@@ -1,6 +1,9 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -227,6 +230,46 @@ func fail(w http.ResponseWriter, s int, e error) {
 	w.WriteHeader(s)
 	reply(w, map[string]string{"error": e.Error()})
 }
+func pdfAssetOverlay() http.Handler {
+	raw, e := web.ReadFile("web/vendor/pdfjs-assets.tar.gz")
+	if e != nil {
+		return nil
+	}
+	gz, e := gzip.NewReader(bytes.NewReader(raw))
+	if e != nil {
+		return nil
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	files := map[string][]byte{}
+	for {
+		h, e := tr.Next()
+		if e == io.EOF {
+			break
+		}
+		if e != nil || h.Typeflag != tar.TypeReg {
+			return nil
+		}
+		name := "web/vendor/" + filepath.Clean(h.Name)
+		if !strings.HasPrefix(name, "web/vendor/cmaps/") && !strings.HasPrefix(name, "web/vendor/standard_fonts/") {
+			return nil
+		}
+		data, e := io.ReadAll(io.LimitReader(tr, 2<<20))
+		if e != nil {
+			return nil
+		}
+		files[strings.TrimPrefix(name, "web/")] = data
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/"), "")
+		data, ok := files[key]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeContent(w, r, filepath.Base(key), time.Time{}, bytes.NewReader(data))
+	})
+}
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.backgroundRoutes(mux)
@@ -236,6 +279,10 @@ func (a *app) routes() http.Handler {
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
 	a.recommendationRoutes(mux)
+	if overlay := pdfAssetOverlay(); overlay != nil {
+		mux.Handle("GET /vendor/cmaps/", overlay)
+		mux.Handle("GET /vendor/standard_fonts/", overlay)
+	}
 	static, _ := fs.Sub(web, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
 	mux.HandleFunc("GET /api/sources", func(w http.ResponseWriter, r *http.Request) {

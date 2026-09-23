@@ -10,7 +10,7 @@ FROM ${BUILD_FROM}
 
 RUN apk add --no-cache ca-certificates jq
 COPY --from=builder /out/archivist /usr/bin/archivist
-COPY home-assistant/archivist/run.sh /run.sh
+COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
 EXPOSE 5056
