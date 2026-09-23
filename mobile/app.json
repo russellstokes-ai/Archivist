@@ -1,1 +1,0 @@
-{"expo":{"name":"Archivist","slug":"archivist","version":"0.0.0","orientation":"default","userInterfaceStyle":"automatic","ios":{"supportsTablet":true,"bundleIdentifier":"app.archivist.reader"},"android":{"package":"app.archivist.reader"},"plugins":["expo-secure-store",["expo-audio",{"enableBackgroundPlayback":true,"microphonePermission":false}]],"updates":{"enabled":false}}}
