@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
@@ -87,6 +88,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
 
 function Client() {
   const systemScheme = useColorScheme();
+  const {width} = useWindowDimensions();
   const [theme, setTheme] = useState<ThemeMode>('system');
   const p = useMemo(() => palette(theme, systemScheme), [theme, systemScheme]);
   const [session, setSession] = useState<Session | null>(null);
@@ -132,6 +134,7 @@ function Client() {
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
   const loadCancel = useRef<(() => void) | null>(null);
+  const shelfColumns = width >= 900 ? 5 : width >= 700 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
       const current = sessionRef.current;
@@ -393,13 +396,14 @@ function Client() {
         </ScrollView>
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         <FlatList
+          key={shelfColumns}
           data={books}
           keyExtractor={b => String(b.id)}
-          numColumns={2}
+          numColumns={shelfColumns}
           contentContainerStyle={styles.grid}
           ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty, {color: p.muted}]}>No matching books. Add and scan folders in server settings.</Text> : null}
           renderItem={({item}) => (
-            <View style={styles.book}><Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
+            <View style={[styles.book, {maxWidth: `${100 / shelfColumns}%`}]}><Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
               <Cover book={item} />
               <Text numberOfLines={2} style={[styles.bookTitle, {color: p.ink}]}>{item.title}</Text>
               <Text style={[styles.meta, {color: p.muted}]}>{item.format} - {item.space}{item.author ? ' - '+item.author : ''}{item.series ? ' - '+item.series : ''}</Text>
