@@ -15,11 +15,17 @@ export async function request(session: Session, path: string, method = 'GET', da
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 15000);
   try {
-    const response = await fetch(session.server + path, {
+    let response: Response;
+    try {
+      response = await fetch(session.server + path, {
       method, redirect: 'error', signal: abort.signal,
       headers: {Authorization: 'Bearer ' + session.token, 'Content-Type': 'application/json', 'X-Archivist-Action': '1'},
       body: data === undefined ? undefined : JSON.stringify(data),
-    });
+      });
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') throw Error('Archivist server timed out. Check the DuckDNS address, HTTPS certificate, and that the add-on is running.');
+      throw Error('Could not reach the Archivist server. Check the address and network connection.');
+    }
     if (!(response.headers.get('content-type') || '').includes('application/json')) throw Error('This address did not return an Archivist API response.');
     const result = await response.json();
     if (!response.ok) throw new RequestError(result.error || 'Request failed', response.status);
