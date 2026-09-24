@@ -3,7 +3,7 @@ FROM golang:1.25-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache ca-certificates
 COPY app/ .
-RUN go mod download
+RUN go mod tidy
 RUN go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/archivist .
 
 FROM alpine:3.22
