@@ -1,0 +1,10 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{execFileSync}=require('node:child_process');
+const root=path.dirname(require.resolve('expo-audio/package.json'));
+const files=['ios/AudioPlayer.swift','ios/AudioModule.swift','android/src/main/java/expo/modules/audio/AudioPlayer.kt','android/src/main/java/expo/modules/audio/AudioModule.kt'];
+execFileSync(process.execPath,['patch-audio.cjs']);
+const before=files.map(f=>fs.readFileSync(path.join(root,f),'utf8'));
+execFileSync(process.execPath,['patch-audio.cjs']);
+files.forEach((f,i)=>assert.equal(fs.readFileSync(path.join(root,f),'utf8'),before[i]));
+assert(before[0].includes('self.pause()'));assert(before[1].includes('Function("setSleepTimer")'));
+assert(before[2].includes('weakPlayer.get()?.ref?.pause()'));assert(before[3].includes('Function("setSleepTimer")'));
+console.log('PASS: pinned native source patch, timer/API presence and idempotence (not native compilation)');
