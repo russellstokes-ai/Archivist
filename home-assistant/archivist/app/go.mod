@@ -2,7 +2,11 @@ module archivist
 
 go 1.25.0
 
-require modernc.org/sqlite v1.39.1
+require (
+	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/nwaples/rardecode/v2 v2.0.0
+	modernc.org/sqlite v1.39.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

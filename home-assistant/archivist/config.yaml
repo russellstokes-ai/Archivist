@@ -1,7 +1,7 @@
 name: Archivist
 slug: archivist
 description: Privacy-first self-hosted library server for ebooks, audiobooks, comics and PDFs.
-version: 0.1.5-dev
+version: 0.1.6-dev
 url: https://github.com/russellstokes-ai/Archivist
 arch:
   - aarch64
