@@ -1,0 +1,23 @@
+# Local data and generated runtime files
+data/
+tmp/
+*.db
+*.db-shm
+*.db-wal
+
+# Builds and packaged archives
+dist/
+build/
+*.zip
+*.tar
+*.tgz
+
+# Mobile generated files
+mobile/node_modules/
+mobile/.expo/
+mobile/ios/
+
+# Tooling noise
+.DS_Store
+*.log
+coverage.out
