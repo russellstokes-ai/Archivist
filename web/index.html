@@ -1,12 +1,67 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Archivist</title><link rel="stylesheet" href="./style.css"><script defer src="./app.js"></script><script defer src="./catalogue.js"></script><script defer src="./playback.js"></script><script defer src="./household.js"></script><script defer src="./accounts.js"></script><script defer src="./organise.js"></script><script defer src="./filemoves.js"></script></head><body>
-<header><img class="brand-logo" src="./assets/archivist-primary-logo.png" alt="Archivist"><select id="theme" aria-label="Appearance"><option value="system">Follow system</option><option value="light">Light</option><option value="dark">Dark</option></select></header>
-<main><div id="activity" class="activity-banner" hidden role="status" aria-live="polite"><div><strong id="activity-label">Working…</strong><span id="activity-detail"></span></div><progress id="activity-progress"></progress></div><section id="setup" hidden><h1>Create owner access</h1><p>Choose the access key you will use to manage this Archivist server.</p><form id="setup-form"><label>Owner access key<input id="setup-key" type="password" required minlength="8" autocomplete="new-password"></label><button>Create access</button></form></section>
-<section id="unlock" hidden><h1>Your library. Yours.</h1><p>Enter your Archivist access key.</p><form id="login"><label>Access key<input id="key" type="password" required autocomplete="current-password"></label><button>Unlock</button></form></section>
-<section id="library" hidden><h1>Library</h1><p>Your books, across your folders.</p><div class="tools"><input id="search" type="search" placeholder="Search titles" aria-label="Search titles"><select id="space" aria-label="Library space"><option value="">All spaces</option></select></div><p id="count"></p><div id="books"></div></section>
-<section id="sources" hidden><div class="page-heading"><div><span class="eyebrow">Library setup</span><h1>Folders & organisation</h1><p>Add your media, scan it for metadata, then preview how Archivist should organise it.</p></div></div><div class="workflow-steps"><span><b>1</b>Add folders</span><span><b>2</b>Scan & enrich</span><span><b>3</b>Preview & sort</span></div><section class="panel-card"><h2>Add a source</h2><form id="add"><label>Folder on the server<input id="path" required placeholder="/media/books"></label><label>Library space<input id="new-space" required value="My library" maxlength="100" list="spaces"><datalist id="spaces"></datalist></label><button class="primary">Add folder</button></form><p class="note">Choose a folder using the browser or enter a path. Archivist never changes files during a scan.</p></section><section class="panel-card"><div class="section-heading"><div><h2>Your sources</h2><p>Scan a source to refresh files and metadata.</p></div></div><div id="source-list"></div><div id="scan-jobs" hidden><h3>Scan activity</h3><div id="jobs"></div></div></section></section>
-<section id="config" hidden><h1>Server</h1><p>Use this page to confirm the address for phones and manage server access.</p><div id="config-summary" class="summary"></div><h2>Phone connection</h2><p>Open Archivist on your phone, go to Settings, choose Add server, then enter the server address and access key.</p><form id="owner-access-form"><label>Phone access key<input id="owner-access-key" type="password" minlength="8" maxlength="256" autocomplete="new-password" placeholder="At least 8 characters"></label><button id="owner-access-save">Set / replace access key</button></form><p class="note">This key is for connecting apps to this server. Home Assistant Web UI does not require it.</p><h2>Active sessions</h2><div id="session-list"></div></section>
-<section id="picker" hidden><h2>Choose a server folder</h2><p id="folder-location"></p><div class="tools"><button id="folder-up">Parent folder</button><button id="folder-use">Use this folder</button><button id="folder-close">Close</button></div><div id="folder-items"></div></section>
+<header class="app-header"><img class="brand-logo" src="./assets/archivist-primary-logo.png" alt="Archivist"><div class="header-actions"><select id="theme" aria-label="Appearance"><option value="system">Follow system</option><option value="light">Light</option><option value="dark">Dark</option></select></div></header>
+<main>
+<div id="activity" class="activity-banner" hidden role="status" aria-live="polite"><div><strong id="activity-label">Working…</strong><span id="activity-detail"></span></div><progress id="activity-progress"></progress></div>
+
+<section id="setup" hidden class="auth-card"><span class="eyebrow">First run</span><h1>Create owner access</h1><p>Choose the access key you will use to manage this Archivist server.</p><form id="setup-form"><label>Owner access key<input id="setup-key" type="password" required minlength="8" autocomplete="new-password"></label><button class="primary">Create access</button></form></section>
+<section id="unlock" hidden class="auth-card"><span class="eyebrow">Archivist</span><h1>Your library. Yours.</h1><p>Enter your Archivist access key.</p><form id="login"><label>Access key<input id="key" type="password" required autocomplete="current-password"></label><button class="primary">Unlock</button></form></section>
+
+<section id="library" hidden>
+  <div class="shelf-hero">
+    <div><span class="eyebrow">Archivist Shelf</span><h1>Your library</h1><p>Books, comics and audiobooks organised as works — not a wall of files.</p></div>
+    <div id="library-total" class="hero-count">0<span>works</span></div>
+  </div>
+  <div id="library-summary" class="library-summary"></div>
+  <div class="shelf-toolbar">
+    <input id="search" type="search" placeholder="Search title, author or series" aria-label="Search library">
+    <select id="space" aria-label="Library space"><option value="">All spaces</option></select>
+  </div>
+  <div id="active-filter" class="active-filter" hidden></div>
+  <div class="section-heading"><div><h2>Shelf</h2><p id="count"></p></div><button id="clear-library-filter" hidden>Clear filter</button></div>
+  <div id="books" class="shelf-grid"></div>
+  <div class="load-more-wrap"><button id="load-more" hidden>Load more</button></div>
+</section>
+
+<section id="atlas" hidden>
+  <div class="page-heading"><div><span class="eyebrow">Explore</span><h1>Atlas</h1><p>Browse your collection by format, library space and author.</p></div></div>
+  <div class="atlas-grid">
+    <section class="panel-card"><h2>Formats</h2><div id="atlas-formats" class="atlas-list"></div></section>
+    <section class="panel-card"><h2>Spaces</h2><div id="atlas-spaces" class="atlas-list"></div></section>
+    <section class="panel-card"><h2>Authors</h2><div id="atlas-authors" class="atlas-list"></div></section>
+  </div>
+</section>
+
+<section id="settings" hidden>
+  <div class="page-heading"><div><span class="eyebrow">Administration</span><h1>Settings</h1><p>Library sources, organisation, household access and server configuration.</p></div></div>
+  <div class="settings-tabs" role="tablist">
+    <button data-settings="library" aria-current="page">Library & storage</button>
+    <button data-settings="organisation">Organisation</button>
+    <button data-settings="household">Household</button>
+    <button data-settings="server">Server</button>
+  </div>
+
+  <section id="sources" data-settings-panel="library">
+    <div class="workflow-steps"><span><b>1</b>Add folders</span><span><b>2</b>Scan & enrich</span><span><b>3</b>Browse Shelf</span></div>
+    <section class="panel-card"><div class="section-heading"><div><h2>Add a source</h2><p>Add media folders without changing their contents.</p></div></div><form id="add"><label>Folder on the server<input id="path" required placeholder="/media/books"></label><label>Library space<input id="new-space" required value="My library" maxlength="100" list="spaces"><datalist id="spaces"></datalist></label><button class="primary">Add folder</button></form><p class="note">Scanning reads metadata and builds the Shelf. Sorting files is optional.</p></section>
+    <section class="panel-card"><div class="section-heading"><div><h2>Sources</h2><p>Scan or refresh a source when files change.</p></div></div><div id="source-list"></div><div id="scan-jobs" hidden><h3>Scan activity</h3><div id="jobs"></div></div></section>
+  </section>
+
+  <section id="organisation-settings" data-settings-panel="organisation" hidden></section>
+  <section id="household-settings" data-settings-panel="household" hidden></section>
+
+  <section id="config" data-settings-panel="server" hidden>
+    <section class="panel-card"><div class="section-heading"><div><h2>Server</h2><p>Connection details, phone access and active sessions.</p></div></div><div id="config-summary" class="summary"></div></section>
+    <section class="panel-card"><h2>Phone connection</h2><p>In the Archivist app, open Settings → Add server, then enter the server address and access key.</p><form id="owner-access-form"><label>Phone access key<input id="owner-access-key" type="password" minlength="8" maxlength="256" autocomplete="new-password" placeholder="At least 8 characters"></label><button id="owner-access-save">Set / replace access key</button></form><p class="note">This key is for connecting apps. Home Assistant ingress remains trusted owner access.</p></section>
+    <section class="panel-card"><h2>Active sessions</h2><div id="session-list"></div></section>
+  </section>
+</section>
+
+<section id="picker" hidden class="picker-overlay"><div class="picker-card"><h2>Choose a server folder</h2><p id="folder-location"></p><div class="tools"><button id="folder-up">Parent folder</button><button id="folder-use">Use this folder</button><button id="folder-close">Close</button></div><div id="folder-items"></div></div></section>
+
+<section id="work-detail" hidden class="work-overlay" aria-modal="true"><div class="work-card"><button id="work-close" class="work-close" aria-label="Close">×</button><div id="work-detail-content"></div></div></section>
 <p id="status" role="status" aria-live="polite"></p>
-</main><aside id="player" hidden><div><strong id="playing-title"></strong><button id="close-player" aria-label="Close player">Close</button></div><audio id="audio" controls preload="metadata"></audio></aside>
-<nav hidden id="nav"><button data-page="library" aria-current="page">Library</button><button data-page="sources">Folders</button><button data-page="config">Server</button></nav></body></html>
+</main>
+<aside id="player" hidden><div><strong id="playing-title"></strong><button id="close-player" aria-label="Close player">Close</button></div><audio id="audio" controls preload="metadata"></audio></aside>
+<nav hidden id="nav"><button data-page="library" aria-current="page">Shelf</button><button data-page="atlas">Atlas</button><button data-page="settings">Settings</button></nav>
+</body></html>
