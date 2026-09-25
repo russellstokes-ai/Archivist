@@ -282,7 +282,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/library-summary", func(w http.ResponseWriter, r *http.Request) {
 		var total int
-		_ = a.db.QueryRow(`SELECT count(*) FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)`,who(r).Owner,who(r).ID).Scan(&total)
+		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)`,who(r).Owner,who(r).ID).Scan(&total)
 		formats := []map[string]any{}
 		rows, e := a.db.Query(`SELECT e.format,count(DISTINCT w.id) FROM works w JOIN editions e ON e.work_id=w.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY e.format ORDER BY count(DISTINCT w.id) DESC,e.format`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{formats=append(formats,map[string]any{"name":name,"count":count})}};rows.Close() }
