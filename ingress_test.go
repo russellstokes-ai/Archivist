@@ -47,15 +47,19 @@ func TestIngressRoutingAndSession(t *testing.T) {
 		if w := request("GET", "/api/me", "", cookie); w.Code != 200 {
 			t.Fatalf("login %d", w.Code)
 		}
-		if w := request("GET", "/api/me", "", nil); w.Code != 401 {
-			t.Fatal("auth bypass")
+		if w := request("GET", "/api/me", "", nil); base == "/" {
+			if w.Code != 401 { t.Fatal("auth bypass") }
+		} else if w.Code != 200 || !strings.Contains(w.Body.String(), `"owner":true`) {
+			t.Fatalf("trusted ingress owner missing: %d %s", w.Code, w.Body.String())
 		}
 		w = request("POST", "/logout", "", cookie)
 		if w.Result().Cookies()[0].Path != base {
 			t.Fatal("logout scope")
 		}
-		if w := request("GET", "/api/me", "", cookie); w.Code != 401 {
-			t.Fatal("logout failed")
+		if w := request("GET", "/api/me", "", cookie); base == "/" {
+			if w.Code != 401 { t.Fatal("logout failed") }
+		} else if w.Code != 200 || !strings.Contains(w.Body.String(), `"owner":true`) {
+			t.Fatalf("ingress trust lost after logout: %d %s", w.Code, w.Body.String())
 		}
 		for _, asset := range []string{"/app.js", "/reader.js", "/style.css", "/assets/archivist-app-icon.png", "/vendor/pdf.mjs", "/vendor/pdf.worker.mjs"} {
 			if w := request("GET", asset, "", nil); w.Code != 200 {
