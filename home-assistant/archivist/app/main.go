@@ -353,11 +353,15 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/sources/{id}", func(w http.ResponseWriter, r *http.Request) {
 		a.scanMu.Lock()
 		defer a.scanMu.Unlock()
-		_, e := a.db.Exec("DELETE FROM sources WHERE id=?", r.PathValue("id"))
-		if e != nil {
+		tx, e := a.db.Begin()
+		if e != nil { fail(w,500,e); return }
+		defer tx.Rollback()
+		if _, e = tx.Exec("DELETE FROM sources WHERE id=?", r.PathValue("id")); e != nil {
 			fail(w, 500, e)
 			return
 		}
+		if e = pruneCatalogue(tx); e != nil { fail(w,500,e); return }
+		if e = tx.Commit(); e != nil { fail(w,500,e); return }
 		reply(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("GET /api/books", func(w http.ResponseWriter, r *http.Request) {
