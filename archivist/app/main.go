@@ -32,10 +32,16 @@ type app struct {
 	scanMu sync.Mutex
 }
 type source struct {
-	ID     int64  `json:"id"`
-	Space  string `json:"space"`
-	Path   string `json:"path"`
-	Status string `json:"status"`
+	ID         int64  `json:"id"`
+	Space      string `json:"space"`
+	Path       string `json:"path"`
+	Status     string `json:"status"`
+	Files      int64  `json:"files"`
+	Works      int64  `json:"works"`
+	Audiobooks int64  `json:"audiobooks"`
+	Comics     int64  `json:"comics"`
+	Ebooks     int64  `json:"ebooks"`
+	PDFs       int64  `json:"pdfs"`
 }
 type book struct {
 	ID        int64  `json:"id"`
@@ -275,7 +281,18 @@ func (a *app) routes() http.Handler {
 	static, _ := fs.Sub(web, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
 	mux.HandleFunc("GET /api/sources", func(w http.ResponseWriter, r *http.Request) {
-		rows, e := a.db.Query("SELECT id,space,path,status FROM sources WHERE ? OR space IN (SELECT space FROM grants WHERE profile_id=?) ORDER BY id", who(r).Owner, who(r).ID)
+		rows, e := a.db.Query(`SELECT s.id,s.space,s.path,s.status,
+			count(DISTINCT a.id),count(DISTINCT e.work_id),
+			count(DISTINCT CASE WHEN a.format='Audio' THEN e.work_id END),
+			count(DISTINCT CASE WHEN a.format='Comic' THEN e.work_id END),
+			count(DISTINCT CASE WHEN a.format='Ebook' THEN e.work_id END),
+			count(DISTINCT CASE WHEN a.format='PDF' THEN e.work_id END)
+			FROM sources s
+			LEFT JOIN assets a ON a.source_id=s.id AND a.available=1
+			LEFT JOIN edition_assets ea ON ea.asset_id=a.id
+			LEFT JOIN editions e ON e.id=ea.edition_id
+			WHERE ? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)
+			GROUP BY s.id ORDER BY s.id`, who(r).Owner, who(r).ID)
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -284,7 +301,7 @@ func (a *app) routes() http.Handler {
 		out := []source{}
 		for rows.Next() {
 			var s source
-			if e = rows.Scan(&s.ID, &s.Space, &s.Path, &s.Status); e != nil {
+			if e = rows.Scan(&s.ID, &s.Space, &s.Path, &s.Status, &s.Files, &s.Works, &s.Audiobooks, &s.Comics, &s.Ebooks, &s.PDFs); e != nil {
 				fail(w, 500, e)
 				return
 			}
