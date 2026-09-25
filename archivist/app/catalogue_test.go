@@ -67,8 +67,31 @@ func TestGroupingRejectsCrossSpace(t *testing.T) {
 		t.Fatal("cross-space grouping accepted")
 	}
 	var n int
-	a.db.QueryRow("SELECT count(*) FROM works").Scan(&n)
+	a.db.QueryRow("SELECT count(*) FROM works WHERE auto=0").Scan(&n)
 	if n != 0 {
-		t.Fatal("failed operation committed")
+		t.Fatal("failed manual grouping committed")
 	}
+}
+
+func TestScanBuildsConservativeLogicalWorks(t *testing.T) {
+	a := fixture(t)
+	if e := a.initCatalogue(); e != nil { t.Fatal(e) }
+	root := t.TempDir()
+	audioDir := filepath.Join(root, "Author", "Long Book")
+	if e := os.MkdirAll(audioDir, 0700); e != nil { t.Fatal(e) }
+	for _, name := range []string{"01.mp3", "02.mp3", "03.mp3"} {
+		if e := os.WriteFile(filepath.Join(audioDir, name), []byte("audio"), 0600); e != nil { t.Fatal(e) }
+	}
+	if e := os.WriteFile(filepath.Join(root, "Novel.epub"), []byte("not-a-real-epub"), 0600); e != nil { t.Fatal(e) }
+	if e := a.addSource("Main", root); e != nil { t.Fatal(e) }
+	if e := a.scan(1); e != nil { t.Fatal(e) }
+
+	var works int
+	if e := a.db.QueryRow("SELECT count(*) FROM works").Scan(&works); e != nil { t.Fatal(e) }
+	if works != 2 { t.Fatalf("works=%d want 2", works) }
+
+	var title string
+	var files int
+	if e := a.db.QueryRow(`SELECT w.title,count(ea.asset_id) FROM works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE e.format='Audio' GROUP BY w.id`).Scan(&title,&files); e != nil { t.Fatal(e) }
+	if title != "Long Book" || files != 3 { t.Fatalf("audio work=%q files=%d", title, files) }
 }
