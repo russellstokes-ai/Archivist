@@ -60,13 +60,27 @@ jobs:
           node queue.test.cjs
           node native-patch.test.cjs
 
+      - name: Read app version
+        id: app_version
+        working-directory: mobile/android
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 'versionName ' app/build.gradle | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Build release APK
         working-directory: mobile/android
         run: ./gradlew assembleRelease --no-daemon --console=plain
 
+      - name: Name versioned APK
+        shell: bash
+        run: |
+          APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
+          cp "$APK" "mobile/android/app/build/outputs/apk/release/Archivist-${{ steps.app_version.outputs.version }}.apk"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: archivist-release-apk
-          path: mobile/android/app/build/outputs/apk/release/*.apk
+          name: Archivist-${{ steps.app_version.outputs.version }}-APK
+          path: mobile/android/app/build/outputs/apk/release/Archivist-${{ steps.app_version.outputs.version }}.apk
           if-no-files-found: error
