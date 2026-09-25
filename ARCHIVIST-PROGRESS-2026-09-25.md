@@ -91,3 +91,7 @@ Download `archivist-release-apk`, unzip it, and install the APK on Android.
 3. If APK is usable, test server install and phone connection.
 4. Improve Atlas with real metadata once scan/extraction support is expanded.
 5. Upgrade speech focus from tap-point zoom to detected text/bubble regions when stable.
+
+## Android Rebuild Trigger
+
+- Rebuild requested after Android startup compatibility fix (0.0.1 / versionCode 2).
