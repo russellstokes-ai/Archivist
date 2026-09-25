@@ -72,6 +72,28 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew assembleRelease --no-daemon --console=plain
 
+      - name: Launch release APK in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
+            adb install -r "$APK"
+            adb logcat -c
+            adb shell am force-stop app.archivist.reader
+            adb shell monkey -p app.archivist.reader -c android.intent.category.LAUNCHER 1
+            sleep 12
+            PID=$(adb shell pidof app.archivist.reader | tr -d '\r')
+            if [ -z "$PID" ]; then
+              echo "Archivist process exited after launch"
+              adb logcat -d -t 400
+              exit 1
+            fi
+            echo "Archivist stayed running after launch (PID $PID)"
+
       - name: Name versioned APK
         shell: bash
         run: |
