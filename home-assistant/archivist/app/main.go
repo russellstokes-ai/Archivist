@@ -569,13 +569,26 @@ func (a *app) routes() http.Handler {
 }
 func main() {
 	data := flag.String("data", "./data", "Local database directory")
-	addr := flag.String("listen", "127.0.0.1:5056", "Loopback listen address")
+	addr := flag.String("listen", "127.0.0.1:5056", "HTTP listen address")
 	allowLAN := flag.Bool("allow-lan", false, "Allow non-loopback bind for trusted reverse proxies or Home Assistant add-on containers")
+	tlsAddr := flag.String("tls-listen", "", "Optional HTTPS listen address")
+	tlsCert := flag.String("tls-cert", "", "TLS certificate chain file")
+	tlsKey := flag.String("tls-key", "", "TLS private key file")
 	flag.Parse()
 	host, _, e := net.SplitHostPort(*addr)
 	ip := net.ParseIP(host)
 	if e != nil || ip == nil || (!*allowLAN && !ip.IsLoopback()) {
-		log.Fatal("This internal milestone accepts loopback addresses only unless -allow-lan is set")
+		log.Fatal("HTTP listener accepts loopback addresses only unless -allow-lan is set")
+	}
+	if *tlsAddr != "" {
+		tlsHost, _, tlsErr := net.SplitHostPort(*tlsAddr)
+		tlsIP := net.ParseIP(tlsHost)
+		if tlsErr != nil || tlsIP == nil || (!*allowLAN && !tlsIP.IsLoopback()) {
+			log.Fatal("HTTPS listener accepts loopback addresses only unless -allow-lan is set")
+		}
+		if strings.TrimSpace(*tlsCert) == "" || strings.TrimSpace(*tlsKey) == "" {
+			log.Fatal("-tls-listen requires -tls-cert and -tls-key")
+		}
 	}
 	if e = os.MkdirAll(*data, 0700); e != nil {
 		log.Fatal(e)
@@ -621,7 +634,17 @@ func main() {
 		log.Fatal(e)
 	}
 	go a.worker(context.Background())
+	handler := a.routes()
+	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	if *tlsAddr != "" {
+		tlsServer := &http.Server{Addr: *tlsAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+		go func() {
+			fmt.Printf("Archivist remote HTTPS: https://%s\n", *tlsAddr)
+			if err := tlsServer.ListenAndServeTLS(*tlsCert, *tlsKey); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Fatalf("remote HTTPS listener: %v", err)
+			}
+		}()
+	}
 	fmt.Printf("Archivist server: http://%s\n", *addr)
-	server := &http.Server{Addr: *addr, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	log.Fatal(server.ListenAndServe())
 }
