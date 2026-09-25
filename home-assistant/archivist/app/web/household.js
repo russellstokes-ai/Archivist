@@ -6,7 +6,7 @@ const profileList=element('div'),createBlock=element('div'),createForm=element('
 createBlock.className='profile-create';spaceChoices.className='access-choice-grid';createButton.className='primary';
 nameField.placeholder='Profile name';nameField.required=true;nameField.maxLength=100;nameField.setAttribute('aria-label','Profile name');
 createBlock.append(element('h3','Add a person'),element('p','Select the library spaces this person can access. A space can contain one or more source folders.'),createForm);
-createForm.append(nameField,spaceChoices,createButton);household.append(householdHead,createBlock,profileList);$('sources').append(household);
+createForm.append(nameField,spaceChoices,createButton);household.append(householdHead,createBlock,profileList);$('household-settings').append(household);
 
 async function refreshHousehold(){
   if(!currentProfile?.owner)return;
