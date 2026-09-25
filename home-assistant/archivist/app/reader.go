@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"database/sql"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +43,41 @@ func (a *app) openAsset(id string) (*os.File, string, error) {
 	f, e := dir.Open(rel)
 	return f, format, e
 }
+func tarComicParts(f *os.File) ([]string, error) {
+	if _, e := f.Seek(0, 0); e != nil { return nil, e }
+	tr := tar.NewReader(f)
+	parts := []string{}
+	for count := 0; ; count++ {
+		if count > 10000 { return nil, errors.New("comic contains too many entries") }
+		h, e := tr.Next()
+		if e == io.EOF { break }
+		if e != nil { return nil, e }
+		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA { continue }
+		switch strings.ToLower(path.Ext(h.Name)) {
+		case ".jpg", ".jpeg", ".png", ".webp":
+			parts = append(parts, h.Name)
+		}
+	}
+	sort.SliceStable(parts, func(i, j int) bool { return naturalLess(parts[i], parts[j]) })
+	if len(parts) == 0 { return nil, errors.New("no supported image pages in comic") }
+	return parts, nil
+}
+func tarComicEntry(f *os.File, name string, limit uint64) ([]byte, error) {
+	if _, e := f.Seek(0, 0); e != nil { return nil, e }
+	tr := tar.NewReader(f)
+	for {
+		h, e := tr.Next()
+		if e == io.EOF { break }
+		if e != nil { return nil, e }
+		if h.Name != name { continue }
+		if h.Size < 0 || uint64(h.Size) > limit { return nil, errors.New("comic page exceeds size limit") }
+		b, e := io.ReadAll(io.LimitReader(tr, int64(limit)+1))
+		if uint64(len(b)) > limit { return nil, errors.New("comic page exceeds size limit") }
+		return b, e
+	}
+	return nil, errors.New("comic page missing")
+}
+
 func zipEntry(z *zip.Reader, name string, limit uint64) ([]byte, error) {
 	for _, f := range z.File {
 		if f.Name == name {
@@ -198,14 +235,17 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			fail(w, 400, errors.New("this asset is not a readable book"))
 			return
 		}
-		z, e := zip.NewReader(f, info.Size())
-		if e != nil {
-			fail(w, 400, errors.New("archive unsupported or corrupt; CBR requires a separate decoder"))
-			return
+		ext := strings.ToLower(filepath.Ext(f.Name()))
+		var parts []string
+		var z *zip.Reader
+		if format == "Comic" && ext == ".cbt" {
+			parts, e = tarComicParts(f)
+		} else {
+			z, e = zip.NewReader(f, info.Size())
+			if e == nil { parts, e = readerParts(z, format) }
 		}
-		parts, e := readerParts(z, format)
 		if e != nil {
-			fail(w, 400, e)
+			fail(w, 400, errors.New("archive unsupported or corrupt"))
 			return
 		}
 		part := r.PathValue("part")
@@ -226,7 +266,12 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 		if format == "Comic" {
 			limit = 24 << 20
 		}
-		data, e := zipEntry(z, parts[index], limit)
+		var data []byte
+		if format == "Comic" && ext == ".cbt" {
+			data, e = tarComicEntry(f, parts[index], limit)
+		} else {
+			data, e = zipEntry(z, parts[index], limit)
+		}
 		if e != nil {
 			fail(w, 400, e)
 			return
