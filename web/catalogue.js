@@ -40,7 +40,8 @@
     try{
       await api('./api/works/group','POST',{title:name,ids:[...chosen]});
       chosen.clear();title.value='';message('Work created. Original files are unchanged.');
-      await loadLibrarySummary();await loadBooks(false);if(panel.open)await load.click();
+      await loadLibrarySummary();await loadBooks(false);
+      if(panel.open){items=await api('./api/books');status.textContent=items.length+' scanned files available';render()}
     }catch(e){message(e.message)}
     finally{activity('');create.disabled=false;create.textContent='Create work'}
   };
