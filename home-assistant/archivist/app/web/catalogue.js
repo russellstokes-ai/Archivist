@@ -1,9 +1,47 @@
-let selecting=false;const chosen=new Set();
-const groupControls=element('div');groupControls.className='tools';
-const choose=element('button','Select files to group'),commit=element('button','Create book'),groupTitle=element('input'),view=element('button','Grouped books');groupTitle.placeholder='Book title';groupTitle.setAttribute('aria-label','Title for grouped book');commit.hidden=true;groupTitle.hidden=true;groupControls.append(choose,groupTitle,commit,view);$('library').insertBefore(groupControls,$('books'));
-const grouped=element('section');grouped.hidden=true;$('library').append(grouped);
-choose.onclick=()=>{selecting=!selecting;chosen.clear();choose.textContent=selecting?'Cancel selection':'Select files to group';commit.hidden=!selecting;groupTitle.hidden=!selecting;document.querySelectorAll('[data-asset]').forEach(b=>b.removeAttribute('aria-pressed'));message(selecting?'Select audio tracks and editions belonging to one book. Multiple audio files will become one ordered audiobook edition.':'')};
-$('books').addEventListener('click',e=>{if(!selecting)return;const b=e.target.closest('[data-asset]');if(!b)return;e.stopImmediatePropagation();e.preventDefault();const id=Number(b.dataset.asset);if(chosen.has(id))chosen.delete(id);else chosen.add(id);b.setAttribute('aria-pressed',String(chosen.has(id)));commit.textContent='Create book ('+chosen.size+')'},true);
-commit.onclick=async()=>{if(!confirm('Create this grouping? If selected files already belong to a book, they will be reassigned and earlier edition progress may no longer apply.'))return;commit.disabled=true;try{await api('./api/works/group','POST',{title:groupTitle.value,ids:[...chosen]});choose.click();message('Book created. Original files are unchanged.');await showGroups()}catch(e){message(e.message)}finally{commit.disabled=false}};
-async function showGroups(){grouped.hidden=false;grouped.replaceChildren(element('h2','Grouped books'));const items=await api('./api/works?q='+encodeURIComponent($('search').value)+'&space='+encodeURIComponent($('space').value));if(!items.length)grouped.append(element('p','Select related files above to create your first book.'));for(const w of items){const row=element('article');row.className='source';row.append(element('strong',w.title),element('p',w.editions+' editions · '+w.files+' files · '+w.space));const open=element('button','View editions'),split=element('button','Ungroup');open.onclick=async()=>{try{const tracks=await api('./api/works/'+w.id+'/tracks');let detail=row.querySelector('.tracks');if(detail)detail.remove();detail=element('div');detail.className='tracks';let edition=null;for(const t of tracks){if(edition!==t.edition){detail.append(element('h3',t.format+' edition'));edition=t.edition;if(t.format==='Audio'){const resume=element('button','Continue audiobook');resume.onclick=()=>openAudiobook(w.title,tracks,t.edition);detail.append(resume)}}const b=element('button',t.title+(t.available?'':' · Unavailable'));b.disabled=!t.available;b.onclick=()=>{if(t.format==='Audio'){openAudiobook(w.title,tracks,t.edition,t.id)}else window.open('./reader.html?asset='+t.id,'_blank','noopener')};detail.append(b)}row.append(detail)}catch(e){message(e.message)}};split.onclick=async()=>{if(!confirm('Ungroup this book? Its edition playback progress will be removed. Files and source catalogue entries will remain.'))return;try{await api('./api/works/'+w.id,'DELETE');await showGroups()}catch(e){message(e.message)}};row.append(open,split);grouped.append(row)}}
-view.onclick=()=>showGroups().catch(e=>message(e.message));
+(() => {
+  const panel=element('details');panel.className='panel-card advanced-grouping';
+  const summary=element('summary','Advanced: combine scanned files into one work');panel.append(summary);
+  const intro=element('p','Use this only when Archivist has not grouped related files correctly. Your original files are not changed.');
+  const controls=element('div');controls.className='advanced-group-controls';
+  const search=element('input');search.type='search';search.placeholder='Filter scanned files';search.setAttribute('aria-label','Filter scanned files');
+  const load=element('button','Load scanned files');load.type='button';
+  const title=element('input');title.placeholder='Work title';title.maxLength=1000;title.setAttribute('aria-label','Work title');
+  const create=element('button','Create work');create.className='primary';create.type='button';create.disabled=true;
+  controls.append(search,load,title,create);
+  const status=element('p');status.className='note';
+  const list=element('div');list.className='raw-file-list';
+  panel.append(intro,controls,status,list);$('organisation-settings').append(panel);
+
+  let items=[],chosen=new Set();
+
+  function render(){
+    const q=search.value.trim().toLowerCase();list.replaceChildren();
+    const visible=items.filter(x=>!q||[x.title,x.author,x.series,x.format,x.space].some(v=>(v||'').toLowerCase().includes(q))).slice(0,250);
+    for(const item of visible){
+      const label=element('label');label.className='raw-file-row';
+      const box=element('input');box.type='checkbox';box.checked=chosen.has(item.id);box.onchange=()=>{box.checked?chosen.add(item.id):chosen.delete(item.id);create.disabled=!chosen.size;status.textContent=chosen.size+' selected'};
+      const copy=element('span');copy.append(element('strong',item.title),element('small',[item.author,item.series,item.format,item.space].filter(Boolean).join(' · ')));
+      label.append(box,copy);list.append(label);
+    }
+    if(items.length>250)list.append(element('p','Showing the first 250 matching files. Narrow the filter to find others.'));
+  }
+
+  load.onclick=async()=>{
+    load.disabled=true;load.textContent='Loading…';activity('Loading scanned files');
+    try{items=await api('./api/books');chosen.clear();status.textContent=items.length+' scanned files available';render()}
+    catch(e){message(e.message)}
+    finally{activity('');load.disabled=false;load.textContent='Load scanned files'}
+  };
+  search.oninput=render;
+  create.onclick=async()=>{
+    if(!chosen.size)return;
+    const name=title.value.trim();if(!name){message('Enter a work title.');return}
+    create.disabled=true;create.textContent='Creating…';activity('Creating work',name);
+    try{
+      await api('./api/works/group','POST',{title:name,ids:[...chosen]});
+      chosen.clear();title.value='';message('Work created. Original files are unchanged.');
+      await loadLibrarySummary();await loadBooks(false);if(panel.open)await load.click();
+    }catch(e){message(e.message)}
+    finally{activity('');create.disabled=false;create.textContent='Create work'}
+  };
+})();
