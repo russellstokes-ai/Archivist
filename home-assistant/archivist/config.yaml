@@ -1,7 +1,7 @@
 name: Archivist
 slug: archivist
 description: Privacy-first self-hosted library server for ebooks, audiobooks, comics and PDFs.
-version: 0.1.18
+version: 0.1.19
 url: https://github.com/russellstokes-ai/Archivist
 arch:
   - aarch64
@@ -15,17 +15,28 @@ panel_icon: mdi:bookshelf
 watchdog: http://[HOST]:[PORT:5056]/healthz
 ports:
   5056/tcp: 5056
+  5443/tcp: 5443
 ports_description:
-  5056/tcp: Archivist web interface and API
+  5056/tcp: Archivist local web interface and API
+  5443/tcp: Archivist optional HTTPS API for remote app access
 map:
   - media:rw
   - share:rw
   - backup:rw
+  - ssl:ro
 options:
   data_path: /data
   listen: 0.0.0.0:5056
   allow_lan: true
+  remote_https: false
+  remote_listen: 0.0.0.0:5443
+  certfile: fullchain.pem
+  keyfile: privkey.pem
 schema:
   data_path: str
   listen: str
   allow_lan: bool
+  remote_https: bool
+  remote_listen: str
+  certfile: str
+  keyfile: password
