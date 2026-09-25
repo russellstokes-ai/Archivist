@@ -144,7 +144,7 @@ func kind(path string) string {
 	}
 	return ""
 }
-func (a *app) scan(id int64) error {
+func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
 	var root string
@@ -156,6 +156,15 @@ func (a *app) scan(id int64) error {
 		a.db.Exec("UPDATE sources SET status='Unavailable' WHERE id=?", id)
 		return errors.New("source unavailable; previous catalogue retained")
 	}
+	total := 0
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() || d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
+			return nil
+		}
+		if kind(path) != "" { total++ }
+		return nil
+	})
+	if progress != nil { progress(0, total) }
 	stage, e := os.CreateTemp("", "archivist-scan-*.jsonl")
 	if e != nil {
 		return e
@@ -188,6 +197,7 @@ func (a *app) scan(id int64) error {
 		}
 		meta := metadataFor(path, rel, format)
 		count++
+		if progress != nil && (count == total || count%10 == 0) { progress(count, total) }
 		return encoder.Encode(entry{rel, meta.Title, meta.Author, meta.Series, format})
 	})
 	if e != nil {
@@ -222,8 +232,11 @@ func (a *app) scan(id int64) error {
 	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", fmt.Sprintf("%d files · %s", count, time.Now().Format("2 Jan 15:04")), id); e != nil {
 		return e
 	}
-	return tx.Commit()
+	if e = tx.Commit(); e != nil { return e }
+	if progress != nil { progress(total, total) }
+	return nil
 }
+func (a *app) scan(id int64) error { return a.scanWithProgress(id, nil) }
 func reply(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
