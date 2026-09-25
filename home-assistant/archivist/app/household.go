@@ -161,7 +161,7 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 	if len(parts) >= 3 && parts[1] == "assets" && ((len(parts) == 3 && r.Method == "GET") || ((len(parts) == 4 || len(parts) == 5) && parts[3] == "reader" && r.Method == "GET") || (len(parts) == 4 && parts[3] == "reading-progress" && (r.Method == "GET" || r.Method == "PUT"))) {
 		query = `SELECT s.space FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.id=?`
 	}
-	if len(parts) == 4 && parts[1] == "works" && parts[3] == "tracks" && r.Method == "GET" {
+	if len(parts) == 4 && parts[1] == "works" && (parts[3] == "tracks" || parts[3] == "cover") && r.Method == "GET" {
 		query = `SELECT space FROM works WHERE id=?`
 	}
 	if len(parts) == 4 && parts[1] == "editions" && parts[3] == "progress" && (r.Method == "GET" || r.Method == "PUT") {
