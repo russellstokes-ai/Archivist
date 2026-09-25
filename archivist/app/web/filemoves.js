@@ -96,38 +96,55 @@
     const selected=selectedItems();
     if(!selected.length){message('No files in this scope.');return}
     previewAll.disabled=true;previewAll.textContent='Building preview…';
+    let ok=0,failed=0;
+    previewList.replaceChildren();previewSummary.hidden=false;
     try{
-      const out=await api('./api/file-moves/preview-template-batch','POST',{assets:selected.map(x=>x.id),template:template.value});
-      message('Preview ready: '+out.ok+' changes, '+out.failed+' skipped.');
+      for(let i=0;i<selected.length;i++){
+        const item=selected[i],done=i+1,pct=Math.round(done/selected.length*100);
+        activity('Building sort preview',done+' / '+selected.length+' files · '+pct+'%',done,selected.length);
+        previewSummary.replaceChildren(element('strong','Building preview…'),element('span',done+' / '+selected.length+' · '+pct+'%'));
+        try{await api('./api/file-moves/preview-template','POST',{asset:item.id,template:template.value});ok++}
+        catch(e){failed++}
+      }
+      message('Preview ready: '+ok+' changes, '+failed+' skipped.');
       await refreshMoves();
     }catch(e){message(e.message)}
-    finally{previewAll.disabled=false;previewAll.textContent='Preview organisation'}
+    finally{activity('');previewAll.disabled=false;previewAll.textContent='Preview organisation'}
   };
   apply.onclick=async()=>{
     if(!previewIds.length)return;
     if(!confirm('Apply these '+previewIds.length+' previewed file moves? Archivist verifies each file before changing it.'))return;
-    apply.disabled=true;
+    apply.disabled=true;apply.textContent='Applying changes…';
+    let ok=0,failed=0;const ids=[...previewIds];
     try{
-      const out=await api('./api/file-moves/apply-batch','POST',{ids:[...previewIds]});
-      message('Organisation complete: '+out.ok+' moved, '+out.failed+' need review.');
+      for(let i=0;i<ids.length;i++){
+        const done=i+1,pct=Math.round(done/ids.length*100);
+        activity('Applying organisation',done+' / '+ids.length+' files · '+pct+'%',done,ids.length);
+        try{await api('./api/file-moves/'+ids[i]+'/apply','POST');ok++}catch(e){failed++}
+      }
+      message('Organisation complete: '+ok+' moved, '+failed+' need review.');
       await loadBooks();await refreshItems();await refreshMoves();
     }catch(e){message(e.message)}
-    finally{apply.disabled=false}
+    finally{activity('');apply.disabled=false;apply.textContent='Apply previewed changes'}
   };
   clear.onclick=async()=>{
-    clear.disabled=true;
+    clear.disabled=true;clear.textContent='Clearing…';const ids=[...previewIds];
     try{
-      for(const id of [...previewIds])await api('./api/file-moves/'+id+'/cancel','POST');
+      for(let i=0;i<ids.length;i++){
+        const done=i+1,pct=Math.round(done/ids.length*100);
+        activity('Clearing sort preview',done+' / '+ids.length+' files · '+pct+'%',done,ids.length);
+        await api('./api/file-moves/'+ids[i]+'/cancel','POST');
+      }
       message('Preview cleared. No files were changed.');await refreshMoves();
     }catch(e){message(e.message)}
-    finally{clear.disabled=false}
+    finally{activity('');clear.disabled=false;clear.textContent='Clear preview'}
   };
   manualForm.onsubmit=async e=>{
     e.preventDefault();if(!target.value.trim()){message('Enter a destination path.');return}
-    manualPreview.disabled=true;
+    manualPreview.disabled=true;manualPreview.textContent='Building preview…';activity('Building manual move preview');
     try{await api('./api/file-moves/preview','POST',{asset:Number(asset.value),to:target.value});message('Manual move added to preview.');await refreshMoves()}
     catch(e){message(e.message)}
-    finally{manualPreview.disabled=false}
+    finally{activity('');manualPreview.disabled=false;manualPreview.textContent='Preview this move'}
   };
   window.addEventListener('archivist-ready',async()=>{
     panel.hidden=!currentProfile?.owner;
