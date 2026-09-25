@@ -15,8 +15,7 @@ import (
 func (a *app) initCatalogue() error {
 	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS works(id INTEGER PRIMARY KEY,title TEXT NOT NULL,space TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS editions(id INTEGER PRIMARY KEY,work_id INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,format TEXT NOT NULL);
- CREATE TABLE IF NOT EXISTS edition_assets(asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,edition_id INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,position INTEGER NOT NULL);
- PRAGMA user_version=2;`)
+ CREATE TABLE IF NOT EXISTS edition_assets(asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,edition_id INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,position INTEGER NOT NULL);`)
 	if e != nil { return e }
 	for _, stmt := range []string{
 		"ALTER TABLE works ADD COLUMN author TEXT NOT NULL DEFAULT ''",
@@ -28,7 +27,7 @@ func (a *app) initCatalogue() error {
 			return alterErr
 		}
 	}
-	return nil
+	return a.initCatalogueV3()
 }
 
 // Natural ordering makes Track 2 precede Track 10 without modifying filenames.
@@ -131,6 +130,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 			res, insertErr := tx.Exec("INSERT INTO works(title,space,author,series,auto,group_key) VALUES(?,?,?,?,1,?)",title,first.space,author,series,key)
 			if insertErr != nil { return insertErr }
 			work, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
+			if insertErr = syncLegacyWorkEntities(tx, work, author, series); insertErr != nil { return insertErr }
 			res, insertErr = tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
 			if insertErr != nil { return insertErr }
 			edition, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
@@ -138,6 +138,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 			return err
 		} else {
 			if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=? WHERE id=?",title,first.space,author,series,work); err != nil { return err }
+			if err = syncLegacyWorkEntities(tx, work, author, series); err != nil { return err }
 			err = tx.QueryRow("SELECT id FROM editions WHERE work_id=? ORDER BY id LIMIT 1",work).Scan(&edition)
 			if err == sql.ErrNoRows {
 				res, insertErr := tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
@@ -246,6 +247,7 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		if e=tx.QueryRow("SELECT count(*) FROM edition_assets ea JOIN editions e ON e.id=ea.edition_id WHERE e.work_id=?",autoWorks[0]).Scan(&total);e!=nil{return 0,e}
 		if total==len(ids) {
 			if _,e=tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,auto=0,group_key='' WHERE id=?",title,space,author,series,autoWorks[0]);e!=nil{return 0,e}
+			if e=syncLegacyWorkEntities(tx,autoWorks[0],author,series);e!=nil{return 0,e}
 			if e=tx.Commit();e!=nil{return 0,e}
 			return autoWorks[0],nil
 		}
@@ -263,6 +265,7 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 	if e != nil {
 		return 0, e
 	}
+	if e=syncLegacyWorkEntities(tx,work,author,series);e!=nil{return 0,e}
 	sort.SliceStable(items, func(i, j int) bool { return naturalLess(items[i].path, items[j].path) })
 	audioEdition := int64(0)
 	position := 0

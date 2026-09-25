@@ -53,18 +53,7 @@ jobs:
           sh -n home-assistant/archivist/run.sh
 
       - name: Verify packaged source parity
-        run: |
-          for file in *.go go.mod go.sum; do
-            cmp "$file" "archivist/app/$file"
-            cmp "$file" "home-assistant/archivist/app/$file"
-          done
-          for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js; do
-            cmp "web/$file" "archivist/app/web/$file"
-            cmp "web/$file" "home-assistant/archivist/app/web/$file"
-          done
-          cmp archivist/config.yaml home-assistant/archivist/config.yaml
-          cmp archivist/run.sh home-assistant/archivist/run.sh
-          cmp archivist/Dockerfile home-assistant/archivist/Dockerfile
+        run: sh scripts/sync-packaged-server.sh --check
 
       - name: Home Assistant add-on smoke test
         run: |

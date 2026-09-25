@@ -61,8 +61,7 @@ func openDB(path string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 	_, e = db.Exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
  CREATE TABLE IF NOT EXISTS sources(id INTEGER PRIMARY KEY,space TEXT NOT NULL,path TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'Not scanned');
- CREATE TABLE IF NOT EXISTS assets(id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,relative_path TEXT NOT NULL,title TEXT NOT NULL,format TEXT NOT NULL,available INTEGER NOT NULL DEFAULT 1,UNIQUE(source_id,relative_path));
- PRAGMA user_version=1;`)
+ CREATE TABLE IF NOT EXISTS assets(id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,relative_path TEXT NOT NULL,title TEXT NOT NULL,format TEXT NOT NULL,available INTEGER NOT NULL DEFAULT 1,UNIQUE(source_id,relative_path));`)
 	if e != nil {
 		db.Close()
 		return nil, e
