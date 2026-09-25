@@ -156,9 +156,18 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 	if path == "/api/books" || path == "/api/works" || path == "/api/sources" || path == "/api/library-summary" {
 		return r.Method == "GET"
 	}
+	if path == "/api/queue" {
+		return r.Method == "GET" || r.Method == "PUT"
+	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	var query string
-	if len(parts) >= 3 && parts[1] == "assets" && ((len(parts) == 3 && r.Method == "GET") || ((len(parts) == 4 || len(parts) == 5) && parts[3] == "reader" && r.Method == "GET") || (len(parts) == 4 && parts[3] == "reading-progress" && (r.Method == "GET" || r.Method == "PUT"))) {
+	if len(parts) >= 3 && parts[1] == "assets" && (
+		(len(parts) == 3 && r.Method == "GET") ||
+		((len(parts) == 4 || len(parts) == 5) && parts[3] == "reader" && r.Method == "GET") ||
+		(len(parts) == 4 && parts[3] == "reading-progress" && (r.Method == "GET" || r.Method == "PUT")) ||
+		(len(parts) == 4 && parts[3] == "listening" && r.Method == "GET") ||
+		(len(parts) == 4 && parts[3] == "listening-progress" && (r.Method == "GET" || r.Method == "PUT")) ||
+		(len(parts) == 4 && parts[3] == "chapters" && r.Method == "GET")) {
 		query = `SELECT s.space FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.id=?`
 	}
 	if len(parts) == 4 && parts[1] == "works" && (parts[3] == "tracks" || parts[3] == "cover") && r.Method == "GET" {
