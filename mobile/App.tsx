@@ -14,34 +14,13 @@ import {
 } from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {SavedQueue, reorder} from './queue';
 import {LocalBook, LocalFolder, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
-
-type SafeAudioStatus = {currentTime:number;duration:number;playing:boolean;didJustFinish:boolean;isLoaded?:boolean;error?:string|null};
-
-function useSafeAudioPlayer(){
-  const listeners=useRef(new Set<(status:SafeAudioStatus)=>void()).current;
-  return useMemo(()=>({
-    addListener:(_event:string,listener:(status:SafeAudioStatus)=>void)=>{listeners.add(listener);return{remove:()=>listeners.delete(listener)};},
-    replace:(_source:unknown)=>{const status:SafeAudioStatus={currentTime:0,duration:0,playing:false,didJustFinish:false,isLoaded:false,error:'Audio playback is temporarily disabled in this startup-safe build.'};listeners.forEach(listener=>listener(status));},
-    setActiveForLockScreen:(_active:boolean,_meta?:unknown)=>{},
-    seekTo:async(_seconds:number)=>{},
-    play:()=>{},
-    pause:()=>{},
-    setPlaybackRate:(_rate:number)=>{},
-    setSleepTimer:(_seconds:number)=>{},
-  }),[listeners]);
-}
-
-function useSafeAudioPlayerStatus(_player:unknown):SafeAudioStatus{
-  return {currentTime:0,duration:0,playing:false,didJustFinish:false,isLoaded:false,error:null};
-}
-
-async function setSafeAudioModeAsync(_options:unknown){}
 
 type Book = {id: number; title: string; author: string; series: string; format: string; space: string; available: boolean; uri?: string};
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
@@ -136,8 +115,8 @@ function Client() {
   const [readerLoading, setReaderLoading] = useState(false);
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
-  const player = useSafeAudioPlayer();
-  const audio = useSafeAudioPlayerStatus(player);
+  const player = useAudioPlayer(null);
+  const audio = useAudioPlayerStatus(player);
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
@@ -299,7 +278,7 @@ function Client() {
       })
       .catch(e => setError(String(e.message || e)))
       .finally(() => setRestoring(false));
-    setSafeAudioModeAsync({playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix'}).catch(e => setError((e as Error).message));
+    setAudioModeAsync({playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix'}).catch(e => setError(e.message));
   }, []);
 
   useEffect(() => {
