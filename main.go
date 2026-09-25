@@ -573,6 +573,9 @@ func main() {
 	if e = a.initCatalogue(); e != nil {
 		log.Fatal(e)
 	}
+	if e = a.syncExistingCatalogue(); e != nil {
+		log.Printf("catalogue migration: %v", e)
+	}
 	if e = a.initProgress(); e != nil {
 		log.Fatal(e)
 	}
