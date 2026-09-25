@@ -59,6 +59,15 @@ func openDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, e
 	}
+	for _, stmt := range []string{
+		"ALTER TABLE assets ADD COLUMN author TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN series TEXT NOT NULL DEFAULT ''",
+	} {
+		if _, alterErr := db.Exec(stmt); alterErr != nil && !strings.Contains(strings.ToLower(alterErr.Error()), "duplicate column") {
+			db.Close()
+			return nil, alterErr
+		}
+	}
 	return db, nil
 }
 func canonical(path string) (string, error) {
@@ -246,6 +255,8 @@ func (a *app) routes() http.Handler {
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
 	a.recommendationRoutes(mux)
+	a.organisationRoutes(mux)
+	a.moveRoutes(mux)
 	static, _ := fs.Sub(web, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
 	mux.HandleFunc("GET /api/sources", func(w http.ResponseWriter, r *http.Request) {
@@ -283,6 +294,20 @@ func (a *app) routes() http.Handler {
 			"sessions":   sessions,
 			"roots":      browseRoots(),
 		})
+	})
+	mux.HandleFunc("POST /api/owner-access", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Token string `json:"token"`
+		}
+		if e := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); e != nil {
+			fail(w, 400, errors.New("invalid owner access key"))
+			return
+		}
+		if e := a.setOwnerCredential(body.Token); e != nil {
+			fail(w, 400, e)
+			return
+		}
+		reply(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/sources", func(w http.ResponseWriter, r *http.Request) {
 		var s source
@@ -421,7 +446,7 @@ func (a *app) routes() http.Handler {
 			profile := identity{}
 			valid := false
 			if r.Header.Get("X-Ingress-Path") != "" {
-				profile = identity{ID: 0, Name: "Owner", Owner: true}
+				profile = identity{ID: 0, Name: "Owner", Owner: true, Ingress: true}
 				valid = true
 			} else {
 				c, e := r.Cookie("archivist_session")
@@ -540,6 +565,9 @@ func main() {
 		log.Fatal(e)
 	}
 	if e = a.initJobs(); e != nil {
+		log.Fatal(e)
+	}
+	if e = a.initMoves(); e != nil {
 		log.Fatal(e)
 	}
 	go a.worker(context.Background())
