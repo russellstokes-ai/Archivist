@@ -21,23 +21,11 @@ import {Playback, PlaybackState, Chapter} from './playback';
 import {SavedQueue, reorder} from './queue';
 import {LocalBook, LocalFolder, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
+import {brand, palette, radius, minimumTouchTarget, ThemeMode, Palette} from './design';
 
 type Book = {id: number; title: string; author: string; series: string; format: string; space: string; available: boolean; uri?: string};
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
 type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'settings';
-type ThemeMode = 'system' | 'light' | 'dark';
-type Palette = {
-  ink: string;
-  paper: string;
-  muted: string;
-  line: string;
-  card: string;
-  raised: string;
-  sage: string;
-  gold: string;
-  ivory: string;
-};
-
 const storageKey = 'archivist.session';
 const themeKey = 'archivist.theme';
 const localFoldersKey = 'archivist.localFolders';
@@ -47,21 +35,6 @@ const localSortHistoryKey = 'archivist.localSortHistory';
 
 function validateServer(raw: string) {
   return checkServer(raw, __DEV__);
-}
-
-function palette(mode: ThemeMode, system: string | null | undefined): Palette {
-  const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
-  return {
-    ink: dark ? '#f8f7f2' : '#0f2a36',
-    paper: dark ? '#081318' : '#f8f7f2',
-    muted: dark ? '#9fb3b0' : '#627672',
-    line: dark ? '#203840' : '#d9dfdc',
-    card: dark ? '#0d2027' : '#fffdfa',
-    raised: dark ? '#132b34' : '#ffffff',
-    sage: '#397076',
-    gold: '#c6a374',
-    ivory: '#f8f7f2',
-  };
 }
 
 function formatTime(seconds: number) {
@@ -917,10 +890,10 @@ function Client() {
       </View>
       {playing ? (
         <Pressable accessibilityRole="button" onPress={() => setActiveTab('player')} style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
-          <View style={[styles.miniCover, {backgroundColor: p.gold}]}><Text style={{color: '#0f2a36', fontWeight: '700'}}>{coverInitials(playing.title)}</Text></View>
+          <View style={[styles.miniCover, {backgroundColor: p.gold}]}><Text style={{color: brand.ink, fontWeight: '700'}}>{coverInitials(playing.title)}</Text></View>
           <View style={{flex: 1}}>
             <Text numberOfLines={1} style={[styles.miniTitle, {color: p.ivory}]}>{playing.title}</Text>
-            <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(audio.currentTime)} - {audio.playing ? 'Playing' : 'Paused'}</Text>
+            <Text style={[styles.miniMeta, {color: '#C8D4D2'}]}>{formatTime(audio.currentTime)} - {audio.playing ? 'Playing' : 'Paused'}</Text>
           </View>
           <Pressable accessibilityRole="button" onPress={() => controller.toggle()} style={styles.miniButton}>
             <Text style={styles.miniButtonText}>{playback?.playing ? 'Pause' : 'Play'}</Text>
@@ -958,11 +931,11 @@ const styles = StyleSheet.create({
   title: {fontFamily: 'serif', fontSize: 34, marginBottom: 2},
   sectionTitle: {fontSize: 17, fontWeight: '700', marginTop: 10},
   input: {padding: 14, borderWidth: 1, borderRadius: 8, fontSize: 16},
-  button: {backgroundColor: '#397076', borderRadius: 8, paddingHorizontal: 14, minHeight: 46, justifyContent: 'center', alignItems: 'center'},
-  buttonGold: {backgroundColor: '#c6a374'},
-  buttonQuiet: {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#397076'},
-  buttonText: {color: '#f8f7f2', fontSize: 15, fontWeight: '700'},
-  buttonQuietText: {color: '#397076'},
+  button: {backgroundColor: brand.sage, borderRadius: radius.sm, paddingHorizontal: 14, minHeight: minimumTouchTarget, justifyContent: 'center', alignItems: 'center'},
+  buttonGold: {backgroundColor: brand.gold},
+  buttonQuiet: {backgroundColor: 'transparent', borderWidth: 1, borderColor: brand.sage},
+  buttonText: {color: brand.ivory, fontSize: 15, fontWeight: '700'},
+  buttonQuietText: {color: brand.sage},
   error: {paddingHorizontal: 16, paddingVertical: 8},
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
@@ -980,7 +953,7 @@ const styles = StyleSheet.create({
   timeRow: {flexDirection: 'row', justifyContent: 'space-between'},
   transport: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14},
   playButton: {width: 104, height: 58, borderRadius: 999, alignItems: 'center', justifyContent: 'center'},
-  playButtonText: {color: '#f8f7f2', fontSize: 17, fontWeight: '800'},
+  playButtonText: {color: brand.ivory, fontSize: 17, fontWeight: '800'},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex: 1},
   readerBar: {height: 50, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center'},
@@ -999,7 +972,7 @@ const styles = StyleSheet.create({
   miniTitle: {fontWeight: '800'},
   miniMeta: {fontSize: 12},
   miniButton: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#f8f7f2'},
-  miniButtonText: {color: '#f8f7f2', fontWeight: '700'},
+  miniButtonText: {color: brand.ivory, fontWeight: '700'},
   tabBar: {height: 62, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row'},
   tab: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   tabText: {fontSize: 12, fontWeight: '800'},
