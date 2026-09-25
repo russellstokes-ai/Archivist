@@ -94,7 +94,7 @@ jobs:
             adb start-server
             adb devices
           script: |
-            set -euo pipefail
+            set -eu
             APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
             test -n "$APK"
             adb install -r "$APK"
