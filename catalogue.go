@@ -135,6 +135,19 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	return tx.Commit()
 }
 
+func (a *app) syncExistingCatalogue() error {
+	a.scanMu.Lock()
+	defer a.scanMu.Unlock()
+	rows, e := a.db.Query("SELECT id FROM sources ORDER BY id")
+	if e != nil { return e }
+	ids := []int64{}
+	for rows.Next() { var id int64; if e=rows.Scan(&id); e!=nil { rows.Close(); return e }; ids=append(ids,id) }
+	if e=rows.Err(); e!=nil { rows.Close(); return e }
+	rows.Close()
+	for _, id := range ids { if e=a.syncAutoCatalogueLocked(id); e!=nil { return e } }
+	return nil
+}
+
 // Grouping is explicit. Title similarity alone must not merge unrelated editions.
 func (a *app) group(title string, ids []int64) (int64, error) {
 	title = strings.TrimSpace(title)
