@@ -17,5 +17,5 @@ COPY --from=builder /out/archivist /usr/bin/archivist
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
-EXPOSE 5056
+EXPOSE 5056 5443
 CMD ["/run.sh"]
