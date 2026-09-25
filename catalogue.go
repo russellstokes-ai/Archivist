@@ -218,20 +218,42 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		space = x.space
 		items = append(items, x)
 	}
-	if len(ids) > 0 {
-		placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
-		args := make([]any, len(ids))
-		for i,id := range ids { args[i]=id }
-		if _, e = tx.Exec("DELETE FROM works WHERE auto=1 AND id IN (SELECT DISTINCT e.work_id FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id WHERE ea.asset_id IN ("+placeholders+"))", args...); e != nil {
-			return 0, e
-		}
-	}
 	author := ""; series := ""
 	if len(items) > 0 {
 		sameAuthor, sameSeries := true, true
 		author, series = items[0].author, items[0].series
 		for _, x := range items[1:] { if x.author != author { sameAuthor=false }; if x.series != series { sameSeries=false } }
 		if !sameAuthor { author="" }; if !sameSeries { series="" }
+	}
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i,id := range ids { args[i]=id }
+	autoRows, e := tx.Query("SELECT DISTINCT w.id FROM works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE w.auto=1 AND ea.asset_id IN ("+placeholders+")", args...)
+	if e != nil { return 0, e }
+	autoWorks := []int64{}
+	for autoRows.Next(){ var id int64; if e=autoRows.Scan(&id); e!=nil{autoRows.Close();return 0,e}; autoWorks=append(autoWorks,id) }
+	if e=autoRows.Err();e!=nil{autoRows.Close();return 0,e};autoRows.Close()
+	for _, workID := range autoWorks {
+		var total, selected int
+		if e=tx.QueryRow("SELECT count(*) FROM edition_assets ea JOIN editions e ON e.id=ea.edition_id WHERE e.work_id=?",workID).Scan(&total);e!=nil{return 0,e}
+		query := "SELECT count(*) FROM edition_assets ea JOIN editions e ON e.id=ea.edition_id WHERE e.work_id=? AND ea.asset_id IN ("+placeholders+")"
+		workArgs := append([]any{workID}, args...)
+		if e=tx.QueryRow(query,workArgs...).Scan(&selected);e!=nil{return 0,e}
+		if selected != total { return 0, errors.New("select all files from an automatically grouped work before regrouping it") }
+	}
+	if len(autoWorks)==1 {
+		var total int
+		if e=tx.QueryRow("SELECT count(*) FROM edition_assets ea JOIN editions e ON e.id=ea.edition_id WHERE e.work_id=?",autoWorks[0]).Scan(&total);e!=nil{return 0,e}
+		if total==len(ids) {
+			if _,e=tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,auto=0,group_key='' WHERE id=?",title,space,author,series,autoWorks[0]);e!=nil{return 0,e}
+			if e=tx.Commit();e!=nil{return 0,e}
+			return autoWorks[0],nil
+		}
+	}
+	if len(autoWorks)>0 {
+		workPlaceholders:=strings.TrimRight(strings.Repeat("?,",len(autoWorks)),",")
+		workArgs:=make([]any,len(autoWorks));for i,id:=range autoWorks{workArgs[i]=id}
+		if _,e=tx.Exec("DELETE FROM works WHERE id IN ("+workPlaceholders+")",workArgs...);e!=nil{return 0,e}
 	}
 	res, e := tx.Exec("INSERT INTO works(title,space,author,series,auto,group_key) VALUES(?,?,?,?,0,'')", title, space, author, series)
 	if e != nil {
