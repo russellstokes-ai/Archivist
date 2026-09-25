@@ -31,6 +31,24 @@ func readRAR(ctx context.Context, f *os.File, wanted string) ([]string, []byte, 
 	if _, e := f.Seek(0, 0); e != nil {
 		return nil, nil, e
 	}
+	var signature [8]byte
+	n, e := io.ReadFull(f, signature[:7])
+	if e != nil || n != 7 {
+		return nil, nil, errors.New("invalid RAR signature")
+	}
+	rar4 := bytes.Equal(signature[:7], []byte{'R','a','r','!',0x1a,0x07,0x00})
+	rar5Prefix := bytes.Equal(signature[:7], []byte{'R','a','r','!',0x1a,0x07,0x01})
+	if !rar4 && !rar5Prefix {
+		return nil, nil, errors.New("invalid RAR signature")
+	}
+	if rar5Prefix {
+		if _, e = io.ReadFull(f, signature[7:8]); e != nil || signature[7] != 0x00 {
+			return nil, nil, errors.New("invalid RAR5 signature")
+		}
+	}
+	if _, e = f.Seek(0, 0); e != nil {
+		return nil, nil, e
+	}
 	r, e := rardecode.NewReader(cancellationReader{ctx, f}, rardecode.MaxDictionarySize(64<<20))
 	if e != nil {
 		return nil, nil, e
