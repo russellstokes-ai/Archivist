@@ -1,12 +1,12 @@
 (() => {
-  const panel=element('details'),summary=element('summary','Rename / move files'),form=element('form');
+  const panel=element('details'),summary=element('summary','Organise & sort library'),form=element('form');
   const asset=element('select'),template=element('select'),target=element('input'),preview=element('button','Preview move'),templatePreview=element('button','Preview template'),batchPreview=element('button','Preview all with template'),batchApply=element('button','Apply all previews'),history=element('div');
   asset.setAttribute('aria-label','File');
   template.setAttribute('aria-label','Sorting template');
   [['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].forEach(([value,label])=>template.append(new Option(label,value)));
   target.setAttribute('aria-label','Relative destination path');target.placeholder='Author/Book/Track 01.mp3';
   preview.type='submit';templatePreview.type='button';batchPreview.type='button';batchApply.type='button';
-  form.append(asset,template,templatePreview,batchPreview,target,preview,batchApply);panel.append(summary,form,history);$('sources').append(panel);panel.hidden=true;
+  const help=element('p','Choose a sorting template, preview the result, then apply only when you are happy. Originals are not overwritten.');form.append(asset,template,templatePreview,batchPreview,target,preview,batchApply);panel.append(summary,help,form,history);$('sources').append(panel);panel.hidden=true;panel.open=true;
   let currentItems=[];
   async function refresh(){
     history.replaceChildren();let previewCount=0;
