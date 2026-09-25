@@ -49,6 +49,10 @@ jobs:
         working-directory: mobile
         run: npm ci
 
+      - name: Expo doctor
+        working-directory: mobile
+        run: npx expo-doctor
+
       - name: Mobile typecheck
         working-directory: mobile
         run: npm run typecheck
@@ -75,10 +79,11 @@ jobs:
       - name: Launch release APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
             adb install -r "$APK"
