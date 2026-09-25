@@ -1,0 +1,50 @@
+/*
+ * Archivist design tokens.
+ * Brand values are fixed by the approved identity; semantic tokens may vary by theme.
+ */
+:root{
+  color-scheme:light dark;
+  --brand-ink:#0F2A36;
+  --brand-sage:#397076;
+  --brand-gold:#C6A374;
+  --brand-ivory:#F8F7F2;
+
+  --paper:light-dark(var(--brand-ivory),#081318);
+  --text:light-dark(var(--brand-ink),var(--brand-ivory));
+  --muted:light-dark(#627672,#9FB3B0);
+  --surface:light-dark(#FFFDFA,#0D2027);
+  --surface-raised:light-dark(#FFFFFF,#132B34);
+  --line:light-dark(#D9DFDC,#203840);
+  --success:light-dark(#247347,#8ED0AD);
+  --danger:light-dark(#9F3D3D,#E6A3A3);
+
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:24px;
+  --space-6:32px;
+  --space-7:48px;
+
+  --radius-xs:4px;
+  --radius-sm:8px;
+  --radius-md:12px;
+  --radius-lg:16px;
+  --radius-pill:999px;
+
+  --font-editorial:Literata,Georgia,'Times New Roman',serif;
+  --font-interface:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --text-caption:12px;
+  --text-body:15px;
+  --text-body-lg:17px;
+  --text-title:24px;
+  --text-display:34px;
+
+  --motion-quick:120ms;
+  --motion-standard:200ms;
+  --motion-deliberate:320ms;
+  --touch-target:48px;
+
+  --shadow-cover:4px 7px 15px #0002;
+  --shadow-panel:0 8px 26px #0000000a;
+}
