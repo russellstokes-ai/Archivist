@@ -163,7 +163,7 @@ func (a *app) scan(id int64) error {
 	defer os.Remove(stage.Name())
 	defer stage.Close()
 	encoder := json.NewEncoder(stage)
-	type entry struct{ Relative, Title, Format string }
+	type entry struct{ Relative, Title, Author, Series, Format string }
 	count := 0
 	e = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -186,14 +186,9 @@ func (a *app) scan(id int64) error {
 		if e != nil {
 			return e
 		}
-		title := strings.TrimSuffix(d.Name(), filepath.Ext(d.Name()))
-		if format == "Ebook" {
-			if embedded := epubTitle(path); embedded != "" {
-				title = embedded
-			}
-		}
+		meta := metadataFor(path, rel, format)
 		count++
-		return encoder.Encode(entry{rel, title, format})
+		return encoder.Encode(entry{rel, meta.Title, meta.Author, meta.Series, format})
 	})
 	if e != nil {
 		a.db.Exec("UPDATE sources SET status='Scan failed; catalogue retained' WHERE id=?", id)
@@ -220,7 +215,7 @@ func (a *app) scan(id int64) error {
 		if e != nil {
 			return e
 		}
-		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,format,available) VALUES(?,?,?,?,1) ON CONFLICT(source_id,relative_path) DO UPDATE SET available=1`, id, item.Relative, item.Title, item.Format); e != nil {
+		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available) VALUES(?,?,?,?,?,?,1) ON CONFLICT(source_id,relative_path) DO UPDATE SET title=excluded.title,author=CASE WHEN assets.author='' THEN excluded.author ELSE assets.author END,series=CASE WHEN assets.series='' THEN excluded.series ELSE assets.series END,format=excluded.format,available=1`, id, item.Relative, item.Title, item.Author, item.Series, item.Format); e != nil {
 			return e
 		}
 	}
