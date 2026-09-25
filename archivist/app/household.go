@@ -153,7 +153,7 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 	if path == "/api/me" || path == "/api/recommendations" {
 		return r.Method == "GET"
 	}
-	if path == "/api/books" || path == "/api/works" || path == "/api/sources" {
+	if path == "/api/books" || path == "/api/works" || path == "/api/sources" || path == "/api/library-summary" {
 		return r.Method == "GET"
 	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
