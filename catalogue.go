@@ -184,6 +184,14 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		space = x.space
 		items = append(items, x)
 	}
+	if len(ids) > 0 {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+		args := make([]any, len(ids))
+		for i,id := range ids { args[i]=id }
+		if _, e = tx.Exec("DELETE FROM works WHERE auto=1 AND id IN (SELECT DISTINCT e.work_id FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id WHERE ea.asset_id IN ("+placeholders+"))", args...); e != nil {
+			return 0, e
+		}
+	}
 	author := ""; series := ""
 	if len(items) > 0 {
 		sameAuthor, sameSeries := true, true
