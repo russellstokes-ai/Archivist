@@ -12,6 +12,10 @@ on:
       - 'home-assistant/archivist/app/**'
       - '.github/workflows/server-check.yml'
 
+concurrency:
+  group: server-check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   server-check:
     runs-on: ubuntu-latest
