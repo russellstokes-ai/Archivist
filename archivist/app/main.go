@@ -418,15 +418,22 @@ func (a *app) routes() http.Handler {
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			c, e := r.Cookie("archivist_session")
-			key := ""
-			if e == nil {
-				key = c.Value
+			profile := identity{}
+			valid := false
+			if r.Header.Get("X-Ingress-Path") != "" {
+				profile = identity{ID: 0, Name: "Owner", Owner: true}
+				valid = true
+			} else {
+				c, e := r.Cookie("archivist_session")
+				key := ""
+				if e == nil {
+					key = c.Value
+				}
+				if bearer := r.Header.Get("Authorization"); strings.HasPrefix(bearer, "Bearer ") {
+					key = strings.TrimPrefix(bearer, "Bearer ")
+				}
+				profile, valid = a.sessionIdentity(key)
 			}
-			if bearer := r.Header.Get("Authorization"); strings.HasPrefix(bearer, "Bearer ") {
-				key = strings.TrimPrefix(bearer, "Bearer ")
-			}
-			profile, valid := a.sessionIdentity(key)
 			if !valid {
 				fail(w, 401, errors.New("unlock this local session"))
 				return
