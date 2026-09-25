@@ -86,8 +86,13 @@ jobs:
           api-level: 34
           arch: x86_64
           profile: pixel_6
+          emulator-build: 14214601
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          pre-emulator-launch-script: |
+            adb kill-server || true
+            adb start-server
+            adb devices
           script: |
             set -euo pipefail
             APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
