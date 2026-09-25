@@ -1,6 +1,7 @@
 (() => {
-  const panel=document.createElement('details');
-  const heading=document.createElement('summary');heading.textContent='Edit book details';panel.append(heading);
+  const panel=document.createElement('details');panel.className='panel-card';
+  const heading=document.createElement('summary');heading.textContent='Advanced: correct scanned file metadata';panel.append(heading);
+  panel.append(element('p','Correct title, author or series when a scanned file was identified incorrectly. This does not rename the original file.'));
   const form=document.createElement('form'),choice=document.createElement('select'),title=document.createElement('input'),author=document.createElement('input'),series=document.createElement('input'),save=document.createElement('button');
   choice.setAttribute('aria-label','Book to edit');title.setAttribute('aria-label','Corrected title');author.setAttribute('aria-label','Author');series.setAttribute('aria-label','Series');
   title.required=true;for(const field of [title,author,series])field.maxLength=1000;author.placeholder='Author';series.placeholder='Series';save.textContent='Save details';
