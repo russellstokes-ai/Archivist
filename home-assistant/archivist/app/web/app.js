@@ -1,5 +1,11 @@
 const $=id=>document.getElementById(id);let page='library',request=0,currentProfile=null;
 function message(text){$('status').textContent=text}
+function activity(label,detail='',current=null,total=null){
+  const box=$('activity'),bar=$('activity-progress');
+  if(!label){box.hidden=true;bar.removeAttribute('value');bar.removeAttribute('max');return}
+  box.hidden=false;$('activity-label').textContent=label;$('activity-detail').textContent=detail?(' · '+detail):'';
+  if(Number.isFinite(current)&&Number.isFinite(total)&&total>0){bar.max=total;bar.value=Math.min(total,current)}else{bar.removeAttribute('value');bar.removeAttribute('max')}
+}
 async function api(url,method='GET',data){const res=await fetch(url,{method,headers:{'Content-Type':'application/json','X-Archivist-Action':'1'},body:data?JSON.stringify(data):undefined});if(!(res.headers.get('content-type')||'').includes('application/json'))throw Error('Archivist server response was not available.');const body=await res.json();if(!res.ok)throw Error(body.error||'Request failed');return body}
 function element(tag,text){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e}
 async function loadBooks(){const revision=++request;const items=await api('./api/books?q='+encodeURIComponent($('search').value)+'&space='+encodeURIComponent($('space').value));if(revision!==request)return;$('books').replaceChildren();$('count').textContent=items.length+' files'+(items.length===500?' · First 500 results; narrow your search':'');for(const b of items){const button=element('button');button.className='book';button.dataset.asset=b.id;button.append(Object.assign(element('div',b.title),{className:'cover'}),element('small',b.format+' · '+b.space+(b.author?' · '+b.author:'')+(b.series?' · '+b.series:'')+(b.available?'':' · Unavailable')));button.onclick=()=>{if(!b.available){message('This file was not found on the latest scan.');return}if(b.format==='Audio'){$('playing-title').textContent=b.title;$('audio').src='./api/assets/'+b.id;$('player').hidden=false;$('audio').play().catch(()=>message('Press Play to begin. This browser may not support the audio format.'))}else{window.open('./reader.html?asset='+b.id,'_blank','noopener')}};$('books').append(button)}}
