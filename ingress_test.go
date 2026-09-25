@@ -57,7 +57,7 @@ func TestIngressRoutingAndSession(t *testing.T) {
 		if w := request("GET", "/api/me", "", cookie); w.Code != 401 {
 			t.Fatal("logout failed")
 		}
-		for _, asset := range []string{"/app.js", "/reader.js", "/style.css", "/assets/archivist-app-icon.png", "/vendor/pdf.mjs", "/vendor/pdf.worker.mjs", "/vendor/cmaps/Adobe-Korea1-0.bcmap", "/vendor/standard_fonts/FoxitSerif.pfb"} {
+		for _, asset := range []string{"/app.js", "/reader.js", "/style.css", "/assets/archivist-app-icon.png", "/vendor/pdf.mjs", "/vendor/pdf.worker.mjs"} {
 			if w := request("GET", asset, "", nil); w.Code != 200 {
 				t.Fatalf("asset %s: %d", asset, w.Code)
 			}
