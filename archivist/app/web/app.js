@@ -123,6 +123,9 @@ async function loadSources(){
   for(const s of sources){
     const row=element('article');row.className='source source-card';
     const head=element('div');head.className='source-head';const title=element('div');title.append(element('strong',s.space),element('p',s.path));
+    const stats=element('div');stats.className='source-stats';
+    for(const [label,value] of [['Works',s.works],['Audiobooks',s.audiobooks],['Comics',s.comics],['Ebooks',s.ebooks],['PDFs',s.pdfs]]){if(Number(value)>0){const chip=element('span',value+' '+label);stats.append(chip)}}
+    if(stats.children.length)title.append(stats);
     const state=element('span',s.status||'Not scanned');state.className='status-pill';head.append(title,state);
     const actions=element('div');actions.className='source-actions';
     const scan=element('button','Scan / refresh');scan.className='primary';scan.onclick=async()=>{
