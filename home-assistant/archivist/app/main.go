@@ -233,6 +233,10 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		return e
 	}
 	if e = tx.Commit(); e != nil { return e }
+	if e = a.syncAutoCatalogueLocked(id); e != nil {
+		a.db.Exec("UPDATE sources SET status=? WHERE id=?", "Scanned; library grouping needs attention", id)
+		return e
+	}
 	if progress != nil { progress(total, total) }
 	return nil
 }
@@ -260,6 +264,7 @@ func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.backgroundRoutes(mux)
 	a.catalogueRoutes(mux)
+	a.coverRoutes(mux)
 	a.progressRoutes(mux)
 	a.householdRoutes(mux)
 	a.accountRoutes(mux)
@@ -567,6 +572,9 @@ func main() {
 	}
 	if e = a.initCatalogue(); e != nil {
 		log.Fatal(e)
+	}
+	if e = a.syncExistingCatalogue(); e != nil {
+		log.Printf("catalogue migration: %v", e)
 	}
 	if e = a.initProgress(); e != nil {
 		log.Fatal(e)
