@@ -7,6 +7,10 @@ on:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
 
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-android-apk:
     name: Build Android APK
@@ -85,19 +89,32 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
+            set -euo pipefail
             APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
+            test -n "$APK"
             adb install -r "$APK"
             adb logcat -c
             adb shell am force-stop app.archivist.reader
-            adb shell monkey -p app.archivist.reader -c android.intent.category.LAUNCHER 1
-            sleep 12
+            adb shell am start -W -n app.archivist.reader/.MainActivity
+            sleep 15
             PID=$(adb shell pidof app.archivist.reader | tr -d '\r')
             if [ -z "$PID" ]; then
               echo "Archivist process exited after launch"
-              adb logcat -d -t 400
+              adb logcat -d -t 600
               exit 1
             fi
-            echo "Archivist stayed running after launch (PID $PID)"
+            if ! adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -q 'app.archivist.reader'; then
+              echo "Archivist did not remain as the resumed activity"
+              adb logcat --pid="$PID" -d -t 600 || true
+              exit 1
+            fi
+            APP_LOG=$(adb logcat --pid="$PID" -d -v brief || true)
+            printf '%s\n' "$APP_LOG"
+            if printf '%s\n' "$APP_LOG" | grep -Eiq 'FATAL EXCEPTION|UnsatisfiedLinkError|Unable to load script|ReactNativeJS.*(TypeError|ReferenceError|Invariant Violation)'; then
+              echo "Archivist emitted a fatal startup error"
+              exit 1
+            fi
+            echo "Archivist release APK passed launch smoke test (PID $PID)"
 
       - name: Name versioned APK
         shell: bash
