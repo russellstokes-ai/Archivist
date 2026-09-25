@@ -83,58 +83,92 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	tx, e := a.db.Begin()
 	if e != nil { return e }
 	defer tx.Rollback()
-	if _, e = tx.Exec(`DELETE FROM works WHERE auto=1 AND id IN (
-		SELECT DISTINCT e.work_id FROM editions e
-		JOIN edition_assets ea ON ea.edition_id=e.id
-		JOIN assets a ON a.id=ea.asset_id WHERE a.source_id=?
-	)`, sourceID); e != nil { return e }
 
-	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.format,s.space
+	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.format,s.space,
+		COALESCE(w.auto,1)
 		FROM assets a JOIN sources s ON s.id=a.source_id
 		LEFT JOIN edition_assets ea ON ea.asset_id=a.id
-		WHERE a.source_id=? AND a.available=1 AND ea.asset_id IS NULL
+		LEFT JOIN editions ed ON ed.id=ea.edition_id
+		LEFT JOIN works w ON w.id=ed.work_id
+		WHERE a.source_id=? AND a.available=1 AND (w.id IS NULL OR w.auto=1)
 		ORDER BY a.relative_path`, sourceID)
 	if e != nil { return e }
+
 	groups := map[string][]catalogueAsset{}
 	order := []string{}
 	for rows.Next() {
 		var x catalogueAsset
-		if e = rows.Scan(&x.id,&x.path,&x.title,&x.author,&x.series,&x.format,&x.space); e != nil { rows.Close(); return e }
+		var auto int
+		if e = rows.Scan(&x.id,&x.path,&x.title,&x.author,&x.series,&x.format,&x.space,&auto); e != nil { rows.Close(); return e }
 		key := strings.ToLower(x.format)+":"+filepath.ToSlash(x.path)
 		if x.format == "Audio" {
 			dir := filepath.ToSlash(filepath.Dir(x.path))
 			if dir != "." && dir != "" { key = "audio-dir:"+dir }
 		}
+		key = "source:" + strconv.FormatInt(sourceID,10) + ":" + key
 		if _, ok := groups[key]; !ok { order = append(order,key) }
 		groups[key] = append(groups[key],x)
 	}
 	if e = rows.Err(); e != nil { rows.Close(); return e }
 	rows.Close()
 
+	keep := map[int64]bool{}
 	for _, key := range order {
 		items := groups[key]
 		sort.SliceStable(items,func(i,j int)bool{return naturalLess(items[i].path,items[j].path)})
 		first := items[0]
 		title := first.title
-		if first.format == "Audio" && strings.HasPrefix(key,"audio-dir:") {
-			if folder := filepath.Base(strings.TrimPrefix(key,"audio-dir:")); folder != "." && folder != "" { title = folder }
+		rawKey := strings.TrimPrefix(key,"source:"+strconv.FormatInt(sourceID,10)+":")
+		if first.format == "Audio" && strings.HasPrefix(rawKey,"audio-dir:") {
+			if folder := filepath.Base(strings.TrimPrefix(rawKey,"audio-dir:")); folder != "." && folder != "" { title = folder }
 		}
 		author := commonValue(items,func(x catalogueAsset)string{return x.author})
 		series := commonValue(items,func(x catalogueAsset)string{return x.series})
-		res, err := tx.Exec("INSERT INTO works(title,space,author,series,auto,group_key) VALUES(?,?,?,?,1,?)", title, first.space, author, series, key)
-		if err != nil { return err }
-		work, err := res.LastInsertId(); if err != nil { return err }
-		res, err = tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
-		if err != nil { return err }
-		edition, err := res.LastInsertId(); if err != nil { return err }
+
+		var work, edition int64
+		err := tx.QueryRow("SELECT id FROM works WHERE auto=1 AND group_key=? LIMIT 1",key).Scan(&work)
+		if err == sql.ErrNoRows {
+			res, insertErr := tx.Exec("INSERT INTO works(title,space,author,series,auto,group_key) VALUES(?,?,?,?,1,?)",title,first.space,author,series,key)
+			if insertErr != nil { return insertErr }
+			work, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
+			res, insertErr = tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
+			if insertErr != nil { return insertErr }
+			edition, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
+		} else if err != nil {
+			return err
+		} else {
+			if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=? WHERE id=?",title,first.space,author,series,work); err != nil { return err }
+			err = tx.QueryRow("SELECT id FROM editions WHERE work_id=? ORDER BY id LIMIT 1",work).Scan(&edition)
+			if err == sql.ErrNoRows {
+				res, insertErr := tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
+				if insertErr != nil { return insertErr }
+				edition, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
+			} else if err != nil { return err }
+			if _, err = tx.Exec("UPDATE editions SET format=? WHERE id=?",first.format,edition); err != nil { return err }
+			if _, err = tx.Exec("DELETE FROM editions WHERE work_id=? AND id<>?",work,edition); err != nil { return err }
+			if _, err = tx.Exec("DELETE FROM edition_assets WHERE edition_id=?",edition); err != nil { return err }
+		}
+		keep[work]=true
 		for pos,item := range items {
-			if _, err = tx.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?)",item.id,edition,pos); err != nil { return err }
+			if _, err = tx.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?) ON CONFLICT(asset_id) DO UPDATE SET edition_id=excluded.edition_id,position=excluded.position",item.id,edition,pos); err != nil { return err }
 		}
 	}
+
+	staleRows, e := tx.Query(`SELECT DISTINCT w.id FROM works w
+		JOIN editions ed ON ed.work_id=w.id
+		JOIN edition_assets ea ON ea.edition_id=ed.id
+		JOIN assets a ON a.id=ea.asset_id
+		WHERE w.auto=1 AND a.source_id=?`,sourceID)
+	if e != nil { return e }
+	stale := []int64{}
+	for staleRows.Next(){var id int64;if e=staleRows.Scan(&id);e!=nil{staleRows.Close();return e};if !keep[id]{stale=append(stale,id)}}
+	if e=staleRows.Err();e!=nil{staleRows.Close();return e}
+	staleRows.Close()
+	for _, id := range stale { if _,e=tx.Exec("DELETE FROM works WHERE id=?",id);e!=nil{return e} }
+
 	if e = pruneCatalogue(tx); e != nil { return e }
 	return tx.Commit()
 }
-
 func (a *app) syncExistingCatalogue() error {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
@@ -183,6 +217,14 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		}
 		space = x.space
 		items = append(items, x)
+	}
+	if len(ids) > 0 {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+		args := make([]any, len(ids))
+		for i,id := range ids { args[i]=id }
+		if _, e = tx.Exec("DELETE FROM works WHERE auto=1 AND id IN (SELECT DISTINCT e.work_id FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id WHERE ea.asset_id IN ("+placeholders+"))", args...); e != nil {
+			return 0, e
+		}
 	}
 	author := ""; series := ""
 	if len(items) > 0 {
