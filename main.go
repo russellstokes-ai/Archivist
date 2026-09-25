@@ -389,7 +389,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/books", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space := r.URL.Query().Get("space")
-		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.title LIKE ? AND (?='' OR s.space=?) AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)) ORDER BY a.title,a.id LIMIT 500`, q, space, space, who(r).Owner, who(r).ID)
+		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available FROM assets a JOIN sources s ON s.id=a.source_id WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ?) AND (?='' OR s.space=?) AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)) ORDER BY a.title,a.id LIMIT 500`, q, q, q, space, space, who(r).Owner, who(r).ID)
 		if e != nil {
 			fail(w, 500, e)
 			return
