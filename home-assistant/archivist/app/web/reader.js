@@ -28,13 +28,17 @@ async function show(index,offset=0){
     }else if(manifest.format==='Comic'){
       const img=document.createElement('img');img.alt='Page '+(index+1);img.className='comic-page';img.src='./api/assets/'+asset+'/reader/'+index;
       $('reading').append(img);await img.decode();img.style.width=Math.round($('reading').clientWidth*zoom)+'px';img.style.maxWidth='none';
+    }else if(manifest.format==='PDF'){
+      const frame=document.createElement('iframe');
+      frame.src='./api/assets/'+asset;
+      frame.title='PDF document';
+      frame.style.width='100%';
+      frame.style.height='calc(100vh - 170px)';
+      frame.style.border='0';
+      $('reading').append(frame);
+      await new Promise(resolve=>{frame.onload=()=>resolve();setTimeout(resolve,500);});
     }else{
-      const page=await pdf.getPage(index+1),original=page.getViewport({scale:1});
-      const desired=$('reading').clientWidth/original.width*zoom;
-      const scale=Math.min(desired,Math.sqrt(16000000/(original.width*original.height)));
-      const viewport=page.getViewport({scale}),canvas=document.createElement('canvas');canvas.width=viewport.width;canvas.height=viewport.height;
-      canvas.setAttribute('aria-label','PDF page '+(index+1));canvas.style.maxWidth='none';$('reading').append(canvas);
-      renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;
+      throw Error('This format is not supported by the reader.');
     }
     loaded=true;await new Promise(requestAnimationFrame);scrollTo(0,offset*Math.max(0,document.documentElement.scrollHeight-innerHeight));status('');
   }catch(e){status(e.message);}finally{busy=false;controls();}
@@ -68,11 +72,9 @@ try{
   if(!/^\d+$/.test(asset||''))throw Error('Choose a book from Library.');status('Opening...');
   manifest=await api('./api/assets/'+asset+'/reader');const progress=await api('./api/assets/'+asset+'/reading-progress');revision=progress.revision;
   if(manifest.format==='PDF'){
-    const lib=await import('./vendor/pdf.mjs');lib.GlobalWorkerOptions.workerSrc='./vendor/pdf.worker.mjs';
-    pdf=await lib.getDocument({url:'./api/assets/'+asset,withCredentials:true,isEvalSupported:false,useWasm:false,cMapUrl:'./vendor/cmaps/',cMapPacked:true,standardFontDataUrl:'./vendor/standard_fonts/'}).promise;
-    manifest.parts=Array.from({length:pdf.numPages},(_,i)=>'Page '+(i+1));
+    manifest.parts=['Document'];
   }
-  for(const control of [zoomOut,fit,zoomIn])control.hidden=manifest.format==='Ebook';
+  for(const control of [zoomOut,fit,zoomIn])control.hidden=manifest.format==='Ebook'||manifest.format==='PDF';
   $('smaller').hidden=$('larger').hidden=manifest.format!=='Ebook';
   if(!manifest.parts.length)throw Error('This book has no readable pages.');
   manifest.parts.forEach((name,i)=>$('sections').add(new Option(name,String(i))));await show(Math.min(progress.part,manifest.parts.length-1),progress.fraction);
