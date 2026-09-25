@@ -153,6 +153,9 @@ func kind(path string) string {
 func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
+	if a.movesPending() {
+		return errors.New("finish or recover pending file moves before scanning")
+	}
 	var root string
 	if e := a.db.QueryRow("SELECT path FROM sources WHERE id=?", id).Scan(&root); e != nil {
 		return e
@@ -231,7 +234,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if e != nil {
 			return e
 		}
-		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available) VALUES(?,?,?,?,?,?,1) ON CONFLICT(source_id,relative_path) DO UPDATE SET title=excluded.title,author=CASE WHEN assets.author='' THEN excluded.author ELSE assets.author END,series=CASE WHEN assets.series='' THEN excluded.series ELSE assets.series END,format=excluded.format,available=1`, id, item.Relative, item.Title, item.Author, item.Series, item.Format); e != nil {
+		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available) VALUES(?,?,?,?,?,?,1) ON CONFLICT(source_id,relative_path) DO UPDATE SET title=CASE WHEN assets.title='' THEN excluded.title ELSE assets.title END,author=CASE WHEN assets.author='' THEN excluded.author ELSE assets.author END,series=CASE WHEN assets.series='' THEN excluded.series ELSE assets.series END,format=excluded.format,available=1`, id, item.Relative, item.Title, item.Author, item.Series, item.Format); e != nil {
 			return e
 		}
 	}
@@ -272,6 +275,8 @@ func (a *app) routes() http.Handler {
 	a.catalogueRoutes(mux)
 	a.coverRoutes(mux)
 	a.progressRoutes(mux)
+	a.listeningRoutes(mux)
+	a.playerFeatureRoutes(mux)
 	a.householdRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
@@ -384,7 +389,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/books", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space := r.URL.Query().Get("space")
-		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.title LIKE ? AND (?='' OR s.space=?) AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)) ORDER BY a.title,a.id LIMIT 500`, q, space, space, who(r).Owner, who(r).ID)
+		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available FROM assets a JOIN sources s ON s.id=a.source_id WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ?) AND (?='' OR s.space=?) AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)) ORDER BY a.title,a.id LIMIT 500`, q, q, q, space, space, who(r).Owner, who(r).ID)
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -598,6 +603,12 @@ func main() {
 		log.Printf("catalogue migration: %v", e)
 	}
 	if e = a.initProgress(); e != nil {
+		log.Fatal(e)
+	}
+	if e = a.initListening(); e != nil {
+		log.Fatal(e)
+	}
+	if e = a.initPlayerFeatures(); e != nil {
 		log.Fatal(e)
 	}
 	if e = a.initReader(); e != nil {
