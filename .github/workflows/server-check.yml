@@ -65,3 +65,40 @@ jobs:
           cmp archivist/config.yaml home-assistant/archivist/config.yaml
           cmp archivist/run.sh home-assistant/archivist/run.sh
           cmp archivist/Dockerfile home-assistant/archivist/Dockerfile
+
+      - name: Home Assistant add-on smoke test
+        run: |
+          set -euo pipefail
+          docker build --build-arg BUILD_VERSION=0.1.19 --build-arg BUILD_ARCH=amd64 -t archivist-ha-test home-assistant/archivist
+
+          rm -rf .ci-data .ci-ssl
+          mkdir -p .ci-data .ci-ssl
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1             -keyout .ci-ssl/privkey.pem -out .ci-ssl/fullchain.pem             -subj '/CN=localhost' >/dev/null 2>&1
+          cat > .ci-data/options.json <<'JSON'
+          {
+            "data_path": "/data",
+            "listen": "0.0.0.0:5056",
+            "allow_lan": true,
+            "remote_https": true,
+            "remote_listen": "0.0.0.0:5443",
+            "certfile": "fullchain.pem",
+            "keyfile": "privkey.pem"
+          }
+          JSON
+
+          docker run -d --name archivist-ha-test-run             -p 15056:5056 -p 15443:5443             -v "$PWD/.ci-data:/data" -v "$PWD/.ci-ssl:/ssl:ro"             archivist-ha-test
+
+          cleanup() {
+            docker logs archivist-ha-test-run || true
+            docker rm -f archivist-ha-test-run >/dev/null 2>&1 || true
+            rm -rf .ci-data .ci-ssl
+          }
+          trap cleanup EXIT
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:15056/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:15056/healthz
+          curl -kfsS https://127.0.0.1:15443/healthz
+
