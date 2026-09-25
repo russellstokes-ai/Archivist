@@ -374,10 +374,19 @@ func (a *app) routes() http.Handler {
 		reply(w, map[string]bool{"ok": true})
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		base, ingressErr := ingressBase(r)
+		if ingressErr != nil {
+			http.Error(w, "invalid ingress request", http.StatusForbidden)
+			return
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self'; object-src 'none'; frame-ancestors 'none'")
+		frameAncestors := "'none'"
+		if r.Header.Get("X-Ingress-Path") != "" {
+			frameAncestors = "'self'"
+		}
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self'; object-src 'none'; frame-ancestors "+frameAncestors)
 		if r.URL.Path == "/setup/status" && r.Method == "GET" {
 			reply(w, map[string]bool{"configured": a.ownerConfigured()})
 			return
@@ -478,6 +487,9 @@ func (a *app) routes() http.Handler {
 			if _, ok := a.sessionIdentity(bearer); ok {
 				http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: bearer, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, Path: "/"})
 			}
+		}
+		if serveEntry(w, r, base) {
+			return
 		}
 		mux.ServeHTTP(w, r)
 	})
