@@ -12,9 +12,10 @@ import (
 )
 
 type identity struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Owner bool   `json:"owner"`
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Owner   bool   `json:"owner"`
+	Ingress bool   `json:"ingress,omitempty"`
 }
 type identityKey struct{}
 
