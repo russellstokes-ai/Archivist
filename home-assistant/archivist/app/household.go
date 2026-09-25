@@ -32,10 +32,10 @@ func (a *app) identify(key string) (identity, bool) {
 		return p, false
 	}
 	if hash, ok := a.ownerCredentialHash(); ok && keyHash(key) == hash {
-		return identity{0, "Owner", true}, true
+		return identity{ID: 0, Name: "Owner", Owner: true}, true
 	}
 	if !a.ownerConfigured() && key == a.token {
-		return identity{0, "Owner", true}, true
+		return identity{ID: 0, Name: "Owner", Owner: true}, true
 	}
 	e := a.db.QueryRow("SELECT id,name FROM profiles WHERE key_hash=? AND revoked=0", keyHash(key)).Scan(&p.ID, &p.Name)
 	return p, e == nil
