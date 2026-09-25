@@ -1,0 +1,53 @@
+name: Server checks
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'web/**'
+      - 'archivist/app/**'
+      - 'home-assistant/archivist/app/**'
+      - '.github/workflows/server-check.yml'
+
+jobs:
+  server-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+
+      - name: Root server tests
+        run: go test ./...
+
+      - name: Packaged server tests
+        run: |
+          (cd archivist/app && go test ./...)
+          (cd home-assistant/archivist/app && go test ./...)
+
+      - name: Web JavaScript syntax
+        run: |
+          for dir in web archivist/app/web home-assistant/archivist/app/web; do
+            for file in "$dir"/*.js; do
+              node --check "$file"
+            done
+          done
+
+      - name: Verify packaged source parity
+        run: |
+          for file in main.go catalogue.go household.go covers.go; do
+            cmp "$file" "archivist/app/$file"
+            cmp "$file" "home-assistant/archivist/app/$file"
+          done
+          for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js; do
+            cmp "web/$file" "archivist/app/web/$file"
+            cmp "web/$file" "home-assistant/archivist/app/web/$file"
+          done
