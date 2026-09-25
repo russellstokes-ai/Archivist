@@ -115,7 +115,7 @@ func (a *app) initCatalogueV3() error {
 			namespace TEXT NOT NULL DEFAULT '',
 			value TEXT NOT NULL,
 			UNIQUE(entity_type,entity_id,provider,namespace,value),
-			UNIQUE(provider,namespace,value)
+			UNIQUE(entity_type,provider,namespace,value)
 		)`,
 		`CREATE TABLE IF NOT EXISTS metadata_values(
 			entity_type TEXT NOT NULL,
