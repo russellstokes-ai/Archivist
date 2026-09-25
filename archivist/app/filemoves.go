@@ -66,6 +66,11 @@ func sortTemplatePath(template, title, author, series, format, current string) (
 		return filepath.Join(authorPart, seriesPart, base), nil
 	case "format-author-title":
 		return filepath.Join(formatPart, authorPart, base), nil
+	case "format-author-series-title":
+		if strings.TrimSpace(series) == "" {
+			return filepath.Join(formatPart, authorPart, base), nil
+		}
+		return filepath.Join(formatPart, authorPart, seriesPart, base), nil
 	default:
 		return "", errors.New("unknown sorting template")
 	}
@@ -150,6 +155,9 @@ func (a *app) previewMove(asset int64, target string) (fileMove, error) {
 		return m, e
 	}
 	m.ID = hex.EncodeToString(raw)
+	if _, e = a.db.Exec("UPDATE file_moves SET state='cancelled' WHERE asset=? AND state='preview'", m.Asset); e != nil {
+		return m, e
+	}
 	_, e = a.db.Exec("INSERT INTO file_moves VALUES(?,?,?,?,?,?,?)", m.ID, m.Asset, m.Root, m.From, m.To, m.Hash, m.State)
 	return m, e
 }
