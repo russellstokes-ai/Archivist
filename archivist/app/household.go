@@ -58,7 +58,23 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 				fail(w, 500, e)
 				return
 			}
-			out = append(out, map[string]any{"id": id, "name": name, "revoked": revoked})
+			spaceRows, spaceErr := a.db.Query("SELECT space FROM grants WHERE profile_id=? ORDER BY space", id)
+			if spaceErr != nil {
+				fail(w, 500, spaceErr)
+				return
+			}
+			spaces := []string{}
+			for spaceRows.Next() {
+				var space string
+				if spaceErr = spaceRows.Scan(&space); spaceErr != nil {
+					spaceRows.Close()
+					fail(w, 500, spaceErr)
+					return
+				}
+				spaces = append(spaces, space)
+			}
+			spaceRows.Close()
+			out = append(out, map[string]any{"id": id, "name": name, "revoked": revoked, "spaces": spaces})
 		}
 		reply(w, out)
 	})
