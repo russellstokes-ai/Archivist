@@ -8,8 +8,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'web/**'
-      - 'archivist/app/**'
-      - 'home-assistant/archivist/app/**'
+      - 'archivist/**'
+      - 'home-assistant/archivist/**'
       - '.github/workflows/server-check.yml'
 
 concurrency:
@@ -47,9 +47,14 @@ jobs:
             done
           done
 
+      - name: Add-on launcher syntax
+        run: |
+          sh -n archivist/run.sh
+          sh -n home-assistant/archivist/run.sh
+
       - name: Verify packaged source parity
         run: |
-          for file in main.go catalogue.go household.go covers.go; do
+          for file in *.go go.mod go.sum; do
             cmp "$file" "archivist/app/$file"
             cmp "$file" "home-assistant/archivist/app/$file"
           done
@@ -57,3 +62,6 @@ jobs:
             cmp "web/$file" "archivist/app/web/$file"
             cmp "web/$file" "home-assistant/archivist/app/web/$file"
           done
+          cmp archivist/config.yaml home-assistant/archivist/config.yaml
+          cmp archivist/run.sh home-assistant/archivist/run.sh
+          cmp archivist/Dockerfile home-assistant/archivist/Dockerfile
