@@ -227,6 +227,16 @@ func fail(w http.ResponseWriter, s int, e error) {
 	w.WriteHeader(s)
 	reply(w, map[string]string{"error": e.Error()})
 }
+func publicURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := r.Header.Get("X-Forwarded-Proto"); forwarded == "http" || forwarded == "https" {
+		scheme = forwarded
+	}
+	return scheme + "://" + r.Host
+}
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.backgroundRoutes(mux)
@@ -259,6 +269,20 @@ func (a *app) routes() http.Handler {
 			out = append(out, s)
 		}
 		reply(w, out)
+	})
+	mux.HandleFunc("GET /api/server-info", func(w http.ResponseWriter, r *http.Request) {
+		var sources, jobs, sessions int
+		a.db.QueryRow("SELECT count(*) FROM sources").Scan(&sources)
+		a.db.QueryRow("SELECT count(*) FROM jobs WHERE state IN ('queued','running')").Scan(&jobs)
+		a.db.QueryRow("SELECT count(*) FROM sessions WHERE expires>?", time.Now().Unix()).Scan(&sessions)
+		reply(w, map[string]any{
+			"address":    publicURL(r),
+			"configured": a.ownerConfigured(),
+			"sources":    sources,
+			"activeJobs": jobs,
+			"sessions":   sessions,
+			"roots":      browseRoots(),
+		})
 	})
 	mux.HandleFunc("POST /api/sources", func(w http.ResponseWriter, r *http.Request) {
 		var s source
@@ -354,6 +378,36 @@ func (a *app) routes() http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self'; object-src 'none'; frame-ancestors 'none'")
+		if r.URL.Path == "/setup/status" && r.Method == "GET" {
+			reply(w, map[string]bool{"configured": a.ownerConfigured()})
+			return
+		}
+		if r.URL.Path == "/setup" && r.Method == "POST" {
+			if r.Header.Get("X-Archivist-Action") != "1" {
+				fail(w, 403, errors.New("invalid request"))
+				return
+			}
+			if a.ownerConfigured() {
+				fail(w, 409, errors.New("owner access is already configured"))
+				return
+			}
+			var body struct {
+				Token string `json:"token"`
+			}
+			json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body)
+			if e := a.setOwnerCredential(body.Token); e != nil {
+				fail(w, 400, e)
+				return
+			}
+			session, e := a.newSession(body.Token)
+			if e != nil {
+				fail(w, 500, e)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: "/"})
+			reply(w, map[string]string{"token": session})
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			c, e := r.Cookie("archivist_session")
 			key := ""
@@ -470,7 +524,7 @@ func main() {
 		log.Fatal(e)
 	}
 	go a.worker(context.Background())
-	fmt.Printf("Archivist internal milestone: http://%s\nLocal access key: %s\n", *addr, a.token)
+	fmt.Printf("Archivist server: http://%s\n", *addr)
 	server := &http.Server{Addr: *addr, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	log.Fatal(server.ListenAndServe())
 }

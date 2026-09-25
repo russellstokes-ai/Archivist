@@ -12,7 +12,28 @@ import (
 )
 
 func (a *app) initSessions() error {
-	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY,token_hash TEXT NOT NULL UNIQUE,profile_id INTEGER NOT NULL,credential_hash TEXT NOT NULL,expires INTEGER NOT NULL,created INTEGER NOT NULL);`)
+	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY,token_hash TEXT NOT NULL UNIQUE,profile_id INTEGER NOT NULL,credential_hash TEXT NOT NULL,expires INTEGER NOT NULL,created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS owner_credentials(id INTEGER PRIMARY KEY CHECK(id=1),key_hash TEXT NOT NULL,created INTEGER NOT NULL);`)
+	return e
+}
+func (a *app) ownerCredentialHash() (string, bool) {
+	var hash string
+	e := a.db.QueryRow("SELECT key_hash FROM owner_credentials WHERE id=1").Scan(&hash)
+	return hash, e == nil
+}
+func (a *app) ownerConfigured() bool {
+	_, ok := a.ownerCredentialHash()
+	return ok
+}
+func (a *app) setOwnerCredential(key string) error {
+	key = strings.TrimSpace(key)
+	if len(key) < 8 || len(key) > 256 {
+		return errors.New("create an access key with at least 8 characters")
+	}
+	_, e := a.db.Exec("INSERT INTO owner_credentials(id,key_hash,created) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET key_hash=excluded.key_hash", keyHash(key), time.Now().Unix())
+	if e == nil {
+		a.db.Exec("DELETE FROM sessions WHERE profile_id=0")
+	}
 	return e
 }
 func (a *app) newSession(key string) (string, error) {
@@ -38,6 +59,9 @@ func (a *app) sessionIdentity(token string) (identity, bool) {
 		return identity{}, false
 	}
 	if id == 0 {
+		if hash, ok := a.ownerCredentialHash(); ok {
+			return identity{0, "Owner", true}, credential == hash
+		}
 		return identity{0, "Owner", true}, credential == keyHash(a.token)
 	}
 	var p identity

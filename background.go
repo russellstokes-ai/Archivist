@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -74,16 +75,18 @@ func (a *app) backgroundRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/folders", func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Query().Get("path")
 		if p == "" {
-			p, _ = os.UserHomeDir()
+			roots := browseRoots()
+			reply(w, map[string]any{"path": "", "parent": "", "roots": roots, "folders": roots})
+			return
 		}
 		root, e := canonical(p)
 		if e != nil {
-			fail(w, 400, errors.New("folder unavailable"))
+			fail(w, 400, errors.New("folder unavailable: "+p))
 			return
 		}
 		entries, e := os.ReadDir(root)
 		if e != nil {
-			fail(w, 403, errors.New("cannot read this folder"))
+			fail(w, 403, errors.New("Archivist cannot read this folder from the server"))
 			return
 		}
 		folders := []map[string]string{}
@@ -94,4 +97,35 @@ func (a *app) backgroundRoutes(mux *http.ServeMux) {
 		}
 		reply(w, map[string]any{"path": root, "parent": filepath.Dir(root), "folders": folders})
 	})
+}
+
+func browseRoots() []map[string]string {
+	candidates := []struct {
+		name string
+		path string
+	}{
+		{"Media", "/media"},
+		{"Share", "/share"},
+		{"Mounted drives", "/mnt"},
+		{"Server data", "/data"},
+		{"Library storage", "/srv"},
+	}
+	if home, e := os.UserHomeDir(); e == nil && home != "" {
+		candidates = append(candidates, struct {
+			name string
+			path string
+		}{"Home", home})
+	}
+	seen := map[string]bool{}
+	roots := []map[string]string{}
+	for _, c := range candidates {
+		p, e := canonical(c.path)
+		if e != nil || seen[p] {
+			continue
+		}
+		seen[p] = true
+		roots = append(roots, map[string]string{"name": c.name, "path": p})
+	}
+	sort.SliceStable(roots, func(i, j int) bool { return roots[i]["name"] < roots[j]["name"] })
+	return roots
 }

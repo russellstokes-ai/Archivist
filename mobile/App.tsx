@@ -16,11 +16,13 @@ import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
-import {request, validateServer as checkServer, readerNavigationAllowed, Session} from './connection';
+import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {SavedQueue, reorder} from './queue';
+import {LocalBook, LocalFolder, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 
-type Book = {id: number; title: string; author: string; series: string; format: string; space: string; available: boolean};
+type Book = {id: number; title: string; author: string; series: string; format: string; space: string; available: boolean; uri?: string};
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
 type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'settings';
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -38,6 +40,10 @@ type Palette = {
 
 const storageKey = 'archivist.session';
 const themeKey = 'archivist.theme';
+const localFoldersKey = 'archivist.localFolders';
+const localProgressKey = 'archivist.localProgress';
+const localQueueKey = 'archivist.localQueue';
+const localSortHistoryKey = 'archivist.localSortHistory';
 
 function validateServer(raw: string) {
   return checkServer(raw, __DEV__);
@@ -94,12 +100,19 @@ function Client() {
   const [session, setSession] = useState<Session | null>(null);
   const [server, setServer] = useState('');
   const [key, setKey] = useState('');
+  const [serverPanelOpen, setServerPanelOpen] = useState(false);
+  const [serverNotice, setServerNotice] = useState('');
   const [books, setBooks] = useState<Book[]>([]);
+  const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
+  const [localFolderNotice, setLocalFolderNotice] = useState('');
+  const [localScanning, setLocalScanning] = useState(false);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [reading, setReading] = useState<Book | null>(null);
+  const [localReader, setLocalReader] = useState<LocalReaderDocument | null>(null);
+  const [readerLoading, setReaderLoading] = useState(false);
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
   const player = useAudioPlayer(null);
@@ -109,6 +122,7 @@ function Client() {
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|null>(null);
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
+  const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
   const queueRef = useRef(queuedBooks); queueRef.current=queuedBooks;
   const [queueReady,setQueueReady]=useState(false);
   const [queueBusy,setQueueBusy]=useState(false);
@@ -133,6 +147,8 @@ function Client() {
   const [editSeries,setEditSeries]=useState('');
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
+  const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
+  const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
   const loadCancel = useRef<(() => void) | null>(null);
   const shelfColumns = width >= 900 ? 5 : width >= 700 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
@@ -178,6 +194,34 @@ function Client() {
     }, setPlayback,
   ), [player]);
   const audioProgress = playback?.duration ? Math.min(1, playback.seconds / playback.duration) : 0;
+  const localAudioProgress = !session && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
+  const displayedProgress = session ? audioProgress : localAudioProgress;
+  const visibleBooks = useMemo(() => {
+    if (session) return books;
+    const q = query.trim().toLowerCase();
+    return books.filter(book => {
+      if (space && book.space !== space) return false;
+      if (!q) return true;
+      return [book.title, book.author, book.series, book.format, book.space].some(value => value.toLowerCase().includes(q));
+    });
+  }, [books, query, session, space]);
+  const atlas = useMemo(() => {
+    const count = (values: string[]) => {
+      const totals = new Map<string, number>();
+      for (const value of values.map(v => v.trim()).filter(Boolean)) totals.set(value, (totals.get(value) || 0) + 1);
+      return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8);
+    };
+    return {
+      formats: count(books.map(book => book.format)),
+      authors: count(books.map(book => book.author || 'Unknown author')),
+      series: count(books.map(book => book.series).filter(Boolean)),
+      spaces: count(books.map(book => book.space)),
+      status: [
+        ['Available', books.filter(book => book.available).length] as [string, number],
+        ['Unavailable', books.filter(book => !book.available).length] as [string, number],
+      ].filter(([, total]) => total > 0),
+    };
+  }, [books]);
 
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
@@ -193,6 +237,12 @@ function Client() {
     void controller.open(next.id).then(()=>{if(controller.state.playing)void queueStore?.edit(items=>items.filter(b=>b.id!==next.id));});
   }, [playback?.completed, controller, queueStore]);
 
+  useEffect(() => {
+    if (session || !audio.didJustFinish || !queueRef.current.length) return;
+    const [next, ...rest] = queueRef.current;
+    void updateLocalQueue(rest).then(() => playBook(next));
+  }, [audio.didJustFinish, session]);
+
   const activeAsset=playback?.tracks[playback.index]?.id;
   useEffect(()=>{
     let cancelled=false;setChapters([]);setChapterError('');
@@ -203,6 +253,20 @@ function Client() {
   useEffect(() => {
     SecureStore.getItemAsync(themeKey).then(value => {
       if (value === 'system' || value === 'light' || value === 'dark') setTheme(value);
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(localFoldersKey).then(value => {
+      if (!value) return;
+      const saved = JSON.parse(value) as LocalFolder[];
+      if (Array.isArray(saved)) setLocalFolders(saved);
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(localProgressKey).then(value => {
+      if (value) setLocalProgress(JSON.parse(value));
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(localQueueKey).then(value => {
+      if (value) setQueuedBooks(JSON.parse(value));
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(localSortHistoryKey).then(value => {
+      if (value) setLocalSortHistory(JSON.parse(value));
     }).catch(() => undefined);
     SecureStore.getItemAsync(storageKey)
       .then(async value => {
@@ -243,6 +307,21 @@ function Client() {
     request(session,'/api/sources').then(items => { if(!cancelled) {setSources(items);setSpaces([...new Set<string>(items.map((s: {space:string})=>s.space))]);} }).catch(e=>setError(e.message));
     return () => {cancelled=true;};
   }, [session]);
+
+  useEffect(() => {
+    if (session || !playing?.uri || !audio.currentTime) return;
+    const timer = setTimeout(() => {
+      const next = {...localProgress, [playing.uri!]: audio.currentTime};
+      setLocalProgress(next);
+      SecureStore.setItemAsync(localProgressKey, JSON.stringify(next)).catch(() => undefined);
+    }, 750);
+    return () => clearTimeout(timer);
+  }, [audio.currentTime, localProgress, playing, session]);
+
+  useEffect(() => {
+    if (session || restoring || !localFolders.length || books.length || localScanning) return;
+    void rescanLocalFolders();
+  }, [books.length, localFolders, localScanning, restoring, session]);
 
   async function chooseTheme(next: ThemeMode) {
     setTheme(next);
@@ -297,8 +376,11 @@ function Client() {
   async function signIn() {
     setBusy(true);
     setError('');
+    setServerNotice('');
     try {
       const origin = validateServer(server);
+      const setup = await setupStatus(origin);
+      if (!setup.configured) throw Error('Open this server address in a browser and create owner access first. Then return here and connect.');
       const data = await request({server: origin, token: ''}, '/session', 'POST', {token: key});
       if (typeof data.token !== 'string' || !data.token) throw Error('Invalid server session response');
       const next = {server: origin, token: String(data.token)};
@@ -306,7 +388,24 @@ function Client() {
       await SecureStore.setItemAsync(storageKey, JSON.stringify(next));
       setKey('');
       setSession(next);
+      setServerPanelOpen(false);
       setActiveTab('shelf');
+    } catch (e) {
+      if (e instanceof RequestError && e.status === 401) setError('That access key was not accepted by this Archivist server.');
+      else setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkServerAddress() {
+    setBusy(true);
+    setError('');
+    setServerNotice('');
+    try {
+      const origin = validateServer(server);
+      const setup = await setupStatus(origin);
+      setServerNotice(setup.configured ? 'Server found. Enter your access key to connect.' : 'Server found. Create owner access in the server web page first.');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -329,11 +428,73 @@ function Client() {
     await SecureStore.deleteItemAsync(storageKey);
     setSession(null);
     setBooks([]);
+    setOwner(false);
+    setSources([]);
     setQueuedBooks([]); setSpace('');
   }
 
+  async function addLocalFolder() {
+    setError('');
+    setLocalFolderNotice('');
+    setLocalScanning(true);
+    try {
+      const picked = await pickLocalFolder();
+      if (!picked) {
+        setLocalFolderNotice('Folder selection cancelled.');
+        return;
+      }
+      const folders = localFolders.some(folder => folder.uri === picked.uri) ? localFolders : [...localFolders, picked];
+      const result = await scanLocalFolders(folders);
+      setLocalFolders(result.folders);
+      setBooks(result.books);
+      setLocalMovePreviews([]);
+      setSpaces([...new Set(result.books.map(book => book.space))]);
+      await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
+      setLocalFolderNotice(`${result.books.length} local items found${result.skipped ? `; ${result.skipped} folders could not be read` : ''}${result.truncated ? '; showing first batch' : ''}.`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLocalScanning(false);
+    }
+  }
+
+  async function rescanLocalFolders() {
+    if (!localFolders.length) return;
+    setError('');
+    setLocalScanning(true);
+    try {
+      const result = await scanLocalFolders(localFolders);
+      setLocalFolders(result.folders);
+      setBooks(result.books);
+      setLocalMovePreviews([]);
+      setSpaces([...new Set(result.books.map(book => book.space))]);
+      await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
+      setLocalFolderNotice(`${result.books.length} local items found${result.skipped ? `; ${result.skipped} folders could not be read` : ''}${result.truncated ? '; showing first batch' : ''}.`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLocalScanning(false);
+    }
+  }
+
   async function playBook(book: Book) {
-    if (!session) return;
+    if (!session) {
+      if (!book.uri) return;
+      setError('');
+      try {
+        loadCancel.current?.();
+        await controller.stop();
+        setPlaying(book);
+        setActiveTab('player');
+        player.replace({uri: book.uri});
+        player.setActiveForLockScreen(true, {title: book.title, albumTitle: 'Archivist'});
+        if (localProgress[book.uri]) await player.seekTo(localProgress[book.uri]);
+        player.play();
+      } catch (e) {
+        setError((e as Error).message);
+      }
+      return;
+    }
     if (!book.available) {
       setError('This file is currently unavailable.');
       return;
@@ -348,6 +509,57 @@ function Client() {
     }
   }
 
+  function previewLocalSortBatch() {
+    const previews = previewLocalSort(visibleBooks.filter(book => book.uri) as LocalBook[], sortTemplate);
+    setLocalMovePreviews(previews);
+    const ready = previews.filter(item => item.state === 'ready').length;
+    const conflicts = previews.filter(item => item.state === 'conflict').length;
+    const same = previews.filter(item => item.state === 'same').length;
+    setMoveStatus(`${ready} ready; ${conflicts} conflicts; ${same} already organised.`);
+  }
+
+  async function applyLocalSortBatch() {
+    const ready = localMovePreviews.filter(item => item.state === 'ready');
+    if (!ready.length) {
+      setMoveStatus('No ready local moves to apply.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setMoveStatus('Copying organised files...');
+    try {
+      const result = await applyLocalSortCopies(ready);
+      const entry: LocalSortHistory = {id: String(Date.now()), createdAt: new Date().toISOString(), copied: result.copied, failed: result.failed};
+      const history = [entry, ...localSortHistory].slice(0, 20);
+      setLocalSortHistory(history);
+      await SecureStore.setItemAsync(localSortHistoryKey, JSON.stringify(history));
+      setMoveStatus(`${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
+      await rescanLocalFolders();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function recoverLocalSort(history: LocalSortHistory) {
+    setBusy(true);
+    setError('');
+    setMoveStatus('Removing copied files...');
+    try {
+      const result = await removeLocalSortCopies(history);
+      const next = localSortHistory.filter(item => item.id !== history.id);
+      setLocalSortHistory(next);
+      await SecureStore.setItemAsync(localSortHistoryKey, JSON.stringify(next));
+      setMoveStatus(`${result.copied.length} copied files removed; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}.`);
+      await rescanLocalFolders();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openBook(book: Book) {
     if (!book.available) {
       setError('This file is currently unavailable.');
@@ -355,10 +567,30 @@ function Client() {
     }
     setError('');
     if (book.format === 'Audio') playBook(book);
+    else if (!session) {
+      if (!book.uri) return;
+      setReading(book);
+      setActiveTab('reader');
+      setReaderLoading(true);
+      setLocalReader(null);
+      buildLocalReaderDocument(book.uri, book.format, book.title).then(setLocalReader).catch(e => setError(e.message)).finally(() => setReaderLoading(false));
+    }
     else {
       setReading(book);
       setActiveTab('reader');
     }
+  }
+
+  async function addLocalQueue(book: Book) {
+    if (!book.uri) return;
+    const next = queuedBooks.some(item => item.uri === book.uri) ? queuedBooks : [...queuedBooks, book];
+    setQueuedBooks(next);
+    await SecureStore.setItemAsync(localQueueKey, JSON.stringify(next));
+  }
+
+  async function updateLocalQueue(next: Book[]) {
+    setQueuedBooks(next);
+    await SecureStore.setItemAsync(localQueueKey, JSON.stringify(next));
   }
 
   function Cover({book, large = false}: {book: Book; large?: boolean}) {
@@ -370,19 +602,18 @@ function Client() {
     );
   }
 
-  function Login() {
+  function ServerConnect() {
     return (
-      <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
-        <ScrollView contentContainerStyle={styles.login}>
-          <Text style={[styles.logo, {color: p.ink}]}>Archivist</Text>
-          <Text style={[styles.tagline, {color: p.gold}]}>YOUR LIBRARY. YOURS.</Text>
-          <Text style={[styles.loginCopy, {color: p.muted}]}>Connect to your own server. Privacy stays the default, not an upgrade.</Text>
+      <View style={{gap: 12}}>
+          <Text style={[styles.sectionTitle, {color: p.ink}]}>Add Server</Text>
+          <Text style={[styles.loginCopy, {color: p.muted, textAlign: 'left'}]}>Connect a private Archivist server when you want a shared household library. Your phone library keeps working locally.</Text>
           <TextInput accessibilityLabel="Server address" autoCapitalize="none" autoCorrect={false} keyboardType="url" value={server} onChangeText={setServer} placeholder="https://books.example.com" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <TextInput accessibilityLabel="Profile access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={key} onChangeText={setKey} placeholder="Profile access key" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
+          <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
           <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy} />
+          {serverNotice ? <Text style={[styles.meta, {color: p.gold}]}>{serverNotice}</Text> : null}
           {error ? <Text accessibilityRole="alert" style={[styles.error, {color: p.gold}]}>{error}</Text> : null}
-        </ScrollView>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -390,6 +621,19 @@ function Client() {
     return (
       <View style={[styles.content, {flex: 1}]}>
         <Text style={[styles.title, {color: p.ink}]}>Shelf</Text>
+        {!session ? <View style={[styles.setupPanel, {backgroundColor: p.card, borderColor: p.line}]}>
+          <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Start with folders on this phone</Text>
+          <Text style={[styles.empty, {color: p.muted}]}>Add folders, scan their content, then sort locally. Server connection is optional and can be added from Settings.</Text>
+          {localFolders.map(folder => <View key={folder.id} style={[styles.sourceRow, {borderColor: p.line}]}>
+            <Text style={{color: p.ink, fontWeight: '700'}}>{folder.name}</Text>
+            <Text style={{color: p.muted}}>{folder.status}{folder.itemCount ? ` - ${folder.itemCount} items` : ''}</Text>
+          </View>)}
+          <View style={styles.toolRow}>
+            <Button label={localScanning ? 'Scanning...' : 'Add folders'} disabled={localScanning} onPress={() => void addLocalFolder()} />
+            <Button label="Rescan" tone="quiet" disabled={localScanning || localFolders.length===0} onPress={() => void rescanLocalFolders()} />
+          </View>
+          {localFolderNotice ? <Text style={[styles.meta, {color: p.gold}]}>{localFolderNotice}</Text> : null}
+        </View> : null}
         <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search titles" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         <ScrollView horizontal style={{flexGrow: 0}} contentContainerStyle={{gap: 8}}>
           {['', ...spaces].map(name => <Button key={name} label={name || 'All spaces'} tone={space===name?'primary':'quiet'} onPress={()=>setSpace(name)} />)}
@@ -397,20 +641,46 @@ function Client() {
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         <FlatList
           key={shelfColumns}
-          data={books}
+          data={visibleBooks}
           keyExtractor={b => String(b.id)}
           numColumns={shelfColumns}
           contentContainerStyle={styles.grid}
-          ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty, {color: p.muted}]}>No matching books. Add and scan folders in server settings.</Text> : null}
+          ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty, {color: p.muted}]}>{session ? 'No matching books. Add and scan folders in Settings.' : localFolders.length ? 'No matching local items.' : 'No books yet. Add folders to build your local library.'}</Text> : null}
           renderItem={({item}) => (
             <View style={[styles.book, {maxWidth: `${100 / shelfColumns}%`}]}><Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
               <Cover book={item} />
               <Text numberOfLines={2} style={[styles.bookTitle, {color: p.ink}]}>{item.title}</Text>
               <Text style={[styles.meta, {color: p.muted}]}>{item.format} - {item.space}{item.author ? ' - '+item.author : ''}{item.series ? ' - '+item.series : ''}</Text>
-            </Pressable>{item.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady || queueBusy} onPress={()=>void queueStore?.edit(old=>old.some(b=>b.id===item.id)?old:[...old,item])} /> : null}
+            </Pressable>{item.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={session ? (!queueReady || queueBusy) : false} onPress={()=>session ? void queueStore?.edit(old=>old.some(b=>b.id===item.id)?old:[...old,item]) : void addLocalQueue(item)} /> : null}
             {owner?<Button label="Edit details" tone="quiet" onPress={()=>{setEditing(item);setEditTitle(item.title);setEditAuthor(item.author||'');setEditSeries(item.series||'');}}/>:null}</View>
           )}
         />
+        {!session && books.length ? <View style={[styles.setupPanel, {backgroundColor: p.card, borderColor: p.line}]}>
+          <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Local sorting</Text>
+          <View style={styles.segment}>
+            {[
+              ['author-title','Author / Title'],
+              ['author-series-title','Author / Series / Title'],
+              ['format-author-title','Format / Author / Title'],
+            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+          </View>
+          <Button label="Preview visible local items" disabled={visibleBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+          <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item => item.state !== 'ready')} onPress={() => void applyLocalSortBatch()}/>
+          {moveStatus ? <Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text> : null}
+          {localMovePreviews.slice(0, 20).map(item => <View key={item.id} style={[styles.sourceRow, {borderColor: p.line}]}>
+            <Text style={{color:p.ink, fontWeight:'700'}}>{item.title}</Text>
+            <Text style={{color:p.muted}}>From: {item.from}</Text>
+            <Text style={{color:item.state==='conflict'?p.gold:p.muted}}>To: {item.to}</Text>
+            <Text style={{color:p.muted}}>{item.state}</Text>
+          </View>)}
+          {localMovePreviews.length > 20 ? <Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text> : null}
+          {localSortHistory.length ? <Text style={[styles.sectionTitle, {color:p.ink}]}>Copy history</Text> : null}
+          {localSortHistory.slice(0, 3).map(item => <View key={item.id} style={[styles.sourceRow, {borderColor:p.line}]}>
+            <Text style={{color:p.ink, fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
+            <Text style={{color:p.muted}}>{item.copied.length} copied; {item.failed.length} failed</Text>
+            <Button label="Remove copied files" disabled={busy || item.copied.length===0} tone="quiet" onPress={() => void recoverLocalSort(item)} />
+          </View>)}
+        </View> : null}
         {editing ? <View style={{gap:8}}><TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
@@ -432,24 +702,24 @@ function Client() {
             <Text style={[styles.nowTitle, {color: p.ink}]}>{current.title}</Text>
             <Text style={[styles.meta, {color: p.muted}]}>{current.space}{current.author ? ' - '+current.author : ''}{current.series ? ' - '+current.series : ''}</Text>
             <View style={[styles.progressTrack, {backgroundColor: p.line}]}>
-              <View style={[styles.progressFill, {backgroundColor: p.gold, width: `${audioProgress * 100}%`}]} />
+              <View style={[styles.progressFill, {backgroundColor: p.gold, width: `${displayedProgress * 100}%`}]} />
             </View>
             <View style={styles.timeRow}>
-              <Text style={[styles.meta, {color: p.muted}]}>{formatTime(playback?.seconds || 0)}</Text>
-              <Text style={[styles.meta, {color: p.muted}]}>{formatTime(playback?.duration || 0)}</Text>
+              <Text style={[styles.meta, {color: p.muted}]}>{formatTime(session ? playback?.seconds || 0 : audio.currentTime || 0)}</Text>
+              <Text style={[styles.meta, {color: p.muted}]}>{formatTime(session ? playback?.duration || 0 : audio.duration || 0)}</Text>
             </View>
             <View style={styles.transport}>
-              <Button label="-15" tone="quiet" onPress={() => void controller.seek((playback?.seconds || 0)-15)} />
-              <Pressable accessibilityRole="button" accessibilityLabel={playback?.playing?'Pause':'Play'} disabled={playback?.loading} style={[styles.playButton, {backgroundColor: p.sage}]} onPress={() => controller.toggle()}>
-                <Text style={styles.playButtonText}>{playback?.loading ? 'Loading' : playback?.playing ? 'Pause' : 'Play'}</Text>
+              <Button label="-15" tone="quiet" onPress={() => session ? void controller.seek((playback?.seconds || 0)-15) : void player.seekTo((audio.currentTime || 0)-15)} />
+              <Pressable accessibilityRole="button" accessibilityLabel={(session ? playback?.playing : audio.playing)?'Pause':'Play'} disabled={session ? playback?.loading : false} style={[styles.playButton, {backgroundColor: p.sage}]} onPress={() => session ? controller.toggle() : audio.playing ? player.pause() : player.play()}>
+                <Text style={styles.playButtonText}>{session && playback?.loading ? 'Loading' : (session ? playback?.playing : audio.playing) ? 'Pause' : 'Play'}</Text>
               </Pressable>
-              <Button label="+30" tone="quiet" onPress={() => void controller.seek((playback?.seconds || 0)+30)} />
+              <Button label="+30" tone="quiet" onPress={() => session ? void controller.seek((playback?.seconds || 0)+30) : void player.seekTo((audio.currentTime || 0)+30)} />
             </View>
-            <View style={styles.toolRow}>
+            {session ? <View style={styles.toolRow}>
               <Button label={(playback?.speed || 1)+'x'} tone="quiet" onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} />
               <Button label={playback?.sleepAt ? 'Sleep on' : 'Sleep'} tone="quiet" onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} />
               <Button label="Tracks / Queue" tone="quiet" onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} />
-            </View>
+            </View> : <Text style={[styles.meta,{color:p.muted}]}>Playing from this phone.</Text>}
             {playback?.error ? <Text accessibilityRole="alert" style={{color:p.gold}}>{playback.error}</Text> : null}
             {playerPanel==='speed' ? <View style={styles.toolRow}>{[0.75,1,1.25,1.5,1.75,2].map(rate=><Button key={rate} label={rate+'x'} tone={rate===playback?.speed?'primary':'quiet'} onPress={()=>controller.setSpeed(rate)} />)}</View> : null}
             {playerPanel==='sleep' ? <View style={styles.toolRow}>{[0,15,30,45,60].map(minutes=><Button key={minutes} label={minutes?minutes+' min':'Off'} tone="quiet" onPress={()=>controller.sleep(minutes)} />)}</View> : null}
@@ -460,12 +730,12 @@ function Client() {
               <Text style={{color:p.ink}}>Tracks</Text>
               {playback?.tracks.map((track,index)=><Button key={track.id} label={(index+1)+'. '+track.title} disabled={!track.available || playback.loading} tone={index===playback.index?'primary':'quiet'} onPress={()=>void controller.select(index)} />)}
               <Text style={{color:p.ink}}>Queued books</Text>
-              <Button label="Reload queue" disabled={queueBusy} tone="quiet" onPress={()=>void queueStore?.reload()}/>
+              {session ? <Button label="Reload queue" disabled={queueBusy} tone="quiet" onPress={()=>void queueStore?.reload()}/> : null}
               {queuedBooks.map((book,index)=><View key={book.id} style={{gap:8}}><Button label={book.title} disabled={queueBusy || !book.available} onPress={()=>{void playBook(book).then(()=>{if(controller.state.playing)void queueStore?.edit(items=>items.filter(b=>b.id!==book.id));});}} />
                 <View style={styles.toolRow}>
-                  <Button label="Move up" disabled={queueBusy || index===0} tone="quiet" onPress={()=>void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),-1))}/>
-                  <Button label="Move down" disabled={queueBusy || index===queuedBooks.length-1} tone="quiet" onPress={()=>void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),1))}/>
-                  <Button label="Remove" disabled={queueBusy} tone="quiet" onPress={()=>void queueStore?.edit(items=>items.filter(b=>b.id!==book.id))}/>
+                  <Button label="Move up" disabled={queueBusy || index===0} tone="quiet" onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),-1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), -1))}/>
+                  <Button label="Move down" disabled={queueBusy || index===queuedBooks.length-1} tone="quiet" onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), 1))}/>
+                  <Button label="Remove" disabled={queueBusy} tone="quiet" onPress={()=>session ? void queueStore?.edit(items=>items.filter(b=>b.id!==book.id)) : void updateLocalQueue(queuedBooks.filter(b=>b.uri!==book.uri))}/>
                 </View></View>)}
             </View> : null}
           </>
@@ -477,11 +747,28 @@ function Client() {
   }
 
   function Reader() {
-    if (!session || !reading) {
+    if (!reading) {
       return (
         <View style={styles.content}>
           <Text style={[styles.title, {color: p.ink}]}>Reader</Text>
-          <Text style={[styles.empty, {color: p.muted}]}>Open an EPUB, PDF or comic from Shelf.</Text>
+          <Text style={[styles.empty, {color: p.muted}]}>{session ? 'Open an EPUB, PDF or comic from Shelf.' : 'Open an EPUB, PDF or comic from Shelf.'}</Text>
+        </View>
+      );
+    }
+    if (!session) {
+      return (
+        <View style={styles.readerScreen}>
+          <View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}>
+            <Pressable accessibilityRole="button" onPress={() => {setReading(null);setLocalReader(null);setActiveTab('shelf');}} style={styles.readerBack}>
+              <Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text>
+            </Pressable>
+            <Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading.title}</Text>
+          </View>
+          {readerLoading ? <ActivityIndicator accessibilityLabel="Opening local reader" /> : localReader?.html ? (
+            <WebView originWhitelist={['*']} source={{html: localReader.html}} />
+          ) : localReader?.uri ? (
+            <WebView originWhitelist={['content://*', 'file://*']} source={{uri: localReader.uri}} allowFileAccess />
+          ) : <Text style={[styles.empty, {color: p.muted, padding: 16}]}>Unable to open this file.</Text>}
         </View>
       );
     }
@@ -510,20 +797,46 @@ function Client() {
     );
   }
 
+  function atlasSelect(kind: 'format' | 'author' | 'series' | 'space' | 'status', value: string) {
+    if (kind === 'space') {
+      setSpace(value);
+      setQuery('');
+    } else if (kind === 'status') {
+      setQuery(value === 'Unavailable' ? 'Unavailable' : '');
+    } else {
+      setQuery(value === 'Unknown author' ? '' : value);
+    }
+    setActiveTab('shelf');
+  }
+
+  function AtlasGroup({title, items, kind}: {title: string; items: Array<[string, number]>; kind: 'format' | 'author' | 'series' | 'space' | 'status'}) {
+    const max = Math.max(1, ...items.map(([, total]) => total));
+    return (
+      <View style={[styles.atlasGroup, {borderColor: p.line, backgroundColor: p.card}]}>
+        <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>{title}</Text>
+        {items.length ? items.map(([name, total]) => (
+          <Pressable key={title + name} accessibilityRole="button" onPress={() => atlasSelect(kind, name)} style={styles.atlasRow}>
+            <Text numberOfLines={1} style={[styles.atlasText, {color: p.ink}]}>{name}</Text>
+            <View style={[styles.atlasBarTrack, {backgroundColor: p.line}]}>
+              <View style={[styles.atlasBarFill, {backgroundColor: p.sage, width: `${Math.max(8, (total / max) * 100)}%`}]} />
+            </View>
+            <Text style={[styles.meta, {color: p.muted, width: 32, textAlign: 'right'}]}>{total}</Text>
+          </Pressable>
+        )) : <Text style={[styles.empty, {color: p.muted}]}>No data yet.</Text>}
+      </View>
+    );
+  }
+
   function Atlas() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.title, {color: p.ink}]}>Atlas</Text>
-        <View style={[styles.atlasPanel, {backgroundColor: p.card, borderColor: p.line}]}>
-          {['Authors', 'Series', 'Works', 'Editions', 'Profiles'].map((label, index) => (
-            <View key={label} style={[styles.atlasNode, {left: 22 + (index % 2) * 155, top: 28 + index * 54, borderColor: p.sage, backgroundColor: p.raised}]}>
-              <Text style={[styles.atlasText, {color: p.ink}]}>{label}</Text>
-            </View>
-          ))}
-          <View style={[styles.atlasLine, {backgroundColor: p.line, top: 82, left: 112, width: 136, transform: [{rotate: '19deg'}]}]} />
-          <View style={[styles.atlasLine, {backgroundColor: p.line, top: 178, left: 112, width: 146, transform: [{rotate: '-16deg'}]}]} />
-        </View>
-        <Text style={[styles.empty, {color: p.muted}]}>This is the product slot for the Obsidian-quality media universe. The graph engine, filters and layout physics are still release work.</Text>
+        <Text style={[styles.empty, {color: p.muted}]}>Tap any row to focus the Shelf. Genre is currently represented by media format until richer metadata is available.</Text>
+        <AtlasGroup title="Genres" kind="format" items={atlas.formats} />
+        <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
+        <AtlasGroup title="Series" kind="series" items={atlas.series} />
+        <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
+        <AtlasGroup title="Reading State" kind="status" items={atlas.status} />
       </ScrollView>
     );
   }
@@ -541,7 +854,8 @@ function Client() {
           ))}
         </View>
         <Text style={[styles.sectionTitle, {color: p.ink}]}>Server</Text>
-        <Text style={[styles.meta, {color: p.muted}]}>{session?.server}</Text>
+        {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : <Text style={[styles.meta, {color: p.muted}]}>No server connected. Your phone library works locally.</Text>}
+        {!session ? (serverPanelOpen ? <ServerConnect /> : <Button label="Add server" tone="quiet" onPress={() => setServerPanelOpen(true)} />) : null}
         {owner ? <View style={{gap:10}}>
           <Text style={[styles.sectionTitle,{color:p.ink}]}>Source folders</Text>
           {sources.map(s=><View key={s.id} style={{gap:6}}><Text style={{color:p.ink}}>{s.space}</Text><Text style={{color:p.muted}}>{s.path}</Text><Text style={{color:p.muted}}>{s.status}</Text><Button label="Scan folder" disabled={busy} tone="quiet" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')}/><Button label="Remove folder" disabled={busy} tone="quiet" onPress={()=>void removeSource(s.id)}/></View>)}
@@ -557,12 +871,12 @@ function Client() {
               ['format-author-title','Format / Author / Title'],
             ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
           </View>
-          <Button label="Preview visible shelf" disabled={busy || books.length===0} tone="quiet" onPress={()=>void previewSort(books.map(b=>b.id))}/>
+          <Button label="Preview visible shelf" disabled={busy || visibleBooks.length===0} tone="quiet" onPress={()=>void previewSort(visibleBooks.map(b=>b.id))}/>
           <Button label="Preview all library items" disabled={busy} tone="quiet" onPress={()=>void previewSort([])}/>
           <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
           {moveStatus?<Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
         </View>:null}
-        <Button label="Sign out" tone="gold" onPress={() => void signOut()} />
+        {session ? <Button label="Sign out" tone="gold" onPress={() => void signOut()} /> : null}
       </ScrollView>
     );
   }
@@ -583,8 +897,6 @@ function Client() {
     );
   }
 
-  if (!session) return Login();
-
   const tabs: Array<{id: Tab; label: string}> = [
     {id: 'shelf', label: 'Shelf'},
     {id: 'player', label: 'Player'},
@@ -597,7 +909,7 @@ function Client() {
     <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
       <View style={[styles.appHeader, {borderBottomColor: p.line}]}>
         <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
-        <Text style={[styles.headerMeta, {color: p.muted}]}>{books.length} items</Text>
+        <Text style={[styles.headerMeta, {color: p.muted}]}>{session ? `${books.length} items` : `${books.length} local items`}</Text>
       </View>
       {error ? <Text accessibilityRole="alert" style={[styles.error, {color: p.gold}]}>{error}</Text> : null}
       <View style={styles.tabBody}>
@@ -640,6 +952,8 @@ const styles = StyleSheet.create({
   appHeader: {height: 58, paddingHorizontal: 18, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
   headerMeta: {fontSize: 13},
   content: {padding: 16, gap: 14},
+  setupPanel: {borderWidth: 1, borderRadius: 8, padding: 14, gap: 12},
+  sourceRow: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 4},
   tabBody: {flex: 1},
   title: {fontFamily: 'serif', fontSize: 34, marginBottom: 2},
   sectionTitle: {fontSize: 17, fontWeight: '700', marginTop: 10},
@@ -673,10 +987,11 @@ const styles = StyleSheet.create({
   readerBack: {width: 72, alignItems: 'center', justifyContent: 'center'},
   readerAction: {fontWeight: '700'},
   readerTitle: {flex: 1, textAlign: 'center', fontWeight: '700'},
-  atlasPanel: {height: 360, borderWidth: 1, borderRadius: 8, overflow: 'hidden'},
-  atlasNode: {position: 'absolute', width: 132, minHeight: 44, borderWidth: 1, borderRadius: 8, justifyContent: 'center', alignItems: 'center'},
+  atlasGroup: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 10},
+  atlasRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36},
   atlasText: {fontWeight: '700'},
-  atlasLine: {position: 'absolute', height: 2},
+  atlasBarTrack: {flex: 1, height: 8, borderRadius: 999, overflow: 'hidden'},
+  atlasBarFill: {height: 8, borderRadius: 999},
   segment: {flexDirection: 'row', gap: 8},
   segmentItem: {flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center'},
   miniPlayer: {minHeight: 66, marginHorizontal: 12, marginBottom: 8, borderRadius: 8, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10},

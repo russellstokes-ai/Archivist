@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id),asset=new URLSearchParams(location.search).get('asset');
-let manifest,part=0,revision=0,busy=true,font=20,pdf,saveQueue=Promise.resolve(),conflict=false,loaded=false,renderTask,zoom=1;
+let manifest,part=0,revision=0,busy=true,font=20,pdf,saveQueue=Promise.resolve(),conflict=false,loaded=false,renderTask,zoom=1,lastTap=0;
 async function api(path,method='GET',body){
   const r=await fetch(path,{method,headers:{'Content-Type':'application/json','X-Archivist-Action':'1'},body:body?JSON.stringify(body):undefined});
   const data=await r.json();if(!r.ok)throw Error(data.error||'Unable to open book');return data;
@@ -26,7 +26,7 @@ async function show(index,offset=0){
       else for(const text of data.paragraphs){const p=document.createElement('p');p.textContent=text;$('reading').append(p);}
       await Promise.all([...$('reading').querySelectorAll('img')].map(img=>img.decode().catch(()=>undefined)));
     }else if(manifest.format==='Comic'){
-      const img=document.createElement('img');img.alt='Page '+(index+1);img.src='./api/assets/'+asset+'/reader/'+index;
+      const img=document.createElement('img');img.alt='Page '+(index+1);img.className='comic-page';img.src='./api/assets/'+asset+'/reader/'+index;
       $('reading').append(img);await img.decode();img.style.width=Math.round($('reading').clientWidth*zoom)+'px';img.style.maxWidth='none';
     }else{
       const page=await pdf.getPage(index+1),original=page.getViewport({scale:1});
@@ -56,6 +56,14 @@ zoomOut.onclick=()=>changeZoom(zoom-.25);zoomIn.onclick=()=>changeZoom(zoom+.25)
 document.querySelector('.tools').append(zoomOut,fit,zoomIn);
 document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;if(e.key==='ArrowRight')void move(1);if(e.key==='ArrowLeft')void move(-1);});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)void save();});setInterval(save,5000);
+function focusComicPage(img,x,y){
+  if(manifest?.format!=='Comic')return;
+  const rect=img.getBoundingClientRect(),px=Math.max(0,Math.min(100,(x-rect.left)/rect.width*100)),py=Math.max(0,Math.min(100,(y-rect.top)/rect.height*100));
+  const active=img.classList.contains('focused');document.querySelectorAll('.comic-page.focused').forEach(page=>page.classList.remove('focused'));
+  if(active)return;img.style.transformOrigin=px+'% '+py+'%';img.classList.add('focused');setTimeout(()=>img.scrollIntoView({block:'center',inline:'center',behavior:'smooth'}),40);
+}
+document.addEventListener('dblclick',e=>{const img=e.target.closest?.('.comic-page');if(img){e.preventDefault();focusComicPage(img,e.clientX,e.clientY);}});
+document.addEventListener('touchend',e=>{const now=Date.now(),touch=e.changedTouches?.[0],img=e.target.closest?.('.comic-page');if(img&&touch&&now-lastTap<320){e.preventDefault();focusComicPage(img,touch.clientX,touch.clientY);}lastTap=now;},{passive:false});
 try{
   if(!/^\d+$/.test(asset||''))throw Error('Choose a book from Library.');status('Opening...');
   manifest=await api('./api/assets/'+asset+'/reader');const progress=await api('./api/assets/'+asset+'/reading-progress');revision=progress.revision;

@@ -26,12 +26,15 @@ func (a *app) initHousehold() error {
 	return e
 }
 func (a *app) identify(key string) (identity, bool) {
-	if key != "" && key == a.token {
-		return identity{0, "Owner", true}, true
-	}
 	var p identity
 	if key == "" {
 		return p, false
+	}
+	if hash, ok := a.ownerCredentialHash(); ok && keyHash(key) == hash {
+		return identity{0, "Owner", true}, true
+	}
+	if !a.ownerConfigured() && key == a.token {
+		return identity{0, "Owner", true}, true
 	}
 	e := a.db.QueryRow("SELECT id,name FROM profiles WHERE key_hash=? AND revoked=0", keyHash(key)).Scan(&p.ID, &p.Name)
 	return p, e == nil

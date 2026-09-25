@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),Module=require('node:module');
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
-const {validateServer,readerNavigationAllowed,RequestError,request}=require('./connection.ts');
+const {validateServer,readerNavigationAllowed,RequestError,request,setupStatus}=require('./connection.ts');
 const {Playback}=require('./playback.ts');
 const tick=()=>new Promise(r=>setImmediate(r));
 (async()=>{
@@ -12,6 +12,9 @@ const tick=()=>new Promise(r=>setImmediate(r));
   const oldFetch=global.fetch;
   global.fetch=async()=>new Response('<html>wrong app</html>',{headers:{'Content-Type':'text/html'}});
   await assert.rejects(request({server:'https://books.example',token:'key'},'/api/me'),/Archivist API/);
+  global.fetch=async()=>new Response(JSON.stringify({configured:true}),{headers:{'Content-Type':'application/json'}});
+  assert.deepEqual(await setupStatus('https://books.example'),{configured:true});
+  await assert.rejects(request({server:'https://books.example',token:'key'},'/wrong'),/Invalid API path/);
   global.fetch=oldFetch;
   let p={asset:1,seconds:42,revision:0,complete:false},conflict=false;const writes=[],calls=[];
   const api=async(path,method,data)=>{
