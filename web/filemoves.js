@@ -40,7 +40,7 @@
   manualForm.append(asset,target,manualPreview);advanced.append(advSummary,manualForm);
 
   panel.append(heading,controls,readiness,previewSummary,previewList,actions,advanced);
-  $('sources').append(panel);
+  $('organisation-settings').append(panel);
 
   let items=[],previewIds=[];
 
