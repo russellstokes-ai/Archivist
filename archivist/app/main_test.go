@@ -21,6 +21,9 @@ func fixture(t *testing.T) *app {
 	if e := a.initHousehold(); e != nil {
 		t.Fatal(e)
 	}
+	if e := a.initCatalogue(); e != nil {
+		t.Fatal(e)
+	}
 	a.initSessions()
 	a.db.Exec("INSERT INTO sessions(token_hash,profile_id,credential_hash,expires,created) VALUES(?,0,?,9999999999,0)", keyHash("test-key"), keyHash("test-key"))
 	return a
@@ -144,7 +147,7 @@ func TestCSRFAndPersistence(t *testing.T) {
 	res := httptest.NewRecorder()
 	a.routes().ServeHTTP(res, req)
 	body, _ := io.ReadAll(res.Result().Body)
-	if !strings.Contains(string(body), "Source folders") {
+	if !strings.Contains(string(body), "Archivist Shelf") {
 		t.Fatal("UI not embedded")
 	}
 	req = httptest.NewRequest("GET", "/healthz", nil)
