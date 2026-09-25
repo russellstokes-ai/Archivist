@@ -26,12 +26,14 @@ jobs:
           cache: true
 
       - name: Root server tests
-        run: go test ./...
+        run: |
+          go mod tidy
+          go test ./...
 
       - name: Packaged server tests
         run: |
-          (cd archivist/app && go test ./...)
-          (cd home-assistant/archivist/app && go test ./...)
+          (cd archivist/app && go mod tidy && go test ./...)
+          (cd home-assistant/archivist/app && go mod tidy && go test ./...)
 
       - name: Web JavaScript syntax
         run: |
