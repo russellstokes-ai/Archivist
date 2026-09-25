@@ -3,18 +3,29 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
 // Jobs are persisted before acknowledgement. Interrupted scans restart safely:
 // scan commits catalogue changes atomically and upserts existing paths.
 func (a *app) initJobs() error {
-	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,state TEXT NOT NULL,message TEXT NOT NULL DEFAULT ''); CREATE UNIQUE INDEX IF NOT EXISTS one_active_scan ON jobs(source_id) WHERE state IN ('queued','running'); UPDATE jobs SET state='queued',message='Resuming interrupted scan' WHERE state='running';`)
-	return e
+	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS jobs(id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,state TEXT NOT NULL,message TEXT NOT NULL DEFAULT '',progress INTEGER NOT NULL DEFAULT 0,total INTEGER NOT NULL DEFAULT 0); CREATE UNIQUE INDEX IF NOT EXISTS one_active_scan ON jobs(source_id) WHERE state IN ('queued','running'); UPDATE jobs SET state='queued',message='Resuming interrupted scan' WHERE state='running';`)
+	if e != nil { return e }
+	for _, stmt := range []string{
+		"ALTER TABLE jobs ADD COLUMN progress INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE jobs ADD COLUMN total INTEGER NOT NULL DEFAULT 0",
+	} {
+		if _, alterErr := a.db.Exec(stmt); alterErr != nil && !strings.Contains(strings.ToLower(alterErr.Error()), "duplicate column") {
+			return alterErr
+		}
+	}
+	return nil
 }
 func (a *app) enqueue(id int64) (int64, error) {
 	var found int
@@ -45,16 +56,23 @@ func (a *app) worker(ctx context.Context) {
 			}
 			a.db.Exec("UPDATE jobs SET state='running' WHERE id=?", id)
 			state, msg := "complete", "Scan complete"
-			if e := a.scan(source); e != nil {
+			progressFn := func(done, total int) {
+				message := "Scanning"
+				if total > 0 {
+					message = fmt.Sprintf("Scanning %d of %d files", done, total)
+				}
+				a.db.Exec("UPDATE jobs SET progress=?,total=?,message=? WHERE id=?", done, total, message, id)
+			}
+			if e := a.scanWithProgress(source, progressFn); e != nil {
 				state, msg = "failed", e.Error()
 			}
-			a.db.Exec("UPDATE jobs SET state=?,message=? WHERE id=?", state, msg, id)
+			a.db.Exec("UPDATE jobs SET state=?,message=?,progress=CASE WHEN ?='complete' THEN total ELSE progress END WHERE id=?", state, msg, state, id)
 		}
 	}
 }
 func (a *app) backgroundRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/jobs", func(w http.ResponseWriter, r *http.Request) {
-		rows, e := a.db.Query("SELECT id,source_id,state,message FROM jobs ORDER BY id DESC LIMIT 50")
+		rows, e := a.db.Query("SELECT id,source_id,state,message,progress,total FROM jobs ORDER BY id DESC LIMIT 50")
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -63,12 +81,13 @@ func (a *app) backgroundRoutes(mux *http.ServeMux) {
 		out := []map[string]any{}
 		for rows.Next() {
 			var id, source int64
+			var progress, total int
 			var state, msg string
-			if e = rows.Scan(&id, &source, &state, &msg); e != nil {
+			if e = rows.Scan(&id, &source, &state, &msg, &progress, &total); e != nil {
 				fail(w, 500, e)
 				return
 			}
-			out = append(out, map[string]any{"id": id, "source_id": source, "state": state, "message": msg})
+			out = append(out, map[string]any{"id": id, "source_id": source, "state": state, "message": msg, "progress": progress, "total": total})
 		}
 		reply(w, out)
 	})
