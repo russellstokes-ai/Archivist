@@ -479,7 +479,7 @@ func (a *app) routes() http.Handler {
 				fail(w, 500, e)
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: "/"})
+			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: base})
 			reply(w, map[string]string{"token": session})
 			return
 		}
@@ -532,7 +532,7 @@ func (a *app) routes() http.Handler {
 				fail(w, 500, e)
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: "/"})
+			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: base})
 			if r.URL.Path == "/session" {
 				reply(w, map[string]string{"token": session})
 			} else {
@@ -551,14 +551,14 @@ func (a *app) routes() http.Handler {
 			if key != "" {
 				a.db.Exec("DELETE FROM sessions WHERE token_hash=?", keyHash(key))
 			}
-			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: "", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: "/"})
+			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: "", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: base})
 			reply(w, map[string]bool{"ok": true})
 			return
 		}
 		if r.URL.Path == "/reader.html" {
 			bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if _, ok := a.sessionIdentity(bearer); ok {
-				http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: bearer, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, Path: "/"})
+				http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: bearer, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, Path: base})
 			}
 		}
 		if serveEntry(w, r, base) {
