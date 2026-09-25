@@ -31,6 +31,11 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
 		}
 		a.scanMu.Lock()
 		defer a.scanMu.Unlock()
+		var sourceID int64
+		if err := a.db.QueryRow("SELECT source_id FROM assets WHERE id=?", r.PathValue("id")).Scan(&sourceID); err != nil {
+			fail(w, 404, errors.New("asset missing"))
+			return
+		}
 		res, err := a.db.Exec("UPDATE assets SET title=?,author=?,series=? WHERE id=?", in.Title, in.Author, in.Series, r.PathValue("id"))
 		if err != nil {
 			fail(w, 500, err)
@@ -39,6 +44,10 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
 		n, _ := res.RowsAffected()
 		if n != 1 {
 			fail(w, 404, errors.New("asset missing"))
+			return
+		}
+		if err = a.syncAutoCatalogueLocked(sourceID); err != nil {
+			fail(w, 500, err)
 			return
 		}
 		reply(w, map[string]bool{"ok": true})
