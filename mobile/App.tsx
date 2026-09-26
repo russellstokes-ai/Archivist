@@ -611,8 +611,9 @@ function Client() {
     setLocalMovePreviews(previews);
     const ready = previews.filter(item => item.state === 'ready').length;
     const conflicts = previews.filter(item => item.state === 'conflict').length;
+    const review = previews.filter(item => item.state === 'review').length;
     const same = previews.filter(item => item.state === 'same').length;
-    setMoveStatus(`${ready} ready; ${conflicts} conflicts; ${same} already organised.`);
+    setMoveStatus(`${ready} ready; ${review} need metadata review; ${conflicts} conflicts; ${same} already organised.`);
   }
 
   async function applyLocalSortBatch() {
@@ -851,8 +852,8 @@ function Client() {
           {localMovePreviews.slice(0, 20).map(item => <View key={item.id} style={[styles.sourceRow, {borderColor: p.line}]}>
             <Text style={{color:p.ink, fontWeight:'700'}}>{item.title}</Text>
             <Text style={{color:p.muted}}>From: {item.from}</Text>
-            <Text style={{color:item.state==='conflict'?p.gold:p.muted}}>To: {item.to}</Text>
-            <Text style={{color:p.muted}}>{item.state}</Text>
+            <Text style={{color:item.state==='conflict'||item.state==='review'?p.gold:p.muted}}>To: {item.to}</Text>
+            <Text style={{color:item.state==='review'?p.gold:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
           </View>)}
           {localMovePreviews.length > 20 ? <Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text> : null}
           {localSortHistory.length ? <Text style={[styles.sectionTitle, {color:p.ink}]}>Copy history</Text> : null}
