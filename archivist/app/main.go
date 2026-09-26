@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -493,15 +494,30 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/books", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space := r.URL.Query().Get("space")
+		format := r.URL.Query().Get("format")
 		reviewOnly := r.URL.Query().Get("review") == "1"
+		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+		availability := r.URL.Query().Get("availability")
+		if availability != "" && availability != "available" && availability != "unavailable" {
+			fail(w,400,errors.New("invalid availability filter"))
+			return
+		}
+		limit := 500
+		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
+		offset := 0
+		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
 			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ?)
 			AND (?='' OR s.space=?)
+			AND (?='' OR a.format=?)
+			AND (?=0 OR trim(a.author)='')
 			AND (?=0 OR a.needs_review=1)
+			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
-			ORDER BY a.needs_review DESC,a.title,a.id LIMIT 500`,
-			q, q, q, space, space, reviewOnly, who(r).Owner, who(r).ID)
+			ORDER BY a.needs_review DESC,a.title,a.id LIMIT ? OFFSET ?`,
+			q, q, q, space, space, format, format, unknownAuthor, reviewOnly,
+			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
 		if e != nil {
 			fail(w, 500, e)
 			return
