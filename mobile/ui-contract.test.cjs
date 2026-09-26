@@ -12,10 +12,10 @@ for (const match of source.matchAll(/<Button\b[\s\S]*?\/>/g)) {
   assert.match(match[0], /\bonPress\s*=/, 'Button without onPress handler: ' + match[0].slice(0,180));
 }
 
-for (const match of source.matchAll(/<Pressable\b[\s\S]*?>/g)) {
-  const tag = match[0];
-  if (!/accessibilityRole\s*=\s*["'](?:button|tab)["']/.test(tag)) continue;
-  assert.match(tag, /\bonPress\s*=/, 'Interactive Pressable without onPress handler: ' + tag.slice(0,180));
+for (const match of source.matchAll(/<Pressable\b[\s\S]*?<\/Pressable>/g)) {
+  const block = match[0];
+  if (!/accessibilityRole\s*=\s*["'](?:button|tab)["']/.test(block)) continue;
+  assert.match(block, /\bonPress\s*=/, 'Interactive Pressable without onPress handler: ' + block.slice(0,220));
 }
 
 for (const route of [
