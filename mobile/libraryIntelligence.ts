@@ -21,7 +21,9 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   const parts = decodedPathParts(uri);
   const filename = parts[parts.length - 1] || 'Untitled';
   const stem = cleanLabel(filename.replace(/\.[^.]+$/, ''));
-  const dirs = parts.slice(0, -1).filter(Boolean);
+  const rawDirs = parts.slice(0, -1).filter(Boolean).map(cleanLabel);
+  const dirs = [...rawDirs];
+  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
   const parent = cleanLabel(dirs[dirs.length - 1] || '');
   const grandparent = cleanLabel(dirs[dirs.length - 2] || '');
   const greatGrandparent = cleanLabel(dirs[dirs.length - 3] || '');
@@ -45,7 +47,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     series = sensibleFolder(parent, title) ? parent : '';
     confidence = 'medium';
     reviewReason = series ? '' : 'Title and author inferred from filename; series was not clear.';
-  } else if (dashed.length >= 2) {
+  } else if (dashed.length >= 2 && !looksIndex(dashed[0])) {
     author = dashed[0];
     title = dashed.slice(1).join(' - ');
     confidence = 'medium';
@@ -195,7 +197,11 @@ function equivalent(a: string, b: string) {
 
 function sensibleFolder(value: string, title: string) {
   if (!value || equivalent(value, title)) return false;
-  return !/^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media)$/i.test(value);
+  return !isLibraryRoot(value);
+}
+
+function isLibraryRoot(value: string) {
+  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
 }
 
 function looksIndex(value: string) {
