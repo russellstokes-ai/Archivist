@@ -11,10 +11,10 @@ export function validateServer(raw: string, development = false): string {
   if (u.username || u.password || u.search || u.hash || u.pathname !== '/') throw Error('Enter the Archivist server origin only, for example https://books.example.com.');
   return u.origin;
 }
-export async function request(session: Session, path: string, method = 'GET', data?: unknown) {
+export async function request(session: Session, path: string, method = 'GET', data?: unknown, timeoutMs = 15000) {
   if (!path.startsWith('/api/') && !['/session', '/logout', '/setup/status'].includes(path)) throw Error('Invalid API path');
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), 15000);
+  const timer = setTimeout(() => abort.abort(), Math.max(1000, Math.min(timeoutMs, 300000)));
   try {
     let response: Response;
     try {
