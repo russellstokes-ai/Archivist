@@ -222,6 +222,7 @@ function Client() {
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
+  const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const loadCancel = useRef<(() => void) | null>(null);
   const shelfColumns = width >= 900 ? 5 : width >= 700 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
@@ -347,7 +348,7 @@ function Client() {
     }).catch(() => undefined);
     SecureStore.getItemAsync(localMetadataOverridesKey).then(value => {
       if (value) setLocalMetadataOverrides(JSON.parse(value));
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLocalOverridesReady(true));
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
     }).catch(() => undefined);
@@ -405,9 +406,9 @@ function Client() {
   }, [audio.currentTime, localProgress, playing, session]);
 
   useEffect(() => {
-    if (session || restoring || !localFolders.length || books.length || localScanning) return;
+    if (session || restoring || !localOverridesReady || !localFolders.length || books.length || localScanning) return;
     void rescanLocalFolders();
-  }, [books.length, localFolders, localScanning, restoring, session]);
+  }, [books.length, localFolders, localOverridesReady, localScanning, restoring, session]);
 
   async function chooseTheme(next: ThemeMode) {
     setTheme(next);
