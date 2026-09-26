@@ -413,7 +413,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		var unknownAuthors int
 		_ = a.db.QueryRow(`SELECT count(*) FROM works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
 		var needsReview int
-		_ = a.db.QueryRow(`SELECT count(*) FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.available=1 AND a.needs_review=1 AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&needsReview)
+		_ = a.db.QueryRow(`SELECT count(*) FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.needs_review=1 AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&needsReview)
 		series := []map[string]any{}
 		rows, e = a.db.Query(`SELECT w.series,count(*) FROM works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{series=append(series,map[string]any{"name":name,"count":count})}};rows.Close() }
