@@ -124,6 +124,19 @@ func archiveCover(root, rel, format string) ([]byte,string,error) {
 	return nil,"",errors.New("cover not found")
 }
 
+func (a *app) assetCover(id string) ([]byte,string,error) {
+	var root, rel, format string
+	err:=a.db.QueryRow(`SELECT s.path,a.relative_path,a.format
+		FROM assets a JOIN sources s ON s.id=a.source_id
+		WHERE a.id=? AND a.available=1`,id).Scan(&root,&rel,&format)
+	if err!=nil{return nil,"",err}
+	if data,mime,e:=externalCover(root,rel);e==nil{return data,mime,nil}
+	if format=="Comic" || format=="Ebook" {
+		if data,mime,e:=archiveCover(root,rel,format);e==nil{return data,mime,nil}
+	}
+	return nil,"",errors.New("cover unavailable")
+}
+
 func (a *app) workCover(id string) ([]byte,string,error) {
 	var root, rel, format string
 	err:=a.db.QueryRow(`SELECT s.path,a.relative_path,a.format FROM works w
@@ -138,12 +151,22 @@ func (a *app) workCover(id string) ([]byte,string,error) {
 	return nil,"",errors.New("cover unavailable")
 }
 
+func writeCoverResponse(w http.ResponseWriter,data []byte,mime string) {
+	w.Header().Set("Content-Type",mime)
+	w.Header().Set("Cache-Control","private, max-age=86400")
+	w.Header().Set("X-Content-Type-Options","nosniff")
+	w.Write(data)
+}
+
 func (a *app) coverRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/assets/{id}/cover",func(w http.ResponseWriter,r *http.Request){
+		data,mime,err:=a.assetCover(r.PathValue("id"))
+		if err!=nil { http.NotFound(w,r); return }
+		writeCoverResponse(w,data,mime)
+	})
 	mux.HandleFunc("GET /api/works/{id}/cover",func(w http.ResponseWriter,r *http.Request){
 		data,mime,err:=a.workCover(r.PathValue("id"))
 		if err!=nil { http.NotFound(w,r); return }
-		w.Header().Set("Content-Type",mime)
-		w.Header().Set("Cache-Control","private, max-age=86400")
-		w.Write(data)
+		writeCoverResponse(w,data,mime)
 	})
 }
