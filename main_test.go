@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -224,5 +225,63 @@ func TestScanReviewFilterAndIncrementalMetadataRefresh(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != 200 || strings.Contains(res.Body.String(), "The Dispossessed") {
 		t.Fatalf("resolved item still in review queue: %d %s", res.Code, res.Body.String())
+	}
+}
+
+
+func TestLegacyMetadataMigrationPreservesCorrections(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy.db")
+	root := filepath.Join(dir, "library")
+	if e := os.Mkdir(root, 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(root, "Book.epub"), []byte("book"), 0600); e != nil {
+		t.Fatal(e)
+	}
+
+	db, e := sql.Open("sqlite", dbPath)
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, e = db.Exec(`PRAGMA foreign_keys=ON;
+		CREATE TABLE sources(id INTEGER PRIMARY KEY,space TEXT NOT NULL,path TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'Not scanned');
+		CREATE TABLE assets(id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,relative_path TEXT NOT NULL,title TEXT NOT NULL,format TEXT NOT NULL,available INTEGER NOT NULL DEFAULT 1,author TEXT NOT NULL DEFAULT '',series TEXT NOT NULL DEFAULT '',UNIQUE(source_id,relative_path));
+		INSERT INTO sources(id,space,path,status) VALUES(1,'Main',?,'Scanned');
+		INSERT INTO assets(id,source_id,relative_path,title,format,available,author,series) VALUES(1,1,'Book.epub','My Corrected Title','Ebook',1,'Corrected Author','Corrected Series');`, root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	db.Close()
+
+	db, e = openDB(dbPath)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	a := &app{db: db}
+	if e = a.initCatalogue(); e != nil {
+		t.Fatal(e)
+	}
+
+	var source string
+	var confidence int
+	var review bool
+	if e = db.QueryRow("SELECT metadata_source,metadata_confidence,needs_review FROM assets WHERE id=1").Scan(&source,&confidence,&review); e != nil {
+		t.Fatal(e)
+	}
+	if source != "legacy" || confidence != 100 || review {
+		t.Fatalf("legacy migration source=%q confidence=%d review=%v", source, confidence, review)
+	}
+
+	if e = a.scan(1); e != nil {
+		t.Fatal(e)
+	}
+	var title, author, series string
+	if e = db.QueryRow("SELECT title,author,series FROM assets WHERE id=1").Scan(&title,&author,&series); e != nil {
+		t.Fatal(e)
+	}
+	if title != "My Corrected Title" || author != "Corrected Author" || series != "Corrected Series" {
+		t.Fatalf("legacy correction overwritten title=%q author=%q series=%q", title, author, series)
 	}
 }
