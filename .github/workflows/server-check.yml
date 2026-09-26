@@ -47,6 +47,9 @@ jobs:
             done
           done
 
+      - name: UI wiring contract
+        run: node scripts/ui-contract.cjs
+
       - name: Add-on launcher syntax
         run: |
           sh -n archivist/run.sh
