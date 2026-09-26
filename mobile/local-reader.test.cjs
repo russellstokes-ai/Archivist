@@ -28,6 +28,11 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   assert(epub.html.includes('Arrakis'));
   assert(!epub.html.includes('<script>'));
   assert(!epub.html.includes('onclick'));
+  assert(epub.html.includes('column-width'));
+  assert(epub.html.includes('text-focused'));
+  assert(epub.html.includes('archivist-reader-text-scale'));
+  assert(epub.html.includes('readerPrev'));
+  assert(epub.html.includes('readerNext'));
 
   zip = new JSZip();
   zip.file('001.jpg', Buffer.from([1, 2, 3]));
@@ -35,9 +40,14 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   const comic = await buildLocalReaderDocument('comic.cbz', 'Comic', 'Comic');
   assert(comic.html.includes('data:image/jpeg;base64'));
   assert(comic.html.includes('comic-page'));
-  assert(comic.html.includes('focusImage'));
+  assert(comic.html.includes('comic-page active'));
+  assert(comic.html.includes('reader-page-sound') || comic.html.includes('archivist-reader-sound'));
+  assert(comic.html.includes('pinchStartDistance'));
+  assert(comic.html.includes('focusAt'));
+  assert(comic.html.includes('turn-next'));
+  assert(comic.html.includes('Sound on'));
 
   const pdf = await buildLocalReaderDocument('file.pdf', 'PDF', 'PDF');
   assert.equal(pdf.uri, 'file.pdf');
-  console.log('PASS: local reader EPUB, comic and PDF document generation');
+  console.log('PASS: local reader EPUB/comic paging, focus, pinch, sound and PDF passthrough');
 })().catch(e => { console.error(e); process.exitCode = 1; });
