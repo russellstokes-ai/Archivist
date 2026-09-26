@@ -55,6 +55,16 @@ type ServerWork = {
   available: boolean;
 };
 type WorkTrack = {id: number; title: string; format: string; edition: number; available: boolean};
+type SummaryItem = {name: string; count: number};
+type LibrarySummary = {
+  total: number;
+  formats: SummaryItem[];
+  spaces: SummaryItem[];
+  authors: SummaryItem[];
+  unknownAuthors: number;
+  series: SummaryItem[];
+  availability: SummaryItem[];
+};
 type LocalWorkProgress = {uri: string; seconds: number; complete?: boolean};
 type WorkPicker = {work: ServerWork; tracks: WorkTrack[]};
 type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'settings';
@@ -186,6 +196,9 @@ function Client() {
   const [books, setBooks] = useState<Book[]>([]);
   const [serverWorks, setServerWorks] = useState<ServerWork[]>([]);
   const [continueWorks, setContinueWorks] = useState<ServerWork[]>([]);
+  const [serverSummary, setServerSummary] = useState<LibrarySummary | null>(null);
+  const [serverHasMore, setServerHasMore] = useState(false);
+  const [serverLoadingMore, setServerLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
@@ -345,7 +358,18 @@ function Client() {
   }).slice(0, 12), [localReadingProgress, localWorkProgress, localWorks, space]);
 
   const atlas = useMemo(() => {
-    const items = session ? serverWorks : localWorks;
+    if (session && serverSummary) {
+      const authors: Array<[string,number]> = serverSummary.authors.map(item => [item.name,item.count]);
+      if (serverSummary.unknownAuthors > 0) authors.push(['Unknown author',serverSummary.unknownAuthors]);
+      return {
+        formats: serverSummary.formats.map(item => [item.name,item.count] as [string,number]),
+        authors,
+        series: serverSummary.series.map(item => [item.name,item.count] as [string,number]),
+        spaces: serverSummary.spaces.map(item => [item.name,item.count] as [string,number]),
+        status: serverSummary.availability.map(item => [item.name,item.count] as [string,number]),
+      };
+    }
+    const items = localWorks;
     const count = (values: string[]) => {
       const totals = new Map<string, number>();
       for (const value of values.map(v => v.trim()).filter(Boolean)) totals.set(value, (totals.get(value) || 0) + 1);
@@ -361,7 +385,7 @@ function Client() {
         ['Unavailable', items.filter(item => !item.available).length] as [string, number],
       ].filter(([, total]) => total > 0),
     };
-  }, [localWorks, serverWorks, session]);
+  }, [localWorks, serverSummary, session]);
 
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
