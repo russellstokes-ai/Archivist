@@ -1,3 +1,4 @@
+:root{--reader-accent:#397076}
 #reading{
   font-family:Georgia,serif;
   line-height:1.8;
@@ -25,7 +26,7 @@
 #reading .text-focused{
   transform:scale(1.14);
   transform-origin:center center;
-  background:color-mix(in srgb,var(--accent) 10%,transparent);
+  background:color-mix(in srgb,var(--reader-accent) 10%,transparent);
   padding:.25em .4em;
   border-radius:.35em;
   position:relative;
@@ -51,7 +52,7 @@ header a{color:var(--text)}
 main{padding-bottom:130px;overflow-x:hidden}
 #reading canvas{background:white}
 .tools{align-items:center}
-.tools button[aria-pressed="true"]{border-color:var(--accent);font-weight:800}
+.tools button[aria-pressed="true"]{border-color:var(--reader-accent);font-weight:800}
 nav{
   backdrop-filter:blur(16px);
   background:color-mix(in srgb,var(--bg) 90%,transparent);
