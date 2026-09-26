@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -145,6 +146,15 @@ func (a *app) previewMove(asset int64, target string) (fileMove, error) {
 	defer root.Close()
 	if _, e = root.Lstat(m.To); !os.IsNotExist(e) {
 		return m, errors.New("destination exists or cannot be inspected")
+	}
+	var pendingTarget int
+	if e = a.db.QueryRow(`SELECT count(*) FROM file_moves
+		WHERE root=? AND lower(new_path)=lower(?) AND asset<>?
+		AND state IN ('preview','applying','linked')`,m.Root,m.To,m.Asset).Scan(&pendingTarget); e != nil {
+		return m,e
+	}
+	if pendingTarget > 0 {
+		return m, errors.New("another pending move already targets this destination")
 	}
 	m.Hash, _, e = fileHash(root, m.From)
 	if e != nil {
@@ -577,7 +587,18 @@ func (a *app) moveRoutes(mux *http.ServeMux) {
 		reply(w, undo)
 	})
 	mux.HandleFunc("GET /api/file-moves", func(w http.ResponseWriter, r *http.Request) {
-		rows, e := a.db.Query("SELECT id,asset,root,old_path,new_path,hash,state FROM file_moves ORDER BY rowid DESC LIMIT 100")
+		limit := 100
+		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
+		offset := 0
+		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
+		state := r.URL.Query().Get("state")
+		var rows *sql.Rows
+		var e error
+		if state == "pending" {
+			rows, e = a.db.Query("SELECT id,asset,root,old_path,new_path,hash,state FROM file_moves WHERE state IN ('preview','applying','linked') ORDER BY rowid ASC LIMIT ? OFFSET ?", limit, offset)
+		} else {
+			rows, e = a.db.Query("SELECT id,asset,root,old_path,new_path,hash,state FROM file_moves ORDER BY rowid DESC LIMIT ? OFFSET ?", limit, offset)
+		}
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -592,6 +613,7 @@ func (a *app) moveRoutes(mux *http.ServeMux) {
 			}
 			out = append(out, m)
 		}
+		if e = rows.Err(); e != nil { fail(w,500,e); return }
 		reply(w, out)
 	})
 }
