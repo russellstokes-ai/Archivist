@@ -318,6 +318,12 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/works", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space, format := r.URL.Query().Get("space"), r.URL.Query().Get("format")
+		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+		availability := r.URL.Query().Get("availability")
+		if availability != "" && availability != "available" && availability != "unavailable" {
+			fail(w,400,errors.New("invalid availability filter"))
+			return
+		}
 		limit := 60
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 200 { limit = n }
 		offset := 0
@@ -330,9 +336,13 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ?)
 			AND (?='' OR w.space=?) AND (?='' OR e.format=?)
+			AND (?=0 OR trim(w.author)='')
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
-			GROUP BY w.id ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
-			q,q,q,space,space,format,format,who(r).Owner,who(r).ID,limit,offset)
+			GROUP BY w.id
+			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
+			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
+			q,q,q,space,space,format,format,unknownAuthor,who(r).Owner,who(r).ID,
+			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
 		defer rows.Close()
 		out := []map[string]any{}
