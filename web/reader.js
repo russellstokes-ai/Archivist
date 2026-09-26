@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id),asset=new URLSearchParams(location.search).get('asset');
 let manifest,part=0,revision=0,busy=true,font=20,pdf,saveQueue=Promise.resolve(),conflict=false,loaded=false,renderTask,zoom=1,lastTap=0,turning=false,pinchStartDistance=0,pinchStartZoom=1,pinchStartFont=20;
-let soundEnabled=localStorage.getItem('reader-page-sound')!=='off';
+let soundEnabled=localStorage.getItem('archivist-reader-sound')!=='off';
 
 async function api(path,method='GET',body){
   const r=await fetch(path,{method,headers:{'Content-Type':'application/json','X-Archivist-Action':'1'},body:body?JSON.stringify(body):undefined});
@@ -98,7 +98,7 @@ zoomIn.textContent='+';zoomIn.setAttribute('aria-label','Zoom in');zoomIn.title=
 fit.textContent='Fit';fit.setAttribute('aria-label','Fit page');
 function updateSoundButton(){sound.textContent=soundEnabled?'Sound on':'Sound off';sound.setAttribute('aria-pressed',soundEnabled?'true':'false');}
 updateSoundButton();
-sound.onclick=()=>{soundEnabled=!soundEnabled;localStorage.setItem('reader-page-sound',soundEnabled?'on':'off');if(soundEnabled)pageSound();updateSoundButton();};
+sound.onclick=()=>{soundEnabled=!soundEnabled;localStorage.setItem('archivist-reader-sound',soundEnabled?'on':'off');if(soundEnabled)pageSound();updateSoundButton();};
 function changeZoom(value){if(busy||!manifest||manifest.format!=='Comic')return;zoom=clamp(value,1,4);applyComicZoom();}
 zoomOut.onclick=()=>changeZoom(zoom-.25);zoomIn.onclick=()=>changeZoom(zoom+.25);fit.onclick=()=>changeZoom(1);
 document.querySelector('.tools').append(zoomOut,fit,zoomIn,sound);
