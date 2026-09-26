@@ -877,6 +877,17 @@ function Client() {
     if (first) openBook(first);
   }
 
+  function openServerWorkTrack(work: ServerWork, track: WorkTrack) {
+    setWorkPicker(null);
+    const item: Book = {
+      id:track.id,title:work.title,author:work.author,series:work.series,
+      format:track.format,space:work.space,available:track.available,
+      coverShape:track.format==='Audio'?'square':'portrait',
+    };
+    if (track.format === 'Audio') void playBook(item);
+    else openBook(item);
+  }
+
   async function openServerWork(work: ServerWork) {
     if (!session || !work.available) {
       setError('This work is currently unavailable.');
