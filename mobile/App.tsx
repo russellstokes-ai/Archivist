@@ -921,8 +921,6 @@ function Client() {
               accessibilityHint="Tap the timeline to seek"
               onPress={event => {
                 if (!duration) return;
-                const width = event.currentTarget && (event.currentTarget as unknown as {measure?: Function});
-                void width;
                 const location = event.nativeEvent.locationX;
                 const trackWidth = Math.max(1, Math.min(width >= 700 ? 560 : width - 36, 560));
                 seekTo((location / trackWidth) * duration);
