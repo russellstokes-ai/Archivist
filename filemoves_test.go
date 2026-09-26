@@ -108,7 +108,7 @@ func TestBatchTemplatePreviewAndApply(t *testing.T) {
 	if e := a.scan(1); e != nil {
 		t.Fatal(e)
 	}
-	a.db.Exec("UPDATE assets SET author='Ada' WHERE id IN (1,2)")
+	a.db.Exec("UPDATE assets SET author='Ada',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id IN (1,2)")
 	out := a.previewMoveTemplateBatch([]int64{1, 2}, "author-title")
 	if out.OK != 2 || out.Failed != 0 {
 		t.Fatalf("preview batch: %+v", out)
@@ -136,7 +136,7 @@ func TestBatchTemplateRejectsDuplicateDestinations(t *testing.T) {
 	if e := a.scan(1); e != nil {
 		t.Fatal(e)
 	}
-	a.db.Exec("UPDATE assets SET title='Same', author='Ada' WHERE id IN (1,2)")
+	a.db.Exec("UPDATE assets SET title='Same',author='Ada',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id IN (1,2)")
 	out := a.previewMoveTemplateBatch([]int64{1, 2}, "author-title")
 	if out.OK != 1 || out.Failed != 1 {
 		t.Fatalf("duplicate handling: %+v", out)
@@ -190,7 +190,7 @@ func TestBatchApplyRecoversLinkedJournal(t *testing.T) {
 	if e := a.scan(1); e != nil {
 		t.Fatal(e)
 	}
-	a.db.Exec("UPDATE assets SET author='Ada' WHERE id IN (1,2)")
+	a.db.Exec("UPDATE assets SET author='Ada',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id IN (1,2)")
 	out := a.previewMoveTemplateBatch([]int64{1, 2}, "author-title")
 	if out.OK != 2 || out.Failed != 0 {
 		t.Fatalf("preview batch: %+v", out)
@@ -210,5 +210,33 @@ func TestBatchApplyRecoversLinkedJournal(t *testing.T) {
 	}
 	if _, e := os.Stat(filepath.Join(root, "One.mp3")); !os.IsNotExist(e) {
 		t.Fatal("linked recovery did not remove old One.mp3")
+	}
+}
+
+
+func TestTemplateOrganisationRequiresReviewedMetadata(t *testing.T) {
+	a := fixture(t)
+	a.initMoves()
+	root := t.TempDir()
+	if e := os.WriteFile(filepath.Join(root, "Mystery.epub"), []byte("book"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := a.addSource("Books", root); e != nil {
+		t.Fatal(e)
+	}
+	if e := a.scan(1); e != nil {
+		t.Fatal(e)
+	}
+	out := a.previewMoveTemplateBatch([]int64{1}, "author-title")
+	if out.OK != 0 || out.Failed != 1 {
+		t.Fatalf("unreviewed metadata organised: %+v", out)
+	}
+	if len(out.Items) != 1 || out.Items[0].Error != "review metadata before organising this file" {
+		t.Fatalf("unexpected review failure: %+v", out)
+	}
+	a.db.Exec("UPDATE assets SET title='Mystery',author='Known Author',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id=1")
+	out = a.previewMoveTemplateBatch([]int64{1}, "author-title")
+	if out.OK != 1 || out.Failed != 0 {
+		t.Fatalf("reviewed metadata not organisable: %+v", out)
 	}
 }
