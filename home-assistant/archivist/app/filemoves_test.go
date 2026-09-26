@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -239,4 +243,36 @@ func TestTemplateOrganisationRequiresReviewedMetadata(t *testing.T) {
 	if out.OK != 1 || out.Failed != 0 {
 		t.Fatalf("reviewed metadata not organisable: %+v", out)
 	}
+}
+
+
+func TestPendingMovePaginationAndCrossBatchCollision(t *testing.T) {
+	a:=fixture(t)
+	if e:=a.initMoves();e!=nil{t.Fatal(e)}
+	root:=t.TempDir()
+	for _,name:=range []string{"One.epub","Two.epub"} {
+		if e:=os.WriteFile(filepath.Join(root,name),[]byte(name),0600);e!=nil{t.Fatal(e)}
+	}
+	if e:=a.addSource("Main",root);e!=nil{t.Fatal(e)}
+	if e:=a.scan(1);e!=nil{t.Fatal(e)}
+	a.db.Exec("UPDATE assets SET author='Author',needs_review=0,metadata_source='manual',metadata_confidence=100")
+	first,e:=a.previewMove(1,"Author/Same.epub")
+	if e!=nil{t.Fatal(e)}
+	if _,e=a.previewMove(2,"Author/Same.epub");e==nil{
+		t.Fatal("cross-batch duplicate destination accepted")
+	}
+	if _,e=a.db.Exec("DELETE FROM file_moves");e!=nil{t.Fatal(e)}
+	for i:=0;i<510;i++{
+		if _,e=a.db.Exec("INSERT INTO file_moves(id,asset,root,old_path,new_path,hash,state) VALUES(?,?,?,?,?,?,?)",
+			fmt.Sprintf("move-%03d",i),1,root,"One.epub",fmt.Sprintf("Target-%03d.epub",i),"hash","preview");e!=nil{t.Fatal(e)}
+	}
+	req:=httptest.NewRequest("GET","/api/file-moves?state=pending&limit=500&offset=500",nil)
+	req.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+	res:=httptest.NewRecorder()
+	a.routes().ServeHTTP(res,req)
+	if res.Code!=200{t.Fatalf("pending page=%d %s",res.Code,res.Body.String())}
+	var page []fileMove
+	if e=json.Unmarshal(res.Body.Bytes(),&page);e!=nil{t.Fatal(e)}
+	if len(page)!=10{t.Fatalf("pending second page=%d want 10",len(page))}
+	_ = first
 }
