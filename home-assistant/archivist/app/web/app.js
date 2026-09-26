@@ -15,11 +15,12 @@ async function api(url,method='GET',data){
   const body=await res.json();if(!res.ok)throw Error(body.error||'Request failed');return body
 }
 function element(tag,text){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e}
-function initials(title){return title.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]?.toUpperCase()).join('')||'A'}
-
 function coverFor(work){
   const wrap=element('div');wrap.className='cover';
-  const fallback=element('span',initials(work.title));fallback.className='cover-initials';
+  const fallback=element('span');fallback.className='cover-fallback';
+  const format=element('small',String(work.format||'Book').toUpperCase());
+  const title=element('strong',work.title||'Untitled');
+  fallback.append(format,title);
   const img=element('img');img.loading='lazy';img.alt='';img.decoding='async';img.src='./api/works/'+work.id+'/cover';
   img.addEventListener('load',()=>wrap.classList.add('has-cover'));
   img.addEventListener('error',()=>img.remove());
