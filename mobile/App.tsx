@@ -109,10 +109,6 @@ function formatTime(seconds: number) {
   return `${mins}:${secs}`;
 }
 
-function coverInitials(title: string) {
-  return title.split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]?.toUpperCase()).join('') || 'A';
-}
-
 function Button({label, onPress, disabled, tone = 'primary'}: {label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'quiet' | 'gold'}) {
   return (
     <Pressable
@@ -973,7 +969,7 @@ function Client() {
     useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
       <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor: p.ink}]}>
-        <Text style={[styles.coverMark, {color: p.gold}]}>{coverInitials(title)}</Text>
+        <Text numberOfLines={1} style={[styles.coverFormat, {color: p.gold}]}>{format.toUpperCase()}</Text>
         <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle, {color: p.ivory}]}>{title}</Text>
         {imageSource && !coverFailed ? (
           <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
@@ -991,6 +987,20 @@ function Client() {
       serverPath={session ? '/api/assets/' + book.id + '/cover' : undefined}
       large={large}
     />;
+  }
+
+  function MiniArtwork({book}: {book: Book}) {
+    const source = session
+      ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
+      : book.coverUri ? {uri: book.coverUri} : null;
+    const [failed,setFailed]=useState(false);
+    useEffect(()=>setFailed(false),[source?.uri]);
+    return (
+      <View style={[styles.miniCover,{backgroundColor:p.gold}]}>
+        <Text numberOfLines={1} style={styles.miniCoverLabel}>{book.format.toUpperCase()}</Text>
+        {source && !failed ? <Image accessible={false} source={source} resizeMode="cover" style={styles.miniCoverImage} onError={()=>setFailed(true)} /> : null}
+      </View>
+    );
   }
 
   function ServerConnect() {
@@ -1641,7 +1651,7 @@ function Client() {
       <CelebrationOverlay active={celebrating} />
       {playing ? (
         <Pressable accessibilityRole="button" onPress={() => setActiveTab('player')} style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
-          <View style={[styles.miniCover, {backgroundColor: p.gold}]}><Text style={{color: '#0f2a36', fontWeight: '700'}}>{coverInitials(playing.title)}</Text></View>
+          <MiniArtwork book={playing} />
           <View style={{flex: 1}}>
             <Text numberOfLines={1} style={[styles.miniTitle, {color: p.ivory}]}>{playing.title}</Text>
             <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(session ? playback?.seconds || 0 : audio.currentTime || 0)} · {(session ? playback?.playing : audio.playing) ? 'Playing' : 'Paused'}</Text>
@@ -1713,7 +1723,7 @@ const styles = StyleSheet.create({
   coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
   coverLargeSquare: {width: 230, height: 230},
-  coverMark: {fontFamily: 'serif', fontSize: 38, fontWeight: '700'},
+  coverFormat: {fontSize: 11, fontWeight: '900', letterSpacing: 1.6},
   coverTitle: {fontFamily: 'serif', fontSize: 20},
   bookTitle: {fontSize: 15, fontWeight: '700'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
