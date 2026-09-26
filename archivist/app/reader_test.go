@@ -109,7 +109,7 @@ func TestReaderWebInteractionAssets(t *testing.T) {
 	script := string(js)
 	style := string(css)
 	for _, marker := range []string{
-		"reader-page-sound",
+		"archivist-reader-sound",
 		"pageSound()",
 		"pinchStartDistance",
 		"focusComicPage",
