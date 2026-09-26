@@ -368,6 +368,9 @@ function Client() {
     SecureStore.getItemAsync(localProgressKey).then(value => {
       if (value) setLocalProgress(JSON.parse(value));
     }).catch(() => undefined);
+    SecureStore.getItemAsync(localWorkProgressKey).then(value => {
+      if (value) setLocalWorkProgress(JSON.parse(value));
+    }).catch(() => undefined);
     SecureStore.getItemAsync(localReadingProgressKey).then(value => {
       if (value) setLocalReadingProgress(JSON.parse(value));
     }).catch(() => undefined);
@@ -400,13 +403,18 @@ function Client() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session) { setServerWorks([]); return; }
     let cancelled = false;
     setShelfLoading(true);
     const timeout = setTimeout(() => {
-      request(session, '/api/books?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space))
-        .then(data => {
-          if (!cancelled) setBooks(data);
+      Promise.all([
+        request(session, '/api/books?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space)),
+        request(session, '/api/works?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space) + '&limit=200'),
+      ])
+        .then(([assets, works]) => {
+          if (cancelled) return;
+          setBooks(assets);
+          setServerWorks(works);
         })
         .catch(e => {
           if (!cancelled) setError(e.message);
@@ -448,8 +456,15 @@ function Client() {
 
   async function refreshSourcesAndShelf() {
     if(!session)return;
-    const items=await request(session,'/api/sources');setSources(items);setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
-    const shelf=await request(session,'/api/books?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space));setBooks(shelf);
+    const [items, assets, works]=await Promise.all([
+      request(session,'/api/sources'),
+      request(session,'/api/books?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)),
+      request(session,'/api/works?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)+'&limit=200'),
+    ]);
+    setSources(items);
+    setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
+    setBooks(assets);
+    setServerWorks(works);
   }
 
   async function sourceAction(path: string, data?: unknown) {
@@ -546,6 +561,7 @@ function Client() {
     await SecureStore.deleteItemAsync(storageKey);
     setSession(null);
     setBooks([]);
+    setServerWorks([]);
     setOwner(false);
     setSources([]);
     setQueuedBooks([]); setSpace('');
