@@ -23,6 +23,7 @@ import {Playback, PlaybackState, Chapter} from './playback';
 import {SavedQueue, reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
+import {groupLocalWorks, LocalWork} from './localWorks';
 
 type Book = {
   id: number;
@@ -39,8 +40,23 @@ type Book = {
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'legacy';
+  localWorkKey?: string;
 };
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
+type ServerWork = {
+  id: number;
+  title: string;
+  author: string;
+  series: string;
+  format: string;
+  space: string;
+  editions: number;
+  files: number;
+  available: boolean;
+};
+type WorkTrack = {id: number; title: string; format: string; edition: number; available: boolean};
+type LocalWorkProgress = {uri: string; seconds: number; complete?: boolean};
+type WorkPicker = {work: ServerWork; tracks: WorkTrack[]};
 type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'settings';
 type ThemeMode = 'system' | 'light' | 'dark';
 type Palette = {
@@ -60,6 +76,7 @@ const themeKey = 'archivist.theme';
 const localFoldersKey = 'archivist.localFolders';
 const localProgressKey = 'archivist.localProgress';
 const localReadingProgressKey = 'archivist.localReadingProgress';
+const localWorkProgressKey = 'archivist.localWorkProgress.v1';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
@@ -171,6 +188,7 @@ function Client() {
   const [serverPanelOpen, setServerPanelOpen] = useState(false);
   const [serverNotice, setServerNotice] = useState('');
   const [books, setBooks] = useState<Book[]>([]);
+  const [serverWorks, setServerWorks] = useState<ServerWork[]>([]);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
@@ -197,6 +215,9 @@ function Client() {
   const [localSpeed, setLocalSpeed] = useState(1);
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
+  const [localWorkProgress, setLocalWorkProgress] = useState<Record<string, LocalWorkProgress>>({});
+  const [activeLocalWork, setActiveLocalWork] = useState<LocalWork | null>(null);
+  const [localWorkIndex, setLocalWorkIndex] = useState(0);
   const [localReadingProgress, setLocalReadingProgress] = useState<Record<string, number>>({});
   const queueRef = useRef(queuedBooks); queueRef.current=queuedBooks;
   const [queueReady,setQueueReady]=useState(false);
@@ -217,6 +238,7 @@ function Client() {
   const [folderPath,setFolderPath]=useState('');
   const [folderSpace,setFolderSpace]=useState('My library');
   const [editing,setEditing]=useState<Book|null>(null);
+  const [workPicker,setWorkPicker]=useState<WorkPicker|null>(null);
   const [editTitle,setEditTitle]=useState('');
   const [editAuthor,setEditAuthor]=useState('');
   const [editSeries,setEditSeries]=useState('');
@@ -273,6 +295,12 @@ function Client() {
   const audioProgress = playback?.duration ? Math.min(1, playback.seconds / playback.duration) : 0;
   const localAudioProgress = !session && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
   const displayedProgress = session ? audioProgress : localAudioProgress;
+  const localWorks = useMemo(() => {
+    if (session) return [] as LocalWork[];
+    const local = books.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
+    return groupLocalWorks(local);
+  }, [books, session]);
+
   const visibleBooks = useMemo(() => {
     if (session) return books;
     const q = query.trim().toLowerCase();
