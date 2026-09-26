@@ -112,7 +112,8 @@ assert.equal(previews[0].state, 'review');
   const root = 'content://root/tree/primary:Books/document/primary:Books';
   const file = root + '%2FMystery.epub';
   const sidecar = root + '%2FMystery.opf';
-  saf.dirs.set(root, [file, sidecar]);
+  const cover = root + '%2FMystery.jpg';
+  saf.dirs.set(root, [file, sidecar, cover]);
   fileText.set(sidecar, '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator></metadata></package>');
   fileInfo.set(sidecar, {exists: true, size: 160});
   let scanned = await scanLocalFolders([{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}]);
@@ -120,6 +121,7 @@ assert.equal(previews[0].state, 'review');
   assert.equal(scanned.books[0].title, 'The Dispossessed');
   assert.equal(scanned.books[0].metadataSource, 'sidecar');
   assert.equal(scanned.books[0].needsReview, false);
+  assert.equal(scanned.books[0].coverUri, cover);
 
   scanned = await scanLocalFolders(
     [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
