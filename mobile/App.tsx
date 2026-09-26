@@ -189,6 +189,7 @@ function Client() {
   sessionRef.current = session;
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|null>(null);
+  const [localSpeed, setLocalSpeed] = useState(1);
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
   const queueRef = useRef(queuedBooks); queueRef.current=queuedBooks;
@@ -863,54 +864,167 @@ function Client() {
 
   function Player() {
     const current = playing;
+    const position = session ? playback?.seconds || 0 : audio.currentTime || 0;
+    const duration = session ? playback?.duration || 0 : audio.duration || 0;
+    const isPlaying = session ? !!playback?.playing : !!audio.playing;
+    const speed = session ? playback?.speed || 1 : localSpeed;
+    const currentChapterIndex = chapters.findIndex(chapter => position >= chapter.start && (chapter.end <= chapter.start || position < chapter.end));
+    const currentChapter = currentChapterIndex >= 0 ? chapters[currentChapterIndex] : null;
+    const remaining = Math.max(0, duration - position);
+    const nativeSleepSupported = typeof (player as typeof player & {setSleepTimer?: (seconds:number)=>void}).setSleepTimer === 'function';
+
+    function seekTo(seconds: number) {
+      const target = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, seconds));
+      if (session) void controller.seek(target);
+      else void player.seekTo(target);
+    }
+
+    function setPlayerSpeed(rate: number) {
+      if (session) controller.setSpeed(rate);
+      else {
+        try {
+          player.setPlaybackRate(rate);
+          setLocalSpeed(rate);
+        } catch (e) {
+          setError((e as Error).message);
+        }
+      }
+    }
+
     return (
       <ScrollView contentContainerStyle={styles.playerScreen}>
-        <Text style={[styles.title, {color: p.ink}]}>Player</Text>
+        <View style={styles.playerHeading}>
+          <View>
+            <Text style={[styles.playerEyebrow, {color:p.gold}]}>NOW PLAYING</Text>
+            <Text style={[styles.title, {color: p.ink}]}>Listen</Text>
+          </View>
+          {current ? <Text style={[styles.meta,{color:p.muted}]}>{speed}×</Text> : null}
+        </View>
         {current ? (
           <>
-            <Cover book={current} large />
-            <Text style={[styles.nowTitle, {color: p.ink}]}>{current.title}</Text>
-            <Text style={[styles.meta, {color: p.muted}]}>{current.space}{current.author ? ' - '+current.author : ''}{current.series ? ' - '+current.series : ''}</Text>
-            <View style={[styles.progressTrack, {backgroundColor: p.line}]}>
-              <View style={[styles.progressFill, {backgroundColor: p.gold, width: `${displayedProgress * 100}%`}]} />
+            <View style={[styles.playerArtworkFrame,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Cover book={{...current, coverShape:'square'}} large />
             </View>
+            <View style={styles.playerIdentity}>
+              <Text numberOfLines={2} style={[styles.nowTitle, {color: p.ink}]}>{current.title}</Text>
+              <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
+                {[current.author, current.series, current.space].filter(Boolean).join(' · ')}
+              </Text>
+              {currentChapter ? <Text numberOfLines={1} style={[styles.playerChapter,{color:p.sage}]}>
+                Chapter {currentChapterIndex + 1} of {chapters.length} · {currentChapter.title}
+              </Text> : null}
+            </View>
+
+            <Pressable
+              accessibilityRole="adjustable"
+              accessibilityLabel="Playback position"
+              accessibilityHint="Tap the timeline to seek"
+              onPress={event => {
+                if (!duration) return;
+                const width = event.currentTarget && (event.currentTarget as unknown as {measure?: Function});
+                void width;
+                const location = event.nativeEvent.locationX;
+                const trackWidth = Math.max(1, Math.min(width >= 700 ? 560 : width - 36, 560));
+                seekTo((location / trackWidth) * duration);
+              }}
+              style={[styles.progressHitArea,{maxWidth:560,alignSelf:'center',width:'100%'}]}>
+              <View style={[styles.progressTrack, {backgroundColor: p.line}]}>
+                <View style={[styles.progressFill, {backgroundColor: p.gold, width: `${displayedProgress * 100}%`}]} />
+              </View>
+            </Pressable>
             <View style={styles.timeRow}>
-              <Text style={[styles.meta, {color: p.muted}]}>{formatTime(session ? playback?.seconds || 0 : audio.currentTime || 0)}</Text>
-              <Text style={[styles.meta, {color: p.muted}]}>{formatTime(session ? playback?.duration || 0 : audio.duration || 0)}</Text>
+              <Text style={[styles.playerTime, {color: p.ink}]}>{formatTime(position)}</Text>
+              <Text style={[styles.meta, {color: p.muted}]}>−{formatTime(remaining)}</Text>
+              <Text style={[styles.playerTime, {color: p.ink}]}>{formatTime(duration)}</Text>
             </View>
+
             <View style={styles.transport}>
-              <Button label="-15" tone="quiet" onPress={() => session ? void controller.seek((playback?.seconds || 0)-15) : void player.seekTo((audio.currentTime || 0)-15)} />
-              <Pressable accessibilityRole="button" accessibilityLabel={(session ? playback?.playing : audio.playing)?'Pause':'Play'} disabled={session ? playback?.loading : false} style={[styles.playButton, {backgroundColor: p.sage}]} onPress={() => session ? controller.toggle() : audio.playing ? player.pause() : player.play()}>
-                <Text style={styles.playButtonText}>{session && playback?.loading ? 'Loading' : (session ? playback?.playing : audio.playing) ? 'Pause' : 'Play'}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={() => seekTo(position - 15)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
+                <Text style={[styles.skipMain,{color:p.ink}]}>15</Text>
+                <Text style={[styles.skipMeta,{color:p.muted}]}>back</Text>
               </Pressable>
-              <Button label="+30" tone="quiet" onPress={() => session ? void controller.seek((playback?.seconds || 0)+30) : void player.seekTo((audio.currentTime || 0)+30)} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+                disabled={session ? playback?.loading : false}
+                style={({pressed})=>[styles.playButton,{backgroundColor:p.sage,transform:[{scale:pressed?0.97:1}]}]}
+                onPress={() => session ? controller.toggle() : isPlaying ? player.pause() : player.play()}>
+                <Text style={styles.playButtonGlyph}>{session && playback?.loading ? '…' : isPlaying ? 'Ⅱ' : '▶'}</Text>
+                <Text style={styles.playButtonCaption}>{session && playback?.loading ? 'Loading' : isPlaying ? 'Pause' : 'Play'}</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={() => seekTo(position + 30)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
+                <Text style={[styles.skipMain,{color:p.ink}]}>30</Text>
+                <Text style={[styles.skipMeta,{color:p.muted}]}>forward</Text>
+              </Pressable>
             </View>
-            {session ? <View style={styles.toolRow}>
-              <Button label={(playback?.speed || 1)+'x'} tone="quiet" onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} />
-              <Button label={playback?.sleepAt ? 'Sleep on' : 'Sleep'} tone="quiet" onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} />
-              <Button label="Tracks / Queue" tone="quiet" onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} />
-            </View> : <Text style={[styles.meta,{color:p.muted}]}>Playing from this phone.</Text>}
-            {playback?.error ? <Text accessibilityRole="alert" style={{color:p.gold}}>{playback.error}</Text> : null}
-            {playerPanel==='speed' ? <View style={styles.toolRow}>{[0.75,1,1.25,1.5,1.75,2].map(rate=><Button key={rate} label={rate+'x'} tone={rate===playback?.speed?'primary':'quiet'} onPress={()=>controller.setSpeed(rate)} />)}</View> : null}
-            {playerPanel==='sleep' ? <View style={styles.toolRow}>{[0,15,30,45,60].map(minutes=><Button key={minutes} label={minutes?minutes+' min':'Off'} tone="quiet" onPress={()=>controller.sleep(minutes)} />)}</View> : null}
-            {playerPanel==='queue' ? <View style={{gap:8}}>
-              <Text style={{color:p.ink}}>Chapters</Text>
-              {chapterError?<Text style={{color:p.gold}}>{chapterError}</Text>:chapters.length===0?<Text style={{color:p.muted}}>No embedded chapters</Text>:null}
-              {chapters.map((chapter,index)=><Button key={index} label={formatTime(chapter.start)+' '+chapter.title} tone="quiet" onPress={()=>void controller.seek(chapter.start)} />)}
-              <Text style={{color:p.ink}}>Tracks</Text>
-              {playback?.tracks.map((track,index)=><Button key={track.id} label={(index+1)+'. '+track.title} disabled={!track.available || playback.loading} tone={index===playback.index?'primary':'quiet'} onPress={()=>void controller.select(index)} />)}
-              <Text style={{color:p.ink}}>Queued books</Text>
-              {session ? <Button label="Reload queue" disabled={queueBusy} tone="quiet" onPress={()=>void queueStore?.reload()}/> : null}
-              {queuedBooks.map((book,index)=><View key={book.id} style={{gap:8}}><Button label={book.title} disabled={queueBusy || !book.available} onPress={()=>{void playBook(book).then(()=>{if(controller.state.playing)void queueStore?.edit(items=>items.filter(b=>b.id!==book.id));});}} />
-                <View style={styles.toolRow}>
-                  <Button label="Move up" disabled={queueBusy || index===0} tone="quiet" onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),-1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), -1))}/>
-                  <Button label="Move down" disabled={queueBusy || index===queuedBooks.length-1} tone="quiet" onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), 1))}/>
-                  <Button label="Remove" disabled={queueBusy} tone="quiet" onPress={()=>session ? void queueStore?.edit(items=>items.filter(b=>b.id!==book.id)) : void updateLocalQueue(queuedBooks.filter(b=>b.uri!==book.uri))}/>
-                </View></View>)}
+
+            <View style={[styles.playerTools,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Pressable accessibilityRole="button" onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{speed}×</Text>
+                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
+              </Pressable>
+              {session && nativeSleepSupported ? <Pressable accessibilityRole="button" onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{playback?.sleepAt ? 'On' : '—'}</Text>
+                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
+              </Pressable> : null}
+              <Pressable accessibilityRole="button" onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{queuedBooks.length}</Text>
+                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
+              </Pressable>
+            </View>
+
+            {playback?.error ? <Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.gold,borderColor:p.gold}]}>{playback.error}</Text> : null}
+
+            {playerPanel==='speed' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Playback speed</Text>
+              <View style={styles.toolRow}>{[0.75,1,1.25,1.5,1.75,2].map(rate=><Button key={rate} label={rate+'×'} tone={rate===speed?'primary':'quiet'} onPress={()=>setPlayerSpeed(rate)} />)}</View>
+            </View> : null}
+
+            {playerPanel==='sleep' && session && nativeSleepSupported ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Sleep timer</Text>
+              <View style={styles.toolRow}>{[0,15,30,45,60].map(minutes=><Button key={minutes} label={minutes?minutes+' min':'Off'} tone="quiet" onPress={()=>controller.sleep(minutes)} />)}</View>
+            </View> : null}
+
+            {playerPanel==='queue' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              {session ? <>
+                <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text>
+                {chapterError?<Text style={{color:p.gold}}>{chapterError}</Text>:chapters.length===0?<Text style={{color:p.muted}}>No embedded chapters</Text>:null}
+                {chapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index && {backgroundColor:p.raised}]}>
+                  <Text style={[styles.chapterIndex,{color:p.gold}]}>{index+1}</Text>
+                  <View style={{flex:1}}>
+                    <Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text>
+                    <Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}</Text>
+                  </View>
+                </Pressable>)}
+                {playback?.tracks && playback.tracks.length > 1 ? <>
+                  <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Files</Text>
+                  {playback.tracks.map((track,index)=><Button key={track.id} label={(index+1)+'. '+track.title} disabled={!track.available || playback.loading} tone={index===playback.index?'primary':'quiet'} onPress={()=>void controller.select(index)} />)}
+                </> : null}
+              </> : null}
+              <View style={styles.queueHeader}>
+                <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Up next</Text>
+                {session ? <Button label="Refresh" disabled={queueBusy} tone="quiet" onPress={()=>void queueStore?.reload()}/> : null}
+              </View>
+              {!queuedBooks.length ? <Text style={[styles.meta,{color:p.muted}]}>Nothing queued. Add audiobooks from Shelf.</Text> : null}
+              {queuedBooks.map((book,index)=><View key={(book.uri || '') + book.id} style={[styles.queueBook,{borderColor:p.line}]}>
+                <Pressable accessibilityRole="button" style={{flex:1}} onPress={()=>{void playBook(book).then(()=>{if(session && controller.state.playing)void queueStore?.edit(items=>items.filter(b=>b.id!==book.id));});}}>
+                  <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{book.title}</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>#{index+1}{book.author ? ' · '+book.author : ''}</Text>
+                </Pressable>
+                <View style={styles.queueActions}>
+                  <Pressable accessibilityRole="button" disabled={queueBusy || index===0} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),-1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), -1))}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900'}}>↑</Text></Pressable>
+                  <Pressable accessibilityRole="button" disabled={queueBusy || index===queuedBooks.length-1} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), 1))}><Text style={{color:index===queuedBooks.length-1?p.muted:p.sage,fontWeight:'900'}}>↓</Text></Pressable>
+                  <Pressable accessibilityRole="button" disabled={queueBusy} onPress={()=>session ? void queueStore?.edit(items=>items.filter(b=>b.id!==book.id)) : void updateLocalQueue(queuedBooks.filter(b=>b.uri!==book.uri))}><Text style={{color:p.gold,fontWeight:'800'}}>Remove</Text></Pressable>
+                </View>
+              </View>)}
             </View> : null}
           </>
         ) : (
-          <Text style={[styles.empty, {color: p.muted}]}>Choose an audiobook from Shelf to start playback.</Text>
+          <View style={[styles.playerEmpty,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Nothing playing</Text>
+            <Text style={[styles.empty, {color: p.muted}]}>Choose an audiobook from Shelf. Archivist will remember where you stopped.</Text>
+            <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')} />
+          </View>
         )}
       </ScrollView>
     );
@@ -1091,10 +1205,10 @@ function Client() {
           <View style={[styles.miniCover, {backgroundColor: p.gold}]}><Text style={{color: '#0f2a36', fontWeight: '700'}}>{coverInitials(playing.title)}</Text></View>
           <View style={{flex: 1}}>
             <Text numberOfLines={1} style={[styles.miniTitle, {color: p.ivory}]}>{playing.title}</Text>
-            <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(audio.currentTime)} - {audio.playing ? 'Playing' : 'Paused'}</Text>
+            <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(session ? playback?.seconds || 0 : audio.currentTime || 0)} · {(session ? playback?.playing : audio.playing) ? 'Playing' : 'Paused'}</Text>
           </View>
-          <Pressable accessibilityRole="button" onPress={() => controller.toggle()} style={styles.miniButton}>
-            <Text style={styles.miniButtonText}>{playback?.playing ? 'Pause' : 'Play'}</Text>
+          <Pressable accessibilityRole="button" onPress={() => session ? controller.toggle() : audio.playing ? player.pause() : player.play()} style={styles.miniButton}>
+            <Text style={styles.miniButtonText}>{(session ? playback?.playing : audio.playing) ? 'Pause' : 'Play'}</Text>
           </Pressable>
         </Pressable>
       ) : null}
@@ -1164,14 +1278,41 @@ const styles = StyleSheet.create({
   bookTitle: {fontSize: 15, fontWeight: '700'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {padding: 18, gap: 14, paddingBottom: 120},
-  nowTitle: {fontFamily: 'serif', fontSize: 28, textAlign: 'center', marginTop: 4},
-  progressTrack: {height: 6, borderRadius: 999, overflow: 'hidden', marginTop: 8},
-  progressFill: {height: 6, borderRadius: 999},
-  timeRow: {flexDirection: 'row', justifyContent: 'space-between'},
-  transport: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14},
-  playButton: {width: 104, height: 58, borderRadius: 999, alignItems: 'center', justifyContent: 'center'},
+  playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 680, width:'100%', alignSelf:'center'},
+  playerHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between'},
+  playerEyebrow: {fontSize:11,fontWeight:'900',letterSpacing:2},
+  playerArtworkFrame: {alignSelf:'center',borderWidth:1,borderRadius:24,padding:10,shadowColor:'#000',shadowOpacity:0.12,shadowRadius:18,elevation:5},
+  playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:10},
+  nowTitle: {fontFamily: 'serif', fontSize: 30, textAlign: 'center', marginTop: 4},
+  playerByline: {fontSize:14,lineHeight:20,textAlign:'center'},
+  playerChapter: {fontSize:13,fontWeight:'800',textAlign:'center',marginTop:3},
+  progressHitArea: {paddingVertical:10},
+  progressTrack: {height: 7, borderRadius: 999, overflow: 'hidden'},
+  progressFill: {height: 7, borderRadius: 999},
+  timeRow: {flexDirection: 'row', justifyContent: 'space-between',alignItems:'center',marginTop:-8},
+  playerTime: {fontSize:13,fontVariant:['tabular-nums'],fontWeight:'700'},
+  transport: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22,marginVertical:4},
+  skipButton: {width:64,height:64,borderRadius:32,borderWidth:1,alignItems:'center',justifyContent:'center'},
+  skipMain: {fontSize:17,fontWeight:'900',lineHeight:19},
+  skipMeta: {fontSize:10,fontWeight:'700',textTransform:'uppercase'},
+  playButton: {width: 82, height: 82, borderRadius: 41, alignItems: 'center', justifyContent: 'center',shadowColor:'#000',shadowOpacity:0.18,shadowRadius:12,elevation:5},
+  playButtonGlyph: {color:'#f8f7f2',fontSize:24,fontWeight:'900',lineHeight:28},
+  playButtonCaption: {color:'#f8f7f2',fontSize:10,fontWeight:'800',textTransform:'uppercase',letterSpacing:0.6},
   playButtonText: {color: '#f8f7f2', fontSize: 17, fontWeight: '800'},
+  playerTools: {borderWidth:1,borderRadius:14,flexDirection:'row',overflow:'hidden'},
+  playerTool: {flex:1,minHeight:68,alignItems:'center',justifyContent:'center',padding:8},
+  playerToolBorder: {borderLeftWidth:StyleSheet.hairlineWidth},
+  playerToolValue: {fontSize:16,fontWeight:'900'},
+  playerToolLabel: {fontSize:11,fontWeight:'700',marginTop:2},
+  playerPanel: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  playerPanelTitle: {fontSize:16,fontWeight:'900'},
+  playerNotice: {borderWidth:1,borderRadius:10,padding:12},
+  chapterRow: {flexDirection:'row',alignItems:'center',gap:10,padding:10,borderRadius:10},
+  chapterIndex: {width:24,textAlign:'center',fontWeight:'900'},
+  queueHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  queueBook: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',gap:10,alignItems:'center'},
+  queueActions: {flexDirection:'row',gap:14,alignItems:'center'},
+  playerEmpty: {borderWidth:1,borderRadius:16,padding:18,gap:12},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex: 1},
   readerBar: {height: 50, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center'},
