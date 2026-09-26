@@ -445,18 +445,20 @@ function Client() {
   }, []);
 
   useEffect(() => {
-    if (!session) { setServerWorks([]); return; }
+    if (!session) { setServerWorks([]); setContinueWorks([]); return; }
     let cancelled = false;
     setShelfLoading(true);
     const timeout = setTimeout(() => {
       Promise.all([
         request(session, '/api/books?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space)),
         request(session, '/api/works?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space) + '&limit=200'),
+        request(session, '/api/continue?space=' + encodeURIComponent(space)),
       ])
-        .then(([assets, works]) => {
+        .then(([assets, works, continuing]) => {
           if (cancelled) return;
           setBooks(assets);
           setServerWorks(works);
+          setContinueWorks(continuing);
         })
         .catch(e => {
           if (!cancelled) setError(e.message);
@@ -500,6 +502,15 @@ function Client() {
   }, [audio.currentTime, activeLocalWork, localWorkIndex, playing?.uri, session]);
 
   useEffect(() => {
+    if (!session || activeTab !== 'shelf') return;
+    let cancelled=false;
+    request(session,'/api/continue?space='+encodeURIComponent(space))
+      .then(items=>{if(!cancelled)setContinueWorks(items);})
+      .catch(e=>{if(!cancelled)setError(e.message);});
+    return()=>{cancelled=true;};
+  }, [activeTab, session, space]);
+
+  useEffect(() => {
     if (session || restoring || !localOverridesReady || !localFolders.length || books.length || localScanning) return;
     void rescanLocalFolders();
   }, [books.length, localFolders, localOverridesReady, localScanning, restoring, session]);
@@ -511,15 +522,17 @@ function Client() {
 
   async function refreshSourcesAndShelf() {
     if(!session)return;
-    const [items, assets, works]=await Promise.all([
+    const [items, assets, works, continuing]=await Promise.all([
       request(session,'/api/sources'),
       request(session,'/api/books?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)),
       request(session,'/api/works?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)+'&limit=200'),
+      request(session,'/api/continue?space='+encodeURIComponent(space)),
     ]);
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
     setBooks(assets);
     setServerWorks(works);
+    setContinueWorks(continuing);
   }
 
   async function sourceAction(path: string, data?: unknown) {
@@ -617,6 +630,7 @@ function Client() {
     setSession(null);
     setBooks([]);
     setServerWorks([]);
+    setContinueWorks([]);
     setOwner(false);
     setSources([]);
     setQueuedBooks([]); setSpace('');
