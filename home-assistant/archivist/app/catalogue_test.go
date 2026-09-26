@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -94,4 +97,63 @@ func TestScanBuildsConservativeLogicalWorks(t *testing.T) {
 	var files int
 	if e := a.db.QueryRow(`SELECT w.title,count(ea.asset_id) FROM works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE e.format='Audio' GROUP BY w.id`).Scan(&title,&files); e != nil { t.Fatal(e) }
 	if title != "Long Book" || files != 3 { t.Fatalf("audio work=%q files=%d", title, files) }
+}
+
+
+func TestWorkFiltersAndCompleteSummary(t *testing.T) {
+	a:=fixture(t)
+	root:=t.TempDir()
+	if _,e:=a.db.Exec("INSERT INTO sources(id,space,path,status) VALUES(1,'Main',?,'Ready')",root);e!=nil{t.Fatal(e)}
+	assets:=[]struct{
+		title,author,series,format string
+		available,review int
+	}{
+		{"Known","Author One","Series A","Audio",1,0},
+		{"Unknown","","Series B","Ebook",0,1},
+		{"Known Two","Author Two","Series A","Ebook",1,0},
+	}
+	for i,item:=range assets{
+		res,e:=a.db.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available,metadata_source,metadata_confidence,needs_review)
+			VALUES(1,?,?,?,?,?,?, 'manual',100,?)`,
+			item.title+".dat",item.title,item.author,item.series,item.format,item.available,item.review)
+		if e!=nil{t.Fatal(e)}
+		assetID,_:=res.LastInsertId()
+		res,e=a.db.Exec("INSERT INTO works(title,space,author,series,auto,group_key) VALUES(?,?,?,?,1,?)",item.title,"Main",item.author,item.series,"test-"+item.title)
+		if e!=nil{t.Fatal(e)}
+		workID,_:=res.LastInsertId()
+		res,e=a.db.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",workID,item.format)
+		if e!=nil{t.Fatal(e)}
+		editionID,_:=res.LastInsertId()
+		if _,e=a.db.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,0)",assetID,editionID);e!=nil{t.Fatal(e)}
+		_ = i
+	}
+	call:=func(path string)*httptest.ResponseRecorder{
+		req:=httptest.NewRequest("GET",path,nil)
+		req.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+		res:=httptest.NewRecorder()
+		a.routes().ServeHTTP(res,req)
+		return res
+	}
+	res:=call("/api/works?unknownAuthor=1&availability=unavailable&format=Ebook&limit=100")
+	if res.Code!=200{t.Fatalf("work filter=%d %s",res.Code,res.Body.String())}
+	var works []map[string]any
+	if e:=json.Unmarshal(res.Body.Bytes(),&works);e!=nil{t.Fatal(e)}
+	if len(works)!=1 || works[0]["title"]!="Unknown"{t.Fatalf("filtered works=%v",works)}
+
+	res=call("/api/library-summary")
+	if res.Code!=200{t.Fatalf("summary=%d %s",res.Code,res.Body.String())}
+	var summary struct{
+		Total int `json:"total"`
+		UnknownAuthors int `json:"unknownAuthors"`
+		NeedsReview int `json:"needsReview"`
+		Series []struct{Name string `json:"name"`;Count int `json:"count"`} `json:"series"`
+		Availability []struct{Name string `json:"name"`;Count int `json:"count"`} `json:"availability"`
+	}
+	if e:=json.Unmarshal(res.Body.Bytes(),&summary);e!=nil{t.Fatal(e)}
+	if summary.Total!=3 || summary.UnknownAuthors!=1 || summary.NeedsReview!=1 {
+		t.Fatalf("summary=%+v",summary)
+	}
+	if len(summary.Series)!=2 || len(summary.Availability)!=2 {
+		t.Fatalf("summary aggregates series=%v availability=%v",summary.Series,summary.Availability)
+	}
 }
