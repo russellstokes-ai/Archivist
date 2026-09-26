@@ -48,3 +48,4 @@ jobs:
           node local-works.test.cjs
           node local-reader.test.cjs
           node native-patch.test.cjs
+          node ui-contract.test.cjs
