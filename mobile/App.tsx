@@ -1281,12 +1281,22 @@ function Client() {
                   {playback.tracks.map((track,index)=><Button key={track.id} label={(index+1)+'. '+track.title} disabled={!track.available || playback.loading} tone={index===playback.index?'primary':'quiet'} onPress={()=>void controller.select(index)} />)}
                 </> : null}
               </> : null}
+              {!session && activeLocalWork && activeLocalWork.tracks.length > 1 ? <>
+                <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Files</Text>
+                {activeLocalWork.tracks.map((track,index)=><Button
+                  key={track.uri}
+                  label={(index+1)+'. '+track.title}
+                  disabled={!track.available}
+                  tone={index===localWorkIndex?'primary':'quiet'}
+                  onPress={()=>void loadLocalWorkTrack(activeLocalWork,index,0)}
+                />)}
+              </> : null}
               <View style={styles.queueHeader}>
                 <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Up next</Text>
                 {session ? <Button label="Refresh" disabled={queueBusy} tone="quiet" onPress={()=>void queueStore?.reload()}/> : null}
               </View>
               {!queuedBooks.length ? <Text style={[styles.meta,{color:p.muted}]}>Nothing queued. Add audiobooks from Shelf.</Text> : null}
-              {queuedBooks.map((book,index)=><View key={(book.uri || '') + book.id} style={[styles.queueBook,{borderColor:p.line}]}>
+              {queuedBooks.map((book,index)=><View key={(book.localWorkKey || book.uri || '') + book.id} style={[styles.queueBook,{borderColor:p.line}]}>
                 <Pressable accessibilityRole="button" style={{flex:1}} onPress={()=>{void playBook(book).then(()=>{if(session && controller.state.playing)void queueStore?.edit(items=>items.filter(b=>b.id!==book.id));});}}>
                   <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{book.title}</Text>
                   <Text style={[styles.meta,{color:p.muted}]}>#{index+1}{book.author ? ' · '+book.author : ''}</Text>
