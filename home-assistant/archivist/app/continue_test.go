@@ -56,6 +56,7 @@ func TestContinueReturnsRealProfileProgressOnly(t *testing.T) {
 func TestContinueRespectsHouseholdSpaceGrants(t *testing.T) {
 	a := fixture(t)
 	if err := a.initProgress(); err != nil { t.Fatal(err) }
+	if err := a.initReader(); err != nil { t.Fatal(err) }
 
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "Book.mp3"), []byte("audio"), 0600); err != nil { t.Fatal(err) }
