@@ -474,21 +474,44 @@ function Client() {
     setAudioModeAsync({playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix'}).catch(e => setError(e.message));
   }, []);
 
+  function serverWorksPath(offset = 0, limit = 100) {
+    const params = new URLSearchParams({
+      q: query,
+      space,
+      format: formatFilter,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (unknownAuthorOnly) params.set('unknownAuthor','1');
+    if (availabilityFilter !== 'all') params.set('availability',availabilityFilter);
+    return '/api/works?' + params.toString();
+  }
+
   useEffect(() => {
-    if (!session) { setServerWorks([]); setContinueWorks([]); return; }
+    if (!session) {
+      setServerWorks([]);
+      setContinueWorks([]);
+      setServerSummary(null);
+      setServerHasMore(false);
+      return;
+    }
     let cancelled = false;
     setShelfLoading(true);
+    setServerHasMore(false);
     const timeout = setTimeout(() => {
       Promise.all([
         request(session, '/api/books?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space)),
-        request(session, '/api/works?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space) + '&format=' + encodeURIComponent(formatFilter) + '&limit=200'),
+        request(session, serverWorksPath(0,100)),
         request(session, '/api/continue?space=' + encodeURIComponent(space)),
+        request(session, '/api/library-summary'),
       ])
-        .then(([assets, works, continuing]) => {
+        .then(([assets, works, continuing, summary]) => {
           if (cancelled) return;
           setBooks(assets);
           setServerWorks(works);
+          setServerHasMore(works.length === 100);
           setContinueWorks(continuing);
+          setServerSummary(summary);
         })
         .catch(e => {
           if (!cancelled) setError(e.message);
@@ -498,7 +521,7 @@ function Client() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [formatFilter, session, query, space]);
+  }, [availabilityFilter, formatFilter, session, query, space, unknownAuthorOnly]);
 
   useEffect(() => {
     if (!session) { setSpaces([]); return; }
@@ -552,17 +575,37 @@ function Client() {
 
   async function refreshSourcesAndShelf() {
     if(!session)return;
-    const [items, assets, works, continuing]=await Promise.all([
+    const [items, assets, works, continuing, summary]=await Promise.all([
       request(session,'/api/sources'),
       request(session,'/api/books?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)),
-      request(session,'/api/works?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)+'&format='+encodeURIComponent(formatFilter)+'&limit=200'),
+      request(session,serverWorksPath(0,100)),
       request(session,'/api/continue?space='+encodeURIComponent(space)),
+      request(session,'/api/library-summary'),
     ]);
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
     setBooks(assets);
     setServerWorks(works);
+    setServerHasMore(works.length===100);
     setContinueWorks(continuing);
+    setServerSummary(summary);
+  }
+
+  async function loadMoreServerWorks() {
+    if (!session || !serverHasMore || serverLoadingMore || shelfLoading) return;
+    setServerLoadingMore(true);
+    try {
+      const next = await request(session,serverWorksPath(serverWorks.length,100)) as ServerWork[];
+      setServerWorks(current => {
+        const seen=new Set(current.map(work=>work.id));
+        return [...current,...next.filter(work=>!seen.has(work.id))];
+      });
+      setServerHasMore(next.length===100);
+    } catch(e) {
+      setError((e as Error).message);
+    } finally {
+      setServerLoadingMore(false);
+    }
   }
 
   async function sourceAction(path: string, data?: unknown) {
@@ -661,6 +704,9 @@ function Client() {
     setBooks([]);
     setServerWorks([]);
     setContinueWorks([]);
+    setServerSummary(null);
+    setServerHasMore(false);
+    setServerLoadingMore(false);
     setOwner(false);
     setSources([]);
     setQueuedBooks([]); setSpace('');
@@ -1301,6 +1347,9 @@ function Client() {
             contentContainerStyle={styles.grid}
             ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>No matching works. Add and scan folders in Settings.</Text> : null}
             renderItem={({item}) => <ServerWorkCard work={item} />}
+            onEndReachedThreshold={0.55}
+            onEndReached={()=>void loadMoreServerWorks()}
+            ListFooterComponent={serverLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more works" /> : null}
           />
         ) : (
           <FlatList
@@ -1739,7 +1788,7 @@ function Client() {
     <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
       <View style={[styles.appHeader, {borderBottomColor: p.line}]}>
         <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
-        <Text style={[styles.headerMeta, {color: p.muted}]}>{session ? `${serverWorks.length} works` : `${localWorks.length} works`}</Text>
+        <Text style={[styles.headerMeta, {color: p.muted}]}>{session ? `${serverSummary?.total ?? serverWorks.length} works` : `${localWorks.length} works`}</Text>
       </View>
       {error ? <Text accessibilityRole="alert" style={[styles.error, {color: p.gold}]}>{error}</Text> : null}
       <View style={styles.tabBody}>
