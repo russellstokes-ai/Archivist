@@ -20,7 +20,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {SavedQueue, reorder} from './queue';
-import {LocalBook, LocalFolder, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 
 type Book = {
@@ -59,6 +59,7 @@ const localProgressKey = 'archivist.localProgress';
 const localReadingProgressKey = 'archivist.localReadingProgress';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
+const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 
@@ -220,6 +221,7 @@ function Client() {
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
+  const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const loadCancel = useRef<(() => void) | null>(null);
   const shelfColumns = width >= 900 ? 5 : width >= 700 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
@@ -342,6 +344,9 @@ function Client() {
     }).catch(() => undefined);
     SecureStore.getItemAsync(localSortHistoryKey).then(value => {
       if (value) setLocalSortHistory(JSON.parse(value));
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(localMetadataOverridesKey).then(value => {
+      if (value) setLocalMetadataOverrides(JSON.parse(value));
     }).catch(() => undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
@@ -526,7 +531,7 @@ function Client() {
       }
       const folders = localFolders.some(folder => folder.uri === picked.uri) ? localFolders : [...localFolders, picked];
       setScanProgress({phase: 'discovering', currentFolder: picked.name, entriesVisited: 0, found: 0, review: 0});
-      const result = await scanLocalFolders(folders, setScanProgress);
+      const result = await scanLocalFolders(folders, setScanProgress, localMetadataOverrides);
       setLocalFolders(result.folders);
       setBooks(result.books);
       setLocalMovePreviews([]);
@@ -553,7 +558,7 @@ function Client() {
     setLocalScanning(true);
     try {
       setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
-      const result = await scanLocalFolders(localFolders, setScanProgress);
+      const result = await scanLocalFolders(localFolders, setScanProgress, localMetadataOverrides);
       setLocalFolders(result.folders);
       setBooks(result.books);
       setLocalMovePreviews([]);
@@ -827,7 +832,7 @@ function Client() {
               {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
               <Text style={[styles.meta, {color: p.muted}]}>{item.format} - {item.space}{item.author ? ' - '+item.author : ''}{item.series ? ' - '+item.series : ''}</Text>
             </Pressable>{item.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={session ? (!queueReady || queueBusy) : false} onPress={()=>session ? void queueStore?.edit(old=>old.some(b=>b.id===item.id)?old:[...old,item]) : void addLocalQueue(item)} /> : null}
-            {owner?<Button label="Edit details" tone="quiet" onPress={()=>{setEditing(item);setEditTitle(item.title);setEditAuthor(item.author||'');setEditSeries(item.series||'');}}/>:null}</View>
+            {(session ? owner : true) ? <Button label="Edit details" tone="quiet" onPress={()=>{setEditing(item);setEditTitle(item.title);setEditAuthor(item.author||'');setEditSeries(item.series||'');}}/> : null}</View>
           )}
         />
         {!session && books.length ? <View style={[styles.setupPanel, {backgroundColor: p.card, borderColor: p.line}]}>
@@ -856,12 +861,34 @@ function Client() {
             <Button label="Remove copied files" disabled={busy || item.copied.length===0} tone="quiet" onPress={() => void recoverLocalSort(item)} />
           </View>)}
         </View> : null}
-        {editing ? <View style={{gap:8}}><TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
+        {editing ? <View style={[styles.editorCard,{backgroundColor:p.card,borderColor:p.line}]}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
+          {editing.reviewReason ? <Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text> : null}
+          <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-          <Button label="Save details" disabled={busy} onPress={()=>{
-          if(!session)return;setBusy(true);request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title:editTitle,author:editAuthor,series:editSeries}).then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title:editTitle.trim(),author:editAuthor.trim(),series:editSeries.trim()}:b));setEditing(null);}).catch(e=>setError(e.message)).finally(()=>setBusy(false));
-        }}/><Button label="Cancel" tone="quiet" onPress={()=>setEditing(null)}/></View>:null}
+          <View style={styles.toolRow}>
+            <Button label="Save details" disabled={busy || !editTitle.trim()} onPress={()=>{
+              const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim();
+              if(!title)return;
+              setBusy(true);setError('');
+              if(session){
+                request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName})
+                  .then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+                  .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+              }else if(editing.uri){
+                const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName}};
+                setLocalMetadataOverrides(next);
+                SecureStore.setItemAsync(localMetadataOverridesKey,JSON.stringify(next))
+                  .then(()=>{setBooks(old=>old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+                  .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+              }else{
+                setBusy(false);
+              }
+            }}/>
+            <Button label="Cancel" tone="quiet" onPress={()=>setEditing(null)}/>
+          </View>
+        </View>:null}
         </View>
       </View>
     );
@@ -1296,6 +1323,7 @@ const styles = StyleSheet.create({
   coverTitle: {fontFamily: 'serif', fontSize: 20},
   bookTitle: {fontSize: 15, fontWeight: '700'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
+  editorCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 680, width:'100%', alignSelf:'center'},
   playerHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between'},
