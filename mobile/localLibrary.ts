@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
-import {StorageAccessFramework} from 'expo-file-system/legacy';
-import {inferLocalBookMetadata, IdentificationConfidence} from './libraryIntelligence';
+import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
+import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, parseLocalSidecar} from './libraryIntelligence';
 
 export type LocalBook = {
   id: number;
@@ -15,6 +15,7 @@ export type LocalBook = {
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
+  metadataSource?: 'path' | 'sidecar' | 'manual';
 };
 
 export type LocalSortPreview = {
@@ -56,6 +57,12 @@ export type LocalScanProgress = {
   entriesVisited: number;
   found: number;
   review: number;
+};
+
+export type LocalMetadataOverride = {
+  title: string;
+  author: string;
+  series: string;
 };
 
 export type LocalScanResult = {
@@ -114,6 +121,7 @@ export async function pickLocalFolder(): Promise<LocalFolder | null> {
 export async function scanLocalFolders(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
+  overrides: Record<string, LocalMetadataOverride> = {},
 ): Promise<LocalScanResult> {
   const books: LocalBook[] = [];
   let skipped = 0;
@@ -135,6 +143,22 @@ export async function scanLocalFolders(
       skipped += 1;
       return;
     }
+
+    const supportedFiles = children.filter(child => {
+      const ext = extension(child);
+      return !!ext && supported.has(ext);
+    });
+    const sidecarByStem = new Map<string, string>();
+    let genericSidecar = '';
+    for (const child of children) {
+      const ext = extension(child);
+      if (ext !== 'opf' && ext !== 'nfo') continue;
+      const stem = fileStem(child).toLowerCase();
+      sidecarByStem.set(stem, child);
+      if (stem === 'metadata' || stem === 'book') genericSidecar = child;
+    }
+    if (supportedFiles.length !== 1) genericSidecar = '';
+
     for (const child of children) {
       entriesVisited += 1;
       if (entriesVisited === 1 || entriesVisited % 20 === 0) report('discovering', space);
@@ -146,7 +170,27 @@ export async function scanLocalFolders(
       const format = ext ? supported.get(ext) : undefined;
       if (format && !seen.has(child)) {
         seen.add(child);
-        const identity = inferLocalBookMetadata(child, format);
+        let identity = inferLocalBookMetadata(child, format);
+
+        const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
+        if (sidecarUri) {
+          try {
+            const info = await getInfoAsync(sidecarUri);
+            if (info.exists && (!('size' in info) || typeof info.size !== 'number' || info.size <= 2 * 1024 * 1024)) {
+              const text = await readAsStringAsync(sidecarUri);
+              const fields = parseLocalSidecar(text, extension(sidecarUri));
+              if (fields.title || fields.author || fields.series) {
+                identity = applyLocalMetadata(identity, fields, 'sidecar');
+              }
+            }
+          } catch {
+            // Sidecars are enrichment only. A malformed/unreadable one must never fail the scan.
+          }
+        }
+
+        const override = overrides[child];
+        if (override) identity = applyLocalMetadata(identity, override, 'manual');
+
         if (identity.needsReview) review += 1;
         books.push({
           id: books.length + 1,
@@ -161,6 +205,7 @@ export async function scanLocalFolders(
           needsReview: identity.needsReview,
           reviewReason: identity.reviewReason,
           coverShape: identity.coverShape,
+          metadataSource: identity.metadataSource,
         });
         report('discovering', space);
       } else if (!ext && depth < maxDepth) {
@@ -276,6 +321,10 @@ function targetPath(book: LocalBook, filename: string, template: string) {
 function fileNameFromUri(uri: string) {
   const clean = decodeUriPart(uri).split('?')[0];
   return clean.split('/').pop() || 'item';
+}
+
+function fileStem(uri: string) {
+  return fileNameFromUri(uri).replace(/\.[^.]+$/, '');
 }
 
 async function createTargetFile(rootUri: string, relativePath: string) {
