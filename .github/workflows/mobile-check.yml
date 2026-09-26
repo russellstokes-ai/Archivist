@@ -45,5 +45,6 @@ jobs:
           node core.test.cjs
           node queue.test.cjs
           node local-library.test.cjs
+          node local-works.test.cjs
           node local-reader.test.cjs
           node native-patch.test.cjs
