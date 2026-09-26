@@ -62,6 +62,7 @@ type LibrarySummary = {
   spaces: SummaryItem[];
   authors: SummaryItem[];
   unknownAuthors: number;
+  needsReview: number;
   series: SummaryItem[];
   availability: SummaryItem[];
 };
@@ -199,6 +200,8 @@ function Client() {
   const [serverSummary, setServerSummary] = useState<LibrarySummary | null>(null);
   const [serverHasMore, setServerHasMore] = useState(false);
   const [serverLoadingMore, setServerLoadingMore] = useState(false);
+  const [serverBooksHasMore, setServerBooksHasMore] = useState(false);
+  const [serverBooksLoadingMore, setServerBooksLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
@@ -487,12 +490,27 @@ function Client() {
     return '/api/works?' + params.toString();
   }
 
+  function serverAssetsPath(offset = 0, limit = 500, allLibrary = false) {
+    const params = new URLSearchParams({
+      q: allLibrary ? '' : query,
+      space: allLibrary ? '' : space,
+      format: allLibrary ? '' : formatFilter,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (!allLibrary && reviewOnly) params.set('review','1');
+    if (!allLibrary && unknownAuthorOnly) params.set('unknownAuthor','1');
+    if (!allLibrary && availabilityFilter !== 'all') params.set('availability',availabilityFilter);
+    return '/api/books?' + params.toString();
+  }
+
   useEffect(() => {
     if (!session) {
       setServerWorks([]);
       setContinueWorks([]);
       setServerSummary(null);
       setServerHasMore(false);
+      setServerBooksHasMore(false);
       return;
     }
     let cancelled = false;
@@ -500,7 +518,7 @@ function Client() {
     setServerHasMore(false);
     const timeout = setTimeout(() => {
       Promise.all([
-        request(session, '/api/books?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space)),
+        request(session, serverAssetsPath(0,500)),
         request(session, serverWorksPath(0,100)),
         request(session, '/api/continue?space=' + encodeURIComponent(space)),
         request(session, '/api/library-summary'),
@@ -508,6 +526,7 @@ function Client() {
         .then(([assets, works, continuing, summary]) => {
           if (cancelled) return;
           setBooks(assets);
+          setServerBooksHasMore(assets.length === 500);
           setServerWorks(works);
           setServerHasMore(works.length === 100);
           setContinueWorks(continuing);
@@ -521,7 +540,7 @@ function Client() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [availabilityFilter, formatFilter, session, query, space, unknownAuthorOnly]);
+  }, [availabilityFilter, formatFilter, reviewOnly, session, query, space, unknownAuthorOnly]);
 
   useEffect(() => {
     if (!session) { setSpaces([]); return; }
@@ -577,7 +596,7 @@ function Client() {
     if(!session)return;
     const [items, assets, works, continuing, summary]=await Promise.all([
       request(session,'/api/sources'),
-      request(session,'/api/books?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)),
+      request(session,serverAssetsPath(0,500)),
       request(session,serverWorksPath(0,100)),
       request(session,'/api/continue?space='+encodeURIComponent(space)),
       request(session,'/api/library-summary'),
@@ -585,6 +604,7 @@ function Client() {
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
     setBooks(assets);
+    setServerBooksHasMore(assets.length===500);
     setServerWorks(works);
     setServerHasMore(works.length===100);
     setContinueWorks(continuing);
@@ -605,6 +625,23 @@ function Client() {
       setError((e as Error).message);
     } finally {
       setServerLoadingMore(false);
+    }
+  }
+
+  async function loadMoreServerBooks() {
+    if (!session || !serverBooksHasMore || serverBooksLoadingMore || shelfLoading) return;
+    setServerBooksLoadingMore(true);
+    try {
+      const next = await request(session,serverAssetsPath(books.length,500)) as Book[];
+      setBooks(current => {
+        const seen=new Set(current.map(book=>book.id));
+        return [...current,...next.filter(book=>!seen.has(book.id))];
+      });
+      setServerBooksHasMore(next.length===500);
+    } catch(e) {
+      setError((e as Error).message);
+    } finally {
+      setServerBooksLoadingMore(false);
     }
   }
 
@@ -707,6 +744,8 @@ function Client() {
     setServerSummary(null);
     setServerHasMore(false);
     setServerLoadingMore(false);
+    setServerBooksHasMore(false);
+    setServerBooksLoadingMore(false);
     setOwner(false);
     setSources([]);
     setQueuedBooks([]); setSpace('');
@@ -1129,7 +1168,7 @@ function Client() {
 
   function OnboardingGuide() {
     if (session || onboardingDone) return null;
-    const reviewCount = books.filter(book => book.needsReview).length;
+    const reviewCount = session ? (serverSummary?.needsReview ?? books.filter(book => book.needsReview).length) : books.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
     const hasBooks = books.length > 0;
     return (
@@ -1337,6 +1376,9 @@ function Client() {
             contentContainerStyle={styles.grid}
             ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>}
             renderItem={({item}) => <RawAssetCard item={item} />}
+            onEndReachedThreshold={0.55}
+            onEndReached={()=>void loadMoreServerBooks()}
+            ListFooterComponent={session && serverBooksLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more review files" /> : null}
           />
         ) : session ? (
           <FlatList
