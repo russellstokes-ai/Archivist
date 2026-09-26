@@ -77,3 +77,7 @@ nav{z-index:50}
 }
 
 .source-stats{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.source-stats span{font-size:11px;padding:4px 7px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--muted)}
+
+.cover-fallback{display:grid;gap:8px;width:100%;align-self:stretch;position:relative;z-index:0}
+.cover-fallback small{font:800 10px/1.2 system-ui,sans-serif;letter-spacing:.14em;color:#c6a374;text-transform:uppercase;margin:0}
+.cover-fallback strong{font:600 18px/1.25 Georgia,serif;color:#f8f7f2}
