@@ -95,3 +95,31 @@ Download `archivist-release-apk`, unzip it, and install the APK on Android.
 ## Android Rebuild Trigger
 
 - Rebuild requested after Android startup compatibility fix (0.0.1 / versionCode 2).
+
+
+## 2026-09-26 — BookOrbit-informed polish pass
+
+Archivist remains deliberately local-first. BookOrbit was used as a reference for library onboarding, library switching, cover preferences, achievements/statistics and breadth, but Archivist should avoid a server-admin-first experience.
+
+### Implemented for mobile 0.0.8
+
+- Added a three-step first-run guide: choose folders, automatic scan/identification, review only uncertain matches.
+- Added immediate visible scan progress from the start of discovery.
+- Added a one-time first-library celebration effect.
+- Added conservative local metadata inference from common filename/folder layouts with confidence and review flags.
+- Raised the local discovery cap to 5,000 while keeping traversal sequential and bounded-memory.
+- Added scan summaries for found / confidently identified / review counts.
+- Added a responsive library switcher: left library rail on wider layouts, compact chips on phones.
+- Added uncertain-item review filtering and per-book review badges.
+- Added square audiobook and portrait book/comic cover geometry as the basis for consistent fill-style artwork presentation.
+- Bumped Android mobile version to 0.0.8 / versionCode 9.
+- Android CI now gates builds on local-library and local-reader tests as well as core/queue/native tests.
+- Added `ARCHIVIST-POLISH-PLAN-2026-09-26.md` for the expanded build sequence.
+
+### Next polish sequence after 0.0.8 validation
+
+1. Audiobook player refinement: artwork, chapters, queue, speed/sleep interactions and motion.
+2. Reader/comic refinement: paged mode, page-turn animation, optional page-turn sound, richer reader controls.
+3. Profile: achievements, reading/listening statistics, streaks and milestones kept out of the main navigation.
+4. Scanner v2 deeper layers: embedded metadata, sidecars, multi-file audiobook grouping, ISBN/provider matching, dedupe/fingerprints and background cover extraction.
+5. Atlas: real genres and richer relationships.
