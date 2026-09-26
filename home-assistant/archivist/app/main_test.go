@@ -157,3 +157,72 @@ func TestCSRFAndPersistence(t *testing.T) {
 		t.Fatalf("health endpoint: %d %q", res.Code, res.Body.String())
 	}
 }
+
+
+func TestScanReviewFilterAndIncrementalMetadataRefresh(t *testing.T) {
+	a := fixture(t)
+	root := t.TempDir()
+	book := filepath.Join(root, "Mystery.epub")
+	if e := os.WriteFile(book, []byte("not-real-epub"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := a.addSource("Main", root); e != nil {
+		t.Fatal(e)
+	}
+	if e := a.scan(1); e != nil {
+		t.Fatal(e)
+	}
+
+	var source string
+	var confidence int
+	var review bool
+	var signature string
+	if e := a.db.QueryRow("SELECT metadata_source,metadata_confidence,needs_review,scan_signature FROM assets WHERE id=1").Scan(&source,&confidence,&review,&signature); e != nil {
+		t.Fatal(e)
+	}
+	if source != "path" || confidence >= 60 || !review || signature == "" {
+		t.Fatalf("initial identification source=%q confidence=%d review=%v signature=%q", source, confidence, review, signature)
+	}
+
+	handler := a.routes()
+	req := httptest.NewRequest("GET", "/api/books?q=&space=&review=1", nil)
+	req.AddCookie(&http.Cookie{Name: "archivist_session", Value: "test-key"})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != 200 || !strings.Contains(res.Body.String(), `"needsReview":true`) {
+		t.Fatalf("review queue: %d %s", res.Code, res.Body.String())
+	}
+
+	sidecar := filepath.Join(root, "Mystery.opf")
+	_jsii := `<?xml version="1.0"?><package><metadata>
+		<title>The Dispossessed</title><creator>Ursula K. Le Guin</creator>
+		<meta name="calibre:series" content="Hainish Cycle"/>
+	</metadata></package>`
+	if e := os.WriteFile(sidecar, []byte(_jsii), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := a.scan(1); e != nil {
+		t.Fatal(e)
+	}
+
+	var title, author, series, nextSource, nextSignature string
+	var nextConfidence int
+	var nextReview bool
+	if e := a.db.QueryRow("SELECT title,author,series,metadata_source,metadata_confidence,needs_review,scan_signature FROM assets WHERE id=1").Scan(&title,&author,&series,&nextSource,&nextConfidence,&nextReview,&nextSignature); e != nil {
+		t.Fatal(e)
+	}
+	if title != "The Dispossessed" || author != "Ursula K. Le Guin" || series != "Hainish Cycle" {
+		t.Fatalf("sidecar refresh title=%q author=%q series=%q", title, author, series)
+	}
+	if !strings.Contains(nextSource, "sidecar") || nextConfidence < 90 || nextReview || nextSignature == signature {
+		t.Fatalf("refreshed source=%q confidence=%d review=%v signatureChanged=%v", nextSource, nextConfidence, nextReview, nextSignature != signature)
+	}
+
+	req = httptest.NewRequest("GET", "/api/books?q=&space=&review=1", nil)
+	req.AddCookie(&http.Cookie{Name: "archivist_session", Value: "test-key"})
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != 200 || strings.Contains(res.Body.String(), "The Dispossessed") {
+		t.Fatalf("resolved item still in review queue: %d %s", res.Code, res.Body.String())
+	}
+}
