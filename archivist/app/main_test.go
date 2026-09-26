@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -283,5 +285,48 @@ func TestLegacyMetadataMigrationPreservesCorrections(t *testing.T) {
 	}
 	if title != "My Corrected Title" || author != "Corrected Author" || series != "Corrected Series" {
 		t.Fatalf("legacy correction overwritten title=%q author=%q series=%q", title, author, series)
+	}
+}
+
+
+func TestBooksPaginationAndFilters(t *testing.T) {
+	a := fixture(t)
+	root := t.TempDir()
+	if _, e := a.db.Exec("INSERT INTO sources(id,space,path,status) VALUES(1,'Main',?,'Ready')", root); e != nil {
+		t.Fatal(e)
+	}
+	for i := 0; i < 510; i++ {
+		author := "Known Author"
+		format := "Ebook"
+		available := 1
+		if i == 509 {
+			author = ""
+			format = "Audio"
+			available = 0
+		}
+		if _, e := a.db.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available,metadata_source,metadata_confidence,needs_review)
+			VALUES(1,?,?,?,?,?,?, 'manual',100,0)`, fmt.Sprintf("book-%03d.epub",i),fmt.Sprintf("Book %03d",i),author,"",format,available); e != nil {
+			t.Fatal(e)
+		}
+	}
+	call := func(path string) *httptest.ResponseRecorder {
+		req:=httptest.NewRequest("GET",path,nil)
+		req.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+		res:=httptest.NewRecorder()
+		a.routes().ServeHTTP(res,req)
+		return res
+	}
+	res:=call("/api/books?limit=500&offset=500")
+	if res.Code!=200 { t.Fatalf("page status=%d %s",res.Code,res.Body.String()) }
+	var page []book
+	if e:=json.Unmarshal(res.Body.Bytes(),&page);e!=nil{t.Fatal(e)}
+	if len(page)!=10 { t.Fatalf("second page=%d want 10",len(page)) }
+
+	res=call("/api/books?unknownAuthor=1&availability=unavailable&format=Audio&limit=500")
+	if res.Code!=200 { t.Fatalf("filtered status=%d %s",res.Code,res.Body.String()) }
+	page=nil
+	if e:=json.Unmarshal(res.Body.Bytes(),&page);e!=nil{t.Fatal(e)}
+	if len(page)!=1 || page[0].Author!="" || page[0].Available || page[0].Format!="Audio" {
+		t.Fatalf("filtered page=%+v",page)
 	}
 }
