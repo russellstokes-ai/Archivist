@@ -1841,6 +1841,8 @@ const styles = StyleSheet.create({
   segmentItem: {flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center'},
   miniPlayer: {minHeight: 66, marginHorizontal: 12, marginBottom: 8, borderRadius: 8, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10},
   miniCover: {width: 42, height: 42, borderRadius: 5, alignItems: 'center', justifyContent: 'center'},
+  miniCoverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
+  miniCoverLabel: {color:'#0f2a36',fontSize:8,fontWeight:'900',letterSpacing:0.6},
   miniTitle: {fontWeight: '800'},
   miniMeta: {fontSize: 12},
   miniButton: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#f8f7f2'},
