@@ -16,6 +16,7 @@ export type LocalBook = {
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
   metadataSource?: 'path' | 'sidecar' | 'manual';
+  coverUri?: string;
 };
 
 export type LocalSortPreview = {
@@ -150,12 +151,27 @@ export async function scanLocalFolders(
     });
     const sidecarByStem = new Map<string, string>();
     let genericSidecar = '';
+    const artworkByStem = new Map<string, string>();
+    let genericCover = '';
+    let genericCoverRank = 99;
+    const genericCoverAllowed = supportedFiles.length === 1 || (
+      supportedFiles.length > 1 && supportedFiles.every(child => supported.get(extension(child)) === 'Audio')
+    );
     for (const child of children) {
       const ext = extension(child);
-      if (ext !== 'opf' && ext !== 'nfo') continue;
       const stem = fileStem(child).toLowerCase();
-      sidecarByStem.set(stem, child);
-      if (stem === 'metadata' || stem === 'book') genericSidecar = child;
+      if (ext === 'opf' || ext === 'nfo') {
+        sidecarByStem.set(stem, child);
+        if (stem === 'metadata' || stem === 'book') genericSidecar = child;
+      }
+      if (['jpg','jpeg','png','webp'].includes(ext)) {
+        artworkByStem.set(stem, child);
+        const rank = stem === 'cover' ? 0 : stem === 'folder' ? 1 : 99;
+        if (genericCoverAllowed && rank < genericCoverRank) {
+          genericCover = child;
+          genericCoverRank = rank;
+        }
+      }
     }
     if (supportedFiles.length !== 1) genericSidecar = '';
 
@@ -191,6 +207,7 @@ export async function scanLocalFolders(
         const override = overrides[child];
         if (override) identity = applyLocalMetadata(identity, override, 'manual');
 
+        const coverUri = artworkByStem.get(fileStem(child).toLowerCase()) || genericCover || undefined;
         if (identity.needsReview) review += 1;
         books.push({
           id: books.length + 1,
@@ -206,6 +223,7 @@ export async function scanLocalFolders(
           reviewReason: identity.reviewReason,
           coverShape: identity.coverShape,
           metadataSource: identity.metadataSource,
+          coverUri,
         });
         report('discovering', space);
       } else if (!ext && depth < maxDepth) {
