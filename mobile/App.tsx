@@ -667,19 +667,80 @@ function Client() {
     return `${result.ok} ${success}; ${result.failed} need review${firstError ? ': ' + firstError : ''}`;
   }
 
+  async function fetchAllAssetIDs(allLibrary: boolean) {
+    if (!session) return [] as number[];
+    const ids: number[] = [];
+    for (let offset=0; ; offset+=500) {
+      const page = await request(session,serverAssetsPath(offset,500,allLibrary)) as Book[];
+      ids.push(...page.map(book=>book.id));
+      setMoveStatus(`Reading library… ${ids.length} files found`);
+      if (page.length < 500) break;
+    }
+    return ids;
+  }
+
+  async function previewAssetIDs(assetIds: number[]) {
+    if (!session || !assetIds.length) return {ok:0,failed:0,items:[]} as MoveBatchResult;
+    const total: MoveBatchResult={ok:0,failed:0,items:[]};
+    const batchSize=25;
+    for (let i=0;i<assetIds.length;i+=batchSize) {
+      setMoveStatus(`Preparing safe previews… ${Math.min(i+batchSize,assetIds.length)} / ${assetIds.length}`);
+      const result = await request(
+        session,'/api/file-moves/preview-template-batch','POST',
+        {assets:assetIds.slice(i,i+batchSize),template:sortTemplate},120000,
+      ) as MoveBatchResult;
+      total.ok+=result.ok; total.failed+=result.failed; total.items.push(...result.items);
+    }
+    return total;
+  }
+
   async function previewSort(assetIds: number[]) {
-    if(!session)return;setBusy(true);setError('');setMoveStatus('Preparing safe move previews...');
+    if(!session)return;
+    setBusy(true);setError('');setMoveStatus('Preparing safe move previews...');
     try {
-      const result = await request(session,'/api/file-moves/preview-template-batch','POST',{assets:assetIds,template:sortTemplate}) as MoveBatchResult;
+      const result = await previewAssetIDs(assetIds);
+      setMoveStatus(assetIds.length ? describeBatch(result,'ready to move') : 'No matching files to preview.');
+    } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
+  }
+
+  async function previewLibrary(allLibrary: boolean) {
+    if(!session)return;
+    setBusy(true);setError('');setMoveStatus('Reading library…');
+    try {
+      const ids=await fetchAllAssetIDs(allLibrary);
+      if(!ids.length){setMoveStatus('No files to preview.');return;}
+      const result=await previewAssetIDs(ids);
       setMoveStatus(describeBatch(result,'ready to move'));
     } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
   }
 
+  async function fetchPendingMoveIDs() {
+    if(!session)return [] as string[];
+    const ids:string[]=[];
+    for(let offset=0;;offset+=500){
+      const page=await request(session,'/api/file-moves?state=pending&limit=500&offset='+offset) as Array<{id:string}>;
+      ids.push(...page.map(move=>move.id));
+      if(page.length<500)break;
+    }
+    return ids;
+  }
+
   async function applySortBatch() {
-    if(!session)return;setBusy(true);setError('');setMoveStatus('Applying pending safe moves...');
+    if(!session)return;
+    setBusy(true);setError('');setMoveStatus('Reading pending safe moves...');
     try {
-      const result = await request(session,'/api/file-moves/apply-batch','POST',{ids:[]}) as MoveBatchResult;
-      setMoveStatus(describeBatch(result,'moved'));
+      const ids=await fetchPendingMoveIDs();
+      if(!ids.length){setMoveStatus('No pending safe moves.');return;}
+      const total:MoveBatchResult={ok:0,failed:0,items:[]};
+      const batchSize=10;
+      for(let i=0;i<ids.length;i+=batchSize){
+        setMoveStatus(`Applying safe moves… ${Math.min(i+batchSize,ids.length)} / ${ids.length}`);
+        const result=await request(
+          session,'/api/file-moves/apply-batch','POST',{ids:ids.slice(i,i+batchSize)},120000,
+        ) as MoveBatchResult;
+        total.ok+=result.ok;total.failed+=result.failed;total.items.push(...result.items);
+      }
+      setMoveStatus(describeBatch(total,'moved'));
       await refreshSourcesAndShelf();
     } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
   }
@@ -1792,8 +1853,8 @@ function Client() {
               ['format-author-title','Format / Author / Title'],
             ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
           </View>
-          <Button label="Preview matching files" disabled={busy || visibleBooks.length===0} tone="quiet" onPress={()=>void previewSort(visibleBooks.map(b=>b.id))}/>
-          <Button label="Preview all library items" disabled={busy} tone="quiet" onPress={()=>void previewSort([])}/>
+          <Button label="Preview matching files" disabled={busy || shelfLoading} tone="quiet" onPress={()=>void previewLibrary(false)}/>
+          <Button label="Preview entire library" disabled={busy} tone="quiet" onPress={()=>void previewLibrary(true)}/>
           <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
           {moveStatus?<Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
         </View>:null}
