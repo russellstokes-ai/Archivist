@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
 const source = fs.readFileSync('App.tsx','utf8');
+const clientSource = ['App.tsx','connection.ts','queue.ts','playback.ts'].map(file => fs.readFileSync(file,'utf8')).join('\n');
 
 for (const banned of ['Coming soon','Not implemented','TODO','FIXME','Genre is currently represented by media format','coverInitials(']) {
   assert.equal(source.includes(banned), false, 'Banned placeholder/dead-state marker found: ' + banned);
@@ -21,7 +22,7 @@ for (const route of [
   '/api/me','/api/books','/api/works','/api/continue','/api/sources',
   '/api/file-moves','/api/assets/','/api/queue','/session','/logout','/setup/status'
 ]) {
-  assert.ok(source.includes(route), 'Expected wired mobile route missing from App.tsx: ' + route);
+  assert.ok(clientSource.includes(route), 'Expected wired mobile route missing from client: ' + route);
 }
 
 console.log('PASS: no placeholder UI markers and every visible mobile button/tab is wired');
