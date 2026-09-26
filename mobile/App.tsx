@@ -189,6 +189,7 @@ function Client() {
   const [serverNotice, setServerNotice] = useState('');
   const [books, setBooks] = useState<Book[]>([]);
   const [serverWorks, setServerWorks] = useState<ServerWork[]>([]);
+  const [continueWorks, setContinueWorks] = useState<ServerWork[]>([]);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
@@ -198,6 +199,7 @@ function Client() {
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [query, setQuery] = useState('');
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all'|'available'|'unavailable'>('all');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
@@ -301,42 +303,59 @@ function Client() {
     return groupLocalWorks(local);
   }, [books, session]);
 
+  const availabilityMatches = (available: boolean) =>
+    availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
+
   const visibleBooks = useMemo(() => {
-    if (session) return reviewOnly ? books.filter(book => book.needsReview) : books;
     const q = query.trim().toLowerCase();
     return books.filter(book => {
       if (space && book.space !== space) return false;
       if (reviewOnly && !book.needsReview) return false;
+      if (!availabilityMatches(book.available)) return false;
       if (!q) return true;
       return [book.title, book.author, book.series, book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
-  }, [books, query, reviewOnly, session, space]);
+  }, [availabilityFilter, books, query, reviewOnly, space]);
+
   const visibleLocalWorks = useMemo(() => {
     const q = query.trim().toLowerCase();
     return localWorks.filter(work => {
       if (space && work.space !== space) return false;
+      if (!availabilityMatches(work.available)) return false;
       if (q && ![work.title,work.author,work.series,work.format,work.space].some(value => value.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [localWorks, query, space]);
+  }, [availabilityFilter, localWorks, query, space]);
+
+  const visibleServerWorks = useMemo(() => serverWorks.filter(work => availabilityMatches(work.available)), [availabilityFilter, serverWorks]);
+
+  const localContinueWorks = useMemo(() => localWorks.filter(work => {
+    if (space && work.space !== space) return false;
+    if (work.format === 'Audio') {
+      const point = localWorkProgress[work.key];
+      return !!point && !point.complete && point.seconds > 0;
+    }
+    return work.tracks.some(track => !!track.uri && (localReadingProgress[track.uri] || 0) > 0);
+  }).slice(0, 12), [localReadingProgress, localWorkProgress, localWorks, space]);
 
   const atlas = useMemo(() => {
+    const items = session ? serverWorks : localWorks;
     const count = (values: string[]) => {
       const totals = new Map<string, number>();
       for (const value of values.map(v => v.trim()).filter(Boolean)) totals.set(value, (totals.get(value) || 0) + 1);
       return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8);
     };
     return {
-      formats: count(books.map(book => book.format)),
-      authors: count(books.map(book => book.author || 'Unknown author')),
-      series: count(books.map(book => book.series).filter(Boolean)),
-      spaces: count(books.map(book => book.space)),
+      formats: count(items.map(item => item.format)),
+      authors: count(items.map(item => item.author || 'Unknown author')),
+      series: count(items.map(item => item.series).filter(Boolean)),
+      spaces: count(items.map(item => item.space)),
       status: [
-        ['Available', books.filter(book => book.available).length] as [string, number],
-        ['Unavailable', books.filter(book => !book.available).length] as [string, number],
+        ['Available', items.filter(item => item.available).length] as [string, number],
+        ['Unavailable', items.filter(item => !item.available).length] as [string, number],
       ].filter(([, total]) => total > 0),
     };
-  }, [books]);
+  }, [localWorks, serverWorks, session]);
 
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
