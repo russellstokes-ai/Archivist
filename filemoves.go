@@ -147,6 +147,15 @@ func (a *app) previewMove(asset int64, target string) (fileMove, error) {
 	if _, e = root.Lstat(m.To); !os.IsNotExist(e) {
 		return m, errors.New("destination exists or cannot be inspected")
 	}
+	var pendingTarget int
+	if e = a.db.QueryRow(`SELECT count(*) FROM file_moves
+		WHERE root=? AND lower(new_path)=lower(?) AND asset<>?
+		AND state IN ('preview','applying','linked')`,m.Root,m.To,m.Asset).Scan(&pendingTarget); e != nil {
+		return m,e
+	}
+	if pendingTarget > 0 {
+		return m, errors.New("another pending move already targets this destination")
+	}
 	m.Hash, _, e = fileHash(root, m.From)
 	if e != nil {
 		return m, e
