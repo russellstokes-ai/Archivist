@@ -8,6 +8,13 @@ export type LocalIdentity = {
   needsReview: boolean;
   reviewReason: string;
   coverShape: 'portrait' | 'square';
+  metadataSource: 'path' | 'sidecar' | 'manual';
+};
+
+export type LocalMetadataFields = {
+  title?: string;
+  author?: string;
+  series?: string;
 };
 
 export function inferLocalBookMetadata(uri: string, format: string): LocalIdentity {
@@ -25,7 +32,6 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   let confidence: IdentificationConfidence = 'low';
   let reviewReason = 'Could not confidently identify author and series from the file path.';
 
-  // Common audiobook/ebook dump: Author - Series - 01 - Title.ext
   const dashed = stem.split(/\s+-\s+/).map(cleanLabel).filter(Boolean);
   if (dashed.length >= 4 && looksIndex(dashed[2])) {
     author = dashed[0];
@@ -44,14 +50,22 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     title = dashed.slice(1).join(' - ');
     confidence = 'medium';
     reviewReason = 'Author and title inferred from filename.';
+  } else if (format === 'Audio' && dirs.length >= 3) {
+    author = greatGrandparent;
+    series = grandparent;
+    confidence = author ? 'high' : 'medium';
+    reviewReason = author ? '' : 'Audiobook folders were only partly identifiable.';
+  } else if (format === 'Audio' && dirs.length >= 2) {
+    author = grandparent;
+    series = '';
+    confidence = author ? 'medium' : 'low';
+    reviewReason = author ? '' : 'Audiobook author could not be identified confidently.';
   } else if (dirs.length >= 3 && equivalent(parent, stem)) {
-    // Author / Series / Book / Book.ext
     author = greatGrandparent;
     series = grandparent;
     confidence = author && series ? 'high' : 'medium';
     reviewReason = confidence === 'high' ? '' : 'Folder layout was only partly identifiable.';
   } else if (dirs.length >= 2 && sensibleFolder(parent, stem) && sensibleFolder(grandparent, stem)) {
-    // Author / Series / Title.ext
     author = grandparent;
     series = parent;
     confidence = 'high';
@@ -83,6 +97,54 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     needsReview,
     reviewReason: needsReview ? reviewReason : '',
     coverShape: format === 'Audio' ? 'square' : 'portrait',
+    metadataSource: 'path',
+  };
+}
+
+export function applyLocalMetadata(
+  base: LocalIdentity,
+  fields: LocalMetadataFields,
+  source: 'sidecar' | 'manual',
+): LocalIdentity {
+  const title = cleanLabel(fields.title || '') || base.title;
+  const author = fields.author === undefined ? base.author : cleanLabel(fields.author);
+  const series = fields.series === undefined ? base.series : cleanLabel(fields.series);
+  const manual = source === 'manual';
+  const completeEnough = title !== 'Untitled' && (!!author || manual);
+  return {
+    ...base,
+    title,
+    author,
+    series,
+    confidence: 'high',
+    needsReview: !completeEnough,
+    reviewReason: completeEnough ? '' : 'Metadata was found, but the author still needs review.',
+    metadataSource: source,
+  };
+}
+
+export function parseLocalSidecar(text: string, extension: string): LocalMetadataFields {
+  if (!text || text.length > 2 * 1024 * 1024) return {};
+  const ext = extension.toLowerCase();
+  const title = xmlValue(text, ['dc:title', 'title']);
+  const author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer']);
+
+  let series = xmlValue(text, ['series']);
+  if (!series && ext === 'opf') {
+    const calibre = text.match(/<meta\b[^>]*name\s*=\s*["']calibre:series["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
+      || text.match(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']calibre:series["'][^>]*>/i);
+    if (calibre) series = decodeXml(calibre[1]);
+
+    if (!series) {
+      const collection = text.match(/<meta\b[^>]*property\s*=\s*["'][^"']*belongs-to-collection["'][^>]*>([\s\S]*?)<\/meta>/i);
+      if (collection) series = stripXml(collection[1]);
+    }
+  }
+
+  return {
+    title: cleanLabel(title || '') || undefined,
+    author: cleanLabel(author || '') || undefined,
+    series: cleanLabel(series || '') || undefined,
   };
 }
 
@@ -94,6 +156,27 @@ export function decodedPathParts(uri: string): string[] {
   if (value.includes(marker)) value = value.split(marker).pop() || value;
   value = value.replace(/^primary:/, '');
   return value.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
+}
+
+function xmlValue(text: string, tags: string[]) {
+  for (const tag of tags) {
+    const match = text.match(new RegExp('<' + tag + '\\b[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i'));
+    if (match) return stripXml(match[1]);
+  }
+  return '';
+}
+
+function stripXml(value: string) {
+  return decodeXml(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function decodeXml(value: string) {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
 }
 
 function cleanLabel(value: string) {
