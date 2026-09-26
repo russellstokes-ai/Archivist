@@ -26,9 +26,15 @@ const saf = {
   async copyAsync(copy) { this.copies.push(copy); },
   async deleteAsync(uri) { this.deleted.push(uri); },
 };
+const fileText = new Map();
+const fileInfo = new Map();
 Module._load = function(request, parent, isMain) {
   if (request === 'react-native') return {Platform: {OS: 'android'}};
-  if (request === 'expo-file-system/legacy') return {StorageAccessFramework: saf};
+  if (request === 'expo-file-system/legacy') return {
+    StorageAccessFramework: saf,
+    async readAsStringAsync(uri) { return fileText.get(uri) || ''; },
+    async getInfoAsync(uri) { return fileInfo.get(uri) || {exists: true, size: (fileText.get(uri) || '').length}; },
+  };
   return load.call(this, request, parent, isMain);
 };
 
@@ -36,8 +42,8 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyLocalSortCopies, previewLocalSort, removeLocalSortCopies, localFolderName} = require('./localLibrary.ts');
-const {inferLocalBookMetadata} = require('./libraryIntelligence.ts');
+const {applyLocalSortCopies, previewLocalSort, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
 
 const books = [
   {id: 1, uri: 'content://root/document/primary:Books%2FDune.epub', title: 'Dune', author: 'Frank Herbert', series: 'Dune', format: 'EPUB', space: 'Books', available: true},
@@ -74,6 +80,23 @@ const uncertain = inferLocalBookMetadata(
 );
 assert.equal(uncertain.title, 'something');
 assert.equal(uncertain.needsReview, true);
+
+const opf = parseLocalSidecar(
+  '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator><meta name="calibre:series" content="Hainish Cycle"/></metadata></package>',
+  'opf',
+);
+assert.deepEqual(opf, {title: 'The Dispossessed', author: 'Ursula K. Le Guin', series: 'Hainish Cycle'});
+const manual = applyLocalMetadata(uncertain, {title: 'Corrected', author: 'A. Writer', series: ''}, 'manual');
+assert.equal(manual.metadataSource, 'manual');
+assert.equal(manual.confidence, 'high');
+assert.equal(manual.needsReview, false);
+
+const audioPath = inferLocalBookMetadata(
+  'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2F01%20-%20Opening.mp3',
+  'Audio',
+);
+assert.equal(audioPath.author, 'Frank Herbert');
+assert.equal(audioPath.series, '');
 let previews = previewLocalSort(books.slice(0, 2), 'format-author-title');
 assert.equal(previews[0].to, 'EPUB/Frank Herbert/Dune/Dune.epub');
 assert.equal(previews[1].to, 'Comic/Frank Herbert/Dune/Dune.cbz');
@@ -83,6 +106,27 @@ previews = previewLocalSort([books[0], {...books[0], id: 4, uri: 'content://root
 assert.equal(previews.every(item => item.state === 'conflict'), true);
 
 (async () => {
+  const root = 'content://root/tree/primary:Books/document/primary:Books';
+  const file = root + '%2FMystery.epub';
+  const sidecar = root + '%2FMystery.opf';
+  saf.dirs.set(root, [file, sidecar]);
+  fileText.set(sidecar, '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator></metadata></package>');
+  fileInfo.set(sidecar, {exists: true, size: 160});
+  let scanned = await scanLocalFolders([{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}]);
+  assert.equal(scanned.books.length, 1);
+  assert.equal(scanned.books[0].title, 'The Dispossessed');
+  assert.equal(scanned.books[0].metadataSource, 'sidecar');
+  assert.equal(scanned.books[0].needsReview, false);
+
+  scanned = await scanLocalFolders(
+    [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
+    undefined,
+    {[file]: {title:'My correction',author:'Manual Author',series:'Manual Series'}},
+  );
+  assert.equal(scanned.books[0].title, 'My correction');
+  assert.equal(scanned.books[0].metadataSource, 'manual');
+  assert.equal(scanned.books[0].needsReview, false);
+
   previews = previewLocalSort([books[0]], 'author-series-title');
   saf.dirs.set(previews[0].rootUri, []);
   const result = await applyLocalSortCopies(previews);
@@ -96,5 +140,5 @@ assert.equal(previews.every(item => item.state === 'conflict'), true);
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);
-  console.log('PASS: local folder naming, conservative metadata inference, local sort preview paths/conflicts, copy apply and recovery');
+  console.log('PASS: local scanner sidecars/manual overrides, metadata inference, sort previews, copy apply and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
