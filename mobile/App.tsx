@@ -302,7 +302,7 @@ function Client() {
   }, [books, session]);
 
   const visibleBooks = useMemo(() => {
-    if (session) return books;
+    if (session) return reviewOnly ? books.filter(book => book.needsReview) : books;
     const q = query.trim().toLowerCase();
     return books.filter(book => {
       if (space && book.space !== space) return false;
@@ -311,6 +311,15 @@ function Client() {
       return [book.title, book.author, book.series, book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
   }, [books, query, reviewOnly, session, space]);
+  const visibleLocalWorks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return localWorks.filter(work => {
+      if (space && work.space !== space) return false;
+      if (q && ![work.title,work.author,work.series,work.format,work.space].some(value => value.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [localWorks, query, space]);
+
   const atlas = useMemo(() => {
     const count = (values: string[]) => {
       const totals = new Map<string, number>();
@@ -826,6 +835,75 @@ function Client() {
     }
   }
 
+  async function addLocalWorkQueue(work: LocalWork) {
+    const first = work.tracks[0];
+    if (!first?.uri) return;
+    const item: Book = {
+      ...first,
+      title: work.title,
+      author: work.author,
+      series: work.series,
+      coverUri: work.coverUri,
+      coverShape: 'square',
+      localWorkKey: work.key,
+    };
+    const next = queuedBooks.some(existing => existing.localWorkKey === work.key)
+      ? queuedBooks
+      : [...queuedBooks, item];
+    setQueuedBooks(next);
+    await SecureStore.setItemAsync(localQueueKey, JSON.stringify(next));
+  }
+
+  async function queueServerWork(work: ServerWork) {
+    if (!session || work.format !== 'Audio') return;
+    try {
+      const tracks = await request(session, '/api/works/' + work.id + '/tracks') as WorkTrack[];
+      const first = tracks.find(track => track.available && track.format === 'Audio');
+      if (!first) throw Error('No available audio files for this audiobook.');
+      const item: Book = {
+        id:first.id,title:work.title,author:work.author,series:work.series,
+        format:'Audio',space:work.space,available:true,coverShape:'square',
+      };
+      await queueStore?.edit(old => old.some(book => book.id === item.id) ? old : [...old,item]);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  function openLocalWork(work: LocalWork) {
+    if (!work.available) { setError('This work is currently unavailable.'); return; }
+    if (work.format === 'Audio') { void playLocalWork(work); return; }
+    const first = work.tracks.find(track => track.available);
+    if (first) openBook(first);
+  }
+
+  async function openServerWork(work: ServerWork) {
+    if (!session || !work.available) {
+      setError('This work is currently unavailable.');
+      return;
+    }
+    setError('');
+    try {
+      const tracks = await request(session, '/api/works/' + work.id + '/tracks') as WorkTrack[];
+      const available = tracks.filter(track => track.available);
+      if (!available.length) throw Error('No readable files are currently available for this work.');
+      if (work.format === 'Audio' || available.every(track => track.format === 'Audio')) {
+        const first = available.find(track => track.format === 'Audio')!;
+        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,format:'Audio',space:work.space,available:true,coverShape:'square'});
+        return;
+      }
+      const editions = new Set(available.map(track => track.edition));
+      if (editions.size === 1) {
+        const first = available[0];
+        openBook({id:first.id,title:work.title,author:work.author,series:work.series,format:first.format,space:work.space,available:true,coverShape:first.format==='Audio'?'square':'portrait'});
+        return;
+      }
+      setWorkPicker({work,tracks:available});
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function addLocalQueue(book: Book) {
     if (!book.uri) return;
     const next = queuedBooks.some(item => item.uri === book.uri) ? queuedBooks : [...queuedBooks, book];
@@ -838,28 +916,37 @@ function Client() {
     await SecureStore.setItemAsync(localQueueKey, JSON.stringify(next));
   }
 
-  function Cover({book, large = false}: {book: Book; large?: boolean}) {
-    const square = book.coverShape === 'square' || book.format === 'Audio';
-    const imageSource = session
-      ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
-      : book.coverUri ? {uri: book.coverUri} : null;
+  function Artwork({
+    title,format,coverShape,coverUri,serverPath,large=false,
+  }: {
+    title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;
+  }) {
+    const square = coverShape === 'square' || format === 'Audio';
+    const imageSource = session && serverPath
+      ? {uri: session.server + serverPath, headers: {Authorization: 'Bearer ' + session.token}}
+      : coverUri ? {uri: coverUri} : null;
     const [coverFailed, setCoverFailed] = useState(false);
     useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
       <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor: p.ink}]}>
-        <Text style={[styles.coverMark, {color: p.gold}]}>{coverInitials(book.title)}</Text>
-        <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle, {color: p.ivory}]}>{book.title}</Text>
+        <Text style={[styles.coverMark, {color: p.gold}]}>{coverInitials(title)}</Text>
+        <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle, {color: p.ivory}]}>{title}</Text>
         {imageSource && !coverFailed ? (
-          <Image
-            accessible={false}
-            source={imageSource}
-            resizeMode="cover"
-            style={styles.coverImage}
-            onError={() => setCoverFailed(true)}
-          />
+          <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
         ) : null}
       </View>
     );
+  }
+
+  function Cover({book, large = false}: {book: Book; large?: boolean}) {
+    return <Artwork
+      title={book.title}
+      format={book.format}
+      coverShape={book.coverShape}
+      coverUri={book.coverUri}
+      serverPath={session ? '/api/assets/' + book.id + '/cover' : undefined}
+      large={large}
+    />;
   }
 
   function ServerConnect() {
