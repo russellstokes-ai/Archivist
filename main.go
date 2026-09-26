@@ -376,6 +376,7 @@ func (a *app) routes() http.Handler {
 	a.readerRoutes(mux)
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
+	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
 	static, _ := fs.Sub(web, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
