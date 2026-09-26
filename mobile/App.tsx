@@ -1153,23 +1153,38 @@ function Client() {
         {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
         <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
-        <FlatList
-          key={shelfColumns}
-          data={visibleBooks}
-          keyExtractor={b => String(b.id)}
-          numColumns={shelfColumns}
-          contentContainerStyle={styles.grid}
-          ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty, {color: p.muted}]}>{session ? 'No matching books. Add and scan folders in Settings.' : localFolders.length ? 'No matching local items.' : 'No books yet. Add folders to build your local library.'}</Text> : null}
-          renderItem={({item}) => (
-            <View style={[styles.book, {maxWidth: `${100 / shelfColumns}%`}]}><Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
-              <Cover book={item} />
-              <Text numberOfLines={2} style={[styles.bookTitle, {color: p.ink}]}>{item.title}</Text>
-              {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
-              <Text style={[styles.meta, {color: p.muted}]}>{item.format} - {item.space}{item.author ? ' - '+item.author : ''}{item.series ? ' - '+item.series : ''}</Text>
-            </Pressable>{item.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={session ? (!queueReady || queueBusy) : false} onPress={()=>session ? void queueStore?.edit(old=>old.some(b=>b.id===item.id)?old:[...old,item]) : void addLocalQueue(item)} /> : null}
-            {(session ? owner : true) ? <Button label="Edit details" tone="quiet" onPress={()=>{setEditing(item);setEditTitle(item.title);setEditAuthor(item.author||'');setEditSeries(item.series||'');}}/> : null}</View>
-          )}
-        />
+        {reviewOnly ? (
+          <FlatList
+            key={'review-'+shelfColumns}
+            data={visibleBooks}
+            keyExtractor={b => 'asset-'+b.id}
+            numColumns={shelfColumns}
+            contentContainerStyle={styles.grid}
+            ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>}
+            renderItem={({item}) => <RawAssetCard item={item} />}
+          />
+        ) : session ? (
+          <FlatList
+            key={'server-works-'+shelfColumns}
+            data={serverWorks}
+            keyExtractor={work => 'work-'+work.id}
+            numColumns={shelfColumns}
+            contentContainerStyle={styles.grid}
+            ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>No matching works. Add and scan folders in Settings.</Text> : null}
+            renderItem={({item}) => <ServerWorkCard work={item} />}
+          />
+        ) : (
+          <FlatList
+            key={'local-works-'+shelfColumns}
+            data={visibleLocalWorks}
+            keyExtractor={work => work.key}
+            numColumns={shelfColumns}
+            contentContainerStyle={styles.grid}
+            ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>{localFolders.length?'No matching works.':'No books yet. Add folders to build your local library.'}</Text> : null}
+            renderItem={({item}) => <LocalWorkCard work={item} />}
+          />
+        )}
+        <WorkPickerPanel />
         {!session && books.length ? <View style={[styles.setupPanel, {backgroundColor: p.card, borderColor: p.line}]}>
           <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Local sorting</Text>
           <View style={styles.segment}>
