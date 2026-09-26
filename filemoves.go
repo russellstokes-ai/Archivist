@@ -577,7 +577,18 @@ func (a *app) moveRoutes(mux *http.ServeMux) {
 		reply(w, undo)
 	})
 	mux.HandleFunc("GET /api/file-moves", func(w http.ResponseWriter, r *http.Request) {
-		rows, e := a.db.Query("SELECT id,asset,root,old_path,new_path,hash,state FROM file_moves ORDER BY rowid DESC LIMIT 100")
+		limit := 100
+		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
+		offset := 0
+		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
+		state := r.URL.Query().Get("state")
+		var rows *sql.Rows
+		var e error
+		if state == "pending" {
+			rows, e = a.db.Query("SELECT id,asset,root,old_path,new_path,hash,state FROM file_moves WHERE state IN ('preview','applying','linked') ORDER BY rowid ASC LIMIT ? OFFSET ?", limit, offset)
+		} else {
+			rows, e = a.db.Query("SELECT id,asset,root,old_path,new_path,hash,state FROM file_moves ORDER BY rowid DESC LIMIT ? OFFSET ?", limit, offset)
+		}
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -592,6 +603,7 @@ func (a *app) moveRoutes(mux *http.ServeMux) {
 			}
 			out = append(out, m)
 		}
+		if e = rows.Err(); e != nil { fail(w,500,e); return }
 		reply(w, out)
 	})
 }
