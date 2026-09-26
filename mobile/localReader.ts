@@ -9,14 +9,14 @@ export type LocalReaderDocument = {
 const imageExt = /\.(jpe?g|png|gif|webp)$/i;
 const textExt = /\.(xhtml|html|htm)$/i;
 
-export async function buildLocalReaderDocument(uri: string, format: string, title: string): Promise<LocalReaderDocument> {
+export async function buildLocalReaderDocument(uri: string, format: string, title: string, initialPage = 0): Promise<LocalReaderDocument> {
   if (format === 'PDF') return {uri};
-  if (format === 'Comic') return {html: await comicHtml(uri, title)};
-  if (format === 'EPUB') return {html: await epubHtml(uri, title)};
+  if (format === 'Comic') return {html: await comicHtml(uri, title, initialPage)};
+  if (format === 'EPUB') return {html: await epubHtml(uri, title, initialPage)};
   return {uri};
 }
 
-async function comicHtml(uri: string, title: string) {
+async function comicHtml(uri: string, title: string, initialPage: number) {
   const zip = await zipFromUri(uri);
   const pages = Object.values(zip.files)
     .filter(file => !file.dir && imageExt.test(file.name))
@@ -25,10 +25,10 @@ async function comicHtml(uri: string, title: string) {
     const base64 = await page.async('base64');
     return `<img class="comic-page${index === 0 ? ' active' : ''}" data-page="${index}" src="data:${mime(page.name)};base64,${base64}" alt="Page ${index + 1}">`;
   }));
-  return shell(title, images.join('\n') || '<p>No readable comic pages found.</p>', 'comic');
+  return shell(title, images.join('\n') || '<p>No readable comic pages found.</p>', 'comic', initialPage);
 }
 
-async function epubHtml(uri: string, title: string) {
+async function epubHtml(uri: string, title: string, initialPage: number) {
   const zip = await zipFromUri(uri);
   const docs = Object.values(zip.files)
     .filter(file => !file.dir && textExt.test(file.name))
@@ -37,7 +37,7 @@ async function epubHtml(uri: string, title: string) {
     const raw = await file.async('text');
     return `<section>${sanitizeEpubHtml(raw)}</section>`;
   }));
-  return shell(title, parts.join('\n') || '<p>No readable EPUB text found.</p>', 'epub');
+  return shell(title, parts.join('\n') || '<p>No readable EPUB text found.</p>', 'epub', initialPage);
 }
 
 async function zipFromUri(uri: string) {
@@ -45,7 +45,7 @@ async function zipFromUri(uri: string) {
   return JSZip.loadAsync(data, {base64: true});
 }
 
-function shell(title: string, body: string, mode: 'comic' | 'epub') {
+function shell(title: string, body: string, mode: 'comic' | 'epub', initialPage: number) {
   return `<!doctype html>
 <html>
 <head>
@@ -93,12 +93,12 @@ main{width:100%;height:100%;margin:0;position:relative}
   <button id="readerSound" aria-label="Toggle page turn sound">Sound</button>
   <button id="readerNext" aria-label="Next page">›</button>
 </div>
-${readerInteractionScript(mode)}
+${readerInteractionScript(mode, initialPage)}
 </body>
 </html>`;
 }
 
-function readerInteractionScript(mode: 'comic' | 'epub') {
+function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
   return `<script>
 (() => {
   const mode = '${mode}';
@@ -109,7 +109,7 @@ function readerInteractionScript(mode: 'comic' | 'epub') {
   const next = document.getElementById('readerNext');
   const soundButton = document.getElementById('readerSound');
   const pages = [...document.querySelectorAll('.comic-page')];
-  let page = 0;
+  let page = Math.max(0, Number('${Math.max(0, Math.floor(initialPage))}') || 0);
   let turning = false;
   let zoom = 1;
   let pinchStartDistance = 0;
@@ -125,6 +125,11 @@ function readerInteractionScript(mode: 'comic' | 'epub') {
   function pageCount(){
     if(mode==='comic') return Math.max(1,pages.length);
     return Math.max(1,Math.ceil(reader.scrollWidth / Math.max(1,innerWidth)));
+  }
+  function reportPosition(){
+    try{
+      window.ReactNativeWebView?.postMessage(JSON.stringify({type:'reader-position',page,count:pageCount()}));
+    }catch{}
   }
   function refreshHud(){
     position.textContent=(page+1)+' / '+pageCount();
@@ -170,7 +175,7 @@ function readerInteractionScript(mode: 'comic' | 'epub') {
       page=target;
       if(mode==='comic'){resetComicZoom();showComic(page);}
       else reader.scrollLeft=page*innerWidth;
-      refreshHud();
+      refreshHud();reportPosition();
     },115);
     setTimeout(()=>{reader.classList.remove(cls);turning=false;},260);
   }
@@ -255,8 +260,12 @@ function readerInteractionScript(mode: 'comic' | 'epub') {
   addEventListener('resize',()=>{if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();});
   document.addEventListener('keydown',event=>{if(event.key==='ArrowLeft')move(-1);if(event.key==='ArrowRight')move(1);});
 
-  if(mode==='comic')showComic(0);
-  requestAnimationFrame(refreshHud);
+  requestAnimationFrame(()=>{
+    page=clamp(page,0,pageCount()-1);
+    if(mode==='comic')showComic(page);
+    else reader.scrollLeft=page*innerWidth;
+    refreshHud();reportPosition();
+  });
 })();
 </script>`;
 }
