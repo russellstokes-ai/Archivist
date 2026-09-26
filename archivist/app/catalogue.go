@@ -318,6 +318,12 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/works", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space, format := r.URL.Query().Get("space"), r.URL.Query().Get("format")
+		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+		availability := r.URL.Query().Get("availability")
+		if availability != "" && availability != "available" && availability != "unavailable" {
+			fail(w,400,errors.New("invalid availability filter"))
+			return
+		}
 		limit := 60
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 200 { limit = n }
 		offset := 0
@@ -330,9 +336,13 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ?)
 			AND (?='' OR w.space=?) AND (?='' OR e.format=?)
+			AND (?=0 OR trim(w.author)='')
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
-			GROUP BY w.id ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
-			q,q,q,space,space,format,format,who(r).Owner,who(r).ID,limit,offset)
+			GROUP BY w.id
+			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
+			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
+			q,q,q,space,space,format,format,unknownAuthor,who(r).Owner,who(r).ID,
+			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
 		defer rows.Close()
 		out := []map[string]any{}
@@ -400,7 +410,26 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		authors := []map[string]any{}
 		rows, e = a.db.Query(`SELECT w.author,count(*) FROM works w WHERE w.author<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.author ORDER BY count(*) DESC,w.author LIMIT 12`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{authors=append(authors,map[string]any{"name":name,"count":count})}};rows.Close() }
-		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors})
+		var unknownAuthors int
+		_ = a.db.QueryRow(`SELECT count(*) FROM works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
+		var needsReview int
+		_ = a.db.QueryRow(`SELECT count(*) FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.available=1 AND a.needs_review=1 AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&needsReview)
+		series := []map[string]any{}
+		rows, e = a.db.Query(`SELECT w.series,count(*) FROM works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
+		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{series=append(series,map[string]any{"name":name,"count":count})}};rows.Close() }
+		availability := []map[string]any{}
+		rows, e = a.db.Query(`
+			SELECT status,count(*) FROM (
+				SELECT w.id,CASE WHEN sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0 THEN 'Available' ELSE 'Unavailable' END AS status
+				FROM works w
+				JOIN editions ed ON ed.work_id=w.id
+				JOIN edition_assets ea ON ea.edition_id=ed.id
+				JOIN assets a ON a.id=ea.asset_id
+				WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
+				GROUP BY w.id
+			) GROUP BY status ORDER BY status`,who(r).Owner,who(r).ID)
+		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{availability=append(availability,map[string]any{"name":name,"count":count})}};rows.Close() }
+		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"series":series,"availability":availability})
 	})
 	mux.HandleFunc("GET /api/works/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))
