@@ -1044,6 +1044,76 @@ function Client() {
     );
   }
 
+  function beginEdit(item: Book) {
+    setEditing(item);
+    setEditTitle(item.title);
+    setEditAuthor(item.author || '');
+    setEditSeries(item.series || '');
+  }
+
+  function RawAssetCard({item}: {item: Book}) {
+    return (
+      <View style={[styles.book,{maxWidth:(100 / shelfColumns) + '%'}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
+          <Cover book={item} />
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
+          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
+          <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}</Text>
+        </Pressable>
+        {(session ? owner : true) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
+      </View>
+    );
+  }
+
+  function LocalWorkCard({work}: {work: LocalWork}) {
+    return (
+      <View style={[styles.book,{maxWidth:(100 / shelfColumns) + '%'}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
+          <Artwork title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverUri} />
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
+          {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
+          <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
+            {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.files>1 ? ' · '+work.files+' files' : ''}
+          </Text>
+        </Pressable>
+        {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
+      </View>
+    );
+  }
+
+  function ServerWorkCard({work}: {work: ServerWork}) {
+    return (
+      <View style={[styles.book,{maxWidth:(100 / shelfColumns) + '%'}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>void openServerWork(work)}>
+          <Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} serverPath={'/api/works/'+work.id+'/cover'} />
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
+          <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
+            {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.files>1 ? ' · '+work.files+' files' : ''}{work.editions>1 ? ' · '+work.editions+' editions' : ''}
+          </Text>
+        </Pressable>
+        {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
+      </View>
+    );
+  }
+
+  function WorkPickerPanel() {
+    if (!workPicker) return null;
+    const choices = workPicker.tracks.filter((track,index,all)=>all.findIndex(item=>item.edition===track.edition)===index);
+    return (
+      <View style={[styles.editorCard,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{workPicker.work.title}</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Choose an edition to open.</Text>
+        {choices.map(track=><Button
+          key={track.edition}
+          label={(track.format==='Audio'?'Listen':'Open')+' · '+track.format}
+          tone="quiet"
+          onPress={()=>openServerWorkTrack(workPicker.work,track)}
+        />)}
+        <Button label="Cancel" tone="quiet" onPress={()=>setWorkPicker(null)} />
+      </View>
+    );
+  }
+
   function Shelf() {
     const wideLibraries = width >= 760 && spaces.length > 0;
     const reviewCount = books.filter(book => book.needsReview).length;
