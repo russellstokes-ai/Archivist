@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
