@@ -344,6 +344,50 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		}
 		reply(w,out)
 	})
+	mux.HandleFunc("GET /api/continue", func(w http.ResponseWriter, r *http.Request) {
+		space := r.URL.Query().Get("space")
+		rows, e := a.db.Query(`SELECT w.id,w.title,w.author,w.series,w.space,
+			count(DISTINCT e.id),count(ea.asset_id),
+			CASE WHEN count(DISTINCT e.format)=1 THEN min(e.format) ELSE 'Mixed' END,
+			sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)
+			FROM works w
+			JOIN editions e ON e.work_id=w.id
+			JOIN edition_assets ea ON ea.edition_id=e.id
+			JOIN assets a ON a.id=ea.asset_id
+			WHERE (?='' OR w.space=?)
+			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+			AND (
+				EXISTS (
+					SELECT 1 FROM editions pe
+					JOIN profile_progress pp ON pp.edition_id=pe.id
+					WHERE pe.work_id=w.id AND pp.profile_id=? AND pp.complete=0
+					AND (pp.seconds>0 OR pp.revision>0)
+				)
+				OR EXISTS (
+					SELECT 1 FROM editions re
+					JOIN edition_assets rea ON rea.edition_id=re.id
+					JOIN reading_progress rp ON rp.asset_id=rea.asset_id
+					WHERE re.work_id=w.id AND rp.profile_id=?
+					AND (rp.part>0 OR rp.fraction>0 OR rp.revision>0)
+				)
+			)
+			GROUP BY w.id
+			ORDER BY w.title,w.id
+			LIMIT 20`,
+			space,space,who(r).Owner,who(r).ID,who(r).ID,who(r).ID)
+		if e != nil { fail(w,500,e); return }
+		defer rows.Close()
+		out := []map[string]any{}
+		for rows.Next() {
+			var id, editions, files, available int64
+			var title, author, series, workSpace, workFormat string
+			if e=rows.Scan(&id,&title,&author,&series,&workSpace,&editions,&files,&workFormat,&available); e != nil { fail(w,500,e); return }
+			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0})
+		}
+		if e=rows.Err(); e!=nil { fail(w,500,e); return }
+		reply(w,out)
+	})
+
 	mux.HandleFunc("GET /api/library-summary", func(w http.ResponseWriter, r *http.Request) {
 		var total int
 		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)`,who(r).Owner,who(r).ID).Scan(&total)
