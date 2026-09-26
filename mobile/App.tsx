@@ -710,7 +710,7 @@ function Client() {
             accessible={false}
             source={imageSource}
             resizeMode="cover"
-            style={StyleSheet.absoluteFillObject}
+            style={styles.coverImage}
             onError={() => setCoverFailed(true)}
           />
         ) : null}
@@ -1335,6 +1335,7 @@ const styles = StyleSheet.create({
   empty: {fontSize: 15, lineHeight: 22},
   book: {flex: 1, maxWidth: '50%', padding: 8, gap: 7},
   cover: {aspectRatio: 2 / 3, borderRadius: 8, justifyContent: 'space-between', padding: 12, overflow: 'hidden'},
+  coverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
   coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
   coverLargeSquare: {width: 230, height: 230},
