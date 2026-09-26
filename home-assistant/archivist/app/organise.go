@@ -36,7 +36,13 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
 			fail(w, 404, errors.New("asset missing"))
 			return
 		}
-		res, err := a.db.Exec("UPDATE assets SET title=?,author=?,series=? WHERE id=?", in.Title, in.Author, in.Series, r.PathValue("id"))
+		res, err := a.db.Exec(`UPDATE assets
+			SET title=?,author=?,series=?,
+				metadata_source='manual',
+				metadata_confidence=100,
+				needs_review=0,
+				review_reason=''
+			WHERE id=?`, in.Title, in.Author, in.Series, r.PathValue("id"))
 		if err != nil {
 			fail(w, 500, err)
 			return
