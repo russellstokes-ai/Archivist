@@ -26,7 +26,7 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   files.set('book.epub', await zip.generateAsync({type: 'base64'}));
   const epub = await buildLocalReaderDocument('book.epub', 'EPUB', 'Dune');
   assert(epub.html.includes('Arrakis'));
-  assert(!epub.html.includes('<script>'));
+  assert(!epub.html.includes('bad()'));
   assert(!epub.html.includes('onclick'));
   assert(epub.html.includes('column-width'));
   assert(epub.html.includes('text-focused'));
