@@ -196,6 +196,8 @@ function Client() {
   const [celebrating, setCelebrating] = useState(false);
   const [query, setQuery] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<'all'|'available'|'unavailable'>('all');
+  const [formatFilter, setFormatFilter] = useState('');
+  const [unknownAuthorOnly, setUnknownAuthorOnly] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
@@ -307,23 +309,31 @@ function Client() {
     return books.filter(book => {
       if (space && book.space !== space) return false;
       if (reviewOnly && !book.needsReview) return false;
+      if (formatFilter && book.format !== formatFilter) return false;
+      if (unknownAuthorOnly && !!book.author) return false;
       if (!availabilityMatches(book.available)) return false;
       if (!q) return true;
       return [book.title, book.author, book.series, book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
-  }, [availabilityFilter, books, query, reviewOnly, space]);
+  }, [availabilityFilter, books, formatFilter, query, reviewOnly, space, unknownAuthorOnly]);
 
   const visibleLocalWorks = useMemo(() => {
     const q = query.trim().toLowerCase();
     return localWorks.filter(work => {
       if (space && work.space !== space) return false;
+      if (formatFilter && work.format !== formatFilter) return false;
+      if (unknownAuthorOnly && !!work.author) return false;
       if (!availabilityMatches(work.available)) return false;
       if (q && ![work.title,work.author,work.series,work.format,work.space].some(value => value.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [availabilityFilter, localWorks, query, space]);
+  }, [availabilityFilter, formatFilter, localWorks, query, space, unknownAuthorOnly]);
 
-  const visibleServerWorks = useMemo(() => serverWorks.filter(work => availabilityMatches(work.available)), [availabilityFilter, serverWorks]);
+  const visibleServerWorks = useMemo(() => serverWorks.filter(work =>
+    availabilityMatches(work.available) &&
+    (!formatFilter || work.format === formatFilter) &&
+    (!unknownAuthorOnly || !work.author)
+  ), [availabilityFilter, formatFilter, serverWorks, unknownAuthorOnly]);
 
   const localContinueWorks = useMemo(() => localWorks.filter(work => {
     if (space && work.space !== space) return false;
@@ -447,7 +457,7 @@ function Client() {
     const timeout = setTimeout(() => {
       Promise.all([
         request(session, '/api/books?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space)),
-        request(session, '/api/works?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space) + '&limit=200'),
+        request(session, '/api/works?q=' + encodeURIComponent(query) + '&space=' + encodeURIComponent(space) + '&format=' + encodeURIComponent(formatFilter) + '&limit=200'),
         request(session, '/api/continue?space=' + encodeURIComponent(space)),
       ])
         .then(([assets, works, continuing]) => {
@@ -464,7 +474,7 @@ function Client() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [session, query, space]);
+  }, [formatFilter, session, query, space]);
 
   useEffect(() => {
     if (!session) { setSpaces([]); return; }
@@ -521,7 +531,7 @@ function Client() {
     const [items, assets, works, continuing]=await Promise.all([
       request(session,'/api/sources'),
       request(session,'/api/books?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)),
-      request(session,'/api/works?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)+'&limit=200'),
+      request(session,'/api/works?q='+encodeURIComponent(query)+'&space='+encodeURIComponent(space)+'&format='+encodeURIComponent(formatFilter)+'&limit=200'),
       request(session,'/api/continue?space='+encodeURIComponent(space)),
     ]);
     setSources(items);
@@ -1032,7 +1042,7 @@ function Client() {
             key={name || 'all'}
             accessibilityRole="button"
             accessibilityState={{selected: space === name}}
-            onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');}}
+            onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false);}}
             style={[
               styles.libraryChoice,
               vertical && styles.libraryChoiceVertical,
@@ -1213,7 +1223,7 @@ function Client() {
           </View>
         </View> : null}
         {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
-        {!reviewOnly && !query.trim() && availabilityFilter==='all' && continuing.length ? <View style={styles.shelfSection}>
+        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !unknownAuthorOnly && continuing.length ? <View style={styles.shelfSection}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Continue</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
             {session ? continueWorks.map(work => <ContinueCard
@@ -1233,20 +1243,20 @@ function Client() {
             />)}
           </ScrollView>
         </View> : null}
-        {!reviewOnly && !query.trim() && availabilityFilter==='all' && seriesOptions.length ? <View style={styles.shelfSection}>
+        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !unknownAuthorOnly && seriesOptions.length ? <View style={styles.shelfSection}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
             {seriesOptions.map(([name,total]) => <Pressable
               key={name}
               accessibilityRole="button"
-              onPress={()=>{setQuery(name);setAvailabilityFilter('all')}}
+              onPress={()=>{setQuery(name);setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false)}}
               style={[styles.seriesChip,{borderColor:p.line,backgroundColor:p.card}]}>
               <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{name}</Text>
               <Text style={[styles.meta,{color:p.muted}]}>{total}</Text>
             </Pressable>)}
           </ScrollView>
         </View> : null}
-        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all')}} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
+        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false)}} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         {reviewOnly ? (
           <FlatList
@@ -1584,16 +1594,23 @@ function Client() {
 
   function atlasSelect(kind: 'format' | 'author' | 'series' | 'space' | 'status', value: string) {
     setReviewOnly(false);
+    setAvailabilityFilter('all');
+    setFormatFilter('');
+    setUnknownAuthorOnly(false);
     if (kind === 'space') {
       setSpace(value);
       setQuery('');
-      setAvailabilityFilter('all');
     } else if (kind === 'status') {
       setQuery('');
       setAvailabilityFilter(value === 'Unavailable' ? 'unavailable' : 'available');
+    } else if (kind === 'format') {
+      setQuery('');
+      setFormatFilter(value);
+    } else if (kind === 'author' && value === 'Unknown author') {
+      setQuery('');
+      setUnknownAuthorOnly(true);
     } else {
-      setQuery(value === 'Unknown author' ? '' : value);
-      setAvailabilityFilter('all');
+      setQuery(value);
     }
     setActiveTab('shelf');
   }
@@ -1625,7 +1642,7 @@ function Client() {
         <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
         <AtlasGroup title="Series" kind="series" items={atlas.series} />
         <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
-        <AtlasGroup title="Reading State" kind="status" items={atlas.status} />
+        <AtlasGroup title="Availability" kind="status" items={atlas.status} />
       </ScrollView>
     );
   }
