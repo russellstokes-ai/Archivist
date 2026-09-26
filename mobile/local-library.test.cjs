@@ -37,6 +37,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
 }).outputText, file);
 
 const {applyLocalSortCopies, previewLocalSort, removeLocalSortCopies, localFolderName} = require('./localLibrary.ts');
+const {inferLocalBookMetadata} = require('./libraryIntelligence.ts');
 
 const books = [
   {id: 1, uri: 'content://root/document/primary:Books%2FDune.epub', title: 'Dune', author: 'Frank Herbert', series: 'Dune', format: 'EPUB', space: 'Books', available: true},
@@ -45,6 +46,34 @@ const books = [
 ];
 
 assert.equal(localFolderName('content://root/tree/primary:Comics/document/primary:Comics'), 'Comics');
+
+const hierarchy = inferLocalBookMetadata(
+  'content://root/document/primary:Books%2FFrank%20Herbert%2FDune%2FDune%20Messiah.epub',
+  'EPUB',
+);
+assert.equal(hierarchy.title, 'Dune Messiah');
+assert.equal(hierarchy.author, 'Frank Herbert');
+assert.equal(hierarchy.series, 'Dune');
+assert.equal(hierarchy.confidence, 'high');
+assert.equal(hierarchy.needsReview, false);
+assert.equal(hierarchy.coverShape, 'portrait');
+
+const dashed = inferLocalBookMetadata(
+  'content://root/document/primary:Audiobooks%2FFrank%20Herbert%20-%20Dune%20-%2001%20-%20Dune.m4b',
+  'Audio',
+);
+assert.equal(dashed.title, 'Dune');
+assert.equal(dashed.author, 'Frank Herbert');
+assert.equal(dashed.series, 'Dune');
+assert.equal(dashed.confidence, 'high');
+assert.equal(dashed.coverShape, 'square');
+
+const uncertain = inferLocalBookMetadata(
+  'content://root/document/primary:Downloads%2Fsomething.epub',
+  'EPUB',
+);
+assert.equal(uncertain.title, 'something');
+assert.equal(uncertain.needsReview, true);
 let previews = previewLocalSort(books.slice(0, 2), 'format-author-title');
 assert.equal(previews[0].to, 'EPUB/Frank Herbert/Dune/Dune.epub');
 assert.equal(previews[1].to, 'Comic/Frank Herbert/Dune/Dune.cbz');
@@ -67,5 +96,5 @@ assert.equal(previews.every(item => item.state === 'conflict'), true);
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);
-  console.log('PASS: local folder naming, local sort preview paths/conflicts, copy apply and recovery');
+  console.log('PASS: local folder naming, conservative metadata inference, local sort preview paths/conflicts, copy apply and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
