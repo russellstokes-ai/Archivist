@@ -44,13 +44,16 @@ func TestHouseholdPermissionsAndProgress(t *testing.T) {
 			t.Fatalf("list leak %s: %d %s", path, w.Code, w.Body.String())
 		}
 	}
-	for _, path := range []string{"/api/assets/1", "/api/works/1/tracks", "/api/editions/1/progress", "/api/folders", "/api/profiles", "/api/jobs"} {
+	for _, path := range []string{"/api/assets/1", "/api/assets/1/cover", "/api/works/1/tracks", "/api/editions/1/progress", "/api/folders", "/api/profiles", "/api/jobs"} {
 		if w := call("GET", path, ""); w.Code != 403 {
 			t.Fatalf("access %s: %d", path, w.Code)
 		}
 	}
 	if w := call("GET", "/api/assets/2", ""); w.Code != 200 {
 		t.Fatal("allowed media blocked")
+	}
+	if w := call("GET", "/api/assets/2/cover", ""); w.Code == 403 {
+		t.Fatal("allowed cover blocked")
 	}
 	if w := call("DELETE", "/api/sources/2", ""); w.Code != 403 {
 		t.Fatal("member deleted source")
