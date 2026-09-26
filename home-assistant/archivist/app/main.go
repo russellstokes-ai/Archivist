@@ -74,7 +74,7 @@ func openDB(path string) (*sql.DB, error) {
 	for _, stmt := range []string{
 		"ALTER TABLE assets ADD COLUMN author TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE assets ADD COLUMN series TEXT NOT NULL DEFAULT ''",
-		"ALTER TABLE assets ADD COLUMN metadata_source TEXT NOT NULL DEFAULT 'path'",
+		"ALTER TABLE assets ADD COLUMN metadata_source TEXT NOT NULL DEFAULT 'legacy'",
 		"ALTER TABLE assets ADD COLUMN metadata_confidence INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE assets ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 1",
 		"ALTER TABLE assets ADD COLUMN review_reason TEXT NOT NULL DEFAULT ''",
@@ -86,6 +86,15 @@ func openDB(path string) (*sql.DB, error) {
 			db.Close()
 			return nil, alterErr
 		}
+	}
+	// Rows created before provenance tracking may include user corrections.
+	// Preserve them as legacy/manual-quality metadata until the user explicitly changes them.
+	if _, migrateErr := db.Exec(`UPDATE assets
+		SET metadata_source='legacy',metadata_confidence=100,needs_review=0,review_reason=''
+		WHERE scan_signature='' AND size_bytes=0 AND modified_unix=0
+		AND (title<>'' OR author<>'' OR series<>'')`); migrateErr != nil {
+		db.Close()
+		return nil, migrateErr
 	}
 	return db, nil
 }
@@ -315,15 +324,15 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix)
 			VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?)
 			ON CONFLICT(source_id,relative_path) DO UPDATE SET
-				title=CASE WHEN assets.metadata_source='manual' THEN assets.title ELSE excluded.title END,
-				author=CASE WHEN assets.metadata_source='manual' THEN assets.author ELSE excluded.author END,
-				series=CASE WHEN assets.metadata_source='manual' THEN assets.series ELSE excluded.series END,
+				title=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.title ELSE excluded.title END,
+				author=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.author ELSE excluded.author END,
+				series=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.series ELSE excluded.series END,
 				format=excluded.format,
 				available=1,
-				metadata_source=CASE WHEN assets.metadata_source='manual' THEN assets.metadata_source ELSE excluded.metadata_source END,
-				metadata_confidence=CASE WHEN assets.metadata_source='manual' THEN assets.metadata_confidence ELSE excluded.metadata_confidence END,
-				needs_review=CASE WHEN assets.metadata_source='manual' THEN assets.needs_review ELSE excluded.needs_review END,
-				review_reason=CASE WHEN assets.metadata_source='manual' THEN assets.review_reason ELSE excluded.review_reason END,
+				metadata_source=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.metadata_source ELSE excluded.metadata_source END,
+				metadata_confidence=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.metadata_confidence ELSE excluded.metadata_confidence END,
+				needs_review=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.needs_review ELSE excluded.needs_review END,
+				review_reason=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.review_reason ELSE excluded.review_reason END,
 				scan_signature=excluded.scan_signature,
 				size_bytes=excluded.size_bytes,
 				modified_unix=excluded.modified_unix`,
