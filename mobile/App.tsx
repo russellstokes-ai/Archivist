@@ -1032,7 +1032,7 @@ function Client() {
             key={name || 'all'}
             accessibilityRole="button"
             accessibilityState={{selected: space === name}}
-            onPress={() => {setSpace(name); setReviewOnly(false);}}
+            onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');}}
             style={[
               styles.libraryChoice,
               vertical && styles.libraryChoiceVertical,
@@ -1194,7 +1194,7 @@ function Client() {
           </View>
         </View> : null}
         {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
-        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
+        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all')}} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         {reviewOnly ? (
           <FlatList
@@ -1209,7 +1209,7 @@ function Client() {
         ) : session ? (
           <FlatList
             key={'server-works-'+shelfColumns}
-            data={serverWorks}
+            data={visibleServerWorks}
             keyExtractor={work => 'work-'+work.id}
             numColumns={shelfColumns}
             contentContainerStyle={styles.grid}
@@ -1531,13 +1531,17 @@ function Client() {
   }
 
   function atlasSelect(kind: 'format' | 'author' | 'series' | 'space' | 'status', value: string) {
+    setReviewOnly(false);
     if (kind === 'space') {
       setSpace(value);
       setQuery('');
+      setAvailabilityFilter('all');
     } else if (kind === 'status') {
-      setQuery(value === 'Unavailable' ? 'Unavailable' : '');
+      setQuery('');
+      setAvailabilityFilter(value === 'Unavailable' ? 'unavailable' : 'available');
     } else {
       setQuery(value === 'Unknown author' ? '' : value);
+      setAvailabilityFilter('all');
     }
     setActiveTab('shelf');
   }
@@ -1564,8 +1568,8 @@ function Client() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.title, {color: p.ink}]}>Atlas</Text>
-        <Text style={[styles.empty, {color: p.muted}]}>Tap any row to focus the Shelf. Genre is currently represented by media format until richer metadata is available.</Text>
-        <AtlasGroup title="Genres" kind="format" items={atlas.formats} />
+        <Text style={[styles.empty, {color: p.muted}]}>Tap any row to focus the Shelf using real catalogue metadata.</Text>
+        <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
         <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
         <AtlasGroup title="Series" kind="series" items={atlas.series} />
         <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
@@ -1604,7 +1608,7 @@ function Client() {
               ['format-author-title','Format / Author / Title'],
             ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
           </View>
-          <Button label="Preview visible shelf" disabled={busy || visibleBooks.length===0} tone="quiet" onPress={()=>void previewSort(visibleBooks.map(b=>b.id))}/>
+          <Button label="Preview matching files" disabled={busy || visibleBooks.length===0} tone="quiet" onPress={()=>void previewSort(visibleBooks.map(b=>b.id))}/>
           <Button label="Preview all library items" disabled={busy} tone="quiet" onPress={()=>void previewSort([])}/>
           <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
           {moveStatus?<Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
@@ -1642,7 +1646,7 @@ function Client() {
     <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
       <View style={[styles.appHeader, {borderBottomColor: p.line}]}>
         <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
-        <Text style={[styles.headerMeta, {color: p.muted}]}>{session ? `${books.length} items` : `${books.length} local items`}</Text>
+        <Text style={[styles.headerMeta, {color: p.muted}]}>{session ? `${serverWorks.length} works` : `${localWorks.length} works`}</Text>
       </View>
       {error ? <Text accessibilityRole="alert" style={[styles.error, {color: p.gold}]}>{error}</Text> : null}
       <View style={styles.tabBody}>
