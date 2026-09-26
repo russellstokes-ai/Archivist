@@ -344,10 +344,24 @@ function Client() {
   }, [playback?.completed, controller, queueStore]);
 
   useEffect(() => {
-    if (session || !audio.didJustFinish || !queueRef.current.length) return;
+    if (session || !audio.didJustFinish) return;
+    if (activeLocalWork && localWorkIndex < activeLocalWork.tracks.length - 1) {
+      void loadLocalWorkTrack(activeLocalWork, localWorkIndex + 1, 0);
+      return;
+    }
+    if (activeLocalWork) {
+      setLocalWorkProgress(current => {
+        const last = activeLocalWork.tracks[localWorkIndex];
+        const next = {...current, [activeLocalWork.key]: {uri:last?.uri || '', seconds:0, complete:true}};
+        SecureStore.setItemAsync(localWorkProgressKey, JSON.stringify(next)).catch(() => undefined);
+        return next;
+      });
+    }
+    if (!queueRef.current.length) return;
     const [next, ...rest] = queueRef.current;
-    void updateLocalQueue(rest).then(() => playBook(next));
-  }, [audio.didJustFinish, session]);
+    const nextWork = next.localWorkKey ? localWorks.find(work => work.key === next.localWorkKey) : undefined;
+    void updateLocalQueue(rest).then(() => nextWork ? playLocalWork(nextWork) : playBook(next));
+  }, [audio.didJustFinish, session, activeLocalWork, localWorkIndex, localWorks]);
 
   const activeAsset=playback?.tracks[playback.index]?.id;
   useEffect(()=>{
@@ -437,12 +451,25 @@ function Client() {
   useEffect(() => {
     if (session || !playing?.uri || !audio.currentTime) return;
     const timer = setTimeout(() => {
-      const next = {...localProgress, [playing.uri!]: audio.currentTime};
-      setLocalProgress(next);
-      SecureStore.setItemAsync(localProgressKey, JSON.stringify(next)).catch(() => undefined);
+      const seconds = audio.currentTime;
+      setLocalProgress(current => {
+        const next = {...current, [playing.uri!]: seconds};
+        SecureStore.setItemAsync(localProgressKey, JSON.stringify(next)).catch(() => undefined);
+        return next;
+      });
+      if (activeLocalWork) {
+        const track = activeLocalWork.tracks[localWorkIndex];
+        if (track?.uri) {
+          setLocalWorkProgress(current => {
+            const next = {...current, [activeLocalWork.key]: {uri:track.uri, seconds, complete:false}};
+            SecureStore.setItemAsync(localWorkProgressKey, JSON.stringify(next)).catch(() => undefined);
+            return next;
+          });
+        }
+      }
     }, 750);
     return () => clearTimeout(timer);
-  }, [audio.currentTime, localProgress, playing, session]);
+  }, [audio.currentTime, activeLocalWork, localWorkIndex, playing?.uri, session]);
 
   useEffect(() => {
     if (session || restoring || !localOverridesReady || !localFolders.length || books.length || localScanning) return;
@@ -621,8 +648,81 @@ function Client() {
     }
   }
 
+  async function loadLocalWorkTrack(work: LocalWork, index: number, seconds = 0) {
+    const track = work.tracks[index];
+    if (!track?.uri || !track.available) throw Error('This audiobook file is unavailable.');
+    loadCancel.current?.();
+    setError('');
+    setActiveLocalWork(work);
+    setLocalWorkIndex(index);
+    const display: Book = {
+      ...track,
+      title: work.title,
+      author: work.author,
+      series: work.series,
+      coverUri: work.coverUri,
+      coverShape: 'square',
+      localWorkKey: work.key,
+    };
+    setPlaying(display);
+    setActiveTab('player');
+
+    await new Promise<void>((resolve, reject) => {
+      let done = false;
+      let seeking = false;
+      const finish = (error?: Error) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timeout);
+        listener.remove();
+        loadCancel.current = null;
+        if (error) reject(error); else resolve();
+      };
+      const timeout = setTimeout(() => finish(Error('Audio loading timed out.')), 30000);
+      const listener = player.addListener('playbackStatusUpdate', status => {
+        if (status.error) { finish(Error(status.error)); return; }
+        if (!status.isLoaded || seeking || done) return;
+        seeking = true;
+        void player.seekTo(Math.min(Math.max(0, seconds), status.duration || Math.max(0, seconds))).then(() => finish(), e => finish(e));
+      });
+      loadCancel.current = () => finish(Error('Playback changed.'));
+      try {
+        player.replace({uri: track.uri});
+        player.setActiveForLockScreen(true, {
+          title: work.title,
+          artist: work.author || undefined,
+          albumTitle: work.series || 'Archivist',
+        });
+      } catch (e) {
+        finish(e as Error);
+      }
+    });
+    player.setPlaybackRate(localSpeed);
+    player.play();
+  }
+
+  async function playLocalWork(work: LocalWork) {
+    if (!work.available || !work.tracks.length) {
+      setError('This audiobook is currently unavailable.');
+      return;
+    }
+    try {
+      await controller.stop();
+      const saved = localWorkProgress[work.key];
+      const savedIndex = saved && !saved.complete ? work.tracks.findIndex(track => track.uri === saved.uri) : -1;
+      const index = savedIndex >= 0 ? savedIndex : 0;
+      await loadLocalWorkTrack(work, index, saved && !saved.complete ? saved.seconds : 0);
+    } catch (e) {
+      if ((e as Error).message !== 'Playback changed.') setError((e as Error).message);
+    }
+  }
+
   async function playBook(book: Book) {
     if (!session) {
+      if (book.localWorkKey) {
+        const work = localWorks.find(item => item.key === book.localWorkKey);
+        if (work) { await playLocalWork(work); return; }
+      }
       if (!book.uri) return;
       setError('');
       try {
