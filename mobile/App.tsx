@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {
   ActivityIndicator,
+  Animated,
   AppState,
   FlatList,
   Pressable,
@@ -19,10 +20,23 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {SavedQueue, reorder} from './queue';
-import {LocalBook, LocalFolder, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 
-type Book = {id: number; title: string; author: string; series: string; format: string; space: string; available: boolean; uri?: string};
+type Book = {
+  id: number;
+  title: string;
+  author: string;
+  series: string;
+  format: string;
+  space: string;
+  available: boolean;
+  uri?: string;
+  identificationConfidence?: 'high' | 'medium' | 'low';
+  needsReview?: boolean;
+  reviewReason?: string;
+  coverShape?: 'portrait' | 'square';
+};
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
 type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'settings';
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -44,6 +58,8 @@ const localFoldersKey = 'archivist.localFolders';
 const localProgressKey = 'archivist.localProgress';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
+const onboardingDoneKey = 'archivist.onboardingDone.v2';
+const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 
 function validateServer(raw: string) {
   return checkServer(raw, __DEV__);
@@ -92,6 +108,53 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
+function CelebrationOverlay({active}: {active: boolean}) {
+  const burst = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!active) {
+      burst.setValue(0);
+      return;
+    }
+    burst.setValue(0);
+    Animated.sequence([
+      Animated.timing(burst, {toValue: 1, duration: 520, useNativeDriver: true}),
+      Animated.delay(850),
+      Animated.timing(burst, {toValue: 0, duration: 420, useNativeDriver: true}),
+    ]).start();
+  }, [active, burst]);
+  if (!active) return null;
+  const particles = ['✦','•','✧','•','✦','✧','•','✦','•','✧','✦','•'];
+  return (
+    <View pointerEvents="none" style={styles.celebration}>
+      {particles.map((mark, index) => {
+        const angle = (index / particles.length) * Math.PI * 2;
+        const distance = 86 + (index % 3) * 22;
+        return (
+          <Animated.Text
+            key={index}
+            style={[
+              styles.celebrationParticle,
+              {
+                opacity: burst,
+                transform: [
+                  {translateX: burst.interpolate({inputRange: [0, 1], outputRange: [0, Math.cos(angle) * distance]})},
+                  {translateY: burst.interpolate({inputRange: [0, 1], outputRange: [0, Math.sin(angle) * distance]})},
+                  {scale: burst.interpolate({inputRange: [0, 0.25, 1], outputRange: [0.4, 1.15, 0.85]})},
+                ],
+              },
+            ]}>
+            {mark}
+          </Animated.Text>
+        );
+      })}
+      <Animated.View style={[styles.celebrationBadge, {opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:[0.75,1.04,1]})}]}]}>
+        <Text style={styles.celebrationTitle}>Your library is alive</Text>
+        <Text style={styles.celebrationCopy}>Archivist found your first books.</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 function Client() {
   const systemScheme = useColorScheme();
   const {width} = useWindowDimensions();
@@ -106,6 +169,11 @@ function Client() {
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
+  const [reviewOnly, setReviewOnly] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
+  const [celebrationEligible, setCelebrationEligible] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -201,10 +269,11 @@ function Client() {
     const q = query.trim().toLowerCase();
     return books.filter(book => {
       if (space && book.space !== space) return false;
+      if (reviewOnly && !book.needsReview) return false;
       if (!q) return true;
       return [book.title, book.author, book.series, book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
-  }, [books, query, session, space]);
+  }, [books, query, reviewOnly, session, space]);
   const atlas = useMemo(() => {
     const count = (values: string[]) => {
       const totals = new Map<string, number>();
@@ -267,6 +336,12 @@ function Client() {
     }).catch(() => undefined);
     SecureStore.getItemAsync(localSortHistoryKey).then(value => {
       if (value) setLocalSortHistory(JSON.parse(value));
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(onboardingDoneKey).then(value => {
+      setOnboardingDone(value === '1');
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(firstLibraryCelebratedKey).then(value => {
+      setCelebrationEligible(value !== '1');
     }).catch(() => undefined);
     SecureStore.getItemAsync(storageKey)
       .then(async value => {
@@ -444,17 +519,25 @@ function Client() {
         return;
       }
       const folders = localFolders.some(folder => folder.uri === picked.uri) ? localFolders : [...localFolders, picked];
-      const result = await scanLocalFolders(folders);
+      setScanProgress({phase: 'discovering', currentFolder: picked.name, entriesVisited: 0, found: 0, review: 0});
+      const result = await scanLocalFolders(folders, setScanProgress);
       setLocalFolders(result.folders);
       setBooks(result.books);
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
-      setLocalFolderNotice(`${result.books.length} local items found${result.skipped ? `; ${result.skipped} folders could not be read` : ''}${result.truncated ? '; showing first batch' : ''}.`);
+      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${result.truncated ? ' · first 5,000 shown' : ''}.`);
+      if (result.books.length && celebrationEligible) {
+        setCelebrating(true);
+        setCelebrationEligible(false);
+        void SecureStore.setItemAsync(firstLibraryCelebratedKey, '1');
+        setTimeout(() => setCelebrating(false), 1900);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLocalScanning(false);
+      setScanProgress(null);
     }
   }
 
@@ -463,17 +546,19 @@ function Client() {
     setError('');
     setLocalScanning(true);
     try {
-      const result = await scanLocalFolders(localFolders);
+      setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
+      const result = await scanLocalFolders(localFolders, setScanProgress);
       setLocalFolders(result.folders);
       setBooks(result.books);
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
-      setLocalFolderNotice(`${result.books.length} local items found${result.skipped ? `; ${result.skipped} folders could not be read` : ''}${result.truncated ? '; showing first batch' : ''}.`);
+      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${result.truncated ? ' · first 5,000 shown' : ''}.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLocalScanning(false);
+      setScanProgress(null);
     }
   }
 
@@ -594,8 +679,9 @@ function Client() {
   }
 
   function Cover({book, large = false}: {book: Book; large?: boolean}) {
+    const square = book.coverShape === 'square' || book.format === 'Audio';
     return (
-      <View style={[styles.cover, large && styles.coverLarge, {backgroundColor: p.ink}]}>
+      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor: p.ink}]}>
         <Text style={[styles.coverMark, {color: p.gold}]}>{coverInitials(book.title)}</Text>
         <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle, {color: p.ivory}]}>{book.title}</Text>
       </View>
@@ -617,27 +703,109 @@ function Client() {
     );
   }
 
-  function Shelf() {
+  async function finishOnboarding() {
+    setOnboardingDone(true);
+    await SecureStore.setItemAsync(onboardingDoneKey, '1');
+  }
+
+  function LibrarySwitcher({vertical = false}: {vertical?: boolean}) {
+    const names = ['', ...spaces];
     return (
-      <View style={[styles.content, {flex: 1}]}>
-        <Text style={[styles.title, {color: p.ink}]}>Shelf</Text>
-        {!session ? <View style={[styles.setupPanel, {backgroundColor: p.card, borderColor: p.line}]}>
-          <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Start with folders on this phone</Text>
-          <Text style={[styles.empty, {color: p.muted}]}>Add folders, scan their content, then sort locally. Server connection is optional and can be added from Settings.</Text>
-          {localFolders.map(folder => <View key={folder.id} style={[styles.sourceRow, {borderColor: p.line}]}>
-            <Text style={{color: p.ink, fontWeight: '700'}}>{folder.name}</Text>
-            <Text style={{color: p.muted}}>{folder.status}{folder.itemCount ? ` - ${folder.itemCount} items` : ''}</Text>
-          </View>)}
-          <View style={styles.toolRow}>
-            <Button label={localScanning ? 'Scanning...' : 'Add folders'} disabled={localScanning} onPress={() => void addLocalFolder()} />
-            <Button label="Rescan" tone="quiet" disabled={localScanning || localFolders.length===0} onPress={() => void rescanLocalFolders()} />
+      <View style={vertical ? styles.libraryRailList : undefined}>
+        {names.map(name => (
+          <Pressable
+            key={name || 'all'}
+            accessibilityRole="button"
+            accessibilityState={{selected: space === name}}
+            onPress={() => {setSpace(name); setReviewOnly(false);}}
+            style={[
+              styles.libraryChoice,
+              vertical && styles.libraryChoiceVertical,
+              {borderColor: p.line, backgroundColor: space === name ? p.sage : p.card},
+            ]}>
+            <Text numberOfLines={1} style={{color: space === name ? p.ivory : p.ink, fontWeight: '700'}}>
+              {name || 'All books'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
+
+  function OnboardingGuide() {
+    if (session || onboardingDone) return null;
+    const reviewCount = books.filter(book => book.needsReview).length;
+    const hasFolder = localFolders.length > 0;
+    const hasBooks = books.length > 0;
+    return (
+      <View style={[styles.onboardingCard, {backgroundColor: p.card, borderColor: p.line}]}>
+        <Text style={[styles.onboardingEyebrow, {color: p.gold}]}>START HERE</Text>
+        <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Build your library in three simple steps</Text>
+        <View style={styles.onboardingStep}>
+          <Text style={[styles.onboardingNumber, {backgroundColor: hasFolder ? p.sage : p.ink}]}>1</Text>
+          <View style={{flex:1}}>
+            <Text style={[styles.onboardingStepTitle, {color:p.ink}]}>Choose where your books live</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} folder${localFolders.length === 1 ? '' : 's'} added` : 'Pick a Books, Comics or Audiobooks folder. You can add more later.'}</Text>
           </View>
-          {localFolderNotice ? <Text style={[styles.meta, {color: p.gold}]}>{localFolderNotice}</Text> : null}
+        </View>
+        <View style={styles.onboardingStep}>
+          <Text style={[styles.onboardingNumber, {backgroundColor: hasBooks ? p.sage : hasFolder ? p.ink : p.line}]}>2</Text>
+          <View style={{flex:1}}>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist finds and identifies everything</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>
+              {localScanning && scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${books.length} items found` : 'Scanning starts immediately after you choose a folder.'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.onboardingStep}>
+          <Text style={[styles.onboardingNumber, {backgroundColor: hasBooks && reviewCount === 0 ? p.sage : hasBooks ? p.ink : p.line}]}>3</Text>
+          <View style={{flex:1}}>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Archivist keeps confident matches out of your way.' : reviewCount ? `${reviewCount} item${reviewCount === 1 ? '' : 's'} need a quick check.` : 'Everything found so far looks good.'}</Text>
+          </View>
+        </View>
+        {!hasFolder ? <Button label={localScanning ? 'Scanning…' : 'Choose a folder'} disabled={localScanning} onPress={() => void addLocalFolder()} /> : null}
+        {hasFolder && !hasBooks ? <Button label={localScanning ? 'Scanning…' : 'Scan again'} disabled={localScanning} onPress={() => void rescanLocalFolders()} /> : null}
+        {hasBooks && reviewCount > 0 ? <Button label={`Review ${reviewCount} uncertain item${reviewCount === 1 ? '' : 's'}`} tone="quiet" onPress={() => {setReviewOnly(true); setQuery('');}} /> : null}
+        {hasBooks ? <Button label="Enter my library" onPress={() => void finishOnboarding()} /> : null}
+      </View>
+    );
+  }
+
+  function Shelf() {
+    const wideLibraries = width >= 760 && spaces.length > 0;
+    const reviewCount = books.filter(book => book.needsReview).length;
+    return (
+      <View style={styles.shelfShell}>
+        {wideLibraries ? <View style={[styles.libraryRail,{borderRightColor:p.line,backgroundColor:p.card}]}>
+          <Text style={[styles.libraryRailTitle,{color:p.ink}]}>Libraries</Text>
+          <LibrarySwitcher vertical />
+          {!session ? <Pressable accessibilityRole="button" onPress={() => void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'800'}}>+ Add folder</Text></Pressable> : null}
         </View> : null}
-        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search titles" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
-        <ScrollView horizontal style={{flexGrow: 0}} contentContainerStyle={{gap: 8}}>
-          {['', ...spaces].map(name => <Button key={name} label={name || 'All spaces'} tone={space===name?'primary':'quiet'} onPress={()=>setSpace(name)} />)}
-        </ScrollView>
+        <View style={[styles.content, {flex: 1}]}>
+        <Text style={[styles.title, {color: p.ink}]}>Shelf</Text>
+        <OnboardingGuide />
+        {!session && onboardingDone ? <View style={[styles.librarySummary,{backgroundColor:p.card,borderColor:p.line}]}>
+          <View style={{flex:1}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your libraries</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder${localFolders.length === 1 ? '' : 's'} · ${books.length} items${reviewCount ? ` · ${reviewCount} need review` : ''}</Text>
+          </View>
+          <Button label={localScanning ? 'Scanning…' : 'Add folder'} disabled={localScanning} tone="quiet" onPress={() => void addLocalFolder()} />
+        </View> : null}
+        {!wideLibraries && spaces.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher /></ScrollView> : null}
+        {reviewOnly ? <View style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.gold}]}>
+          <Text style={[styles.meta,{color:p.ink,flex:1}]}>Showing only items Archivist could not identify confidently.</Text>
+          <Button label="Show all" tone="quiet" onPress={() => setReviewOnly(false)} />
+        </View> : null}
+        {localScanning && scanProgress ? <View style={[styles.scanBanner,{backgroundColor:p.ink}]}>
+          <ActivityIndicator color={p.ivory} />
+          <View style={{flex:1}}>
+            <Text style={{color:p.ivory,fontWeight:'800'}}>Scanning {scanProgress.currentFolder || 'library'}…</Text>
+            <Text style={{color:'#c8d4d2'}}>{scanProgress.entriesVisited} checked · {scanProgress.found} books found · {scanProgress.review} need review</Text>
+          </View>
+        </View> : null}
+        {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
+        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         <FlatList
           key={shelfColumns}
@@ -687,6 +855,7 @@ function Client() {
           <Button label="Save details" disabled={busy} onPress={()=>{
           if(!session)return;setBusy(true);request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title:editTitle,author:editAuthor,series:editSeries}).then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title:editTitle.trim(),author:editAuthor.trim(),series:editSeries.trim()}:b));setEditing(null);}).catch(e=>setError(e.message)).finally(()=>setBusy(false));
         }}/><Button label="Cancel" tone="quiet" onPress={()=>setEditing(null)}/></View>:null}
+        </View>
       </View>
     );
   }
@@ -915,6 +1084,7 @@ function Client() {
       <View style={styles.tabBody}>
         {CurrentTab()}
       </View>
+      <CelebrationOverlay active={celebrating} />
       {playing ? (
         <Pressable accessibilityRole="button" onPress={() => setActiveTab('player')} style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
           <View style={[styles.miniCover, {backgroundColor: p.gold}]}><Text style={{color: '#0f2a36', fontWeight: '700'}}>{coverInitials(playing.title)}</Text></View>
@@ -953,6 +1123,22 @@ const styles = StyleSheet.create({
   headerMeta: {fontSize: 13},
   content: {padding: 16, gap: 14},
   setupPanel: {borderWidth: 1, borderRadius: 8, padding: 14, gap: 12},
+  shelfShell: {flex: 1, flexDirection: 'row'},
+  libraryRail: {width: 190, borderRightWidth: StyleSheet.hairlineWidth, padding: 14, gap: 10},
+  libraryRailTitle: {fontSize: 13, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4},
+  libraryRailList: {gap: 8},
+  libraryRailAdd: {paddingVertical: 12, paddingHorizontal: 8},
+  libraryChoice: {borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
+  libraryChoiceVertical: {borderRadius: 8, minHeight: 44},
+  libraryChips: {gap: 8, paddingBottom: 2},
+  librarySummary: {borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center'},
+  reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
+  scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
+  onboardingCard: {borderWidth: 1, borderRadius: 16, padding: 16, gap: 14},
+  onboardingEyebrow: {fontSize: 11, fontWeight: '900', letterSpacing: 2},
+  onboardingStep: {flexDirection: 'row', gap: 12, alignItems: 'flex-start'},
+  onboardingNumber: {width: 28, height: 28, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', color: '#f8f7f2', fontWeight: '900', overflow: 'hidden'},
+  onboardingStepTitle: {fontSize: 15, fontWeight: '800', marginBottom: 2},
   sourceRow: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 4},
   tabBody: {flex: 1},
   title: {fontFamily: 'serif', fontSize: 34, marginBottom: 2},
@@ -967,8 +1153,10 @@ const styles = StyleSheet.create({
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
   book: {flex: 1, maxWidth: '50%', padding: 8, gap: 7},
-  cover: {aspectRatio: 2 / 3, borderRadius: 6, justifyContent: 'space-between', padding: 12},
+  cover: {aspectRatio: 2 / 3, borderRadius: 8, justifyContent: 'space-between', padding: 12, overflow: 'hidden'},
+  coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
+  coverLargeSquare: {width: 230, height: 230},
   coverMark: {fontFamily: 'serif', fontSize: 38, fontWeight: '700'},
   coverTitle: {fontFamily: 'serif', fontSize: 20},
   bookTitle: {fontSize: 15, fontWeight: '700'},
@@ -1003,4 +1191,9 @@ const styles = StyleSheet.create({
   tabBar: {height: 62, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row'},
   tab: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   tabText: {fontSize: 12, fontWeight: '800'},
+  celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
+  celebrationParticle: {position:'absolute', fontSize:28, color:'#c6a374', fontWeight:'900'},
+  celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
+  celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
+  celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
 });
