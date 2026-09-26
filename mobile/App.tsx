@@ -1053,7 +1053,7 @@ function Client() {
 
   function RawAssetCard({item}: {item: Book}) {
     return (
-      <View style={[styles.book,{maxWidth:(100 / shelfColumns) + '%'}]}>
+      <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
           <Cover book={item} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
@@ -1067,7 +1067,7 @@ function Client() {
 
   function LocalWorkCard({work}: {work: LocalWork}) {
     return (
-      <View style={[styles.book,{maxWidth:(100 / shelfColumns) + '%'}]}>
+      <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
           <Artwork title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverUri} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
@@ -1083,7 +1083,7 @@ function Client() {
 
   function ServerWorkCard({work}: {work: ServerWork}) {
     return (
-      <View style={[styles.book,{maxWidth:(100 / shelfColumns) + '%'}]}>
+      <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>void openServerWork(work)}>
           <Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} serverPath={'/api/works/'+work.id+'/cover'} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
