@@ -40,11 +40,17 @@ func TestEditMetadataAuthorSeriesSearchAndRescan(t *testing.T) {
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"author":"Ada Lovelace"`) || !strings.Contains(w.Body.String(), `"series":"Engine Notes"`) {
 		t.Fatalf("metadata search/list: %d %s", w.Code, w.Body.String())
 	}
+	if !strings.Contains(w.Body.String(), `"metadataSource":"manual"`) || strings.Contains(w.Body.String(), `"needsReview":true`) {
+		t.Fatalf("manual metadata provenance/review state missing: %s", w.Body.String())
+	}
 	if e := a.scan(1); e != nil {
 		t.Fatal(e)
 	}
 	w = call("GET", "/api/books?q=Engine&space=", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"title":"Corrected"`) || !strings.Contains(w.Body.String(), `"series":"Engine Notes"`) {
 		t.Fatalf("rescan lost metadata: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"metadataSource":"manual"`) {
+		t.Fatalf("rescan lost manual provenance: %s", w.Body.String())
 	}
 }
