@@ -83,6 +83,7 @@ main{width:100%;height:100%;margin:0;position:relative}
 .epub p,.epub li,.epub blockquote,.epub h1,.epub h2,.epub h3{transition:transform .18s ease,background .18s ease,padding .18s ease,border-radius .18s ease}
 .epub .text-focused{transform:scale(1.16);transform-origin:center center;background:color-mix(in srgb,var(--gold) 12%,transparent);padding:.25em .4em;border-radius:.35em;position:relative;z-index:3}
 @media (prefers-color-scheme:dark){:root{--paper:#10191d;--ink:#edf2ef;--muted:#a8b6b5;--line:#314247;--sage:#6f9da1;--gold:#d4b988}}
+@media (prefers-reduced-motion:reduce){.turn-surface,.comic-page,.epub p,.epub li,.epub blockquote,.epub h1,.epub h2,.epub h3{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body class="${mode}">
@@ -136,6 +137,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
     prev.disabled=page<=0;
     next.disabled=page>=pageCount()-1;
     soundButton.textContent=soundEnabled?'Sound on':'Sound off';
+    soundButton.setAttribute('aria-pressed',soundEnabled?'true':'false');
     clearTimeout(hudTimer);hud.classList.remove('dim');hudTimer=setTimeout(()=>hud.classList.add('dim'),1800);
   }
   function pageSound(){
