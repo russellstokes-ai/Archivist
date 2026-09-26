@@ -4,6 +4,7 @@ import {
   Animated,
   AppState,
   FlatList,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -36,6 +37,8 @@ type Book = {
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
+  coverUri?: string;
+  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'legacy';
 };
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
 type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'settings';
@@ -693,10 +696,24 @@ function Client() {
 
   function Cover({book, large = false}: {book: Book; large?: boolean}) {
     const square = book.coverShape === 'square' || book.format === 'Audio';
+    const imageSource = session
+      ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
+      : book.coverUri ? {uri: book.coverUri} : null;
+    const [coverFailed, setCoverFailed] = useState(false);
+    useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
       <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor: p.ink}]}>
         <Text style={[styles.coverMark, {color: p.gold}]}>{coverInitials(book.title)}</Text>
         <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle, {color: p.ivory}]}>{book.title}</Text>
+        {imageSource && !coverFailed ? (
+          <Image
+            accessible={false}
+            source={imageSource}
+            resizeMode="cover"
+            style={StyleSheet.absoluteFillObject}
+            onError={() => setCoverFailed(true)}
+          />
+        ) : null}
       </View>
     );
   }
