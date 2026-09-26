@@ -27,7 +27,7 @@ export type LocalSortPreview = {
   relativePath: string;
   from: string;
   to: string;
-  state: 'ready' | 'same' | 'conflict';
+  state: 'ready' | 'same' | 'conflict' | 'review';
 };
 
 export type LocalSortApplyResult = {
@@ -257,10 +257,10 @@ export function previewLocalSort(books: LocalBook[], template: string): LocalSor
       relativePath: target,
       from,
       to: target,
-      state: from.endsWith(target) ? 'same' as const : 'ready' as const,
+      state: book.needsReview ? 'review' as const : from.endsWith(target) ? 'same' as const : 'ready' as const,
     };
   });
-  return previews.map(preview => destinations.get(preview.to)! > 1 ? {...preview, state: 'conflict'} : preview);
+  return previews.map(preview => preview.state === 'review' ? preview : destinations.get(preview.to)! > 1 ? {...preview, state: 'conflict'} : preview);
 }
 
 export async function applyLocalSortCopies(previews: LocalSortPreview[]): Promise<LocalSortApplyResult> {
