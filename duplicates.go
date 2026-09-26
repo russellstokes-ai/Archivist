@@ -91,6 +91,8 @@ func (a *app) duplicateRoutes(mux *http.ServeMux) {
 			fail(w,400,errors.New("verify between 2 and 20 candidate files at a time"))
 			return
 		}
+		a.scanMu.Lock()
+		defer a.scanMu.Unlock()
 		seen := map[int64]bool{}
 		hashGroups := map[string][]duplicateCandidate{}
 		hashOrder := []string{}
