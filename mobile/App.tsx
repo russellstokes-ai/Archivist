@@ -1157,9 +1157,28 @@ function Client() {
     );
   }
 
+  function ContinueCard({
+    title,author,format,coverUri,serverPath,onPress,
+  }: {
+    title:string;author:string;format:string;coverUri?:string;serverPath?:string;onPress:()=>void;
+  }) {
+    return (
+      <Pressable accessibilityRole="button" onPress={onPress} style={styles.continueCard}>
+        <Artwork title={title} format={format} coverShape={format==='Audio'?'square':'portrait'} coverUri={coverUri} serverPath={serverPath} />
+        <Text numberOfLines={2} style={[styles.continueTitle,{color:p.ink}]}>{title}</Text>
+        <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{author || format}</Text>
+      </Pressable>
+    );
+  }
+
   function Shelf() {
     const wideLibraries = width >= 760 && spaces.length > 0;
     const reviewCount = books.filter(book => book.needsReview).length;
+    const continuing = session ? continueWorks : localContinueWorks;
+    const shelfWorks = session ? visibleServerWorks : visibleLocalWorks;
+    const seriesCounts = new Map<string,number>();
+    for (const work of shelfWorks) if (work.series) seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
+    const seriesOptions = [...seriesCounts.entries()].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,10);
     return (
       <View style={styles.shelfShell}>
         {wideLibraries ? <View style={[styles.libraryRail,{borderRightColor:p.line,backgroundColor:p.card}]}>
@@ -1194,6 +1213,39 @@ function Client() {
           </View>
         </View> : null}
         {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
+        {!reviewOnly && !query.trim() && availabilityFilter==='all' && continuing.length ? <View style={styles.shelfSection}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Continue</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
+            {session ? continueWorks.map(work => <ContinueCard
+              key={'continue-server-'+work.id}
+              title={work.title}
+              author={work.author}
+              format={work.format}
+              serverPath={'/api/works/'+work.id+'/cover'}
+              onPress={()=>void openServerWork(work)}
+            />) : localContinueWorks.map(work => <ContinueCard
+              key={'continue-local-'+work.key}
+              title={work.title}
+              author={work.author}
+              format={work.format}
+              coverUri={work.coverUri}
+              onPress={()=>openLocalWork(work)}
+            />)}
+          </ScrollView>
+        </View> : null}
+        {!reviewOnly && !query.trim() && availabilityFilter==='all' && seriesOptions.length ? <View style={styles.shelfSection}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
+            {seriesOptions.map(([name,total]) => <Pressable
+              key={name}
+              accessibilityRole="button"
+              onPress={()=>{setQuery(name);setAvailabilityFilter('all')}}
+              style={[styles.seriesChip,{borderColor:p.line,backgroundColor:p.card}]}>
+              <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{name}</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{total}</Text>
+            </Pressable>)}
+          </ScrollView>
+        </View> : null}
         <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all')}} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         {reviewOnly ? (
@@ -1702,6 +1754,12 @@ const styles = StyleSheet.create({
   libraryChipsRow: {flexDirection: 'row', gap: 8},
   librarySummary: {borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center'},
   reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
+  shelfSection: {gap:8},
+  continueRow: {gap:12,paddingRight:6},
+  continueCard: {width:132,gap:6},
+  continueTitle: {fontSize:14,fontWeight:'800'},
+  seriesRow: {gap:8,paddingRight:6},
+  seriesChip: {minWidth:140,maxWidth:220,borderWidth:1,borderRadius:12,paddingHorizontal:12,paddingVertical:10,gap:2},
   scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
   onboardingCard: {borderWidth: 1, borderRadius: 16, padding: 16, gap: 14},
   onboardingEyebrow: {fontSize: 11, fontWeight: '900', letterSpacing: 2},
