@@ -44,13 +44,17 @@ type source struct {
 	PDFs       int64  `json:"pdfs"`
 }
 type book struct {
-	ID        int64  `json:"id"`
-	Title     string `json:"title"`
-	Author    string `json:"author"`
-	Series    string `json:"series"`
-	Format    string `json:"format"`
-	Space     string `json:"space"`
-	Available bool   `json:"available"`
+	ID                       int64  `json:"id"`
+	Title                    string `json:"title"`
+	Author                   string `json:"author"`
+	Series                   string `json:"series"`
+	Format                   string `json:"format"`
+	Space                    string `json:"space"`
+	Available                bool   `json:"available"`
+	IdentificationConfidence string `json:"identificationConfidence,omitempty"`
+	NeedsReview              bool   `json:"needsReview,omitempty"`
+	ReviewReason             string `json:"reviewReason,omitempty"`
+	MetadataSource           string `json:"metadataSource,omitempty"`
 }
 
 func openDB(path string) (*sql.DB, error) {
@@ -70,6 +74,13 @@ func openDB(path string) (*sql.DB, error) {
 	for _, stmt := range []string{
 		"ALTER TABLE assets ADD COLUMN author TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE assets ADD COLUMN series TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN metadata_source TEXT NOT NULL DEFAULT 'path'",
+		"ALTER TABLE assets ADD COLUMN metadata_confidence INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE assets ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 1",
+		"ALTER TABLE assets ADD COLUMN review_reason TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN scan_signature TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN size_bytes INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE assets ADD COLUMN modified_unix INTEGER NOT NULL DEFAULT 0",
 	} {
 		if _, alterErr := db.Exec(stmt); alterErr != nil && !strings.Contains(strings.ToLower(alterErr.Error()), "duplicate column") {
 			db.Close()
@@ -181,8 +192,42 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	defer os.Remove(stage.Name())
 	defer stage.Close()
 	encoder := json.NewEncoder(stage)
-	type entry struct{ Relative, Title, Author, Series, Format string }
+	type entry struct {
+		Relative, Title, Author, Series, Format string
+		MetadataSource, ReviewReason, ScanSignature string
+		MetadataConfidence, SizeBytes, ModifiedUnix int64
+		NeedsReview bool
+	}
+	type cachedEntry struct {
+		Title, Author, Series, MetadataSource, ReviewReason, ScanSignature string
+		MetadataConfidence, SizeBytes, ModifiedUnix int64
+		NeedsReview bool
+	}
+	cached := map[string]cachedEntry{}
+	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
+	if cacheErr != nil {
+		return cacheErr
+	}
+	for rows.Next() {
+		var rel string
+		var item cachedEntry
+		var review int
+		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
+			rows.Close()
+			return cacheErr
+		}
+		item.NeedsReview = review != 0
+		cached[rel] = item
+	}
+	if cacheErr = rows.Err(); cacheErr != nil {
+		rows.Close()
+		return cacheErr
+	}
+	rows.Close()
+
 	count := 0
+	reused := 0
+	reviewCount := 0
 	e = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -204,10 +249,43 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if e != nil {
 			return e
 		}
-		meta := metadataFor(path, rel, format)
+		info, statErr := d.Info()
+		if statErr != nil {
+			return statErr
+		}
+		signature := metadataSignature(path, info)
+		item := entry{
+			Relative: rel,
+			Format: format,
+			ScanSignature: signature,
+			SizeBytes: info.Size(),
+			ModifiedUnix: info.ModTime().Unix(),
+		}
+		if existing, ok := cached[rel]; ok && existing.ScanSignature == signature {
+			item.Title = existing.Title
+			item.Author = existing.Author
+			item.Series = existing.Series
+			item.MetadataSource = existing.MetadataSource
+			item.MetadataConfidence = existing.MetadataConfidence
+			item.NeedsReview = existing.NeedsReview
+			item.ReviewReason = existing.ReviewReason
+			reused++
+		} else {
+			meta := metadataFor(path, rel, format)
+			item.Title = meta.Title
+			item.Author = meta.Author
+			item.Series = meta.Series
+			item.MetadataSource = meta.Source
+			item.MetadataConfidence = int64(meta.Confidence)
+			item.NeedsReview = meta.NeedsReview
+			item.ReviewReason = meta.ReviewReason
+		}
+		if item.NeedsReview {
+			reviewCount++
+		}
 		count++
 		if progress != nil && (count == total || count%10 == 0) { progress(count, total) }
-		return encoder.Encode(entry{rel, meta.Title, meta.Author, meta.Series, format})
+		return encoder.Encode(item)
 	})
 	if e != nil {
 		a.db.Exec("UPDATE sources SET status='Scan failed; catalogue retained' WHERE id=?", id)
@@ -234,11 +312,27 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if e != nil {
 			return e
 		}
-		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available) VALUES(?,?,?,?,?,?,1) ON CONFLICT(source_id,relative_path) DO UPDATE SET title=CASE WHEN assets.title='' THEN excluded.title ELSE assets.title END,author=CASE WHEN assets.author='' THEN excluded.author ELSE assets.author END,series=CASE WHEN assets.series='' THEN excluded.series ELSE assets.series END,format=excluded.format,available=1`, id, item.Relative, item.Title, item.Author, item.Series, item.Format); e != nil {
+		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix)
+			VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?)
+			ON CONFLICT(source_id,relative_path) DO UPDATE SET
+				title=CASE WHEN assets.metadata_source='manual' THEN assets.title ELSE excluded.title END,
+				author=CASE WHEN assets.metadata_source='manual' THEN assets.author ELSE excluded.author END,
+				series=CASE WHEN assets.metadata_source='manual' THEN assets.series ELSE excluded.series END,
+				format=excluded.format,
+				available=1,
+				metadata_source=CASE WHEN assets.metadata_source='manual' THEN assets.metadata_source ELSE excluded.metadata_source END,
+				metadata_confidence=CASE WHEN assets.metadata_source='manual' THEN assets.metadata_confidence ELSE excluded.metadata_confidence END,
+				needs_review=CASE WHEN assets.metadata_source='manual' THEN assets.needs_review ELSE excluded.needs_review END,
+				review_reason=CASE WHEN assets.metadata_source='manual' THEN assets.review_reason ELSE excluded.review_reason END,
+				scan_signature=excluded.scan_signature,
+				size_bytes=excluded.size_bytes,
+				modified_unix=excluded.modified_unix`,
+			id, item.Relative, item.Title, item.Author, item.Series, item.Format, item.MetadataSource, item.MetadataConfidence, item.NeedsReview, item.ReviewReason, item.ScanSignature, item.SizeBytes, item.ModifiedUnix); e != nil {
 			return e
 		}
 	}
-	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", fmt.Sprintf("%d files · %s", count, time.Now().Format("2 Jan 15:04")), id); e != nil {
+	status := fmt.Sprintf("%d files · %d reused · %d need review · %s", count, reused, reviewCount, time.Now().Format("2 Jan 15:04"))
+	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", status, id); e != nil {
 		return e
 	}
 	if e = tx.Commit(); e != nil { return e }
@@ -389,7 +483,15 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/books", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space := r.URL.Query().Get("space")
-		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available FROM assets a JOIN sources s ON s.id=a.source_id WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ?) AND (?='' OR s.space=?) AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)) ORDER BY a.title,a.id LIMIT 500`, q, q, q, space, space, who(r).Owner, who(r).ID)
+		reviewOnly := r.URL.Query().Get("review") == "1"
+		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
+			FROM assets a JOIN sources s ON s.id=a.source_id
+			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ?)
+			AND (?='' OR s.space=?)
+			AND (?=0 OR a.needs_review=1)
+			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
+			ORDER BY a.needs_review DESC,a.title,a.id LIMIT 500`,
+			q, q, q, space, space, reviewOnly, who(r).Owner, who(r).ID)
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -398,9 +500,18 @@ func (a *app) routes() http.Handler {
 		out := []book{}
 		for rows.Next() {
 			var b book
-			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.Format, &b.Space, &b.Available); e != nil {
+			var confidence int
+			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.Format, &b.Space, &b.Available, &confidence, &b.NeedsReview, &b.ReviewReason, &b.MetadataSource); e != nil {
 				fail(w, 500, e)
 				return
+			}
+			switch {
+			case confidence >= 85:
+				b.IdentificationConfidence = "high"
+			case confidence >= 60:
+				b.IdentificationConfidence = "medium"
+			default:
+				b.IdentificationConfidence = "low"
 			}
 			out = append(out, b)
 		}
