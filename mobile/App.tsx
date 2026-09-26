@@ -711,7 +711,7 @@ function Client() {
   function LibrarySwitcher({vertical = false}: {vertical?: boolean}) {
     const names = ['', ...spaces];
     return (
-      <View style={vertical ? styles.libraryRailList : undefined}>
+      <View style={vertical ? styles.libraryRailList : styles.libraryChipsRow}>
         {names.map(name => (
           <Pressable
             key={name || 'all'}
@@ -818,6 +818,7 @@ function Client() {
             <View style={[styles.book, {maxWidth: `${100 / shelfColumns}%`}]}><Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
               <Cover book={item} />
               <Text numberOfLines={2} style={[styles.bookTitle, {color: p.ink}]}>{item.title}</Text>
+              {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
               <Text style={[styles.meta, {color: p.muted}]}>{item.format} - {item.space}{item.author ? ' - '+item.author : ''}{item.series ? ' - '+item.series : ''}</Text>
             </Pressable>{item.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={session ? (!queueReady || queueBusy) : false} onPress={()=>session ? void queueStore?.edit(old=>old.some(b=>b.id===item.id)?old:[...old,item]) : void addLocalQueue(item)} /> : null}
             {owner?<Button label="Edit details" tone="quiet" onPress={()=>{setEditing(item);setEditTitle(item.title);setEditAuthor(item.author||'');setEditSeries(item.series||'');}}/>:null}</View>
@@ -1131,6 +1132,7 @@ const styles = StyleSheet.create({
   libraryChoice: {borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
   libraryChoiceVertical: {borderRadius: 8, minHeight: 44},
   libraryChips: {gap: 8, paddingBottom: 2},
+  libraryChipsRow: {flexDirection: 'row', gap: 8},
   librarySummary: {borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center'},
   reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
   scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
@@ -1160,6 +1162,7 @@ const styles = StyleSheet.create({
   coverMark: {fontFamily: 'serif', fontSize: 38, fontWeight: '700'},
   coverTitle: {fontFamily: 'serif', fontSize: 20},
   bookTitle: {fontSize: 15, fontWeight: '700'},
+  reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {padding: 18, gap: 14, paddingBottom: 120},
   nowTitle: {fontFamily: 'serif', fontSize: 28, textAlign: 'center', marginTop: 4},
