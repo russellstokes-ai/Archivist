@@ -123,3 +123,37 @@ Archivist remains deliberately local-first. BookOrbit was used as a reference fo
 3. Profile: achievements, reading/listening statistics, streaks and milestones kept out of the main navigation.
 4. Scanner v2 deeper layers: embedded metadata, sidecars, multi-file audiobook grouping, ISBN/provider matching, dedupe/fingerprints and background cover extraction.
 5. Atlas: real genres and richer relationships.
+
+
+## 2026-09-26 — Reader and player polish pass
+
+### Audiobook player
+
+- Reworked the mobile player around a dedicated listening surface rather than generic buttons.
+- Added large square artwork treatment, clearer title/byline/chapter hierarchy and remaining-time display.
+- Added restrained 15-second back / 30-second forward controls and larger central play/pause affordance.
+- Added compact speed, sleep/queue surfaces rather than permanently exposing controls.
+- Improved chapter and queue presentation.
+- Corrected the local mini-player so local playback no longer routes through the server playback controller.
+- Local playback speed now uses Expo Audio's native playback-rate API.
+
+### Reader / comics
+
+- Local comics are now paged rather than rendered as one long strip.
+- Local EPUB content is presented in paginated columns.
+- Edge tap turns pages.
+- Center tap focuses text; comic focus zooms around the tapped point.
+- Pinch zoom works for comics; EPUB pinch adjusts readable text scale.
+- Page transitions use a restrained short 3D turn rather than a decorative full-page curl.
+- Optional page-turn sound is synthesized locally with Web Audio, avoiding bundled/licensed sound assets.
+- Sound preference is persistent and consistent across local/server readers.
+- Reader respects reduced-motion preferences.
+- Local EPUB/comic page position persists per file and resumes on reopen.
+- Server reader now mirrors the same page-turn, text focus, pinch and sound interaction language.
+- Server and Home Assistant packaged reader assets are parity-gated so they cannot silently diverge from root source.
+
+### Validation gates
+
+- Local reader tests now cover sanitization, paging, text focus, pinch and reader controls.
+- Server reader tests verify the interaction assets and reduced-motion CSS.
+- Android release workflow typechecks, runs all mobile tests, builds a release APK and launches that exact artifact in an emulator.
