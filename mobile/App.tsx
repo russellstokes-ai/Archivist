@@ -56,6 +56,7 @@ const storageKey = 'archivist.session';
 const themeKey = 'archivist.theme';
 const localFoldersKey = 'archivist.localFolders';
 const localProgressKey = 'archivist.localProgress';
+const localReadingProgressKey = 'archivist.localReadingProgress';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
@@ -192,6 +193,7 @@ function Client() {
   const [localSpeed, setLocalSpeed] = useState(1);
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
+  const [localReadingProgress, setLocalReadingProgress] = useState<Record<string, number>>({});
   const queueRef = useRef(queuedBooks); queueRef.current=queuedBooks;
   const [queueReady,setQueueReady]=useState(false);
   const [queueBusy,setQueueBusy]=useState(false);
@@ -331,6 +333,9 @@ function Client() {
     }).catch(() => undefined);
     SecureStore.getItemAsync(localProgressKey).then(value => {
       if (value) setLocalProgress(JSON.parse(value));
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(localReadingProgressKey).then(value => {
+      if (value) setLocalReadingProgress(JSON.parse(value));
     }).catch(() => undefined);
     SecureStore.getItemAsync(localQueueKey).then(value => {
       if (value) setQueuedBooks(JSON.parse(value));
@@ -659,7 +664,7 @@ function Client() {
       setActiveTab('reader');
       setReaderLoading(true);
       setLocalReader(null);
-      buildLocalReaderDocument(book.uri, book.format, book.title).then(setLocalReader).catch(e => setError(e.message)).finally(() => setReaderLoading(false));
+      buildLocalReaderDocument(book.uri, book.format, book.title, localReadingProgress[book.uri] || 0).then(setLocalReader).catch(e => setError(e.message)).finally(() => setReaderLoading(false));
     }
     else {
       setReading(book);
@@ -1047,7 +1052,23 @@ function Client() {
             <Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading.title}</Text>
           </View>
           {readerLoading ? <ActivityIndicator accessibilityLabel="Opening local reader" /> : localReader?.html ? (
-            <WebView originWhitelist={['*']} source={{html: localReader.html}} />
+            <WebView
+              originWhitelist={['*']}
+              source={{html: localReader.html}}
+              onMessage={event => {
+                if (!reading?.uri) return;
+                try {
+                  const message = JSON.parse(event.nativeEvent.data);
+                  if (message?.type !== 'reader-position' || !Number.isInteger(message.page) || message.page < 0) return;
+                  setLocalReadingProgress(current => {
+                    if (current[reading.uri!] === message.page) return current;
+                    const next = {...current, [reading.uri!]: message.page};
+                    SecureStore.setItemAsync(localReadingProgressKey, JSON.stringify(next)).catch(() => undefined);
+                    return next;
+                  });
+                } catch {}
+              }}
+            />
           ) : localReader?.uri ? (
             <WebView originWhitelist={['content://*', 'file://*']} source={{uri: localReader.uri}} allowFileAccess />
           ) : <Text style={[styles.empty, {color: p.muted, padding: 16}]}>Unable to open this file.</Text>}
