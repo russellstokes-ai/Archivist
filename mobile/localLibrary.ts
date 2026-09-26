@@ -1,5 +1,6 @@
 import {Platform} from 'react-native';
 import {StorageAccessFramework} from 'expo-file-system/legacy';
+import {inferLocalBookMetadata, IdentificationConfidence} from './libraryIntelligence';
 
 export type LocalBook = {
   id: number;
@@ -10,6 +11,10 @@ export type LocalBook = {
   format: string;
   space: string;
   available: boolean;
+  identificationConfidence?: IdentificationConfidence;
+  needsReview?: boolean;
+  reviewReason?: string;
+  coverShape?: 'portrait' | 'square';
 };
 
 export type LocalSortPreview = {
@@ -45,11 +50,21 @@ export type LocalFolder = {
   scannedAt?: string;
 };
 
+export type LocalScanProgress = {
+  phase: 'discovering' | 'complete';
+  currentFolder: string;
+  entriesVisited: number;
+  found: number;
+  review: number;
+};
+
 export type LocalScanResult = {
   folders: LocalFolder[];
   books: LocalBook[];
   skipped: number;
   truncated: boolean;
+  identified: number;
+  review: number;
 };
 
 const supported = new Map<string, string>([
@@ -67,7 +82,7 @@ const supported = new Map<string, string>([
   ['flac', 'Audio'],
 ]);
 
-const maxEntriesPerScan = 1200;
+const maxEntriesPerScan = 5000;
 const maxDepth = 8;
 
 export function localFolderName(uri: string) {
@@ -96,11 +111,20 @@ export async function pickLocalFolder(): Promise<LocalFolder | null> {
   };
 }
 
-export async function scanLocalFolders(folders: LocalFolder[]): Promise<LocalScanResult> {
+export async function scanLocalFolders(
+  folders: LocalFolder[],
+  onProgress?: (progress: LocalScanProgress) => void,
+): Promise<LocalScanResult> {
   const books: LocalBook[] = [];
   let skipped = 0;
   let truncated = false;
+  let entriesVisited = 0;
+  let review = 0;
   const seen = new Set<string>();
+
+  const report = (phase: LocalScanProgress['phase'], currentFolder: string) => {
+    onProgress?.({phase, currentFolder, entriesVisited, found: books.length, review});
+  };
 
   async function scanDir(uri: string, space: string, depth: number) {
     if (truncated || depth > maxDepth) return;
@@ -112,6 +136,8 @@ export async function scanLocalFolders(folders: LocalFolder[]): Promise<LocalSca
       return;
     }
     for (const child of children) {
+      entriesVisited += 1;
+      if (entriesVisited === 1 || entriesVisited % 20 === 0) report('discovering', space);
       if (books.length >= maxEntriesPerScan) {
         truncated = true;
         return;
@@ -120,16 +146,23 @@ export async function scanLocalFolders(folders: LocalFolder[]): Promise<LocalSca
       const format = ext ? supported.get(ext) : undefined;
       if (format && !seen.has(child)) {
         seen.add(child);
+        const identity = inferLocalBookMetadata(child, format);
+        if (identity.needsReview) review += 1;
         books.push({
           id: books.length + 1,
           uri: child,
-          title: titleFromUri(child),
-          author: '',
-          series: '',
+          title: identity.title || titleFromUri(child),
+          author: identity.author,
+          series: identity.series,
           format,
           space,
           available: true,
+          identificationConfidence: identity.confidence,
+          needsReview: identity.needsReview,
+          reviewReason: identity.reviewReason,
+          coverShape: identity.coverShape,
         });
+        report('discovering', space);
       } else if (!ext && depth < maxDepth) {
         await scanDir(child, space, depth + 1);
       }
@@ -139,6 +172,7 @@ export async function scanLocalFolders(folders: LocalFolder[]): Promise<LocalSca
   const nextFolders: LocalFolder[] = [];
   for (const folder of folders) {
     const before = books.length;
+    report('discovering', folder.name);
     await scanDir(folder.uri, folder.name, 0);
     const count = books.length - before;
     nextFolders.push({
@@ -150,7 +184,15 @@ export async function scanLocalFolders(folders: LocalFolder[]): Promise<LocalSca
     if (truncated) break;
   }
 
-  return {folders: nextFolders.concat(folders.slice(nextFolders.length)), books, skipped, truncated};
+  report('complete', '');
+  return {
+    folders: nextFolders.concat(folders.slice(nextFolders.length)),
+    books,
+    skipped,
+    truncated,
+    identified: books.length - review,
+    review,
+  };
 }
 
 export function previewLocalSort(books: LocalBook[], template: string): LocalSortPreview[] {
