@@ -1135,9 +1135,13 @@ function Client() {
           <Button label={localScanning ? 'Scanning…' : 'Add folder'} disabled={localScanning} tone="quiet" onPress={() => void addLocalFolder()} />
         </View> : null}
         {!wideLibraries && spaces.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher /></ScrollView> : null}
+        {reviewCount>0 && !reviewOnly ? <View style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.gold}]}>
+          <Text style={[styles.meta,{color:p.ink,flex:1}]}>{reviewCount} file{reviewCount===1?'':'s'} need a quick metadata check before automatic organising.</Text>
+          <Button label={'Review '+reviewCount} tone="quiet" onPress={() => {setReviewOnly(true);setQuery('');}} />
+        </View> : null}
         {reviewOnly ? <View style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.gold}]}>
-          <Text style={[styles.meta,{color:p.ink,flex:1}]}>Showing only items Archivist could not identify confidently.</Text>
-          <Button label="Show all" tone="quiet" onPress={() => setReviewOnly(false)} />
+          <Text style={[styles.meta,{color:p.ink,flex:1}]}>Reviewing uncertain files. Corrections are preserved on future scans.</Text>
+          <Button label="Back to Shelf" tone="quiet" onPress={() => setReviewOnly(false)} />
         </View> : null}
         {localScanning && scanProgress ? <View style={[styles.scanBanner,{backgroundColor:p.ink}]}>
           <ActivityIndicator color={p.ivory} />
