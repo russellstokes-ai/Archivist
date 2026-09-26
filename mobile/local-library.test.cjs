@@ -105,6 +105,9 @@ assert.equal(previews.every(item => item.state === 'ready'), true);
 previews = previewLocalSort([books[0], {...books[0], id: 4, uri: 'content://root/document/primary:Other%2FDune.epub'}], 'author-title');
 assert.equal(previews.every(item => item.state === 'conflict'), true);
 
+previews = previewLocalSort([{...books[0], needsReview: true}], 'author-title');
+assert.equal(previews[0].state, 'review');
+
 (async () => {
   const root = 'content://root/tree/primary:Books/document/primary:Books';
   const file = root + '%2FMystery.epub';
