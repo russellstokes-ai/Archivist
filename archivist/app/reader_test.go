@@ -95,3 +95,40 @@ func TestReaderPermissionsAndProgress(t *testing.T) {
 		t.Fatal("native login failed")
 	}
 }
+
+
+func TestReaderWebInteractionAssets(t *testing.T) {
+	js, err := web.ReadFile("web/reader.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css, err := web.ReadFile("web/reader.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(js)
+	style := string(css)
+	for _, marker := range []string{
+		"reader-page-sound",
+		"pageSound()",
+		"pinchStartDistance",
+		"focusComicPage",
+		"focusText",
+		"turn-next",
+		"turn-prev",
+	} {
+		if !strings.Contains(script, marker) {
+			t.Fatalf("reader interaction missing %q", marker)
+		}
+	}
+	for _, marker := range []string{
+		".text-focused",
+		"readerTurnNext",
+		"readerTurnPrev",
+		"prefers-reduced-motion",
+	} {
+		if !strings.Contains(style, marker) {
+			t.Fatalf("reader polish CSS missing %q", marker)
+		}
+	}
+}
