@@ -82,6 +82,17 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew assembleRelease --no-daemon --console=plain
 
+      - name: Locate release APK
+        id: release_apk
+        shell: bash
+        run: |
+          set -eu
+          APK=$(find mobile/android/app/build/outputs/apk -type f -name '*.apk' -print | head -n 1)
+          test -n "$APK"
+          test -f "$APK"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Found release APK: $APK"
+
       - name: Launch release APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -97,8 +108,8 @@ jobs:
             adb devices
           script: |
             set -eu
-            APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
-            test -n "$APK"
+            APK="${{ steps.release_apk.outputs.path }}"
+            test -f "$APK"
             adb install -r "$APK"
             adb logcat -c
             adb shell am force-stop app.archivist.reader
@@ -126,12 +137,13 @@ jobs:
       - name: Name versioned APK
         shell: bash
         run: |
-          APK=$(find mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
-          cp "$APK" "mobile/android/app/build/outputs/apk/release/Archivist-${{ steps.app_version.outputs.version }}.apk"
+          APK="${{ steps.release_apk.outputs.path }}"
+          OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk"
+          cp "$APK" "$OUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Archivist-${{ steps.app_version.outputs.version }}-APK
-          path: mobile/android/app/build/outputs/apk/release/Archivist-${{ steps.app_version.outputs.version }}.apk
+          path: mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk
           if-no-files-found: error
