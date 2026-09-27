@@ -158,8 +158,8 @@ document.addEventListener('keydown',e=>{
   if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;
   if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();void move(1);}
   if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();void move(-1);}
-  if(e.key==='Home'&&manifest?.parts?.length){e.preventDefault();void show(0);}
-  if(e.key==='End'&&manifest?.parts?.length){e.preventDefault();void show(manifest.parts.length-1);}
+  if(e.key==='Home'&&manifest?.parts?.length){e.preventDefault();void save().then(()=>show(0));}
+  if(e.key==='End'&&manifest?.parts?.length){e.preventDefault();void save().then(()=>show(manifest.parts.length-1));}
   if(e.key==='Escape'&&speechFocus.isActive()){e.preventDefault();speechFocus.close();status('');}
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden)void save();});setInterval(save,5000);
