@@ -19,7 +19,7 @@ for (const match of source.matchAll(/<Pressable\b[\s\S]*?<\/Pressable>/g)) {
 }
 
 for (const route of [
-  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/atlas-relationships','/api/duplicate-candidates','/api/sources',
+  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/preferences','/api/atlas-relationships','/api/duplicate-candidates','/api/sources',
   '/api/file-moves','/api/assets/','/api/queue','/session','/logout','/setup/status'
 ]) {
   assert.ok(clientSource.includes(route), 'Expected wired mobile route missing from client: ' + route);
@@ -50,3 +50,12 @@ const playerStart=source.indexOf('function Player()');
 assert.ok(shelfStart>=0 && playerStart>shelfStart, 'Shelf function bounds are missing');
 const shelfSource=source.slice(shelfStart,playerStart);
 assert.equal(shelfSource.includes('>Local sorting</Text>'),false,'Technical local sorting controls must not live on the Shelf');
+
+assert.ok(source.includes('function PersonalControls('), 'Personal star/favourite controls are missing');
+assert.ok(source.includes("kind=\"reading\""), 'Atlas reading-state relationship is missing');
+assert.ok(source.includes("kind=\"rating\""), 'Atlas rating relationship is missing');
+assert.ok(source.includes("kind=\"favourite\""), 'Atlas favourite relationship is missing');
+assert.ok(source.includes('>Family users</Text>'), 'Admin family-user management is missing');
+assert.ok(source.includes('User · whole library'), 'Family user UI must use simple whole-library User semantics');
+assert.equal(source.includes('Change library access'),false,'Mobile UI must not expose per-library User permissions');
+assert.ok(source.includes("profile.admin ?? profile.owner"), 'Mobile must understand new Admin role while remaining compatible with older servers');
