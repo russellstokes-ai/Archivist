@@ -1,0 +1,57 @@
+name: Core CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: core-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Go tests
+        run: go test ./...
+
+  mobile:
+    name: Mobile tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+      - name: Unit and contract tests
+        working-directory: mobile
+        run: |
+          node core.test.cjs
+          node queue.test.cjs
+          node local-library.test.cjs
+          node local-works.test.cjs
+          node atlas.test.cjs
+          node duplicates.test.cjs
+          node local-reader.test.cjs
+          node profile-stats.test.cjs
+          node native-patch.test.cjs
+          node ui-contract.test.cjs
