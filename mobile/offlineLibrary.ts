@@ -43,6 +43,7 @@ export type OfflineDownloadCheckpoint={
   key:string;
   server:string;
   workId:number;
+  title?:string;
   directory:string;
   completedTrackIds:number[];
   current?:{
@@ -202,7 +203,7 @@ export async function downloadOfflineWork(
     options.checkpoint.workId===work.id;
   const checkpoint:OfflineDownloadCheckpoint=compatibleCheckpoint
     ? {...options!.checkpoint!,completedTrackIds:[...options!.checkpoint!.completedTrackIds],current:options!.checkpoint!.current?{...options!.checkpoint!.current}:undefined}
-    : {version:1,key,server:session.server,workId:work.id,directory:dir,completedTrackIds:[],updatedAt:new Date().toISOString()};
+    : {version:1,key,server:session.server,workId:work.id,title:work.title,directory:dir,completedTrackIds:[],updatedAt:new Date().toISOString()};
 
   await makeDirectoryAsync(root,{intermediates:true});
   if(!compatibleCheckpoint){
@@ -232,6 +233,7 @@ export async function downloadOfflineWork(
       }
     }
   }
+  checkpoint.title=work.title;
   checkpoint.completedTrackIds=[...completed];
 
   if(knownTotal>0){
