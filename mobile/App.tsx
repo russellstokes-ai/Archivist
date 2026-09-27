@@ -540,27 +540,34 @@ function Client() {
 
   const visibleLocalWorks = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return localWorks.filter(work => {
+    return localPersonalWorks.filter(work => {
       if (space && work.space !== space) return false;
       if (formatFilter && work.format !== formatFilter) return false;
       if (authorFilter && work.author !== authorFilter) return false;
       if (seriesFilter && work.series !== seriesFilter) return false;
       if (genreFilter && work.genre !== genreFilter) return false;
       if (unknownAuthorOnly && !!work.author) return false;
+      if (readingFilter && work.readingState!==readingFilter) return false;
+      if (ratingFilter>0 && work.rating!==ratingFilter) return false;
+      if (favouriteOnly && !work.favourite) return false;
       if (!availabilityMatches(work.available)) return false;
       if (q && ![work.title,work.author,work.series,work.genre,work.format,work.space].some(value => value.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [authorFilter, availabilityFilter, formatFilter, genreFilter, localWorks, query, seriesFilter, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, favouriteOnly, formatFilter, genreFilter, localPersonalWorks, query, ratingFilter, readingFilter, seriesFilter, space, unknownAuthorOnly]);
 
-  const visibleServerWorks = useMemo(() => serverWorks.filter(work =>
-    availabilityMatches(work.available) &&
-    (!formatFilter || work.format === formatFilter) &&
-    (!authorFilter || work.author === authorFilter) &&
-    (!seriesFilter || work.series === seriesFilter) &&
-    (!genreFilter || work.genre === genreFilter) &&
-    (!unknownAuthorOnly || !work.author)
-  ), [authorFilter, availabilityFilter, formatFilter, genreFilter, seriesFilter, serverWorks, unknownAuthorOnly]);
+  const visibleServerWorks = useMemo(() => serverWorks.filter(work => {
+    const pref=serverPreferences[work.id] || {rating:0,favourite:false,state:'not-started' as ReadingState};
+    return availabilityMatches(work.available) &&
+      (!formatFilter || work.format === formatFilter) &&
+      (!authorFilter || work.author === authorFilter) &&
+      (!seriesFilter || work.series === seriesFilter) &&
+      (!genreFilter || work.genre === genreFilter) &&
+      (!readingFilter || pref.state===readingFilter) &&
+      (!ratingFilter || pref.rating===ratingFilter) &&
+      (!favouriteOnly || pref.favourite) &&
+      (!unknownAuthorOnly || !work.author);
+  }), [authorFilter, availabilityFilter, favouriteOnly, formatFilter, genreFilter, ratingFilter, readingFilter, seriesFilter, serverPreferences, serverWorks, unknownAuthorOnly]);
 
   const localContinueWorks = useMemo(() => localWorks.filter(work => {
     if (space && work.space !== space) return false;
@@ -577,9 +584,15 @@ function Client() {
   }).slice(0, 12), [localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks, space]);
 
   const atlas = useMemo(() => {
+    const count = (values: string[]) => {
+      const totals = new Map<string, number>();
+      for (const value of values.map(v => v.trim()).filter(Boolean)) totals.set(value, (totals.get(value) || 0) + 1);
+      return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
+    };
     if (session && serverSummary) {
       const authors: Array<[string,number]> = serverSummary.authors.map(item => [item.name,item.count]);
       if (serverSummary.unknownAuthors > 0) authors.push(['Unknown author',serverSummary.unknownAuthors]);
+      const prefs=Object.values(serverPreferences);
       return {
         formats: serverSummary.formats.map(item => [item.name,item.count] as [string,number]),
         authors,
@@ -587,14 +600,12 @@ function Client() {
         genres: (serverSummary.genres || []).map(item => [item.name,item.count] as [string,number]),
         spaces: serverSummary.spaces.map(item => [item.name,item.count] as [string,number]),
         status: serverSummary.availability.map(item => [item.name,item.count] as [string,number]),
+        reading: count(prefs.map(item=>item.state==='finished'?'Finished':item.state==='in-progress'?'In progress':'Not started')),
+        ratings: count(prefs.map(item=>ratingLabel(item.rating||0))),
+        favourites: prefs.some(item=>item.favourite)?[['Favourites',prefs.filter(item=>item.favourite).length] as [string,number]]:[],
       };
     }
-    const items = localWorks;
-    const count = (values: string[]) => {
-      const totals = new Map<string, number>();
-      for (const value of values.map(v => v.trim()).filter(Boolean)) totals.set(value, (totals.get(value) || 0) + 1);
-      return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8);
-    };
+    const items = localPersonalWorks;
     return {
       formats: count(items.map(item => item.format)),
       authors: count(items.map(item => item.author || 'Unknown author')),
@@ -605,8 +616,11 @@ function Client() {
         ['Available', items.filter(item => item.available).length] as [string, number],
         ['Unavailable', items.filter(item => !item.available).length] as [string, number],
       ].filter(([, total]) => total > 0),
+      reading: count(items.map(item=>item.readingState==='finished'?'Finished':item.readingState==='in-progress'?'In progress':'Not started')),
+      ratings: count(items.map(item=>ratingLabel(item.rating||0))),
+      favourites: items.some(item=>item.favourite)?[['Favourites',items.filter(item=>item.favourite).length] as [string,number]]:[],
     };
-  }, [localWorks, serverSummary, session]);
+  }, [localPersonalWorks, serverPreferences, serverSummary, session]);
 
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
@@ -928,13 +942,14 @@ function Client() {
 
   async function refreshSourcesAndShelf() {
     if(!session)return;
-    const [items, assets, works, continuing, summary, stats]=await Promise.all([
+    const [items, assets, works, continuing, summary, stats, preferences]=await Promise.all([
       request(session,'/api/sources'),
       request(session,serverAssetsPath(0,500)),
       request(session,serverWorksPath(0,100)),
       request(session,'/api/continue?space='+encodeURIComponent(space)),
       request(session,'/api/library-summary'),
       request(session,'/api/profile-stats'),
+      request(session,'/api/preferences'),
     ]);
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
@@ -945,6 +960,9 @@ function Client() {
     setContinueWorks((continuing as ServerWork[]).map(normalizeServerWork));
     setServerSummary(normalizeLibrarySummary(summary));
     setServerProfileStats(stats);
+    const prefMap:Record<number,PersonalPreference>={};
+    for(const pref of preferences as PersonalPreference[])if(pref.workId)prefMap[pref.workId]=pref;
+    setServerPreferences(prefMap);
   }
 
   async function loadMoreServerWorks() {
@@ -1770,8 +1788,35 @@ function Client() {
     );
   }
 
+  function PersonalControls({rating,favourite,onRating,onFavourite}:{
+    rating:number;favourite:boolean;onRating:(rating:number)=>void;onFavourite:()=>void;
+  }) {
+    return <View style={{gap:5,marginTop:7}}>
+      <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
+        <View accessibilityLabel={'Personal rating '+ratingLabel(rating)} style={{flexDirection:'row'}}>
+          {[1,2,3,4,5].map(star=>{
+            const full=rating>=star*2,half=rating===star*2-1;
+            return <Pressable
+              key={star}
+              accessibilityRole="button"
+              accessibilityLabel={'Rate '+(star-0.5)+' or '+star+' stars'}
+              onPress={event=>onRating((star-1)*2+(event.nativeEvent.locationX<13?1:2))}
+              style={{width:26,height:30,alignItems:'center',justifyContent:'center'}}>
+              <Text style={{fontSize:20,color:full||half?p.gold:p.muted,opacity:half?0.55:1}}>★</Text>
+            </Pressable>;
+          })}
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={favourite?'Remove favourite':'Add favourite'} onPress={onFavourite} style={{padding:5}}>
+          <Text style={{fontSize:22,color:favourite?p.gold:p.muted}}>{favourite?'♥':'♡'}</Text>
+        </Pressable>
+      </View>
+      {rating>0?<Text style={[styles.meta,{color:p.gold}]}>{ratingLabel(rating)}</Text>:null}
+    </View>;
+  }
+
   function LocalWorkCard({work}: {work: LocalWork}) {
     const downloaded=Object.values(offlineWorks).find(item=>'offline:'+item.key===work.key);
+    const personal=localPreferences[work.key] || {rating:0,favourite:false};
     return (
       <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
@@ -1782,6 +1827,9 @@ function Client() {
             {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.genre ? ' · '+work.genre : ''}{work.files>1 ? ' · '+work.files+' files' : ''}
           </Text>
         </Pressable>
+        <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
+          onRating={rating=>void saveLocalPreference(work,{...personal,rating})}
+          onFavourite={()=>void saveLocalPreference(work,{...personal,favourite:!personal.favourite})} />
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
         {downloaded ? <Button label="Remove download" tone="quiet" disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
       </View>
@@ -1791,6 +1839,7 @@ function Client() {
   function ServerWorkCard({work}: {work: ServerWork}) {
     const downloaded=downloadedServerWork(work);
     const downloading=offlineBusyId===work.id;
+    const personal=serverPreferences[work.id] || {rating:0,favourite:false,state:'not-started' as ReadingState};
     return (
       <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>void openServerWork(work)}>
@@ -1800,6 +1849,9 @@ function Client() {
             {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.genre ? ' · '+work.genre : ''}{work.files>1 ? ' · '+work.files+' files' : ''}{work.editions>1 ? ' · '+work.editions+' editions' : ''}
           </Text>
         </Pressable>
+        <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
+          onRating={rating=>void saveServerPreference(work,{...personal,rating})}
+          onFavourite={()=>void saveServerPreference(work,{...personal,favourite:!personal.favourite})} />
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
         {downloaded
           ? <Button label={'Downloaded · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
@@ -2264,6 +2316,9 @@ function Client() {
     setAuthorFilter('');
     setSeriesFilter('');
     setGenreFilter('');
+    setReadingFilter('');
+    setRatingFilter(0);
+    setFavouriteOnly(false);
     setUnknownAuthorOnly(false);
     if (kind === 'space') {
       setSpace(value);
@@ -2279,6 +2334,12 @@ function Client() {
       setUnknownAuthorOnly(true);
     } else if (kind === 'author') {
       setAuthorFilter(value);
+    } else if (kind === 'reading') {
+      setReadingFilter(value==='Finished'?'finished':value==='In progress'?'in-progress':'not-started');
+    } else if (kind === 'rating') {
+      setRatingFilter(Math.max(0,ratingFromLabel(value)));
+    } else if (kind === 'favourite') {
+      setFavouriteOnly(true);
     }
     setActiveTab('shelf');
   }
@@ -2338,6 +2399,9 @@ function Client() {
           <AtlasConnectionGroup title="Formats" kind="format" items={relation.formats} />
           <AtlasConnectionGroup title="Folders" kind="space" items={relation.spaces} />
           <AtlasConnectionGroup title="Availability" kind="status" items={relation.availability || []} />
+          <AtlasConnectionGroup title="Reading state" kind="reading" items={relation.reading || []} />
+          <AtlasConnectionGroup title="Ratings" kind="rating" items={relation.ratings || []} />
+          <AtlasConnectionGroup title="Favourites" kind="favourite" items={relation.favourites || []} />
           <Text style={[styles.sectionTitle,{color:p.ink}]}>Works</Text>
           <View style={{gap:8}}>
             {session ? serverAtlasRelationship?.works.map(work=><Pressable key={work.id} accessibilityRole="button" onPress={()=>void openServerWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
@@ -2366,7 +2430,10 @@ function Client() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.title, {color: p.ink}]}>Atlas</Text>
-        <Text style={[styles.empty, {color: p.muted}]}>Explore how authors, series, genres, formats and folders connect across your library.</Text>
+        <Text style={[styles.empty, {color: p.muted}]}>Explore your library and your own reading history, ratings and favourites.</Text>
+        <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
+        <AtlasGroup title="Ratings" kind="rating" items={atlas.ratings} />
+        <AtlasGroup title="Favourites" kind="favourite" items={atlas.favourites} />
         <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
         <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
         <AtlasGroup title="Series" kind="series" items={atlas.series} />
@@ -2599,6 +2666,23 @@ function Client() {
         ) : <Text style={[styles.meta, {color: p.muted}]}>No server connected. Your phone library works locally.</Text>}
         {!session && !recoverableSession ? (serverPanelOpen ? <ServerConnect /> : <Button label="Add server" tone="quiet" onPress={() => setServerPanelOpen(true)} />) : null}
         {owner ? <View style={{gap:10}}>
+          <Text style={[styles.sectionTitle,{color:p.ink}]}>Family users</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
+          <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
+          <Button label={busy?'Creating…':'Add user'} disabled={busy||!newUserName.trim()} tone="quiet" onPress={()=>void createFamilyUser()} />
+          {newUserKey?<View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.gold}]}>
+            <Text style={{color:p.ink,fontWeight:'800'}}>User access key — shown once</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Give this key to the family member when they connect the Archivist server.</Text>
+            <Text selectable style={{color:p.gold,fontWeight:'800'}}>{newUserKey}</Text>
+            <Button label="Hide key" tone="quiet" onPress={()=>setNewUserKey('')} />
+          </View>:null}
+          {householdUsers.map(user=><View key={user.id} style={[styles.sourceRow,{borderColor:p.line}]}>
+            <View style={{flex:1}}>
+              <Text style={{color:p.ink,fontWeight:'800'}}>{user.name}</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text>
+            </View>
+            {!user.revoked?<Button label="Revoke" tone="quiet" disabled={busy} onPress={()=>void revokeFamilyUser(user.id)} />:null}
+          </View>)}
           <Text style={[styles.sectionTitle,{color:p.ink}]}>Source folders</Text>
           {sources.map(s=><View key={s.id} style={{gap:6}}><Text style={{color:p.ink}}>{s.space}</Text><Text style={{color:p.muted}}>{s.path}</Text><Text style={{color:p.muted}}>{s.status}</Text><Button label="Scan folder" disabled={busy} tone="quiet" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')}/><Button label="Remove folder" disabled={busy} tone="quiet" onPress={()=>void removeSource(s.id)}/></View>)}
           <TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
