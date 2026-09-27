@@ -55,7 +55,7 @@ export function createSpeechFocusController(){
     if(cache.has(bucket))return {region:cache.get(bucket),rect,width,height};
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)return null;
     ctx.drawImage(img,0,0,width,height);let data;try{data=ctx.getImageData(0,0,width,height).data;}catch{return null;}
-    const region=detectBubbleRegion(data,width,height,x,y);if(!region)return null;cache.set(bucket,region);if(cache.size>24)cache.delete(cache.keys().next().value);
+    const region=detectBubbleRegion(data,width,height,x,y);if(!region)return null;cache.set(bucket,region);if(cache.size>24){const oldest=cache.keys().next().value;if(oldest)cache.delete(oldest);}
     return {region,rect,width,height};
   }
   function focus(img,clientX,clientY,key='page'){
@@ -68,7 +68,7 @@ export function createSpeechFocusController(){
     const path=new Path2D(),xScale=outW/(region.right-region.left+1),yScale=outH/(region.bottom-region.top+1),rows=region.rows;if(rows.length<2)return false;
     path.moveTo((rows[0].left-region.left)*xScale,(rows[0].y-region.top)*yScale);
     for(const row of rows)path.lineTo((row.left-region.left)*xScale,(row.y-region.top)*yScale);
-    for(let i=rows.length-1;i>=0;i--){const row=rows[i];path.lineTo((row.right-region.left)*xScale,(row.y-region.top)*yScale);}path.close();
+    for(let i=rows.length-1;i>=0;i--){const row=rows[i];path.lineTo((row.right-region.left)*xScale,(row.y-region.top)*yScale);}path.closePath();
     ctx.save();ctx.clip(path);ctx.drawImage(img,sourceX,sourceY,sourceW,sourceH,0,0,outW,outH);ctx.restore();
     const displayLeft=rect.left+region.left/width*rect.width,displayTop=rect.top+region.top/height*rect.height,displayW=(region.right-region.left+1)/width*rect.width,displayH=(region.bottom-region.top+1)/height*rect.height,ratio=displayW/Math.max(1,displayH);
     let targetW=Math.min(innerWidth*.82,Math.max(displayW*2.15,220)),targetH=targetW/Math.max(.2,ratio);if(targetH>innerHeight*.68){targetH=innerHeight*.68;targetW=targetH*ratio;}
