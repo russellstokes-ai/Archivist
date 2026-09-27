@@ -47,5 +47,6 @@ jobs:
           node local-library.test.cjs
           node local-works.test.cjs
           node local-reader.test.cjs
+          node profile-stats.test.cjs
           node native-patch.test.cjs
           node ui-contract.test.cjs
