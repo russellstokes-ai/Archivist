@@ -3,17 +3,19 @@ package main
 import "net/http"
 
 type profileStats struct {
-	Name             string `json:"name"`
-	Owner            bool   `json:"owner"`
-	Works            int    `json:"works"`
-	Formats          int    `json:"formats"`
-	Series           int    `json:"series"`
-	StartedAudio     int    `json:"startedAudio"`
-	CompletedAudio   int    `json:"completedAudio"`
-	StartedReading   int    `json:"startedReading"`
-	CompletedReading int    `json:"completedReading"`
-	InProgress       int    `json:"inProgress"`
-	Completed        int    `json:"completed"`
+	Name              string `json:"name"`
+	Owner             bool   `json:"owner"`
+	Works             int    `json:"works"`
+	Formats           int    `json:"formats"`
+	Series            int    `json:"series"`
+	StartedAudio      int    `json:"startedAudio"`
+	CompletedAudio    int    `json:"completedAudio"`
+	InProgressAudio   int    `json:"inProgressAudio"`
+	StartedReading    int    `json:"startedReading"`
+	CompletedReading  int    `json:"completedReading"`
+	InProgressReading int    `json:"inProgressReading"`
+	InProgress        int    `json:"inProgress"`
+	Completed         int    `json:"completed"`
 }
 
 func (a *app) profileStatsFor(p identity) (profileStats,error) {
@@ -38,23 +40,41 @@ func (a *app) profileStatsFor(p identity) (profileStats,error) {
 		p.Owner,p.ID).Scan(&out.Series);e!=nil{return out,e}
 
 	audioStarted:=`
-		SELECT DISTINCT w.id
+		SELECT w.id
 		FROM works w
 		JOIN editions e ON e.work_id=w.id
 		JOIN profile_progress pp ON pp.edition_id=e.id
-		WHERE e.format='Audio'
-		AND pp.profile_id=?
+		WHERE e.format='Audio' AND pp.profile_id=?
 		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
-		AND (pp.seconds>0 OR pp.revision>0 OR pp.complete=1)`
-	audioCompleted:=`
-		SELECT DISTINCT w.id
+		AND (pp.seconds>0 OR pp.revision>0 OR pp.complete=1)
+		UNION
+		SELECT w.id
+		FROM works w
+		JOIN editions e ON e.work_id=w.id
+		JOIN edition_assets ea ON ea.edition_id=e.id
+		JOIN asset_progress ap ON ap.asset_id=ea.asset_id
+		WHERE e.format='Audio' AND ap.profile_id=?
+		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+		AND (ap.seconds>0 OR ap.revision>0 OR ap.complete=1)`
+
+	audioInProgress:=`
+		SELECT w.id
 		FROM works w
 		JOIN editions e ON e.work_id=w.id
 		JOIN profile_progress pp ON pp.edition_id=e.id
-		WHERE e.format='Audio'
-		AND pp.profile_id=?
+		WHERE e.format='Audio' AND pp.profile_id=? AND pp.complete=0
 		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
-		AND pp.complete=1`
+		AND (pp.seconds>0 OR pp.revision>0)
+		UNION
+		SELECT w.id
+		FROM works w
+		JOIN editions e ON e.work_id=w.id
+		JOIN edition_assets ea ON ea.edition_id=e.id
+		JOIN asset_progress ap ON ap.asset_id=ea.asset_id
+		WHERE e.format='Audio' AND ap.profile_id=? AND ap.complete=0
+		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+		AND (ap.seconds>0 OR ap.revision>0)`
+
 	readingStarted:=`
 		SELECT DISTINCT w.id
 		FROM works w
@@ -65,31 +85,49 @@ func (a *app) profileStatsFor(p identity) (profileStats,error) {
 		AND rp.profile_id=?
 		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 		AND (rp.part>0 OR rp.fraction>0 OR rp.revision>0 OR rp.complete=1)`
-	readingCompleted:=`
+
+	readingInProgress:=`
 		SELECT DISTINCT w.id
 		FROM works w
 		JOIN editions e ON e.work_id=w.id
 		JOIN edition_assets ea ON ea.edition_id=e.id
 		JOIN reading_progress rp ON rp.asset_id=ea.asset_id
 		WHERE e.format IN ('Ebook','Comic','PDF')
-		AND rp.profile_id=?
+		AND rp.profile_id=? AND rp.complete=0
 		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
-		AND rp.complete=1`
+		AND (rp.part>0 OR rp.fraction>0 OR rp.revision>0)`
 
-	if e:=a.db.QueryRow("SELECT count(*) FROM ("+audioStarted+")",p.ID,p.Owner,p.ID).Scan(&out.StartedAudio);e!=nil{return out,e}
-	if e:=a.db.QueryRow("SELECT count(*) FROM ("+audioCompleted+")",p.ID,p.Owner,p.ID).Scan(&out.CompletedAudio);e!=nil{return out,e}
-	if e:=a.db.QueryRow("SELECT count(*) FROM ("+readingStarted+")",p.ID,p.Owner,p.ID).Scan(&out.StartedReading);e!=nil{return out,e}
-	if e:=a.db.QueryRow("SELECT count(*) FROM ("+readingCompleted+")",p.ID,p.Owner,p.ID).Scan(&out.CompletedReading);e!=nil{return out,e}
+	if e:=a.db.QueryRow("SELECT count(*) FROM ("+audioStarted+")",
+		p.ID,p.Owner,p.ID,p.ID,p.Owner,p.ID).Scan(&out.StartedAudio);e!=nil{return out,e}
+	if e:=a.db.QueryRow("SELECT count(*) FROM ("+audioInProgress+")",
+		p.ID,p.Owner,p.ID,p.ID,p.Owner,p.ID).Scan(&out.InProgressAudio);e!=nil{return out,e}
+	if e:=a.db.QueryRow("SELECT count(*) FROM ("+readingStarted+")",
+		p.ID,p.Owner,p.ID).Scan(&out.StartedReading);e!=nil{return out,e}
+	if e:=a.db.QueryRow("SELECT count(*) FROM ("+readingInProgress+")",
+		p.ID,p.Owner,p.ID).Scan(&out.InProgressReading);e!=nil{return out,e}
 
-	startedUnion:="SELECT id FROM ("+audioStarted+") UNION SELECT id FROM ("+readingStarted+")"
-	completedUnion:="SELECT id FROM ("+audioCompleted+") UNION SELECT id FROM ("+readingCompleted+")"
-	var startedWorks int
-	if e:=a.db.QueryRow("SELECT count(*) FROM ("+startedUnion+")",
-		p.ID,p.Owner,p.ID,p.ID,p.Owner,p.ID).Scan(&startedWorks);e!=nil{return out,e}
-	if e:=a.db.QueryRow("SELECT count(*) FROM ("+completedUnion+")",
-		p.ID,p.Owner,p.ID,p.ID,p.Owner,p.ID).Scan(&out.Completed);e!=nil{return out,e}
-	out.InProgress=startedWorks-out.Completed
-	if out.InProgress<0 { out.InProgress=0 }
+	if e:=a.db.QueryRow(`
+		SELECT count(DISTINCT pc.work_id)
+		FROM profile_completions pc JOIN works w ON w.id=pc.work_id
+		WHERE pc.profile_id=? AND pc.kind='Audio'
+		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,
+		p.ID,p.Owner,p.ID).Scan(&out.CompletedAudio);e!=nil{return out,e}
+	if e:=a.db.QueryRow(`
+		SELECT count(DISTINCT pc.work_id)
+		FROM profile_completions pc JOIN works w ON w.id=pc.work_id
+		WHERE pc.profile_id=? AND pc.kind='Reading'
+		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,
+		p.ID,p.Owner,p.ID).Scan(&out.CompletedReading);e!=nil{return out,e}
+	if e:=a.db.QueryRow(`
+		SELECT count(DISTINCT pc.work_id)
+		FROM profile_completions pc JOIN works w ON w.id=pc.work_id
+		WHERE pc.profile_id=?
+		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,
+		p.ID,p.Owner,p.ID).Scan(&out.Completed);e!=nil{return out,e}
+
+	currentUnion:="SELECT id FROM ("+audioInProgress+") UNION SELECT id FROM ("+readingInProgress+")"
+	if e:=a.db.QueryRow("SELECT count(*) FROM ("+currentUnion+")",
+		p.ID,p.Owner,p.ID,p.ID,p.Owner,p.ID,p.ID,p.Owner,p.ID).Scan(&out.InProgress);e!=nil{return out,e}
 	return out,nil
 }
 
