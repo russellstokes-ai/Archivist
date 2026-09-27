@@ -41,8 +41,12 @@ export class Playback {
       this.state.tracks = context.tracks;
       this.progressURL = context.progressURL; this.revision = point.revision; this.blocked = false;
       this.complete = point.complete;
-      const index = point.complete ? 0 : Math.max(0, context.tracks.findIndex((t: Track) => t.id === point.asset));
-      await this.load(index, point.complete ? 0 : point.seconds, generation);
+      const restartingCompletedWork = point.complete;
+      const index = restartingCompletedWork ? 0 : Math.max(0, context.tracks.findIndex((t: Track) => t.id === point.asset));
+      await this.load(index, restartingCompletedWork ? 0 : point.seconds, generation);
+      if (restartingCompletedWork && generation === this.generation && !this.blocked) {
+        await this.save();
+      }
     } catch (e) { if (generation === this.generation) { this.state.loading = false; this.fail(e); } }
   }
   private async load(index: number, seconds = 0, generation = this.generation) {
