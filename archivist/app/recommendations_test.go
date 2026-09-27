@@ -49,7 +49,11 @@ func TestRecommendationsLocalAccessibleAndUnstarted(t *testing.T) {
 	if strings.Contains(s, "Private") || !strings.Contains(s, "Allowed") {
 		t.Fatal(s)
 	}
-	a.db.Exec("INSERT INTO reading_progress VALUES(1,2,0,0,1)")
+	if _,err:=a.db.Exec("INSERT INTO reading_progress(profile_id,asset_id,part,fraction,revision,complete) VALUES(1,2,0,0,0,0)");err!=nil{t.Fatal(err)}
+	if s = call(); !strings.Contains(s, "Allowed") {
+		t.Fatal("zero-position bookkeeping row incorrectly treated as started")
+	}
+	if _,err:=a.db.Exec("UPDATE reading_progress SET part=1,revision=1 WHERE profile_id=1 AND asset_id=2");err!=nil{t.Fatal(err)}
 	if s = call(); strings.Contains(s, "Allowed") {
 		t.Fatal("started title recommended")
 	}
