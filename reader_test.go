@@ -74,8 +74,8 @@ func TestReaderPermissionsAndProgress(t *testing.T) {
 	if w := call("GET", "/api/assets/1/reader/0", "", token); w.Code != 200 || !strings.Contains(w.Body.String(), "Hello reader") {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	w := call("PUT", "/api/assets/1/reading-progress", `{"part":1,"fraction":0.5,"revision":0}`, token)
-	if w.Code != 200 {
+	w := call("PUT", "/api/assets/1/reading-progress", `{"part":1,"fraction":1,"revision":0,"complete":true}`, token)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"complete":true`) {
 		t.Fatal(w.Body.String())
 	}
 	if w := call("PUT", "/api/assets/1/reading-progress", `{"part":0,"fraction":0,"revision":0}`, token); w.Code != 409 {
@@ -116,6 +116,7 @@ func TestReaderWebInteractionAssets(t *testing.T) {
 		"focusText",
 		"turn-next",
 		"turn-prev",
+		"complete",
 	} {
 		if !strings.Contains(script, marker) {
 			t.Fatalf("reader interaction missing %q", marker)
