@@ -192,13 +192,12 @@ func opfMetadataFromReader(decode func(any) bool) embeddedMetadata {
 		}
 		m.Author = cleanMetadata(strings.Join(clean, ", "))
 	}
-	genres := make([]string,0,len(p.Subject))
 	for _, subject := range p.Subject {
 		if value := cleanMetadata(subject); value != "" {
-			genres = append(genres,value)
+			m.Genre = value
+			break
 		}
 	}
-	m.Genre = cleanMetadata(strings.Join(uniqueStrings(genres), ", "))
 	for _, meta := range p.Meta {
 		key := strings.ToLower(strings.TrimSpace(meta.Name + " " + meta.Property))
 		value := cleanMetadata(meta.Content)
