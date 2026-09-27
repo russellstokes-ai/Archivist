@@ -47,6 +47,16 @@ func TestPersonalPreferencesAreIsolatedAndUserWritable(t *testing.T) {
 	}
 	alice:=check(aliceSession)
 	if alice.Rating!=9 || !alice.Favourite || alice.State!="in-progress"{t.Fatalf("Alice=%+v",alice)}
+	for _,path:=range []string{
+		"/api/works?favourite=1",
+		"/api/works?rating=9",
+		"/api/works?reading=in-progress",
+	} {
+		filtered:=call(aliceSession,"GET",path,"")
+		if filtered.Code!=200 || !strings.Contains(filtered.Body.String(),"Dune"){
+			t.Fatalf("personal work filter %s=%d %s",path,filtered.Code,filtered.Body.String())
+		}
+	}
 	bob:=check(bobSession)
 	if bob.Rating!=6 || bob.Favourite || bob.State!="not-started"{t.Fatalf("Bob=%+v",bob)}
 	admin:=check("test-key")
