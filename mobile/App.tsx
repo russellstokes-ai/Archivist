@@ -234,6 +234,7 @@ function Client() {
   const [theme, setTheme] = useState<ThemeMode>('system');
   const p = useMemo(() => palette(theme, systemScheme), [theme, systemScheme]);
   const [session, setSession] = useState<Session | null>(null);
+  const [recoverableSession, setRecoverableSession] = useState<Session | null>(null);
   const [server, setServer] = useState('');
   const [key, setKey] = useState('');
   const [serverPanelOpen, setServerPanelOpen] = useState(false);
@@ -628,8 +629,22 @@ function Client() {
         if (!value) return;
         const saved = JSON.parse(value) as Session;
         validateServer(saved.server);
-        await request(saved, '/api/me');
-        setSession(saved);
+        setServer(saved.server);
+        try {
+          await request(saved, '/api/me');
+          setSession(saved);
+          setRecoverableSession(null);
+        } catch (e) {
+          if (e instanceof RequestError && e.status === 401) {
+            await SecureStore.deleteItemAsync(storageKey);
+            setRecoverableSession(null);
+            setServerPanelOpen(true);
+            setError('Your saved server session expired. Enter your access key to reconnect.');
+          } else {
+            setRecoverableSession(saved);
+            setError('Your saved server is currently unreachable. Your local library is still available; retry the server from Settings.');
+          }
+        }
       })
       .catch(e => setError(String(e.message || e)))
       .finally(() => setRestoring(false));
@@ -967,6 +982,7 @@ function Client() {
       await SecureStore.setItemAsync(storageKey, JSON.stringify(next));
       setKey('');
       setSession(next);
+      setRecoverableSession(null);
       setServerPanelOpen(false);
       setActiveTab('shelf');
     } catch (e) {
@@ -992,6 +1008,35 @@ function Client() {
     }
   }
 
+  async function retrySavedServer() {
+    if(!recoverableSession)return;
+    setBusy(true);setError('');setServerNotice('');
+    try{
+      await request(recoverableSession,'/api/me');
+      setSession(recoverableSession);
+      setRecoverableSession(null);
+      setActiveTab('shelf');
+    }catch(e){
+      if(e instanceof RequestError && e.status===401){
+        await SecureStore.deleteItemAsync(storageKey);
+        setServer(recoverableSession.server);
+        setRecoverableSession(null);
+        setServerPanelOpen(true);
+        setError('Your saved server session expired. Enter your access key to reconnect.');
+      }else{
+        setError((e as Error).message);
+      }
+    }finally{setBusy(false);}
+  }
+
+  async function forgetSavedServer() {
+    await SecureStore.deleteItemAsync(storageKey);
+    setRecoverableSession(null);
+    setServer('');
+    setServerNotice('');
+    setError('');
+  }
+
   async function signOut() {
     if (!session) return;
     loadCancel.current?.();
@@ -1006,6 +1051,7 @@ function Client() {
     }
     await SecureStore.deleteItemAsync(storageKey);
     setSession(null);
+    setRecoverableSession(null);
     setBooks([]);
     setServerWorks([]);
     setContinueWorks([]);
@@ -2300,8 +2346,18 @@ function Client() {
         {(!session || owner)?<Button label="Review duplicates" tone="quiet" onPress={()=>void openDuplicateReview()} />:null}
         <DuplicateReviewPanel />
         <Text style={[styles.sectionTitle, {color: p.ink}]}>Server</Text>
-        {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : <Text style={[styles.meta, {color: p.muted}]}>No server connected. Your phone library works locally.</Text>}
-        {!session ? (serverPanelOpen ? <ServerConnect /> : <Button label="Add server" tone="quiet" onPress={() => setServerPanelOpen(true)} />) : null}
+        {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : recoverableSession ? (
+          <View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={{color:p.ink,fontWeight:'800'}}>Saved server offline</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{recoverableSession.server}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Your local library remains available. Retry without re-entering your access key.</Text>
+            <View style={styles.toolRow}>
+              <Button label={busy?'Retrying…':'Retry server'} disabled={busy} onPress={()=>void retrySavedServer()} />
+              <Button label="Forget saved server" disabled={busy} tone="quiet" onPress={()=>void forgetSavedServer()} />
+            </View>
+          </View>
+        ) : <Text style={[styles.meta, {color: p.muted}]}>No server connected. Your phone library works locally.</Text>}
+        {!session && !recoverableSession ? (serverPanelOpen ? <ServerConnect /> : <Button label="Add server" tone="quiet" onPress={() => setServerPanelOpen(true)} />) : null}
         {owner ? <View style={{gap:10}}>
           <Text style={[styles.sectionTitle,{color:p.ink}]}>Source folders</Text>
           {sources.map(s=><View key={s.id} style={{gap:6}}><Text style={{color:p.ink}}>{s.space}</Text><Text style={{color:p.muted}}>{s.path}</Text><Text style={{color:p.muted}}>{s.status}</Text><Button label="Scan folder" disabled={busy} tone="quiet" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')}/><Button label="Remove folder" disabled={busy} tone="quiet" onPress={()=>void removeSource(s.id)}/></View>)}
@@ -2453,6 +2509,7 @@ const styles = StyleSheet.create({
   bookTitle: {fontSize: 15, fontWeight: '700'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   editorCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  serverRecovery: {borderWidth:1,borderRadius:14,padding:14,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 680, width:'100%', alignSelf:'center'},
   playerHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between'},
