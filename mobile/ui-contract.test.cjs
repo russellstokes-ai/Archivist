@@ -42,3 +42,11 @@ assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'")
 assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold start must restore the cached local catalogue');
 assert.ok(source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
+
+assert.ok(source.includes('function LocalSortingPanel()'), 'Local organisation controls should live in a dedicated Settings panel');
+assert.ok(source.includes('<LocalSortingPanel />'), 'Settings must render the local organisation panel');
+const shelfStart=source.indexOf('function Shelf()');
+const playerStart=source.indexOf('function Player()');
+assert.ok(shelfStart>=0 && playerStart>shelfStart, 'Shelf function bounds are missing');
+const shelfSource=source.slice(shelfStart,playerStart);
+assert.equal(shelfSource.includes('>Local sorting</Text>'),false,'Technical local sorting controls must not live on the Shelf');
