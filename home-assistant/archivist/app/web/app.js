@@ -82,10 +82,10 @@ async function openWork(work){
       const selected=tracks.filter(t=>t.edition===edition),format=selected[0]?.format||'Edition';
       const block=element('div');block.className='edition-card';block.append(element('strong',format+' edition'),element('p',selected.length+' file'+(selected.length===1?'':'s')));
       if(format==='Audio'){
-        const play=element('button','Play audiobook');play.className='primary';play.onclick=()=>{$('work-detail').hidden=true;openAudiobook(work.title,tracks,edition)};block.append(play);
+        const play=element('button','Play audiobook');play.className='primary';play.onclick=()=>{hideOverlay('work-detail');openAudiobook(work.title,tracks,edition)};block.append(play);
       }else{
         for(const item of selected){
-          const open=element('button','Open '+item.title);open.disabled=!item.available;open.onclick=()=>window.open('./reader.html?asset='+item.id,'_blank','noopener');block.append(open);
+          const open=element('button','Open '+item.title);open.disabled=!item.available;open.onclick=()=>{hideOverlay('work-detail');window.open('./reader.html?asset='+item.id,'_blank','noopener')};block.append(open);
         }
       }
       content.append(block);
