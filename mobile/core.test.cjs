@@ -5,7 +5,8 @@ const {Playback}=require('./playback.ts');
 const tick=()=>new Promise(r=>setImmediate(r));
 (async()=>{
   assert.equal(validateServer(' https://books.example/ '),'https://books.example');
-  for(const url of ['http://192.168.1.2:5056','https://books.example/api/hassio_ingress/key','https://user:pass@books.example','file:///tmp/book','https://books.example/?token=secret'])assert.throws(()=>validateServer(url));
+  for(const url of ['http://192.168.1.2:5056','http://10.0.0.5:5056','http://172.31.2.3:5056','http://100.64.0.1:5056','http://100.127.255.254:5056','http://[fd7a:115c:a1e0::1]:5056']) assert.equal(validateServer(url),new URL(url).origin);
+  for(const url of ['http://8.8.8.8:5056','http://100.128.0.1:5056','http://172.32.0.1:5056','http://books.example','https://books.example/api/hassio_ingress/key','https://user:pass@books.example','file:///tmp/book','https://books.example/?token=secret'])assert.throws(()=>validateServer(url));
   assert.equal(validateServer('http://10.0.2.2:5056',true),'http://10.0.2.2:5056');
   assert(readerNavigationAllowed('https://books.example/reader.html?asset=1','https://books.example'));
   assert(!readerNavigationAllowed('https://evil.example/','https://books.example'));
@@ -35,5 +36,5 @@ const tick=()=>new Promise(r=>setImmediate(r));
   c.update(10,100,true,false);conflict=true;await c.save();assert.equal(c.state.playing,false);const count=writes.length;await c.save();assert.equal(writes.length,count);
   conflict=false;await c.open(1);c.update(11,100,true,false);await Promise.all([c.save(),c.save()]);assert.equal(p.seconds,11);
   await c.stop();assert.equal(c.state.tracks.length,0);
-  console.log('PASS: connection validation, reader navigation, server errors, resume, rewind, ordered saves, speed, sleep, advance, completion and conflict protection');
+  console.log('PASS: public HTTPS/private LAN/Tailscale connection validation, reader navigation, server errors, resume, rewind, ordered saves, speed, sleep, advance, completion and conflict protection');
 })().catch(e=>{console.error(e);process.exitCode=1;});
