@@ -14,7 +14,9 @@ import (
 type identity struct {
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
-	Owner   bool   `json:"owner"`
+	Role    string `json:"role"`
+	Admin   bool   `json:"admin"`
+	Owner   bool   `json:"owner"` // compatibility alias for older clients
 	Ingress bool   `json:"ingress,omitempty"`
 }
 type identityKey struct{}
@@ -22,8 +24,14 @@ type identityKey struct{}
 func who(r *http.Request) identity { p, _ := r.Context().Value(identityKey{}).(identity); return p }
 func keyHash(key string) string    { v := sha256.Sum256([]byte(key)); return hex.EncodeToString(v[:]) }
 func (a *app) initHousehold() error {
-	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS profiles(id INTEGER PRIMARY KEY,name TEXT NOT NULL,key_hash TEXT NOT NULL UNIQUE,revoked INTEGER NOT NULL DEFAULT 0);
- CREATE TABLE IF NOT EXISTS grants(profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,space TEXT NOT NULL,PRIMARY KEY(profile_id,space));`)
+	if _, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS profiles(id INTEGER PRIMARY KEY,name TEXT NOT NULL,key_hash TEXT NOT NULL UNIQUE,revoked INTEGER NOT NULL DEFAULT 0);
+ CREATE TABLE IF NOT EXISTS grants(profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,space TEXT NOT NULL,PRIMARY KEY(profile_id,space));`); e != nil {
+		return e
+	}
+	// Archivist now has only two roles: Admin and User. Existing profile/grant
+	// databases are upgraded in place by granting every active User every library.
+	_, e := a.db.Exec(`INSERT OR IGNORE INTO grants(profile_id,space)
+		SELECT p.id,s.space FROM profiles p CROSS JOIN sources s WHERE p.revoked=0`)
 	return e
 }
 func (a *app) identify(key string) (identity, bool) {
@@ -32,12 +40,15 @@ func (a *app) identify(key string) (identity, bool) {
 		return p, false
 	}
 	if hash, ok := a.ownerCredentialHash(); ok && keyHash(key) == hash {
-		return identity{ID: 0, Name: "Owner", Owner: true}, true
+		return identity{ID: 0, Name: "Admin", Role: "admin", Admin: true, Owner: true}, true
 	}
 	if !a.ownerConfigured() && key == a.token {
-		return identity{ID: 0, Name: "Owner", Owner: true}, true
+		return identity{ID: 0, Name: "Admin", Role: "admin", Admin: true, Owner: true}, true
 	}
 	e := a.db.QueryRow("SELECT id,name FROM profiles WHERE key_hash=? AND revoked=0", keyHash(key)).Scan(&p.ID, &p.Name)
+	if e == nil {
+		p.Role = "user"
+	}
 	return p, e == nil
 }
 func (a *app) householdRoutes(mux *http.ServeMux) {
@@ -80,16 +91,16 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		var p struct {
-			Name   string   `json:"name"`
-			Spaces []string `json:"spaces"`
+			Name string `json:"name"`
+			Spaces []string `json:"spaces,omitempty"` // accepted for legacy clients; ignored
 		}
 		if e := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&p); e != nil {
 			fail(w, 400, e)
 			return
 		}
 		p.Name = strings.TrimSpace(p.Name)
-		if p.Name == "" || len(p.Name) > 100 || len(p.Spaces) > 100 {
-			fail(w, 400, errors.New("enter a name and up to 100 spaces"))
+		if p.Name == "" || len(p.Name) > 100 {
+			fail(w, 400, errors.New("enter a user name up to 100 characters"))
 			return
 		}
 		raw := make([]byte, 32)
@@ -114,22 +125,16 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 			fail(w, 500, e)
 			return
 		}
-		for _, space := range p.Spaces {
-			var n int
-			if e = tx.QueryRow("SELECT count(*) FROM sources WHERE space=?", space).Scan(&n); e != nil || n == 0 {
-				fail(w, 400, errors.New("choose existing spaces"))
-				return
-			}
-			if _, e = tx.Exec("INSERT OR IGNORE INTO grants(profile_id,space) VALUES(?,?)", id, space); e != nil {
-				fail(w, 500, e)
-				return
-			}
+		if _, e = tx.Exec(`INSERT OR IGNORE INTO grants(profile_id,space)
+			SELECT ?,space FROM sources GROUP BY space`, id); e != nil {
+			fail(w, 500, e)
+			return
 		}
 		if e = tx.Commit(); e != nil {
 			fail(w, 500, e)
 			return
 		}
-		reply(w, map[string]any{"id": id, "key": key})
+		reply(w, map[string]any{"id": id, "name": p.Name, "role": "user", "key": key})
 	})
 	mux.HandleFunc("DELETE /api/profiles/{id}", func(w http.ResponseWriter, r *http.Request) {
 		_, e := a.db.Exec("UPDATE profiles SET revoked=1 WHERE id=?", r.PathValue("id"))
