@@ -29,6 +29,7 @@ import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {possibleLocalDuplicateGroups} from './duplicates';
 import {buildLegacyAtlasRelationship, normalizeAtlasRelationship, normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
+import {downloadOfflineWork, OfflineServerTrack, OfflineServerWork, offlineToLocalWork, removeOfflineWork} from './offlineLibrary';
 
 type Book = {
   id: number;
@@ -61,7 +62,7 @@ type ServerWork = {
   files: number;
   available: boolean;
 };
-type WorkTrack = {id: number; title: string; format: string; edition: number; available: boolean};
+type WorkTrack = {id: number; title: string; format: string; edition: number; available: boolean; name?: string; size?: number};
 type SummaryItem = {name: string; count: number};
 type LibrarySummary = {
   total: number;
@@ -135,6 +136,7 @@ const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
+const offlineWorksKey = 'archivist.offlineWorks.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 
@@ -337,6 +339,9 @@ function Client() {
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
+  const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
+  const [offlineBusyId,setOfflineBusyId]=useState<number|null>(null);
+  const [offlineProgress,setOfflineProgress]=useState('');
   const loadCancel = useRef<(() => void) | null>(null);
   const shelfColumns = width >= 900 ? 5 : width >= 700 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
@@ -387,8 +392,9 @@ function Client() {
   const localWorks = useMemo(() => {
     if (session) return [] as LocalWork[];
     const local = books.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
-    return groupLocalWorks(local);
-  }, [books, session]);
+    const downloaded=Object.values(offlineWorks).map(offlineToLocalWork);
+    return [...groupLocalWorks(local),...downloaded];
+  }, [books, offlineWorks, session]);
 
   const localAtlasRelationship = useMemo(() =>
     !session && atlasFocus ? buildAtlasRelationship(localWorks,atlasFocus.kind,atlasFocus.value) : null,
@@ -620,6 +626,9 @@ function Client() {
       setBooks(normalized);
       setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
     }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
+    getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
+      if (value && typeof value === 'object') setOfflineWorks(value);
+    }).catch(() => undefined);
     getPersistedJSON<Record<string, number>>(localProgressKey).then(value => {
       if (value && typeof value === 'object') setLocalProgress(value);
     }).catch(() => undefined);
@@ -1384,6 +1393,54 @@ function Client() {
     await setPersistedJSON(localQueueKey, next);
   }
 
+  function downloadedServerWork(work: ServerWork) {
+    if(!session)return undefined;
+    return offlineWorks[session.server+'|'+work.id];
+  }
+
+  async function downloadServerWork(work: ServerWork) {
+    if(!session || offlineBusyId!==null)return;
+    setError('');
+    setOfflineBusyId(work.id);
+    setOfflineProgress('Preparing download…');
+    try{
+      const tracks=await request(session,'/api/works/'+work.id+'/tracks') as WorkTrack[];
+      const downloaded=await downloadOfflineWork(
+        session,
+        work,
+        tracks as OfflineServerTrack[],
+        (written,total)=>setOfflineProgress(total>0 ? Math.min(100,Math.round(written/total*100))+'%' : formatBytes(written)),
+      );
+      const next={...offlineWorks,[downloaded.key]:downloaded};
+      setOfflineWorks(next);
+      await setPersistedJSON(offlineWorksKey,next);
+      setOfflineProgress('Downloaded · '+formatBytes(downloaded.bytes));
+    }catch(e){
+      setError((e as Error).message);
+      setOfflineProgress('');
+    }finally{
+      setOfflineBusyId(null);
+    }
+  }
+
+  async function removeServerDownload(downloaded: OfflineServerWork) {
+    if(offlineBusyId!==null)return;
+    setOfflineBusyId(downloaded.workId);
+    setError('');
+    try{
+      await removeOfflineWork(downloaded);
+      const next={...offlineWorks};
+      delete next[downloaded.key];
+      setOfflineWorks(next);
+      await setPersistedJSON(offlineWorksKey,next);
+      setOfflineProgress('');
+    }catch(e){
+      setError((e as Error).message);
+    }finally{
+      setOfflineBusyId(null);
+    }
+  }
+
   async function queueServerWork(work: ServerWork) {
     if (!session || work.format !== 'Audio') return;
     try {
@@ -1611,6 +1668,7 @@ function Client() {
   }
 
   function LocalWorkCard({work}: {work: LocalWork}) {
+    const downloaded=Object.values(offlineWorks).find(item=>'offline:'+item.key===work.key);
     return (
       <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
@@ -1622,11 +1680,14 @@ function Client() {
           </Text>
         </Pressable>
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
+        {downloaded ? <Button label="Remove download" tone="quiet" disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
       </View>
     );
   }
 
   function ServerWorkCard({work}: {work: ServerWork}) {
+    const downloaded=downloadedServerWork(work);
+    const downloading=offlineBusyId===work.id;
     return (
       <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>void openServerWork(work)}>
@@ -1637,6 +1698,9 @@ function Client() {
           </Text>
         </Pressable>
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
+        {downloaded
+          ? <Button label={'Downloaded · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
+          : <Button label={downloading ? 'Downloading '+offlineProgress : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
       </View>
     );
   }
