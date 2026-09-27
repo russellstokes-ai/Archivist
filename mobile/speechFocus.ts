@@ -119,7 +119,7 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
     const region=detector(data,width,height,x,y);
     if(!region)return null;
     cache.set(bucket,region);
-    if(cache.size>24)cache.delete(cache.keys().next().value);
+    if(cache.size>24){const oldest=cache.keys().next().value;if(oldest)cache.delete(oldest);}
     return {region,rect,width,height,bucket};
   }
 
@@ -149,7 +149,7 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
     path.moveTo((rows[0].left-region.left)*xScale,(rows[0].y-region.top)*yScale);
     for(const row of rows)path.lineTo((row.left-region.left)*xScale,(row.y-region.top)*yScale);
     for(let i=rows.length-1;i>=0;i--){const row=rows[i];path.lineTo((row.right-region.left)*xScale,(row.y-region.top)*yScale);}
-    path.close();
+    path.closePath();
     ctx.save();ctx.clip(path);
     ctx.drawImage(img,sourceX,sourceY,sourceW,sourceH,0,0,outW,outH);
     ctx.restore();
