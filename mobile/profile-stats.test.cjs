@@ -9,7 +9,8 @@ const {achievementsFor,clampProgress} = require('./profileStats.ts');
 
 const base = {
   name:'Local library',owner:true,works:1,formats:1,series:0,
-  startedAudio:0,completedAudio:0,startedReading:0,completedReading:0,
+  startedAudio:0,completedAudio:0,inProgressAudio:0,
+  startedReading:0,completedReading:0,inProgressReading:0,
   inProgress:0,completed:0,
 };
 let achievements=achievementsFor(base);
