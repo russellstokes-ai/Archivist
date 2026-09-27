@@ -24,11 +24,15 @@ type readingPosition struct {
 	Part     int     `json:"part"`
 	Fraction float64 `json:"fraction"`
 	Revision int64   `json:"revision"`
+	Complete bool    `json:"complete"`
 }
 
 func (a *app) initReader() error {
-	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS reading_progress(profile_id INTEGER NOT NULL,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,part INTEGER NOT NULL,fraction REAL NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(profile_id,asset_id));`)
-	return e
+	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS reading_progress(profile_id INTEGER NOT NULL,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,part INTEGER NOT NULL,fraction REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(profile_id,asset_id));`)
+	if e != nil { return e }
+	_, e = a.db.Exec("ALTER TABLE reading_progress ADD COLUMN complete INTEGER NOT NULL DEFAULT 0")
+	if e != nil && !strings.Contains(strings.ToLower(e.Error()), "duplicate column") { return e }
+	return nil
 }
 func (a *app) openAsset(id string) (*os.File, string, error) {
 	var root, rel, format string
@@ -297,7 +301,7 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/assets/{id}/reader/{part}", serve)
 	mux.HandleFunc("GET /api/assets/{id}/reading-progress", func(w http.ResponseWriter, r *http.Request) {
 		var p readingPosition
-		e := a.db.QueryRow("SELECT part,fraction,revision FROM reading_progress WHERE profile_id=? AND asset_id=?", who(r).ID, r.PathValue("id")).Scan(&p.Part, &p.Fraction, &p.Revision)
+		e := a.db.QueryRow("SELECT part,fraction,revision,complete FROM reading_progress WHERE profile_id=? AND asset_id=?", who(r).ID, r.PathValue("id")).Scan(&p.Part, &p.Fraction, &p.Revision, &p.Complete)
 		if e != nil && e != sql.ErrNoRows {
 			fail(w, 500, e)
 			return
@@ -327,7 +331,7 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			return
 		}
 		p.Revision++
-		_, e = tx.Exec(`INSERT INTO reading_progress VALUES(?,?,?,?,?) ON CONFLICT(profile_id,asset_id) DO UPDATE SET part=excluded.part,fraction=excluded.fraction,revision=excluded.revision`, who(r).ID, r.PathValue("id"), p.Part, p.Fraction, p.Revision)
+		_, e = tx.Exec(`INSERT INTO reading_progress(profile_id,asset_id,part,fraction,revision,complete) VALUES(?,?,?,?,?,?) ON CONFLICT(profile_id,asset_id) DO UPDATE SET part=excluded.part,fraction=excluded.fraction,revision=excluded.revision,complete=excluded.complete`, who(r).ID, r.PathValue("id"), p.Part, p.Fraction, p.Revision, p.Complete)
 		if e != nil {
 			fail(w, 400, errors.New("cannot save this asset position"))
 			return
