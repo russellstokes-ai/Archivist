@@ -31,6 +31,7 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   assert(epub.html.includes('column-width'));
   assert(epub.html.includes('text-focused'));
   assert(epub.html.includes('archivist-reader-text-scale'));
+  assert(epub.html.includes('complete:page>=count-1'));
   assert(epub.html.includes('readerPrev'));
   assert(epub.html.includes('readerNext'));
 
