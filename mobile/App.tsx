@@ -1795,6 +1795,14 @@ function Client() {
                     SecureStore.setItemAsync(localReadingProgressKey, JSON.stringify(next)).catch(() => undefined);
                     return next;
                   });
+                  if (message.complete === true) {
+                    setLocalReadingComplete(current => {
+                      if (current[reading.uri!]) return current;
+                      const next = {...current, [reading.uri!]: true};
+                      SecureStore.setItemAsync(localReadingCompleteKey, JSON.stringify(next)).catch(() => undefined);
+                      return next;
+                    });
+                  }
                 } catch {}
               }}
             />
