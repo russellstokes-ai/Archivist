@@ -6,8 +6,10 @@ export type VerifiedProfileStats = {
   series: number;
   startedAudio: number;
   completedAudio: number;
+  inProgressAudio: number;
   startedReading: number;
   completedReading: number;
+  inProgressReading: number;
   inProgress: number;
   completed: number;
 };
