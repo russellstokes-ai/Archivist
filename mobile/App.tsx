@@ -2147,6 +2147,10 @@ function Client() {
           <FlatList
             key={'review-'+shelfColumns}
             data={visibleBooks}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews
             keyExtractor={b => 'asset-'+b.id}
             numColumns={shelfColumns}
             contentContainerStyle={styles.grid}
@@ -2160,6 +2164,10 @@ function Client() {
           <FlatList
             key={'server-works-'+shelfColumns}
             data={visibleServerWorks}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews
             keyExtractor={work => 'work-'+work.id}
             numColumns={shelfColumns}
             contentContainerStyle={styles.grid}
@@ -2173,6 +2181,10 @@ function Client() {
           <FlatList
             key={'local-works-'+shelfColumns}
             data={visibleLocalWorks}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews
             keyExtractor={work => work.key}
             numColumns={shelfColumns}
             contentContainerStyle={styles.grid}
