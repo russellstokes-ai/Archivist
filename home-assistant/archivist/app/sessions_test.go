@@ -60,7 +60,7 @@ func TestSessionRotationLogoutAndExpiry(t *testing.T) {
 		t.Fatal("logout did not revoke server session")
 	}
 }
-func TestGrantEditsAtomicAndImmediate(t *testing.T) {
+func TestLegacyGrantRoutesPreserveWholeLibraryUserAccess(t *testing.T) {
 	a := fixture(t)
 	a.db.Exec("INSERT INTO profiles(id,name,key_hash) VALUES(1,'Member',?)", keyHash("key"))
 	root := t.TempDir()
@@ -77,8 +77,8 @@ func TestGrantEditsAtomicAndImmediate(t *testing.T) {
 		a.routes().ServeHTTP(w, r)
 		return w
 	}
-	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":["Missing"]}`, "test-key"); w.Code != 400 {
-		t.Fatal("invalid grant accepted")
+	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":["Missing"]}`, "test-key"); w.Code != 200 {
+		t.Fatalf("legacy grant compatibility route=%d %s",w.Code,w.Body.String())
 	}
 	if w := call("GET", "/api/assets/1", "", token); w.Code != 200 {
 		t.Fatal("rollback lost original grant")
@@ -86,10 +86,10 @@ func TestGrantEditsAtomicAndImmediate(t *testing.T) {
 	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":[]}`, "test-key"); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
-	if w := call("GET", "/api/assets/1", "", token); w.Code != 403 {
-		t.Fatal("removed grant still permits media")
+	if w := call("GET", "/api/assets/1", "", token); w.Code != 200 {
+		t.Fatal("legacy grant edit removed whole-library User access")
 	}
 	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":["Family"]}`, token); w.Code != 403 {
-		t.Fatal("member self-escalated")
+		t.Fatal("User changed Admin-only compatibility route")
 	}
 }
