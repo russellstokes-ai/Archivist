@@ -51,5 +51,6 @@ jobs:
           node local-reader.test.cjs
           node profile-stats.test.cjs
           node server-compatibility.test.cjs
+          node state-store.test.cjs
           node native-patch.test.cjs
           node ui-contract.test.cjs
