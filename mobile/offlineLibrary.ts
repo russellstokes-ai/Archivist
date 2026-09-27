@@ -60,6 +60,15 @@ function offlineKey(server:string,workId:number){
   return server+'|'+workId;
 }
 
+function serverSlug(server:string){
+  let hash=2166136261;
+  for(let i=0;i<server.length;i++){
+    hash^=server.charCodeAt(i);
+    hash=Math.imul(hash,16777619);
+  }
+  return (hash>>>0).toString(16).padStart(8,'0');
+}
+
 export async function downloadOfflineWork(
   session:Session,
   work:{id:number;title:string;author:string;series:string;genre?:string;format:string;space:string},
@@ -75,7 +84,7 @@ export async function downloadOfflineWork(
   if(knownTotal>maxOfflineWorkBytes)throw Error('This work is larger than the 8 GB offline safety limit.');
 
   const root=documentDirectory+'archivist-offline/';
-  const dir=root+safePart(btoa(unescape(encodeURIComponent(session.server))).slice(0,32))+'-'+work.id+'/';
+  const dir=root+serverSlug(session.server)+'-'+work.id+'/';
   await makeDirectoryAsync(root,{intermediates:true});
   await deleteAsync(dir,{idempotent:true}).catch(()=>undefined);
   await makeDirectoryAsync(dir,{intermediates:true});
