@@ -25,6 +25,7 @@ import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalS
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
+import {buildAtlasRelationship} from './atlas';
 
 type Book = {
   id: number;
@@ -66,6 +67,16 @@ type LibrarySummary = {
   needsReview: number;
   series: SummaryItem[];
   availability: SummaryItem[];
+};
+type ServerAtlasRelationship = {
+  kind: 'author' | 'series';
+  value: string;
+  workCount: number;
+  works: ServerWork[];
+  authors: SummaryItem[];
+  series: SummaryItem[];
+  formats: SummaryItem[];
+  spaces: SummaryItem[];
 };
 type LocalWorkProgress = {uri: string; seconds: number; complete?: boolean};
 type WorkPicker = {work: ServerWork; tracks: WorkTrack[]};
@@ -202,6 +213,9 @@ function Client() {
   const [serverSummary, setServerSummary] = useState<LibrarySummary | null>(null);
   const [serverProfileStats, setServerProfileStats] = useState<VerifiedProfileStats | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [atlasFocus,setAtlasFocus]=useState<{kind:'author'|'series';value:string}|null>(null);
+  const [serverAtlasRelationship,setServerAtlasRelationship]=useState<ServerAtlasRelationship|null>(null);
+  const [atlasLoading,setAtlasLoading]=useState(false);
   const [serverHasMore, setServerHasMore] = useState(false);
   const [serverLoadingMore, setServerLoadingMore] = useState(false);
   const [serverBooksHasMore, setServerBooksHasMore] = useState(false);
@@ -323,6 +337,12 @@ function Client() {
     const local = books.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
   }, [books, session]);
+
+  const localAtlasRelationship = useMemo(() =>
+    !session && atlasFocus ? buildAtlasRelationship(localWorks,atlasFocus.kind,atlasFocus.value) : null,
+    [atlasFocus,localWorks,session],
+  );
+
 
   const localProfileStats = useMemo<VerifiedProfileStats>(() => {
     const audioWorks = localWorks.filter(work => work.format === 'Audio');
@@ -629,6 +649,21 @@ function Client() {
       .finally(()=>{if(!cancelled)setProfileLoading(false);});
     return()=>{cancelled=true;};
   }, [activeTab, playback?.completed, session]);
+
+  useEffect(()=>{
+    if(!session || !atlasFocus){
+      setServerAtlasRelationship(null);
+      setAtlasLoading(false);
+      return;
+    }
+    let cancelled=false;
+    setAtlasLoading(true);
+    request(session,'/api/atlas-relationships?kind='+encodeURIComponent(atlasFocus.kind)+'&value='+encodeURIComponent(atlasFocus.value))
+      .then(data=>{if(!cancelled)setServerAtlasRelationship(data);})
+      .catch(e=>{if(!cancelled)setError(e.message);})
+      .finally(()=>{if(!cancelled)setAtlasLoading(false);});
+    return()=>{cancelled=true;};
+  },[atlasFocus,session]);
 
   useEffect(() => {
     if (session || !playing?.uri || !audio.currentTime) return;
@@ -1889,7 +1924,10 @@ function Client() {
       <View style={[styles.atlasGroup, {borderColor: p.line, backgroundColor: p.card}]}>
         <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>{title}</Text>
         {items.length ? items.map(([name, total]) => (
-          <Pressable key={title + name} accessibilityRole="button" onPress={() => atlasSelect(kind, name)} style={styles.atlasRow}>
+          <Pressable key={title + name} accessibilityRole="button" onPress={() => {
+            if(kind==='author' || kind==='series') setAtlasFocus({kind,value:name});
+            else atlasSelect(kind,name);
+          }} style={styles.atlasRow}>
             <Text numberOfLines={1} style={[styles.atlasText, {color: p.ink}]}>{name}</Text>
             <View style={[styles.atlasBarTrack, {backgroundColor: p.line}]}>
               <View style={[styles.atlasBarFill, {backgroundColor: p.sage, width: `${Math.max(8, (total / max) * 100)}%`}]} />
@@ -1901,11 +1939,81 @@ function Client() {
     );
   }
 
+  function AtlasRelationshipView() {
+    if(!atlasFocus)return null;
+    const relation=session?serverAtlasRelationship:localAtlasRelationship;
+    const authors=relation?.authors || [];
+    const series=relation?.series || [];
+    const formats=relation?.formats || [];
+    const folders=relation?.spaces || [];
+    return (
+      <ScrollView contentContainerStyle={styles.content}>
+        <Button label="Back to Atlas" tone="quiet" onPress={()=>setAtlasFocus(null)} />
+        <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
+          <Text style={[styles.playerEyebrow,{color:p.gold}]}>{atlasFocus.kind==='author'?'AUTHOR':'SERIES'}</Text>
+          <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{atlasFocus.value}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>
+            {relation ? relation.workCount+' work'+(relation.workCount===1?'':'s') : 'Loading relationships…'}
+          </Text>
+        </View>
+        {atlasLoading ? <ActivityIndicator accessibilityLabel="Loading Atlas relationships" /> : null}
+        {relation ? <>
+          {atlasFocus.kind==='author' && series.length ? <View style={[styles.atlasRelationGroup,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
+            <View style={styles.atlasChipWrap}>
+              {series.map(item=><Pressable key={item.name} accessibilityRole="button" onPress={()=>setAtlasFocus({kind:'series',value:item.name})} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
+                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
+              </Pressable>)}
+            </View>
+          </View>:null}
+          {atlasFocus.kind==='series' && authors.length ? <View style={[styles.atlasRelationGroup,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Authors</Text>
+            <View style={styles.atlasChipWrap}>
+              {authors.map(item=><Pressable key={item.name} accessibilityRole="button" onPress={()=>setAtlasFocus({kind:'author',value:item.name})} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
+                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
+              </Pressable>)}
+            </View>
+          </View>:null}
+          <View style={[styles.atlasRelationGroup,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Connected</Text>
+            <View style={styles.atlasChipWrap}>
+              {formats.map(item=><Pressable key={'format-'+item.name} accessibilityRole="button" onPress={()=>atlasSelect('format',item.name)} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
+                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
+              </Pressable>)}
+              {folders.map(item=><Pressable key={'folder-'+item.name} accessibilityRole="button" onPress={()=>atlasSelect('space',item.name)} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
+                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
+              </Pressable>)}
+            </View>
+          </View>
+          <Text style={[styles.sectionTitle,{color:p.ink}]}>Works</Text>
+          <View style={{gap:8}}>
+            {session ? serverAtlasRelationship?.works.map(work=><Pressable key={work.id} accessibilityRole="button" onPress={()=>void openServerWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
+              <View style={{flex:1}}>
+                <Text style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.format} · {work.format}</Text>
+              </View>
+              <Text style={{color:p.sage,fontWeight:'900'}}>Open</Text>
+            </Pressable>) : localAtlasRelationship?.works.map(work=><Pressable key={work.key} accessibilityRole="button" onPress={()=>openLocalWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
+              <View style={{flex:1}}>
+                <Text style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.format} · {work.format}</Text>
+              </View>
+              <Text style={{color:p.sage,fontWeight:'900'}}>Open</Text>
+            </Pressable>)}
+          </View>
+          {relation.workCount>relation.works.length ? <Text style={[styles.meta,{color:p.muted}]}>Showing {relation.works.length} of {relation.workCount} works here. Shelf can show the full set.</Text>:null}
+          <Button label="View all on Shelf" onPress={()=>atlasSelect(atlasFocus.kind,atlasFocus.value)} />
+        </>:null}
+      </ScrollView>
+    );
+  }
+
   function Atlas() {
+    if(atlasFocus)return <AtlasRelationshipView />;
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.title, {color: p.ink}]}>Atlas</Text>
-        <Text style={[styles.empty, {color: p.muted}]}>Tap any row to focus the Shelf using real catalogue metadata.</Text>
+        <Text style={[styles.empty, {color: p.muted}]}>Explore the real relationships in your library. Authors and series open here; formats, folders and availability focus Shelf.</Text>
         <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
         <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
         <AtlasGroup title="Series" kind="series" items={atlas.series} />
@@ -2234,4 +2342,9 @@ const styles = StyleSheet.create({
   achievementState: {fontSize:12,fontWeight:'900'},
   achievementTrack: {height:6,borderRadius:999,overflow:'hidden'},
   achievementFill: {height:'100%',borderRadius:999},
+  atlasFocusHero: {borderWidth:1,borderRadius:18,padding:16,gap:5},
+  atlasRelationGroup: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  atlasChipWrap: {flexDirection:'row',flexWrap:'wrap',gap:8},
+  atlasRelationChip: {borderWidth:1,borderRadius:999,paddingHorizontal:11,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
+  atlasWorkRow: {borderWidth:1,borderRadius:12,padding:12,flexDirection:'row',alignItems:'center',gap:10},
 });
