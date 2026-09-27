@@ -1977,7 +1977,7 @@ function Client() {
                   <Text style={[styles.achievementState,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
                 </View>
                 <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
-                  <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(ratio*100)+'%'}]} />
+                  <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:`${Math.round(ratio*100)}%`}]} />
                 </View>
               </View>;
             })}
