@@ -594,6 +594,22 @@ function Client() {
   }, [session]);
 
   useEffect(() => {
+    if (!session) {
+      setServerProfileStats(null);
+      setProfileLoading(false);
+      return;
+    }
+    if (activeTab !== 'profile') return;
+    let cancelled=false;
+    setProfileLoading(true);
+    request(session,'/api/profile-stats')
+      .then(stats=>{if(!cancelled)setServerProfileStats(stats);})
+      .catch(e=>{if(!cancelled)setError(e.message);})
+      .finally(()=>{if(!cancelled)setProfileLoading(false);});
+    return()=>{cancelled=true;};
+  }, [activeTab, session]);
+
+  useEffect(() => {
     if (session || !playing?.uri || !audio.currentTime) return;
     const timer = setTimeout(() => {
       const seconds = audio.currentTime;
@@ -846,6 +862,8 @@ function Client() {
     setServerWorks([]);
     setContinueWorks([]);
     setServerSummary(null);
+    setServerProfileStats(null);
+    setProfileLoading(false);
     setServerHasMore(false);
     setServerLoadingMore(false);
     setServerBooksHasMore(false);
