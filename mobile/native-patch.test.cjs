@@ -15,4 +15,6 @@ const manifest=fs.readFileSync(path.join(__dirname,'android','app','src','main',
 assert.equal(manifest.includes('android.permission.RECORD_AUDIO'),false,'Archivist playback does not request microphone access.');
 assert.equal(manifest.includes('android:usesCleartextTraffic="true"'),true,'Android must permit HTTP transport after Archivist validates that the server is a private LAN or Tailscale address.');
 const appConfig=JSON.parse(fs.readFileSync(path.join(__dirname,'app.json'),'utf8'));
-assert.equal(appConfig.expo?.android?.usesCleartextTraffic,true,'Expo config must preserve private-server HTTP support on future native regeneration.');
+assert.equal(appConfig.expo?.plugins?.includes('./plugins/withCleartextTraffic'),true,'Expo config must register the private-server transport plugin.');
+const cleartextPlugin=fs.readFileSync(path.join(__dirname,'plugins','withCleartextTraffic.js'),'utf8');
+assert.equal(cleartextPlugin.includes("android:usesCleartextTraffic"),true,'The Expo plugin must preserve private-server HTTP support on future native regeneration.');
