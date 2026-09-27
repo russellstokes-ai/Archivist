@@ -57,7 +57,7 @@ function countArray(value:unknown):CompatibleCount[]{
 }
 
 export function normalizeServerWork<T extends CompatibleServerWork>(work:T):T & {genre:string;rating:number;favourite:boolean;state:'not-started'|'in-progress'|'finished'}{
-  const state=work.state==='finished'||work.state==='in-progress'?'state' in work?work.state:'not-started':'not-started';
+  const state=work.state==='finished'||work.state==='in-progress'?work.state:'not-started';
   return {
     ...work,
     genre:typeof work.genre==='string'?work.genre:'',
