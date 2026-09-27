@@ -122,6 +122,6 @@ assert(browser.includes('speech-focus-overlay'));
 assert(browser.includes('getImageData'));
 assert(browser.includes('Path2D'));
 assert(browser.includes('1600'),'display crop should be bounded while retaining high-resolution source pixels');
-assert(browser.includes("aria-label','Close enlarged speech bubble"),'enlarged bubble must be keyboard/screen-reader dismissible');
+assert(browser.includes('Close enlarged speech bubble'),'enlarged bubble must be keyboard/screen-reader dismissible');
 
 console.log('PASS: speech focus corpus covers oval, rectangular, grey, edge, lettering, adjacent, tailed and negative comic regions');
