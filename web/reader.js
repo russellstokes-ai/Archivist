@@ -1,4 +1,7 @@
+import {createSpeechFocusController} from './speech-focus.js';
+
 const $=id=>document.getElementById(id),asset=new URLSearchParams(location.search).get('asset');
+const speechFocus=createSpeechFocusController();
 let manifest,part=0,revision=0,busy=true,font=20,pdf,saveQueue=Promise.resolve(),conflict=false,loaded=false,renderTask,zoom=1,lastTap=0,turning=false,pinchStartDistance=0,pinchStartZoom=1,pinchStartFont=20;
 let soundEnabled=localStorage.getItem('archivist-reader-sound')!=='off';
 
@@ -45,6 +48,7 @@ function applyComicZoom(originX=50,originY=50){
 }
 function focusComicPage(img,x,y){
   if(manifest?.format!=='Comic')return;
+  if(speechFocus.focus(img,x,y,'part-'+part))return;
   const rect=img.getBoundingClientRect(),px=clamp((x-rect.left)/Math.max(1,rect.width)*100,0,100),py=clamp((y-rect.top)/Math.max(1,rect.height)*100,0,100);
   zoom=zoom>1.01?1:2.45;applyComicZoom(px,py);
 }
@@ -57,6 +61,7 @@ function focusText(target){
   if(!active){block.classList.add('text-focused');setTimeout(()=>block.scrollIntoView({block:'center',behavior:'smooth'}),30);}
 }
 async function show(index,offset=0){
+  speechFocus.cancel();
   busy=true;loaded=false;part=index;controls();$('reading').replaceChildren();$('sections').value=String(index);
   try{
     if(manifest.format==='Ebook'){
@@ -110,13 +115,12 @@ $('reading').addEventListener('click',e=>{
   const rect=$('reading').getBoundingClientRect(),x=e.clientX-rect.left;
   if(x<rect.width*.18){void move(-1);return;}
   if(x>rect.width*.82){void move(1);return;}
-  if(manifest.format==='Comic'){const img=e.target.closest?.('.comic-page');if(img)focusComicPage(img,e.clientX,e.clientY);}
-  else focusText(e.target);
+  if(manifest.format!=='Comic')focusText(e.target);
 });
 $('reading').addEventListener('dblclick',e=>{const img=e.target.closest?.('.comic-page');if(img){e.preventDefault();focusComicPage(img,e.clientX,e.clientY);}});
 $('reading').addEventListener('touchstart',e=>{
   if(e.touches.length===2){
-    e.preventDefault();pinchStartDistance=distance(e.touches[0],e.touches[1]);pinchStartZoom=zoom;pinchStartFont=font;
+    e.preventDefault();speechFocus.cancel();pinchStartDistance=distance(e.touches[0],e.touches[1]);pinchStartZoom=zoom;pinchStartFont=font;
   }
 },{passive:false});
 $('reading').addEventListener('touchmove',e=>{
