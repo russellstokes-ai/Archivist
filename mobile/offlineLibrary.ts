@@ -35,6 +35,8 @@ export type OfflineServerWork={
 };
 
 const maxOfflineWorkBytes=8*1024*1024*1024;
+const maxArchiveReaderBytes=256*1024*1024;
+const maxPdfBytes=4*1024*1024*1024;
 
 function safePart(value:string){
   return String(value||'file').replace(/[^a-z0-9._-]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,120)||'file';
@@ -78,10 +80,16 @@ export async function downloadOfflineWork(
   if(!documentDirectory)throw Error('Offline storage is unavailable on this device.');
   const available=tracks.filter(track=>track.available);
   if(!available.length)throw Error('No available files can be downloaded for this work.');
+  const unnamedComic=available.find(track=>track.format==='Comic' && !track.name);
+  if(unnamedComic)throw Error('Update your Archivist server before downloading comics for offline use so the original archive type can be preserved.');
   const unsupported=available.find(track=>track.format==='Comic' && /\.(?:cbr|cbt)$/i.test(track.name||''));
   if(unsupported)throw Error('Offline comic downloads currently require CBZ/ZIP. CBR/CBT can still be read from your Archivist server.');
   const knownTotal=available.reduce((sum,track)=>sum+Math.max(0,Number(track.size)||0),0);
   if(knownTotal>maxOfflineWorkBytes)throw Error('This work is larger than the 8 GB offline safety limit.');
+  const archiveBytes=available.filter(track=>track.format==='Ebook'||track.format==='Comic').reduce((sum,track)=>sum+Math.max(0,Number(track.size)||0),0);
+  if(archiveBytes>maxArchiveReaderBytes)throw Error('This ebook/comic is larger than the 256 MB offline reader safety limit.');
+  const pdfBytes=available.filter(track=>track.format==='PDF').reduce((sum,track)=>sum+Math.max(0,Number(track.size)||0),0);
+  if(pdfBytes>maxPdfBytes)throw Error('This PDF is larger than the 4 GB offline safety limit.');
 
   const root=documentDirectory+'archivist-offline/';
   const dir=root+serverSlug(session.server)+'-'+work.id+'/';
