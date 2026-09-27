@@ -658,7 +658,7 @@ func (a *app) routes() http.Handler {
 			profile := identity{}
 			valid := false
 			if r.Header.Get("X-Ingress-Path") != "" {
-				profile = identity{ID: 0, Name: "Owner", Owner: true, Ingress: true}
+				profile = identity{ID: 0, Name: "Admin", Role: "admin", Admin: true, Owner: true, Ingress: true}
 				valid = true
 			} else {
 				c, e := r.Cookie("archivist_session")
