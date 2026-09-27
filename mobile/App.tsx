@@ -76,6 +76,9 @@ type ServerWork = {
   editions: number;
   files: number;
   available: boolean;
+  rating?: number;
+  favourite?: boolean;
+  state?: ReadingState;
 };
 type WorkTrack = {id: number; title: string; format: string; edition: number; available: boolean; name?: string; size?: number};
 type ReadingState = 'not-started'|'in-progress'|'finished';
@@ -92,6 +95,9 @@ type LibrarySummary = {
   series: SummaryItem[];
   genres?: SummaryItem[];
   availability: SummaryItem[];
+  reading?: SummaryItem[];
+  ratings?: SummaryItem[];
+  favourites?: SummaryItem[];
 };
 type ServerAtlasRelationship = {
   kind: AtlasKind;
@@ -620,9 +626,15 @@ function Client() {
         genres: (serverSummary.genres || []).map(item => [item.name,item.count] as [string,number]),
         spaces: serverSummary.spaces.map(item => [item.name,item.count] as [string,number]),
         status: serverSummary.availability.map(item => [item.name,item.count] as [string,number]),
-        reading: count(prefs.map(item=>item.state==='finished'?'Finished':item.state==='in-progress'?'In progress':'Not started')),
-        ratings: count(prefs.map(item=>ratingLabel(item.rating||0))),
-        favourites: prefs.some(item=>item.favourite)?[['Favourites',prefs.filter(item=>item.favourite).length] as [string,number]]:[],
+        reading: serverSummary.reading?.length
+          ? serverSummary.reading.map(item=>[item.name,item.count] as [string,number])
+          : count(prefs.map(item=>item.state==='finished'?'Finished':item.state==='in-progress'?'In progress':'Not started')),
+        ratings: serverSummary.ratings?.length
+          ? serverSummary.ratings.map(item=>[item.name,item.count] as [string,number])
+          : count(prefs.map(item=>ratingLabel(item.rating||0))),
+        favourites: serverSummary.favourites?.length
+          ? serverSummary.favourites.map(item=>[item.name,item.count] as [string,number])
+          : prefs.some(item=>item.favourite)?[['Favourites',prefs.filter(item=>item.favourite).length] as [string,number]]:[],
       };
     }
     const items = localPersonalWorks;
@@ -788,10 +800,18 @@ function Client() {
     try{
       return await request(current,'/api/preferences') as PersonalPreference[];
     }catch(e){
-      // Servers from before personal ratings existed return 403/404 here.
+      // Compatibility only: current servers page personal state with works.
       if(e instanceof RequestError && (e.status===403 || e.status===404))return [];
       throw e;
     }
+  }
+
+  function preferencesFromWorks(items:ServerWork[]){
+    const out:Record<number,PersonalPreference>={};
+    for(const work of items){
+      out[work.id]={workId:work.id,rating:work.rating||0,favourite:!!work.favourite,state:work.state||'not-started'};
+    }
+    return out;
   }
 
   function serverWorksPath(offset = 0, limit = 100) {
@@ -844,25 +864,35 @@ function Client() {
     setServerHasMore(false);
     const timeout = setTimeout(() => {
       Promise.all([
-        request(session, serverAssetsPath(0,500)),
+        reviewOnly ? request(session, serverAssetsPath(0,200)) : Promise.resolve([]),
         request(session, serverWorksPath(0,100)),
         request(session, '/api/continue?space=' + encodeURIComponent(space)),
         request(session, '/api/library-summary'),
         request(session, '/api/profile-stats'),
-        fetchServerPreferences(session),
       ])
-        .then(([assets, works, continuing, summary, stats, preferences]) => {
+        .then(([assets, works, continuing, summary, stats]) => {
           if (cancelled) return;
-          setBooks(assets);
-          setServerBooksHasMore(assets.length === 500);
-          setServerWorks(works);
-          setServerHasMore(works.length === 100);
-          setContinueWorks(continuing);
-          setServerSummary(summary);
+          const normalizedWorks=(works as ServerWork[]).map(normalizeServerWork) as ServerWork[];
+          const normalizedSummary=normalizeLibrarySummary(summary);
+          setBooks(assets as Book[]);
+          setServerBooksHasMore(reviewOnly && (assets as Book[]).length === 200);
+          setServerWorks(normalizedWorks);
+          setServerHasMore(normalizedWorks.length === 100);
+          setContinueWorks((continuing as ServerWork[]).map(normalizeServerWork) as ServerWork[]);
+          setServerSummary(normalizedSummary);
           setServerProfileStats(stats);
-          const prefMap:Record<number,PersonalPreference>={};
-          for(const pref of preferences as PersonalPreference[])if(pref.workId)prefMap[pref.workId]=pref;
-          setServerPreferences(prefMap);
+          setServerPreferences(preferencesFromWorks(normalizedWorks));
+          const hasPagedPersonal=Array.isArray((summary as LibrarySummary).reading) &&
+            Array.isArray((summary as LibrarySummary).ratings) &&
+            Array.isArray((summary as LibrarySummary).favourites);
+          if(!hasPagedPersonal){
+            void fetchServerPreferences(session).then(preferences=>{
+              if(cancelled)return;
+              const prefMap:Record<number,PersonalPreference>={};
+              for(const pref of preferences)if(pref.workId)prefMap[pref.workId]=pref;
+              setServerPreferences(prefMap);
+            }).catch(e=>{if(!cancelled)setError(e.message);});
+          }
         })
         .catch(e => {
           if (!cancelled) setError(e.message);
