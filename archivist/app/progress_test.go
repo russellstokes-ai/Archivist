@@ -49,4 +49,12 @@ func TestProgressRevisionResumeAndIsolation(t *testing.T) {
 	if e != nil || read.Seconds != 5 {
 		t.Fatal("scan lost progress")
 	}
+	p, e = a.saveProgress(edition, progress{Asset:1,Seconds:10,Revision:2,Complete:true})
+	if e != nil || !p.Complete || p.Revision != 3 {
+		t.Fatalf("completion save failed: %+v %v",p,e)
+	}
+	p, e = a.saveProgress(edition, progress{Asset:1,Seconds:0,Revision:3,Complete:false})
+	if e != nil || !p.Complete || p.Revision != 4 {
+		t.Fatalf("replay cleared completion: %+v %v",p,e)
+	}
 }
