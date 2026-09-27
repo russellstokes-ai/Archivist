@@ -24,6 +24,7 @@ import {SavedQueue, reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
+import {achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
 
 type Book = {
   id: number;
@@ -68,7 +69,7 @@ type LibrarySummary = {
 };
 type LocalWorkProgress = {uri: string; seconds: number; complete?: boolean};
 type WorkPicker = {work: ServerWork; tracks: WorkTrack[]};
-type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'settings';
+type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'profile' | 'settings';
 type ThemeMode = 'system' | 'light' | 'dark';
 type Palette = {
   ink: string;
@@ -87,6 +88,7 @@ const themeKey = 'archivist.theme';
 const localFoldersKey = 'archivist.localFolders';
 const localProgressKey = 'archivist.localProgress';
 const localReadingProgressKey = 'archivist.localReadingProgress';
+const localReadingCompleteKey = 'archivist.localReadingComplete.v1';
 const localWorkProgressKey = 'archivist.localWorkProgress.v1';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
