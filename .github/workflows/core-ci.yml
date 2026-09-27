@@ -87,5 +87,6 @@ jobs:
           node profile-stats.test.cjs
           node server-compatibility.test.cjs
           node state-store.test.cjs
+          node speech-focus.test.cjs
           node native-patch.test.cjs
           node ui-contract.test.cjs
