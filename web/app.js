@@ -15,6 +15,30 @@ async function api(url,method='GET',data){
   const body=await res.json();if(!res.ok)throw Error(body.error||'Request failed');return body
 }
 function element(tag,text){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e}
+const overlayFocus=new Map();
+function showOverlay(id){
+  const overlay=$(id);if(!overlay)return;
+  if(overlay.hidden)overlayFocus.set(id,document.activeElement);
+  overlay.hidden=false;
+  requestAnimationFrame(()=>overlay.querySelector('[tabindex="-1"],button,[href],input,select,textarea')?.focus());
+}
+function hideOverlay(id){
+  const overlay=$(id);if(!overlay)return;
+  overlay.hidden=true;
+  const previous=overlayFocus.get(id);overlayFocus.delete(id);
+  if(previous&&typeof previous.focus==='function')requestAnimationFrame(()=>previous.focus());
+}
+document.addEventListener('keydown',event=>{
+  const overlay=[...document.querySelectorAll('.picker-overlay:not([hidden]),.work-overlay:not([hidden])')].at(-1);
+  if(!overlay)return;
+  if(event.key==='Escape'){event.preventDefault();hideOverlay(overlay.id);return}
+  if(event.key!=='Tab')return;
+  const focusable=[...overlay.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+  if(!focusable.length){event.preventDefault();overlay.querySelector('[tabindex="-1"]')?.focus();return}
+  const first=focusable[0],last=focusable.at(-1);
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+});
 function coverFor(work){
   const wrap=element('div');wrap.className='cover';
   const fallback=element('span');fallback.className='cover-fallback';
@@ -66,7 +90,7 @@ async function openWork(work){
       }
       content.append(block);
     }
-    $('work-detail').hidden=false;
+    showOverlay('work-detail');
   }catch(e){message(e.message)}
   finally{activity('')}
 }
@@ -188,8 +212,8 @@ $('load-more').onclick=()=>loadBooks(true).catch(e=>message(e.message));
 $('clear-library-filter').onclick=()=>{libraryFormat='';$('search').value='';$('space').value='';loadBooks(false).catch(e=>message(e.message))};
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>show(b.dataset.page));
 document.querySelectorAll('[data-settings]').forEach(b=>b.onclick=()=>showSettings(b.dataset.settings));
-$('work-close').onclick=()=>{$('work-detail').hidden=true};
-$('work-detail').addEventListener('click',e=>{if(e.target===$('work-detail'))$('work-detail').hidden=true});
+$('work-close').onclick=()=>hideOverlay('work-detail');
+$('work-detail').addEventListener('click',e=>{if(e.target===$('work-detail'))hideOverlay('work-detail')});
 $('close-player').onclick=()=>{$('audio').pause();$('audio').removeAttribute('src');$('audio').load();$('player').hidden=true};
 $('audio').onerror=()=>message('Unable to play this file. Check availability and browser codec support.');
 
@@ -199,17 +223,17 @@ $('theme').onchange=theme;theme();
 
 let folder='',parent='',jobTimer,jobSignature='';
 async function browse(p=''){
-  activity('Loading server folders',p||'Available roots');$('picker').hidden=false;$('folder-location').textContent='Loading folders…';$('folder-items').replaceChildren();$('folder-up').disabled=true;$('folder-use').disabled=true;
+  activity('Loading server folders',p||'Available roots');showOverlay('picker');$('folder-location').textContent='Loading folders…';$('folder-items').replaceChildren();$('folder-up').disabled=true;$('folder-use').disabled=true;
   try{
     const data=await api('./api/folders?path='+encodeURIComponent(p));folder=data.path||'';parent=data.parent||'';$('folder-location').textContent=folder||'Choose a starting folder';$('folder-up').disabled=!parent;$('folder-use').disabled=!folder;
     const items=Array.isArray(data.folders)?data.folders:[];
-    for(const f of items){const row=element('div'),name=element('strong',f.name),open=element('button','Open'),use=element('button','Use folder');row.className='folder-row';open.type=use.type='button';open.onclick=()=>browse(f.path);use.onclick=()=>{$('path').value=f.path;$('picker').hidden=true;message('Folder selected. Choose Add folder to continue.')};row.append(name,element('p',f.path),open,use);$('folder-items').append(row)}
+    for(const f of items){const row=element('div'),name=element('strong',f.name),open=element('button','Open'),use=element('button','Use folder');row.className='folder-row';open.type=use.type='button';open.onclick=()=>browse(f.path);use.onclick=()=>{$('path').value=f.path;hideOverlay('picker');message('Folder selected. Choose Add folder to continue.')};row.append(name,element('p',f.path),open,use);$('folder-items').append(row)}
     if(!items.length)$('folder-items').append(element('p','No readable folders are available here.'));
   }catch(e){folder='';parent='';$('folder-location').textContent='Unable to browse server folders';$('folder-items').replaceChildren(element('p',e.message));message(e.message)}
   finally{activity('')}
 }
 const browseButton=element('button','Browse server folders');browseButton.type='button';browseButton.onclick=()=>browse($('path').value);$('add').append(browseButton);
-$('folder-up').onclick=()=>browse(parent);$('folder-use').onclick=()=>{$('path').value=folder;$('picker').hidden=true};$('folder-close').onclick=()=>{$('picker').hidden=true};
+$('folder-up').onclick=()=>browse(parent);$('folder-use').onclick=()=>{$('path').value=folder;hideOverlay('picker')};$('folder-close').onclick=()=>hideOverlay('picker');
 
 async function pollJobs(){
   clearTimeout(jobTimer);
