@@ -2,7 +2,7 @@ import {createSpeechFocusController} from './speech-focus.js';
 
 const $=id=>document.getElementById(id),asset=new URLSearchParams(location.search).get('asset');
 const speechFocus=createSpeechFocusController();
-let manifest,part=0,revision=0,busy=true,font=20,pdf,saveQueue=Promise.resolve(),conflict=false,loaded=false,renderTask,zoom=1,lastTap=0,turning=false,pinchStartDistance=0,pinchStartZoom=1,pinchStartFont=20;
+let manifest,part=0,revision=0,busy=true,font=20,pdf,saveQueue=Promise.resolve(),conflict=false,loaded=false,renderTask,zoom=1,lastTap=0,turning=false,pinchStartDistance=0,pinchStartZoom=1,pinchStartFont=20,completionNotified=false;
 let soundEnabled=localStorage.getItem('archivist-reader-sound')!=='off';
 
 async function api(path,method='GET',body){
@@ -16,7 +16,14 @@ function save(){
   const progressFraction=fraction();
   const complete=!!manifest && part>=manifest.parts.length-1 && (manifest.format==='Comic' || progressFraction>=.95);
   const p={part,fraction:progressFraction,complete};
-  saveQueue=saveQueue.then(async()=>{if(conflict)return;try{const result=await api('./api/assets/'+asset+'/reading-progress','PUT',{...p,revision});revision=result.revision;}catch(e){conflict=true;status('Position not synced: '+e.message);}});
+  saveQueue=saveQueue.then(async()=>{if(conflict)return;try{
+    const result=await api('./api/assets/'+asset+'/reading-progress','PUT',{...p,revision});
+    revision=result.revision;
+    if(complete&&!completionNotified){
+      completionNotified=true;
+      window.ReactNativeWebView?.postMessage?.(JSON.stringify({type:'archivist-reader-complete'}));
+    }
+  }catch(e){conflict=true;status('Position not synced: '+e.message);}});
   return saveQueue;
 }
 function controls(){
@@ -144,7 +151,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)void save()
 
 try{
   if(!/^\d+$/.test(asset||''))throw Error('Choose a book from Library.');status('Opening...');
-  manifest=await api('./api/assets/'+asset+'/reader');const progress=await api('./api/assets/'+asset+'/reading-progress');revision=progress.revision;
+  manifest=await api('./api/assets/'+asset+'/reader');const progress=await api('./api/assets/'+asset+'/reading-progress');revision=progress.revision;completionNotified=!!progress.complete;
   if(manifest.format==='PDF')manifest.parts=['Document'];
   for(const control of [zoomOut,fit,zoomIn])control.hidden=manifest.format!=='Comic';
   sound.hidden=manifest.format==='PDF';
