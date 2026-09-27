@@ -321,8 +321,7 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 		}
 		defer tx.Rollback()
 		var revision int64
-		var alreadyComplete bool
-		e = tx.QueryRow("SELECT revision,complete FROM reading_progress WHERE profile_id=? AND asset_id=?", who(r).ID, r.PathValue("id")).Scan(&revision,&alreadyComplete)
+		e = tx.QueryRow("SELECT revision FROM reading_progress WHERE profile_id=? AND asset_id=?", who(r).ID, r.PathValue("id")).Scan(&revision)
 		if e != nil && e != sql.ErrNoRows {
 			fail(w, 500, e)
 			return
@@ -331,7 +330,6 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			fail(w, 409, errors.New("reading position changed in another session"))
 			return
 		}
-		p.Complete = p.Complete || alreadyComplete
 		p.Revision++
 		_, e = tx.Exec(`INSERT INTO reading_progress(profile_id,asset_id,part,fraction,revision,complete) VALUES(?,?,?,?,?,?) ON CONFLICT(profile_id,asset_id) DO UPDATE SET part=excluded.part,fraction=excluded.fraction,revision=excluded.revision,complete=excluded.complete`, who(r).ID, r.PathValue("id"), p.Part, p.Fraction, p.Revision, p.Complete)
 		if e != nil {
