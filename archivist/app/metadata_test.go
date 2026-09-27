@@ -64,11 +64,12 @@ func TestMetadataReadsBoundedEmbeddedEpub(t *testing.T) {
 		"OPS/content.opf": `<?xml version="1.0"?><package><metadata>
 			<title>The Left Hand of Darkness</title>
 			<creator>Ursula K. Le Guin</creator>
+			<subject>Science Fiction</subject>
 			<meta property="belongs-to-collection">Hainish Cycle</meta>
 		</metadata></package>`,
 	})
 	meta := metadataFor(book, "Le Guin/Hainish/The Left Hand of Darkness.epub", "Ebook")
-	if meta.Title != "The Left Hand of Darkness" || meta.Author != "Ursula K. Le Guin" || meta.Series != "Hainish Cycle" {
+	if meta.Title != "The Left Hand of Darkness" || meta.Author != "Ursula K. Le Guin" || meta.Series != "Hainish Cycle" || meta.Genre != "Science Fiction" {
 		t.Fatalf("embedded metadata=%+v", meta)
 	}
 	if meta.Confidence < 90 || meta.NeedsReview {
