@@ -6,6 +6,7 @@ export type LocalWork = {
   title: string;
   author: string;
   series: string;
+  genre: string;
   format: string;
   space: string;
   available: boolean;
@@ -38,12 +39,14 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
     const title = audio && folderTitle ? folderTitle : first.title;
     const author = commonValue(tracks.map(item => item.author));
     const series = commonValue(tracks.map(item => item.series));
+    const genre = commonValue(tracks.map(item => item.genre));
     const reviewItem = tracks.find(item => item.needsReview);
     return {
       key,
       title,
       author,
       series,
+      genre,
       format: first.format,
       space: first.space,
       available: tracks.some(item => item.available),
