@@ -17,7 +17,7 @@ function detectBubbleRegion(pixels,width,height,tapX,tapY){
   if(baseLum<115)return null;
   const total=width*height,visited=new Uint8Array(total),queue=new Int32Array(total),leftByRow=new Int32Array(height),rightByRow=new Int32Array(height);
   leftByRow.fill(width);rightByRow.fill(-1);
-  const tolerance=95*95,minLum=Math.max(75,baseLum-95),maxArea=Math.max(96,Math.floor(total*.24));
+  const tolerance=95*95,minLum=Math.max(75,baseLum-95),maxArea=Math.max(96,Math.floor(total*.30));
   let head=0,tail=0,area=0,left=width,top=height,right=-1,bottom=-1;queue[tail++]=seedY*width+seedX;
   while(head<tail){
     const pos=queue[head++];if(visited[pos])continue;
