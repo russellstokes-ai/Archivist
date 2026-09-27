@@ -1617,7 +1617,7 @@ function Client() {
 
   async function refreshOfflineStorage(){
     setOfflineStorageBusy(true);
-    try{setOfflineStorage(await inspectOfflineStorage(offlineWorks));}
+    try{setOfflineStorage(await inspectOfflineStorage(offlineWorks,Object.values(offlineCheckpoints)));}
     catch(e){setError((e as Error).message);}
     finally{setOfflineStorageBusy(false);}
   }
@@ -1630,7 +1630,7 @@ function Client() {
       setOfflineWorks(result.retained);
       await setPersistedJSON(offlineWorksKey,result.retained);
       setOfflineProgress('Cleaned '+result.removedWorks.length+' broken download'+(result.removedWorks.length===1?'':'s')+' and '+result.removedOrphans+' orphan folder'+(result.removedOrphans===1?'':'s')+'.');
-      setOfflineStorage(await inspectOfflineStorage(result.retained));
+      setOfflineStorage(await inspectOfflineStorage(result.retained,Object.values(offlineCheckpoints)));
     }catch(e){setError((e as Error).message);}
     finally{setOfflineStorageBusy(false);}
   }
@@ -1642,7 +1642,7 @@ function Client() {
       await removeOfflineCheckpoint(checkpoint);
       await saveOfflineCheckpoint(checkpoint.key,null);
       setOfflineProgress('Partial download removed.');
-      setOfflineStorage(await inspectOfflineStorage(offlineWorks));
+      setOfflineStorage(await inspectOfflineStorage(offlineWorks,Object.values(offlineCheckpoints)));
     }catch(e){setError((e as Error).message);}
     finally{setOfflineStorageBusy(false);}
   }
@@ -1671,7 +1671,7 @@ function Client() {
         return next;
       });
       setOfflineProgress('Downloaded · '+formatBytes(downloaded.bytes));
-      setOfflineStorage(await inspectOfflineStorage({...offlineWorks,[downloaded.key]:downloaded}));
+      setOfflineStorage(await inspectOfflineStorage({...offlineWorks,[downloaded.key]:downloaded},Object.values(offlineCheckpoints).filter(item=>item.key!==downloaded.key)));
     }catch(e){
       if(isOfflineDownloadPaused(e)){
         setOfflineProgress('Paused · tap Resume download');
@@ -1695,7 +1695,7 @@ function Client() {
       setOfflineWorks(next);
       await setPersistedJSON(offlineWorksKey,next);
       setOfflineProgress('');
-      setOfflineStorage(await inspectOfflineStorage(next));
+      setOfflineStorage(await inspectOfflineStorage(next,Object.values(offlineCheckpoints)));
     }catch(e){
       setError((e as Error).message);
     }finally{
@@ -2846,7 +2846,7 @@ function Client() {
           <Text style={[styles.meta,{color:p.muted}]}>
             {capacity>0 ? formatBytes(free)+' free of '+formatBytes(capacity) : 'Stored in Archivist app storage'}
           </Text>
-          {partial.length?<Text style={[styles.meta,{color:p.gold}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} ready to resume</Text>:null}
+          {partial.length?<Text style={[styles.meta,{color:p.gold}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} · {formatBytes(offlineStorage?.partialBytes||0)} partial data</Text>:null}
           {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.gold}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
         </View>
       </View>
