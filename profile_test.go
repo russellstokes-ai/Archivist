@@ -50,7 +50,7 @@ func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 
 	var got profileStats
 	if err := json.Unmarshal(res.Body.Bytes(),&got); err != nil { t.Fatal(err) }
-	if got.Name != "Owner" || !got.Owner { t.Fatalf("identity=%+v",got) }
+	if got.Name != "Admin" || !got.Owner { t.Fatalf("identity=%+v",got) }
 	if got.Works != 3 || got.Formats != 2 || got.Series != 2 {
 		t.Fatalf("library stats=%+v",got)
 	}
@@ -62,7 +62,7 @@ func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 	}
 }
 
-func TestProfileStatsRespectsHouseholdGrants(t *testing.T) {
+func TestProfileStatsUserSeesWholeLibrary(t *testing.T) {
 	a := fixture(t)
 	initAllProgressForTest(t,a)
 
@@ -77,7 +77,8 @@ func TestProfileStatsRespectsHouseholdGrants(t *testing.T) {
 	res,err:=a.db.Exec("INSERT INTO profiles(name,key_hash,revoked) VALUES('Child',?,0)",keyHash("child-key"))
 	if err!=nil{t.Fatal(err)}
 	profileID,_:=res.LastInsertId()
-	if _,err=a.db.Exec("INSERT INTO grants(profile_id,space) VALUES(?,'Main')",profileID);err!=nil{t.Fatal(err)}
+	// Startup migration grants every active User every existing library.
+	if err=a.initHousehold();err!=nil{t.Fatal(err)}
 	if _,err=a.db.Exec("INSERT INTO sessions(token_hash,profile_id,credential_hash,expires,created) VALUES(?,?,?,9999999999,0)",keyHash("child-session"),profileID,keyHash("child-key"));err!=nil{t.Fatal(err)}
 	if _,err=a.db.Exec("INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(?,?,?,?,1,1)",profileID,mainEdition,mainAsset,12.0);err!=nil{t.Fatal(err)}
 	if _,err=a.db.Exec("INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(?,?,?,?,1,1)",profileID,privateEdition,privateAsset,12.0);err!=nil{t.Fatal(err)}
@@ -89,7 +90,7 @@ func TestProfileStatsRespectsHouseholdGrants(t *testing.T) {
 	if resw.Code!=200{t.Fatalf("child stats=%d %s",resw.Code,resw.Body.String())}
 	var got profileStats
 	if err=json.Unmarshal(resw.Body.Bytes(),&got);err!=nil{t.Fatal(err)}
-	if got.Name!="Child" || got.Owner || got.Works!=1 || got.CompletedAudio!=1 || got.Completed!=1 {
-		t.Fatalf("grant leak or identity mismatch=%+v",got)
+	if got.Name!="Child" || got.Owner || got.Works!=2 || got.CompletedAudio!=2 || got.Completed!=2 {
+		t.Fatalf("whole-library User stats mismatch=%+v",got)
 	}
 }
