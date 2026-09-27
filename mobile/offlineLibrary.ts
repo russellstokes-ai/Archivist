@@ -46,6 +46,7 @@ export type OfflineDownloadCheckpoint={
   title?:string;
   directory:string;
   completedTrackIds:number[];
+  completedBytes?:number;
   current?:{
     trackId:number;
     uri:string;
@@ -63,6 +64,7 @@ export type OfflineStorageSummary={
   capacityBytes:number;
   missingFiles:number;
   incompleteWorks:number;
+  partialBytes:number;
 };
 
 export type OfflineCleanupResult={
@@ -168,7 +170,9 @@ export async function pauseActiveOfflineDownload(){
 }
 
 export async function removeOfflineCheckpoint(checkpoint:OfflineDownloadCheckpoint){
-  await deleteAsync(checkpoint.directory,{idempotent:true});
+  // Never trust a persisted directory string for deletion; derive the only
+  // allowed work directory from the server/work identity.
+  await deleteAsync(offlineDirectory(checkpoint.server,checkpoint.workId),{idempotent:true});
 }
 
 export async function downloadOfflineWork(
@@ -235,6 +239,7 @@ export async function downloadOfflineWork(
   }
   checkpoint.title=work.title;
   checkpoint.completedTrackIds=[...completed];
+  checkpoint.completedBytes=written;
 
   if(knownTotal>0){
     try{
@@ -292,6 +297,7 @@ export async function downloadOfflineWork(
       if(written>maxOfflineWorkBytes)throw Error('Offline download exceeded the 8 GB safety limit.');
       completed.add(track.id);
       checkpoint.completedTrackIds=[...completed];
+      checkpoint.completedBytes=written;
       checkpoint.current=undefined;
       resultTracks.push({...track,uri,localFormat:localFormat(track)});
       await persistCheckpoint(checkpoint,options?.onCheckpoint);
@@ -345,6 +351,7 @@ export async function removeOfflineWork(work:OfflineServerWork){
 
 export async function inspectOfflineStorage(
   works:Record<string,OfflineServerWork>,
+  checkpoints:OfflineDownloadCheckpoint[]=[],
 ):Promise<OfflineStorageSummary>{
   let actualBytes=0,missingFiles=0,incompleteWorks=0;
   for(const work of Object.values(works)){
@@ -363,6 +370,8 @@ export async function inspectOfflineStorage(
     getFreeDiskStorageAsync().catch(()=>0),
     getTotalDiskCapacityAsync().catch(()=>0),
   ]);
+  const partialBytes=checkpoints.reduce((sum,checkpoint)=>
+    sum+Math.max(0,checkpoint.completedBytes||0)+Math.max(0,checkpoint.current?.bytesWritten||0),0);
   return {
     items:Object.keys(works).length,
     trackedBytes:Object.values(works).reduce((sum,work)=>sum+Math.max(0,work.bytes||0),0),
@@ -371,6 +380,7 @@ export async function inspectOfflineStorage(
     capacityBytes,
     missingFiles,
     incompleteWorks,
+    partialBytes,
   };
 }
 
