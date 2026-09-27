@@ -4,10 +4,10 @@ export class RequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 function isPrivateHTTPHost(hostname: string): boolean {
-  const host = hostname.trim().toLowerCase().replace(/^\\[|\\]$/g, '');
+  const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host === '::1') return true;
   const parts = host.split('.');
-  if (parts.length === 4 && parts.every(part => /^\\d{1,3}$/.test(part))) {
+  if (parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part))) {
     const octets = parts.map(Number);
     if (octets.some(octet => octet < 0 || octet > 255)) return false;
     const [a, b] = octets;
