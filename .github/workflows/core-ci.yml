@@ -22,8 +22,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Resolve module checksums
+        run: go mod tidy
       - name: Go tests
         run: go test ./...
+      - name: Emit resolved checksums
+        if: always()
+        run: |
+          echo '---GO-SUM-BEGIN---'
+          cat go.sum
+          echo '---GO-SUM-END---'
 
   mobile:
     name: Mobile tests
