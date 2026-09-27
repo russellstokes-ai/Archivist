@@ -78,3 +78,14 @@ assert.ok(source.includes('Reader needs attention'), 'Server reader retry state 
 assert.ok(source.includes('readerReloadKey'), 'Server reader retry must reload the WebView');
 assert.ok(source.includes("message?.type==='archivist-reader-ready'"), 'Server reader ready bridge is missing');
 assert.ok(source.includes("reading.format"), 'Reader header must expose the active format');
+
+assert.ok(source.includes('Modal transparent animationType="fade" visible onRequestClose={()=>setRatingPrompt(null)}'), 'Completion rating prompt must be a dismissible native modal');
+assert.ok(source.includes("accessibilityViewIsModal accessibilityLabel={'Choose edition for '"), 'Edition picker must expose modal accessibility semantics');
+assert.ok(source.includes("KeyboardAvoidingView style={styles.modalKeyboard}"), 'Metadata editor must remain usable with the on-screen keyboard');
+assert.ok(source.includes("accessibilityLabel={'Open player for '+playing.title}"), 'Mini player must expose a separate open-player action');
+assert.ok(source.includes("accessibilityLabel={(session ? playback?.playing : audio.playing) ? 'Pause '+playing.title"), 'Mini player play/pause must be a separate labelled control');
+assert.equal(source.includes('<Pressable accessibilityRole="button" onPress={() => setActiveTab(\'player\')} style={[styles.miniPlayer'),false,'Mini player must not nest a button inside another button');
+assert.ok(source.includes('accessibilityLabel="Dismiss error"'), 'Global errors need a dismiss action');
+assert.ok(source.includes("label={'Remove download · '+formatBytes(downloaded.bytes)}"), 'Downloaded server work action must clearly say it removes the download');
+assert.ok(source.includes('accessibilityState={{selected:theme===mode}}'), 'Theme choices must expose selected state');
+assert.ok(source.includes('accessibilityState={{selected:sortTemplate===id}}'), 'Sort layout choices must expose selected state');
