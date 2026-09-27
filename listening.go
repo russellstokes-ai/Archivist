@@ -6,11 +6,17 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 func (a *app) initListening() error {
-	_, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS asset_progress(profile_id INTEGER NOT NULL,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,seconds REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(profile_id,asset_id))`)
-	return err
+	if _, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS asset_progress(profile_id INTEGER NOT NULL,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,seconds REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(profile_id,asset_id))`); err != nil {
+		return err
+	}
+	if _, err := a.db.Exec("ALTER TABLE asset_progress ADD COLUMN complete INTEGER NOT NULL DEFAULT 0"); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+		return err
+	}
+	return nil
 }
 
 func (a *app) listeningRoutes(mux *http.ServeMux) {
