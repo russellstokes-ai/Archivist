@@ -774,6 +774,9 @@ func main() {
 	if e = a.initReader(); e != nil {
 		log.Fatal(e)
 	}
+	if e = a.initCompletions(); e != nil {
+		log.Fatal(e)
+	}
 	if e = a.initJobs(); e != nil {
 		log.Fatal(e)
 	}
