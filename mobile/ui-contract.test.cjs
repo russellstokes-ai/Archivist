@@ -19,7 +19,7 @@ for (const match of source.matchAll(/<Pressable\b[\s\S]*?<\/Pressable>/g)) {
 }
 
 for (const route of [
-  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/sources',
+  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/atlas-relationships','/api/sources',
   '/api/file-moves','/api/assets/','/api/queue','/session','/logout','/setup/status'
 ]) {
   assert.ok(clientSource.includes(route), 'Expected wired mobile route missing from client: ' + route);
@@ -29,3 +29,5 @@ console.log('PASS: no placeholder UI markers and every visible mobile button/tab
 
 assert.ok(source.includes("{id: 'profile', label: 'Profile'}"), 'Profile tab is not wired');
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
+
+assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
