@@ -155,7 +155,7 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 		return true
 	}
 	path := r.URL.Path
-	if path == "/api/me" || path == "/api/recommendations" || path == "/api/continue" || path == "/api/profile-stats" || path == "/api/atlas-relationships" {
+	if path == "/api/me" || path == "/api/recommendations" || path == "/api/continue" || path == "/api/profile-stats" || path == "/api/atlas-relationships" || path == "/api/preferences" {
 		return r.Method == "GET"
 	}
 	if path == "/api/books" || path == "/api/works" || path == "/api/sources" || path == "/api/library-summary" {
@@ -176,7 +176,9 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 		(len(parts) == 4 && parts[3] == "chapters" && r.Method == "GET")) {
 		query = `SELECT s.space FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.id=?`
 	}
-	if len(parts) == 4 && parts[1] == "works" && (parts[3] == "tracks" || parts[3] == "cover") && r.Method == "GET" {
+	if len(parts) == 4 && parts[1] == "works" && (
+		((parts[3] == "tracks" || parts[3] == "cover") && r.Method == "GET") ||
+		(parts[3] == "preference" && r.Method == "PUT")) {
 		query = `SELECT space FROM works WHERE id=?`
 	}
 	if len(parts) == 4 && parts[1] == "editions" && parts[3] == "progress" && (r.Method == "GET" || r.Method == "PUT") {
