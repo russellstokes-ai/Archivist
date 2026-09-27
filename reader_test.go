@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"encoding/json"
@@ -26,6 +27,30 @@ func makeReaderEPUB(t *testing.T) []byte {
 	z.Close()
 	return b.Bytes()
 }
+func TestComicArchiveSupportContract(t *testing.T) {
+	if got:=kind("issue.cbz");got!="Comic"{t.Fatalf("CBZ kind=%q",got)}
+	if got:=kind("issue.cbt");got!="Comic"{t.Fatalf("CBT kind=%q",got)}
+	if got:=kind("issue.cbr");got!=""{t.Fatalf("CBR must remain unsupported, kind=%q",got)}
+
+	var b bytes.Buffer
+	tw:=tar.NewWriter(&b)
+	for _,name:=range []string{"010.jpg","002.jpg","001.jpg"} {
+		data:=[]byte{0xff,0xd8,0xff,0xd9}
+		if err:=tw.WriteHeader(&tar.Header{Name:name,Mode:0600,Size:int64(len(data))});err!=nil{t.Fatal(err)}
+		if _,err:=tw.Write(data);err!=nil{t.Fatal(err)}
+	}
+	if err:=tw.Close();err!=nil{t.Fatal(err)}
+	p:=filepath.Join(t.TempDir(),"issue.cbt")
+	if err:=os.WriteFile(p,b.Bytes(),0600);err!=nil{t.Fatal(err)}
+	file,err:=os.Open(p);if err!=nil{t.Fatal(err)}
+	defer file.Close()
+	parts,err:=tarComicParts(file)
+	if err!=nil{t.Fatal(err)}
+	if len(parts)!=3 || parts[0]!="001.jpg" || parts[1]!="002.jpg" || parts[2]!="010.jpg"{
+		t.Fatalf("CBT natural order=%v",parts)
+	}
+}
+
 func TestReaderSpineAndSafeContent(t *testing.T) {
 	b := makeReaderEPUB(t)
 	z, e := zip.NewReader(bytes.NewReader(b), int64(len(b)))
@@ -121,6 +146,9 @@ func TestReaderWebInteractionAssets(t *testing.T) {
 		"turn-next",
 		"turn-prev",
 		"complete",
+		"archivist-reader-ready",
+		"PageDown",
+		"Bubble not isolated; page zoomed instead.",
 	} {
 		if !strings.Contains(script, marker) {
 			t.Fatalf("reader interaction missing %q", marker)
@@ -131,6 +159,8 @@ func TestReaderWebInteractionAssets(t *testing.T) {
 		"readerTurnNext",
 		"readerTurnPrev",
 		"prefers-reduced-motion",
+		".reader-help",
+		"focus-visible",
 	} {
 		if !strings.Contains(style, marker) {
 			t.Fatalf("reader polish CSS missing %q", marker)
