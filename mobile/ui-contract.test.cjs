@@ -63,3 +63,11 @@ assert.ok(source.includes("profile.admin ?? profile.owner"), 'Mobile must unders
 assert.ok(source.includes('How was it?'), 'Completion rating prompt is missing');
 assert.ok(source.includes('archivist-reader-complete'), 'Server reader completion must bridge back to the mobile rating prompt');
 assert.ok(source.includes('serverWorkId?: number'), 'Server work identity must survive into reader/player completion flows');
+
+assert.ok(source.includes('>Offline downloads</Text>'), 'Offline download manager is missing from Settings');
+assert.ok(source.includes('Resume download'), 'Interrupted downloads must expose a Resume action');
+assert.ok(source.includes('Clean up storage'), 'Offline storage cleanup action is missing');
+assert.ok(source.includes('pauseActiveOfflineDownload'), 'Active offline downloads must pause safely when the app backgrounds');
+assert.ok(source.includes('initialNumToRender={12}'), 'Shelf lists must bound initial rendering for large libraries');
+assert.ok(source.includes('maxToRenderPerBatch={12}'), 'Shelf lists must bound render batches');
+assert.equal(source.includes("request(session, serverAssetsPath(0,500))"),false,'Normal Shelf refresh must not fetch 500 raw files');
