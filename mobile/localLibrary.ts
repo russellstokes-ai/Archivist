@@ -82,7 +82,6 @@ const supported = new Map<string, string>([
   ['epub', 'EPUB'],
   ['pdf', 'PDF'],
   ['cbz', 'Comic'],
-  ['cbr', 'Comic'],
   ['zip', 'Comic'],
   ['mp3', 'Audio'],
   ['m4a', 'Audio'],
@@ -97,7 +96,7 @@ const maxEntriesPerScan = 10000;
 const maxVisitedEntriesPerScan = 50000;
 const knownNonDirectoryExtensions = new Set([
   ...supported.keys(),
-  'opf','nfo','jpg','jpeg','png','webp','gif','txt','cue','m3u','m3u8','json','xml','srt',
+  'cbr','cbt','opf','nfo','jpg','jpeg','png','webp','gif','txt','cue','m3u','m3u8','json','xml','srt',
 ]);
 const maxDepth = 8;
 
@@ -418,7 +417,6 @@ function mimeType(ext: string) {
   if (ext === 'epub') return 'application/epub+zip';
   if (ext === 'pdf') return 'application/pdf';
   if (ext === 'cbz' || ext === 'zip') return 'application/zip';
-  if (ext === 'cbr') return 'application/vnd.comicbook-rar';
   if (ext === 'mp3') return 'audio/mpeg';
   if (ext === 'm4a' || ext === 'm4b') return 'audio/mp4';
   if (ext === 'flac') return 'audio/flac';
