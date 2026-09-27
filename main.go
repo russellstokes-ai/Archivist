@@ -679,7 +679,7 @@ func (a *app) routes() http.Handler {
 				fail(w, 500, e)
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: base})
+			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, Secure: requestIsSecure(r), SameSite: http.SameSiteStrictMode, Path: base})
 			if r.URL.Path == "/session" {
 				reply(w, map[string]string{"token": session})
 			} else {
