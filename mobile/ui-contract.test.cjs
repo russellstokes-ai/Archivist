@@ -33,3 +33,7 @@ assert.ok(source.includes("function Profile()"), 'Profile screen is not implemen
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 
 assert.ok(source.includes("function DuplicateReviewPanel()"), 'Duplicate review UI is not implemented');
+
+assert.ok(source.includes("serverSummary.genres || []"), 'Atlas must tolerate servers from before genre summaries were added');
+assert.ok(source.includes("relation.genres || []"), 'Atlas relationship view must tolerate servers from before genre links were added');
+assert.ok(source.includes("relation.availability || []"), 'Atlas relationship view must tolerate servers from before availability links were added');
