@@ -38,6 +38,9 @@ export type CompatibleAtlasRelationship={
   formats:CompatibleCount[];
   spaces:CompatibleCount[];
   availability?:CompatibleCount[];
+  reading?:CompatibleCount[];
+  ratings?:CompatibleCount[];
+  favourites?:CompatibleCount[];
 };
 
 function countArray(value:unknown):CompatibleCount[]{
@@ -60,10 +63,13 @@ export function normalizeLibrarySummary(value:CompatibleLibrarySummary):Compatib
     series:countArray(value.series),
     genres:countArray(value.genres),
     availability:countArray(value.availability),
+    reading:countArray(value.reading),
+    ratings:countArray(value.ratings),
+    favourites:countArray(value.favourites),
   };
 }
 
-export function normalizeAtlasRelationship(value:CompatibleAtlasRelationship):CompatibleAtlasRelationship & {genres:CompatibleCount[];availability:CompatibleCount[]}{
+export function normalizeAtlasRelationship(value:CompatibleAtlasRelationship):CompatibleAtlasRelationship & {genres:CompatibleCount[];availability:CompatibleCount[];reading:CompatibleCount[];ratings:CompatibleCount[];favourites:CompatibleCount[]}{
   return {
     ...value,
     works:Array.isArray(value.works)?value.works.map(normalizeServerWork):[],
@@ -80,7 +86,7 @@ export function buildLegacyAtlasRelationship(
   works:CompatibleServerWork[],
   kind:AtlasKind,
   value:string,
-):CompatibleAtlasRelationship & {genres:CompatibleCount[];availability:CompatibleCount[]}{
+):CompatibleAtlasRelationship & {genres:CompatibleCount[];availability:CompatibleCount[];reading:CompatibleCount[];ratings:CompatibleCount[];favourites:CompatibleCount[]}{
   const normalized=works.map(normalizeServerWork);
   return buildAtlasRelationship(normalized,kind,value);
 }
