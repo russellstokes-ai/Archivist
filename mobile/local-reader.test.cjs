@@ -48,7 +48,16 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   assert(comic.html.includes('turn-next'));
   assert(comic.html.includes('Sound on'));
 
+  await assert.rejects(
+    buildLocalReaderDocument('legacy.cbr','Comic','Legacy CBR'),
+    /CBR\/RAR comics are not supported/,
+  );
+  await assert.rejects(
+    buildLocalReaderDocument('remote-only.cbt','Comic','Remote CBT'),
+    /Archivist server.*CBZ\/ZIP/,
+  );
+
   const pdf = await buildLocalReaderDocument('file.pdf', 'PDF', 'PDF');
   assert.equal(pdf.uri, 'file.pdf');
-  console.log('PASS: local reader EPUB/comic paging, focus, pinch, sound and PDF passthrough');
+  console.log('PASS: local reader EPUB/CBZ paging, focus, pinch, sound, explicit CBR/CBT handling and PDF passthrough');
 })().catch(e => { console.error(e); process.exitCode = 1; });
