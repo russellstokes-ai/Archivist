@@ -382,6 +382,7 @@ func (a *app) routes() http.Handler {
 	a.listeningRoutes(mux)
 	a.playerFeatureRoutes(mux)
 	a.householdRoutes(mux)
+	a.profileRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
 	a.recommendationRoutes(mux)
