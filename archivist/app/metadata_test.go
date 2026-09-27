@@ -108,3 +108,36 @@ func TestMetadataSignatureIncludesSidecars(t *testing.T) {
 		t.Fatalf("signature did not include sidecar: before=%q after=%q", before, after)
 	}
 }
+
+
+func TestGenericSidecarsAreCachedAcrossMultiTrackScan(t *testing.T) {
+	root := t.TempDir()
+	sidecar := filepath.Join(root, "metadata.opf")
+	if err := os.WriteFile(sidecar, []byte(`<?xml version="1.0"?><package><metadata>
+		<title>Dune</title><creator>Frank Herbert</creator>
+	</metadata></package>`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cache := newSidecarScanCache()
+	for i := 0; i < 100; i++ {
+		filename := filepath.Join(root, fmt.Sprintf("%03d - Track.mp3", i))
+		if err := os.WriteFile(filename, []byte("audio"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = metadataSignatureWithCache(filename, info, cache)
+		meta := metadataForWithCache(filename, filepath.Base(filename), "Audio", cache)
+		if meta.Title != "Dune" || meta.Author != "Frank Herbert" {
+			t.Fatalf("cached sidecar metadata=%+v", meta)
+		}
+	}
+	if cache.statChecks != 4 {
+		t.Fatalf("generic sidecars stat'd %d times; want one check for each of four generic candidates", cache.statChecks)
+	}
+	if cache.parseReads != 1 {
+		t.Fatalf("generic sidecar parsed %d times; want once per scan", cache.parseReads)
+	}
+}
