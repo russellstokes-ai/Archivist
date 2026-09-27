@@ -24,7 +24,7 @@ import {SavedQueue, reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
-import {achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
+import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
 
 type Book = {
   id: number;
@@ -139,7 +139,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-function CelebrationOverlay({active}: {active: boolean}) {
+function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.'}: {active: boolean;title?: string;copy?: string}) {
   const burst = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!active) {
@@ -179,8 +179,8 @@ function CelebrationOverlay({active}: {active: boolean}) {
         );
       })}
       <Animated.View style={[styles.celebrationBadge, {opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:[0.75,1.04,1]})}]}]}>
-        <Text style={styles.celebrationTitle}>Your library is alive</Text>
-        <Text style={styles.celebrationCopy}>Archivist found your first books.</Text>
+        <Text style={styles.celebrationTitle}>{title}</Text>
+        <Text style={styles.celebrationCopy}>{copy}</Text>
       </Animated.View>
     </View>
   );
@@ -214,6 +214,8 @@ function Client() {
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
+  const [achievementCelebration,setAchievementCelebration]=useState<Achievement|null>(null);
+  const achievementBaseline=useRef<{key:string;ids:Set<string>}|null>(null);
   const [query, setQuery] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<'all'|'available'|'unavailable'>('all');
   const [formatFilter, setFormatFilter] = useState('');
@@ -356,6 +358,23 @@ function Client() {
 
   const profileStats = session ? serverProfileStats : localProfileStats;
   const profileAchievements = useMemo(() => profileStats ? achievementsFor(profileStats) : [], [profileStats]);
+
+  useEffect(()=>{
+    if(!profileStats)return;
+    const key=session ? session.server+'|'+profileStats.name : 'local';
+    const unlocked=new Set(profileAchievements.filter(item=>item.unlocked).map(item=>item.id));
+    const baseline=achievementBaseline.current;
+    if(!baseline || baseline.key!==key){
+      achievementBaseline.current={key,ids:unlocked};
+      return;
+    }
+    const newly=profileAchievements.find(item=>item.unlocked && item.id!=='first-shelf' && !baseline.ids.has(item.id));
+    achievementBaseline.current={key,ids:unlocked};
+    if(!newly)return;
+    setAchievementCelebration(newly);
+    const timer=setTimeout(()=>setAchievementCelebration(null),1900);
+    return()=>clearTimeout(timer);
+  },[profileAchievements,profileStats,session]);
 
   const availabilityMatches = (available: boolean) =>
     availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
@@ -1966,7 +1985,11 @@ function Client() {
       <View style={styles.tabBody}>
         {CurrentTab()}
       </View>
-      <CelebrationOverlay active={celebrating} />
+      <CelebrationOverlay
+        active={celebrating || !!achievementCelebration}
+        title={achievementCelebration ? achievementCelebration.title : undefined}
+        copy={achievementCelebration ? achievementCelebration.description : undefined}
+      />
       {playing ? (
         <Pressable accessibilityRole="button" onPress={() => setActiveTab('player')} style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
           <MiniArtwork book={playing} />
