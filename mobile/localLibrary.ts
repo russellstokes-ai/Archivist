@@ -93,8 +93,8 @@ const supported = new Map<string, string>([
   ['flac', 'Audio'],
 ]);
 
-const maxEntriesPerScan = 5000;
-const maxVisitedEntriesPerScan = 25000;
+const maxEntriesPerScan = 10000;
+const maxVisitedEntriesPerScan = 50000;
 const knownNonDirectoryExtensions = new Set([
   ...supported.keys(),
   'opf','nfo','jpg','jpeg','png','webp','gif','txt','cue','m3u','m3u8','json','xml','srt',
@@ -251,7 +251,7 @@ export async function scanLocalFolders(
           metadataSource: identity.metadataSource,
           coverUri,
         });
-        report('discovering', space);
+        if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
       } else if (depth < maxDepth) {
         if (!ext) {
           await scanDir(child, space, depth + 1);
