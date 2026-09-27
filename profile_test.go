@@ -33,14 +33,15 @@ func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 	root := t.TempDir()
 	if _, err := a.db.Exec("INSERT INTO sources(id,space,path,status) VALUES(1,'Main',?,'Ready')", root); err != nil { t.Fatal(err) }
 
-	_, audioDoneEdition, audioDoneAsset := addProfileStatsWork(t,a,1,"Main","Finished Audio","Audio","Series One",true)
-	_, readingDoneEdition, readingDoneAsset := addProfileStatsWork(t,a,1,"Main","Finished Book","Ebook","Series Two",true)
+	audioDoneWork, audioDoneEdition, audioDoneAsset := addProfileStatsWork(t,a,1,"Main","Finished Audio","Audio","Series One",true)
+	readingDoneWork, readingDoneEdition, readingDoneAsset := addProfileStatsWork(t,a,1,"Main","Finished Book","Ebook","Series Two",true)
 	_, audioStartedEdition, audioStartedAsset := addProfileStatsWork(t,a,1,"Main","Started Audio","Audio","Series One",true)
 	_ = readingDoneEdition
 
 	if _, err := a.db.Exec("INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(0,?,?,?,?,1)", audioDoneEdition,audioDoneAsset,120.0,1); err != nil { t.Fatal(err) }
 	if _, err := a.db.Exec("INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(0,?,?,?,?,0)", audioStartedEdition,audioStartedAsset,45.0,1); err != nil { t.Fatal(err) }
 	if _, err := a.db.Exec("INSERT INTO reading_progress(profile_id,asset_id,part,fraction,revision,complete) VALUES(0,?,?,?,?,1)", readingDoneAsset,4,1.0,1); err != nil { t.Fatal(err) }
+	if _,err:=a.db.Exec("INSERT INTO work_preferences(profile_id,work_id,rating,favourite,updated) VALUES(0,?,10,1,1),(0,?,9,1,1)",audioDoneWork,readingDoneWork);err!=nil{t.Fatal(err)}
 
 	req := httptest.NewRequest("GET","/api/profile-stats",nil)
 	req.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
@@ -59,6 +60,9 @@ func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 	}
 	if got.InProgress != 1 || got.Completed != 2 {
 		t.Fatalf("completion stats=%+v",got)
+	}
+	if got.Rated!=2 || got.Favourites!=2 || got.AverageRating!=9.5 {
+		t.Fatalf("personal preference stats=%+v",got)
 	}
 }
 
