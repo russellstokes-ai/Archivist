@@ -36,6 +36,98 @@ type metadataCandidate struct {
 	confidence int
 }
 
+type sidecarCacheEntry struct {
+	checked bool
+	exists  bool
+	size    int64
+	modNano int64
+	parsed  bool
+	meta    embeddedMetadata
+}
+
+type sidecarScanCache struct {
+	generic    map[string]*sidecarCacheEntry
+	statChecks int
+	parseReads int
+}
+
+func newSidecarScanCache() *sidecarScanCache {
+	return &sidecarScanCache{generic: map[string]*sidecarCacheEntry{}}
+}
+
+func isGenericSidecar(filename string) bool {
+	switch strings.ToLower(filepath.Base(filename)) {
+	case "metadata.opf", "book.opf", "metadata.nfo", "book.nfo":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *sidecarScanCache) stat(filename string) (size, modNano int64, exists bool) {
+	if c == nil || !isGenericSidecar(filename) {
+		info, err := os.Stat(filename)
+		if err != nil || !info.Mode().IsRegular() {
+			return 0, 0, false
+		}
+		return info.Size(), info.ModTime().UnixNano(), true
+	}
+	entry, ok := c.generic[filename]
+	if !ok {
+		entry = &sidecarCacheEntry{}
+		c.generic[filename] = entry
+	}
+	if !entry.checked {
+		entry.checked = true
+		c.statChecks++
+		if info, err := os.Stat(filename); err == nil && info.Mode().IsRegular() {
+			entry.exists = true
+			entry.size = info.Size()
+			entry.modNano = info.ModTime().UnixNano()
+		}
+	}
+	return entry.size, entry.modNano, entry.exists
+}
+
+func parseSidecarFile(filename string) embeddedMetadata {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".opf":
+		return opfMetadataFromReader(func(dst any) bool { return readXMLFile(filename, dst) })
+	case ".nfo":
+		var nfo struct {
+			Title  string `xml:"title"`
+			Author string `xml:"author"`
+			Writer string `xml:"writer"`
+			Series string `xml:"series"`
+		}
+		if readXMLFile(filename, &nfo) {
+			author := cleanMetadata(nfo.Author)
+			if author == "" {
+				author = cleanMetadata(nfo.Writer)
+			}
+			return embeddedMetadata{Title: cleanMetadata(nfo.Title), Author: author, Series: cleanMetadata(nfo.Series)}
+		}
+	}
+	return embeddedMetadata{}
+}
+
+func (c *sidecarScanCache) metadata(filename string) embeddedMetadata {
+	if c == nil || !isGenericSidecar(filename) {
+		return parseSidecarFile(filename)
+	}
+	size, _, exists := c.stat(filename)
+	if !exists || size > metadataXMLLimit {
+		return embeddedMetadata{}
+	}
+	entry := c.generic[filename]
+	if !entry.parsed {
+		entry.parsed = true
+		c.parseReads++
+		entry.meta = parseSidecarFile(filename)
+	}
+	return entry.meta
+}
+
 func cleanMetadata(s string) string {
 	s = strings.TrimSpace(strings.Join(strings.Fields(s), " "))
 	if len(s) > 1000 {
@@ -169,34 +261,18 @@ func sidecarCandidates(filename string) []string {
 	return out
 }
 
-func sidecarMetadata(filename string) embeddedMetadata {
+func sidecarMetadataWithCache(filename string, cache *sidecarScanCache) embeddedMetadata {
 	for _, candidate := range sidecarCandidates(filename) {
-		switch strings.ToLower(filepath.Ext(candidate)) {
-		case ".opf":
-			meta := opfMetadataFromReader(func(dst any) bool { return readXMLFile(candidate, dst) })
-			if meta.Title != "" || meta.Author != "" || meta.Series != "" {
-				return meta
-			}
-		case ".nfo":
-			var nfo struct {
-				Title  string `xml:"title"`
-				Author string `xml:"author"`
-				Writer string `xml:"writer"`
-				Series string `xml:"series"`
-			}
-			if readXMLFile(candidate, &nfo) {
-				author := cleanMetadata(nfo.Author)
-				if author == "" {
-					author = cleanMetadata(nfo.Writer)
-				}
-				meta := embeddedMetadata{Title: cleanMetadata(nfo.Title), Author: author, Series: cleanMetadata(nfo.Series)}
-				if meta.Title != "" || meta.Author != "" || meta.Series != "" {
-					return meta
-				}
-			}
+		meta := cache.metadata(candidate)
+		if meta.Title != "" || meta.Author != "" || meta.Series != "" {
+			return meta
 		}
 	}
 	return embeddedMetadata{}
+}
+
+func sidecarMetadata(filename string) embeddedMetadata {
+	return sidecarMetadataWithCache(filename, nil)
 }
 
 func pathMetadata(relative, format string) metadataCandidate {
@@ -309,11 +385,11 @@ func uniqueStrings(items []string) []string {
 	return out
 }
 
-func metadataFor(filename, relative, format string) identifiedMetadata {
+func metadataForWithCache(filename, relative, format string, cache *sidecarScanCache) identifiedMetadata {
 	pathCandidate := pathMetadata(relative, format)
 	candidates := []metadataCandidate{pathCandidate}
 
-	if sidecar := sidecarMetadata(filename); sidecar.Title != "" || sidecar.Author != "" || sidecar.Series != "" {
+	if sidecar := sidecarMetadataWithCache(filename, cache); sidecar.Title != "" || sidecar.Author != "" || sidecar.Series != "" {
 		candidates = append(candidates, metadataCandidate{embeddedMetadata: sidecar, source: "sidecar", confidence: 96})
 	}
 
@@ -331,15 +407,23 @@ func metadataFor(filename, relative, format string) identifiedMetadata {
 	return mergeMetadata(candidates...)
 }
 
-func metadataSignature(filename string, info os.FileInfo) string {
+func metadataFor(filename, relative, format string) identifiedMetadata {
+	return metadataForWithCache(filename, relative, format, nil)
+}
+
+func metadataSignatureWithCache(filename string, info os.FileInfo, cache *sidecarScanCache) string {
 	parts := []string{fmt.Sprintf("file:%d:%d", info.Size(), info.ModTime().UnixNano())}
 	for _, sidecar := range sidecarCandidates(filename) {
-		if stat, e := os.Stat(sidecar); e == nil && stat.Mode().IsRegular() {
-			parts = append(parts, fmt.Sprintf("%s:%d:%d", filepath.Base(sidecar), stat.Size(), stat.ModTime().UnixNano()))
+		if size, modNano, exists := cache.stat(sidecar); exists {
+			parts = append(parts, fmt.Sprintf("%s:%d:%d", filepath.Base(sidecar), size, modNano))
 		}
 	}
 	sort.Strings(parts[1:])
 	return strings.Join(parts, "|")
+}
+
+func metadataSignature(filename string, info os.FileInfo) string {
+	return metadataSignatureWithCache(filename, info, nil)
 }
 
 func epubTitle(filename string) string { return epubMetadata(filename).Title }
