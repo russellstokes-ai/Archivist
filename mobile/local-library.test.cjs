@@ -28,12 +28,14 @@ const saf = {
 };
 const fileText = new Map();
 const fileInfo = new Map();
+const fileReads = [];
+const infoReads = [];
 Module._load = function(request, parent, isMain) {
   if (request === 'react-native') return {Platform: {OS: 'android'}};
   if (request === 'expo-file-system/legacy') return {
     StorageAccessFramework: saf,
-    async readAsStringAsync(uri) { return fileText.get(uri) || ''; },
-    async getInfoAsync(uri) { return fileInfo.get(uri) || {exists: true, size: (fileText.get(uri) || '').length}; },
+    async readAsStringAsync(uri) { fileReads.push(uri); return fileText.get(uri) || ''; },
+    async getInfoAsync(uri) { infoReads.push(uri); return fileInfo.get(uri) || {exists: true, size: (fileText.get(uri) || '').length}; },
   };
   return load.call(this, request, parent, isMain);
 };
@@ -73,6 +75,16 @@ assert.equal(dashed.author, 'Frank Herbert');
 assert.equal(dashed.series, 'Dune');
 assert.equal(dashed.confidence, 'high');
 assert.equal(dashed.coverShape, 'square');
+
+const messy = inferLocalBookMetadata(
+  'content://root/document/primary:Books%2FNeil_Gaiman%20-%20Sandman%20-%2001%20-%20Preludes_%26_Nocturnes%20%5Bebook%5D.epub',
+  'EPUB',
+);
+assert.equal(messy.author, 'Neil Gaiman');
+assert.equal(messy.series, 'Sandman');
+assert.equal(messy.title, 'Preludes & Nocturnes');
+assert.equal(messy.confidence, 'high');
+assert.equal(messy.needsReview, false);
 
 const uncertain = inferLocalBookMetadata(
   'content://root/document/primary:Downloads%2Fsomething.epub',
@@ -144,6 +156,73 @@ assert.equal(previews[0].state, 'review');
   assert.equal(dottedScan.books.length,1);
   assert.equal(dottedScan.books[0].title,'The Hobbit');
 
+  // Multi-track audiobooks may use one book-level OPF/cover. Parse that OPF once,
+  // then reuse it for every track instead of doing repeated I/O.
+  const audioRoot='content://root/tree/primary:Audiobooks/document/primary:Audiobooks%2FDune';
+  const track1=audioRoot+'%2F01%20-%20Opening.mp3';
+  const track2=audioRoot+'%2F02%20-%20Arrakis.mp3';
+  const audioOpf=audioRoot+'%2Fmetadata.opf';
+  const audioCover=audioRoot+'%2Fcover.jpg';
+  saf.dirs.set(audioRoot,[track1,track2,audioOpf,audioCover]);
+  fileText.set(audioOpf,'<package><metadata><dc:title>Dune</dc:title><dc:creator>Frank Herbert</dc:creator><dc:subject>Science Fiction</dc:subject><meta name="calibre:series" content="Dune"/></metadata></package>');
+  fileInfo.set(audioOpf,{exists:true,size:220});
+  const audioScan=await scanLocalFolders([{id:audioRoot,uri:audioRoot,name:'Audiobooks',status:'Ready',itemCount:0}]);
+  assert.equal(audioScan.books.length,2);
+  assert.equal(audioScan.review,0);
+  assert.equal(audioScan.books.every(item=>item.metadataSource==='sidecar'),true);
+  assert.equal(audioScan.books.every(item=>item.author==='Frank Herbert'),true);
+  assert.equal(audioScan.books.every(item=>item.genre==='Science Fiction'),true);
+  assert.equal(audioScan.books.every(item=>item.coverUri===audioCover),true);
+  assert.equal(fileReads.filter(uri=>uri===audioOpf).length,1);
+  assert.equal(infoReads.filter(uri=>uri===audioOpf).length,1);
+
+  // Discovery must stay metadata-only even when the media file itself is huge.
+  const hugeRoot='content://root/tree/primary:Books/document/primary:Huge';
+  const hugeBook=hugeRoot+'%2FReference.epub';
+  saf.dirs.set(hugeRoot,[hugeBook]);
+  fileInfo.set(hugeBook,{exists:true,size:8*1024*1024*1024});
+  const hugeScan=await scanLocalFolders([{id:hugeRoot,uri:hugeRoot,name:'Huge',status:'Ready',itemCount:0}]);
+  assert.equal(hugeScan.books.length,1);
+  assert.equal(infoReads.includes(hugeBook),false);
+  assert.equal(fileReads.includes(hugeBook),false);
+
+  // A valid media file at the maximum supported recursion depth is still found.
+  const deepRoot='content://root/tree/primary:Books/document/primary:Deep';
+  let deepParent=deepRoot;
+  for(let depth=1;depth<=8;depth++){
+    const child=deepParent+'%2FLevel'+depth;
+    saf.dirs.set(deepParent,[child]);
+    deepParent=child;
+  }
+  const deepBook=deepParent+'%2FDeep%20Book.epub';
+  saf.dirs.set(deepParent,[deepBook]);
+  const deepScan=await scanLocalFolders([{id:deepRoot,uri:deepRoot,name:'Deep',status:'Ready',itemCount:0}]);
+  assert.equal(deepScan.books.length,1);
+  assert.equal(deepScan.books[0].title,'Deep Book');
+
+  // Malformed and oversized sidecars are enrichment failures only; media remains usable.
+  const brokenRoot='content://root/tree/primary:Books/document/primary:Broken';
+  const brokenBook=brokenRoot+'%2FUnknown.epub';
+  const brokenSidecar=brokenRoot+'%2FUnknown.opf';
+  saf.dirs.set(brokenRoot,[brokenBook,brokenSidecar]);
+  fileText.set(brokenSidecar,'<package><metadata><dc:title>');
+  fileInfo.set(brokenSidecar,{exists:true,size:31});
+  const brokenScan=await scanLocalFolders([{id:brokenRoot,uri:brokenRoot,name:'Broken',status:'Ready',itemCount:0}]);
+  assert.equal(brokenScan.books.length,1);
+  assert.equal(brokenScan.books[0].title,'Unknown');
+  assert.equal(brokenScan.books[0].needsReview,true);
+
+  const oversizedRoot='content://root/tree/primary:Books/document/primary:Oversized';
+  const oversizedBook=oversizedRoot+'%2FOriginal.epub';
+  const oversizedSidecar=oversizedRoot+'%2FOriginal.opf';
+  saf.dirs.set(oversizedRoot,[oversizedBook,oversizedSidecar]);
+  fileText.set(oversizedSidecar,'<package><metadata><dc:title>Should Not Be Read</dc:title><dc:creator>Someone</dc:creator></metadata></package>');
+  fileInfo.set(oversizedSidecar,{exists:true,size:3*1024*1024});
+  const oversizedScan=await scanLocalFolders([{id:oversizedRoot,uri:oversizedRoot,name:'Oversized',status:'Ready',itemCount:0}]);
+  assert.equal(oversizedScan.books.length,1);
+  assert.equal(oversizedScan.books[0].title,'Original');
+  assert.equal(fileReads.includes(oversizedSidecar),false);
+
   previews = previewLocalSort([books[0]], 'author-series-title');
   saf.dirs.set(previews[0].rootUri, []);
   const result = await applyLocalSortCopies(previews);
@@ -157,5 +236,5 @@ assert.equal(previews[0].state, 'review');
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);
-  console.log('PASS: local scanner dotted folders, sidecars/manual overrides, metadata inference, sort previews, copy apply and recovery');
+  console.log('PASS: local scanner handles messy names, deep folders, huge files, bounded sidecars, multi-track metadata caching, sort previews, copy apply and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
