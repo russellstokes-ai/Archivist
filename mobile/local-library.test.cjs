@@ -82,14 +82,15 @@ assert.equal(uncertain.title, 'something');
 assert.equal(uncertain.needsReview, true);
 
 const opf = parseLocalSidecar(
-  '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator><meta name="calibre:series" content="Hainish Cycle"/></metadata></package>',
+  '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator><dc:subject>Science Fiction</dc:subject><meta name="calibre:series" content="Hainish Cycle"/></metadata></package>',
   'opf',
 );
-assert.deepEqual(opf, {title: 'The Dispossessed', author: 'Ursula K. Le Guin', series: 'Hainish Cycle'});
-const manual = applyLocalMetadata(uncertain, {title: 'Corrected', author: 'A. Writer', series: ''}, 'manual');
+assert.deepEqual(opf, {title: 'The Dispossessed', author: 'Ursula K. Le Guin', series: 'Hainish Cycle', genre: 'Science Fiction'});
+const manual = applyLocalMetadata(uncertain, {title: 'Corrected', author: 'A. Writer', series: '', genre: 'Mystery'}, 'manual');
 assert.equal(manual.metadataSource, 'manual');
 assert.equal(manual.confidence, 'high');
 assert.equal(manual.needsReview, false);
+assert.equal(manual.genre, 'Mystery');
 
 const audioPath = inferLocalBookMetadata(
   'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2F01%20-%20Opening.mp3',
@@ -114,22 +115,24 @@ assert.equal(previews[0].state, 'review');
   const sidecar = root + '%2FMystery.opf';
   const cover = root + '%2FMystery.jpg';
   saf.dirs.set(root, [file, sidecar, cover]);
-  fileText.set(sidecar, '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator></metadata></package>');
+  fileText.set(sidecar, '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator><dc:subject>Science Fiction</dc:subject></metadata></package>');
   fileInfo.set(sidecar, {exists: true, size: 160});
   let scanned = await scanLocalFolders([{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}]);
   assert.equal(scanned.books.length, 1);
   assert.equal(scanned.books[0].title, 'The Dispossessed');
   assert.equal(scanned.books[0].metadataSource, 'sidecar');
+  assert.equal(scanned.books[0].genre, 'Science Fiction');
   assert.equal(scanned.books[0].needsReview, false);
   assert.equal(scanned.books[0].coverUri, cover);
 
   scanned = await scanLocalFolders(
     [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
     undefined,
-    {[file]: {title:'My correction',author:'Manual Author',series:'Manual Series'}},
+    {[file]: {title:'My correction',author:'Manual Author',series:'Manual Series',genre:'Fantasy'}},
   );
   assert.equal(scanned.books[0].title, 'My correction');
   assert.equal(scanned.books[0].metadataSource, 'manual');
+  assert.equal(scanned.books[0].genre, 'Fantasy');
   assert.equal(scanned.books[0].needsReview, false);
 
   const dottedRoot='content://root/tree/primary:Books/document/primary:Books2';
