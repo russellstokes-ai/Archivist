@@ -54,7 +54,7 @@ func TestProgressRevisionResumeAndIsolation(t *testing.T) {
 		t.Fatalf("completion save failed: %+v %v",p,e)
 	}
 	p, e = a.saveProgress(edition, progress{Asset:1,Seconds:0,Revision:3,Complete:false})
-	if e != nil || !p.Complete || p.Revision != 4 {
-		t.Fatalf("replay cleared completion: %+v %v",p,e)
+	if e != nil || p.Complete || p.Revision != 4 {
+		t.Fatalf("replay current state did not reset: %+v %v",p,e)
 	}
 }
