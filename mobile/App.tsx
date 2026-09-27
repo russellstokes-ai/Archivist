@@ -584,8 +584,9 @@ function Client() {
         request(session, serverWorksPath(0,100)),
         request(session, '/api/continue?space=' + encodeURIComponent(space)),
         request(session, '/api/library-summary'),
+        request(session, '/api/profile-stats'),
       ])
-        .then(([assets, works, continuing, summary]) => {
+        .then(([assets, works, continuing, summary, stats]) => {
           if (cancelled) return;
           setBooks(assets);
           setServerBooksHasMore(assets.length === 500);
@@ -593,6 +594,7 @@ function Client() {
           setServerHasMore(works.length === 100);
           setContinueWorks(continuing);
           setServerSummary(summary);
+          setServerProfileStats(stats);
         })
         .catch(e => {
           if (!cancelled) setError(e.message);
@@ -626,7 +628,7 @@ function Client() {
       .catch(e=>{if(!cancelled)setError(e.message);})
       .finally(()=>{if(!cancelled)setProfileLoading(false);});
     return()=>{cancelled=true;};
-  }, [activeTab, session]);
+  }, [activeTab, playback?.completed, session]);
 
   useEffect(() => {
     if (session || !playing?.uri || !audio.currentTime) return;
@@ -672,12 +674,13 @@ function Client() {
 
   async function refreshSourcesAndShelf() {
     if(!session)return;
-    const [items, assets, works, continuing, summary]=await Promise.all([
+    const [items, assets, works, continuing, summary, stats]=await Promise.all([
       request(session,'/api/sources'),
       request(session,serverAssetsPath(0,500)),
       request(session,serverWorksPath(0,100)),
       request(session,'/api/continue?space='+encodeURIComponent(space)),
       request(session,'/api/library-summary'),
+      request(session,'/api/profile-stats'),
     ]);
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
@@ -687,6 +690,7 @@ function Client() {
     setServerHasMore(works.length===100);
     setContinueWorks(continuing);
     setServerSummary(summary);
+    setServerProfileStats(stats);
   }
 
   async function loadMoreServerWorks() {
