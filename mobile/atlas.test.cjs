@@ -7,10 +7,10 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
 
 const {buildAtlasRelationship}=require('./atlas.ts');
 const works=[
-  {title:'Dune',author:'Frank Herbert',series:'Dune',format:'Ebook',space:'Books',available:true},
-  {title:'Dune Messiah',author:'Frank Herbert',series:'Dune',format:'Audio',space:'Audio',available:true},
-  {title:'Foundation',author:'Isaac Asimov',series:'Foundation',format:'Ebook',space:'Books',available:true},
-  {title:'Anonymous',author:'',series:'Misc',format:'Comic',space:'Comics',available:true},
+  {title:'Dune',author:'Frank Herbert',series:'Dune',genre:'Science Fiction',format:'Ebook',space:'Books',available:true},
+  {title:'Dune Messiah',author:'Frank Herbert',series:'Dune',genre:'Science Fiction',format:'Audio',space:'Audio',available:true},
+  {title:'Foundation',author:'Isaac Asimov',series:'Foundation',genre:'Science Fiction',format:'Ebook',space:'Books',available:true},
+  {title:'Anonymous',author:'',series:'Misc',genre:'Mystery',format:'Comic',space:'Comics',available:false},
 ];
 
 let relation=buildAtlasRelationship(works,'author','Frank Herbert');
@@ -18,13 +18,27 @@ assert.equal(relation.workCount,2);
 assert.deepEqual(relation.series,[{name:'Dune',count:2}]);
 assert.equal(relation.formats.length,2);
 assert.equal(relation.spaces.length,2);
+assert.deepEqual(relation.genres,[{name:'Science Fiction',count:2}]);
 
 relation=buildAtlasRelationship(works,'series','Dune');
 assert.equal(relation.workCount,2);
 assert.deepEqual(relation.authors,[{name:'Frank Herbert',count:2}]);
 
+relation=buildAtlasRelationship(works,'genre','Science Fiction');
+assert.equal(relation.workCount,3);
+
+relation=buildAtlasRelationship(works,'space','Books');
+assert.equal(relation.workCount,2);
+
+relation=buildAtlasRelationship(works,'format','Comic');
+assert.equal(relation.workCount,1);
+
+relation=buildAtlasRelationship(works,'status','Unavailable');
+assert.equal(relation.workCount,1);
+assert.equal(relation.works[0].title,'Anonymous');
+
 relation=buildAtlasRelationship(works,'author','Unknown author');
 assert.equal(relation.workCount,1);
 assert.equal(relation.works[0].title,'Anonymous');
 
-console.log('PASS: local Atlas relationships are exact and deterministic');
+console.log('PASS: local Atlas author, series, genre, folder, format and availability relationships are exact and deterministic');
