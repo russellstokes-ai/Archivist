@@ -16,6 +16,7 @@ func (a *app) initCatalogue() error {
 	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS works(id INTEGER PRIMARY KEY,title TEXT NOT NULL,space TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS editions(id INTEGER PRIMARY KEY,work_id INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,format TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS edition_assets(asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,edition_id INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,position INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS app_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  PRAGMA user_version=2;`)
 	if e != nil { return e }
 	for _, stmt := range []string{
@@ -171,7 +172,17 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	if e = pruneCatalogue(tx); e != nil { return e }
 	return tx.Commit()
 }
+const catalogueMigrationVersion = "auto-catalogue-v3"
+
 func (a *app) syncExistingCatalogue() error {
+	var version string
+	err := a.db.QueryRow("SELECT value FROM app_meta WHERE key='catalogue_migration'").Scan(&version)
+	if err == nil && version == catalogueMigrationVersion {
+		return nil
+	}
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
 	rows, e := a.db.Query("SELECT id FROM sources ORDER BY id")
@@ -181,7 +192,9 @@ func (a *app) syncExistingCatalogue() error {
 	if e=rows.Err(); e!=nil { rows.Close(); return e }
 	rows.Close()
 	for _, id := range ids { if e=a.syncAutoCatalogueLocked(id); e!=nil { return e } }
-	return nil
+	_, e = a.db.Exec(`INSERT INTO app_meta(key,value) VALUES('catalogue_migration',?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, catalogueMigrationVersion)
+	return e
 }
 
 // Grouping is explicit. Title similarity alone must not merge unrelated editions.
