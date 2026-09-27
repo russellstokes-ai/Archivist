@@ -1356,7 +1356,7 @@ function Client() {
         setPersistedJSON(localFoldersKey, result.folders),
         setPersistedJSON(localCatalogKey, result.books),
       ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
+      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
       setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
       if (result.books.length && celebrationEligible) {
         setCelebrating(true);
@@ -1387,7 +1387,7 @@ function Client() {
         setPersistedJSON(localFoldersKey, result.folders),
         setPersistedJSON(localCatalogKey, result.books),
       ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
+      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
       setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
     } catch (e) {
       setError((e as Error).message);
