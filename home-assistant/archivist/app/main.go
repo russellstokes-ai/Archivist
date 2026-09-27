@@ -157,8 +157,21 @@ func (a *app) addSource(space, path string) error {
 	if conflict {
 		return errors.New("folder overlaps an existing source; choose a different folder")
 	}
-	_, e = a.db.Exec("INSERT INTO sources(space,path) VALUES(?,?)", space, p)
-	return e
+	tx, e := a.db.Begin()
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	if _, e = tx.Exec("INSERT INTO sources(space,path) VALUES(?,?)", space, p); e != nil {
+		return e
+	}
+	// Every active User sees every library. Admin remains the only role allowed
+	// to add, scan, organise or remove server content.
+	if _, e = tx.Exec(`INSERT OR IGNORE INTO grants(profile_id,space)
+		SELECT id,? FROM profiles WHERE revoked=0`, space); e != nil {
+		return e
+	}
+	return tx.Commit()
 }
 func kind(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
@@ -397,6 +410,7 @@ func (a *app) routes() http.Handler {
 	a.householdRoutes(mux)
 	a.profileRoutes(mux)
 	a.atlasRoutes(mux)
+	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
 	a.recommendationRoutes(mux)
@@ -645,7 +659,7 @@ func (a *app) routes() http.Handler {
 			profile := identity{}
 			valid := false
 			if r.Header.Get("X-Ingress-Path") != "" {
-				profile = identity{ID: 0, Name: "Owner", Owner: true, Ingress: true}
+				profile = identity{ID: 0, Name: "Admin", Role: "admin", Admin: true, Owner: true, Ingress: true}
 				valid = true
 			} else {
 				c, e := r.Cookie("archivist_session")
@@ -772,6 +786,9 @@ func main() {
 	}
 	if e = a.syncExistingCatalogue(); e != nil {
 		log.Printf("catalogue migration: %v", e)
+	}
+	if e = a.initPreferences(); e != nil {
+		log.Fatal(e)
 	}
 	if e = a.initProgress(); e != nil {
 		log.Fatal(e)
