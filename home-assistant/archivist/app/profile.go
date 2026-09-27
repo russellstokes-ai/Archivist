@@ -15,7 +15,10 @@ type profileStats struct {
 	CompletedReading  int    `json:"completedReading"`
 	InProgressReading int    `json:"inProgressReading"`
 	InProgress        int    `json:"inProgress"`
-	Completed         int    `json:"completed"`
+	Completed         int     `json:"completed"`
+	Rated             int     `json:"rated"`
+	Favourites        int     `json:"favourites"`
+	AverageRating     float64 `json:"averageRating"`
 }
 
 func (a *app) profileStatsFor(p identity) (profileStats,error) {
@@ -124,6 +127,17 @@ func (a *app) profileStatsFor(p identity) (profileStats,error) {
 		WHERE pc.profile_id=?
 		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,
 		p.ID,p.Owner,p.ID).Scan(&out.Completed);e!=nil{return out,e}
+
+	if e:=a.db.QueryRow(`SELECT count(*),COALESCE(avg(wp.rating),0)
+		FROM work_preferences wp JOIN works w ON w.id=wp.work_id
+		WHERE wp.profile_id=? AND wp.rating>0
+		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,
+		p.ID,p.Owner,p.ID).Scan(&out.Rated,&out.AverageRating);e!=nil{return out,e}
+	if e:=a.db.QueryRow(`SELECT count(*)
+		FROM work_preferences wp JOIN works w ON w.id=wp.work_id
+		WHERE wp.profile_id=? AND wp.favourite=1
+		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,
+		p.ID,p.Owner,p.ID).Scan(&out.Favourites);e!=nil{return out,e}
 
 	currentUnion:="SELECT id FROM ("+audioInProgress+") UNION SELECT id FROM ("+readingInProgress+")"
 	if e:=a.db.QueryRow("SELECT count(*) FROM ("+currentUnion+")",
