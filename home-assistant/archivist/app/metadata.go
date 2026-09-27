@@ -18,12 +18,14 @@ type embeddedMetadata struct {
 	Title  string
 	Author string
 	Series string
+	Genre  string
 }
 
 type identifiedMetadata struct {
 	Title        string
 	Author       string
 	Series       string
+	Genre        string
 	Source       string
 	Confidence   int
 	NeedsReview  bool
@@ -99,13 +101,14 @@ func parseSidecarFile(filename string) embeddedMetadata {
 			Author string `xml:"author"`
 			Writer string `xml:"writer"`
 			Series string `xml:"series"`
+			Genre  string `xml:"genre"`
 		}
 		if readXMLFile(filename, &nfo) {
 			author := cleanMetadata(nfo.Author)
 			if author == "" {
 				author = cleanMetadata(nfo.Writer)
 			}
-			return embeddedMetadata{Title: cleanMetadata(nfo.Title), Author: author, Series: cleanMetadata(nfo.Series)}
+			return embeddedMetadata{Title: cleanMetadata(nfo.Title), Author: author, Series: cleanMetadata(nfo.Series), Genre: cleanMetadata(nfo.Genre)}
 		}
 	}
 	return embeddedMetadata{}
@@ -168,6 +171,7 @@ func opfMetadataFromReader(decode func(any) bool) embeddedMetadata {
 	var p struct {
 		Title   string   `xml:"metadata>title"`
 		Creator []string `xml:"metadata>creator"`
+		Subject []string `xml:"metadata>subject"`
 		Meta    []struct {
 			Name     string `xml:"name,attr"`
 			Content  string `xml:"content,attr"`
@@ -187,6 +191,12 @@ func opfMetadataFromReader(decode func(any) bool) embeddedMetadata {
 			}
 		}
 		m.Author = cleanMetadata(strings.Join(clean, ", "))
+	}
+	for _, subject := range p.Subject {
+		if value := cleanMetadata(subject); value != "" {
+			m.Genre = value
+			break
+		}
 	}
 	for _, meta := range p.Meta {
 		key := strings.ToLower(strings.TrimSpace(meta.Name + " " + meta.Property))
@@ -232,11 +242,12 @@ func comicMetadata(filename string) embeddedMetadata {
 		Title  string `xml:"Title"`
 		Series string `xml:"Series"`
 		Writer string `xml:"Writer"`
+		Genre  string `xml:"Genre"`
 	}
 	if !readZipXML(&z.Reader, "ComicInfo.xml", &info) {
 		return embeddedMetadata{}
 	}
-	return embeddedMetadata{Title: cleanMetadata(info.Title), Author: cleanMetadata(info.Writer), Series: cleanMetadata(info.Series)}
+	return embeddedMetadata{Title: cleanMetadata(info.Title), Author: cleanMetadata(info.Writer), Series: cleanMetadata(info.Series), Genre: cleanMetadata(info.Genre)}
 }
 
 func sidecarCandidates(filename string) []string {
@@ -325,7 +336,7 @@ func pathMetadata(relative, format string) metadataCandidate {
 
 func mergeMetadata(candidates ...metadataCandidate) identifiedMetadata {
 	result := identifiedMetadata{}
-	bestTitle, bestAuthor, bestSeries := -1, -1, -1
+	bestTitle, bestAuthor, bestSeries, bestGenre := -1, -1, -1, -1
 	sources := []string{}
 	maxConfidence := 0
 
@@ -342,7 +353,10 @@ func mergeMetadata(candidates ...metadataCandidate) identifiedMetadata {
 		if candidate.Series != "" && candidate.confidence > bestSeries {
 			result.Series, bestSeries = cleanMetadata(candidate.Series), candidate.confidence
 		}
-		if candidate.Title != "" || candidate.Author != "" || candidate.Series != "" {
+		if candidate.Genre != "" && candidate.confidence > bestGenre {
+			result.Genre, bestGenre = cleanMetadata(candidate.Genre), candidate.confidence
+		}
+		if candidate.Title != "" || candidate.Author != "" || candidate.Series != "" || candidate.Genre != "" {
 			sources = append(sources, candidate.source)
 			if candidate.confidence > maxConfidence {
 				maxConfidence = candidate.confidence
@@ -389,7 +403,7 @@ func metadataForWithCache(filename, relative, format string, cache *sidecarScanC
 	pathCandidate := pathMetadata(relative, format)
 	candidates := []metadataCandidate{pathCandidate}
 
-	if sidecar := sidecarMetadataWithCache(filename, cache); sidecar.Title != "" || sidecar.Author != "" || sidecar.Series != "" {
+	if sidecar := sidecarMetadataWithCache(filename, cache); sidecar.Title != "" || sidecar.Author != "" || sidecar.Series != "" || sidecar.Genre != "" {
 		candidates = append(candidates, metadataCandidate{embeddedMetadata: sidecar, source: "sidecar", confidence: 96})
 	}
 
@@ -400,7 +414,7 @@ func metadataForWithCache(filename, relative, format string, cache *sidecarScanC
 	case "Comic":
 		embedded = comicMetadata(filename)
 	}
-	if embedded.Title != "" || embedded.Author != "" || embedded.Series != "" {
+	if embedded.Title != "" || embedded.Author != "" || embedded.Series != "" || embedded.Genre != "" {
 		candidates = append(candidates, metadataCandidate{embeddedMetadata: embedded, source: "embedded", confidence: 92})
 	}
 
