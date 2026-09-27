@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
+import {speechFocusBrowserSource} from './speechFocus';
 
 export type LocalReaderDocument = {
   html?: string;
@@ -73,6 +74,10 @@ main{width:100%;height:100%;margin:0;position:relative}
 .comic .comic-page{display:none;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;transform-origin:center center;will-change:transform,opacity;user-select:none;-webkit-user-drag:none}
 .comic .comic-page.active{display:block}
 .comic .comic-page.focused{cursor:zoom-out}
+.speech-focus-overlay{position:fixed;z-index:80;margin:0;padding:0;border:0;background:transparent;outline:none;opacity:.82;transform:scale(1);transform-origin:center center;transition:left .24s cubic-bezier(.2,.72,.2,1),top .24s cubic-bezier(.2,.72,.2,1),width .24s cubic-bezier(.2,.72,.2,1),height .24s cubic-bezier(.2,.72,.2,1),opacity .18s ease,filter .18s ease;filter:drop-shadow(0 12px 22px #0008);cursor:zoom-out}
+.speech-focus-overlay.open{opacity:1;filter:drop-shadow(0 18px 34px #000a)}
+.speech-focus-overlay:focus-visible{outline:2px solid var(--gold);outline-offset:5px}
+.speech-focus-overlay canvas{display:block;width:100%;height:100%}
 .comic .reader-hud{--paper:#11181b;--ink:#f8f7f2;--muted:#b4c0c1;--line:#415052}
 
 .epub main{padding:26px 32px 72px;column-width:calc(100vw - 64px);column-gap:64px;column-fill:auto;overflow:hidden;height:100vh;scroll-behavior:auto}
@@ -83,7 +88,7 @@ main{width:100%;height:100%;margin:0;position:relative}
 .epub p,.epub li,.epub blockquote,.epub h1,.epub h2,.epub h3{transition:transform .18s ease,background .18s ease,padding .18s ease,border-radius .18s ease}
 .epub .text-focused{transform:scale(1.16);transform-origin:center center;background:color-mix(in srgb,var(--gold) 12%,transparent);padding:.25em .4em;border-radius:.35em;position:relative;z-index:3}
 @media (prefers-color-scheme:dark){:root{--paper:#10191d;--ink:#edf2ef;--muted:#a8b6b5;--line:#314247;--sage:#6f9da1;--gold:#d4b988}}
-@media (prefers-reduced-motion:reduce){.turn-surface,.comic-page,.epub p,.epub li,.epub blockquote,.epub h1,.epub h2,.epub h3{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media (prefers-reduced-motion:reduce){.turn-surface,.comic-page,.speech-focus-overlay,.epub p,.epub li,.epub blockquote,.epub h1,.epub h2,.epub h3{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body class="${mode}">
@@ -94,6 +99,7 @@ main{width:100%;height:100%;margin:0;position:relative}
   <button id="readerSound" aria-label="Toggle page turn sound">Sound</button>
   <button id="readerNext" aria-label="Next page">›</button>
 </div>
+<script>${speechFocusBrowserSource()}</script>
 ${readerInteractionScript(mode, initialPage)}
 </body>
 </html>`;
@@ -109,6 +115,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
   const prev = document.getElementById('readerPrev');
   const next = document.getElementById('readerNext');
   const soundButton = document.getElementById('readerSound');
+  const speechFocus = window.__archivistSpeechFocus;
   const pages = [...document.querySelectorAll('.comic-page')];
   let page = Math.max(0, Number('${Math.max(0, Math.floor(initialPage))}') || 0);
   let turning = false;
@@ -160,6 +167,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
     }catch{}
   }
   function resetComicZoom(){
+    speechFocus?.cancel?.();
     zoom=1;
     const img=pages[page];
     if(img){img.classList.remove('focused');img.style.transform='scale(1)';img.style.transformOrigin='center center';}
@@ -186,6 +194,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
     if(mode==='comic'){
       const img=target?.closest?.('.comic-page');
       if(!img)return;
+      if(speechFocus?.focus?.(img,x,y,'page-'+page))return;
       const rect=img.getBoundingClientRect();
       const px=clamp((x-rect.left)/Math.max(1,rect.width)*100,0,100);
       const py=clamp((y-rect.top)/Math.max(1,rect.height)*100,0,100);
@@ -208,7 +217,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
     const x=event.clientX;
     if(x<innerWidth*.18){move(-1);return;}
     if(x>innerWidth*.82){move(1);return;}
-    focusAt(event.target,event.clientX,event.clientY);
+    if(mode!=='comic')focusAt(event.target,event.clientX,event.clientY);
     refreshHud();
   });
 
@@ -217,6 +226,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
   reader.addEventListener('touchstart',event=>{
     if(event.touches.length===2){
       event.preventDefault();
+      speechFocus?.cancel?.();
       pinchStartDistance=distance(event.touches[0],event.touches[1]);
       pinchStartZoom=zoom;
       pinchStartScale=Number(getComputedStyle(document.documentElement).getPropertyValue('--reader-scale'))||1;
