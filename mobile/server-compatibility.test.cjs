@@ -12,7 +12,11 @@ const oldWork={
   id:1,title:'Dune',author:'Frank Herbert',series:'Dune',
   format:'Ebook',space:'Books',editions:1,files:1,available:true,
 };
-assert.equal(normalizeServerWork(oldWork).genre,'');
+const normalizedOldWork=normalizeServerWork(oldWork);
+assert.equal(normalizedOldWork.genre,'');
+assert.equal(normalizedOldWork.rating,0);
+assert.equal(normalizedOldWork.favourite,false);
+assert.equal(normalizedOldWork.state,'not-started');
 
 const oldSummary={
   total:1,
@@ -27,6 +31,9 @@ const oldSummary={
 const summary=normalizeLibrarySummary(oldSummary);
 assert.deepEqual(summary.genres,[]);
 assert.deepEqual(summary.formats,[{name:'Ebook',count:1}]);
+assert.deepEqual(summary.reading,[]);
+assert.deepEqual(summary.ratings,[]);
+assert.deepEqual(summary.favourites,[]);
 
 const oldRelation={
   kind:'author',
