@@ -48,7 +48,9 @@ type Book = {
   coverUri?: string;
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'legacy';
   localWorkKey?: string;
+  serverWorkId?: number;
 };
+type RatingPrompt = {title:string;localWorkKey?:string;serverWorkId?:number};
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
 type ServerWork = {
   id: number;
@@ -294,6 +296,7 @@ function Client() {
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [achievementCelebration,setAchievementCelebration]=useState<Achievement|null>(null);
+  const [ratingPrompt,setRatingPrompt]=useState<RatingPrompt|null>(null);
   const achievementBaseline=useRef<{key:string;ids:Set<string>}|null>(null);
   const [query, setQuery] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<'all'|'available'|'unavailable'>('all');
@@ -630,6 +633,12 @@ function Client() {
   }, [controller, player]);
 
   useEffect(() => {
+    if(!session || !playback?.completed || !playing?.serverWorkId)return;
+    const work=serverWorks.find(item=>item.id===playing.serverWorkId);
+    if(work)setRatingPrompt({title:work.title,serverWorkId:work.id});
+  }, [playback?.completed]);
+
+  useEffect(() => {
     if (!playback?.completed || !queueRef.current.length) return;
     const next=queueRef.current[0];
     setPlaying(next);
@@ -643,6 +652,9 @@ function Client() {
       return;
     }
     if (activeLocalWork) {
+      if(!localAudioCompleted[activeLocalWork.key]){
+        setRatingPrompt({title:activeLocalWork.title,localWorkKey:activeLocalWork.key});
+      }
       setLocalWorkProgress(current => {
         const last = activeLocalWork.tracks[localWorkIndex];
         const next = {...current, [activeLocalWork.key]: {uri:last?.uri || '', seconds:0, complete:true}};
@@ -1580,7 +1592,7 @@ function Client() {
       if (!first) throw Error('No available audio files for this audiobook.');
       const item: Book = {
         id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
-        format:'Audio',space:work.space,available:true,coverShape:'square',
+        format:'Audio',space:work.space,available:true,coverShape:'square',serverWorkId:work.id,
       };
       await queueStore?.edit(old => old.some(book => book.id === item.id) ? old : [...old,item]);
     } catch (e) {
@@ -1592,14 +1604,14 @@ function Client() {
     if (!work.available) { setError('This work is currently unavailable.'); return; }
     if (work.format === 'Audio') { void playLocalWork(work); return; }
     const first = work.tracks.find(track => track.available);
-    if (first) openBook(first);
+    if (first) openBook({...first,localWorkKey:work.key});
   }
 
   function openServerWorkTrack(work: ServerWork, track: WorkTrack) {
     setWorkPicker(null);
     const item: Book = {
       id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
-      format:track.format,space:work.space,available:track.available,
+      format:track.format,space:work.space,available:track.available,serverWorkId:work.id,
       coverShape:track.format==='Audio'?'square':'portrait',
     };
     if (track.format === 'Audio') void playBook(item);
@@ -1618,13 +1630,13 @@ function Client() {
       if (!available.length) throw Error('No readable files are currently available for this work.');
       if (work.format === 'Audio' || available.every(track => track.format === 'Audio')) {
         const first = available.find(track => track.format === 'Audio')!;
-        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:'Audio',space:work.space,available:true,coverShape:'square'});
+        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:'Audio',space:work.space,available:true,coverShape:'square',serverWorkId:work.id});
         return;
       }
       const editions = new Set(available.map(track => track.edition));
       if (editions.size === 1) {
         const first = available[0];
-        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:first.format,space:work.space,available:true,coverShape:first.format==='Audio'?'square':'portrait'});
+        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:first.format,space:work.space,available:true,serverWorkId:work.id,coverShape:first.format==='Audio'?'square':'portrait'});
         return;
       }
       setWorkPicker({work,tracks:available});
@@ -1838,7 +1850,7 @@ function Client() {
           </Text>
         </Pressable>
         <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
-          onRating={rating=>void saveLocalPreference(work,{...personal,rating})}
+          onRating={rating=>void saveLocalPreference(work,{...personal,rating:personal.rating===rating?0:rating})}
           onFavourite={()=>void saveLocalPreference(work,{...personal,favourite:!personal.favourite})} />
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
         {downloaded ? <Button label="Remove download" tone="quiet" disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
@@ -1860,7 +1872,7 @@ function Client() {
           </Text>
         </Pressable>
         <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
-          onRating={rating=>void saveServerPreference(work,{...personal,rating})}
+          onRating={rating=>void saveServerPreference(work,{...personal,rating:personal.rating===rating?0:rating})}
           onFavourite={()=>void saveServerPreference(work,{...personal,favourite:!personal.favourite})} />
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
         {downloaded
@@ -1868,6 +1880,38 @@ function Client() {
           : <Button label={downloading ? 'Downloading '+offlineProgress : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
       </View>
     );
+  }
+
+  function RatingPromptPanel() {
+    if(!ratingPrompt)return null;
+    const local=ratingPrompt.localWorkKey?localWorks.find(work=>work.key===ratingPrompt.localWorkKey):undefined;
+    const server=ratingPrompt.serverWorkId?serverWorks.find(work=>work.id===ratingPrompt.serverWorkId):undefined;
+    const personal=local
+      ? (localPreferences[local.key] || {rating:0,favourite:false})
+      : server ? (serverPreferences[server.id] || {rating:0,favourite:false,state:'finished' as ReadingState}) : {rating:0,favourite:false};
+    return <View style={styles.ratingPromptBackdrop}>
+      <View style={[styles.ratingPromptCard,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Text style={[styles.playerEyebrow,{color:p.gold}]}>FINISHED</Text>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>How was it?</Text>
+        <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{ratingPrompt.title}</Text>
+        <PersonalControls
+          rating={personal.rating||0}
+          favourite={!!personal.favourite}
+          onRating={rating=>{
+            const next={...personal,rating:personal.rating===rating?0:rating};
+            if(local)void saveLocalPreference(local,next);
+            else if(server)void saveServerPreference(server,next);
+          }}
+          onFavourite={()=>{
+            const next={...personal,favourite:!personal.favourite};
+            if(local)void saveLocalPreference(local,next);
+            else if(server)void saveServerPreference(server,next);
+          }}
+        />
+        <Button label="Done" onPress={()=>setRatingPrompt(null)} />
+        <Button label="Not now" tone="quiet" onPress={()=>setRatingPrompt(null)} />
+      </View>
+    </View>;
   }
 
   function WorkPickerPanel() {
@@ -2276,6 +2320,9 @@ function Client() {
                     });
                   }
                   if (message.complete === true) {
+                    if(!localReadingComplete[reading.uri!] && reading.localWorkKey){
+                      setRatingPrompt({title:reading.title,localWorkKey:reading.localWorkKey});
+                    }
                     setLocalReadingComplete(current => {
                       if (current[reading.uri!]) return current;
                       const next = {...current, [reading.uri!]: true};
@@ -2307,6 +2354,14 @@ function Client() {
           originWhitelist={[session.server]}
           onShouldStartLoadWithRequest={r => readerNavigationAllowed(r.url, session.server)}
           mixedContentMode="never"
+          onMessage={event=>{
+            try{
+              const message=JSON.parse(event.nativeEvent.data);
+              if(message?.type==='archivist-reader-complete' && reading.serverWorkId){
+                setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
+              }
+            }catch{}
+          }}
           onHttpError={e => setError('Reader request failed: '+e.nativeEvent.statusCode)}
           onError={e => setError(e.nativeEvent.description)}
           allowFileAccess={false}
@@ -2758,6 +2813,7 @@ function Client() {
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
+      <RatingPromptPanel />
       {playing ? (
         <Pressable accessibilityRole="button" onPress={() => setActiveTab('player')} style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
           <MiniArtwork book={playing} />
@@ -2844,6 +2900,8 @@ const styles = StyleSheet.create({
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   editorCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
   serverRecovery: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  ratingPromptBackdrop: {position:'absolute',top:0,right:0,bottom:0,left:0,zIndex:90,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:24},
+  ratingPromptCard: {width:'100%',maxWidth:420,borderWidth:1,borderRadius:18,padding:18,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 680, width:'100%', alignSelf:'center'},
   playerHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between'},
