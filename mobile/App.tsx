@@ -28,6 +28,7 @@ import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from 
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {possibleLocalDuplicateGroups} from './duplicates';
 import {buildLegacyAtlasRelationship, normalizeAtlasRelationship, normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
+import {getPersistedJSON, setPersistedJSON} from './stateStore';
 
 type Book = {
   id: number;
@@ -581,13 +582,13 @@ function Client() {
       setLocalWorkProgress(current => {
         const last = activeLocalWork.tracks[localWorkIndex];
         const next = {...current, [activeLocalWork.key]: {uri:last?.uri || '', seconds:0, complete:true}};
-        SecureStore.setItemAsync(localWorkProgressKey, JSON.stringify(next)).catch(() => undefined);
+        setPersistedJSON(localWorkProgressKey, next).catch(() => undefined);
         return next;
       });
       setLocalAudioCompleted(current => {
         if(current[activeLocalWork.key])return current;
         const next={...current,[activeLocalWork.key]:true};
-        SecureStore.setItemAsync(localAudioCompletedKey,JSON.stringify(next)).catch(()=>undefined);
+        setPersistedJSON(localAudioCompletedKey, next).catch(()=>undefined);
         return next;
       });
     }
@@ -608,37 +609,35 @@ function Client() {
     SecureStore.getItemAsync(themeKey).then(value => {
       if (value === 'system' || value === 'light' || value === 'dark') setTheme(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localFoldersKey).then(value => {
-      if (!value) return;
-      const saved = JSON.parse(value) as LocalFolder[];
+    getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localProgressKey).then(value => {
-      if (value) setLocalProgress(JSON.parse(value));
+    getPersistedJSON<Record<string, number>>(localProgressKey).then(value => {
+      if (value && typeof value === 'object') setLocalProgress(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localWorkProgressKey).then(value => {
-      if (value) setLocalWorkProgress(JSON.parse(value));
+    getPersistedJSON<Record<string, LocalWorkProgress>>(localWorkProgressKey).then(value => {
+      if (value && typeof value === 'object') setLocalWorkProgress(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localAudioCompletedKey).then(value => {
-      if (value) setLocalAudioCompleted(JSON.parse(value));
+    getPersistedJSON<Record<string, boolean>>(localAudioCompletedKey).then(value => {
+      if (value && typeof value === 'object') setLocalAudioCompleted(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localReadingProgressKey).then(value => {
-      if (value) setLocalReadingProgress(JSON.parse(value));
+    getPersistedJSON<Record<string, number>>(localReadingProgressKey).then(value => {
+      if (value && typeof value === 'object') setLocalReadingProgress(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localReadingCompleteKey).then(value => {
-      if (value) setLocalReadingComplete(JSON.parse(value));
+    getPersistedJSON<Record<string, boolean>>(localReadingCompleteKey).then(value => {
+      if (value && typeof value === 'object') setLocalReadingComplete(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localReadingCurrentCompleteKey).then(value => {
-      if (value) setLocalReadingCurrentComplete(JSON.parse(value));
+    getPersistedJSON<Record<string, boolean>>(localReadingCurrentCompleteKey).then(value => {
+      if (value && typeof value === 'object') setLocalReadingCurrentComplete(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localQueueKey).then(value => {
-      if (value) setQueuedBooks(JSON.parse(value));
+    getPersistedJSON<Book[]>(localQueueKey).then(value => {
+      if (Array.isArray(value)) setQueuedBooks(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localSortHistoryKey).then(value => {
-      if (value) setLocalSortHistory(JSON.parse(value));
+    getPersistedJSON<LocalSortHistory[]>(localSortHistoryKey).then(value => {
+      if (Array.isArray(value)) setLocalSortHistory(value);
     }).catch(() => undefined);
-    SecureStore.getItemAsync(localMetadataOverridesKey).then(value => {
-      if (value) setLocalMetadataOverrides(JSON.parse(value));
+    getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(value => {
+      if (value && typeof value === 'object') setLocalMetadataOverrides(value);
     }).catch(() => undefined).finally(() => setLocalOverridesReady(true));
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
@@ -804,7 +803,7 @@ function Client() {
       const seconds = audio.currentTime;
       setLocalProgress(current => {
         const next = {...current, [playing.uri!]: seconds};
-        SecureStore.setItemAsync(localProgressKey, JSON.stringify(next)).catch(() => undefined);
+        setPersistedJSON(localProgressKey, next).catch(() => undefined);
         return next;
       });
       if (activeLocalWork) {
@@ -812,7 +811,7 @@ function Client() {
         if (track?.uri) {
           setLocalWorkProgress(current => {
             const next = {...current, [activeLocalWork.key]: {uri:track.uri, seconds, complete:!!current[activeLocalWork.key]?.complete}};
-            SecureStore.setItemAsync(localWorkProgressKey, JSON.stringify(next)).catch(() => undefined);
+            setPersistedJSON(localWorkProgressKey, next).catch(() => undefined);
             return next;
           });
         }
@@ -838,7 +837,7 @@ function Client() {
     if(!additions.length)return;
     setLocalAudioCompleted(current=>{
       const next={...current,...completed};
-      SecureStore.setItemAsync(localAudioCompletedKey,JSON.stringify(next)).catch(()=>undefined);
+      setPersistedJSON(localAudioCompletedKey, next).catch(()=>undefined);
       return next;
     });
   },[localAudioCompleted,localWorkProgress]);
@@ -1128,7 +1127,7 @@ function Client() {
       setBooks(result.books);
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
-      await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
+      await setPersistedJSON(localFoldersKey, result.folders);
       const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
       setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
       if (result.books.length && celebrationEligible) {
@@ -1156,7 +1155,7 @@ function Client() {
       setBooks(result.books);
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
-      await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
+      await setPersistedJSON(localFoldersKey, result.folders);
       const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
       setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
     } catch (e) {
@@ -1178,7 +1177,7 @@ function Client() {
       const previous=current[work.key];
       const next={...current,[work.key]:{uri:track.uri,seconds,complete:false}};
       if(previous?.uri===track.uri && previous?.seconds===seconds && previous?.complete===false)return current;
-      SecureStore.setItemAsync(localWorkProgressKey,JSON.stringify(next)).catch(()=>undefined);
+      setPersistedJSON(localWorkProgressKey, next).catch(()=>undefined);
       return next;
     });
     const display: Book = {
@@ -1303,7 +1302,7 @@ function Client() {
       const entry: LocalSortHistory = {id: String(Date.now()), createdAt: new Date().toISOString(), copied: result.copied, failed: result.failed};
       const history = [entry, ...localSortHistory].slice(0, 20);
       setLocalSortHistory(history);
-      await SecureStore.setItemAsync(localSortHistoryKey, JSON.stringify(history));
+      await setPersistedJSON(localSortHistoryKey, history);
       setMoveStatus(`${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
       await rescanLocalFolders();
     } catch (e) {
@@ -1321,7 +1320,7 @@ function Client() {
       const result = await removeLocalSortCopies(history);
       const next = localSortHistory.filter(item => item.id !== history.id);
       setLocalSortHistory(next);
-      await SecureStore.setItemAsync(localSortHistoryKey, JSON.stringify(next));
+      await setPersistedJSON(localSortHistoryKey, next);
       setMoveStatus(`${result.copied.length} copied files removed; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}.`);
       await rescanLocalFolders();
     } catch (e) {
@@ -1368,7 +1367,7 @@ function Client() {
       ? queuedBooks
       : [...queuedBooks, item];
     setQueuedBooks(next);
-    await SecureStore.setItemAsync(localQueueKey, JSON.stringify(next));
+    await setPersistedJSON(localQueueKey, next);
   }
 
   async function queueServerWork(work: ServerWork) {
@@ -1436,12 +1435,12 @@ function Client() {
     if (!book.uri) return;
     const next = queuedBooks.some(item => item.uri === book.uri) ? queuedBooks : [...queuedBooks, book];
     setQueuedBooks(next);
-    await SecureStore.setItemAsync(localQueueKey, JSON.stringify(next));
+    await setPersistedJSON(localQueueKey, next);
   }
 
   async function updateLocalQueue(next: Book[]) {
     setQueuedBooks(next);
-    await SecureStore.setItemAsync(localQueueKey, JSON.stringify(next));
+    await setPersistedJSON(localQueueKey, next);
   }
 
   function Artwork({
@@ -1820,7 +1819,7 @@ function Client() {
               }else if(editing.uri){
                 const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
                 setLocalMetadataOverrides(next);
-                SecureStore.setItemAsync(localMetadataOverridesKey,JSON.stringify(next))
+                setPersistedJSON(localMetadataOverridesKey, next)
                   .then(()=>{setBooks(old=>old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
                   .catch(e=>setError(e.message)).finally(()=>setBusy(false));
               }else{
@@ -2041,14 +2040,14 @@ function Client() {
                   setLocalReadingProgress(current => {
                     if (current[reading.uri!] === message.page) return current;
                     const next = {...current, [reading.uri!]: message.page};
-                    SecureStore.setItemAsync(localReadingProgressKey, JSON.stringify(next)).catch(() => undefined);
+                    setPersistedJSON(localReadingProgressKey, next).catch(() => undefined);
                     return next;
                   });
                   if (typeof message.complete === 'boolean') {
                     setLocalReadingCurrentComplete(current => {
                       if (current[reading.uri!] === message.complete) return current;
                       const next={...current,[reading.uri!]:message.complete};
-                      SecureStore.setItemAsync(localReadingCurrentCompleteKey,JSON.stringify(next)).catch(()=>undefined);
+                      setPersistedJSON(localReadingCurrentCompleteKey, next).catch(()=>undefined);
                       return next;
                     });
                   }
@@ -2056,7 +2055,7 @@ function Client() {
                     setLocalReadingComplete(current => {
                       if (current[reading.uri!]) return current;
                       const next = {...current, [reading.uri!]: true};
-                      SecureStore.setItemAsync(localReadingCompleteKey, JSON.stringify(next)).catch(() => undefined);
+                      setPersistedJSON(localReadingCompleteKey, next).catch(() => undefined);
                       return next;
                     });
                   }
