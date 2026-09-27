@@ -13,3 +13,6 @@ assert.equal(appPkg.dependencies?.['expo-asset'],'~57.0.18','expo-audio needs ex
 assert.equal(appPkg.dependencies?.['expo-file-system'],'~57.0.7','Use the Expo SDK 57 file-system native module.');
 const manifest=fs.readFileSync(path.join(__dirname,'android','app','src','main','AndroidManifest.xml'),'utf8');
 assert.equal(manifest.includes('android.permission.RECORD_AUDIO'),false,'Archivist playback does not request microphone access.');
+assert.equal(manifest.includes('android:usesCleartextTraffic="true"'),true,'Android must permit HTTP transport after Archivist validates that the server is a private LAN or Tailscale address.');
+const appConfig=JSON.parse(fs.readFileSync(path.join(__dirname,'app.json'),'utf8'));
+assert.equal(appConfig.expo?.android?.usesCleartextTraffic,true,'Expo config must preserve private-server HTTP support on future native regeneration.');
