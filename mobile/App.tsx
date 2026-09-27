@@ -2009,7 +2009,7 @@ function Client() {
           onFavourite={()=>void saveServerPreference(work,{...personal,favourite:!personal.favourite})} />
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
         {downloaded
-          ? <Button label={'Downloaded · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
+          ? <Button label={'Remove download · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
           : <Button label={downloading ? 'Downloading '+offlineProgress : checkpoint ? 'Resume download' : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
       </View>
     );
@@ -2120,7 +2120,7 @@ function Client() {
           <Button label="Back to Shelf" tone="quiet" onPress={() => setReviewOnly(false)} />
         </View> : null}
         {localScanning && scanProgress ? <View style={[styles.scanBanner,{backgroundColor:p.ink}]}>
-          <ActivityIndicator color={p.ivory} />
+          <ActivityIndicator accessibilityLabel="Scanning local library" color={p.ivory} />
           <View style={{flex:1}}>
             <Text style={{color:p.ivory,fontWeight:'800'}}>Scanning {scanProgress.currentFolder || 'library'}…</Text>
             <Text style={{color:'#c8d4d2'}}>{scanProgress.entriesVisited} checked · {scanProgress.found} books found · {scanProgress.review} need review</Text>
@@ -2391,7 +2391,7 @@ function Client() {
             {playerPanel==='queue' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               {session ? <>
                 <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text>
-                {chapterError?<Text style={{color:p.gold}}>{chapterError}</Text>:chapters.length===0?<Text style={{color:p.muted}}>No embedded chapters</Text>:null}
+                {chapterError?<Text accessibilityRole="alert" style={{color:p.gold}}>{chapterError}</Text>:chapters.length===0?<Text style={{color:p.muted}}>No embedded chapters</Text>:null}
                 {chapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index && {backgroundColor:p.raised}]}>
                   <Text style={[styles.chapterIndex,{color:p.gold}]}>{index+1}</Text>
                   <View style={{flex:1}}>
@@ -2870,11 +2870,11 @@ function Client() {
             ['author-title','Author / Title'],
             ['author-series-title','Author / Series / Title'],
             ['format-author-title','Format / Author / Title'],
-          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
         </View>
         <Button label="Preview visible local items" disabled={visibleBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
         <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
-        {moveStatus?<Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
+        {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
         {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
           <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
           <Text style={{color:p.muted}}>From: {item.from}</Text>
@@ -2914,7 +2914,7 @@ function Client() {
         <Button label={offlineStorageBusy?'Checking…':'Refresh storage'} disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void refreshOfflineStorage()} />
         <Button label="Clean up storage" disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void cleanupDownloads()} />
       </View>
-      {offlineProgress?<Text style={[styles.meta,{color:p.gold}]}>{offlineProgress}</Text>:null}
+      {offlineProgress?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.gold}]}>{offlineProgress}</Text>:null}
       {partial.map(checkpoint=>{
         const connectedWork=session && checkpoint.server===session.server ? serverWorks.find(work=>work.id===checkpoint.workId) : undefined;
         return <View key={'partial-'+checkpoint.key} style={[styles.sourceRow,{borderColor:p.line}]}>
@@ -2944,7 +2944,7 @@ function Client() {
         <Text style={[styles.sectionTitle, {color: p.ink}]}>Appearance</Text>
         <View style={styles.segment}>
           {(['system', 'light', 'dark'] as ThemeMode[]).map(mode => (
-            <Pressable key={mode} accessibilityRole="button" onPress={() => void chooseTheme(mode)} style={[styles.segmentItem, {borderColor: p.line, backgroundColor: theme === mode ? p.sage : p.card}]}>
+            <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={() => void chooseTheme(mode)} style={[styles.segmentItem, {borderColor: p.line, backgroundColor: theme === mode ? p.sage : p.card}]}>
               <Text style={{color: theme === mode ? p.ivory : p.ink}}>{mode[0].toUpperCase() + mode.slice(1)}</Text>
             </Pressable>
           ))}
@@ -2998,7 +2998,7 @@ function Client() {
               ['author-title','Author / Title'],
               ['author-series-title','Author / Series / Title'],
               ['format-author-title','Format / Author / Title'],
-            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
           </View>
           <Button label="Preview matching files" disabled={busy || shelfLoading} tone="quiet" onPress={()=>void previewLibrary(false)}/>
           <Button label="Preview entire library" disabled={busy} tone="quiet" onPress={()=>void previewLibrary(true)}/>
