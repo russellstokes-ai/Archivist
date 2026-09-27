@@ -59,3 +59,7 @@ assert.ok(source.includes('>Family users</Text>'), 'Admin family-user management
 assert.ok(source.includes('User · whole library'), 'Family user UI must use simple whole-library User semantics');
 assert.equal(source.includes('Change library access'),false,'Mobile UI must not expose per-library User permissions');
 assert.ok(source.includes("profile.admin ?? profile.owner"), 'Mobile must understand new Admin role while remaining compatible with older servers');
+
+assert.ok(source.includes('How was it?'), 'Completion rating prompt is missing');
+assert.ok(source.includes('archivist-reader-complete'), 'Server reader completion must bridge back to the mobile rating prompt');
+assert.ok(source.includes('serverWorkId?: number'), 'Server work identity must survive into reader/player completion flows');
