@@ -27,10 +27,13 @@ function save(){
   return saveQueue;
 }
 function controls(){
+  const total=manifest?.parts?.length||0;
   $('previous').disabled=busy||turning||part===0;
-  $('next').disabled=busy||turning||part>=manifest.parts.length-1;
+  $('next').disabled=busy||turning||part>=total-1;
   $('sections').disabled=busy||turning;
-  $('position').textContent=(part+1)+' / '+manifest.parts.length;
+  $('position').textContent=total ? (part+1)+' / '+total : '';
+  $('position').setAttribute('aria-label',total ? 'Page '+(part+1)+' of '+total : 'Reader position');
+  $('reading').setAttribute('aria-busy',busy?'true':'false');
 }
 function pageSound(){
   if(!soundEnabled)return;
@@ -55,9 +58,13 @@ function applyComicZoom(originX=50,originY=50){
 }
 function focusComicPage(img,x,y){
   if(manifest?.format!=='Comic')return;
-  if(speechFocus.focus(img,x,y,'part-'+part))return;
+  if(speechFocus.focus(img,x,y,'part-'+part)){
+    status(speechFocus.isActive()?'Speech bubble enlarged. Tap outside it or press Escape to close.':'');
+    return;
+  }
   const rect=img.getBoundingClientRect(),px=clamp((x-rect.left)/Math.max(1,rect.width)*100,0,100),py=clamp((y-rect.top)/Math.max(1,rect.height)*100,0,100);
   zoom=zoom>1.01?1:2.45;applyComicZoom(px,py);
+  status(zoom>1.01?'Bubble not isolated; page zoomed instead.':'');
 }
 function focusText(target){
   if(manifest?.format!=='Ebook')return;
@@ -69,7 +76,7 @@ function focusText(target){
 }
 async function show(index,offset=0){
   speechFocus.cancel();
-  busy=true;loaded=false;part=index;controls();$('reading').replaceChildren();$('sections').value=String(index);
+  busy=true;loaded=false;part=index;controls();$('reading').replaceChildren();$('sections').value=String(index);status('Opening page…');
   try{
     if(manifest.format==='Ebook'){
       const data=await api('./api/assets/'+asset+'/reader/'+index);
@@ -85,6 +92,7 @@ async function show(index,offset=0){
       $('reading').append(frame);await new Promise(resolve=>{frame.onload=()=>resolve();setTimeout(resolve,500);});
     }else throw Error('This format is not supported by the reader.');
     loaded=true;await new Promise(requestAnimationFrame);scrollTo(0,offset*Math.max(0,document.documentElement.scrollHeight-innerHeight));status('');
+    window.ReactNativeWebView?.postMessage?.(JSON.stringify({type:'archivist-reader-ready',part,total:manifest.parts.length}));
   }catch(e){status(e.message);}finally{busy=false;controls();}
 }
 async function move(n){
@@ -113,7 +121,7 @@ fit.textContent='Fit';fit.setAttribute('aria-label','Fit page');
 function updateSoundButton(){sound.textContent=soundEnabled?'Sound on':'Sound off';sound.setAttribute('aria-pressed',soundEnabled?'true':'false');}
 updateSoundButton();
 sound.onclick=()=>{soundEnabled=!soundEnabled;localStorage.setItem('archivist-reader-sound',soundEnabled?'on':'off');if(soundEnabled)pageSound();updateSoundButton();};
-function changeZoom(value){if(busy||!manifest||manifest.format!=='Comic')return;zoom=clamp(value,1,4);applyComicZoom();}
+function changeZoom(value){if(busy||!manifest||manifest.format!=='Comic')return;zoom=clamp(value,1,4);speechFocus.cancel();applyComicZoom();status(zoom===1?'Fit to page':'Zoom '+Math.round(zoom*100)+'%');}
 zoomOut.onclick=()=>changeZoom(zoom-.25);zoomIn.onclick=()=>changeZoom(zoom+.25);fit.onclick=()=>changeZoom(1);
 document.querySelector('.tools').append(zoomOut,fit,zoomIn,sound);
 
@@ -146,13 +154,25 @@ $('reading').addEventListener('touchend',e=>{
   if(e.touches.length<2&&pinchStartDistance){pinchStartDistance=0;if(manifest?.format==='Ebook')localStorage.setItem('reader-font',String(font));}
 },{passive:false});
 
-document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;if(e.key==='ArrowRight')void move(1);if(e.key==='ArrowLeft')void move(-1);});
+document.addEventListener('keydown',e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;
+  if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();void move(1);}
+  if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();void move(-1);}
+  if(e.key==='Home'&&manifest?.parts?.length){e.preventDefault();void show(0);}
+  if(e.key==='End'&&manifest?.parts?.length){e.preventDefault();void show(manifest.parts.length-1);}
+  if(e.key==='Escape'&&speechFocus.isActive()){e.preventDefault();speechFocus.close();status('');}
+});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)void save();});setInterval(save,5000);
 
 try{
   if(!/^\d+$/.test(asset||''))throw Error('Choose a book from Library.');status('Opening...');
   manifest=await api('./api/assets/'+asset+'/reader');const progress=await api('./api/assets/'+asset+'/reading-progress');revision=progress.revision;completionNotified=!!progress.complete;
   if(manifest.format==='PDF')manifest.parts=['Document'];
+  $('reader-help').textContent=manifest.format==='Comic'
+    ? 'Tap the left or right edge to turn pages. Double-tap a speech bubble to enlarge it; pinch to zoom.'
+    : manifest.format==='Ebook'
+      ? 'Tap the left or right edge to move between sections. Tap text to focus it; pinch to resize.'
+      : 'Use your PDF viewer controls to navigate and zoom.';
   for(const control of [zoomOut,fit,zoomIn])control.hidden=manifest.format!=='Comic';
   sound.hidden=manifest.format==='PDF';
   $('smaller').hidden=$('larger').hidden=manifest.format!=='Ebook';
