@@ -132,6 +132,7 @@ func TestCSRFAndPersistence(t *testing.T) {
 		t.Fatal(e)
 	}
 	b := &app{db: db}
+	if e = b.initHousehold(); e != nil { t.Fatal(e) }
 	if e = b.addSource("Separate", t.TempDir()); e != nil {
 		t.Fatal(e)
 	}
