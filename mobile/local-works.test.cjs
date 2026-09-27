@@ -51,4 +51,16 @@ const review = groupLocalWorks([
 assert.equal(review[0].needsReview,true);
 assert.equal(review[0].reviewReason,'Check author');
 
-console.log('PASS: conservative local work grouping and natural audiobook track ordering');
+const large=Array.from({length:5000},(_,index)=>({
+  ...book(index+10000,'content://root/document/primary:Books%2FAuthor%2FBook%20'+String(index).padStart(5,'0')+'.epub',{
+    title:'Book '+String(index).padStart(5,'0'),
+    format:'EPUB',
+    coverShape:'portrait',
+  }),
+}));
+const largeGrouped=groupLocalWorks(large);
+assert.equal(largeGrouped.length,5000);
+assert.equal(largeGrouped[0].title,'Book 00000');
+assert.equal(largeGrouped[4999].title,'Book 04999');
+
+console.log('PASS: conservative local work grouping handles a 5,000-work shelf with deterministic ordering');
