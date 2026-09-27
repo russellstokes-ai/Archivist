@@ -34,23 +34,23 @@
 
 <section id="settings" hidden>
   <div class="page-heading"><div><span class="eyebrow">Administration</span><h1>Settings</h1><p>Library sources, organisation, household access and server configuration.</p></div></div>
-  <div class="settings-tabs" role="tablist">
-    <button data-settings="library" aria-current="page">Library & storage</button>
-    <button data-settings="organisation">Organisation</button>
-    <button data-settings="household">Household</button>
-    <button data-settings="server">Server</button>
+  <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+    <button role="tab" data-settings="library" aria-selected="true" aria-controls="sources">Library & storage</button>
+    <button role="tab" data-settings="organisation" aria-selected="false" aria-controls="organisation-settings" tabindex="-1">Organisation</button>
+    <button role="tab" data-settings="household" aria-selected="false" aria-controls="household-settings" tabindex="-1">Household</button>
+    <button role="tab" data-settings="server" aria-selected="false" aria-controls="config" tabindex="-1">Server</button>
   </div>
 
-  <section id="sources" data-settings-panel="library">
+  <section id="sources" role="tabpanel" data-settings-panel="library">
     <div class="workflow-steps"><span><b>1</b>Add folders</span><span><b>2</b>Scan & enrich</span><span><b>3</b>Browse Shelf</span></div>
     <section class="panel-card"><div class="section-heading"><div><h2>Add a source</h2><p>Add media folders without changing their contents.</p></div></div><form id="add"><label>Folder on the server<input id="path" required placeholder="/media/books"></label><label>Library space<input id="new-space" required value="My library" maxlength="100" list="spaces"><datalist id="spaces"></datalist></label><button class="primary">Add folder</button></form><p class="note">Scanning reads metadata and builds the Shelf. Sorting files is optional.</p></section>
     <section class="panel-card"><div class="section-heading"><div><h2>Sources</h2><p>Scan or refresh a source when files change.</p></div></div><div id="source-list"></div><div id="scan-jobs" hidden><h3>Scan activity</h3><div id="jobs"></div></div></section>
   </section>
 
-  <section id="organisation-settings" data-settings-panel="organisation" hidden></section>
-  <section id="household-settings" data-settings-panel="household" hidden></section>
+  <section id="organisation-settings" role="tabpanel" data-settings-panel="organisation" hidden></section>
+  <section id="household-settings" role="tabpanel" data-settings-panel="household" hidden></section>
 
-  <section id="config" data-settings-panel="server" hidden>
+  <section id="config" role="tabpanel" data-settings-panel="server" hidden>
     <section class="panel-card"><div class="section-heading"><div><h2>Server</h2><p>Connection details, phone access and active sessions.</p></div></div><div id="config-summary" class="summary"></div></section>
     <section class="panel-card"><h2>Phone connection</h2><p>In the Archivist app, open Settings → Add server, then enter the server address and access key.</p><form id="owner-access-form"><label>Phone access key<input id="owner-access-key" type="password" minlength="8" maxlength="256" autocomplete="new-password" placeholder="At least 8 characters"></label><button id="owner-access-save">Set / replace access key</button></form><p class="note">This key is for connecting apps. Home Assistant ingress remains trusted owner access.</p></section>
     <section class="panel-card"><h2>Active sessions</h2><div id="session-list"></div></section>
