@@ -33,7 +33,7 @@ type Book = {
   title: string;
   author: string;
   series: string;
-  genre: string;
+  genre?: string;
   format: string;
   space: string;
   available: boolean;
@@ -52,7 +52,7 @@ type ServerWork = {
   title: string;
   author: string;
   series: string;
-  genre: string;
+  genre?: string;
   format: string;
   space: string;
   editions: number;
@@ -69,7 +69,7 @@ type LibrarySummary = {
   unknownAuthors: number;
   needsReview: number;
   series: SummaryItem[];
-  genres: SummaryItem[];
+  genres?: SummaryItem[];
   availability: SummaryItem[];
 };
 type ServerAtlasRelationship = {
@@ -79,10 +79,10 @@ type ServerAtlasRelationship = {
   works: ServerWork[];
   authors: SummaryItem[];
   series: SummaryItem[];
-  genres: SummaryItem[];
+  genres?: SummaryItem[];
   formats: SummaryItem[];
   spaces: SummaryItem[];
-  availability: SummaryItem[];
+  availability?: SummaryItem[];
 };
 type DuplicateCandidate = {
   id:number;
@@ -481,7 +481,7 @@ function Client() {
       if (unknownAuthorOnly && !!book.author) return false;
       if (!availabilityMatches(book.available)) return false;
       if (!q) return true;
-      return [book.title, book.author, book.series, book.genre, book.format, book.space].some(value => value.toLowerCase().includes(q));
+      return [book.title, book.author, book.series, book.genre || '', book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
   }, [authorFilter, availabilityFilter, books, formatFilter, genreFilter, query, reviewOnly, seriesFilter, space, unknownAuthorOnly]);
 
@@ -531,7 +531,7 @@ function Client() {
         formats: serverSummary.formats.map(item => [item.name,item.count] as [string,number]),
         authors,
         series: serverSummary.series.map(item => [item.name,item.count] as [string,number]),
-        genres: serverSummary.genres.map(item => [item.name,item.count] as [string,number]),
+        genres: (serverSummary.genres || []).map(item => [item.name,item.count] as [string,number]),
         spaces: serverSummary.spaces.map(item => [item.name,item.count] as [string,number]),
         status: serverSummary.availability.map(item => [item.name,item.count] as [string,number]),
       };
@@ -1363,7 +1363,7 @@ function Client() {
       const first = tracks.find(track => track.available && track.format === 'Audio');
       if (!first) throw Error('No available audio files for this audiobook.');
       const item: Book = {
-        id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre,
+        id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
         format:'Audio',space:work.space,available:true,coverShape:'square',
       };
       await queueStore?.edit(old => old.some(book => book.id === item.id) ? old : [...old,item]);
@@ -1382,7 +1382,7 @@ function Client() {
   function openServerWorkTrack(work: ServerWork, track: WorkTrack) {
     setWorkPicker(null);
     const item: Book = {
-      id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre,
+      id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
       format:track.format,space:work.space,available:track.available,
       coverShape:track.format==='Audio'?'square':'portrait',
     };
@@ -1402,13 +1402,13 @@ function Client() {
       if (!available.length) throw Error('No readable files are currently available for this work.');
       if (work.format === 'Audio' || available.every(track => track.format === 'Audio')) {
         const first = available.find(track => track.format === 'Audio')!;
-        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre,format:'Audio',space:work.space,available:true,coverShape:'square'});
+        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:'Audio',space:work.space,available:true,coverShape:'square'});
         return;
       }
       const editions = new Set(available.map(track => track.edition));
       if (editions.size === 1) {
         const first = available[0];
-        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre,format:first.format,space:work.space,available:true,coverShape:first.format==='Audio'?'square':'portrait'});
+        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:first.format,space:work.space,available:true,coverShape:first.format==='Audio'?'square':'portrait'});
         return;
       }
       setWorkPicker({work,tracks:available});
@@ -2157,10 +2157,10 @@ function Client() {
         {relation ? <>
           <AtlasConnectionGroup title="Authors" kind="author" items={relation.authors} />
           <AtlasConnectionGroup title="Series" kind="series" items={relation.series} />
-          <AtlasConnectionGroup title="Genres" kind="genre" items={relation.genres} />
+          <AtlasConnectionGroup title="Genres" kind="genre" items={relation.genres || []} />
           <AtlasConnectionGroup title="Formats" kind="format" items={relation.formats} />
           <AtlasConnectionGroup title="Folders" kind="space" items={relation.spaces} />
-          <AtlasConnectionGroup title="Availability" kind="status" items={relation.availability} />
+          <AtlasConnectionGroup title="Availability" kind="status" items={relation.availability || []} />
           <Text style={[styles.sectionTitle,{color:p.ink}]}>Works</Text>
           <View style={{gap:8}}>
             {session ? serverAtlasRelationship?.works.map(work=><Pressable key={work.id} accessibilityRole="button" onPress={()=>void openServerWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
