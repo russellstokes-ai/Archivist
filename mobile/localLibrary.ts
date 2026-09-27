@@ -8,6 +8,7 @@ export type LocalBook = {
   title: string;
   author: string;
   series: string;
+  genre: string;
   format: string;
   space: string;
   available: boolean;
@@ -64,6 +65,7 @@ export type LocalMetadataOverride = {
   title: string;
   author: string;
   series: string;
+  genre: string;
 };
 
 export type LocalScanResult = {
@@ -208,7 +210,7 @@ export async function scanLocalFolders(
             if (info.exists && (!('size' in info) || typeof info.size !== 'number' || info.size <= 2 * 1024 * 1024)) {
               const text = await readAsStringAsync(sidecarUri);
               const fields = parseLocalSidecar(text, extension(sidecarUri));
-              if (fields.title || fields.author || fields.series) {
+              if (fields.title || fields.author || fields.series || fields.genre) {
                 identity = applyLocalMetadata(identity, fields, 'sidecar');
               }
             }
@@ -228,6 +230,7 @@ export async function scanLocalFolders(
           title: identity.title || titleFromUri(child),
           author: identity.author,
           series: identity.series,
+          genre: identity.genre,
           format,
           space,
           available: true,
