@@ -981,6 +981,11 @@ function Client() {
     void rescanLocalFolders();
   }, [books.length, localCatalogReady, localFolders, localOverridesReady, localScanning, restoring, session]);
 
+  useEffect(()=>{
+    if(activeTab!=='settings')return;
+    void refreshOfflineStorage();
+  },[activeTab,offlineWorks]);
+
   async function chooseTheme(next: ThemeMode) {
     setTheme(next);
     await SecureStore.setItemAsync(themeKey, next);
@@ -2779,6 +2784,51 @@ function Client() {
     );
   }
 
+  function OfflineDownloadsPanel(){
+    const completed=Object.values(offlineWorks).sort((a,b)=>b.downloadedAt.localeCompare(a.downloadedAt));
+    const partial=Object.values(offlineCheckpoints).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+    const used=offlineStorage?.actualBytes ?? completed.reduce((sum,item)=>sum+Math.max(0,item.bytes||0),0);
+    const capacity=offlineStorage?.capacityBytes || 0;
+    const free=offlineStorage?.freeBytes || 0;
+    return <View style={{gap:10}}>
+      <Text style={[styles.sectionTitle,{color:p.ink}]}>Offline downloads</Text>
+      <View style={[styles.offlineSummary,{backgroundColor:p.card,borderColor:p.line}]}>
+        <View style={{flex:1}}>
+          <Text style={{color:p.ink,fontWeight:'900'}}>{completed.length} downloaded · {formatBytes(used)}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>
+            {capacity>0 ? formatBytes(free)+' free of '+formatBytes(capacity) : 'Stored in Archivist app storage'}
+          </Text>
+          {partial.length?<Text style={[styles.meta,{color:p.gold}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} ready to resume</Text>:null}
+          {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.gold}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
+        </View>
+      </View>
+      <View style={styles.toolRow}>
+        <Button label={offlineStorageBusy?'Checking…':'Refresh storage'} disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void refreshOfflineStorage()} />
+        <Button label="Clean up storage" disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void cleanupDownloads()} />
+      </View>
+      {offlineProgress?<Text style={[styles.meta,{color:p.gold}]}>{offlineProgress}</Text>:null}
+      {partial.map(checkpoint=>{
+        const connectedWork=session && checkpoint.server===session.server ? serverWorks.find(work=>work.id===checkpoint.workId) : undefined;
+        return <View key={'partial-'+checkpoint.key} style={[styles.sourceRow,{borderColor:p.line}]}>
+          <Text style={{color:p.ink,fontWeight:'800'}}>{checkpoint.title || 'Incomplete download'}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>Paused/incomplete · {checkpoint.completedTrackIds.length} file{checkpoint.completedTrackIds.length===1?'':'s'} complete</Text>
+          <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{checkpoint.server}</Text>
+          <View style={styles.toolRow}>
+            {connectedWork?<Button label="Resume" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(connectedWork)} />:null}
+            <Button label="Discard partial" disabled={offlineBusyId!==null||offlineStorageBusy} tone="quiet" onPress={()=>void discardPartialDownload(checkpoint)} />
+          </View>
+        </View>;
+      })}
+      {completed.map(item=><View key={'offline-'+item.key} style={[styles.sourceRow,{borderColor:p.line}]}>
+        <Text style={{color:p.ink,fontWeight:'800'}}>{item.title}</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {formatBytes(item.bytes)} · {new Date(item.downloadedAt).toLocaleDateString()}</Text>
+        <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{item.server}</Text>
+        <Button label="Remove download" disabled={offlineBusyId!==null} tone="quiet" onPress={()=>void removeServerDownload(item)} />
+      </View>)}
+      {!completed.length&&!partial.length?<Text style={[styles.meta,{color:p.muted}]}>Nothing stored offline yet. Use Download for offline on any server work.</Text>:null}
+    </View>;
+  }
+
   function Settings() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
@@ -2796,6 +2846,7 @@ function Client() {
         {(!session || owner)?<Button label="Review duplicates" tone="quiet" onPress={()=>void openDuplicateReview()} />:null}
         <DuplicateReviewPanel />
         <LocalSortingPanel />
+        <OfflineDownloadsPanel />
         <Text style={[styles.sectionTitle, {color: p.ink}]}>Server</Text>
         {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : recoverableSession ? (
           <View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.line}]}>
@@ -2979,6 +3030,7 @@ const styles = StyleSheet.create({
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   editorCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
   serverRecovery: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  offlineSummary: {borderWidth:1,borderRadius:14,padding:14,flexDirection:'row',gap:12,alignItems:'center'},
   ratingPromptBackdrop: {position:'absolute',top:0,right:0,bottom:0,left:0,zIndex:90,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:24},
   ratingPromptCard: {width:'100%',maxWidth:420,borderWidth:1,borderRadius:18,padding:18,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
