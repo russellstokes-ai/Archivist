@@ -85,7 +85,7 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 				spaces = append(spaces, space)
 			}
 			spaceRows.Close()
-			out = append(out, map[string]any{"id": id, "name": name, "revoked": revoked, "spaces": spaces})
+			out = append(out, map[string]any{"id": id, "name": name, "role": "user", "revoked": revoked, "spaces": spaces})
 		}
 		reply(w, out)
 	})
