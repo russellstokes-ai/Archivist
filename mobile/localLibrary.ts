@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
-import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, parseLocalSidecar} from './libraryIntelligence';
+import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar} from './libraryIntelligence';
 
 export type LocalBook = {
   id: number;
@@ -139,6 +139,24 @@ export async function scanLocalFolders(
   let entriesVisited = 0;
   let review = 0;
   const seen = new Set<string>();
+  const sidecarCache = new Map<string, LocalMetadataFields>();
+
+  async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
+    const cached = sidecarCache.get(uri);
+    if (cached) return cached;
+    let fields: LocalMetadataFields = {};
+    try {
+      const info = await getInfoAsync(uri);
+      if (info.exists && (!('size' in info) || typeof info.size !== 'number' || info.size <= 2 * 1024 * 1024)) {
+        fields = parseLocalSidecar(await readAsStringAsync(uri), extension(uri));
+      }
+    } catch {
+      // Sidecars enrich the scan only. Cache a miss so one broken file cannot
+      // be retried for every track in a large audiobook folder.
+    }
+    sidecarCache.set(uri, fields);
+    return fields;
+  }
 
   const report = (phase: LocalScanProgress['phase'], currentFolder: string) => {
     onProgress?.({phase, currentFolder, entriesVisited, found: books.length, review});
@@ -163,7 +181,7 @@ export async function scanLocalFolders(
     const artworkByStem = new Map<string, string>();
     let genericCover = '';
     let genericCoverRank = 99;
-    const genericCoverAllowed = supportedFiles.length === 1 || (
+    const genericBookLevelFilesAllowed = supportedFiles.length === 1 || (
       supportedFiles.length > 1 && supportedFiles.every(child => supported.get(extension(child)) === 'Audio')
     );
     for (const child of children) {
@@ -176,13 +194,13 @@ export async function scanLocalFolders(
       if (['jpg','jpeg','png','webp'].includes(ext)) {
         artworkByStem.set(stem, child);
         const rank = stem === 'cover' ? 0 : stem === 'folder' ? 1 : 99;
-        if (genericCoverAllowed && rank < genericCoverRank) {
+        if (genericBookLevelFilesAllowed && rank < genericCoverRank) {
           genericCover = child;
           genericCoverRank = rank;
         }
       }
     }
-    if (supportedFiles.length !== 1) genericSidecar = '';
+    if (!genericBookLevelFilesAllowed) genericSidecar = '';
 
     for (const child of children) {
       entriesVisited += 1;
@@ -205,17 +223,9 @@ export async function scanLocalFolders(
 
         const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
         if (sidecarUri) {
-          try {
-            const info = await getInfoAsync(sidecarUri);
-            if (info.exists && (!('size' in info) || typeof info.size !== 'number' || info.size <= 2 * 1024 * 1024)) {
-              const text = await readAsStringAsync(sidecarUri);
-              const fields = parseLocalSidecar(text, extension(sidecarUri));
-              if (fields.title || fields.author || fields.series || fields.genre) {
-                identity = applyLocalMetadata(identity, fields, 'sidecar');
-              }
-            }
-          } catch {
-            // Sidecars are enrichment only. A malformed/unreadable one must never fail the scan.
+          const fields = await cachedSidecarFields(sidecarUri);
+          if (fields.title || fields.author || fields.series || fields.genre) {
+            identity = applyLocalMetadata(identity, fields, 'sidecar');
           }
         }
 
