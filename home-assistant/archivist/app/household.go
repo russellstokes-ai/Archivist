@@ -150,7 +150,7 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 		return true
 	}
 	path := r.URL.Path
-	if path == "/api/me" || path == "/api/recommendations" || path == "/api/continue" {
+	if path == "/api/me" || path == "/api/recommendations" || path == "/api/continue" || path == "/api/profile-stats" {
 		return r.Method == "GET"
 	}
 	if path == "/api/books" || path == "/api/works" || path == "/api/sources" || path == "/api/library-summary" {
