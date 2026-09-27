@@ -240,6 +240,10 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			return
 		}
 		ext := strings.ToLower(filepath.Ext(f.Name()))
+		if format == "Comic" && ext == ".cbr" {
+			fail(w, 415, errors.New("CBR/RAR comics are not supported; convert this comic to CBZ/ZIP"))
+			return
+		}
 		var parts []string
 		var z *zip.Reader
 		if format == "Comic" && ext == ".cbt" {
@@ -256,7 +260,11 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 		if part == "" {
 			labels := make([]string, len(parts))
 			for i := range parts {
-				labels[i] = "Section " + strconv.Itoa(i+1)
+				if format == "Comic" {
+					labels[i] = "Page " + strconv.Itoa(i+1)
+				} else {
+					labels[i] = "Section " + strconv.Itoa(i+1)
+				}
 			}
 			reply(w, map[string]any{"format": format, "parts": labels})
 			return
