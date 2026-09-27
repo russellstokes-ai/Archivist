@@ -320,6 +320,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/works", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space, format := r.URL.Query().Get("space"), r.URL.Query().Get("format")
+		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
 		availability := r.URL.Query().Get("availability")
 		if availability != "" && availability != "available" && availability != "unavailable" {
@@ -338,12 +339,13 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ? OR w.genre LIKE ?)
 			AND (?='' OR w.space=?) AND (?='' OR e.format=?)
+			AND (?='' OR w.genre=?)
 			AND (?=0 OR trim(w.author)='')
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY w.id
 			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
 			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
-			q,q,q,q,space,space,format,format,unknownAuthor,who(r).Owner,who(r).ID,
+			q,q,q,q,space,space,format,format,genre,genre,unknownAuthor,who(r).Owner,who(r).ID,
 			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
 		defer rows.Close()
@@ -419,6 +421,9 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		series := []map[string]any{}
 		rows, e = a.db.Query(`SELECT w.series,count(*) FROM works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{series=append(series,map[string]any{"name":name,"count":count})}};rows.Close() }
+		genres := []map[string]any{}
+		rows, e = a.db.Query(`SELECT w.genre,count(*) FROM works w WHERE trim(w.genre)<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.genre ORDER BY count(*) DESC,w.genre LIMIT 20`,who(r).Owner,who(r).ID)
+		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{genres=append(genres,map[string]any{"name":name,"count":count})}};rows.Close() }
 		availability := []map[string]any{}
 		rows, e = a.db.Query(`
 			SELECT status,count(*) FROM (
@@ -431,7 +436,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 				GROUP BY w.id
 			) GROUP BY status ORDER BY status`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{availability=append(availability,map[string]any{"name":name,"count":count})}};rows.Close() }
-		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"series":series,"availability":availability})
+		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"series":series,"genres":genres,"availability":availability})
 	})
 	mux.HandleFunc("GET /api/works/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))
