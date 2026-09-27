@@ -1852,32 +1852,6 @@ function Client() {
           />
         )}
         <WorkPickerPanel />
-        {!session && books.length ? <View style={[styles.setupPanel, {backgroundColor: p.card, borderColor: p.line}]}>
-          <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Local sorting</Text>
-          <View style={styles.segment}>
-            {[
-              ['author-title','Author / Title'],
-              ['author-series-title','Author / Series / Title'],
-              ['format-author-title','Format / Author / Title'],
-            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
-          </View>
-          <Button label="Preview visible local items" disabled={visibleBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
-          <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item => item.state !== 'ready')} onPress={() => void applyLocalSortBatch()}/>
-          {moveStatus ? <Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text> : null}
-          {localMovePreviews.slice(0, 20).map(item => <View key={item.id} style={[styles.sourceRow, {borderColor: p.line}]}>
-            <Text style={{color:p.ink, fontWeight:'700'}}>{item.title}</Text>
-            <Text style={{color:p.muted}}>From: {item.from}</Text>
-            <Text style={{color:item.state==='conflict'||item.state==='review'?p.gold:p.muted}}>To: {item.to}</Text>
-            <Text style={{color:item.state==='review'?p.gold:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
-          </View>)}
-          {localMovePreviews.length > 20 ? <Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text> : null}
-          {localSortHistory.length ? <Text style={[styles.sectionTitle, {color:p.ink}]}>Copy history</Text> : null}
-          {localSortHistory.slice(0, 3).map(item => <View key={item.id} style={[styles.sourceRow, {borderColor:p.line}]}>
-            <Text style={{color:p.ink, fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
-            <Text style={{color:p.muted}}>{item.copied.length} copied; {item.failed.length} failed</Text>
-            <Button label="Remove copied files" disabled={busy || item.copied.length===0} tone="quiet" onPress={() => void recoverLocalSort(item)} />
-          </View>)}
-        </View> : null}
         {editing ? <View style={[styles.editorCard,{backgroundColor:p.card,borderColor:p.line}]}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
           {editing.reviewReason ? <Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text> : null}
@@ -2450,6 +2424,39 @@ function Client() {
     );
   }
 
+  function LocalSortingPanel() {
+    if(session || !books.length)return null;
+    return (
+      <View style={[styles.setupPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist copies into the organised layout and leaves originals untouched until you choose to clean up the copy history.</Text>
+        <View style={styles.segment}>
+          {[
+            ['author-title','Author / Title'],
+            ['author-series-title','Author / Series / Title'],
+            ['format-author-title','Format / Author / Title'],
+          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+        </View>
+        <Button label="Preview visible local items" disabled={visibleBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+        <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
+        {moveStatus?<Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
+        {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
+          <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
+          <Text style={{color:p.muted}}>From: {item.from}</Text>
+          <Text style={{color:item.state==='conflict'||item.state==='review'?p.gold:p.muted}}>To: {item.to}</Text>
+          <Text style={{color:item.state==='review'?p.gold:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
+        </View>)}
+        {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text>:null}
+        {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
+        {localSortHistory.slice(0,3).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
+          <Text style={{color:p.ink,fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
+          <Text style={{color:p.muted}}>{item.copied.length} copied; {item.failed.length} failed</Text>
+          <Button label="Remove copied files" disabled={busy || item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)} />
+        </View>)}
+      </View>
+    );
+  }
+
   function Settings() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
@@ -2466,6 +2473,7 @@ function Client() {
         <Text style={[styles.meta,{color:p.muted}]}>Review possible duplicate files without making destructive changes.</Text>
         {(!session || owner)?<Button label="Review duplicates" tone="quiet" onPress={()=>void openDuplicateReview()} />:null}
         <DuplicateReviewPanel />
+        <LocalSortingPanel />
         <Text style={[styles.sectionTitle, {color: p.ink}]}>Server</Text>
         {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : recoverableSession ? (
           <View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.line}]}>
