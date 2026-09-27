@@ -13,6 +13,9 @@ export type CompatibleServerWork={
   editions:number;
   files:number;
   available:boolean;
+  rating?:number;
+  favourite?:boolean;
+  state?:'not-started'|'in-progress'|'finished';
 };
 
 export type CompatibleLibrarySummary={
@@ -25,6 +28,9 @@ export type CompatibleLibrarySummary={
   series:CompatibleCount[];
   genres?:CompatibleCount[];
   availability:CompatibleCount[];
+  reading?:CompatibleCount[];
+  ratings?:CompatibleCount[];
+  favourites?:CompatibleCount[];
 };
 
 export type CompatibleAtlasRelationship={
@@ -50,11 +56,18 @@ function countArray(value:unknown):CompatibleCount[]{
     : [];
 }
 
-export function normalizeServerWork<T extends CompatibleServerWork>(work:T):T & {genre:string}{
-  return {...work,genre:typeof work.genre==='string'?work.genre:''};
+export function normalizeServerWork<T extends CompatibleServerWork>(work:T):T & {genre:string;rating:number;favourite:boolean;state:'not-started'|'in-progress'|'finished'}{
+  const state=work.state==='finished'||work.state==='in-progress'?'state' in work?work.state:'not-started':'not-started';
+  return {
+    ...work,
+    genre:typeof work.genre==='string'?work.genre:'',
+    rating:Number.isFinite(work.rating)?Math.max(0,Math.min(10,Number(work.rating))):0,
+    favourite:!!work.favourite,
+    state:state as 'not-started'|'in-progress'|'finished',
+  };
 }
 
-export function normalizeLibrarySummary(value:CompatibleLibrarySummary):CompatibleLibrarySummary & {genres:CompatibleCount[]}{
+export function normalizeLibrarySummary(value:CompatibleLibrarySummary):CompatibleLibrarySummary & {genres:CompatibleCount[];reading:CompatibleCount[];ratings:CompatibleCount[];favourites:CompatibleCount[]}{
   return {
     ...value,
     formats:countArray(value.formats),
@@ -63,6 +76,9 @@ export function normalizeLibrarySummary(value:CompatibleLibrarySummary):Compatib
     series:countArray(value.series),
     genres:countArray(value.genres),
     availability:countArray(value.availability),
+    reading:countArray(value.reading),
+    ratings:countArray(value.ratings),
+    favourites:countArray(value.favourites),
   };
 }
 
