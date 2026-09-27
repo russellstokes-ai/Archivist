@@ -373,6 +373,13 @@ func publicURL(r *http.Request) string {
 	}
 	return scheme + "://" + r.Host
 }
+func requestIsSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0])
+	return strings.EqualFold(forwarded, "https")
+}
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.backgroundRoutes(mux)
@@ -618,7 +625,7 @@ func (a *app) routes() http.Handler {
 				fail(w, 500, e)
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: base})
+			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, Secure: requestIsSecure(r), SameSite: http.SameSiteStrictMode, Path: base})
 			reply(w, map[string]string{"token": session})
 			return
 		}
@@ -690,14 +697,14 @@ func (a *app) routes() http.Handler {
 			if key != "" {
 				a.db.Exec("DELETE FROM sessions WHERE token_hash=?", keyHash(key))
 			}
-			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: "", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Path: base})
+			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: "", MaxAge: -1, HttpOnly: true, Secure: requestIsSecure(r), SameSite: http.SameSiteStrictMode, Path: base})
 			reply(w, map[string]bool{"ok": true})
 			return
 		}
 		if r.URL.Path == "/reader.html" {
 			bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if _, ok := a.sessionIdentity(bearer); ok {
-				http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: bearer, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, Path: base})
+				http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: bearer, HttpOnly: true, Secure: requestIsSecure(r), SameSite: http.SameSiteStrictMode, Path: base})
 			}
 		}
 		if serveEntry(w, r, base) {
