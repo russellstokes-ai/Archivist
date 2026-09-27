@@ -156,6 +156,18 @@ assert.equal(previews[0].state, 'review');
   assert.equal(dottedScan.books.length,1);
   assert.equal(dottedScan.books[0].title,'The Hobbit');
 
+  // Local reading is deliberately CBZ/ZIP only. CBR is unsupported and CBT
+  // remains server-reader-only, so neither should appear as broken local books.
+  const comicRoot='content://root/tree/primary:Comics/document/primary:Comics';
+  const cbz=comicRoot+'%2FSupported.cbz';
+  const cbr=comicRoot+'%2FUnsupported.cbr';
+  const cbt=comicRoot+'%2FRemoteOnly.cbt';
+  saf.dirs.set(comicRoot,[cbz,cbr,cbt]);
+  const comicScan=await scanLocalFolders([{id:comicRoot,uri:comicRoot,name:'Comics',status:'Ready',itemCount:0}]);
+  assert.equal(comicScan.books.length,1);
+  assert.equal(comicScan.books[0].uri,cbz);
+  assert.equal(comicScan.books[0].format,'Comic');
+
   // Multi-track audiobooks may use one book-level OPF/cover. Parse that OPF once,
   // then reuse it for every track instead of doing repeated I/O.
   const audioRoot='content://root/tree/primary:Audiobooks/document/primary:Audiobooks%2FDune';
@@ -236,5 +248,5 @@ assert.equal(previews[0].state, 'review');
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);
-  console.log('PASS: local scanner handles messy names, deep folders, huge files, bounded sidecars, multi-track metadata caching, sort previews, copy apply and recovery');
+  console.log('PASS: local scanner handles messy names, CBZ-only local comics, deep folders, huge files, bounded sidecars, metadata caching, sort previews and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
