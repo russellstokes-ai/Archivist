@@ -12,7 +12,12 @@ const textExt = /\.(xhtml|html|htm)$/i;
 
 export async function buildLocalReaderDocument(uri: string, format: string, title: string, initialPage = 0): Promise<LocalReaderDocument> {
   if (format === 'PDF') return {uri};
-  if (format === 'Comic') return {html: await comicHtml(uri, title, initialPage)};
+  if (format === 'Comic') {
+    const ext=(uri.split('?')[0].match(/\.([a-z0-9]+)$/i)?.[1]||'').toLowerCase();
+    if(ext==='cbr')throw Error('CBR/RAR comics are not supported. Convert this comic to CBZ/ZIP first.');
+    if(ext==='cbt')throw Error('CBT comics are supported by the Archivist server, but local/offline reading currently requires CBZ/ZIP.');
+    return {html: await comicHtml(uri, title, initialPage)};
+  }
   if (format === 'EPUB') return {html: await epubHtml(uri, title, initialPage)};
   return {uri};
 }
