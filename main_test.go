@@ -330,3 +330,50 @@ func TestBooksPaginationAndFilters(t *testing.T) {
 		t.Fatalf("filtered page=%+v",page)
 	}
 }
+
+
+func TestMobileReaderBearerBootstrapSetsSecureSessionCookie(t *testing.T) {
+	a := fixture(t)
+	req := httptest.NewRequest("GET", "/reader.html?asset=1", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	res := httptest.NewRecorder()
+	a.routes().ServeHTTP(res, req)
+	if res.Code != 200 {
+		t.Fatalf("reader bootstrap status=%d body=%q", res.Code, res.Body.String())
+	}
+	var sessionCookie *http.Cookie
+	for _, cookie := range res.Result().Cookies() {
+		if cookie.Name == "archivist_session" {
+			sessionCookie = cookie
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("reader bootstrap did not set session cookie")
+	}
+	if sessionCookie.Value != "test-key" || !sessionCookie.HttpOnly || !sessionCookie.Secure || sessionCookie.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("reader bootstrap cookie=%+v", sessionCookie)
+	}
+
+	apiReq := httptest.NewRequest("GET", "/api/me", nil)
+	apiReq.AddCookie(sessionCookie)
+	apiRes := httptest.NewRecorder()
+	a.routes().ServeHTTP(apiRes, apiReq)
+	if apiRes.Code != 200 {
+		t.Fatalf("reader cookie did not authenticate subsequent API request: %d %s", apiRes.Code, apiRes.Body.String())
+	}
+}
+
+func TestInvalidReaderBearerDoesNotMintSessionCookie(t *testing.T) {
+	a := fixture(t)
+	req := httptest.NewRequest("GET", "/reader.html?asset=1", nil)
+	req.Header.Set("Authorization", "Bearer definitely-invalid")
+	res := httptest.NewRecorder()
+	a.routes().ServeHTTP(res, req)
+	for _, cookie := range res.Result().Cookies() {
+		if cookie.Name == "archivist_session" && cookie.Value != "" {
+			t.Fatalf("invalid bearer minted reader cookie: %+v", cookie)
+		}
+	}
+}
