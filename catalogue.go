@@ -475,7 +475,37 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 				GROUP BY w.id
 			) GROUP BY status ORDER BY status`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{availability=append(availability,map[string]any{"name":name,"count":count})}};rows.Close() }
-		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"series":series,"genres":genres,"availability":availability})
+
+		readingSummary := []map[string]any{}
+		rows, e = a.db.Query(`SELECT state,count(*) FROM (
+			SELECT w.id,`+workStateExpression(who(r).ID)+` AS state
+			FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
+		) GROUP BY state ORDER BY count(*) DESC,state`,who(r).Owner,who(r).ID)
+		if e == nil {
+			for rows.Next(){var state string;var count int;if rows.Scan(&state,&count)==nil{
+				name:="Not started";if state=="finished"{name="Finished"}else if state=="in-progress"{name="In progress"}
+				readingSummary=append(readingSummary,map[string]any{"name":name,"count":count})
+			}};rows.Close()
+		}
+
+		ratings := []map[string]any{}
+		rows, e = a.db.Query(`SELECT rating,count(*) FROM (
+			SELECT w.id,`+atlasRatingExpression(who(r).ID)+` AS rating
+			FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
+		) GROUP BY rating ORDER BY CASE rating
+			WHEN '5★' THEN 10 WHEN '4½★' THEN 9 WHEN '4★' THEN 8 WHEN '3½★' THEN 7
+			WHEN '3★' THEN 6 WHEN '2½★' THEN 5 WHEN '2★' THEN 4 WHEN '1½★' THEN 3
+			WHEN '1★' THEN 2 WHEN '½★' THEN 1 ELSE 0 END DESC`,who(r).Owner,who(r).ID)
+		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{ratings=append(ratings,map[string]any{"name":name,"count":count})}};rows.Close() }
+
+		favourites := []map[string]any{}
+		var favouriteCount int
+		_ = a.db.QueryRow(`SELECT count(*) FROM work_preferences wp JOIN works w ON w.id=wp.work_id
+			WHERE wp.profile_id=? AND wp.favourite=1 AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,
+			who(r).ID,who(r).Owner,who(r).ID).Scan(&favouriteCount)
+		if favouriteCount>0 { favourites=append(favourites,map[string]any{"name":"Favourites","count":favouriteCount}) }
+
+		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"series":series,"genres":genres,"availability":availability,"reading":readingSummary,"ratings":ratings,"favourites":favourites})
 	})
 	mux.HandleFunc("GET /api/works/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available,a.relative_path,a.size_bytes FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))
