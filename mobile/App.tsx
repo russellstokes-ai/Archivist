@@ -334,6 +334,8 @@ function Client() {
   const [reading, setReading] = useState<Book | null>(null);
   const [localReader, setLocalReader] = useState<LocalReaderDocument | null>(null);
   const [readerLoading, setReaderLoading] = useState(false);
+  const [readerLoadError,setReaderLoadError]=useState('');
+  const [readerReloadKey,setReaderReloadKey]=useState(0);
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
   const player = useAudioPlayer(null);
@@ -1568,6 +1570,7 @@ function Client() {
       return;
     }
     setError('');
+    setReaderLoadError('');
     if (book.format === 'Audio') playBook(book);
     else if (!session) {
       if (!book.uri) return;
@@ -1575,7 +1578,10 @@ function Client() {
       setActiveTab('reader');
       setReaderLoading(true);
       setLocalReader(null);
-      buildLocalReaderDocument(book.uri, book.format, book.title, localReadingProgress[book.uri] || 0).then(setLocalReader).catch(e => setError(e.message)).finally(() => setReaderLoading(false));
+      buildLocalReaderDocument(book.uri, book.format, book.title, localReadingProgress[book.uri] || 0)
+        .then(setLocalReader)
+        .catch(e => {setReaderLoadError(e.message);setError(e.message);})
+        .finally(() => setReaderLoading(false));
     }
     else {
       setReading(book);
@@ -2419,6 +2425,16 @@ function Client() {
   }
 
   function Reader() {
+    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setActiveTab('shelf');};
+    const readerBar=<View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}>
+        <Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text>
+      </Pressable>
+      <View style={styles.readerHeading}>
+        <Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading?.title || 'Reader'}</Text>
+        {reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}
+      </View>
+    </View>;
     if (!reading) {
       return (
         <View style={styles.content}>
@@ -2430,13 +2446,14 @@ function Client() {
     if (!session) {
       return (
         <View style={styles.readerScreen}>
-          <View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}>
-            <Pressable accessibilityRole="button" onPress={() => {setReading(null);setLocalReader(null);setActiveTab('shelf');}} style={styles.readerBack}>
-              <Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text>
-            </Pressable>
-            <Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading.title}</Text>
-          </View>
-          {readerLoading ? <ActivityIndicator accessibilityLabel="Opening local reader" /> : localReader?.html ? (
+          {readerBar}
+          {readerLoading ? <View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader" /><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View> : readerLoadError ? (
+            <View style={[styles.readerFailure,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>
+              <Button label="Back to Shelf" tone="quiet" onPress={closeReader} />
+            </View>
+          ) : localReader?.html ? (
             <WebView
               originWhitelist={['*']}
               source={{html: localReader.html}}
@@ -2481,33 +2498,49 @@ function Client() {
     }
     return (
       <View style={styles.readerScreen}>
-        <View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}>
-          <Pressable accessibilityRole="button" onPress={() => {setReading(null);setActiveTab('shelf');}} style={styles.readerBack}>
-            <Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text>
-          </Pressable>
-          <Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading.title}</Text>
-        </View>
+        {readerBar}
         <WebView
-          key={session.token + reading.id}
+          key={session.token + reading.id + ':' + readerReloadKey}
           source={{uri: session.server + '/reader.html?asset=' + reading.id, headers: {Authorization: 'Bearer ' + session.token}}}
           incognito
           originWhitelist={[session.server]}
           onShouldStartLoadWithRequest={r => readerNavigationAllowed(r.url, session.server)}
           mixedContentMode="never"
+          onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('');}}
+          onLoadEnd={()=>setReaderLoading(false)}
           onMessage={event=>{
             try{
               const message=JSON.parse(event.nativeEvent.data);
+              if(message?.type==='archivist-reader-ready'){
+                setReaderLoading(false);
+                setReaderLoadError('');
+              }
               if(message?.type==='archivist-reader-complete' && reading.serverWorkId){
                 setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
               }
             }catch{}
           }}
-          onHttpError={e => setError('Reader request failed: '+e.nativeEvent.statusCode)}
-          onError={e => setError(e.nativeEvent.description)}
+          onHttpError={e => {
+            const message='Reader request failed: '+e.nativeEvent.statusCode;
+            setReaderLoadError(message);setReaderLoading(false);setError(message);
+          }}
+          onError={e => {
+            const message=e.nativeEvent.description || 'Reader failed to load.';
+            setReaderLoadError(message);setReaderLoading(false);setError(message);
+          }}
           allowFileAccess={false}
           javaScriptCanOpenWindowsAutomatically={false}
           setSupportMultipleWindows={false}
         />
+        {readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader" /><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}
+        {readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.card,borderColor:p.line}]}>
+          <Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>
+          <View style={styles.toolRow}>
+            <Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1);}} />
+            <Button label="Back to Shelf" tone="quiet" onPress={closeReader} />
+          </View>
+        </View>:null}
       </View>
     );
   }
