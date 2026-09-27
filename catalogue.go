@@ -320,6 +320,8 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/works", func(w http.ResponseWriter, r *http.Request) {
 		q := "%" + r.URL.Query().Get("q") + "%"
 		space, format := r.URL.Query().Get("space"), r.URL.Query().Get("format")
+		author := strings.TrimSpace(r.URL.Query().Get("author"))
+		series := strings.TrimSpace(r.URL.Query().Get("series"))
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
 		availability := r.URL.Query().Get("availability")
@@ -339,13 +341,15 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ? OR w.genre LIKE ?)
 			AND (?='' OR w.space=?) AND (?='' OR e.format=?)
+			AND (?='' OR w.author=?)
+			AND (?='' OR w.series=?)
 			AND (?='' OR w.genre=?)
 			AND (?=0 OR trim(w.author)='')
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY w.id
 			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
 			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
-			q,q,q,q,space,space,format,format,genre,genre,unknownAuthor,who(r).Owner,who(r).ID,
+			q,q,q,q,space,space,format,format,author,author,series,series,genre,genre,unknownAuthor,who(r).Owner,who(r).ID,
 			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
 		defer rows.Close()
