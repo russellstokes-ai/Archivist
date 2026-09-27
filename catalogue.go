@@ -443,7 +443,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"series":series,"genres":genres,"availability":availability})
 	})
 	mux.HandleFunc("GET /api/works/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
-		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))
+		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available,a.relative_path,a.size_bytes FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -452,13 +452,14 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		out := []map[string]any{}
 		for rows.Next() {
 			var id, edition int64
-			var title, format string
+			var title, format, relative string
 			var available bool
-			if e = rows.Scan(&id, &title, &format, &edition, &available); e != nil {
+			var size int64
+			if e = rows.Scan(&id, &title, &format, &edition, &available, &relative, &size); e != nil {
 				fail(w, 500, e)
 				return
 			}
-			out = append(out, map[string]any{"id": id, "title": title, "format": format, "edition": edition, "available": available})
+			out = append(out, map[string]any{"id": id, "title": title, "format": format, "edition": edition, "available": available, "name": filepath.Base(relative), "size": size})
 		}
 		reply(w, out)
 	})
