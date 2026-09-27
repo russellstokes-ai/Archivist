@@ -561,6 +561,12 @@ function Client() {
         SecureStore.setItemAsync(localWorkProgressKey, JSON.stringify(next)).catch(() => undefined);
         return next;
       });
+      setLocalAudioCompleted(current => {
+        if(current[activeLocalWork.key])return current;
+        const next={...current,[activeLocalWork.key]:true};
+        SecureStore.setItemAsync(localAudioCompletedKey,JSON.stringify(next)).catch(()=>undefined);
+        return next;
+      });
     }
     if (!queueRef.current.length) return;
     const [next, ...rest] = queueRef.current;
@@ -1079,6 +1085,13 @@ function Client() {
     setError('');
     setActiveLocalWork(work);
     setLocalWorkIndex(index);
+    setLocalWorkProgress(current => {
+      const previous=current[work.key];
+      const next={...current,[work.key]:{uri:track.uri,seconds,complete:false}};
+      if(previous?.uri===track.uri && previous?.seconds===seconds && previous?.complete===false)return current;
+      SecureStore.setItemAsync(localWorkProgressKey,JSON.stringify(next)).catch(()=>undefined);
+      return next;
+    });
     const display: Book = {
       ...track,
       title: work.title,
@@ -1940,6 +1953,14 @@ function Client() {
                     SecureStore.setItemAsync(localReadingProgressKey, JSON.stringify(next)).catch(() => undefined);
                     return next;
                   });
+                  if (typeof message.complete === 'boolean') {
+                    setLocalReadingCurrentComplete(current => {
+                      if (current[reading.uri!] === message.complete) return current;
+                      const next={...current,[reading.uri!]:message.complete};
+                      SecureStore.setItemAsync(localReadingCurrentCompleteKey,JSON.stringify(next)).catch(()=>undefined);
+                      return next;
+                    });
+                  }
                   if (message.complete === true) {
                     setLocalReadingComplete(current => {
                       if (current[reading.uri!]) return current;
