@@ -51,6 +51,17 @@ const review = groupLocalWorks([
 assert.equal(review[0].needsReview,true);
 assert.equal(review[0].reviewReason,'Check author');
 
+const hugeAudiobook=groupLocalWorks(Array.from({length:1000},(_,index)=>
+  book(index+5000,'content://root/document/primary:Audiobooks%2FLong%20Book%2F'+String(index+1).padStart(4,'0')+'%20-%20Chapter.mp3',{
+    title:'Chapter '+String(index+1),
+    author:'Long Author',
+  })
+));
+assert.equal(hugeAudiobook.length,1);
+assert.equal(hugeAudiobook[0].files,1000);
+assert.equal(hugeAudiobook[0].tracks[0].id,5000);
+assert.equal(hugeAudiobook[0].tracks[999].id,5999);
+
 const large=Array.from({length:5000},(_,index)=>({
   ...book(index+10000,'content://root/document/primary:Books%2FAuthor%2FBook%20'+String(index).padStart(5,'0')+'.epub',{
     title:'Book '+String(index).padStart(5,'0'),
