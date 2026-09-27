@@ -8,6 +8,7 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'web/**'
+      - 'scripts/ui-contract.cjs'
       - 'archivist/**'
       - 'home-assistant/archivist/**'
       - '.github/workflows/server-check.yml'
