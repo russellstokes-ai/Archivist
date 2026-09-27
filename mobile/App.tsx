@@ -342,6 +342,7 @@ function Client() {
   sessionRef.current = session;
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|null>(null);
+  const [playerProgressWidth,setPlayerProgressWidth]=useState(1);
   const [localSpeed, setLocalSpeed] = useState(1);
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
@@ -1578,6 +1579,7 @@ function Client() {
     }
     else {
       setReading(book);
+      setReaderLoading(true);
       setActiveTab('reader');
     }
   }
@@ -2290,12 +2292,18 @@ function Client() {
             <Pressable
               accessibilityRole="adjustable"
               accessibilityLabel="Playback position"
-              accessibilityHint="Tap the timeline to seek"
+              accessibilityHint="Tap to seek, or swipe up and down with a screen reader to move by 30 seconds"
+              accessibilityValue={{min:0,max:Math.max(1,Math.round(duration)),now:Math.round(position),text:formatTime(position)+' of '+formatTime(duration)}}
+              accessibilityActions={[{name:'increment',label:'Forward 30 seconds'},{name:'decrement',label:'Back 30 seconds'}]}
+              onAccessibilityAction={event=>{
+                if(event.nativeEvent.actionName==='increment')seekTo(position+30);
+                if(event.nativeEvent.actionName==='decrement')seekTo(position-30);
+              }}
+              onLayout={event=>setPlayerProgressWidth(Math.max(1,event.nativeEvent.layout.width))}
               onPress={event => {
                 if (!duration) return;
                 const location = event.nativeEvent.locationX;
-                const trackWidth = Math.max(1, Math.min(width >= 700 ? 560 : width - 36, 560));
-                seekTo((location / trackWidth) * duration);
+                seekTo((location / Math.max(1,playerProgressWidth)) * duration);
               }}
               style={[styles.progressHitArea,{maxWidth:560,alignSelf:'center',width:'100%'}]}>
               <View style={[styles.progressTrack, {backgroundColor: p.line}]}>
@@ -2329,15 +2337,15 @@ function Client() {
             </View>
 
             <View style={[styles.playerTools,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Pressable accessibilityRole="button" onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Playback speed '+speed+' times'} accessibilityState={{expanded:playerPanel==='speed'}} onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
                 <Text style={[styles.playerToolValue,{color:p.ink}]}>{speed}×</Text>
                 <Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
               </Pressable>
-              {session && nativeSleepSupported ? <Pressable accessibilityRole="button" onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
+              {session && nativeSleepSupported ? <Pressable accessibilityRole="button" accessibilityLabel="Sleep timer" accessibilityState={{expanded:playerPanel==='sleep'}} onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
                 <Text style={[styles.playerToolValue,{color:p.ink}]}>{playback?.sleepAt ? 'On' : '—'}</Text>
                 <Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
               </Pressable> : null}
-              <Pressable accessibilityRole="button" onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Queue, '+queuedBooks.length+' item'+(queuedBooks.length===1?'':'s')} accessibilityState={{expanded:playerPanel==='queue'}} onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
                 <Text style={[styles.playerToolValue,{color:p.ink}]}>{queuedBooks.length}</Text>
                 <Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
               </Pressable>
@@ -2392,9 +2400,9 @@ function Client() {
                   <Text style={[styles.meta,{color:p.muted}]}>#{index+1}{book.author ? ' · '+book.author : ''}</Text>
                 </Pressable>
                 <View style={styles.queueActions}>
-                  <Pressable accessibilityRole="button" disabled={queueBusy || index===0} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),-1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), -1))}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900'}}>↑</Text></Pressable>
-                  <Pressable accessibilityRole="button" disabled={queueBusy || index===queuedBooks.length-1} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), 1))}><Text style={{color:index===queuedBooks.length-1?p.muted:p.sage,fontWeight:'900'}}>↓</Text></Pressable>
-                  <Pressable accessibilityRole="button" disabled={queueBusy} onPress={()=>session ? void queueStore?.edit(items=>items.filter(b=>b.id!==book.id)) : void updateLocalQueue(queuedBooks.filter(b=>b.uri!==book.uri))}><Text style={{color:p.gold,fontWeight:'800'}}>Remove</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' up in queue'} disabled={queueBusy || index===0} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),-1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), -1))}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900'}}>↑</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' down in queue'} disabled={queueBusy || index===queuedBooks.length-1} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), 1))}><Text style={{color:index===queuedBooks.length-1?p.muted:p.sage,fontWeight:'900'}}>↓</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove '+book.title+' from queue'} disabled={queueBusy} onPress={()=>session ? void queueStore?.edit(items=>items.filter(b=>b.id!==book.id)) : void updateLocalQueue(queuedBooks.filter(b=>b.uri!==book.uri))}><Text style={{color:p.gold,fontWeight:'800'}}>Remove</Text></Pressable>
                 </View>
               </View>)}
             </View> : null}
