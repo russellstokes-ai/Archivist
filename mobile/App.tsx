@@ -748,6 +748,16 @@ function Client() {
     setAudioModeAsync({playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix'}).catch(e => setError(e.message));
   }, []);
 
+  async function fetchServerPreferences(current:Session):Promise<PersonalPreference[]> {
+    try{
+      return await request(current,'/api/preferences') as PersonalPreference[];
+    }catch(e){
+      // Servers from before personal ratings existed return 403/404 here.
+      if(e instanceof RequestError && (e.status===403 || e.status===404))return [];
+      throw e;
+    }
+  }
+
   function serverWorksPath(offset = 0, limit = 100) {
     const params = new URLSearchParams({
       q: query,
@@ -803,7 +813,7 @@ function Client() {
         request(session, '/api/continue?space=' + encodeURIComponent(space)),
         request(session, '/api/library-summary'),
         request(session, '/api/profile-stats'),
-        request(session, '/api/preferences'),
+        fetchServerPreferences(session),
       ])
         .then(([assets, works, continuing, summary, stats, preferences]) => {
           if (cancelled) return;
@@ -949,7 +959,7 @@ function Client() {
       request(session,'/api/continue?space='+encodeURIComponent(space)),
       request(session,'/api/library-summary'),
       request(session,'/api/profile-stats'),
-      request(session,'/api/preferences'),
+      fetchServerPreferences(session),
     ]);
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
