@@ -377,3 +377,21 @@ func TestInvalidReaderBearerDoesNotMintSessionCookie(t *testing.T) {
 		}
 	}
 }
+
+
+func TestMobileSessionCookieIsSecureBehindHTTPSProxy(t *testing.T) {
+	a:=fixture(t)
+	req:=httptest.NewRequest("POST","/session",strings.NewReader(`{"token":"test-key"}`))
+	req.Header.Set("X-Archivist-Action","1")
+	req.Header.Set("X-Forwarded-Proto","https")
+	res:=httptest.NewRecorder()
+	a.routes().ServeHTTP(res,req)
+	if res.Code!=http.StatusOK{t.Fatalf("session status=%d %s",res.Code,res.Body.String())}
+	var found *http.Cookie
+	for _,cookie:=range res.Result().Cookies(){
+		if cookie.Name=="archivist_session"{found=cookie;break}
+	}
+	if found==nil || !found.HttpOnly || !found.Secure || found.SameSite!=http.SameSiteStrictMode {
+		t.Fatalf("session cookie not hardened: %+v",found)
+	}
+}
