@@ -13,23 +13,30 @@ import (
 func TestHouseholdPermissionsAndProgress(t *testing.T) {
 	a := fixture(t)
 	a.initCatalogue()
-	a.initProgress()
+	initAllProgressForTest(t,a)
 	a.initJobs()
-	for _, s := range []string{"Adult", "Family"} {
+	for _, space := range []string{"Adult", "Family"} {
 		root := t.TempDir()
-		os.WriteFile(filepath.Join(root, s+".mp3"), []byte("audio"), 0600)
-		a.addSource(s, root)
+		os.WriteFile(filepath.Join(root, space+".mp3"), []byte("audio"), 0600)
+		if err:=a.addSource(space, root);err!=nil{t.Fatal(err)}
 	}
-	a.scan(1)
-	a.scan(2)
-	a.group("Adult", []int64{1})
-	a.group("Family", []int64{2})
-	a.db.Exec("INSERT INTO profiles(id,name,key_hash) VALUES(1,'Child',?)", keyHash("child-key"))
-	a.db.Exec("INSERT INTO grants(profile_id,space) VALUES(1,'Family')")
-	memberSession, e := a.newSession("child-key")
-	if e != nil {
-		t.Fatal(e)
-	}
+	if err:=a.scan(1);err!=nil{t.Fatal(err)}
+	if err:=a.scan(2);err!=nil{t.Fatal(err)}
+	if _,err:=a.group("Adult", []int64{1});err!=nil{t.Fatal(err)}
+	if _,err:=a.group("Family", []int64{2});err!=nil{t.Fatal(err)}
+
+	adminReq:=httptest.NewRequest("POST","/api/profiles",strings.NewReader(`{"name":"Child"}`))
+	adminReq.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+	adminReq.Header.Set("X-Archivist-Action","1")
+	adminRes:=httptest.NewRecorder()
+	a.routes().ServeHTTP(adminRes,adminReq)
+	if adminRes.Code!=200{t.Fatalf("create user=%d %s",adminRes.Code,adminRes.Body.String())}
+	var created struct{ID int64 `json:"id"`;Key string `json:"key"`;Role string `json:"role"`}
+	if err:=json.Unmarshal(adminRes.Body.Bytes(),&created);err!=nil{t.Fatal(err)}
+	if created.ID==0 || created.Key=="" || created.Role!="user"{t.Fatalf("created=%+v",created)}
+	memberSession,err:=a.newSession(created.Key)
+	if err!=nil{t.Fatal(err)}
+
 	call := func(method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.AddCookie(&http.Cookie{Name: "archivist_session", Value: memberSession})
@@ -40,46 +47,43 @@ func TestHouseholdPermissionsAndProgress(t *testing.T) {
 	}
 	for _, path := range []string{"/api/books", "/api/works", "/api/sources"} {
 		w := call("GET", path, "")
-		if w.Code != 200 || strings.Contains(w.Body.String(), "Adult") {
-			t.Fatalf("list leak %s: %d %s", path, w.Code, w.Body.String())
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "Adult") || !strings.Contains(w.Body.String(), "Family") {
+			t.Fatalf("whole-library User access %s: %d %s", path, w.Code, w.Body.String())
 		}
 	}
-	for _, path := range []string{"/api/assets/1", "/api/assets/1/cover", "/api/works/1/tracks", "/api/editions/1/progress", "/api/folders", "/api/profiles", "/api/jobs"} {
+	for _, path := range []string{"/api/assets/1", "/api/assets/2", "/api/assets/1/cover", "/api/works/1/tracks", "/api/works/2/tracks"} {
+		if w := call("GET", path, ""); w.Code == 403 || w.Code == 401 {
+			t.Fatalf("User media blocked %s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+	for _, path := range []string{"/api/folders", "/api/profiles", "/api/jobs"} {
 		if w := call("GET", path, ""); w.Code != 403 {
-			t.Fatalf("access %s: %d", path, w.Code)
+			t.Fatalf("User reached admin route %s: %d %s", path, w.Code, w.Body.String())
 		}
-	}
-	if w := call("GET", "/api/assets/2", ""); w.Code != 200 {
-		t.Fatal("allowed media blocked")
-	}
-	if w := call("GET", "/api/assets/2/cover", ""); w.Code == 403 {
-		t.Fatal("allowed cover blocked")
 	}
 	if w := call("DELETE", "/api/sources/2", ""); w.Code != 403 {
-		t.Fatal("member deleted source")
+		t.Fatalf("User deleted source: %d %s",w.Code,w.Body.String())
 	}
+	if w := call("POST", "/api/sources/2/scan", ""); w.Code != 403 {
+		t.Fatalf("User scanned source: %d %s",w.Code,w.Body.String())
+	}
+
 	a.saveProgress(2, progress{Asset: 2, Seconds: 80})
 	if w := call("GET", "/api/editions/2/progress", ""); strings.Contains(w.Body.String(), "80") {
-		t.Fatal("owner progress leaked")
+		t.Fatal("Admin progress leaked into User progress")
 	}
 	w := call("PUT", "/api/editions/2/progress", `{"asset":2,"seconds":20,"revision":0}`)
-	if w.Code != 200 {
-		t.Fatal(w.Body.String())
-	}
-	p, _ := a.readProgress(2)
-	if p.Seconds != 80 {
-		t.Fatal("owner progress overwritten")
-	}
+	if w.Code != 200 { t.Fatalf("User progress save=%d %s",w.Code,w.Body.String()) }
+	p,_:=a.readProgress(2)
+	if p.Seconds!=80{t.Fatal("User progress overwrote Admin progress")}
 	var member progress
-	json.Unmarshal(w.Body.Bytes(), &member)
-	if member.Seconds != 20 {
-		t.Fatal("member save failed")
-	}
-	a.db.Exec("UPDATE profiles SET revoked=1 WHERE id=1")
-	if w := call("GET", "/api/assets/2", ""); w.Code != 401 {
-		t.Fatal("revoked key accepted")
-	}
+	json.Unmarshal(w.Body.Bytes(),&member)
+	if member.Seconds!=20{t.Fatal("User progress not isolated")}
+
+	a.db.Exec("UPDATE profiles SET revoked=1 WHERE id=?",created.ID)
+	if w:=call("GET","/api/assets/2","");w.Code!=401{t.Fatalf("revoked User accepted: %d",w.Code)}
 }
+
 func TestLegacyProgressMigration(t *testing.T) {
 	a := fixture(t)
 	a.initCatalogue()
