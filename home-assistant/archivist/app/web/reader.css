@@ -69,3 +69,11 @@ nav{
 @media(prefers-reduced-motion:reduce){
   #reading,#reading .comic-page,.speech-focus-overlay,#reading p,#reading li,#reading blockquote,#reading h1,#reading h2,#reading h3{transition:none!important;animation:none!important}
 }
+
+.reader-help{max-width:720px;margin:-12px auto 12px;font:12px/1.5 system-ui,sans-serif;color:var(--muted);text-align:center}
+#reader-status{min-height:1.5em;text-align:center;margin:4px auto;max-width:720px}
+#reading:focus-visible{outline:2px solid var(--reader-accent);outline-offset:8px;border-radius:4px}
+.tools button:focus-visible,.tools select:focus-visible,nav button:focus-visible{outline:2px solid var(--reader-accent);outline-offset:3px}
+#previous,#next{font-weight:750}
+#position{min-width:84px;text-align:center}
+@media(max-width:640px){.reader-help{margin:-8px 18px 10px}.tools{overflow-x:auto;flex-direction:row}.tools select{min-width:128px}}
