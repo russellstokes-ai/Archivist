@@ -49,6 +49,7 @@ type book struct {
 	Title                    string `json:"title"`
 	Author                   string `json:"author"`
 	Series                   string `json:"series"`
+	Genre                    string `json:"genre"`
 	Format                   string `json:"format"`
 	Space                    string `json:"space"`
 	Available                bool   `json:"available"`
@@ -75,6 +76,7 @@ func openDB(path string) (*sql.DB, error) {
 	for _, stmt := range []string{
 		"ALTER TABLE assets ADD COLUMN author TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE assets ADD COLUMN series TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN genre TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE assets ADD COLUMN metadata_source TEXT NOT NULL DEFAULT 'legacy'",
 		"ALTER TABLE assets ADD COLUMN metadata_confidence INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE assets ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 1",
@@ -93,7 +95,7 @@ func openDB(path string) (*sql.DB, error) {
 	if _, migrateErr := db.Exec(`UPDATE assets
 		SET metadata_source='legacy',metadata_confidence=100,needs_review=0,review_reason=''
 		WHERE scan_signature='' AND size_bytes=0 AND modified_unix=0
-		AND (title<>'' OR author<>'' OR series<>'')`); migrateErr != nil {
+		AND (title<>'' OR author<>'' OR series<>'' OR genre<>'')`); migrateErr != nil {
 		db.Close()
 		return nil, migrateErr
 	}
@@ -203,18 +205,18 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	defer stage.Close()
 	encoder := json.NewEncoder(stage)
 	type entry struct {
-		Relative, Title, Author, Series, Format string
+		Relative, Title, Author, Series, Genre, Format string
 		MetadataSource, ReviewReason, ScanSignature string
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
 	type cachedEntry struct {
-		Title, Author, Series, MetadataSource, ReviewReason, ScanSignature string
+		Title, Author, Series, Genre, MetadataSource, ReviewReason, ScanSignature string
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
 	cached := map[string]cachedEntry{}
-	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
+	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,genre,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
 	if cacheErr != nil {
 		return cacheErr
 	}
@@ -222,7 +224,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		var rel string
 		var item cachedEntry
 		var review int
-		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
+		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.Genre,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
 			rows.Close()
 			return cacheErr
 		}
@@ -276,6 +278,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			item.Title = existing.Title
 			item.Author = existing.Author
 			item.Series = existing.Series
+			item.Genre = existing.Genre
 			item.MetadataSource = existing.MetadataSource
 			item.MetadataConfidence = existing.MetadataConfidence
 			item.NeedsReview = existing.NeedsReview
@@ -286,6 +289,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			item.Title = meta.Title
 			item.Author = meta.Author
 			item.Series = meta.Series
+			item.Genre = meta.Genre
 			item.MetadataSource = meta.Source
 			item.MetadataConfidence = int64(meta.Confidence)
 			item.NeedsReview = meta.NeedsReview
@@ -323,12 +327,13 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if e != nil {
 			return e
 		}
-		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,format,available,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix)
-			VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?)
+		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,genre,format,available,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix)
+			VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?,?,?)
 			ON CONFLICT(source_id,relative_path) DO UPDATE SET
 				title=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.title ELSE excluded.title END,
 				author=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.author ELSE excluded.author END,
 				series=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.series ELSE excluded.series END,
+				genre=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.genre ELSE excluded.genre END,
 				format=excluded.format,
 				available=1,
 				metadata_source=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.metadata_source ELSE excluded.metadata_source END,
@@ -338,7 +343,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 				scan_signature=excluded.scan_signature,
 				size_bytes=excluded.size_bytes,
 				modified_unix=excluded.modified_unix`,
-			id, item.Relative, item.Title, item.Author, item.Series, item.Format, item.MetadataSource, item.MetadataConfidence, item.NeedsReview, item.ReviewReason, item.ScanSignature, item.SizeBytes, item.ModifiedUnix); e != nil {
+			id, item.Relative, item.Title, item.Author, item.Series, item.Genre, item.Format, item.MetadataSource, item.MetadataConfidence, item.NeedsReview, item.ReviewReason, item.ScanSignature, item.SizeBytes, item.ModifiedUnix); e != nil {
 			return e
 		}
 	}
@@ -516,9 +521,9 @@ func (a *app) routes() http.Handler {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
-		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
+		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.genre,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
-			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ?)
+			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ?)
 			AND (?='' OR s.space=?)
 			AND (?='' OR a.format=?)
 			AND (?=0 OR trim(a.author)='')
@@ -526,7 +531,7 @@ func (a *app) routes() http.Handler {
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
 			ORDER BY a.needs_review DESC,a.title,a.id LIMIT ? OFFSET ?`,
-			q, q, q, space, space, format, format, unknownAuthor, reviewOnly,
+			q, q, q, q, space, space, format, format, unknownAuthor, reviewOnly,
 			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
 		if e != nil {
 			fail(w, 500, e)
@@ -537,7 +542,7 @@ func (a *app) routes() http.Handler {
 		for rows.Next() {
 			var b book
 			var confidence int
-			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.Format, &b.Space, &b.Available, &confidence, &b.NeedsReview, &b.ReviewReason, &b.MetadataSource); e != nil {
+			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.Genre, &b.Format, &b.Space, &b.Available, &confidence, &b.NeedsReview, &b.ReviewReason, &b.MetadataSource); e != nil {
 				fail(w, 500, e)
 				return
 			}
