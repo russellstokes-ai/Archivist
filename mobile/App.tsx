@@ -26,6 +26,7 @@ import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
 import {buildAtlasRelationship} from './atlas';
+import {possibleLocalDuplicateGroups} from './duplicates';
 
 type Book = {
   id: number;
@@ -78,6 +79,26 @@ type ServerAtlasRelationship = {
   formats: SummaryItem[];
   spaces: SummaryItem[];
 };
+type DuplicateCandidate = {
+  id:number;
+  title:string;
+  author:string;
+  format:string;
+  space:string;
+  path:string;
+  size:number;
+  reviewed:boolean;
+};
+type DuplicateCandidateGroup = {
+  size:number;
+  reason:string;
+  items:DuplicateCandidate[];
+};
+type DuplicateVerification = {
+  exact:Array<{sha256:string;items:DuplicateCandidate[]}>;
+  unique:DuplicateCandidate[];
+  errors:Array<{id:number;error:string}>;
+};
 type LocalWorkProgress = {uri: string; seconds: number; complete?: boolean};
 type WorkPicker = {work: ServerWork; tracks: WorkTrack[]};
 type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'profile' | 'settings';
@@ -124,6 +145,14 @@ function palette(mode: ThemeMode, system: string | null | undefined): Palette {
     gold: '#c6a374',
     ivory: '#f8f7f2',
   };
+}
+
+function formatBytes(bytes:number) {
+  if(!Number.isFinite(bytes) || bytes<=0)return '0 B';
+  const units=['B','KB','MB','GB','TB'];
+  let value=bytes,index=0;
+  while(value>=1024 && index<units.length-1){value/=1024;index++;}
+  return (index===0?Math.round(value):value.toFixed(value>=10?1:2))+' '+units[index];
 }
 
 function formatTime(seconds: number) {
@@ -216,6 +245,10 @@ function Client() {
   const [atlasFocus,setAtlasFocus]=useState<{kind:'author'|'series';value:string}|null>(null);
   const [serverAtlasRelationship,setServerAtlasRelationship]=useState<ServerAtlasRelationship|null>(null);
   const [atlasLoading,setAtlasLoading]=useState(false);
+  const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
+  const [duplicateLoading,setDuplicateLoading]=useState(false);
+  const [serverDuplicateGroups,setServerDuplicateGroups]=useState<DuplicateCandidateGroup[]>([]);
+  const [duplicateResults,setDuplicateResults]=useState<Record<string,DuplicateVerification>>({});
   const [serverHasMore, setServerHasMore] = useState(false);
   const [serverLoadingMore, setServerLoadingMore] = useState(false);
   const [serverBooksHasMore, setServerBooksHasMore] = useState(false);
@@ -342,6 +375,12 @@ function Client() {
     !session && atlasFocus ? buildAtlasRelationship(localWorks,atlasFocus.kind,atlasFocus.value) : null,
     [atlasFocus,localWorks,session],
   );
+
+  const localDuplicateGroups = useMemo(() => {
+    if(session)return [];
+    const local=books.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    return possibleLocalDuplicateGroups(local);
+  },[books,session]);
 
 
   const localProfileStats = useMemo<VerifiedProfileStats>(() => {
@@ -926,6 +965,9 @@ function Client() {
     setServerLoadingMore(false);
     setServerBooksHasMore(false);
     setServerBooksLoadingMore(false);
+    setServerDuplicateGroups([]);
+    setDuplicateResults({});
+    setDuplicatePanelOpen(false);
     setOwner(false);
     setSources([]);
     setQueuedBooks([]); setSpace('');
@@ -2095,6 +2137,84 @@ function Client() {
     );
   }
 
+  async function refreshDuplicateCandidates() {
+    if(!session || !owner)return;
+    setDuplicateLoading(true);setError('');
+    try{
+      const groups=await request(session,'/api/duplicate-candidates') as DuplicateCandidateGroup[];
+      setServerDuplicateGroups(groups);
+      setDuplicateResults({});
+    }catch(e){setError((e as Error).message);}
+    finally{setDuplicateLoading(false);}
+  }
+
+  async function openDuplicateReview() {
+    setDuplicatePanelOpen(true);
+    if(session && owner)await refreshDuplicateCandidates();
+  }
+
+  async function verifyDuplicateGroup(group:DuplicateCandidateGroup) {
+    if(!session || !owner || group.items.length<2)return;
+    setDuplicateLoading(true);setError('');
+    try{
+      const result=await request(
+        session,'/api/duplicate-candidates/verify','POST',
+        {ids:group.items.map(item=>item.id)},300000,
+      ) as DuplicateVerification;
+      setDuplicateResults(current=>({...current,[String(group.size)]:result}));
+    }catch(e){setError((e as Error).message);}
+    finally{setDuplicateLoading(false);}
+  }
+
+  function DuplicateReviewPanel() {
+    if(!duplicatePanelOpen)return null;
+    return (
+      <View style={[styles.duplicatePanel,{backgroundColor:p.card,borderColor:p.line}]}>
+        <View style={styles.queueHeader}>
+          <View style={{flex:1}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Duplicate review</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>
+              {session
+                ? 'Candidates share the same byte size. Verification reads each file and compares SHA-256; nothing is changed or deleted.'
+                : 'Local candidates share the same normalized title, author, series and format. They are possible duplicates, not byte-verified.'}
+            </Text>
+          </View>
+          <Button label="Close" tone="quiet" onPress={()=>setDuplicatePanelOpen(false)} />
+        </View>
+        {duplicateLoading?<ActivityIndicator accessibilityLabel="Checking duplicate files" />:null}
+        {session ? <>
+          <Button label="Refresh candidates" tone="quiet" disabled={duplicateLoading} onPress={()=>void refreshDuplicateCandidates()} />
+          {!serverDuplicateGroups.length && !duplicateLoading?<Text style={[styles.empty,{color:p.muted}]}>No same-size duplicate candidates found.</Text>:null}
+          {serverDuplicateGroups.map(group=>{
+            const result=duplicateResults[String(group.size)];
+            return <View key={group.size} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+              <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items.length} candidates · {formatBytes(group.size)}</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+              {group.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.title} — {item.path}</Text>)}
+              {!result?<Button label="Verify exact duplicates" tone="quiet" disabled={duplicateLoading} onPress={()=>void verifyDuplicateGroup(group)} />:null}
+              {result?<>
+                <Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{result.exact.reduce((n,set)=>n+set.items.length,0)} files confirmed in exact duplicate sets</Text>
+                {result.exact.map(set=><View key={set.sha256} style={[styles.duplicateExact,{borderColor:p.gold}]}>
+                  <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Exact SHA-256 match · {set.items.length} files</Text>
+                  {set.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.muted}]}>• {item.path}</Text>)}
+                </View>)}
+                {result.unique.length?<Text style={[styles.meta,{color:p.muted}]}>{result.unique.length} candidate file{result.unique.length===1?'':'s'} proved unique.</Text>:null}
+                {result.errors.map(item=><Text key={'err-'+item.id} style={[styles.meta,{color:p.gold}]}>File {item.id}: {item.error}</Text>)}
+              </>:null}
+            </View>;
+          })}
+        </> : <>
+          {!localDuplicateGroups.length?<Text style={[styles.empty,{color:p.muted}]}>No metadata-match duplicate candidates found.</Text>:null}
+          {localDuplicateGroups.map(group=><View key={group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items[0].title} · {group.items.length} possible copies</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+            {group.items.map(item=><Text key={item.uri} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.uri}</Text>)}
+          </View>)}
+        </>}
+      </View>
+    );
+  }
+
   function Settings() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
@@ -2107,6 +2227,10 @@ function Client() {
             </Pressable>
           ))}
         </View>
+        <Text style={[styles.sectionTitle,{color:p.ink}]}>Library health</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Review possible duplicate files without making destructive changes.</Text>
+        {(!session || owner)?<Button label="Review duplicates" tone="quiet" onPress={()=>void openDuplicateReview()} />:null}
+        <DuplicateReviewPanel />
         <Text style={[styles.sectionTitle, {color: p.ink}]}>Server</Text>
         {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : <Text style={[styles.meta, {color: p.muted}]}>No server connected. Your phone library works locally.</Text>}
         {!session ? (serverPanelOpen ? <ServerConnect /> : <Button label="Add server" tone="quiet" onPress={() => setServerPanelOpen(true)} />) : null}
@@ -2347,4 +2471,7 @@ const styles = StyleSheet.create({
   atlasChipWrap: {flexDirection:'row',flexWrap:'wrap',gap:8},
   atlasRelationChip: {borderWidth:1,borderRadius:999,paddingHorizontal:11,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
   atlasWorkRow: {borderWidth:1,borderRadius:12,padding:12,flexDirection:'row',alignItems:'center',gap:10},
+  duplicatePanel: {borderWidth:1,borderRadius:16,padding:14,gap:12},
+  duplicateGroup: {borderWidth:1,borderRadius:12,padding:12,gap:7},
+  duplicateExact: {borderWidth:1,borderRadius:10,padding:10,gap:4},
 });
