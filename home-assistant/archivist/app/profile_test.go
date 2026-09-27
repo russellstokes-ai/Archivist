@@ -29,8 +29,7 @@ func addProfileStatsWork(t *testing.T, a *app, sourceID int64, space, title, for
 
 func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 	a := fixture(t)
-	if err := a.initProgress(); err != nil { t.Fatal(err) }
-	if err := a.initReader(); err != nil { t.Fatal(err) }
+	initAllProgressForTest(t,a)
 	root := t.TempDir()
 	if _, err := a.db.Exec("INSERT INTO sources(id,space,path,status) VALUES(1,'Main',?,'Ready')", root); err != nil { t.Fatal(err) }
 
@@ -55,7 +54,7 @@ func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 	if got.Works != 3 || got.Formats != 2 || got.Series != 2 {
 		t.Fatalf("library stats=%+v",got)
 	}
-	if got.StartedAudio != 2 || got.CompletedAudio != 1 || got.StartedReading != 1 || got.CompletedReading != 1 {
+	if got.StartedAudio != 2 || got.CompletedAudio != 1 || got.InProgressAudio != 1 || got.StartedReading != 1 || got.CompletedReading != 1 || got.InProgressReading != 0 {
 		t.Fatalf("progress stats=%+v",got)
 	}
 	if got.InProgress != 1 || got.Completed != 2 {
@@ -65,8 +64,7 @@ func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 
 func TestProfileStatsRespectsHouseholdGrants(t *testing.T) {
 	a := fixture(t)
-	if err := a.initProgress(); err != nil { t.Fatal(err) }
-	if err := a.initReader(); err != nil { t.Fatal(err) }
+	initAllProgressForTest(t,a)
 
 	mainRoot := filepath.Join(t.TempDir(),"main")
 	privateRoot := filepath.Join(t.TempDir(),"private")
