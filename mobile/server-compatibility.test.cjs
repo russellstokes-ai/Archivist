@@ -41,6 +41,9 @@ const oldRelation={
 const relation=normalizeAtlasRelationship(oldRelation);
 assert.deepEqual(relation.genres,[]);
 assert.deepEqual(relation.availability,[]);
+assert.deepEqual(relation.reading,[]);
+assert.deepEqual(relation.ratings,[]);
+assert.deepEqual(relation.favourites,[]);
 assert.equal(relation.works[0].genre,'');
 
 const legacy=buildLegacyAtlasRelationship([
@@ -52,5 +55,8 @@ assert.equal(legacy.workCount,1);
 assert.equal(legacy.works[0].title,'Dune Messiah');
 assert.deepEqual(legacy.genres,[]);
 assert.deepEqual(legacy.availability,[{name:'Available',count:1}]);
+assert.deepEqual(legacy.reading,[{name:'Not started',count:1}]);
+assert.deepEqual(legacy.ratings,[{name:'Unrated',count:1}]);
+assert.deepEqual(legacy.favourites,[]);
 
 console.log('PASS: new mobile builds tolerate older server payloads and unsupported Atlas dimensions');
