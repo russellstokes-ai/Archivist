@@ -65,10 +65,10 @@ func openDB(path string) (*sql.DB, error) {
 	// pool lets the Pi serve readers/streams while a scan or progress save writes.
 	u := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
 	q := u.Query()
-	q.Set("_foreign_keys", "1")
-	q.Set("_journal_mode", "WAL")
-	q.Set("_busy_timeout", "5000")
-	q.Set("_synchronous", "NORMAL")
+	// modernc applies _pragma values to every pooled connection.
+	q.Add("_pragma", "foreign_keys(1)")
+	q.Add("_pragma", "busy_timeout(5000)")
+	q.Add("_pragma", "synchronous(NORMAL)")
 	u.RawQuery = q.Encode()
 	db, e := sql.Open("sqlite", u.String())
 	if e != nil {
@@ -76,6 +76,12 @@ func openDB(path string) (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(4)
+	// WAL is database-persistent; set it once rather than re-requesting a
+	// journal-mode switch whenever the pool opens a new connection.
+	if _, e = db.Exec("PRAGMA journal_mode=WAL"); e != nil {
+		db.Close()
+		return nil, e
+	}
 	_, e = db.Exec(`CREATE TABLE IF NOT EXISTS sources(id INTEGER PRIMARY KEY,space TEXT NOT NULL,path TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'Not scanned');
  CREATE TABLE IF NOT EXISTS assets(id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,relative_path TEXT NOT NULL,title TEXT NOT NULL,format TEXT NOT NULL,available INTEGER NOT NULL DEFAULT 1,UNIQUE(source_id,relative_path));
  PRAGMA user_version=1;`)
