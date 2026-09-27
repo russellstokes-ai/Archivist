@@ -71,6 +71,7 @@ export type LocalScanResult = {
   books: LocalBook[];
   skipped: number;
   truncated: boolean;
+  truncatedReason?: 'book-limit' | 'entry-limit';
   identified: number;
   review: number;
 };
@@ -91,6 +92,11 @@ const supported = new Map<string, string>([
 ]);
 
 const maxEntriesPerScan = 5000;
+const maxVisitedEntriesPerScan = 25000;
+const knownNonDirectoryExtensions = new Set([
+  ...supported.keys(),
+  'opf','nfo','jpg','jpeg','png','webp','gif','txt','cue','m3u','m3u8','json','xml','srt',
+]);
 const maxDepth = 8;
 
 export function localFolderName(uri: string) {
@@ -127,6 +133,7 @@ export async function scanLocalFolders(
   const books: LocalBook[] = [];
   let skipped = 0;
   let truncated = false;
+  let truncatedReason: 'book-limit' | 'entry-limit' | undefined;
   let entriesVisited = 0;
   let review = 0;
   const seen = new Set<string>();
@@ -135,13 +142,13 @@ export async function scanLocalFolders(
     onProgress?.({phase, currentFolder, entriesVisited, found: books.length, review});
   };
 
-  async function scanDir(uri: string, space: string, depth: number) {
+  async function scanDir(uri: string, space: string, depth: number, countUnreadable = true) {
     if (truncated || depth > maxDepth) return;
     let children: string[];
     try {
       children = await StorageAccessFramework.readDirectoryAsync(uri);
     } catch {
-      skipped += 1;
+      if (countUnreadable) skipped += 1;
       return;
     }
 
@@ -177,9 +184,15 @@ export async function scanLocalFolders(
 
     for (const child of children) {
       entriesVisited += 1;
+      if (entriesVisited > maxVisitedEntriesPerScan) {
+        truncated = true;
+        truncatedReason = 'entry-limit';
+        return;
+      }
       if (entriesVisited === 1 || entriesVisited % 20 === 0) report('discovering', space);
       if (books.length >= maxEntriesPerScan) {
         truncated = true;
+        truncatedReason = 'book-limit';
         return;
       }
       const ext = extension(child);
@@ -226,8 +239,15 @@ export async function scanLocalFolders(
           coverUri,
         });
         report('discovering', space);
-      } else if (!ext && depth < maxDepth) {
-        await scanDir(child, space, depth + 1);
+      } else if (depth < maxDepth) {
+        if (!ext) {
+          await scanDir(child, space, depth + 1);
+        } else if (!knownNonDirectoryExtensions.has(ext)) {
+          // SAF does not tell us whether a child is a file or directory.
+          // Unknown extensions may be dotted folder names (for example "J.R.R. Tolkien"),
+          // so probe them as directories without reporting ordinary unsupported files as errors.
+          await scanDir(child, space, depth + 1, false);
+        }
       }
     }
   }
@@ -253,6 +273,7 @@ export async function scanLocalFolders(
     books,
     skipped,
     truncated,
+    truncatedReason,
     identified: books.length - review,
     review,
   };
