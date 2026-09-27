@@ -118,6 +118,7 @@ func TestScanBuildsConservativeLogicalWorks(t *testing.T) {
 
 func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 	a:=fixture(t)
+	initAllProgressForTest(t,a)
 	root:=t.TempDir()
 	if _,e:=a.db.Exec("INSERT INTO sources(id,space,path,status) VALUES(1,'Main',?,'Ready')",root);e!=nil{t.Fatal(e)}
 	assets:=[]struct{
