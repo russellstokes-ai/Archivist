@@ -410,6 +410,7 @@ func (a *app) routes() http.Handler {
 	a.householdRoutes(mux)
 	a.profileRoutes(mux)
 	a.atlasRoutes(mux)
+	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
 	a.recommendationRoutes(mux)
@@ -785,6 +786,9 @@ func main() {
 	}
 	if e = a.syncExistingCatalogue(); e != nil {
 		log.Printf("catalogue migration: %v", e)
+	}
+	if e = a.initPreferences(); e != nil {
+		log.Fatal(e)
 	}
 	if e = a.initProgress(); e != nil {
 		log.Fatal(e)
