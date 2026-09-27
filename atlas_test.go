@@ -41,7 +41,7 @@ func TestAtlasRelationshipsAreExactAndGrantAware(t *testing.T) {
 	if _,e:=a.db.Exec("INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(1,?,?,45,1,0)",messiahEdition,messiahAsset);e!=nil{t.Fatal(e)}
 	if _,e:=a.db.Exec("INSERT INTO profile_completions(profile_id,work_id,kind,completed_at) VALUES(1,?,'Reading',1)",dune);e!=nil{t.Fatal(e)}
 	for _,pref:=range []struct{work int64;rating int;fav int}{{dune,10,1},{messiah,9,0},{foundation,8,0},{hidden,10,0}} {
-		if _,e:=a.db.Exec("INSERT INTO work_preferences(profile_id,work_id,rating,favourite,updated) VALUES(1,?,?,?,?,1)",pref.work,pref.rating,pref.fav);e!=nil{t.Fatal(e)}
+		if _,e:=a.db.Exec("INSERT INTO work_preferences(profile_id,work_id,rating,favourite,updated) VALUES(1,?,?,?,1)",pref.work,pref.rating,pref.fav);e!=nil{t.Fatal(e)}
 	}
 
 	out,e:=a.atlasRelationshipFor(identity{ID:1,Name:"Reader",Role:"user"},"author","Frank Herbert")
