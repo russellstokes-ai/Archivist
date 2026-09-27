@@ -126,7 +126,14 @@ const {
     downloadOfflineWork(session,{...work,id:43,format:'Comic'},[
       {id:3,title:'Comic',format:'Comic',edition:8,available:true,name:'issue.cbr',size:100},
     ]),
-    /CBZ\/ZIP/,
+    /CBR\/RAR comics are not supported.*CBZ\/ZIP/,
+  );
+
+  await assert.rejects(
+    downloadOfflineWork(session,{...work,id:48,format:'Comic'},[
+      {id:8,title:'Tar comic',format:'Comic',edition:8,available:true,name:'issue.cbt',size:100},
+    ]),
+    /CBT comics can be read from the Archivist server.*CBZ\/ZIP/,
   );
 
   await assert.rejects(
