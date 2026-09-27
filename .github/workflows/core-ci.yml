@@ -15,23 +15,40 @@ jobs:
   server:
     name: Server tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - name: Resolve module checksums
-        run: go mod tidy
-      - name: Go tests
-        run: go test ./...
-      - name: Emit resolved checksums
-        if: always()
+
+      - name: Verify packaged server parity
+        shell: bash
         run: |
-          echo '---GO-SUM-BEGIN---'
-          cat go.sum
-          echo '---GO-SUM-END---'
+          set -euo pipefail
+          for file in *.go go.mod go.sum; do
+            cmp -- "$file" "archivist/app/$file"
+            cmp -- "$file" "home-assistant/archivist/app/$file"
+          done
+          echo "Root, packaged and Home Assistant server sources are identical."
+
+      - name: Test all server packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in "." "archivist/app" "home-assistant/archivist/app"; do
+            echo "Testing $dir"
+            (
+              cd "$dir"
+              go mod tidy
+              go test ./...
+            )
+          done
+
+      - name: Verify module files stay clean
+        run: |
+          git diff --exit-code --             go.mod go.sum             archivist/app/go.mod archivist/app/go.sum             home-assistant/archivist/app/go.mod home-assistant/archivist/app/go.sum
 
   mobile:
     name: Mobile tests
@@ -44,12 +61,19 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+
       - name: Install dependencies
         working-directory: mobile
         run: npm ci
+
+      - name: Expo Doctor
+        working-directory: mobile
+        run: npx expo-doctor
+
       - name: Typecheck
         working-directory: mobile
         run: npm run typecheck
+
       - name: Unit and contract tests
         working-directory: mobile
         run: |
