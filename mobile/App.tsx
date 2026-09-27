@@ -121,7 +121,9 @@ const localFoldersKey = 'archivist.localFolders';
 const localProgressKey = 'archivist.localProgress';
 const localReadingProgressKey = 'archivist.localReadingProgress';
 const localReadingCompleteKey = 'archivist.localReadingComplete.v1';
+const localReadingCurrentCompleteKey = 'archivist.localReadingCurrentComplete.v1';
 const localWorkProgressKey = 'archivist.localWorkProgress.v1';
+const localAudioCompletedKey = 'archivist.localAudioCompleted.v1';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
@@ -285,10 +287,12 @@ function Client() {
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
   const [localWorkProgress, setLocalWorkProgress] = useState<Record<string, LocalWorkProgress>>({});
+  const [localAudioCompleted, setLocalAudioCompleted] = useState<Record<string, boolean>>({});
   const [activeLocalWork, setActiveLocalWork] = useState<LocalWork | null>(null);
   const [localWorkIndex, setLocalWorkIndex] = useState(0);
   const [localReadingProgress, setLocalReadingProgress] = useState<Record<string, number>>({});
   const [localReadingComplete, setLocalReadingComplete] = useState<Record<string, boolean>>({});
+  const [localReadingCurrentComplete, setLocalReadingCurrentComplete] = useState<Record<string, boolean>>({});
   const queueRef = useRef(queuedBooks); queueRef.current=queuedBooks;
   const [queueReady,setQueueReady]=useState(false);
   const [queueBusy,setQueueBusy]=useState(false);
@@ -389,16 +393,31 @@ function Client() {
 
     const startedAudio = audioWorks.filter(work => {
       const point = localWorkProgress[work.key];
-      return !!point && (point.seconds > 0 || !!point.complete);
+      return !!point && (point.seconds > 0 || !!point.complete || !!localAudioCompleted[work.key]);
     }).length;
-    const completedAudio = audioWorks.filter(work => !!localWorkProgress[work.key]?.complete).length;
+    const completedAudio = audioWorks.filter(work =>
+      !!localAudioCompleted[work.key] || !!localWorkProgress[work.key]?.complete
+    ).length;
+    const inProgressAudio = audioWorks.filter(work => {
+      const point=localWorkProgress[work.key];
+      return !!point && !point.complete && point.seconds>0;
+    }).length;
 
     const startedReading = readingWorks.filter(work => work.tracks.some(track =>
-      !!track.uri && Object.prototype.hasOwnProperty.call(localReadingProgress, track.uri)
+      !!track.uri && (
+        Object.prototype.hasOwnProperty.call(localReadingProgress, track.uri) ||
+        !!localReadingComplete[track.uri]
+      )
     )).length;
     const completedReading = readingWorks.filter(work => work.tracks.some(track =>
       !!track.uri && !!localReadingComplete[track.uri]
     )).length;
+    const inProgressReading = readingWorks.filter(work => work.tracks.some(track => {
+      if(!track.uri)return false;
+      const page=localReadingProgress[track.uri] || 0;
+      const currentComplete=localReadingCurrentComplete[track.uri] ?? !!localReadingComplete[track.uri];
+      return page>0 && !currentComplete;
+    })).length;
 
     return {
       name: 'On this device',
@@ -408,12 +427,14 @@ function Client() {
       series: new Set(localWorks.map(work => work.series).filter(Boolean)).size,
       startedAudio,
       completedAudio,
+      inProgressAudio,
       startedReading,
       completedReading,
-      inProgress: Math.max(0, startedAudio - completedAudio) + Math.max(0, startedReading - completedReading),
+      inProgressReading,
+      inProgress: inProgressAudio + inProgressReading,
       completed: completedAudio + completedReading,
     };
-  }, [localReadingComplete, localReadingProgress, localWorkProgress, localWorks]);
+  }, [localAudioCompleted, localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks]);
 
   const profileStats = session ? serverProfileStats : localProfileStats;
   const profileAchievements = useMemo(() => profileStats ? achievementsFor(profileStats) : [], [profileStats]);
@@ -475,8 +496,13 @@ function Client() {
       const point = localWorkProgress[work.key];
       return !!point && !point.complete && point.seconds > 0;
     }
-    return work.tracks.some(track => !!track.uri && (localReadingProgress[track.uri] || 0) > 0);
-  }).slice(0, 12), [localReadingProgress, localWorkProgress, localWorks, space]);
+    return work.tracks.some(track => {
+      if(!track.uri)return false;
+      const page=localReadingProgress[track.uri] || 0;
+      const currentComplete=localReadingCurrentComplete[track.uri] ?? !!localReadingComplete[track.uri];
+      return page>0 && !currentComplete;
+    });
+  }).slice(0, 12), [localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks, space]);
 
   const atlas = useMemo(() => {
     if (session && serverSummary) {
@@ -564,11 +590,17 @@ function Client() {
     SecureStore.getItemAsync(localWorkProgressKey).then(value => {
       if (value) setLocalWorkProgress(JSON.parse(value));
     }).catch(() => undefined);
+    SecureStore.getItemAsync(localAudioCompletedKey).then(value => {
+      if (value) setLocalAudioCompleted(JSON.parse(value));
+    }).catch(() => undefined);
     SecureStore.getItemAsync(localReadingProgressKey).then(value => {
       if (value) setLocalReadingProgress(JSON.parse(value));
     }).catch(() => undefined);
     SecureStore.getItemAsync(localReadingCompleteKey).then(value => {
       if (value) setLocalReadingComplete(JSON.parse(value));
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(localReadingCurrentCompleteKey).then(value => {
+      if (value) setLocalReadingCurrentComplete(JSON.parse(value));
     }).catch(() => undefined);
     SecureStore.getItemAsync(localQueueKey).then(value => {
       if (value) setQueuedBooks(JSON.parse(value));
@@ -735,6 +767,19 @@ function Client() {
       .catch(e=>{if(!cancelled)setError(e.message);});
     return()=>{cancelled=true;};
   }, [activeTab, session, space]);
+
+  useEffect(() => {
+    const completed=Object.fromEntries(
+      Object.entries(localWorkProgress).filter(([,point])=>!!point?.complete).map(([key])=>[key,true])
+    ) as Record<string,boolean>;
+    const additions=Object.keys(completed).filter(key=>!localAudioCompleted[key]);
+    if(!additions.length)return;
+    setLocalAudioCompleted(current=>{
+      const next={...current,...completed};
+      SecureStore.setItemAsync(localAudioCompletedKey,JSON.stringify(next)).catch(()=>undefined);
+      return next;
+    });
+  },[localAudioCompleted,localWorkProgress]);
 
   useEffect(() => {
     if (session || restoring || !localOverridesReady || !localFolders.length || books.length || localScanning) return;
@@ -2104,12 +2149,12 @@ function Client() {
           <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
             <View style={styles.profileBreakdownRow}>
               <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Listening</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {Math.max(0,stats.startedAudio-stats.completedAudio)} in progress</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {stats.inProgressAudio} in progress</Text>
             </View>
             <View style={[styles.profileDivider,{backgroundColor:p.line}]} />
             <View style={styles.profileBreakdownRow}>
               <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Reading</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {Math.max(0,stats.startedReading-stats.completedReading)} in progress</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {stats.inProgressReading} in progress</Text>
             </View>
           </View>
 
