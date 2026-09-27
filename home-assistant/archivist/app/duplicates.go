@@ -87,8 +87,8 @@ func (a *app) duplicateRoutes(mux *http.ServeMux) {
 			fail(w,400,errors.New("invalid duplicate verification request"))
 			return
 		}
-		if len(in.IDs) < 2 || len(in.IDs) > 20 {
-			fail(w,400,errors.New("verify between 2 and 20 candidate files at a time"))
+		if len(in.IDs) < 2 || len(in.IDs) > 500 {
+			fail(w,400,errors.New("verify between 2 and 500 candidate files at a time"))
 			return
 		}
 		a.scanMu.Lock()
