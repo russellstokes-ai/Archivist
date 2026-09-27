@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -30,6 +31,27 @@ func TestSQLitePoolKeepsPerConnectionSafetyPragmas(t *testing.T) {
 	var journal string
 	if err=db.QueryRow("PRAGMA journal_mode").Scan(&journal);err!=nil{t.Fatal(err)}
 	if journal!="wal"{t.Fatalf("journal_mode=%q",journal)}
+}
+
+func TestStreamingReadContinuesDuringCatalogueWrite(t *testing.T) {
+	a:=fixture(t)
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"Stream.mp3"),[]byte("0123456789"),0600);err!=nil{t.Fatal(err)}
+	if err:=a.addSource("Main",root);err!=nil{t.Fatal(err)}
+	if err:=a.scan(1);err!=nil{t.Fatal(err)}
+
+	tx,err:=a.db.Begin();if err!=nil{t.Fatal(err)}
+	defer tx.Rollback()
+	if _,err=tx.Exec("UPDATE sources SET status='Scanning' WHERE id=1");err!=nil{t.Fatal(err)}
+
+	req:=httptest.NewRequest("GET","/api/assets/1",nil)
+	req.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+	req.Header.Set("Range","bytes=2-5")
+	res:=httptest.NewRecorder()
+	a.routes().ServeHTTP(res,req)
+	if res.Code!=http.StatusPartialContent || res.Body.String()!="2345"{
+		t.Fatalf("stream during write=%d %q",res.Code,res.Body.String())
+	}
 }
 
 func TestFiveThousandWorkPagingAndPersonalSummary(t *testing.T) {
