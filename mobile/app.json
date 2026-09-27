@@ -16,8 +16,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#072632"
-      },
-      "usesCleartextTraffic": true
+      }
     },
     "plugins": [
       "expo-secure-store",
@@ -28,7 +27,8 @@
           "recordAudioAndroid": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/withCleartextTraffic"
     ],
     "updates": {
       "enabled": false
