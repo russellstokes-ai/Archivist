@@ -71,3 +71,10 @@ assert.ok(source.includes('pauseActiveOfflineDownload'), 'Active offline downloa
 assert.ok(source.includes('initialNumToRender={12}'), 'Shelf lists must bound initial rendering for large libraries');
 assert.ok(source.includes('maxToRenderPerBatch={12}'), 'Shelf lists must bound render batches');
 assert.equal(source.includes("request(session, serverAssetsPath(0,500))"),false,'Normal Shelf refresh must not fetch 500 raw files');
+
+assert.ok(source.includes('accessibilityActions={[{name:\'increment\',label:\'Forward 30 seconds\'}'), 'Playback timeline must expose screen-reader seek actions');
+assert.ok(source.includes('onLayout={event=>setPlayerProgressWidth'), 'Playback timeline must seek using its rendered width');
+assert.ok(source.includes('Reader needs attention'), 'Server reader retry state is missing');
+assert.ok(source.includes('readerReloadKey'), 'Server reader retry must reload the WebView');
+assert.ok(source.includes("message?.type==='archivist-reader-ready'"), 'Server reader ready bridge is missing');
+assert.ok(source.includes("reading.format"), 'Reader header must expose the active format');
