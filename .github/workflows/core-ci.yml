@@ -31,7 +31,20 @@ jobs:
             cmp -- "$file" "archivist/app/$file"
             cmp -- "$file" "home-assistant/archivist/app/$file"
           done
-          echo "Root, packaged and Home Assistant server sources are identical."
+          for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js reader.html reader.js reader.css speech-focus.js; do
+            cmp -- "web/$file" "archivist/app/web/$file"
+            cmp -- "web/$file" "home-assistant/archivist/app/web/$file"
+          done
+          echo "Root, packaged and Home Assistant server/browser sources are identical."
+
+      - name: Browser syntax and UI contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in web/*.js; do
+            node --check "$file"
+          done
+          node scripts/ui-contract.cjs
 
       - name: Test all server packages
         shell: bash
