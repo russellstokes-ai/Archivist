@@ -644,7 +644,11 @@ function Client() {
 
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
-    const lifecycle = AppState.addEventListener('change', () => { controller.tick(); void controller.save(); });
+    const lifecycle = AppState.addEventListener('change', state => {
+      controller.tick();
+      void controller.save();
+      if(state!=='active')void pauseActiveOfflineDownload();
+    });
     const timer = setInterval(() => controller.tick(),1000);
     return () => { subscription.remove(); lifecycle.remove(); clearInterval(timer); loadCancel.current?.(); void controller.stop(); };
   }, [controller, player]);
@@ -1561,11 +1565,53 @@ function Client() {
     return offlineWorks[session.server+'|'+work.id];
   }
 
+  async function saveOfflineCheckpoint(key:string, checkpoint:OfflineDownloadCheckpoint|null){
+    setOfflineCheckpoints(current=>{
+      const next={...current};
+      if(checkpoint)next[key]=checkpoint;else delete next[key];
+      void setPersistedJSON(offlineCheckpointsKey,next);
+      return next;
+    });
+  }
+
+  async function refreshOfflineStorage(){
+    setOfflineStorageBusy(true);
+    try{setOfflineStorage(await inspectOfflineStorage(offlineWorks));}
+    catch(e){setError((e as Error).message);}
+    finally{setOfflineStorageBusy(false);}
+  }
+
+  async function cleanupDownloads(){
+    if(offlineBusyId!==null)return;
+    setOfflineStorageBusy(true);setError('');
+    try{
+      const result=await cleanupOfflineStorage(offlineWorks,Object.values(offlineCheckpoints));
+      setOfflineWorks(result.retained);
+      await setPersistedJSON(offlineWorksKey,result.retained);
+      setOfflineProgress('Cleaned '+result.removedWorks.length+' broken download'+(result.removedWorks.length===1?'':'s')+' and '+result.removedOrphans+' orphan folder'+(result.removedOrphans===1?'':'s')+'.');
+      setOfflineStorage(await inspectOfflineStorage(result.retained));
+    }catch(e){setError((e as Error).message);}
+    finally{setOfflineStorageBusy(false);}
+  }
+
+  async function discardPartialDownload(checkpoint:OfflineDownloadCheckpoint){
+    if(offlineBusyId!==null)return;
+    setOfflineStorageBusy(true);setError('');
+    try{
+      await removeOfflineCheckpoint(checkpoint);
+      await saveOfflineCheckpoint(checkpoint.key,null);
+      setOfflineProgress('Partial download removed.');
+      setOfflineStorage(await inspectOfflineStorage(offlineWorks));
+    }catch(e){setError((e as Error).message);}
+    finally{setOfflineStorageBusy(false);}
+  }
+
   async function downloadServerWork(work: ServerWork) {
     if(!session || offlineBusyId!==null)return;
+    const checkpointKey=session.server+'|'+work.id;
     setError('');
     setOfflineBusyId(work.id);
-    setOfflineProgress('Preparing download…');
+    setOfflineProgress(offlineCheckpoints[checkpointKey]?'Resuming…':'Preparing download…');
     try{
       const tracks=await request(session,'/api/works/'+work.id+'/tracks') as WorkTrack[];
       const downloaded=await downloadOfflineWork(
@@ -1573,14 +1619,25 @@ function Client() {
         work,
         tracks as OfflineServerTrack[],
         (written,total)=>setOfflineProgress(total>0 ? Math.min(100,Math.round(written/total*100))+'%' : formatBytes(written)),
+        {
+          checkpoint:offlineCheckpoints[checkpointKey],
+          onCheckpoint:checkpoint=>saveOfflineCheckpoint(checkpointKey,checkpoint),
+        },
       );
-      const next={...offlineWorks,[downloaded.key]:downloaded};
-      setOfflineWorks(next);
-      await setPersistedJSON(offlineWorksKey,next);
+      setOfflineWorks(current=>{
+        const next={...current,[downloaded.key]:downloaded};
+        void setPersistedJSON(offlineWorksKey,next);
+        return next;
+      });
       setOfflineProgress('Downloaded · '+formatBytes(downloaded.bytes));
+      setOfflineStorage(await inspectOfflineStorage({...offlineWorks,[downloaded.key]:downloaded}));
     }catch(e){
-      setError((e as Error).message);
-      setOfflineProgress('');
+      if(isOfflineDownloadPaused(e)){
+        setOfflineProgress('Paused · tap Resume download');
+      }else{
+        setError((e as Error).message);
+        setOfflineProgress('Download interrupted · tap Resume download');
+      }
     }finally{
       setOfflineBusyId(null);
     }
@@ -1597,6 +1654,7 @@ function Client() {
       setOfflineWorks(next);
       await setPersistedJSON(offlineWorksKey,next);
       setOfflineProgress('');
+      setOfflineStorage(await inspectOfflineStorage(next));
     }catch(e){
       setError((e as Error).message);
     }finally{
@@ -1881,6 +1939,7 @@ function Client() {
   function ServerWorkCard({work}: {work: ServerWork}) {
     const downloaded=downloadedServerWork(work);
     const downloading=offlineBusyId===work.id;
+    const checkpoint=session?offlineCheckpoints[session.server+'|'+work.id]:undefined;
     const personal=serverPreferences[work.id] || {rating:0,favourite:false,state:'not-started' as ReadingState};
     return (
       <View style={styles.book}>
@@ -1897,7 +1956,7 @@ function Client() {
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
         {downloaded
           ? <Button label={'Downloaded · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
-          : <Button label={downloading ? 'Downloading '+offlineProgress : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
+          : <Button label={downloading ? 'Downloading '+offlineProgress : checkpoint ? 'Resume download' : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
       </View>
     );
   }
