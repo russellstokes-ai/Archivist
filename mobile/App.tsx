@@ -641,7 +641,7 @@ function Client() {
         const track = activeLocalWork.tracks[localWorkIndex];
         if (track?.uri) {
           setLocalWorkProgress(current => {
-            const next = {...current, [activeLocalWork.key]: {uri:track.uri, seconds, complete:false}};
+            const next = {...current, [activeLocalWork.key]: {uri:track.uri, seconds, complete:!!current[activeLocalWork.key]?.complete}};
             SecureStore.setItemAsync(localWorkProgressKey, JSON.stringify(next)).catch(() => undefined);
             return next;
           });
