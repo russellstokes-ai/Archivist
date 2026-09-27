@@ -1,8 +1,8 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -123,5 +123,3 @@ func TestCompletionHistoryBackfillsExistingFinishedProgress(t *testing.T) {
 func itoa[T ~int | ~int64](value T) string {
 	return fmt.Sprint(value)
 }
-
-var _ *sql.DB
