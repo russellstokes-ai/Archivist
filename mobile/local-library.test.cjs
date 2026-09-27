@@ -132,6 +132,15 @@ assert.equal(previews[0].state, 'review');
   assert.equal(scanned.books[0].metadataSource, 'manual');
   assert.equal(scanned.books[0].needsReview, false);
 
+  const dottedRoot='content://root/tree/primary:Books/document/primary:Books2';
+  const dottedAuthor=dottedRoot+'%2FJ.R.R.%20Tolkien';
+  const dottedBook=dottedAuthor+'%2FThe%20Hobbit.epub';
+  saf.dirs.set(dottedRoot,[dottedAuthor]);
+  saf.dirs.set(dottedAuthor,[dottedBook]);
+  const dottedScan=await scanLocalFolders([{id:dottedRoot,uri:dottedRoot,name:'Books2',status:'Ready',itemCount:0}]);
+  assert.equal(dottedScan.books.length,1);
+  assert.equal(dottedScan.books[0].title,'The Hobbit');
+
   previews = previewLocalSort([books[0]], 'author-series-title');
   saf.dirs.set(previews[0].rootUri, []);
   const result = await applyLocalSortCopies(previews);
@@ -145,5 +154,5 @@ assert.equal(previews[0].state, 'review');
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);
-  console.log('PASS: local scanner sidecars/manual overrides, metadata inference, sort previews, copy apply and recovery');
+  console.log('PASS: local scanner dotted folders, sidecars/manual overrides, metadata inference, sort previews, copy apply and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
