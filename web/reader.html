@@ -1,1 +1,37 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Archivist reader</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./reader.css"><script type="module" src="./reader.js"></script></head><body><header><a href="./">Library</a><strong>Archivist</strong><select id="appearance" aria-label="Reader appearance"><option value="light dark">System</option><option value="light">Light</option><option value="dark">Dark</option></select></header><main><p id="reader-status" role="status"></p><div class="tools"><button id="smaller" aria-label="Smaller text">A−</button><button id="larger" aria-label="Larger text">A+</button><select id="sections" aria-label="Section"></select></div><article id="reading" aria-label="Book content"></article></main><nav><button id="previous">Previous</button><span id="position"></span><button id="next">Next</button></nav></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Archivist reader</title>
+<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./reader.css">
+<script type="module" src="./reader.js"></script>
+</head>
+<body>
+<header>
+  <a href="./" aria-label="Back to Archivist library">Library</a>
+  <strong>Archivist</strong>
+  <select id="appearance" aria-label="Reader appearance">
+    <option value="light dark">System</option>
+    <option value="light">Light</option>
+    <option value="dark">Dark</option>
+  </select>
+</header>
+<main>
+  <p id="reader-status" role="status" aria-live="polite"></p>
+  <div class="tools" aria-label="Reading tools">
+    <button id="smaller" aria-label="Smaller text">A−</button>
+    <button id="larger" aria-label="Larger text">A+</button>
+    <select id="sections" aria-label="Section"></select>
+  </div>
+  <p id="reader-help" class="reader-help">Tap the left or right edge to turn pages. Double-tap a comic speech bubble to enlarge it; pinch to zoom.</p>
+  <article id="reading" aria-label="Book content" tabindex="0"></article>
+</main>
+<nav aria-label="Reader page navigation">
+  <button id="previous" aria-label="Previous page or section">Previous</button>
+  <span id="position" aria-live="polite"></span>
+  <button id="next" aria-label="Next page or section">Next</button>
+</nav>
+</body>
+</html>
