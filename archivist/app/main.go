@@ -238,6 +238,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	count := 0
 	reused := 0
 	reviewCount := 0
+	sidecars := newSidecarScanCache()
 	e = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -263,7 +264,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if statErr != nil {
 			return statErr
 		}
-		signature := metadataSignature(path, info)
+		signature := metadataSignatureWithCache(path, info, sidecars)
 		item := entry{
 			Relative: rel,
 			Format: format,
@@ -281,7 +282,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			item.ReviewReason = existing.ReviewReason
 			reused++
 		} else {
-			meta := metadataFor(path, rel, format)
+			meta := metadataForWithCache(path, rel, format, sidecars)
 			item.Title = meta.Title
 			item.Author = meta.Author
 			item.Series = meta.Series
