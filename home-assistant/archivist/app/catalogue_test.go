@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -45,6 +46,21 @@ func TestGroupingEditionsOrderAndUngroup(t *testing.T) {
 	if first != "Track 2" {
 		t.Fatal(first)
 	}
+
+	req:=httptest.NewRequest("GET","/api/works/"+strconv.FormatInt(work,10)+"/tracks",nil)
+	req.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+	res:=httptest.NewRecorder()
+	a.routes().ServeHTTP(res,req)
+	if res.Code!=200{t.Fatalf("tracks=%d %s",res.Code,res.Body.String())}
+	var tracks []struct{
+		ID int64 `json:"id"`
+		Name string `json:"name"`
+		Size int64 `json:"size"`
+	}
+	if e:=json.Unmarshal(res.Body.Bytes(),&tracks);e!=nil{t.Fatal(e)}
+	if len(tracks)!=3{t.Fatalf("tracks=%+v",tracks)}
+	if tracks[0].Name=="" || tracks[0].Size!=7{t.Fatalf("offline track metadata=%+v",tracks[0])}
+
 	a.scan(1)
 	a.db.QueryRow("SELECT count(*) FROM edition_assets").Scan(&n)
 	if n != 3 {
