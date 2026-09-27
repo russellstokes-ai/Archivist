@@ -44,7 +44,7 @@ export function detectBubbleRegion(
   const rightByRow=new Int32Array(height);rightByRow.fill(-1);
   const tolerance=95*95;
   const minLum=Math.max(75,baseLum-95);
-  const maxArea=Math.max(96,Math.floor(total*0.24));
+  const maxArea=Math.max(96,Math.floor(total*0.30));
   let head=0,tail=0,area=0;
   let left=width,top=height,right=-1,bottom=-1;
   queue[tail++]=seedY*width+seedX;
