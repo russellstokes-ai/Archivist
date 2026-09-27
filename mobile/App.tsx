@@ -29,7 +29,20 @@ import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {possibleLocalDuplicateGroups} from './duplicates';
 import {buildLegacyAtlasRelationship, normalizeAtlasRelationship, normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
-import {downloadOfflineWork, OfflineServerTrack, OfflineServerWork, offlineToLocalWork, removeOfflineWork} from './offlineLibrary';
+import {
+  cleanupOfflineStorage,
+  downloadOfflineWork,
+  inspectOfflineStorage,
+  isOfflineDownloadPaused,
+  OfflineDownloadCheckpoint,
+  OfflineServerTrack,
+  OfflineServerWork,
+  OfflineStorageSummary,
+  offlineToLocalWork,
+  pauseActiveOfflineDownload,
+  removeOfflineCheckpoint,
+  removeOfflineWork,
+} from './offlineLibrary';
 
 type Book = {
   id: number;
@@ -145,6 +158,7 @@ const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
+const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
@@ -367,6 +381,9 @@ function Client() {
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
+  const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
+  const [offlineStorage,setOfflineStorage]=useState<OfflineStorageSummary|null>(null);
+  const [offlineStorageBusy,setOfflineStorageBusy]=useState(false);
   const [offlineBusyId,setOfflineBusyId]=useState<number|null>(null);
   const [offlineProgress,setOfflineProgress]=useState('');
   const loadCancel = useRef<(() => void) | null>(null);
@@ -696,6 +713,9 @@ function Client() {
     }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
       if (value && typeof value === 'object') setOfflineWorks(value);
+    }).catch(() => undefined);
+    getPersistedJSON<Record<string, OfflineDownloadCheckpoint>>(offlineCheckpointsKey).then(value => {
+      if (value && typeof value === 'object') setOfflineCheckpoints(value);
     }).catch(() => undefined);
     getPersistedJSON<Record<string, PersonalPreference>>(localPreferencesKey).then(value => {
       if (value && typeof value === 'object') setLocalPreferences(value);
