@@ -5,6 +5,9 @@ import {
   AppState,
   FlatList,
   Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -216,6 +219,8 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{disabled:!!disabled}}
       disabled={disabled}
       style={({pressed}) => [
         styles.button,
@@ -2017,8 +2022,9 @@ function Client() {
     const personal=local
       ? (localPreferences[local.key] || {rating:0,favourite:false})
       : server ? (serverPreferences[server.id] || {rating:0,favourite:false,state:'finished' as ReadingState}) : {rating:0,favourite:false};
-    return <View style={styles.ratingPromptBackdrop}>
-      <View style={[styles.ratingPromptCard,{backgroundColor:p.card,borderColor:p.line}]}>
+    return <Modal transparent animationType="fade" visible onRequestClose={()=>setRatingPrompt(null)}>
+      <View style={styles.ratingPromptBackdrop}>
+      <View accessibilityViewIsModal accessibilityLabel={'Rate '+ratingPrompt.title} style={[styles.ratingPromptCard,{backgroundColor:p.card,borderColor:p.line}]}>
         <Text style={[styles.playerEyebrow,{color:p.gold}]}>FINISHED</Text>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>How was it?</Text>
         <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{ratingPrompt.title}</Text>
@@ -2039,24 +2045,29 @@ function Client() {
         <Button label="Done" onPress={()=>setRatingPrompt(null)} />
         <Button label="Not now" tone="quiet" onPress={()=>setRatingPrompt(null)} />
       </View>
-    </View>;
+      </View>
+    </Modal>;
   }
 
   function WorkPickerPanel() {
     if (!workPicker) return null;
     const choices = workPicker.tracks.filter((track,index,all)=>all.findIndex(item=>item.edition===track.edition)===index);
     return (
-      <View style={[styles.editorCard,{backgroundColor:p.card,borderColor:p.line}]}>
-        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{workPicker.work.title}</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Choose an edition to open.</Text>
-        {choices.map(track=><Button
-          key={track.edition}
-          label={(track.format==='Audio'?'Listen':'Open')+' · '+track.format}
-          tone="quiet"
-          onPress={()=>openServerWorkTrack(workPicker.work,track)}
-        />)}
-        <Button label="Cancel" tone="quiet" onPress={()=>setWorkPicker(null)} />
-      </View>
+      <Modal transparent animationType="fade" visible onRequestClose={()=>setWorkPicker(null)}>
+        <View style={styles.modalBackdrop}>
+          <View accessibilityViewIsModal accessibilityLabel={'Choose edition for '+workPicker.work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{workPicker.work.title}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Choose an edition to open.</Text>
+            {choices.map(track=><Button
+              key={track.edition}
+              label={(track.format==='Audio'?'Listen':'Open')+' · '+track.format}
+              tone="quiet"
+              onPress={()=>openServerWorkTrack(workPicker.work,track)}
+            />)}
+            <Button label="Cancel" tone="quiet" onPress={()=>setWorkPicker(null)} />
+          </View>
+        </View>
+      </Modal>
     );
   }
 
@@ -2066,7 +2077,7 @@ function Client() {
     title:string;author:string;format:string;coverUri?:string;serverPath?:string;onPress:()=>void;
   }) {
     return (
-      <Pressable accessibilityRole="button" onPress={onPress} style={styles.continueCard}>
+      <Pressable accessibilityRole="button" accessibilityLabel={'Continue '+title+', '+(author||format)} onPress={onPress} style={styles.continueCard}>
         <Artwork title={title} format={format} coverShape={format==='Audio'?'square':'portrait'} coverUri={coverUri} serverPath={serverPath} />
         <Text numberOfLines={2} style={[styles.continueTitle,{color:p.ink}]}>{title}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{author || format}</Text>
@@ -2373,7 +2384,7 @@ function Client() {
               {session ? <>
                 <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text>
                 {chapterError?<Text style={{color:p.gold}}>{chapterError}</Text>:chapters.length===0?<Text style={{color:p.muted}}>No embedded chapters</Text>:null}
-                {chapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index && {backgroundColor:p.raised}]}>
+                {chapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index && {backgroundColor:p.raised}]}>
                   <Text style={[styles.chapterIndex,{color:p.gold}]}>{index+1}</Text>
                   <View style={{flex:1}}>
                     <Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text>
