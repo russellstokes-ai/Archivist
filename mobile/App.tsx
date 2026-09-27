@@ -134,6 +134,7 @@ const localAudioCompletedKey = 'archivist.localAudioCompleted.v1';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
+const localCatalogKey = 'archivist.localCatalog.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 
@@ -335,6 +336,7 @@ function Client() {
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
+  const [localCatalogReady,setLocalCatalogReady]=useState(false);
   const loadCancel = useRef<(() => void) | null>(null);
   const shelfColumns = width >= 900 ? 5 : width >= 700 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
@@ -612,6 +614,12 @@ function Client() {
     getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
     }).catch(() => undefined);
+    getPersistedJSON<Book[]>(localCatalogKey).then(saved => {
+      if (!Array.isArray(saved)) return;
+      const normalized=saved.map(book=>({...book,genre:book.genre || ''}));
+      setBooks(normalized);
+      setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
+    }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
     getPersistedJSON<Record<string, number>>(localProgressKey).then(value => {
       if (value && typeof value === 'object') setLocalProgress(value);
     }).catch(() => undefined);
@@ -843,9 +851,9 @@ function Client() {
   },[localAudioCompleted,localWorkProgress]);
 
   useEffect(() => {
-    if (session || restoring || !localOverridesReady || !localFolders.length || books.length || localScanning) return;
+    if (session || restoring || !localOverridesReady || !localCatalogReady || !localFolders.length || books.length || localScanning) return;
     void rescanLocalFolders();
-  }, [books.length, localFolders, localOverridesReady, localScanning, restoring, session]);
+  }, [books.length, localCatalogReady, localFolders, localOverridesReady, localScanning, restoring, session]);
 
   async function chooseTheme(next: ThemeMode) {
     setTheme(next);
@@ -1127,7 +1135,10 @@ function Client() {
       setBooks(result.books);
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
-      await setPersistedJSON(localFoldersKey, result.folders);
+      await Promise.all([
+        setPersistedJSON(localFoldersKey, result.folders),
+        setPersistedJSON(localCatalogKey, result.books),
+      ]);
       const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
       setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
       if (result.books.length && celebrationEligible) {
@@ -1155,7 +1166,10 @@ function Client() {
       setBooks(result.books);
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
-      await setPersistedJSON(localFoldersKey, result.folders);
+      await Promise.all([
+        setPersistedJSON(localFoldersKey, result.folders),
+        setPersistedJSON(localCatalogKey, result.books),
+      ]);
       const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
       setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
     } catch (e) {
@@ -1820,7 +1834,14 @@ function Client() {
                 const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
                 setLocalMetadataOverrides(next);
                 setPersistedJSON(localMetadataOverridesKey, next)
-                  .then(()=>{setBooks(old=>old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+                  .then(()=>{
+                    setBooks(old=>{
+                      const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
+                      void setPersistedJSON(localCatalogKey,updated);
+                      return updated;
+                    });
+                    setEditing(null);
+                  })
                   .catch(e=>setError(e.message)).finally(()=>setBusy(false));
               }else{
                 setBusy(false);
