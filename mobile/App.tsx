@@ -27,6 +27,7 @@ import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {possibleLocalDuplicateGroups} from './duplicates';
+import {buildLegacyAtlasRelationship, normalizeAtlasRelationship, normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 
 type Book = {
   id: number;
@@ -253,6 +254,7 @@ function Client() {
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [serverAtlasRelationship,setServerAtlasRelationship]=useState<ServerAtlasRelationship|null>(null);
   const [atlasLoading,setAtlasLoading]=useState(false);
+  const [atlasCompatibility,setAtlasCompatibility]=useState(false);
   const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
   const [duplicateLoading,setDuplicateLoading]=useState(false);
   const [serverDuplicateGroups,setServerDuplicateGroups]=useState<DuplicateCandidateGroup[]>([]);
@@ -772,16 +774,29 @@ function Client() {
     if(!session || !atlasFocus){
       setServerAtlasRelationship(null);
       setAtlasLoading(false);
+      setAtlasCompatibility(false);
       return;
     }
     let cancelled=false;
     setAtlasLoading(true);
+    setAtlasCompatibility(false);
     request(session,'/api/atlas-relationships?kind='+encodeURIComponent(atlasFocus.kind)+'&value='+encodeURIComponent(atlasFocus.value))
-      .then(data=>{if(!cancelled)setServerAtlasRelationship(data);})
-      .catch(e=>{if(!cancelled)setError(e.message);})
+      .then(data=>{
+        if(cancelled)return;
+        setServerAtlasRelationship(normalizeAtlasRelationship(data));
+      })
+      .catch(e=>{
+        if(cancelled)return;
+        if(e instanceof RequestError && e.status===400){
+          setServerAtlasRelationship(buildLegacyAtlasRelationship(serverWorks,atlasFocus.kind,atlasFocus.value));
+          setAtlasCompatibility(true);
+          return;
+        }
+        setError(e.message);
+      })
       .finally(()=>{if(!cancelled)setAtlasLoading(false);});
     return()=>{cancelled=true;};
-  },[atlasFocus,session]);
+  },[atlasFocus,serverWorks,session]);
 
   useEffect(() => {
     if (session || !playing?.uri || !audio.currentTime) return;
@@ -810,7 +825,7 @@ function Client() {
     if (!session || activeTab !== 'shelf') return;
     let cancelled=false;
     request(session,'/api/continue?space='+encodeURIComponent(space))
-      .then(items=>{if(!cancelled)setContinueWorks(items);})
+      .then(items=>{if(!cancelled)setContinueWorks((items as ServerWork[]).map(normalizeServerWork));})
       .catch(e=>{if(!cancelled)setError(e.message);});
     return()=>{cancelled=true;};
   }, [activeTab, session, space]);
@@ -852,10 +867,10 @@ function Client() {
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
     setBooks(assets);
     setServerBooksHasMore(assets.length===500);
-    setServerWorks(works);
+    setServerWorks((works as ServerWork[]).map(normalizeServerWork));
     setServerHasMore(works.length===100);
-    setContinueWorks(continuing);
-    setServerSummary(summary);
+    setContinueWorks((continuing as ServerWork[]).map(normalizeServerWork));
+    setServerSummary(normalizeLibrarySummary(summary));
     setServerProfileStats(stats);
   }
 
@@ -863,7 +878,7 @@ function Client() {
     if (!session || !serverHasMore || serverLoadingMore || shelfLoading) return;
     setServerLoadingMore(true);
     try {
-      const next = await request(session,serverWorksPath(serverWorks.length,100)) as ServerWork[];
+      const next = (await request(session,serverWorksPath(serverWorks.length,100)) as ServerWork[]).map(normalizeServerWork);
       setServerWorks(current => {
         const seen=new Set(current.map(work=>work.id));
         return [...current,...next.filter(work=>!seen.has(work.id))];
@@ -2154,6 +2169,7 @@ function Client() {
           </Text>
         </View>
         {atlasLoading ? <ActivityIndicator accessibilityLabel="Loading Atlas relationships" /> : null}
+        {atlasCompatibility ? <Text style={[styles.meta,{color:p.gold}]}>Your server is an older Archivist version, so this relationship is calculated from the works currently loaded on your phone. Update the server for complete Atlas links.</Text> : null}
         {relation ? <>
           <AtlasConnectionGroup title="Authors" kind="author" items={relation.authors} />
           <AtlasConnectionGroup title="Series" kind="series" items={relation.series} />
