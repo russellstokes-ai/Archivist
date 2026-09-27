@@ -200,6 +200,8 @@ function Client() {
   const [serverWorks, setServerWorks] = useState<ServerWork[]>([]);
   const [continueWorks, setContinueWorks] = useState<ServerWork[]>([]);
   const [serverSummary, setServerSummary] = useState<LibrarySummary | null>(null);
+  const [serverProfileStats, setServerProfileStats] = useState<VerifiedProfileStats | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [serverHasMore, setServerHasMore] = useState(false);
   const [serverLoadingMore, setServerLoadingMore] = useState(false);
   const [serverBooksHasMore, setServerBooksHasMore] = useState(false);
@@ -237,6 +239,7 @@ function Client() {
   const [activeLocalWork, setActiveLocalWork] = useState<LocalWork | null>(null);
   const [localWorkIndex, setLocalWorkIndex] = useState(0);
   const [localReadingProgress, setLocalReadingProgress] = useState<Record<string, number>>({});
+  const [localReadingComplete, setLocalReadingComplete] = useState<Record<string, boolean>>({});
   const queueRef = useRef(queuedBooks); queueRef.current=queuedBooks;
   const [queueReady,setQueueReady]=useState(false);
   const [queueBusy,setQueueBusy]=useState(false);
