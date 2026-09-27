@@ -63,9 +63,6 @@ export function normalizeLibrarySummary(value:CompatibleLibrarySummary):Compatib
     series:countArray(value.series),
     genres:countArray(value.genres),
     availability:countArray(value.availability),
-    reading:countArray(value.reading),
-    ratings:countArray(value.ratings),
-    favourites:countArray(value.favourites),
   };
 }
 
@@ -79,6 +76,9 @@ export function normalizeAtlasRelationship(value:CompatibleAtlasRelationship):Co
     formats:countArray(value.formats),
     spaces:countArray(value.spaces),
     availability:countArray(value.availability),
+    reading:countArray(value.reading),
+    ratings:countArray(value.ratings),
+    favourites:countArray(value.favourites),
   };
 }
 
