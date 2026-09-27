@@ -454,6 +454,9 @@ function Client() {
     SecureStore.getItemAsync(localReadingProgressKey).then(value => {
       if (value) setLocalReadingProgress(JSON.parse(value));
     }).catch(() => undefined);
+    SecureStore.getItemAsync(localReadingCompleteKey).then(value => {
+      if (value) setLocalReadingComplete(JSON.parse(value));
+    }).catch(() => undefined);
     SecureStore.getItemAsync(localQueueKey).then(value => {
       if (value) setQueuedBooks(JSON.parse(value));
     }).catch(() => undefined);
