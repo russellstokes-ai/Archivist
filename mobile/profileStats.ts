@@ -12,6 +12,9 @@ export type VerifiedProfileStats = {
   inProgressReading: number;
   inProgress: number;
   completed: number;
+  rated?: number;
+  favourites?: number;
+  averageRating?: number;
 };
 
 export type Achievement = {
