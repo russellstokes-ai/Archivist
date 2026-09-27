@@ -157,8 +157,21 @@ func (a *app) addSource(space, path string) error {
 	if conflict {
 		return errors.New("folder overlaps an existing source; choose a different folder")
 	}
-	_, e = a.db.Exec("INSERT INTO sources(space,path) VALUES(?,?)", space, p)
-	return e
+	tx, e := a.db.Begin()
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	if _, e = tx.Exec("INSERT INTO sources(space,path) VALUES(?,?)", space, p); e != nil {
+		return e
+	}
+	// Every active User sees every library. Admin remains the only role allowed
+	// to add, scan, organise or remove server content.
+	if _, e = tx.Exec(`INSERT OR IGNORE INTO grants(profile_id,space)
+		SELECT id,? FROM profiles WHERE revoked=0`, space); e != nil {
+		return e
+	}
+	return tx.Commit()
 }
 func kind(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
