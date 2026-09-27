@@ -1,32 +1,3 @@
-async function editAccess(profile){
-  try{
-    activity('Loading library access',profile.name);
-    const [sources,grants]=await Promise.all([api('./api/sources'),api('./api/profiles/'+profile.id+'/spaces')]);
-    const panel=element('form');panel.className='access-editor panel-card';
-    panel.append(element('h3','Library access · '+profile.name),element('p','Choose which library spaces this person can see. Spaces group one or more source folders; you do not need to manage individual folder paths here.'));
-    const choices=element('div');choices.className='access-choice-grid';
-    for(const space of [...new Set(sources.map(s=>s.space))].sort()){
-      const label=element('label');label.className='access-choice';
-      const box=element('input');box.type='checkbox';box.value=space;box.checked=grants.includes(space);
-      const text=element('span');text.append(element('strong',space),element('small',box.checked?'Currently allowed':'Not currently allowed'));
-      label.append(box,text);choices.append(label);
-    }
-    panel.append(choices);
-    const actions=element('div');actions.className='profile-actions';
-    const save=element('button','Save library access'),cancel=element('button','Cancel');save.className='primary';cancel.type='button';cancel.onclick=()=>panel.remove();
-    actions.append(save,cancel);panel.append(actions);
-    panel.onsubmit=async e=>{
-      e.preventDefault();save.disabled=true;save.textContent='Saving…';activity('Saving library access',profile.name);
-      try{
-        await api('./api/profiles/'+profile.id+'/spaces','PUT',{spaces:[...panel.querySelectorAll('input:checked')].map(x=>x.value)});
-        panel.remove();message(profile.name+' library access updated.');await refreshHousehold();
-      }catch(e){message(e.message)}
-      finally{activity('');save.disabled=false;save.textContent='Save library access'}
-    };
-    household.append(panel);
-  }catch(e){message(e.message)}
-  finally{activity('')}
-}
 async function rotateProfile(profile){
   if(!confirm('Replace '+profile.name+'’s access key and invalidate their current sessions?'))return;
   activity('Replacing access key',profile.name);
