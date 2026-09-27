@@ -12,6 +12,7 @@ import (
 
 func initAllProgressForTest(t *testing.T, a *app) {
 	t.Helper()
+	if err:=a.initPreferences();err!=nil{t.Fatal(err)}
 	if err:=a.initProgress();err!=nil{t.Fatal(err)}
 	if err:=a.initListening();err!=nil{t.Fatal(err)}
 	if err:=a.initReader();err!=nil{t.Fatal(err)}
