@@ -1514,7 +1514,7 @@ function Client() {
 
   function Shelf() {
     const wideLibraries = width >= 760 && spaces.length > 0;
-    const reviewCount = books.filter(book => book.needsReview).length;
+    const reviewCount = session ? (serverSummary?.needsReview ?? books.filter(book => book.needsReview).length) : books.filter(book => book.needsReview).length;
     const continuing = session ? continueWorks : localContinueWorks;
     const shelfWorks = session ? visibleServerWorks : visibleLocalWorks;
     const seriesCounts = new Map<string,number>();
