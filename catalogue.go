@@ -21,6 +21,7 @@ func (a *app) initCatalogue() error {
 	for _, stmt := range []string{
 		"ALTER TABLE works ADD COLUMN author TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE works ADD COLUMN series TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE works ADD COLUMN genre TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE works ADD COLUMN auto INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE works ADD COLUMN group_key TEXT NOT NULL DEFAULT ''",
 	} {
@@ -63,7 +64,7 @@ func naturalLess(a, b string) bool {
 
 type catalogueAsset struct {
 	id int64
-	path, title, author, series, format, space string
+	path, title, author, series, genre, format, space string
 }
 
 func commonValue(items []catalogueAsset, field func(catalogueAsset) string) string {
@@ -84,7 +85,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	if e != nil { return e }
 	defer tx.Rollback()
 
-	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.format,s.space,
+	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.genre,a.format,s.space,
 		COALESCE(w.auto,1)
 		FROM assets a JOIN sources s ON s.id=a.source_id
 		LEFT JOIN edition_assets ea ON ea.asset_id=a.id
@@ -99,7 +100,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	for rows.Next() {
 		var x catalogueAsset
 		var auto int
-		if e = rows.Scan(&x.id,&x.path,&x.title,&x.author,&x.series,&x.format,&x.space,&auto); e != nil { rows.Close(); return e }
+		if e = rows.Scan(&x.id,&x.path,&x.title,&x.author,&x.series,&x.genre,&x.format,&x.space,&auto); e != nil { rows.Close(); return e }
 		key := strings.ToLower(x.format)+":"+filepath.ToSlash(x.path)
 		if x.format == "Audio" {
 			dir := filepath.ToSlash(filepath.Dir(x.path))
@@ -124,11 +125,12 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 		}
 		author := commonValue(items,func(x catalogueAsset)string{return x.author})
 		series := commonValue(items,func(x catalogueAsset)string{return x.series})
+		genre := commonValue(items,func(x catalogueAsset)string{return x.genre})
 
 		var work, edition int64
 		err := tx.QueryRow("SELECT id FROM works WHERE auto=1 AND group_key=? LIMIT 1",key).Scan(&work)
 		if err == sql.ErrNoRows {
-			res, insertErr := tx.Exec("INSERT INTO works(title,space,author,series,auto,group_key) VALUES(?,?,?,?,1,?)",title,first.space,author,series,key)
+			res, insertErr := tx.Exec("INSERT INTO works(title,space,author,series,genre,auto,group_key) VALUES(?,?,?,?,?,1,?)",title,first.space,author,series,genre,key)
 			if insertErr != nil { return insertErr }
 			work, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
 			res, insertErr = tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
@@ -137,7 +139,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 		} else if err != nil {
 			return err
 		} else {
-			if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=? WHERE id=?",title,first.space,author,series,work); err != nil { return err }
+			if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,genre=? WHERE id=?",title,first.space,author,series,genre,work); err != nil { return err }
 			err = tx.QueryRow("SELECT id FROM editions WHERE work_id=? ORDER BY id LIMIT 1",work).Scan(&edition)
 			if err == sql.ErrNoRows {
 				res, insertErr := tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
@@ -197,7 +199,7 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 	defer tx.Rollback()
 	type item struct {
 		id int64
-		path, format, space, author, series string
+		path, format, space, author, series, genre string
 	}
 	items := []item{}
 	seen := map[int64]bool{}
@@ -209,7 +211,7 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		seen[id] = true
 		var x item
 		x.id = id
-		if e = tx.QueryRow(`SELECT a.relative_path,a.format,s.space,a.author,a.series FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.id=?`, id).Scan(&x.path, &x.format, &x.space, &x.author, &x.series); e != nil {
+		if e = tx.QueryRow(`SELECT a.relative_path,a.format,s.space,a.author,a.series,a.genre FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.id=?`, id).Scan(&x.path, &x.format, &x.space, &x.author, &x.series, &x.genre); e != nil {
 			return 0, errors.New("selected file no longer exists")
 		}
 		if len(items) > 0 && space != x.space {
@@ -218,12 +220,12 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		space = x.space
 		items = append(items, x)
 	}
-	author := ""; series := ""
+	author := ""; series := ""; genre := ""
 	if len(items) > 0 {
-		sameAuthor, sameSeries := true, true
-		author, series = items[0].author, items[0].series
-		for _, x := range items[1:] { if x.author != author { sameAuthor=false }; if x.series != series { sameSeries=false } }
-		if !sameAuthor { author="" }; if !sameSeries { series="" }
+		sameAuthor, sameSeries, sameGenre := true, true, true
+		author, series, genre = items[0].author, items[0].series, items[0].genre
+		for _, x := range items[1:] { if x.author != author { sameAuthor=false }; if x.series != series { sameSeries=false }; if x.genre != genre { sameGenre=false } }
+		if !sameAuthor { author="" }; if !sameSeries { series="" }; if !sameGenre { genre="" }
 	}
 	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
 	args := make([]any, len(ids))
@@ -245,7 +247,7 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		var total int
 		if e=tx.QueryRow("SELECT count(*) FROM edition_assets ea JOIN editions e ON e.id=ea.edition_id WHERE e.work_id=?",autoWorks[0]).Scan(&total);e!=nil{return 0,e}
 		if total==len(ids) {
-			if _,e=tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,auto=0,group_key='' WHERE id=?",title,space,author,series,autoWorks[0]);e!=nil{return 0,e}
+			if _,e=tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,genre=?,auto=0,group_key='' WHERE id=?",title,space,author,series,genre,autoWorks[0]);e!=nil{return 0,e}
 			if e=tx.Commit();e!=nil{return 0,e}
 			return autoWorks[0],nil
 		}
@@ -255,7 +257,7 @@ func (a *app) group(title string, ids []int64) (int64, error) {
 		workArgs:=make([]any,len(autoWorks));for i,id:=range autoWorks{workArgs[i]=id}
 		if _,e=tx.Exec("DELETE FROM works WHERE id IN ("+workPlaceholders+")",workArgs...);e!=nil{return 0,e}
 	}
-	res, e := tx.Exec("INSERT INTO works(title,space,author,series,auto,group_key) VALUES(?,?,?,?,0,'')", title, space, author, series)
+	res, e := tx.Exec("INSERT INTO works(title,space,author,series,genre,auto,group_key) VALUES(?,?,?,?,?,0,'')", title, space, author, series, genre)
 	if e != nil {
 		return 0, e
 	}
@@ -328,35 +330,35 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 200 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
-		rows, e := a.db.Query(`SELECT w.id,w.title,w.author,w.series,w.space,
+		rows, e := a.db.Query(`SELECT w.id,w.title,w.author,w.series,w.genre,w.space,
 			count(DISTINCT e.id),count(ea.asset_id),
 			CASE WHEN count(DISTINCT e.format)=1 THEN min(e.format) ELSE 'Mixed' END,
 			sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)
 			FROM works w JOIN editions e ON e.work_id=w.id
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
-			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ?)
+			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ? OR w.genre LIKE ?)
 			AND (?='' OR w.space=?) AND (?='' OR e.format=?)
 			AND (?=0 OR trim(w.author)='')
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY w.id
 			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
 			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
-			q,q,q,space,space,format,format,unknownAuthor,who(r).Owner,who(r).ID,
+			q,q,q,q,space,space,format,format,unknownAuthor,who(r).Owner,who(r).ID,
 			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
 		defer rows.Close()
 		out := []map[string]any{}
 		for rows.Next() {
 			var id, editions, files, available int64
-			var title, author, series, workSpace, workFormat string
-			if e=rows.Scan(&id,&title,&author,&series,&workSpace,&editions,&files,&workFormat,&available); e != nil { fail(w,500,e); return }
-			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0})
+			var title, author, series, genre, workSpace, workFormat string
+			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available); e != nil { fail(w,500,e); return }
+			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0})
 		}
 		reply(w,out)
 	})
 	mux.HandleFunc("GET /api/continue", func(w http.ResponseWriter, r *http.Request) {
 		space := r.URL.Query().Get("space")
-		rows, e := a.db.Query(`SELECT w.id,w.title,w.author,w.series,w.space,
+		rows, e := a.db.Query(`SELECT w.id,w.title,w.author,w.series,w.genre,w.space,
 			count(DISTINCT e.id),count(ea.asset_id),
 			CASE WHEN count(DISTINCT e.format)=1 THEN min(e.format) ELSE 'Mixed' END,
 			sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)
@@ -390,9 +392,9 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		out := []map[string]any{}
 		for rows.Next() {
 			var id, editions, files, available int64
-			var title, author, series, workSpace, workFormat string
-			if e=rows.Scan(&id,&title,&author,&series,&workSpace,&editions,&files,&workFormat,&available); e != nil { fail(w,500,e); return }
-			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0})
+			var title, author, series, genre, workSpace, workFormat string
+			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available); e != nil { fail(w,500,e); return }
+			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0})
 		}
 		if e=rows.Err(); e!=nil { fail(w,500,e); return }
 		reply(w,out)
