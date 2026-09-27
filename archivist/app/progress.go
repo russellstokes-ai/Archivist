@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type progress struct {
@@ -19,12 +20,20 @@ type progress struct {
 var errConflict = errors.New("progress changed in another session; reopen the audiobook to load that position")
 
 func (a *app) initProgress() error {
-	_, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS progress(edition_id INTEGER PRIMARY KEY REFERENCES editions(id) ON DELETE CASCADE,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,seconds REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0);`)
-	if e != nil {
+	if _, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS progress(edition_id INTEGER PRIMARY KEY REFERENCES editions(id) ON DELETE CASCADE,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,seconds REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0);`); e != nil {
 		return e
 	}
-	_, e = a.db.Exec(`CREATE TABLE IF NOT EXISTS profile_progress(profile_id INTEGER NOT NULL,edition_id INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,seconds REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(profile_id,edition_id));
- INSERT OR IGNORE INTO profile_progress SELECT 0,edition_id,asset_id,seconds,revision,complete FROM progress;`)
+	if _, e := a.db.Exec("ALTER TABLE progress ADD COLUMN complete INTEGER NOT NULL DEFAULT 0"); e != nil && !strings.Contains(strings.ToLower(e.Error()), "duplicate column") {
+		return e
+	}
+	if _, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS profile_progress(profile_id INTEGER NOT NULL,edition_id INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,seconds REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(profile_id,edition_id));`); e != nil {
+		return e
+	}
+	if _, e := a.db.Exec("ALTER TABLE profile_progress ADD COLUMN complete INTEGER NOT NULL DEFAULT 0"); e != nil && !strings.Contains(strings.ToLower(e.Error()), "duplicate column") {
+		return e
+	}
+	_, e := a.db.Exec(`INSERT OR IGNORE INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete)
+		SELECT 0,edition_id,asset_id,seconds,revision,complete FROM progress;`)
 	return e
 }
 func (a *app) readProgress(edition int64) (progress, error) { return a.readProfileProgress(0, edition) }
@@ -56,15 +65,13 @@ func (a *app) saveProfileProgress(profile, edition int64, p progress) (progress,
 		return p, errors.New("track does not belong to this audio edition")
 	}
 	var revision int64
-	var alreadyComplete bool
-	e = tx.QueryRow("SELECT revision,complete FROM profile_progress WHERE profile_id=? AND edition_id=?", profile, edition).Scan(&revision,&alreadyComplete)
+	e = tx.QueryRow("SELECT revision FROM profile_progress WHERE profile_id=? AND edition_id=?", profile, edition).Scan(&revision)
 	if e != nil && e != sql.ErrNoRows {
 		return p, e
 	}
 	if revision != p.Revision {
 		return p, errConflict
 	}
-	p.Complete = p.Complete || alreadyComplete
 	p.Revision++
 	_, e = tx.Exec(`INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(?,?,?,?,?,?) ON CONFLICT(profile_id,edition_id) DO UPDATE SET asset_id=excluded.asset_id,seconds=excluded.seconds,revision=excluded.revision,complete=excluded.complete`, profile, edition, p.Asset, p.Seconds, p.Revision, p.Complete)
 	if e != nil {
