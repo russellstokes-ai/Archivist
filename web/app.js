@@ -182,7 +182,11 @@ async function loadConfig(){
 
 function showSettings(name){
   document.querySelectorAll('[data-settings-panel]').forEach(p=>p.hidden=p.dataset.settingsPanel!==name);
-  document.querySelectorAll('[data-settings]').forEach(b=>b.setAttribute('aria-current',b.dataset.settings===name?'page':'false'));
+  document.querySelectorAll('[data-settings]').forEach(b=>{
+    const selected=b.dataset.settings===name;
+    b.setAttribute('aria-selected',selected?'true':'false');
+    b.tabIndex=selected?0:-1;
+  });
   if(name==='server')loadConfig().catch(e=>message(e.message));
 }
 function show(next){
@@ -211,7 +215,19 @@ $('space').onchange=()=>loadBooks(false).catch(e=>message(e.message));
 $('load-more').onclick=()=>loadBooks(true).catch(e=>message(e.message));
 $('clear-library-filter').onclick=()=>{libraryFormat='';$('search').value='';$('space').value='';loadBooks(false).catch(e=>message(e.message))};
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>show(b.dataset.page));
-document.querySelectorAll('[data-settings]').forEach(b=>b.onclick=()=>showSettings(b.dataset.settings));
+document.querySelectorAll('[data-settings]').forEach(b=>{
+  b.onclick=()=>showSettings(b.dataset.settings);
+  b.onkeydown=event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    const tabs=[...document.querySelectorAll('[data-settings]')],index=tabs.indexOf(b);
+    let next=index;
+    if(event.key==='ArrowLeft')next=(index-1+tabs.length)%tabs.length;
+    if(event.key==='ArrowRight')next=(index+1)%tabs.length;
+    if(event.key==='Home')next=0;
+    if(event.key==='End')next=tabs.length-1;
+    event.preventDefault();showSettings(tabs[next].dataset.settings);tabs[next].focus();
+  };
+});
 $('work-close').onclick=()=>hideOverlay('work-detail');
 $('work-detail').addEventListener('click',e=>{if(e.target===$('work-detail'))hideOverlay('work-detail')});
 $('close-player').onclick=()=>{$('audio').pause();$('audio').removeAttribute('src');$('audio').load();$('player').hidden=true};
