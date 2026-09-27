@@ -3042,7 +3042,12 @@ function Client() {
         <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
         <Text style={[styles.headerMeta, {color: p.muted}]}>{session ? `${serverSummary?.total ?? serverWorks.length} works` : `${localWorks.length} works`}</Text>
       </View>
-      {error ? <Text accessibilityRole="alert" style={[styles.error, {color: p.gold}]}>{error}</Text> : null}
+      {error ? <View style={[styles.errorBanner,{borderColor:p.gold,backgroundColor:p.card}]}>
+        <Text accessibilityRole="alert" style={[styles.error, {color: p.gold,flex:1}]}>{error}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
+          <Text style={{color:p.gold,fontSize:20,fontWeight:'900'}}>×</Text>
+        </Pressable>
+      </View> : null}
       <View style={styles.tabBody}>
         {CurrentTab()}
       </View>
@@ -3053,20 +3058,31 @@ function Client() {
       />
       <RatingPromptPanel />
       {playing ? (
-        <Pressable accessibilityRole="button" onPress={() => setActiveTab('player')} style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
-          <MiniArtwork book={playing} />
-          <View style={{flex: 1}}>
-            <Text numberOfLines={1} style={[styles.miniTitle, {color: p.ivory}]}>{playing.title}</Text>
-            <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(session ? playback?.seconds || 0 : audio.currentTime || 0)} · {(session ? playback?.playing : audio.playing) ? 'Playing' : 'Paused'}</Text>
-          </View>
-          <Pressable accessibilityRole="button" onPress={() => session ? controller.toggle() : audio.playing ? player.pause() : player.play()} style={styles.miniButton}>
+        <View style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={'Open player for '+playing.title}
+            onPress={() => setActiveTab('player')}
+            style={styles.miniPlayerMain}>
+            <MiniArtwork book={playing} />
+            <View style={{flex: 1}}>
+              <Text numberOfLines={1} style={[styles.miniTitle, {color: p.ivory}]}>{playing.title}</Text>
+              <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(session ? playback?.seconds || 0 : audio.currentTime || 0)} · {(session ? playback?.playing : audio.playing) ? 'Playing' : 'Paused'}</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={(session ? playback?.playing : audio.playing) ? 'Pause '+playing.title : 'Play '+playing.title}
+            hitSlop={6}
+            onPress={() => session ? controller.toggle() : audio.playing ? player.pause() : player.play()}
+            style={styles.miniButton}>
             <Text style={styles.miniButtonText}>{(session ? playback?.playing : audio.playing) ? 'Pause' : 'Play'}</Text>
           </Pressable>
-        </Pressable>
+        </View>
       ) : null}
       <View style={[styles.tabBar, {backgroundColor: p.card, borderTopColor: p.line}]}>
         {tabs.map(tab => (
-          <Pressable key={tab.id} accessibilityRole="tab" accessibilityState={{selected: activeTab === tab.id}} onPress={() => setActiveTab(tab.id)} style={styles.tab}>
+          <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected: activeTab === tab.id}} onPress={() => setActiveTab(tab.id)} style={styles.tab}>
             <Text style={[styles.tabText, {color: activeTab === tab.id ? p.sage : p.muted}]}>{tab.label}</Text>
           </Pressable>
         ))}
