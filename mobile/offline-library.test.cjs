@@ -4,6 +4,8 @@ const originalLoad=Module._load;
 const dirs=new Set(['file:///docs/']);
 const files=new Map();
 const downloads=[];
+let resumeCalls=0;
+function bodyFor(url){return url.includes('/cover')?Buffer.alloc(120):Buffer.alloc(url.endsWith('/2')?200:100);}
 Module._load=function(request,parent,isMain){
   if(request==='expo-file-system/legacy')return {
     documentDirectory:'file:///docs/',
@@ -11,11 +13,36 @@ Module._load=function(request,parent,isMain){
     async deleteAsync(uri){for(const key of [...files.keys()])if(key.startsWith(uri))files.delete(key);dirs.delete(uri);},
     async downloadAsync(url,uri,options){
       downloads.push({url,uri,options});
-      const body=url.includes('/cover')?Buffer.alloc(120):Buffer.alloc(url.endsWith('/2')?200:100);
-      files.set(uri,body);
+      files.set(uri,bodyFor(url));
       return {uri,status:200,headers:{}};
     },
+    createDownloadResumable(url,uri,options,progress,resumeData){
+      const run=async(isResume)=>{
+        if(isResume)resumeCalls++;
+        downloads.push({url,uri,options,resumeData});
+        const body=bodyFor(url);
+        files.set(uri,body);
+        progress?.({totalBytesWritten:body.length,totalBytesExpectedToWrite:body.length});
+        return {uri,status:200,headers:{}};
+      };
+      return {
+        downloadAsync:()=>run(false),
+        resumeAsync:()=>run(true),
+        async pauseAsync(){return {resumeData:'mock-resume'};},
+      };
+    },
     async getInfoAsync(uri){const body=files.get(uri);return body?{exists:true,size:body.length}:{exists:dirs.has(uri)};},
+    async getFreeDiskStorageAsync(){return 8*1024*1024*1024;},
+    async getTotalDiskCapacityAsync(){return 16*1024*1024*1024;},
+    async readDirectoryAsync(uri){
+      const out=new Set();
+      for(const dir of dirs){
+        if(dir===uri||!dir.startsWith(uri))continue;
+        const rest=dir.slice(uri.length).replace(/\/$/,'');
+        if(rest&&!rest.includes('/'))out.add(rest);
+      }
+      return [...out];
+    },
   };
   return originalLoad.call(this,request,parent,isMain);
 };
@@ -23,7 +50,15 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true},
 }).outputText,file);
 
-const {downloadOfflineWork,removeOfflineWork,offlineToLocalWork}=require('./offlineLibrary.ts');
+const {
+  cleanupOfflineStorage,
+  downloadOfflineWork,
+  inspectOfflineStorage,
+  offlineDirectory,
+  offlineKey,
+  offlineToLocalWork,
+  removeOfflineWork,
+}=require('./offlineLibrary.ts');
 
 (async()=>{
   const session={server:'http://100.64.0.2:3000',token:'secret'};
@@ -32,13 +67,18 @@ const {downloadOfflineWork,removeOfflineWork,offlineToLocalWork}=require('./offl
     {id:1,title:'Opening',format:'Audio',edition:7,available:true,name:'01 - Opening.mp3',size:100},
     {id:2,title:'Arrakis',format:'Audio',edition:7,available:true,name:'02 - Arrakis.mp3',size:200},
   ];
-  const progress=[];
-  const offline=await downloadOfflineWork(session,work,tracks,(written,total)=>progress.push([written,total]));
+  const progress=[],checkpoints=[];
+  const offline=await downloadOfflineWork(
+    session,work,tracks,
+    (written,total)=>progress.push([written,total]),
+    {onCheckpoint:checkpoint=>checkpoints.push(checkpoint)},
+  );
   assert.equal(offline.tracks.length,2);
   assert.equal(offline.bytes,300);
   assert(offline.tracks[0].uri.endsWith('.mp3'));
   assert.equal(offline.coverUri?.endsWith('cover.jpg'),true);
-  assert.deepEqual(progress,[[100,300],[300,300]]);
+  assert(progress.some(([written,total])=>written===300&&total===300));
+  assert.equal(checkpoints.at(-1),null);
   assert(downloads.every(item=>item.options.headers.Authorization==='Bearer secret'));
 
   const local=offlineToLocalWork(offline);
@@ -47,8 +87,40 @@ const {downloadOfflineWork,removeOfflineWork,offlineToLocalWork}=require('./offl
   assert.equal(local.tracks[1].uri,offline.tracks[1].uri);
   assert.equal(local.genre,'Science Fiction');
 
+  const storage=await inspectOfflineStorage({[offline.key]:offline});
+  assert.equal(storage.items,1);
+  assert.equal(storage.missingFiles,0);
+  assert(storage.actualBytes>=300);
+  assert.equal(storage.freeBytes,8*1024*1024*1024);
+
   await removeOfflineWork(offline);
   assert.equal(files.size,0);
+
+  // Resume a work with track 1 already complete and track 2 carrying native resume data.
+  const resumeWork={...work,id:47,title:'Resume Me'};
+  const resumeDir=offlineDirectory(session.server,resumeWork.id);
+  await Module._load('expo-file-system/legacy').makeDirectoryAsync(resumeDir);
+  files.set(resumeDir+'001-01_-_Opening.mp3',Buffer.alloc(100));
+  const checkpoint={
+    version:1,
+    key:offlineKey(session.server,resumeWork.id),
+    server:session.server,
+    workId:resumeWork.id,
+    title:resumeWork.title,
+    directory:resumeDir,
+    completedTrackIds:[1],
+    current:{trackId:2,uri:resumeDir+'002-02_-_Arrakis.mp3',resumeData:'saved-resume',bytesWritten:50},
+    updatedAt:new Date().toISOString(),
+  };
+  const resumed=await downloadOfflineWork(session,resumeWork,tracks,undefined,{checkpoint});
+  assert.equal(resumed.bytes,300);
+  assert.equal(resumeCalls,1);
+
+  dirs.add('file:///docs/archivist-offline/orphan/');
+  files.set('file:///docs/archivist-offline/orphan/junk.bin',Buffer.alloc(10));
+  const cleaned=await cleanupOfflineStorage({[resumed.key]:resumed});
+  assert.equal(cleaned.removedWorks.length,0);
+  assert(cleaned.removedOrphans>=1);
 
   await assert.rejects(
     downloadOfflineWork(session,{...work,id:43,format:'Comic'},[
@@ -78,5 +150,5 @@ const {downloadOfflineWork,removeOfflineWork,offlineToLocalWork}=require('./offl
     /8 GB/,
   );
 
-  console.log('PASS: offline server works preserve files, auth, progress, covers, cleanup and safety limits');
+  console.log('PASS: offline server works resume partial downloads, report storage, clean orphans, preserve auth/covers and enforce safety limits');
 })().catch(e=>{console.error(e);process.exitCode=1;});
