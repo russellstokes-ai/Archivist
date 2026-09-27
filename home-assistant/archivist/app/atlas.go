@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -35,6 +36,9 @@ type atlasRelationship struct {
 	Formats      []atlasCount `json:"formats"`
 	Spaces       []atlasCount `json:"spaces"`
 	Availability []atlasCount `json:"availability"`
+	Reading      []atlasCount `json:"reading"`
+	Ratings      []atlasCount `json:"ratings"`
+	Favourites   []atlasCount `json:"favourites"`
 }
 
 func atlasAvailabilityClause(available bool) string {
@@ -50,7 +54,32 @@ func atlasAvailabilityClause(available bool) string {
 	return "NOT " + clause
 }
 
-func atlasFilter(kind,value string) (string,[]any,error) {
+func atlasRatingValue(value string) (int,bool) {
+	switch strings.TrimSpace(value) {
+	case "5★": return 10,true
+	case "4½★": return 9,true
+	case "4★": return 8,true
+	case "3½★": return 7,true
+	case "3★": return 6,true
+	case "2½★": return 5,true
+	case "2★": return 4,true
+	case "1½★": return 3,true
+	case "1★": return 2,true
+	case "½★": return 1,true
+	case "Unrated": return 0,true
+	default: return 0,false
+	}
+}
+
+func atlasRatingExpression(profileID int64) string {
+	id:=strconv.FormatInt(profileID,10)
+	return `CASE COALESCE((SELECT rating FROM work_preferences wp WHERE wp.profile_id=`+id+` AND wp.work_id=w.id),0)
+		WHEN 10 THEN '5★' WHEN 9 THEN '4½★' WHEN 8 THEN '4★' WHEN 7 THEN '3½★'
+		WHEN 6 THEN '3★' WHEN 5 THEN '2½★' WHEN 4 THEN '2★' WHEN 3 THEN '1½★'
+		WHEN 2 THEN '1★' WHEN 1 THEN '½★' ELSE 'Unrated' END`
+}
+
+func atlasFilter(p identity,kind,value string) (string,[]any,error) {
 	value=strings.TrimSpace(value)
 	if value=="" { return "",nil,errors.New("choose an Atlas value") }
 	if len(value)>500 { return "",nil,errors.New("Atlas value is too long") }
@@ -77,17 +106,36 @@ func atlasFilter(kind,value string) (string,[]any,error) {
 		default:
 			return "",nil,errors.New("choose Available or Unavailable")
 		}
+	case "reading":
+		state:=workStateExpression(p.ID)
+		switch value {
+		case "Finished": return state+"='finished'",nil,nil
+		case "In progress": return state+"='in-progress'",nil,nil
+		case "Not started": return state+"='not-started'",nil,nil
+		default: return "",nil,errors.New("choose Finished, In progress or Not started")
+		}
+	case "rating":
+		rating,ok:=atlasRatingValue(value)
+		if !ok{return "",nil,errors.New("choose a rating")}
+		if rating==0 {
+			return "NOT EXISTS (SELECT 1 FROM work_preferences wp WHERE wp.profile_id="+strconv.FormatInt(p.ID,10)+" AND wp.work_id=w.id AND wp.rating>0)",nil,nil
+		}
+		return "EXISTS (SELECT 1 FROM work_preferences wp WHERE wp.profile_id="+strconv.FormatInt(p.ID,10)+" AND wp.work_id=w.id AND wp.rating=?)",[]any{rating},nil
+	case "favourite":
+		if value!="Favourites"{return "",nil,errors.New("choose Favourites")}
+		return "EXISTS (SELECT 1 FROM work_preferences wp WHERE wp.profile_id="+strconv.FormatInt(p.ID,10)+" AND wp.work_id=w.id AND wp.favourite=1)",nil,nil
 	default:
 		return "",nil,errors.New("unsupported Atlas relationship")
 	}
 }
 
 func (a *app) atlasRelationshipFor(p identity,kind,value string) (atlasRelationship,error) {
-	filter,args,e:=atlasFilter(kind,value)
+	filter,args,e:=atlasFilter(p,kind,value)
 	out:=atlasRelationship{
 		Kind:kind,Value:value,Works:[]atlasWork{},
 		Authors:[]atlasCount{},Series:[]atlasCount{},Genres:[]atlasCount{},
 		Formats:[]atlasCount{},Spaces:[]atlasCount{},Availability:[]atlasCount{},
+		Reading:[]atlasCount{},Ratings:[]atlasCount{},Favourites:[]atlasCount{},
 	}
 	if e!=nil{return out,e}
 
@@ -158,6 +206,25 @@ func (a *app) atlasRelationshipFor(p identity,kind,value string) (atlasRelations
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY CASE WHEN `+atlasAvailabilityClause(true)+` THEN 'Available' ELSE 'Unavailable' END
 			ORDER BY 1`},
+		{&out.Reading,`SELECT CASE `+workStateExpression(p.ID)+`
+			WHEN 'finished' THEN 'Finished' WHEN 'in-progress' THEN 'In progress' ELSE 'Not started' END,count(*)
+			FROM works w WHERE `+filter+`
+			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+			GROUP BY `+workStateExpression(p.ID)+`
+			ORDER BY count(*) DESC,1`},
+		{&out.Ratings,`SELECT `+atlasRatingExpression(p.ID)+`,count(*)
+			FROM works w WHERE `+filter+`
+			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+			GROUP BY `+atlasRatingExpression(p.ID)+`
+			ORDER BY CASE `+atlasRatingExpression(p.ID)+`
+				WHEN '5★' THEN 10 WHEN '4½★' THEN 9 WHEN '4★' THEN 8 WHEN '3½★' THEN 7
+				WHEN '3★' THEN 6 WHEN '2½★' THEN 5 WHEN '2★' THEN 4 WHEN '1½★' THEN 3
+				WHEN '1★' THEN 2 WHEN '½★' THEN 1 ELSE 0 END DESC`},
+		{&out.Favourites,`SELECT 'Favourites',count(*)
+			FROM works w WHERE `+filter+`
+			AND EXISTS (SELECT 1 FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(p.ID,10)+` AND wp.work_id=w.id AND wp.favourite=1)
+			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+			HAVING count(*)>0`},
 	}
 	for _,spec:=range specs{
 		rows,e=a.db.Query(spec.sql,baseArgs...)
