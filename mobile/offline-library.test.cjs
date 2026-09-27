@@ -58,6 +58,20 @@ const {downloadOfflineWork,removeOfflineWork,offlineToLocalWork}=require('./offl
   );
 
   await assert.rejects(
+    downloadOfflineWork(session,{...work,id:45,format:'Comic'},[
+      {id:5,title:'Old server comic',format:'Comic',edition:8,available:true,size:100},
+    ]),
+    /Update your Archivist server/,
+  );
+
+  await assert.rejects(
+    downloadOfflineWork(session,{...work,id:46,format:'Ebook'},[
+      {id:6,title:'Large EPUB',format:'Ebook',edition:8,available:true,name:'large.epub',size:300*1024*1024},
+    ]),
+    /256 MB/,
+  );
+
+  await assert.rejects(
     downloadOfflineWork(session,{...work,id:44},[
       {id:4,title:'Huge',format:'Audio',edition:9,available:true,name:'huge.m4b',size:9*1024*1024*1024},
     ]),
