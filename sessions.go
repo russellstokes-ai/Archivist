@@ -60,12 +60,15 @@ func (a *app) sessionIdentity(token string) (identity, bool) {
 	}
 	if id == 0 {
 		if hash, ok := a.ownerCredentialHash(); ok {
-			return identity{ID: 0, Name: "Owner", Owner: true}, credential == hash
+			return identity{ID: 0, Name: "Admin", Role: "admin", Admin: true, Owner: true}, credential == hash
 		}
-		return identity{ID: 0, Name: "Owner", Owner: true}, credential == keyHash(a.token)
+		return identity{ID: 0, Name: "Admin", Role: "admin", Admin: true, Owner: true}, credential == keyHash(a.token)
 	}
 	var p identity
 	e := a.db.QueryRow("SELECT id,name FROM profiles WHERE id=? AND key_hash=? AND revoked=0", id, credential).Scan(&p.ID, &p.Name)
+	if e == nil {
+		p.Role = "user"
+	}
 	return p, e == nil
 }
 func (a *app) accountRoutes(mux *http.ServeMux) {
