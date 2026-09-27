@@ -10,7 +10,9 @@ function status(s){$('reader-status').textContent=s;}
 function fraction(){const h=document.documentElement.scrollHeight-innerHeight;return h>0?Math.max(0,Math.min(1,scrollY/h)):0;}
 function save(){
   if(busy||!loaded||conflict)return saveQueue;
-  const p={part,fraction:fraction()};
+  const progressFraction=fraction();
+  const complete=!!manifest && part>=manifest.parts.length-1 && (manifest.format==='Comic' || progressFraction>=.95);
+  const p={part,fraction:progressFraction,complete};
   saveQueue=saveQueue.then(async()=>{if(conflict)return;try{const result=await api('./api/assets/'+asset+'/reading-progress','PUT',{...p,revision});revision=result.revision;}catch(e){conflict=true;status('Position not synced: '+e.message);}});
   return saveQueue;
 }
