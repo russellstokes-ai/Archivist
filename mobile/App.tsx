@@ -1042,7 +1042,8 @@ function Client() {
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${result.truncated ? ' · first 5,000 shown' : ''}.`);
+      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
+      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
       if (result.books.length && celebrationEligible) {
         setCelebrating(true);
         setCelebrationEligible(false);
@@ -1069,7 +1070,8 @@ function Client() {
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await SecureStore.setItemAsync(localFoldersKey, JSON.stringify(result.folders));
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${result.truncated ? ' · first 5,000 shown' : ''}.`);
+      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 5,000 books shown' : '';
+      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
