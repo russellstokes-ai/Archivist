@@ -25,7 +25,7 @@ import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalS
 import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
-import {buildAtlasRelationship} from './atlas';
+import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {possibleLocalDuplicateGroups} from './duplicates';
 
 type Book = {
@@ -33,6 +33,7 @@ type Book = {
   title: string;
   author: string;
   series: string;
+  genre: string;
   format: string;
   space: string;
   available: boolean;
@@ -51,6 +52,7 @@ type ServerWork = {
   title: string;
   author: string;
   series: string;
+  genre: string;
   format: string;
   space: string;
   editions: number;
@@ -67,17 +69,20 @@ type LibrarySummary = {
   unknownAuthors: number;
   needsReview: number;
   series: SummaryItem[];
+  genres: SummaryItem[];
   availability: SummaryItem[];
 };
 type ServerAtlasRelationship = {
-  kind: 'author' | 'series';
+  kind: AtlasKind;
   value: string;
   workCount: number;
   works: ServerWork[];
   authors: SummaryItem[];
   series: SummaryItem[];
+  genres: SummaryItem[];
   formats: SummaryItem[];
   spaces: SummaryItem[];
+  availability: SummaryItem[];
 };
 type DuplicateCandidate = {
   id:number;
@@ -245,7 +250,7 @@ function Client() {
   const [serverSummary, setServerSummary] = useState<LibrarySummary | null>(null);
   const [serverProfileStats, setServerProfileStats] = useState<VerifiedProfileStats | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [atlasFocus,setAtlasFocus]=useState<{kind:'author'|'series';value:string}|null>(null);
+  const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [serverAtlasRelationship,setServerAtlasRelationship]=useState<ServerAtlasRelationship|null>(null);
   const [atlasLoading,setAtlasLoading]=useState(false);
   const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
@@ -269,6 +274,9 @@ function Client() {
   const [query, setQuery] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<'all'|'available'|'unavailable'>('all');
   const [formatFilter, setFormatFilter] = useState('');
+  const [authorFilter, setAuthorFilter] = useState('');
+  const [seriesFilter, setSeriesFilter] = useState('');
+  const [genreFilter, setGenreFilter] = useState('');
   const [unknownAuthorOnly, setUnknownAuthorOnly] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -317,6 +325,7 @@ function Client() {
   const [editTitle,setEditTitle]=useState('');
   const [editAuthor,setEditAuthor]=useState('');
   const [editSeries,setEditSeries]=useState('');
+  const [editGenre,setEditGenre]=useState('');
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
@@ -466,30 +475,39 @@ function Client() {
       if (space && book.space !== space) return false;
       if (reviewOnly && !book.needsReview) return false;
       if (formatFilter && book.format !== formatFilter) return false;
+      if (authorFilter && book.author !== authorFilter) return false;
+      if (seriesFilter && book.series !== seriesFilter) return false;
+      if (genreFilter && book.genre !== genreFilter) return false;
       if (unknownAuthorOnly && !!book.author) return false;
       if (!availabilityMatches(book.available)) return false;
       if (!q) return true;
-      return [book.title, book.author, book.series, book.format, book.space].some(value => value.toLowerCase().includes(q));
+      return [book.title, book.author, book.series, book.genre, book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
-  }, [availabilityFilter, books, formatFilter, query, reviewOnly, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, books, formatFilter, genreFilter, query, reviewOnly, seriesFilter, space, unknownAuthorOnly]);
 
   const visibleLocalWorks = useMemo(() => {
     const q = query.trim().toLowerCase();
     return localWorks.filter(work => {
       if (space && work.space !== space) return false;
       if (formatFilter && work.format !== formatFilter) return false;
+      if (authorFilter && work.author !== authorFilter) return false;
+      if (seriesFilter && work.series !== seriesFilter) return false;
+      if (genreFilter && work.genre !== genreFilter) return false;
       if (unknownAuthorOnly && !!work.author) return false;
       if (!availabilityMatches(work.available)) return false;
-      if (q && ![work.title,work.author,work.series,work.format,work.space].some(value => value.toLowerCase().includes(q))) return false;
+      if (q && ![work.title,work.author,work.series,work.genre,work.format,work.space].some(value => value.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [availabilityFilter, formatFilter, localWorks, query, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, formatFilter, genreFilter, localWorks, query, seriesFilter, space, unknownAuthorOnly]);
 
   const visibleServerWorks = useMemo(() => serverWorks.filter(work =>
     availabilityMatches(work.available) &&
     (!formatFilter || work.format === formatFilter) &&
+    (!authorFilter || work.author === authorFilter) &&
+    (!seriesFilter || work.series === seriesFilter) &&
+    (!genreFilter || work.genre === genreFilter) &&
     (!unknownAuthorOnly || !work.author)
-  ), [availabilityFilter, formatFilter, serverWorks, unknownAuthorOnly]);
+  ), [authorFilter, availabilityFilter, formatFilter, genreFilter, seriesFilter, serverWorks, unknownAuthorOnly]);
 
   const localContinueWorks = useMemo(() => localWorks.filter(work => {
     if (space && work.space !== space) return false;
@@ -513,6 +531,7 @@ function Client() {
         formats: serverSummary.formats.map(item => [item.name,item.count] as [string,number]),
         authors,
         series: serverSummary.series.map(item => [item.name,item.count] as [string,number]),
+        genres: serverSummary.genres.map(item => [item.name,item.count] as [string,number]),
         spaces: serverSummary.spaces.map(item => [item.name,item.count] as [string,number]),
         status: serverSummary.availability.map(item => [item.name,item.count] as [string,number]),
       };
@@ -527,6 +546,7 @@ function Client() {
       formats: count(items.map(item => item.format)),
       authors: count(items.map(item => item.author || 'Unknown author')),
       series: count(items.map(item => item.series).filter(Boolean)),
+      genres: count(items.map(item => item.genre).filter(Boolean)),
       spaces: count(items.map(item => item.space)),
       status: [
         ['Available', items.filter(item => item.available).length] as [string, number],
@@ -656,6 +676,9 @@ function Client() {
       q: query,
       space,
       format: formatFilter,
+      author: authorFilter,
+      series: seriesFilter,
+      genre: genreFilter,
       limit: String(limit),
       offset: String(offset),
     });
@@ -669,6 +692,9 @@ function Client() {
       q: allLibrary ? '' : query,
       space: allLibrary ? '' : space,
       format: allLibrary ? '' : formatFilter,
+      author: allLibrary ? '' : authorFilter,
+      series: allLibrary ? '' : seriesFilter,
+      genre: allLibrary ? '' : genreFilter,
       limit: String(limit),
       offset: String(offset),
     });
@@ -716,7 +742,7 @@ function Client() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [availabilityFilter, formatFilter, reviewOnly, session, query, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, formatFilter, genreFilter, reviewOnly, session, query, seriesFilter, space, unknownAuthorOnly]);
 
   useEffect(() => {
     if (!session) { setSpaces([]); return; }
@@ -1479,7 +1505,7 @@ function Client() {
             key={name || 'all'}
             accessibilityRole="button"
             accessibilityState={{selected: space === name}}
-            onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false);}}
+            onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false);}}
             style={[
               styles.libraryChoice,
               vertical && styles.libraryChoiceVertical,
@@ -1539,6 +1565,7 @@ function Client() {
     setEditTitle(item.title);
     setEditAuthor(item.author || '');
     setEditSeries(item.series || '');
+    setEditGenre(item.genre || '');
   }
 
   function RawAssetCard({item}: {item: Book}) {
@@ -1548,7 +1575,7 @@ function Client() {
           <Cover book={item} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
           {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
-          <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}{item.genre ? ' · '+item.genre : ''}</Text>
         </Pressable>
         {(session ? owner : true) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
       </View>
@@ -1563,7 +1590,7 @@ function Client() {
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
           {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
           <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
-            {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.files>1 ? ' · '+work.files+' files' : ''}
+            {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.genre ? ' · '+work.genre : ''}{work.files>1 ? ' · '+work.files+' files' : ''}
           </Text>
         </Pressable>
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
@@ -1578,7 +1605,7 @@ function Client() {
           <Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} serverPath={'/api/works/'+work.id+'/cover'} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
           <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
-            {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.files>1 ? ' · '+work.files+' files' : ''}{work.editions>1 ? ' · '+work.editions+' editions' : ''}
+            {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.genre ? ' · '+work.genre : ''}{work.files>1 ? ' · '+work.files+' files' : ''}{work.editions>1 ? ' · '+work.editions+' editions' : ''}
           </Text>
         </Pressable>
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
@@ -1660,7 +1687,7 @@ function Client() {
           </View>
         </View> : null}
         {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
-        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !unknownAuthorOnly && continuing.length ? <View style={styles.shelfSection}>
+        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && continuing.length ? <View style={styles.shelfSection}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Continue</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
             {session ? continueWorks.map(work => <ContinueCard
@@ -1680,20 +1707,20 @@ function Client() {
             />)}
           </ScrollView>
         </View> : null}
-        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !unknownAuthorOnly && seriesOptions.length ? <View style={styles.shelfSection}>
+        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && seriesOptions.length ? <View style={styles.shelfSection}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
             {seriesOptions.map(([name,total]) => <Pressable
               key={name}
               accessibilityRole="button"
-              onPress={()=>{setQuery(name);setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false)}}
+              onPress={()=>{setQuery('');setSeriesFilter(name);setAuthorFilter('');setGenreFilter('');setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false)}}
               style={[styles.seriesChip,{borderColor:p.line,backgroundColor:p.card}]}>
               <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{name}</Text>
               <Text style={[styles.meta,{color:p.muted}]}>{total}</Text>
             </Pressable>)}
           </ScrollView>
         </View> : null}
-        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false)}} placeholder="Search title, author or series" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
+        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false)}} placeholder="Search title, author, series or genre" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         {reviewOnly ? (
           <FlatList
@@ -1765,20 +1792,21 @@ function Client() {
           <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
+          <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <View style={styles.toolRow}>
             <Button label="Save details" disabled={busy || !editTitle.trim()} onPress={()=>{
-              const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim();
+              const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
               if(!title)return;
               setBusy(true);setError('');
               if(session){
-                request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName})
-                  .then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+                request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
+                  .then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
                   .catch(e=>setError(e.message)).finally(()=>setBusy(false));
               }else if(editing.uri){
-                const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName}};
+                const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
                 setLocalMetadataOverrides(next);
                 SecureStore.setItemAsync(localMetadataOverridesKey,JSON.stringify(next))
-                  .then(()=>{setBooks(old=>old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+                  .then(()=>{setBooks(old=>old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
                   .catch(e=>setError(e.message)).finally(()=>setBusy(false));
               }else{
                 setBusy(false);
@@ -2051,39 +2079,41 @@ function Client() {
     );
   }
 
-  function atlasSelect(kind: 'format' | 'author' | 'series' | 'space' | 'status', value: string) {
+  function atlasSelect(kind: AtlasKind, value: string) {
     setReviewOnly(false);
+    setQuery('');
+    setSpace('');
     setAvailabilityFilter('all');
     setFormatFilter('');
+    setAuthorFilter('');
+    setSeriesFilter('');
+    setGenreFilter('');
     setUnknownAuthorOnly(false);
     if (kind === 'space') {
       setSpace(value);
-      setQuery('');
     } else if (kind === 'status') {
-      setQuery('');
       setAvailabilityFilter(value === 'Unavailable' ? 'unavailable' : 'available');
     } else if (kind === 'format') {
-      setQuery('');
       setFormatFilter(value);
+    } else if (kind === 'genre') {
+      setGenreFilter(value);
+    } else if (kind === 'series') {
+      setSeriesFilter(value);
     } else if (kind === 'author' && value === 'Unknown author') {
-      setQuery('');
       setUnknownAuthorOnly(true);
-    } else {
-      setQuery(value);
+    } else if (kind === 'author') {
+      setAuthorFilter(value);
     }
     setActiveTab('shelf');
   }
 
-  function AtlasGroup({title, items, kind}: {title: string; items: Array<[string, number]>; kind: 'format' | 'author' | 'series' | 'space' | 'status'}) {
+  function AtlasGroup({title, items, kind}: {title: string; items: Array<[string, number]>; kind: AtlasKind}) {
     const max = Math.max(1, ...items.map(([, total]) => total));
     return (
       <View style={[styles.atlasGroup, {borderColor: p.line, backgroundColor: p.card}]}>
         <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>{title}</Text>
         {items.length ? items.map(([name, total]) => (
-          <Pressable key={title + name} accessibilityRole="button" onPress={() => {
-            if(kind==='author' || kind==='series') setAtlasFocus({kind,value:name});
-            else atlasSelect(kind,name);
-          }} style={styles.atlasRow}>
+          <Pressable key={title + name} accessibilityRole="button" onPress={() => setAtlasFocus({kind,value:name})} style={styles.atlasRow}>
             <Text numberOfLines={1} style={[styles.atlasText, {color: p.ink}]}>{name}</Text>
             <View style={[styles.atlasBarTrack, {backgroundColor: p.line}]}>
               <View style={[styles.atlasBarFill, {backgroundColor: p.sage, width: `${Math.max(8, (total / max) * 100)}%`}]} />
@@ -2095,18 +2125,29 @@ function Client() {
     );
   }
 
+  function AtlasConnectionGroup({title,kind,items}: {title:string;kind:AtlasKind;items:SummaryItem[]}) {
+    if(!items.length || atlasFocus?.kind===kind)return null;
+    return (
+      <View style={[styles.atlasRelationGroup,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{title}</Text>
+        <View style={styles.atlasChipWrap}>
+          {items.map(item=><Pressable key={kind+'-'+item.name} accessibilityRole="button" onPress={()=>setAtlasFocus({kind,value:item.name})} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
+            <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
+          </Pressable>)}
+        </View>
+      </View>
+    );
+  }
+
   function AtlasRelationshipView() {
     if(!atlasFocus)return null;
     const relation=session?serverAtlasRelationship:localAtlasRelationship;
-    const authors=relation?.authors || [];
-    const series=relation?.series || [];
-    const formats=relation?.formats || [];
-    const folders=relation?.spaces || [];
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Button label="Back to Atlas" tone="quiet" onPress={()=>setAtlasFocus(null)} />
         <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
-          <Text style={[styles.playerEyebrow,{color:p.gold}]}>{atlasFocus.kind==='author'?'AUTHOR':'SERIES'}</Text>
+          <Text style={[styles.playerEyebrow,{color:p.gold}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
           <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{atlasFocus.value}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>
             {relation ? relation.workCount+' work'+(relation.workCount===1?'':'s') : 'Loading relationships…'}
@@ -2114,45 +2155,24 @@ function Client() {
         </View>
         {atlasLoading ? <ActivityIndicator accessibilityLabel="Loading Atlas relationships" /> : null}
         {relation ? <>
-          {atlasFocus.kind==='author' && series.length ? <View style={[styles.atlasRelationGroup,{backgroundColor:p.card,borderColor:p.line}]}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
-            <View style={styles.atlasChipWrap}>
-              {series.map(item=><Pressable key={item.name} accessibilityRole="button" onPress={()=>setAtlasFocus({kind:'series',value:item.name})} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
-                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
-              </Pressable>)}
-            </View>
-          </View>:null}
-          {atlasFocus.kind==='series' && authors.length ? <View style={[styles.atlasRelationGroup,{backgroundColor:p.card,borderColor:p.line}]}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Authors</Text>
-            <View style={styles.atlasChipWrap}>
-              {authors.map(item=><Pressable key={item.name} accessibilityRole="button" onPress={()=>setAtlasFocus({kind:'author',value:item.name})} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
-                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
-              </Pressable>)}
-            </View>
-          </View>:null}
-          <View style={[styles.atlasRelationGroup,{backgroundColor:p.card,borderColor:p.line}]}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Connected</Text>
-            <View style={styles.atlasChipWrap}>
-              {formats.map(item=><Pressable key={'format-'+item.name} accessibilityRole="button" onPress={()=>atlasSelect('format',item.name)} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
-                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
-              </Pressable>)}
-              {folders.map(item=><Pressable key={'folder-'+item.name} accessibilityRole="button" onPress={()=>atlasSelect('space',item.name)} style={[styles.atlasRelationChip,{borderColor:p.line}]}>
-                <Text style={{color:p.ink,fontWeight:'800'}}>{item.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.count}</Text>
-              </Pressable>)}
-            </View>
-          </View>
+          <AtlasConnectionGroup title="Authors" kind="author" items={relation.authors} />
+          <AtlasConnectionGroup title="Series" kind="series" items={relation.series} />
+          <AtlasConnectionGroup title="Genres" kind="genre" items={relation.genres} />
+          <AtlasConnectionGroup title="Formats" kind="format" items={relation.formats} />
+          <AtlasConnectionGroup title="Folders" kind="space" items={relation.spaces} />
+          <AtlasConnectionGroup title="Availability" kind="status" items={relation.availability} />
           <Text style={[styles.sectionTitle,{color:p.ink}]}>Works</Text>
           <View style={{gap:8}}>
             {session ? serverAtlasRelationship?.works.map(work=><Pressable key={work.id} accessibilityRole="button" onPress={()=>void openServerWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
               <View style={{flex:1}}>
                 <Text style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.format} · {work.format}</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.genre || work.format} · {work.format}</Text>
               </View>
               <Text style={{color:p.sage,fontWeight:'900'}}>Open</Text>
             </Pressable>) : localAtlasRelationship?.works.map(work=><Pressable key={work.key} accessibilityRole="button" onPress={()=>openLocalWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
               <View style={{flex:1}}>
                 <Text style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.format} · {work.format}</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.genre || work.format} · {work.format}</Text>
               </View>
               <Text style={{color:p.sage,fontWeight:'900'}}>Open</Text>
             </Pressable>)}
@@ -2169,10 +2189,11 @@ function Client() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.title, {color: p.ink}]}>Atlas</Text>
-        <Text style={[styles.empty, {color: p.muted}]}>Explore the real relationships in your library. Authors and series open here; formats, folders and availability focus Shelf.</Text>
+        <Text style={[styles.empty, {color: p.muted}]}>Explore how authors, series, genres, formats and folders connect across your library.</Text>
         <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
         <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
         <AtlasGroup title="Series" kind="series" items={atlas.series} />
+        <AtlasGroup title="Genres" kind="genre" items={atlas.genres} />
         <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
         <AtlasGroup title="Availability" kind="status" items={atlas.status} />
       </ScrollView>
