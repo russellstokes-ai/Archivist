@@ -31,7 +31,7 @@ const tick=()=>new Promise(r=>setImmediate(r));
   c.update(100,100,false,true);await tick();assert.equal(c.state.index,0);c.toggle();
   c.update(100,100,false,true);await tick();await tick();assert.equal(c.state.index,1);
   c.update(100,100,false,true);await tick();await tick();assert(c.state.completed);assert(p.complete);
-  await c.open(1);assert.equal(c.state.index,0);assert.equal(c.state.seconds,0);
+  await c.open(1);assert.equal(c.state.index,0);assert.equal(c.state.seconds,0);assert.equal(p.complete,false);
   c.update(10,100,true,false);conflict=true;await c.save();assert.equal(c.state.playing,false);const count=writes.length;await c.save();assert.equal(writes.length,count);
   conflict=false;await c.open(1);c.update(11,100,true,false);await Promise.all([c.save(),c.save()]);assert.equal(p.seconds,11);
   await c.stop();assert.equal(c.state.tracks.length,0);
