@@ -63,6 +63,9 @@ type ServerWork = {
   available: boolean;
 };
 type WorkTrack = {id: number; title: string; format: string; edition: number; available: boolean; name?: string; size?: number};
+type ReadingState = 'not-started'|'in-progress'|'finished';
+type PersonalPreference = {workId?:number;rating:number;favourite:boolean;state?:ReadingState};
+type HouseholdUser = {id:number;name:string;revoked:boolean;role?:'user'};
 type SummaryItem = {name: string; count: number};
 type LibrarySummary = {
   total: number;
@@ -86,6 +89,9 @@ type ServerAtlasRelationship = {
   formats: SummaryItem[];
   spaces: SummaryItem[];
   availability?: SummaryItem[];
+  reading?: SummaryItem[];
+  ratings?: SummaryItem[];
+  favourites?: SummaryItem[];
 };
 type DuplicateCandidate = {
   id:number;
@@ -137,6 +143,7 @@ const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
+const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 
@@ -165,6 +172,15 @@ function formatBytes(bytes:number) {
   let value=bytes,index=0;
   while(value>=1024 && index<units.length-1){value/=1024;index++;}
   return (index===0?Math.round(value):value.toFixed(value>=10?1:2))+' '+units[index];
+}
+
+function ratingLabel(rating:number) {
+  const labels=['Unrated','½★','1★','1½★','2★','2½★','3★','3½★','4★','4½★','5★'];
+  return labels[Math.max(0,Math.min(10,Math.round(rating||0)))];
+}
+
+function ratingFromLabel(label:string) {
+  return ['Unrated','½★','1★','1½★','2★','2½★','3★','3½★','4★','4½★','5★'].indexOf(label);
 }
 
 function formatTime(seconds: number) {
@@ -254,6 +270,8 @@ function Client() {
   const [continueWorks, setContinueWorks] = useState<ServerWork[]>([]);
   const [serverSummary, setServerSummary] = useState<LibrarySummary | null>(null);
   const [serverProfileStats, setServerProfileStats] = useState<VerifiedProfileStats | null>(null);
+  const [serverPreferences,setServerPreferences]=useState<Record<number,PersonalPreference>>({});
+  const [localPreferences,setLocalPreferences]=useState<Record<string,PersonalPreference>>({});
   const [profileLoading, setProfileLoading] = useState(false);
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [serverAtlasRelationship,setServerAtlasRelationship]=useState<ServerAtlasRelationship|null>(null);
@@ -283,6 +301,9 @@ function Client() {
   const [authorFilter, setAuthorFilter] = useState('');
   const [seriesFilter, setSeriesFilter] = useState('');
   const [genreFilter, setGenreFilter] = useState('');
+  const [readingFilter,setReadingFilter]=useState<''|ReadingState>('');
+  const [ratingFilter,setRatingFilter]=useState(0);
+  const [favouriteOnly,setFavouriteOnly]=useState(false);
   const [unknownAuthorOnly, setUnknownAuthorOnly] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -323,6 +344,9 @@ function Client() {
   const [spaces, setSpaces] = useState<string[]>([]);
   const [shelfLoading, setShelfLoading] = useState(false);
   const [owner,setOwner]=useState(false);
+  const [householdUsers,setHouseholdUsers]=useState<HouseholdUser[]>([]);
+  const [newUserName,setNewUserName]=useState('');
+  const [newUserKey,setNewUserKey]=useState('');
   const [sources,setSources]=useState<Array<{id:number;space:string;path:string;status:string}>>([]);
   const [folderPath,setFolderPath]=useState('');
   const [folderSpace,setFolderSpace]=useState('My library');
@@ -396,9 +420,24 @@ function Client() {
     return [...groupLocalWorks(local),...downloaded];
   }, [books, offlineWorks, session]);
 
+  const localPersonalWorks = useMemo(() => localWorks.map(work => {
+    let readingState:ReadingState='not-started';
+    if(work.format==='Audio'){
+      const point=localWorkProgress[work.key];
+      if(localAudioCompleted[work.key] || point?.complete)readingState='finished';
+      else if((point?.seconds||0)>0)readingState='in-progress';
+    }else{
+      const finished=work.tracks.some(track=>!!track.uri && !!localReadingComplete[track.uri]);
+      const started=work.tracks.some(track=>!!track.uri && (localReadingProgress[track.uri]||0)>0);
+      readingState=finished?'finished':started?'in-progress':'not-started';
+    }
+    const pref=localPreferences[work.key] || {rating:0,favourite:false};
+    return {...work,readingState,rating:pref.rating||0,favourite:!!pref.favourite};
+  }),[localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress,localWorks]);
+
   const localAtlasRelationship = useMemo(() =>
-    !session && atlasFocus ? buildAtlasRelationship(localWorks,atlasFocus.kind,atlasFocus.value) : null,
-    [atlasFocus,localWorks,session],
+    !session && atlasFocus ? buildAtlasRelationship(localPersonalWorks,atlasFocus.kind,atlasFocus.value) : null,
+    [atlasFocus,localPersonalWorks,session],
   );
 
   const localDuplicateGroups = useMemo(() => {
@@ -454,8 +493,11 @@ function Client() {
       inProgressReading,
       inProgress: inProgressAudio + inProgressReading,
       completed: completedAudio + completedReading,
+      rated: localWorks.filter(work=>(localPreferences[work.key]?.rating||0)>0).length,
+      favourites: localWorks.filter(work=>!!localPreferences[work.key]?.favourite).length,
+      averageRating: (()=>{const values=localWorks.map(work=>localPreferences[work.key]?.rating||0).filter(Boolean);return values.length?values.reduce((a,b)=>a+b,0)/values.length:0;})(),
     };
-  }, [localAudioCompleted, localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks]);
+  }, [localAudioCompleted, localPreferences, localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks]);
 
   const profileStats = session ? serverProfileStats : localProfileStats;
   const profileAchievements = useMemo(() => profileStats ? achievementsFor(profileStats) : [], [profileStats]);
@@ -629,6 +671,9 @@ function Client() {
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
       if (value && typeof value === 'object') setOfflineWorks(value);
     }).catch(() => undefined);
+    getPersistedJSON<Record<string, PersonalPreference>>(localPreferencesKey).then(value => {
+      if (value && typeof value === 'object') setLocalPreferences(value);
+    }).catch(() => undefined);
     getPersistedJSON<Record<string, number>>(localProgressKey).then(value => {
       if (value && typeof value === 'object') setLocalProgress(value);
     }).catch(() => undefined);
@@ -702,6 +747,9 @@ function Client() {
     });
     if (unknownAuthorOnly) params.set('unknownAuthor','1');
     if (availabilityFilter !== 'all') params.set('availability',availabilityFilter);
+    if (readingFilter) params.set('reading',readingFilter);
+    if (ratingFilter>0) params.set('rating',String(ratingFilter));
+    if (favouriteOnly) params.set('favourite','1');
     return '/api/works?' + params.toString();
   }
 
@@ -741,8 +789,9 @@ function Client() {
         request(session, '/api/continue?space=' + encodeURIComponent(space)),
         request(session, '/api/library-summary'),
         request(session, '/api/profile-stats'),
+        request(session, '/api/preferences'),
       ])
-        .then(([assets, works, continuing, summary, stats]) => {
+        .then(([assets, works, continuing, summary, stats, preferences]) => {
           if (cancelled) return;
           setBooks(assets);
           setServerBooksHasMore(assets.length === 500);
@@ -751,6 +800,9 @@ function Client() {
           setContinueWorks(continuing);
           setServerSummary(summary);
           setServerProfileStats(stats);
+          const prefMap:Record<number,PersonalPreference>={};
+          for(const pref of preferences as PersonalPreference[])if(pref.workId)prefMap[pref.workId]=pref;
+          setServerPreferences(prefMap);
         })
         .catch(e => {
           if (!cancelled) setError(e.message);
@@ -760,12 +812,17 @@ function Client() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [authorFilter, availabilityFilter, formatFilter, genreFilter, reviewOnly, session, query, seriesFilter, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, favouriteOnly, formatFilter, genreFilter, ratingFilter, readingFilter, reviewOnly, session, query, seriesFilter, space, unknownAuthorOnly]);
 
   useEffect(() => {
     if (!session) { setSpaces([]); return; }
     let cancelled=false;
-    request(session,'/api/me').then(profile=>{if(!cancelled)setOwner(profile.owner);}).catch(e=>setError(e.message));
+    request(session,'/api/me').then(profile=>{
+      if(cancelled)return;
+      const isAdmin=!!(profile.admin ?? profile.owner);
+      setOwner(isAdmin);
+      if(isAdmin)request(session,'/api/profiles').then(items=>{if(!cancelled)setHouseholdUsers(items);}).catch(e=>setError(e.message));
+    }).catch(e=>setError(e.message));
     request(session,'/api/sources').then(items => { if(!cancelled) {setSources(items);setSpaces([...new Set<string>(items.map((s: {space:string})=>s.space))]);} }).catch(e=>setError(e.message));
     return () => {cancelled=true;};
   }, [session]);
@@ -1123,8 +1180,54 @@ function Client() {
     setDuplicateResults({});
     setDuplicatePanelOpen(false);
     setOwner(false);
+    setHouseholdUsers([]);
+    setServerPreferences({});
     setSources([]);
     setQueuedBooks([]); setSpace('');
+  }
+
+  async function saveServerPreference(work:ServerWork,next:PersonalPreference){
+    if(!session)return;
+    const previous=serverPreferences[work.id] || {rating:0,favourite:false};
+    setServerPreferences(current=>({...current,[work.id]:next}));
+    try{
+      await request(session,'/api/works/'+work.id+'/preference','PUT',{rating:next.rating||0,favourite:!!next.favourite});
+      const stats=await request(session,'/api/profile-stats');
+      setServerProfileStats(stats);
+    }catch(e){
+      setServerPreferences(current=>({...current,[work.id]:previous}));
+      setError((e as Error).message);
+    }
+  }
+
+  async function saveLocalPreference(work:LocalWork,next:PersonalPreference){
+    const updated={...localPreferences,[work.key]:next};
+    if((next.rating||0)===0&&!next.favourite)delete updated[work.key];
+    setLocalPreferences(updated);
+    try{await setPersistedJSON(localPreferencesKey,updated);}catch(e){setError((e as Error).message);}
+  }
+
+  async function refreshUsers(){
+    if(!session||!owner)return;
+    try{setHouseholdUsers(await request(session,'/api/profiles') as HouseholdUser[]);}catch(e){setError((e as Error).message);}
+  }
+
+  async function createFamilyUser(){
+    if(!session||!owner||!newUserName.trim())return;
+    setBusy(true);setError('');setNewUserKey('');
+    try{
+      const result=await request(session,'/api/profiles','POST',{name:newUserName.trim()});
+      setNewUserName('');
+      setNewUserKey(String(result.key||''));
+      await refreshUsers();
+    }catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+
+  async function revokeFamilyUser(id:number){
+    if(!session||!owner)return;
+    setBusy(true);setError('');
+    try{await request(session,'/api/profiles/'+id,'DELETE');await refreshUsers();}
+    catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
 
   async function addLocalFolder() {
@@ -2286,7 +2389,7 @@ function Client() {
           <View style={{flex:1,gap:3}}>
             <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name || 'Profile'}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
-              {session ? (stats?.owner ? 'Library owner' : 'Household profile') : 'Local library on this device'}
+              {session ? (stats?.owner ? 'Admin' : 'User') : 'Local library on this device'}
             </Text>
           </View>
         </View>
@@ -2303,6 +2406,8 @@ function Client() {
               ['Completed',stats.completed],
               ['Formats',stats.formats],
               ['Series',stats.series],
+              ['Favourites',stats.favourites || 0],
+              ['Rated',stats.rated || 0],
               ['Achievements',unlocked],
             ].map(([label,value])=><View key={String(label)} style={[styles.profileStatCard,{backgroundColor:p.card,borderColor:p.line}]}>
               <Text style={[styles.profileStatValue,{color:p.ink}]}>{value}</Text>
@@ -2310,6 +2415,12 @@ function Client() {
             </View>)}
           </View>
 
+          {(stats.rated || 0)>0 ? <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
+            <View style={styles.profileBreakdownRow}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Your ratings</Text>
+              <Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{ratingLabel(stats.averageRating || 0)} average · {stats.favourites || 0} favourite{(stats.favourites||0)===1?'':'s'}</Text>
+            </View>
+          </View> : null}
           <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
             <View style={styles.profileBreakdownRow}>
               <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Listening</Text>
