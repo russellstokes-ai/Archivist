@@ -2212,42 +2212,50 @@ function Client() {
           />
         )}
         <WorkPickerPanel />
-        {editing ? <View style={[styles.editorCard,{backgroundColor:p.card,borderColor:p.line}]}>
-          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
-          {editing.reviewReason ? <Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text> : null}
-          <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-          <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-          <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-          <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-          <View style={styles.toolRow}>
-            <Button label="Save details" disabled={busy || !editTitle.trim()} onPress={()=>{
-              const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
-              if(!title)return;
-              setBusy(true);setError('');
-              if(session){
-                request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
-                  .then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
-                  .catch(e=>setError(e.message)).finally(()=>setBusy(false));
-              }else if(editing.uri){
-                const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
-                setLocalMetadataOverrides(next);
-                setPersistedJSON(localMetadataOverridesKey, next)
-                  .then(()=>{
-                    setBooks(old=>{
-                      const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
-                      void setPersistedJSON(localCatalogKey,updated);
-                      return updated;
-                    });
-                    setEditing(null);
-                  })
-                  .catch(e=>setError(e.message)).finally(()=>setBusy(false));
-              }else{
-                setBusy(false);
-              }
-            }}/>
-            <Button label="Cancel" tone="quiet" onPress={()=>setEditing(null)}/>
-          </View>
-        </View>:null}
+        {editing ? <Modal transparent animationType="fade" visible onRequestClose={()=>!busy&&setEditing(null)}>
+          <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
+            <View style={styles.modalBackdrop}>
+              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+                <View accessibilityViewIsModal accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+                  <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
+                  {editing.reviewReason ? <Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text> : null}
+                  <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
+                  <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
+                  <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
+                  <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
+                  <View style={styles.toolRow}>
+                    <Button label="Save details" disabled={busy || !editTitle.trim()} onPress={()=>{
+                      const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
+                      if(!title)return;
+                      setBusy(true);setError('');
+                      if(session){
+                        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
+                          .then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+                          .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+                      }else if(editing.uri){
+                        const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
+                        setLocalMetadataOverrides(next);
+                        setPersistedJSON(localMetadataOverridesKey, next)
+                          .then(()=>{
+                            setBooks(old=>{
+                              const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
+                              void setPersistedJSON(localCatalogKey,updated);
+                              return updated;
+                            });
+                            setEditing(null);
+                          })
+                          .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+                      }else{
+                        setBusy(false);
+                      }
+                    }}/>
+                    <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>setEditing(null)}/>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>:null}
         </View>
       </View>
     );
