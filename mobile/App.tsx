@@ -1023,38 +1023,37 @@ function Client() {
 
   async function refreshSourcesAndShelf() {
     if(!session)return;
-    const [items, assets, works, continuing, summary, stats, preferences]=await Promise.all([
+    const [items, assets, works, continuing, summary, stats]=await Promise.all([
       request(session,'/api/sources'),
-      request(session,serverAssetsPath(0,500)),
+      reviewOnly ? request(session,serverAssetsPath(0,200)) : Promise.resolve([]),
       request(session,serverWorksPath(0,100)),
       request(session,'/api/continue?space='+encodeURIComponent(space)),
       request(session,'/api/library-summary'),
       request(session,'/api/profile-stats'),
-      fetchServerPreferences(session),
     ]);
+    const normalizedWorks=(works as ServerWork[]).map(normalizeServerWork) as ServerWork[];
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
-    setBooks(assets);
-    setServerBooksHasMore(assets.length===500);
-    setServerWorks((works as ServerWork[]).map(normalizeServerWork));
-    setServerHasMore(works.length===100);
-    setContinueWorks((continuing as ServerWork[]).map(normalizeServerWork));
+    setBooks(assets as Book[]);
+    setServerBooksHasMore(reviewOnly && (assets as Book[]).length===200);
+    setServerWorks(normalizedWorks);
+    setServerHasMore(normalizedWorks.length===100);
+    setContinueWorks((continuing as ServerWork[]).map(normalizeServerWork) as ServerWork[]);
     setServerSummary(normalizeLibrarySummary(summary));
     setServerProfileStats(stats);
-    const prefMap:Record<number,PersonalPreference>={};
-    for(const pref of preferences as PersonalPreference[])if(pref.workId)prefMap[pref.workId]=pref;
-    setServerPreferences(prefMap);
+    setServerPreferences(preferencesFromWorks(normalizedWorks));
   }
 
   async function loadMoreServerWorks() {
     if (!session || !serverHasMore || serverLoadingMore || shelfLoading) return;
     setServerLoadingMore(true);
     try {
-      const next = (await request(session,serverWorksPath(serverWorks.length,100)) as ServerWork[]).map(normalizeServerWork);
+      const next = (await request(session,serverWorksPath(serverWorks.length,100)) as ServerWork[]).map(normalizeServerWork) as ServerWork[];
       setServerWorks(current => {
         const seen=new Set(current.map(work=>work.id));
         return [...current,...next.filter(work=>!seen.has(work.id))];
       });
+      setServerPreferences(current=>({...current,...preferencesFromWorks(next)}));
       setServerHasMore(next.length===100);
     } catch(e) {
       setError((e as Error).message);
@@ -1067,12 +1066,12 @@ function Client() {
     if (!session || !serverBooksHasMore || serverBooksLoadingMore || shelfLoading) return;
     setServerBooksLoadingMore(true);
     try {
-      const next = await request(session,serverAssetsPath(books.length,500)) as Book[];
+      const next = await request(session,serverAssetsPath(books.length,200)) as Book[];
       setBooks(current => {
         const seen=new Set(current.map(book=>book.id));
         return [...current,...next.filter(book=>!seen.has(book.id))];
       });
-      setServerBooksHasMore(next.length===500);
+      setServerBooksHasMore(next.length===200);
     } catch(e) {
       setError((e as Error).message);
     } finally {
@@ -1287,14 +1286,21 @@ function Client() {
 
   async function saveServerPreference(work:ServerWork,next:PersonalPreference){
     if(!session)return;
-    const previous=serverPreferences[work.id] || {rating:0,favourite:false};
-    setServerPreferences(current=>({...current,[work.id]:next}));
+    const previous=serverPreferences[work.id] || {rating:work.rating||0,favourite:!!work.favourite,state:work.state||'not-started'};
+    const optimistic={...next,workId:work.id,state:next.state||previous.state};
+    setServerPreferences(current=>({...current,[work.id]:optimistic}));
+    setServerWorks(current=>current.map(item=>item.id===work.id?{...item,rating:optimistic.rating,favourite:optimistic.favourite}:item));
     try{
-      await request(session,'/api/works/'+work.id+'/preference','PUT',{rating:next.rating||0,favourite:!!next.favourite});
-      const stats=await request(session,'/api/profile-stats');
+      await request(session,'/api/works/'+work.id+'/preference','PUT',{rating:optimistic.rating||0,favourite:!!optimistic.favourite});
+      const [stats,summary]=await Promise.all([
+        request(session,'/api/profile-stats'),
+        request(session,'/api/library-summary'),
+      ]);
       setServerProfileStats(stats);
+      setServerSummary(normalizeLibrarySummary(summary));
     }catch(e){
       setServerPreferences(current=>({...current,[work.id]:previous}));
+      setServerWorks(current=>current.map(item=>item.id===work.id?{...item,rating:previous.rating,favourite:previous.favourite}:item));
       setError((e as Error).message);
     }
   }
