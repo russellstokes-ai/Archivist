@@ -3,11 +3,31 @@ export type SetupStatus = {configured: boolean};
 export class RequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
+function isPrivateHTTPHost(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/^\\[|\\]$/g, '');
+  if (host === 'localhost' || host === '::1') return true;
+  const parts = host.split('.');
+  if (parts.length === 4 && parts.every(part => /^\\d{1,3}$/.test(part))) {
+    const octets = parts.map(Number);
+    if (octets.some(octet => octet < 0 || octet > 255)) return false;
+    const [a, b] = octets;
+    return a === 10
+      || a === 127
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168)
+      || (a === 100 && b >= 64 && b <= 127);
+  }
+  return /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
+}
+
 export function validateServer(raw: string, development = false): string {
   let u: URL;
-  try { u = new URL(raw.trim()); } catch { throw Error('Enter a complete HTTPS server address.'); }
-  const local = development && ['localhost', '127.0.0.1', '10.0.2.2'].includes(u.hostname);
-  if (u.protocol !== 'https:' && !(local && u.protocol === 'http:')) throw Error('Use HTTPS with a trusted certificate for mobile server connections.');
+  try { u = new URL(raw.trim()); } catch { throw Error('Enter a complete server address.'); }
+  const developmentLocal = development && ['localhost', '127.0.0.1', '10.0.2.2'].includes(u.hostname);
+  const privateHTTP = u.protocol === 'http:' && isPrivateHTTPHost(u.hostname);
+  if (u.protocol !== 'https:' && !privateHTTP && !(developmentLocal && u.protocol === 'http:')) {
+    throw Error('Use HTTPS for public servers. HTTP is allowed only for a private LAN or Tailscale IP address.');
+  }
   if (u.username || u.password || u.search || u.hash || u.pathname !== '/') throw Error('Enter the Archivist server origin only, for example https://books.example.com.');
   return u.origin;
 }
