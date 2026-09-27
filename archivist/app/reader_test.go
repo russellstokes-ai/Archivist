@@ -74,12 +74,16 @@ func TestReaderPermissionsAndProgress(t *testing.T) {
 	if w := call("GET", "/api/assets/1/reader/0", "", token); w.Code != 200 || !strings.Contains(w.Body.String(), "Hello reader") {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	w := call("PUT", "/api/assets/1/reading-progress", `{"part":1,"fraction":0.5,"revision":0}`, token)
-	if w.Code != 200 {
+	w := call("PUT", "/api/assets/1/reading-progress", `{"part":1,"fraction":1,"revision":0,"complete":true}`, token)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"complete":true`) {
 		t.Fatal(w.Body.String())
 	}
 	if w := call("PUT", "/api/assets/1/reading-progress", `{"part":0,"fraction":0,"revision":0}`, token); w.Code != 409 {
 		t.Fatal("stale reading progress accepted")
+	}
+	w = call("PUT", "/api/assets/1/reading-progress", `{"part":0,"fraction":0,"revision":1,"complete":false}`, token)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"complete":true`) {
+		t.Fatalf("reread cleared completion: %d %s",w.Code,w.Body.String())
 	}
 	var owner readingPosition
 	w = call("GET", "/api/assets/1/reading-progress", "", "test-key")
@@ -116,6 +120,7 @@ func TestReaderWebInteractionAssets(t *testing.T) {
 		"focusText",
 		"turn-next",
 		"turn-prev",
+		"complete",
 	} {
 		if !strings.Contains(script, marker) {
 			t.Fatalf("reader interaction missing %q", marker)
@@ -131,4 +136,30 @@ func TestReaderWebInteractionAssets(t *testing.T) {
 			t.Fatalf("reader polish CSS missing %q", marker)
 		}
 	}
+}
+
+
+func TestReaderCompletionMigration(t *testing.T) {
+	a:=fixture(t)
+	if _,e:=a.db.Exec(`CREATE TABLE reading_progress(
+		profile_id INTEGER NOT NULL,
+		asset_id INTEGER NOT NULL,
+		part INTEGER NOT NULL,
+		fraction REAL NOT NULL,
+		revision INTEGER NOT NULL,
+		PRIMARY KEY(profile_id,asset_id)
+	)`);e!=nil{t.Fatal(e)}
+	if e:=a.initReader();e!=nil{t.Fatal(e)}
+	rows,e:=a.db.Query("PRAGMA table_info(reading_progress)")
+	if e!=nil{t.Fatal(e)}
+	defer rows.Close()
+	found:=false
+	for rows.Next(){
+		var cid,notnull,pk int
+		var name,typ string
+		var defaultValue any
+		if e=rows.Scan(&cid,&name,&typ,&notnull,&defaultValue,&pk);e!=nil{t.Fatal(e)}
+		if name=="complete"{found=true}
+	}
+	if !found{t.Fatal("legacy reading_progress table was not migrated")}
 }
