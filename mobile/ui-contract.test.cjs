@@ -19,7 +19,7 @@ for (const match of source.matchAll(/<Pressable\b[\s\S]*?<\/Pressable>/g)) {
 }
 
 for (const route of [
-  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/atlas-relationships','/api/sources',
+  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/atlas-relationships','/api/duplicate-candidates','/api/sources',
   '/api/file-moves','/api/assets/','/api/queue','/session','/logout','/setup/status'
 ]) {
   assert.ok(clientSource.includes(route), 'Expected wired mobile route missing from client: ' + route);
@@ -31,3 +31,5 @@ assert.ok(source.includes("{id: 'profile', label: 'Profile'}"), 'Profile tab is 
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
+
+assert.ok(source.includes("function DuplicateReviewPanel()"), 'Duplicate review UI is not implemented');
