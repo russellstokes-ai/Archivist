@@ -56,13 +56,15 @@ func (a *app) saveProfileProgress(profile, edition int64, p progress) (progress,
 		return p, errors.New("track does not belong to this audio edition")
 	}
 	var revision int64
-	e = tx.QueryRow("SELECT revision FROM profile_progress WHERE profile_id=? AND edition_id=?", profile, edition).Scan(&revision)
+	var alreadyComplete bool
+	e = tx.QueryRow("SELECT revision,complete FROM profile_progress WHERE profile_id=? AND edition_id=?", profile, edition).Scan(&revision,&alreadyComplete)
 	if e != nil && e != sql.ErrNoRows {
 		return p, e
 	}
 	if revision != p.Revision {
 		return p, errConflict
 	}
+	p.Complete = p.Complete || alreadyComplete
 	p.Revision++
 	_, e = tx.Exec(`INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(?,?,?,?,?,?) ON CONFLICT(profile_id,edition_id) DO UPDATE SET asset_id=excluded.asset_id,seconds=excluded.seconds,revision=excluded.revision,complete=excluded.complete`, profile, edition, p.Asset, p.Seconds, p.Revision, p.Complete)
 	if e != nil {
