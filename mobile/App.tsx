@@ -1363,7 +1363,7 @@ function Client() {
       const first = tracks.find(track => track.available && track.format === 'Audio');
       if (!first) throw Error('No available audio files for this audiobook.');
       const item: Book = {
-        id:first.id,title:work.title,author:work.author,series:work.series,
+        id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre,
         format:'Audio',space:work.space,available:true,coverShape:'square',
       };
       await queueStore?.edit(old => old.some(book => book.id === item.id) ? old : [...old,item]);
@@ -1382,7 +1382,7 @@ function Client() {
   function openServerWorkTrack(work: ServerWork, track: WorkTrack) {
     setWorkPicker(null);
     const item: Book = {
-      id:track.id,title:work.title,author:work.author,series:work.series,
+      id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre,
       format:track.format,space:work.space,available:track.available,
       coverShape:track.format==='Audio'?'square':'portrait',
     };
@@ -1402,13 +1402,13 @@ function Client() {
       if (!available.length) throw Error('No readable files are currently available for this work.');
       if (work.format === 'Audio' || available.every(track => track.format === 'Audio')) {
         const first = available.find(track => track.format === 'Audio')!;
-        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,format:'Audio',space:work.space,available:true,coverShape:'square'});
+        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre,format:'Audio',space:work.space,available:true,coverShape:'square'});
         return;
       }
       const editions = new Set(available.map(track => track.edition));
       if (editions.size === 1) {
         const first = available[0];
-        openBook({id:first.id,title:work.title,author:work.author,series:work.series,format:first.format,space:work.space,available:true,coverShape:first.format==='Audio'?'square':'portrait'});
+        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre,format:first.format,space:work.space,available:true,coverShape:first.format==='Audio'?'square':'portrait'});
         return;
       }
       setWorkPicker({work,tracks:available});
