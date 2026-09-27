@@ -4,6 +4,7 @@ export type LocalIdentity = {
   title: string;
   author: string;
   series: string;
+  genre: string;
   confidence: IdentificationConfidence;
   needsReview: boolean;
   reviewReason: string;
@@ -15,6 +16,7 @@ export type LocalMetadataFields = {
   title?: string;
   author?: string;
   series?: string;
+  genre?: string;
 };
 
 export function inferLocalBookMetadata(uri: string, format: string): LocalIdentity {
@@ -31,6 +33,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   let title = stem || 'Untitled';
   let author = '';
   let series = '';
+  let genre = '';
   let confidence: IdentificationConfidence = 'low';
   let reviewReason = 'Could not confidently identify author and series from the file path.';
 
@@ -89,12 +92,14 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   title = cleanLabel(title) || 'Untitled';
   author = cleanLabel(author);
   series = cleanLabel(series);
+  genre = cleanLabel(genre);
 
   const needsReview = confidence === 'low' || title === 'Untitled';
   return {
     title,
     author,
     series,
+    genre,
     confidence,
     needsReview,
     reviewReason: needsReview ? reviewReason : '',
@@ -111,6 +116,7 @@ export function applyLocalMetadata(
   const title = cleanLabel(fields.title || '') || base.title;
   const author = fields.author === undefined ? base.author : cleanLabel(fields.author);
   const series = fields.series === undefined ? base.series : cleanLabel(fields.series);
+  const genre = fields.genre === undefined ? base.genre : cleanLabel(fields.genre);
   const manual = source === 'manual';
   const completeEnough = title !== 'Untitled' && (!!author || manual);
   return {
@@ -118,6 +124,7 @@ export function applyLocalMetadata(
     title,
     author,
     series,
+    genre,
     confidence: 'high',
     needsReview: !completeEnough,
     reviewReason: completeEnough ? '' : 'Metadata was found, but the author still needs review.',
@@ -132,6 +139,7 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
   const author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer']);
 
   let series = xmlValue(text, ['series']);
+  const genre = xmlValue(text, ['dc:subject', 'subject', 'genre']);
   if (!series && ext === 'opf') {
     const calibre = text.match(/<meta\b[^>]*name\s*=\s*["']calibre:series["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
       || text.match(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']calibre:series["'][^>]*>/i);
@@ -147,6 +155,7 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     title: cleanLabel(title || '') || undefined,
     author: cleanLabel(author || '') || undefined,
     series: cleanLabel(series || '') || undefined,
+    genre: cleanLabel(genre || '') || undefined,
   };
 }
 
