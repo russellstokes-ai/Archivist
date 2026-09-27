@@ -322,6 +322,41 @@ function Client() {
     return groupLocalWorks(local);
   }, [books, session]);
 
+  const localProfileStats = useMemo<VerifiedProfileStats>(() => {
+    const audioWorks = localWorks.filter(work => work.format === 'Audio');
+    const readingWorks = localWorks.filter(work => work.format !== 'Audio');
+
+    const startedAudio = audioWorks.filter(work => {
+      const point = localWorkProgress[work.key];
+      return !!point && (point.seconds > 0 || !!point.complete);
+    }).length;
+    const completedAudio = audioWorks.filter(work => !!localWorkProgress[work.key]?.complete).length;
+
+    const startedReading = readingWorks.filter(work => work.tracks.some(track =>
+      !!track.uri && Object.prototype.hasOwnProperty.call(localReadingProgress, track.uri)
+    )).length;
+    const completedReading = readingWorks.filter(work => work.tracks.some(track =>
+      !!track.uri && !!localReadingComplete[track.uri]
+    )).length;
+
+    return {
+      name: 'On this device',
+      owner: false,
+      works: localWorks.length,
+      formats: new Set(localWorks.map(work => work.format).filter(Boolean)).size,
+      series: new Set(localWorks.map(work => work.series).filter(Boolean)).size,
+      startedAudio,
+      completedAudio,
+      startedReading,
+      completedReading,
+      inProgress: Math.max(0, startedAudio - completedAudio) + Math.max(0, startedReading - completedReading),
+      completed: completedAudio + completedReading,
+    };
+  }, [localReadingComplete, localReadingProgress, localWorkProgress, localWorks]);
+
+  const profileStats = session ? serverProfileStats : localProfileStats;
+  const profileAchievements = useMemo(() => profileStats ? achievementsFor(profileStats) : [], [profileStats]);
+
   const availabilityMatches = (available: boolean) =>
     availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
 
