@@ -25,3 +25,14 @@ for (const route of [
 }
 
 console.log('PASS: browser controls are referenced, core routes are wired, and placeholder UI markers are absent');
+
+assert.ok(html.includes('id="picker" hidden class="picker-overlay" role="dialog" aria-modal="true"'), 'Folder picker must be a modal dialog');
+assert.ok(html.includes('id="work-detail" hidden class="work-overlay" role="dialog" aria-modal="true"'), 'Work detail must be a modal dialog');
+assert.ok(html.includes('role="tablist" aria-label="Settings sections"'), 'Settings tabs need tablist semantics');
+assert.ok(html.includes('role="tab" data-settings="library" aria-selected="true"'), 'Settings tabs need selected state');
+assert.ok(source.includes("if(event.key==='Escape')"), 'Browser overlays must close with Escape');
+assert.ok(source.includes("overlayFocus=new Map()"), 'Browser overlays must restore focus');
+assert.ok(source.includes("event.key!=='Tab'"), 'Browser overlays must contain keyboard focus');
+const css=fs.readFileSync('web/style.css','utf8');
+assert.ok(css.includes('focus-visible'), 'Browser controls need visible keyboard focus');
+assert.ok(css.includes('prefers-reduced-motion'), 'Browser UI must respect reduced-motion preference');
