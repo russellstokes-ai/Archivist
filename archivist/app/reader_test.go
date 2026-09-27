@@ -82,8 +82,8 @@ func TestReaderPermissionsAndProgress(t *testing.T) {
 		t.Fatal("stale reading progress accepted")
 	}
 	w = call("PUT", "/api/assets/1/reading-progress", `{"part":0,"fraction":0,"revision":1,"complete":false}`, token)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"complete":true`) {
-		t.Fatalf("reread cleared completion: %d %s",w.Code,w.Body.String())
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"complete":false`) {
+		t.Fatalf("reread current state did not reset: %d %s",w.Code,w.Body.String())
 	}
 	var owner readingPosition
 	w = call("GET", "/api/assets/1/reading-progress", "", "test-key")
