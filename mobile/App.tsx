@@ -1911,6 +1911,78 @@ function Client() {
     );
   }
 
+  function Profile() {
+    const stats=profileStats;
+    const unlocked=profileAchievements.filter(item=>item.unlocked).length;
+    return (
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={[styles.profileHero,{backgroundColor:p.card,borderColor:p.line}]}>
+          <View style={[styles.profileMonogram,{backgroundColor:p.ink}]}>
+            <Text style={[styles.profileMonogramText,{color:p.gold}]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
+          </View>
+          <View style={{flex:1,gap:3}}>
+            <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name || 'Profile'}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>
+              {session ? (stats?.owner ? 'Library owner' : 'Household profile') : 'Local library on this device'}
+            </Text>
+          </View>
+        </View>
+
+        {profileLoading && session ? <ActivityIndicator accessibilityLabel="Loading profile statistics" /> : null}
+        {!stats && !profileLoading ? <Text style={[styles.empty,{color:p.muted}]}>Profile statistics are unavailable.</Text> : null}
+
+        {stats ? <>
+          <Text style={[styles.sectionTitle,{color:p.ink}]}>Your library</Text>
+          <View style={styles.profileStatsGrid}>
+            {[
+              ['Works',stats.works],
+              ['In progress',stats.inProgress],
+              ['Completed',stats.completed],
+              ['Formats',stats.formats],
+              ['Series',stats.series],
+              ['Achievements',unlocked],
+            ].map(([label,value])=><View key={String(label)} style={[styles.profileStatCard,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Text style={[styles.profileStatValue,{color:p.ink}]}>{value}</Text>
+              <Text style={[styles.profileStatLabel,{color:p.muted}]}>{label}</Text>
+            </View>)}
+          </View>
+
+          <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
+            <View style={styles.profileBreakdownRow}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Listening</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {Math.max(0,stats.startedAudio-stats.completedAudio)} in progress</Text>
+            </View>
+            <View style={[styles.profileDivider,{backgroundColor:p.line}]} />
+            <View style={styles.profileBreakdownRow}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Reading</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {Math.max(0,stats.startedReading-stats.completedReading)} in progress</Text>
+            </View>
+          </View>
+
+          <Text style={[styles.sectionTitle,{color:p.ink}]}>Achievements</Text>
+          <Text style={[styles.empty,{color:p.muted}]}>{unlocked} of {profileAchievements.length} earned. Only verified library and progress data counts.</Text>
+          <View style={{gap:10}}>
+            {profileAchievements.map(item=>{
+              const ratio=clampProgress(item.progress,item.target);
+              return <View key={item.id} style={[styles.achievementCard,{backgroundColor:p.card,borderColor:item.unlocked?p.gold:p.line}]}>
+                <View style={styles.achievementHeader}>
+                  <View style={{flex:1,gap:2}}>
+                    <Text style={[styles.achievementTitle,{color:p.ink}]}>{item.title}</Text>
+                    <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
+                  </View>
+                  <Text style={[styles.achievementState,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+                </View>
+                <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
+                  <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(ratio*100)+'%'}]} />
+                </View>
+              </View>;
+            })}
+          </View>
+        </> : null}
+      </ScrollView>
+    );
+  }
+
   function Settings() {
     return (
       <ScrollView contentContainerStyle={styles.content}>
@@ -1956,6 +2028,7 @@ function Client() {
     if (activeTab === 'player') return Player();
     if (activeTab === 'reader') return Reader();
     if (activeTab === 'atlas') return Atlas();
+    if (activeTab === 'profile') return Profile();
     return Settings();
   }
 
@@ -1972,6 +2045,7 @@ function Client() {
     {id: 'player', label: 'Player'},
     {id: 'reader', label: 'Reader'},
     {id: 'atlas', label: 'Atlas'},
+    {id: 'profile', label: 'Profile'},
     {id: 'settings', label: 'Settings'},
   ];
 
@@ -2140,4 +2214,20 @@ const styles = StyleSheet.create({
   celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
   celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
   celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
+  profileHero: {borderWidth:1,borderRadius:18,padding:16,flexDirection:'row',alignItems:'center',gap:14},
+  profileMonogram: {width:58,height:58,borderRadius:29,alignItems:'center',justifyContent:'center'},
+  profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'800'},
+  profileStatsGrid: {flexDirection:'row',flexWrap:'wrap',gap:10},
+  profileStatCard: {width:'31%',minWidth:100,borderWidth:1,borderRadius:14,padding:12,gap:3},
+  profileStatValue: {fontFamily:'serif',fontSize:26,fontWeight:'700'},
+  profileStatLabel: {fontSize:12,fontWeight:'700'},
+  profileBreakdown: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  profileBreakdownRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:12},
+  profileDivider: {height:StyleSheet.hairlineWidth},
+  achievementCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  achievementHeader: {flexDirection:'row',alignItems:'flex-start',gap:12},
+  achievementTitle: {fontSize:15,fontWeight:'900'},
+  achievementState: {fontSize:12,fontWeight:'900'},
+  achievementTrack: {height:6,borderRadius:999,overflow:'hidden'},
+  achievementFill: {height:'100%',borderRadius:999},
 });
