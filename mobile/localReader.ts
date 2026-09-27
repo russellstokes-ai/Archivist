@@ -129,7 +129,8 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
   }
   function reportPosition(){
     try{
-      window.ReactNativeWebView?.postMessage(JSON.stringify({type:'reader-position',page,count:pageCount()}));
+      const count=pageCount();
+      window.ReactNativeWebView?.postMessage(JSON.stringify({type:'reader-position',page,count,complete:page>=count-1}));
     }catch{}
   }
   function refreshHud(){
