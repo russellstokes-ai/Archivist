@@ -22,6 +22,8 @@ assert.equal(appConfig.expo?.version,pkg.version,'Expo app version must match pa
 assert.equal(lock.version,pkg.version,'package-lock root version must match package.json.');
 assert.equal(lock.packages?.['']?.version,pkg.version,'package-lock app package version must match package.json.');
 assert.equal(nativeVersion,pkg.version,'Android versionName must match Expo/package metadata.');
+const nativeCode=Number((appGradle.match(/versionCode\s+(\d+)/)||[])[1]);
+assert.equal(appConfig.expo?.android?.versionCode,nativeCode,'Expo Android versionCode must match the native Gradle versionCode.');
 
 assert.equal(appConfig.expo?.plugins?.includes('./plugins/withCleartextTraffic'),true,'Expo config must register the private-server transport plugin.');
 const cleartextPlugin=fs.readFileSync(path.join(__dirname,'plugins','withCleartextTraffic.js'),'utf8');
