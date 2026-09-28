@@ -429,6 +429,7 @@ func (a *app) routes() http.Handler {
 	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
+	a.epubResourceRoutes(mux)
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
 	a.duplicateRoutes(mux)
