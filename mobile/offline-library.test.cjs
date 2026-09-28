@@ -116,6 +116,33 @@ const {
   assert.equal(resumed.bytes,300);
   assert.equal(resumeCalls,1);
 
+  // A stale resume token without its partial file must restart cleanly rather than loop forever.
+  const missingPartialWork={...work,id:49,title:'Missing Partial'};
+  const missingDir=offlineDirectory(session.server,missingPartialWork.id);
+  await Module._load('expo-file-system/legacy').makeDirectoryAsync(missingDir);
+  files.set(missingDir+'001-01_-_Opening.mp3',Buffer.alloc(100));
+  const missingCheckpoint={
+    version:1,
+    key:offlineKey(session.server,missingPartialWork.id),
+    server:session.server,
+    workId:missingPartialWork.id,
+    title:missingPartialWork.title,
+    directory:'file:///docs/evil-claimed-path/',
+    completedTrackIds:[1],
+    current:{trackId:2,uri:missingDir+'002-02_-_Arrakis.mp3',resumeData:'stale-resume',bytesWritten:50},
+    updatedAt:new Date().toISOString(),
+  };
+  const resumesBefore=resumeCalls;
+  const restarted=await downloadOfflineWork(session,missingPartialWork,tracks,undefined,{checkpoint:missingCheckpoint});
+  assert.equal(restarted.bytes,300);
+  assert.equal(resumeCalls,resumesBefore,'missing partial file must restart instead of resuming stale native data');
+
+  // Persisted URIs are metadata, never deletion authorities.
+  const protectedUri='file:///docs/keep/secret.bin';
+  files.set(protectedUri,Buffer.from('keep'));
+  await removeOfflineWork({...restarted,tracks:[{...restarted.tracks[0],uri:protectedUri}]});
+  assert.equal(files.has(protectedUri),true,'removeOfflineWork must only delete the derived Archivist work directory');
+
   dirs.add('file:///docs/archivist-offline/orphan/');
   files.set('file:///docs/archivist-offline/orphan/junk.bin',Buffer.alloc(10));
   const cleaned=await cleanupOfflineStorage({[resumed.key]:resumed});
@@ -157,5 +184,5 @@ const {
     /8 GB/,
   );
 
-  console.log('PASS: offline server works resume partial downloads, report storage, clean orphans, preserve auth/covers and enforce safety limits');
+  console.log('PASS: offline server works resume/restart safely, derive deletion paths, report storage, clean orphans, preserve auth/covers and enforce safety limits');
 })().catch(e=>{console.error(e);process.exitCode=1;});
