@@ -73,7 +73,9 @@ jobs:
       - name: Home Assistant add-on smoke test
         run: |
           set -euo pipefail
-          docker build --build-arg BUILD_VERSION=0.1.19 --build-arg BUILD_ARCH=amd64 -t archivist-ha-test home-assistant/archivist
+          VERSION=$(awk '/^version:/ {print $2; exit}' home-assistant/archivist/config.yaml)
+          test -n "$VERSION"
+          docker build --build-arg BUILD_VERSION="$VERSION" --build-arg BUILD_ARCH=amd64 -t archivist-ha-test home-assistant/archivist
 
           rm -rf .ci-data .ci-ssl
           mkdir -p .ci-data .ci-ssl
