@@ -35,7 +35,10 @@ jobs:
             cmp -- "web/$file" "archivist/app/web/$file"
             cmp -- "web/$file" "home-assistant/archivist/app/web/$file"
           done
-          echo "Root, packaged and Home Assistant server/browser sources are identical."
+          cmp -- archivist/config.yaml home-assistant/archivist/config.yaml
+          cmp -- archivist/run.sh home-assistant/archivist/run.sh
+          cmp -- archivist/Dockerfile home-assistant/archivist/Dockerfile
+          echo "Root, packaged and Home Assistant server/browser/add-on sources are identical."
 
       - name: Browser syntax and UI contract
         shell: bash
@@ -82,6 +85,10 @@ jobs:
       - name: Expo Doctor
         working-directory: mobile
         run: npx expo-doctor
+
+      - name: Runtime dependency audit
+        working-directory: mobile
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Typecheck
         working-directory: mobile
