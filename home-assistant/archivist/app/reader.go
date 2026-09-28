@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"golang.org/x/net/html"
 	"io"
 	"math"
 	"net/http"
@@ -178,46 +177,6 @@ func readerParts(z *zip.Reader, format string) ([]string, error) {
 	}
 	return parts, nil
 }
-func safeParagraphs(b []byte) ([]string, error) {
-	doc, e := html.Parse(strings.NewReader(string(b)))
-	if e != nil {
-		return nil, e
-	}
-	out := []string{}
-	var buf strings.Builder
-	flush := func() {
-		s := strings.Join(strings.Fields(buf.String()), " ")
-		if s != "" {
-			out = append(out, s)
-		}
-		buf.Reset()
-	}
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode {
-			switch n.Data {
-			case "script", "style", "head", "iframe", "object", "svg", "noscript":
-				return
-			}
-		}
-		block := n.Type == html.ElementNode && (n.Data == "p" || n.Data == "div" || n.Data == "h1" || n.Data == "h2" || n.Data == "h3" || n.Data == "li" || n.Data == "br")
-		if block {
-			flush()
-		}
-		if n.Type == html.TextNode {
-			buf.WriteString(n.Data)
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-		if block {
-			flush()
-		}
-	}
-	walk(doc)
-	flush()
-	return out, nil
-}
 func (a *app) readerRoutes(mux *http.ServeMux) {
 	serve := func(w http.ResponseWriter, r *http.Request) {
 		f, format, e := a.openAsset(r.PathValue("id"))
@@ -298,12 +257,12 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			w.Write(data)
 			return
 		}
-		paragraphs, e := safeParagraphs(data)
+		markup, e := epubMarkup(data, parts[index], r.PathValue("id"))
 		if e != nil {
 			fail(w, 400, e)
 			return
 		}
-		reply(w, map[string]any{"paragraphs": paragraphs})
+		reply(w, map[string]any{"html": markup})
 	}
 	mux.HandleFunc("GET /api/assets/{id}/reader", serve)
 	mux.HandleFunc("GET /api/assets/{id}/reader/{part}", serve)
