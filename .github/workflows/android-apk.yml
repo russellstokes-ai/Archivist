@@ -58,6 +58,10 @@ jobs:
         working-directory: mobile
         run: npx expo-doctor
 
+      - name: Runtime dependency audit
+        working-directory: mobile
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Mobile typecheck
         working-directory: mobile
         run: npm run typecheck
@@ -106,9 +110,13 @@ jobs:
           console.log('Release version metadata:',version);
           NODE
 
+      - name: Android release lint
+        working-directory: mobile/android
+        run: ./gradlew :app:lintRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
+
       - name: Build release APK
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
 
       - name: Locate release APK
         id: release_apk
@@ -135,6 +143,12 @@ jobs:
           printf '%s\n' "$BADGING" | grep -F "versionName='$VERSION'"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$APK"
+          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libreactnative.so'
+          unzip -l "$APK" | grep -q 'lib/x86_64/libreactnative.so'
+          if unzip -l "$APK" | grep -Eq 'lib/(armeabi-v7a|x86)/'; then
+            echo "Unexpected legacy ABI in release APK"
+            exit 1
+          fi
 
       - name: Launch release APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
