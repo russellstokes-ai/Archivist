@@ -169,33 +169,7 @@ jobs:
             adb kill-server || true
             adb start-server
             adb devices
-          script: |
-            set -eu
-            APK="${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
-            test -f "$APK"
-            adb install -r "$APK"
-            adb logcat -c
-            adb shell am force-stop app.archivist.reader
-            adb shell am start -W -n app.archivist.reader/.MainActivity
-            sleep 15
-            PID=$(adb shell pidof app.archivist.reader | tr -d '\r')
-            if [ -z "$PID" ]; then
-              echo "Archivist process exited after launch"
-              adb logcat -d -t 600
-              exit 1
-            fi
-            if ! adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -q 'app.archivist.reader'; then
-              echo "Archivist did not remain as the resumed activity"
-              adb logcat --pid="$PID" -d -t 600 || true
-              exit 1
-            fi
-            APP_LOG=$(adb logcat --pid="$PID" -d -v brief || true)
-            printf '%s\n' "$APP_LOG"
-            if printf '%s\n' "$APP_LOG" | grep -Eiq 'FATAL EXCEPTION|UnsatisfiedLinkError|Unable to load script|ReactNativeJS.*(TypeError|ReferenceError|Invariant Violation)'; then
-              echo "Archivist emitted a fatal startup error"
-              exit 1
-            fi
-            echo "Archivist release APK passed launch smoke test (PID $PID)"
+          script: bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
 
       - name: Name and checksum versioned APK
         shell: bash
