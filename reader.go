@@ -298,12 +298,12 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			w.Write(data)
 			return
 		}
-		paragraphs, e := safeParagraphs(data)
+		markup, e := epubMarkup(data, parts[index], r.PathValue("id"))
 		if e != nil {
 			fail(w, 400, e)
 			return
 		}
-		reply(w, map[string]any{"paragraphs": paragraphs})
+		reply(w, map[string]any{"html": markup})
 	}
 	mux.HandleFunc("GET /api/assets/{id}/reader", serve)
 	mux.HandleFunc("GET /api/assets/{id}/reader/{part}", serve)
