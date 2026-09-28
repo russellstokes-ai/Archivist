@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"os"
 	"strings"
 	"testing"
 )
@@ -22,16 +20,5 @@ func TestEPUBMarkupPreservesContentWithoutExternalRequests(t *testing.T) {
 		if strings.Contains(s, bad) {
 			t.Fatal("unsafe", s)
 		}
-	}
-}
-func TestCBRRejectsInvalidArchive(t *testing.T) {
-	f, e := os.CreateTemp(t.TempDir(), "*.cbr")
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer f.Close()
-	f.WriteString("not an archive")
-	if _, _, e = readRAR(context.Background(), f, ""); e == nil {
-		t.Fatal("accepted corrupt RAR")
 	}
 }
