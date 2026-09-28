@@ -51,6 +51,12 @@ func TestHouseholdPermissionsAndProgress(t *testing.T) {
 			t.Fatalf("whole-library User access %s: %d %s", path, w.Code, w.Body.String())
 		}
 	}
+	wSources:=call("GET","/api/sources","")
+	var memberSources []struct{Path string `json:"path"`; Status string `json:"status"`}
+	if err:=json.Unmarshal(wSources.Body.Bytes(),&memberSources);err!=nil{t.Fatal(err)}
+	for _,source:=range memberSources {
+		if source.Path!="" || source.Status!="" { t.Fatalf("User source metadata leaked path/status: %+v",source) }
+	}
 	for _, path := range []string{"/api/assets/1", "/api/assets/2", "/api/assets/1/cover", "/api/works/1/tracks", "/api/works/2/tracks"} {
 		if w := call("GET", path, ""); w.Code == 403 || w.Code == 401 {
 			t.Fatalf("User media blocked %s: %d %s", path, w.Code, w.Body.String())
