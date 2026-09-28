@@ -2,6 +2,10 @@ name: Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-apk.yml'
 
 concurrency:
   group: android-apk-${{ github.ref }}
@@ -68,6 +72,10 @@ jobs:
           node duplicates.test.cjs
           node local-reader.test.cjs
           node profile-stats.test.cjs
+          node server-compatibility.test.cjs
+          node state-store.test.cjs
+          node speech-focus.test.cjs
+          node offline-library.test.cjs
           node native-patch.test.cjs
           node ui-contract.test.cjs
 
