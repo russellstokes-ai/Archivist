@@ -101,6 +101,7 @@ const {
   const resumeDir=offlineDirectory(session.server,resumeWork.id);
   await Module._load('expo-file-system/legacy').makeDirectoryAsync(resumeDir);
   files.set(resumeDir+'001-01_-_Opening.mp3',Buffer.alloc(100));
+  files.set(resumeDir+'002-02_-_Arrakis.mp3',Buffer.alloc(50));
   const checkpoint={
     version:1,
     key:offlineKey(session.server,resumeWork.id),
