@@ -108,3 +108,5 @@ jobs:
           curl -fsS http://127.0.0.1:15056/healthz
           curl -kfsS https://127.0.0.1:15443/healthz
 
+
+# Final verification trigger 2026-09-28
