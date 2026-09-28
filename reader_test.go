@@ -17,7 +17,7 @@ func makeReaderEPUB(t *testing.T) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	z := zip.NewWriter(&b)
-	for name, content := range map[string]string{"META-INF/container.xml": `<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>`, "OPS/book.opf": `<package><manifest><item id="b" href="b.xhtml" media-type="application/xhtml+xml"/><item id="a" href="a.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/><itemref idref="b"/></spine></package>`, "OPS/a.xhtml": `<html><head><script>steal()</script></head><body><p>Hello <em>reader</em>.</p><iframe src="https://example.com">secret</iframe><p>Second paragraph.</p></body></html>`, "OPS/b.xhtml": `<html><body><p>End.</p></body></html>`} {
+	for name, content := range map[string]string{"META-INF/container.xml": `<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>`, "OPS/book.opf": `<package><manifest><item id="b" href="b.xhtml" media-type="application/xhtml+xml"/><item id="a" href="a.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/><itemref idref="b"/></spine></package>`, "OPS/a.xhtml": `<html><head><script>steal()</script></head><body><p>Hello <em>reader</em>.</p><img src="images/a.png"><iframe src="https://example.com">secret</iframe><p>Second paragraph.</p></body></html>`, "OPS/b.xhtml": `<html><body><p>End.</p></body></html>`, "OPS/images/a.png": string([]byte{0x89,'P','N','G',0x0d,0x0a,0x1a,0x0a,0,0,0,0})} {
 		w, e := z.Create(name)
 		if e != nil {
 			t.Fatal(e)
@@ -62,12 +62,12 @@ func TestReaderSpineAndSafeContent(t *testing.T) {
 		t.Fatal(parts, e)
 	}
 	data, _ := zipEntry(z, parts[0], 4<<20)
-	p, e := safeParagraphs(data)
-	if e != nil || len(p) != 2 || p[0] != "Hello reader." {
-		t.Fatal(p, e)
+	markup, e := epubMarkup(data, parts[0], "1")
+	if e != nil || !strings.Contains(markup, "<em>reader</em>") || !strings.Contains(markup, "./api/assets/1/resources?name=OPS%2Fimages%2Fa.png") {
+		t.Fatal(markup, e)
 	}
-	if strings.Contains(strings.Join(p, " "), "steal") || strings.Contains(strings.Join(p, " "), "secret") {
-		t.Fatal("active content included")
+	if strings.Contains(markup, "steal") || strings.Contains(markup, "example.com") {
+		t.Fatal("active or remote content included")
 	}
 	if _, e = zipEntry(z, parts[0], 1); e == nil {
 		t.Fatal("size bound ignored")
@@ -90,14 +90,17 @@ func TestReaderPermissionsAndProgress(t *testing.T) {
 		a.routes().ServeHTTP(w, r)
 		return w
 	}
-	for _, path := range []string{"/api/assets/1/reader", "/api/assets/1/reader/0", "/api/assets/1/reading-progress"} {
+	for _, path := range []string{"/api/assets/1/reader", "/api/assets/1/reader/0", "/api/assets/1/resources?name=OPS%2Fimages%2Fa.png", "/api/assets/1/reading-progress"} {
 		if w := call("GET", path, "", token); w.Code != 403 {
 			t.Fatalf("leak %s %d", path, w.Code)
 		}
 	}
 	a.db.Exec("INSERT INTO grants VALUES(1,'Private')")
-	if w := call("GET", "/api/assets/1/reader/0", "", token); w.Code != 200 || !strings.Contains(w.Body.String(), "Hello reader") {
+	if w := call("GET", "/api/assets/1/reader/0", "", token); w.Code != 200 || !strings.Contains(w.Body.String(), `"html"`) || !strings.Contains(w.Body.String(), "Hello") {
 		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := call("GET", "/api/assets/1/resources?name=OPS%2Fimages%2Fa.png", "", token); w.Code != 200 || w.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("member EPUB image=%d type=%q body=%q",w.Code,w.Header().Get("Content-Type"),w.Body.String())
 	}
 	w := call("PUT", "/api/assets/1/reading-progress", `{"part":1,"fraction":1,"revision":0,"complete":true}`, token)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"complete":true`) {
