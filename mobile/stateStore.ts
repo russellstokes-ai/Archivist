@@ -10,6 +10,16 @@ import {
 } from 'expo-file-system/legacy';
 
 const root=(documentDirectory || '')+'archivist-state/';
+const pendingWrites=new Map<string,Promise<void>>();
+
+function queueWrite(key:string,operation:()=>Promise<void>):Promise<void>{
+  const previous=pendingWrites.get(key) || Promise.resolve();
+  const next=previous.catch(()=>undefined).then(operation);
+  pendingWrites.set(key,next);
+  return next.finally(()=>{
+    if(pendingWrites.get(key)===next)pendingWrites.delete(key);
+  });
+}
 
 function fileName(key:string){
   return key.replace(/[^a-z0-9._-]+/gi,'_')+'.json';
@@ -38,6 +48,7 @@ async function readJSONFile(uri:string):Promise<{ok:true;value:unknown}|{ok:fals
 }
 
 export async function getPersistedJSON<T>(key:string):Promise<T|null>{
+  await pendingWrites.get(key)?.catch(()=>undefined);
   if(await ensureRoot()){
     const {primary,backup}=paths(key);
     const current=await readJSONFile(primary);
@@ -59,33 +70,37 @@ export async function getPersistedJSON<T>(key:string):Promise<T|null>{
   }
 }
 
-export async function setPersistedJSON(key:string,value:unknown):Promise<void>{
+export function setPersistedJSON(key:string,value:unknown):Promise<void>{
   const encoded=JSON.stringify(value);
-  if(!(await ensureRoot())){
-    // Extremely defensive fallback for runtimes without a document directory.
-    await SecureStore.setItemAsync(key,encoded);
-    return;
-  }
-  const {primary,backup}=paths(key);
-  try{
-    const info=await getInfoAsync(primary);
-    if(info.exists){
-      await deleteAsync(backup,{idempotent:true}).catch(()=>undefined);
-      await copyAsync({from:primary,to:backup});
+  return queueWrite(key,async()=>{
+    if(!(await ensureRoot())){
+      // Extremely defensive fallback for runtimes without a document directory.
+      await SecureStore.setItemAsync(key,encoded);
+      return;
     }
-  }catch{
-    // A backup is best-effort; never block the fresh state write.
-  }
-  await writeAsStringAsync(primary,encoded);
+    const {primary,backup}=paths(key);
+    try{
+      const info=await getInfoAsync(primary);
+      if(info.exists){
+        await deleteAsync(backup,{idempotent:true}).catch(()=>undefined);
+        await copyAsync({from:primary,to:backup});
+      }
+    }catch{
+      // A backup is best-effort; never block the fresh state write.
+    }
+    await writeAsStringAsync(primary,encoded);
+  });
 }
 
-export async function deletePersistedJSON(key:string):Promise<void>{
-  if(await ensureRoot()){
-    const {primary,backup}=paths(key);
-    await Promise.all([
-      deleteAsync(primary,{idempotent:true}).catch(()=>undefined),
-      deleteAsync(backup,{idempotent:true}).catch(()=>undefined),
-    ]);
-  }
-  await SecureStore.deleteItemAsync(key).catch(()=>undefined);
+export function deletePersistedJSON(key:string):Promise<void>{
+  return queueWrite(key,async()=>{
+    if(await ensureRoot()){
+      const {primary,backup}=paths(key);
+      await Promise.all([
+        deleteAsync(primary,{idempotent:true}).catch(()=>undefined),
+        deleteAsync(backup,{idempotent:true}).catch(()=>undefined),
+      ]);
+    }
+    await SecureStore.deleteItemAsync(key).catch(()=>undefined);
+  });
 }
