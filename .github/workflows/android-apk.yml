@@ -33,6 +33,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -87,9 +88,27 @@ jobs:
           VERSION=$(grep -m1 'versionName ' app/build.gradle | cut -d '"' -f 2)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Verify release version metadata
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs');
+          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const app=JSON.parse(fs.readFileSync('app.json','utf8'));
+          const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          const gradle=fs.readFileSync('android/app/build.gradle','utf8');
+          const version=(gradle.match(/versionName\s+"([^"]+)"/)||[])[1];
+          if(!version || pkg.version!==version || app.expo.version!==version || lock.version!==version || lock.packages?.['']?.version!==version){
+            throw new Error('Release version metadata is inconsistent');
+          }
+          console.log('Release version metadata:',version);
+          NODE
+
       - name: Build release APK
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon --console=plain
+        run: ./gradlew assembleRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
 
       - name: Locate release APK
         id: release_apk
@@ -101,6 +120,21 @@ jobs:
           test -f "$APK"
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "Found release APK: $APK"
+
+      - name: Verify release APK package, signature and alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="${{ steps.release_apk.outputs.path }}"
+          VERSION="${{ steps.app_version.outputs.version }}"
+          CODE=$(grep -m1 'versionCode ' mobile/android/app/build.gradle | awk '{print $2}')
+          BADGING="$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -n 1)"
+          printf '%s\n' "$BADGING"
+          printf '%s\n' "$BADGING" | grep -F "package: name='app.archivist.reader'"
+          printf '%s\n' "$BADGING" | grep -F "versionCode='$CODE'"
+          printf '%s\n' "$BADGING" | grep -F "versionName='$VERSION'"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$APK"
 
       - name: Launch release APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -143,16 +177,20 @@ jobs:
             fi
             echo "Archivist release APK passed launch smoke test (PID $PID)"
 
-      - name: Name versioned APK
+      - name: Name and checksum versioned APK
         shell: bash
         run: |
+          set -euo pipefail
           APK="${{ steps.release_apk.outputs.path }}"
           OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk"
           cp "$APK" "$OUT"
+          sha256sum "$OUT" > "$OUT.sha256"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Archivist-${{ steps.app_version.outputs.version }}-APK
-          path: mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk
+          path: |
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk.sha256
           if-no-files-found: error
