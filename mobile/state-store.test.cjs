@@ -5,12 +5,14 @@ const files=new Map();
 const dirs=new Set(['file:///docs/']);
 const secure=new Map();
 const deletedSecure=[];
+let delayedValue='',releaseDelayed;
+const delayed=new Promise(resolve=>{releaseDelayed=resolve;});
 const fsMock={
   documentDirectory:'file:///docs/',
   async getInfoAsync(uri){return {exists:files.has(uri)||dirs.has(uri)};},
   async makeDirectoryAsync(uri){dirs.add(uri);},
   async readAsStringAsync(uri){if(!files.has(uri))throw Error('missing');return files.get(uri);},
-  async writeAsStringAsync(uri,value){files.set(uri,value);},
+  async writeAsStringAsync(uri,value){if(value===delayedValue)await delayed;files.set(uri,value);},
   async copyAsync({from,to}){if(!files.has(from))throw Error('missing');files.set(to,files.get(from));},
   async deleteAsync(uri){files.delete(uri);},
 };
@@ -48,5 +50,13 @@ const {getPersistedJSON,setPersistedJSON,deletePersistedJSON}=require('./stateSt
   assert.equal(files.has('file:///docs/archivist-state/archivist.localProgress.json'),false);
   assert.equal(files.has('file:///docs/archivist-state/archivist.localProgress.json.bak'),false);
 
-  console.log('PASS: growing mobile state migrates from SecureStore, keeps a backup, recovers corruption and deletes cleanly');
+  delayedValue=JSON.stringify({book:100});
+  const older=setPersistedJSON(key,{book:100});
+  const newer=setPersistedJSON(key,{book:101});
+  await new Promise(resolve=>setImmediate(resolve));
+  releaseDelayed();
+  await Promise.all([older,newer]);
+  assert.deepEqual(await getPersistedJSON(key),{book:101},'overlapping writes must preserve the newest state');
+
+  console.log('PASS: growing mobile state migrates from SecureStore, keeps a backup, recovers corruption, serializes overlapping writes and deletes cleanly');
 })().catch(e=>{console.error(e);process.exitCode=1;});
