@@ -263,11 +263,18 @@ export async function downloadOfflineWork(
       const ext=extensionFor(track);
       const base=safePart((track.name||track.title||('track-'+(index+1))).replace(/\.[^.]+$/,''));
       const uri=dir+String(index+1).padStart(3,'0')+'-'+base+ext;
-      const resumeData=checkpoint.current?.trackId===track.id && checkpoint.current.uri===uri
+      const partialSize=await existingSize(uri);
+      let resumeData=checkpoint.current?.trackId===track.id && checkpoint.current.uri===uri
         ? checkpoint.current.resumeData
         : undefined;
+      if(resumeData && partialSize<0)resumeData=undefined;
       if(!resumeData)await deleteAsync(uri,{idempotent:true}).catch(()=>undefined);
-      checkpoint.current={trackId:track.id,uri,resumeData,bytesWritten:checkpoint.current?.trackId===track.id?checkpoint.current.bytesWritten:0};
+      checkpoint.current={
+        trackId:track.id,
+        uri,
+        resumeData,
+        bytesWritten:resumeData && checkpoint.current?.trackId===track.id ? Math.max(0,checkpoint.current.bytesWritten||0) : 0,
+      };
       await persistCheckpoint(checkpoint,options?.onCheckpoint);
 
       const baseWritten=written;
@@ -398,7 +405,7 @@ export async function cleanupOfflineStorage(
   const retained:Record<string,OfflineServerWork>={};
   const removedWorks:string[]=[];
   const referenced=new Set<string>();
-  for(const checkpoint of protectedCheckpoints)referenced.add(checkpoint.directory.endsWith('/')?checkpoint.directory:checkpoint.directory+'/');
+  for(const checkpoint of protectedCheckpoints)referenced.add(offlineDirectory(checkpoint.server,checkpoint.workId));
 
   for(const [key,work] of Object.entries(works)){
     let valid=work.tracks.length>0;
