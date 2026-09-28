@@ -170,6 +170,7 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 		(len(parts) == 3 && r.Method == "GET") ||
 		(len(parts) == 4 && parts[3] == "cover" && r.Method == "GET") ||
 		((len(parts) == 4 || len(parts) == 5) && parts[3] == "reader" && r.Method == "GET") ||
+		(len(parts) == 4 && parts[3] == "resources" && r.Method == "GET") ||
 		(len(parts) == 4 && parts[3] == "reading-progress" && (r.Method == "GET" || r.Method == "PUT")) ||
 		(len(parts) == 4 && parts[3] == "listening" && r.Method == "GET") ||
 		(len(parts) == 4 && parts[3] == "listening-progress" && (r.Method == "GET" || r.Method == "PUT")) ||
