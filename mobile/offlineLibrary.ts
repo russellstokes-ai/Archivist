@@ -346,9 +346,7 @@ export async function downloadOfflineWork(
 }
 
 export async function removeOfflineWork(work:OfflineServerWork){
-  const first=work.tracks[0]?.uri||work.coverUri;
-  if(!first)return;
-  await deleteAsync(directoryOf(first),{idempotent:true});
+  await deleteAsync(offlineDirectory(work.server,work.workId),{idempotent:true});
 }
 
 export async function inspectOfflineStorage(
@@ -407,13 +405,13 @@ export async function cleanupOfflineStorage(
     for(const track of work.tracks){
       if(await existingSize(track.uri)<0){valid=false;break;}
     }
-    const first=work.tracks[0]?.uri||work.coverUri;
+    const dir=offlineDirectory(work.server,work.workId);
     if(valid){
       retained[key]=work;
-      if(first)referenced.add(directoryOf(first));
+      referenced.add(dir);
     }else{
       removedWorks.push(key);
-      if(first)await deleteAsync(directoryOf(first),{idempotent:true}).catch(()=>undefined);
+      await deleteAsync(dir,{idempotent:true}).catch(()=>undefined);
     }
   }
 
