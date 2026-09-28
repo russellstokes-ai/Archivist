@@ -46,6 +46,8 @@ This is the current source-of-truth release ledger. Older polish/testing notes r
 - Speed, sleep and chapters where supported.
 - Lock-screen metadata.
 - User-initiated offline downloads for server works, including multi-track audiobooks.
+- Resumable/interrupted offline downloads with persisted checkpoints.
+- Offline storage manager with used/free space, cleanup, resume, discard and remove controls.
 - Offline work manifest persists and downloaded works appear in the local Shelf when the server is unreachable.
 
 ### Reader
@@ -59,13 +61,16 @@ This is the current source-of-truth release ledger. Older polish/testing notes r
 ### Profile
 - Real local/server statistics.
 - In-progress/completed counts.
+- Personal ratings, favourites and average rating.
 - Achievements derived from real statistics.
 - Milestone celebration remains in Profile/Shelf experience rather than adding navigation clutter.
 
 ### Atlas
 - Real primary genre extraction and persistence.
 - Author, series, genre, format, folder and availability relationships.
-- Exact Shelf drill-down filters.
+- Personal reading state: Not started / In progress / Finished.
+- Personal ratings (half-star increments) and favourites.
+- Exact Shelf drill-down filters, including personal state/rating/favourite.
 - Old-server fallback behavior.
 
 ### Server and Home Assistant packaging
@@ -133,20 +138,16 @@ The server reader supports RAR/TAR comic archives, but the phone-local reader cu
 
 A WASM RAR decoder should only be added after measuring binary size, memory use and device compatibility. Until then this is an explicit release gap for users who require local CBR.
 
-### Atlas reading-state depth
-Atlas currently exposes availability state, not personal reading state. “Finished / In progress / Not started” remains a useful planned relationship.
-
-### Offline download robustness
-User-initiated downloads are implemented and bounded, but resumable interrupted downloads and storage-management UI are not yet complete.
-
 ### Reader archive memory
 Local EPUB/CBZ uses JSZip and materialises archive data in memory. Offline downloads enforce a 256 MB archive safety limit, but local-folder archives can still be larger and require real-device validation or a streaming reader architecture later.
 
-## Next engineering order
+## Remaining release-acceptance order
 
-1. Add Atlas personal reading-state relationships.
-2. Add offline storage management/resume behavior.
-3. Benchmark speech focus and archive-reader memory on real devices/corpus.
-4. Run final Android release build + emulator smoke.
-5. Install/upgrade the final APK on a physical Android device and perform server/LAN/Tailscale/offline acceptance.
-6. Only then mark the release candidate ready.
+1. Complete the final Android release build and emulator launch smoke on the current release-candidate head.
+2. Install/upgrade the APK over the previous tester build on a physical Android device and confirm persisted state survives.
+3. Perform physical-device LAN, Tailscale and public-HTTPS server acceptance.
+4. Exercise real offline transitions with downloaded audiobook, EPUB/PDF/CBZ content, including interrupt/resume.
+5. Benchmark speech focus on a real labelled comic corpus and check archive-reader memory on target phone/tablet hardware.
+6. Measure target Raspberry Pi 4 and phone behavior for large-library startup/search, long playback and scan-while-streaming.
+7. Fix only device-specific release blockers found by those checks; then mark the Android release candidate ready.
+8. After acceptance, produce the signed Google Play AAB/internal-test package.
