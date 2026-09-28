@@ -171,7 +171,7 @@ jobs:
             adb devices
           script: |
             set -eu
-            APK="${{ steps.release_apk.outputs.path }}"
+            APK="${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
             test -f "$APK"
             adb install -r "$APK"
             adb logcat -c
