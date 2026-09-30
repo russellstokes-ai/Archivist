@@ -2735,21 +2735,104 @@ function Client() {
     );
   }
 
+  function AtlasUniverse() {
+    const nodes:Array<{kind:AtlasKind;value:string;count:number}>=[];
+    const add=(kind:AtlasKind,item?:[string,number])=>{if(item?.[0]&&item[1]>0)nodes.push({kind,value:item[0],count:item[1]});};
+    add('author',atlas.authors[0]);
+    add('series',atlas.series[0]);
+    add('genre',atlas.genres[0]);
+    add('reading',atlas.reading[0]);
+    add('format',atlas.formats[0]);
+    add('rating',atlas.ratings.find(([,count])=>count>0));
+    add('favourite',atlas.favourites[0]);
+    add('space',atlas.spaces[0]);
+    const visible=nodes.slice(0,8);
+    const graphW=Math.max(300,Math.min(width-40,720));
+    const graphH=width>=700?470:390;
+    const center={x:graphW/2,y:graphH/2};
+    const nodeW=width>=700?122:94;
+    const nodeH=width>=700?62:54;
+    const positions=[
+      {x:.13,y:.22},{x:.50,y:.11},{x:.86,y:.22},{x:.91,y:.55},
+      {x:.70,y:.84},{x:.36,y:.87},{x:.09,y:.62},{x:.24,y:.43},
+    ];
+    return (
+      <View accessibilityLabel="Atlas connected library graph" style={[styles.atlasUniverse,{width:graphW,height:graphH,backgroundColor:p.card,borderColor:p.line}]}>
+        {visible.map((node,index)=>{
+          const pt={x:graphW*positions[index].x,y:graphH*positions[index].y};
+          const dx=pt.x-center.x,dy=pt.y-center.y;
+          const distance=Math.sqrt(dx*dx+dy*dy);
+          const angle=Math.atan2(dy,dx);
+          return <View key={'line-'+node.kind+'-'+node.value} pointerEvents="none" style={[styles.atlasLine,{left:center.x,top:center.y,width:distance,backgroundColor:p.line,transformOrigin:'left center',transform:[{rotate:angle+'rad'}]}]} />;
+        })}
+        <View style={[styles.atlasCenterNode,{left:center.x-52,top:center.y-52,backgroundColor:p.ink,borderColor:p.gold}]}>
+          <Text style={[styles.atlasCenterMark,{color:p.gold}]}>A</Text>
+          <Text style={[styles.atlasCenterTitle,{color:p.ivory}]}>Library</Text>
+          <Text style={[styles.atlasCenterCount,{color:'#c8d4d2'}]}>{session ? (serverSummary?.total ?? serverWorks.length) : localWorks.length} works</Text>
+        </View>
+        {visible.map((node,index)=>{
+          const pt={x:graphW*positions[index].x,y:graphH*positions[index].y};
+          const label=node.kind==='space'?'Folder':node.kind.charAt(0).toUpperCase()+node.kind.slice(1);
+          return <Pressable
+            key={node.kind+'-'+node.value}
+            accessibilityRole="button"
+            accessibilityLabel={label+' '+node.value+', '+node.count+' works'}
+            onPress={()=>setAtlasFocus({kind:node.kind,value:node.value})}
+            style={({pressed})=>[
+              styles.atlasUniverseNode,
+              {left:pt.x-nodeW/2,top:pt.y-nodeH/2,width:nodeW,minHeight:nodeH,backgroundColor:p.raised,borderColor:node.kind==='genre'||node.kind==='series'?p.gold:p.line},
+              pressed&&styles.cardPressed,
+            ]}>
+            <View style={[styles.atlasNodeAccent,{backgroundColor:node.kind==='genre'||node.kind==='series'?p.gold:p.sage}]} />
+            <Text numberOfLines={1} style={[styles.atlasNodeKind,{color:p.muted}]}>{label}</Text>
+            <Text numberOfLines={1} style={[styles.atlasNodeValue,{color:p.ink}]}>{node.value}</Text>
+            <Text style={[styles.atlasNodeCount,{color:p.muted}]}>{node.count}</Text>
+          </Pressable>;
+        })}
+        {!visible.length ? <View style={styles.atlasEmptyUniverse}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Atlas will grow here</Text>
+          <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Add books and Archivist will connect authors, series, genres and reading history automatically.</Text>
+        </View> : null}
+      </View>
+    );
+  }
+
+  function AtlasChipSection({title,kind,items}: {title:string;kind:AtlasKind;items:Array<[string,number]>}) {
+    if(!items.length)return null;
+    return <View style={styles.atlasChipSection}>
+      <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{title}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.atlasExploreRow}>
+        {items.slice(0,12).map(([name,count])=><Pressable
+          key={kind+'-'+name}
+          accessibilityRole="button"
+          accessibilityLabel={title+' '+name+', '+count}
+          onPress={()=>setAtlasFocus({kind,value:name})}
+          style={({pressed})=>[styles.atlasExploreChip,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
+          <Text numberOfLines={1} style={[styles.atlasExploreName,{color:p.ink}]}>{name}</Text>
+          <Text style={[styles.atlasExploreCount,{color:p.muted}]}>{count}</Text>
+        </Pressable>)}
+      </ScrollView>
+    </View>;
+  }
+
   function Atlas() {
     if(atlasFocus)return <AtlasRelationshipView />;
     return (
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, {color: p.ink}]}>Atlas</Text>
-        <Text style={[styles.empty, {color: p.muted}]}>Explore your library and your own reading history, ratings and favourites.</Text>
-        <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
-        <AtlasGroup title="Ratings" kind="rating" items={atlas.ratings} />
-        <AtlasGroup title="Favourites" kind="favourite" items={atlas.favourites} />
-        <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
-        <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
-        <AtlasGroup title="Series" kind="series" items={atlas.series} />
-        <AtlasGroup title="Genres" kind="genre" items={atlas.genres} />
-        <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
-        <AtlasGroup title="Availability" kind="status" items={atlas.status} />
+      <ScrollView contentContainerStyle={[styles.content,styles.atlasScreen]}>
+        <View style={styles.pageHeading}>
+          <View>
+            <Text style={[styles.pageEyebrow,{color:p.gold}]}>CONNECTED LIBRARY</Text>
+            <Text style={[styles.title,{color:p.ink}]}>Atlas</Text>
+          </View>
+          <Text style={[styles.headerMeta,{color:p.muted}]}>Tap a node</Text>
+        </View>
+        <Text style={[styles.atlasIntro,{color:p.muted}]}>Follow the threads through your authors, series, genres and reading life.</Text>
+        <AtlasUniverse />
+        <AtlasChipSection title="Authors" kind="author" items={atlas.authors} />
+        <AtlasChipSection title="Series" kind="series" items={atlas.series} />
+        <AtlasChipSection title="Genres" kind="genre" items={atlas.genres} />
+        <AtlasChipSection title="Reading" kind="reading" items={atlas.reading} />
+        <AtlasChipSection title="Ratings" kind="rating" items={atlas.ratings} />
       </ScrollView>
     );
   }
@@ -2758,18 +2841,19 @@ function Client() {
     const stats=profileStats;
     const unlocked=profileAchievements.filter(item=>item.unlocked).length;
     return (
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.profileHero,{backgroundColor:p.card,borderColor:p.line}]}>
+      <ScrollView contentContainerStyle={[styles.content,styles.insightsScreen]}>
+        <View style={styles.pageHeading}>
+          <View>
+            <Text style={[styles.pageEyebrow,{color:p.gold}]}>YOUR READING LIFE</Text>
+            <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>Insights</Text>
+          </View>
           <View style={[styles.profileMonogram,{backgroundColor:p.ink}]}>
             <Text style={[styles.profileMonogramText,{color:p.gold}]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
           </View>
-          <View style={{flex:1,gap:3}}>
-            <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name || 'Profile'}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>
-              {session ? (stats?.owner ? 'Admin' : 'User') : 'Local library on this device'}
-            </Text>
-          </View>
         </View>
+        <Text style={[styles.atlasIntro,{color:p.muted}]}>
+          {stats ? `${stats.completed} completed · ${stats.inProgress} in progress · ${stats.favourites || 0} favourites` : 'Your reading and listening history, in one calm view.'}
+        </Text>
 
         {profileLoading && session ? <ActivityIndicator accessibilityLabel="Loading profile statistics" /> : null}
         {!stats && !profileLoading ? <Text style={[styles.empty,{color:p.muted}]}>Profile statistics are unavailable.</Text> : null}
@@ -3291,6 +3375,25 @@ const styles = StyleSheet.create({
   readerFailure: {margin:18,borderWidth:1,borderRadius:16,padding:18,gap:12},
   readerOverlay: {position:'absolute',top:54,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:0.94},
   readerErrorOverlay: {position:'absolute',left:18,right:18,top:82,zIndex:30,borderWidth:1,borderRadius:16,padding:18,gap:12},
+  atlasScreen: {paddingBottom:120},
+  atlasIntro: {fontFamily:'serif',fontSize:17,lineHeight:25,maxWidth:620},
+  atlasUniverse: {alignSelf:'center',borderWidth:StyleSheet.hairlineWidth,borderRadius:28,overflow:'hidden',position:'relative',marginVertical:4},
+  atlasLine: {position:'absolute',height:StyleSheet.hairlineWidth,opacity:.75},
+  atlasCenterNode: {position:'absolute',width:104,height:104,borderRadius:52,borderWidth:1.5,alignItems:'center',justifyContent:'center',zIndex:4},
+  atlasCenterMark: {fontFamily:'serif',fontSize:27,fontWeight:'800',lineHeight:29},
+  atlasCenterTitle: {fontFamily:'serif',fontSize:16,fontWeight:'700'},
+  atlasCenterCount: {fontSize:10,fontWeight:'700',marginTop:2},
+  atlasUniverseNode: {position:'absolute',borderWidth:StyleSheet.hairlineWidth,borderRadius:18,paddingHorizontal:10,paddingVertical:8,justifyContent:'center',zIndex:5,shadowColor:'#000',shadowOpacity:.06,shadowRadius:8,elevation:2},
+  atlasNodeAccent: {position:'absolute',left:9,top:9,width:5,height:5,borderRadius:3},
+  atlasNodeKind: {fontSize:8,fontWeight:'900',letterSpacing:1,textTransform:'uppercase',paddingLeft:9},
+  atlasNodeValue: {fontFamily:'serif',fontSize:13,fontWeight:'700',marginTop:1},
+  atlasNodeCount: {fontSize:9,fontWeight:'700',marginTop:1},
+  atlasEmptyUniverse: {position:'absolute',left:32,right:32,top:'35%',alignItems:'center',gap:7},
+  atlasChipSection: {gap:9},
+  atlasExploreRow: {gap:8,paddingRight:20},
+  atlasExploreChip: {minWidth:110,maxWidth:190,borderWidth:StyleSheet.hairlineWidth,borderRadius:999,paddingHorizontal:13,paddingVertical:9,flexDirection:'row',alignItems:'center',gap:8},
+  atlasExploreName: {fontSize:13,fontWeight:'800',flexShrink:1},
+  atlasExploreCount: {fontSize:11,fontWeight:'800'},
   atlasGroup: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 10},
   atlasRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36},
   atlasText: {fontWeight: '700'},
@@ -3317,17 +3420,18 @@ const styles = StyleSheet.create({
   celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
   celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
   celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
-  profileHero: {borderWidth:1,borderRadius:18,padding:16,flexDirection:'row',alignItems:'center',gap:14},
-  profileMonogram: {width:58,height:58,borderRadius:29,alignItems:'center',justifyContent:'center'},
+  insightsScreen: {paddingBottom:120},
+  profileHero: {borderWidth:0,borderRadius:0,padding:0,flexDirection:'row',alignItems:'center',gap:14},
+  profileMonogram: {width:50,height:50,borderRadius:25,alignItems:'center',justifyContent:'center'},
   profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'800'},
-  profileStatsGrid: {flexDirection:'row',flexWrap:'wrap',gap:10},
-  profileStatCard: {width:'31%',minWidth:100,borderWidth:1,borderRadius:14,padding:12,gap:3},
+  profileStatsGrid: {flexDirection:'row',flexWrap:'wrap',gap:8},
+  profileStatCard: {width:'31%',minWidth:96,borderWidth:0,borderRadius:12,padding:12,gap:3},
   profileStatValue: {fontFamily:'serif',fontSize:26,fontWeight:'700'},
   profileStatLabel: {fontSize:12,fontWeight:'700'},
-  profileBreakdown: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  profileBreakdown: {borderWidth:0,borderRadius:12,padding:14,gap:10},
   profileBreakdownRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:12},
   profileDivider: {height:StyleSheet.hairlineWidth},
-  achievementCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  achievementCard: {borderWidth:StyleSheet.hairlineWidth,borderRadius:12,padding:14,gap:10},
   achievementHeader: {flexDirection:'row',alignItems:'flex-start',gap:12},
   achievementTitle: {fontSize:15,fontWeight:'900'},
   achievementState: {fontSize:12,fontWeight:'900'},
