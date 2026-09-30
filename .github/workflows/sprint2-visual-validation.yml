@@ -123,3 +123,5 @@ PY
           path: visual-screenshots/*.png
           if-no-files-found: error
           retention-days: 7
+
+# Trigger visual validation
