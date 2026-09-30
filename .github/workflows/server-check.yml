@@ -66,9 +66,9 @@ jobs:
             cmp "web/$file" "archivist/app/web/$file"
             cmp "web/$file" "home-assistant/archivist/app/web/$file"
           done
-          cmp archivist/config.yaml home-assistant/archivist/config.yaml
-          cmp archivist/run.sh home-assistant/archivist/run.sh
-          cmp archivist/Dockerfile home-assistant/archivist/Dockerfile
+          for file in config.yaml README.md DOCS.md CHANGELOG.md run.sh Dockerfile; do
+            cmp "archivist/$file" "home-assistant/archivist/$file"
+          done
 
       - name: Home Assistant add-on smoke test
         run: |

@@ -1,41 +1,68 @@
-# Archivist Home Assistant add-on
+<p align="center">
+  <img src="logo.png" alt="Archivist" width="190">
+</p>
 
-Internal development packaging for HAOS on Raspberry Pi 4 and amd64 test systems.
+# Archivist for Home Assistant
 
-This is not a release add-on. It exposes the current Archivist internal server through Home Assistant ingress and port `5056`. The app still uses Archivist's own unlock/session flow and prints a temporary owner access key to the add-on log on startup.
+**Version 0.1.21**
 
-## First install check
+Archivist turns Home Assistant into a private library server for books, audiobooks, comics and PDFs. It provides a polished web library, household profiles, safe organisation tools and an optional server connection for the Archivist Android app.
 
-1. Add `https://github.com/russellstokes-ai/Archivist` to the Home Assistant store repositories, then install Archivist in a test environment.
-2. Start the add-on.
-3. Open the add-on log and copy the `Local access key`.
-4. Open the web UI through ingress or `http://homeassistant.local:5056`.
-5. Unlock with the key.
-6. Add a source such as `/media/books`, `/media/audiobooks`, `/share/books` or another mapped folder.
-7. Scan the source and confirm titles appear in Shelf.
-8. Restart the add-on and confirm the database, source list and catalogue survive.
+## Highlights
 
-The add-on exposes `/healthz` so Supervisor watchdog checks can confirm that the server and database are responsive.
+- Home Assistant ingress support.
+- Multiple library folders and spaces.
+- Books, audiobooks, comics and PDFs in one catalogue.
+- Safe scan and organisation workflows.
+- Preview-first file sorting with collision protection and recovery.
+- Reading and listening progress.
+- Ratings, favourites, completion history and statistics.
+- Atlas library relationships.
+- Administrator and household user profiles.
+- Optional direct LAN and HTTPS access for the mobile app.
+- Persistent data stored under `/data`.
+- Health endpoint for Home Assistant Supervisor monitoring.
 
-## Paths
+## Install
 
-- Database defaults to `/data/archivist.db`.
-- Home Assistant `/media`, `/share` and `/backup` are mapped read/write so source folders can be added from those mount points.
-- Original media files are not modified by the scanner.
+Add this repository to the Home Assistant app store:
 
-## Current limitations
+`https://github.com/russellstokes-ai/Archivist`
 
-- Brand icon and logo are included; final application visual polish is unfinished.
-- No migration from the older organiser add-ons.
-- No remote-access hardening beyond the current internal server.
-- Ingress has not been validated inside a real HAOS supervisor in this environment.
+Then install **Archivist**, start it and select **Open Web UI**.
 
-## Runtime checkpoint 0.1.2-dev
+## First start
 
-Ingress-aware paths and scoped sessions now have automated tests. Direct LAN
-access continues to require Archivist authentication. Only Supervisor's ingress
-peer can supply ingress routing headers; these never bypass profile permissions.
-The container base supports both declared architectures; actual builds/installations
-still need verification. Keep data_path under /data and the internal port at 5056;
-change the published host port in Home Assistant when needed. Setting allow_lan
-to false requires loopback listen and disables ingress connectivity.
+Home Assistant ingress opens Archivist with administrator access using the authenticated Home Assistant session.
+
+1. Open **Settings → Server** and create your owner access key for mobile/direct access.
+2. Open **Settings → Library**.
+3. Add one or more folders from `/media`, `/share` or `/backup`.
+4. Scan the folders.
+5. Return to **Shelf** to browse your library.
+
+Your source media is not altered by scanning. File moves happen only when you explicitly preview and apply an organisation action.
+
+## Supported platforms
+
+- aarch64
+- amd64
+
+The package is suitable for HAOS systems including Raspberry Pi 4 and standard x86-64 Home Assistant hosts.
+
+## Network access
+
+Home Assistant ingress is the simplest way to use the server UI.
+
+Archivist can also expose:
+
+- `5056/tcp` — local HTTP interface/API.
+- `5443/tcp` — optional HTTPS interface/API.
+
+For remote mobile access, use HTTPS or a private network such as Tailscale. Plain HTTP should remain on a trusted local network.
+
+## Documentation
+
+See [DOCS.md](DOCS.md) for configuration, storage, access and troubleshooting information.
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
