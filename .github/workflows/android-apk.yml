@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'mobile/**'
+      - '.github/scripts/android-emulator-smoke.sh'
       - '.github/workflows/android-apk.yml'
 
 concurrency:

@@ -1968,6 +1968,20 @@ function Client() {
     </View>;
   }
 
+  function WorkQuickAction({label,accessibilityLabel,onPress,disabled}:{
+    label:string;accessibilityLabel?:string;onPress:()=>void;disabled?:boolean;
+  }) {
+    return <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      accessibilityState={{disabled:!!disabled}}
+      disabled={disabled}
+      onPress={onPress}
+      style={({pressed})=>[styles.workQuickAction,{borderColor:p.line},(pressed||disabled)&&{opacity:disabled?.42:.62}]}>
+      <Text numberOfLines={1} style={[styles.workQuickActionText,{color:p.sage}]}>{label}</Text>
+    </Pressable>;
+  }
+
   function LocalWorkCard({work}: {work: LocalWork}) {
     const downloaded=Object.values(offlineWorks).find(item=>'offline:'+item.key===work.key);
     const personal=localPreferences[work.key] || {rating:0,favourite:false};
@@ -1984,8 +1998,10 @@ function Client() {
         <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
           onRating={rating=>void saveLocalPreference(work,{...personal,rating:personal.rating===rating?0:rating})}
           onFavourite={()=>void saveLocalPreference(work,{...personal,favourite:!personal.favourite})} />
-        {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
-        {downloaded ? <Button label="Remove download" tone="quiet" disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
+        {(work.format==='Audio'||downloaded) ? <View style={styles.workQuickRow}>
+          {work.format==='Audio' ? <WorkQuickAction label="＋ Queue" accessibilityLabel={'Add '+work.title+' to queue'} onPress={()=>void addLocalWorkQueue(work)} /> : null}
+          {downloaded ? <WorkQuickAction label="✓ Offline" accessibilityLabel={'Remove offline download of '+work.title} disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
+        </View> : null}
       </View>
     );
   }
@@ -2007,10 +2023,12 @@ function Client() {
         <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
           onRating={rating=>void saveServerPreference(work,{...personal,rating:personal.rating===rating?0:rating})}
           onFavourite={()=>void saveServerPreference(work,{...personal,favourite:!personal.favourite})} />
-        {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
-        {downloaded
-          ? <Button label={'Remove download · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
-          : <Button label={downloading ? 'Downloading '+offlineProgress : checkpoint ? 'Resume download' : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
+        <View style={styles.workQuickRow}>
+          {work.format==='Audio' ? <WorkQuickAction label="＋ Queue" accessibilityLabel={'Add '+work.title+' to queue'} disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
+          {downloaded
+            ? <WorkQuickAction label={'✓ Offline · '+formatBytes(downloaded.bytes)} accessibilityLabel={'Remove download · '+formatBytes(downloaded.bytes)} disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
+            : <WorkQuickAction label={downloading ? '↓ '+offlineProgress : checkpoint ? '↻ Resume' : '↓ Offline'} accessibilityLabel={checkpoint?'Resume download of '+work.title:'Download '+work.title+' for offline use'} disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
+        </View>
       </View>
     );
   }
@@ -3309,6 +3327,9 @@ const styles = StyleSheet.create({
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
   book: {flex: 1, maxWidth: '50%', paddingHorizontal: 7, paddingVertical: 10, gap: 7},
+  workQuickRow: {flexDirection:'row',flexWrap:'wrap',gap:6,marginTop:1},
+  workQuickAction: {borderWidth:StyleSheet.hairlineWidth,borderRadius:999,paddingHorizontal:9,minHeight:30,justifyContent:'center',maxWidth:'100%'},
+  workQuickActionText: {fontSize:11,fontWeight:'800'},
   cover: {aspectRatio: 2 / 3, borderRadius: 10, justifyContent: 'space-between', padding: 12, overflow: 'hidden'},
   coverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
   coverSquare: {aspectRatio: 1},

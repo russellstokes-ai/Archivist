@@ -27,8 +27,22 @@ for (const route of [
 
 console.log('PASS: no placeholder UI markers and every visible mobile button/tab is wired');
 
-assert.ok(source.includes("{id: 'profile', label: 'Profile'}"), 'Profile tab is not wired');
-assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
+for (const tab of [
+  "{id: 'shelf', label: 'Shelf'",
+  "{id: 'library', label: 'Library'",
+  "{id: 'atlas', label: 'Atlas'",
+  "{id: 'insights', label: 'Insights'",
+]) assert.ok(source.includes(tab), 'Primary tab is not wired: '+tab);
+for (const bannedTab of [
+  "{id: 'player', label: 'Player'",
+  "{id: 'reader', label: 'Reader'",
+  "{id: 'profile', label: 'Profile'",
+  "{id: 'settings', label: 'Settings'",
+]) assert.equal(source.includes(bannedTab),false,'Contextual screen leaked into primary navigation: '+bannedTab);
+assert.ok(source.includes("function Profile()"), 'Insights screen is not implemented');
+assert.ok(source.includes('function AtlasUniverse()'), 'Atlas connected-universe graph is not implemented');
+assert.ok(source.includes('function AtlasChipSection('), 'Atlas exploration chips are not implemented');
+assert.ok(source.includes('accessibilityLabel="Open settings"'), 'Settings must remain reachable from the app header');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 
@@ -86,6 +100,6 @@ assert.ok(source.includes("accessibilityLabel={'Open player for '+playing.title}
 assert.ok(source.includes("accessibilityLabel={(session ? playback?.playing : audio.playing) ? 'Pause '+playing.title"), 'Mini player play/pause must be a separate labelled control');
 assert.equal(source.includes('<Pressable accessibilityRole="button" onPress={() => setActiveTab(\'player\')} style={[styles.miniPlayer'),false,'Mini player must not nest a button inside another button');
 assert.ok(source.includes('accessibilityLabel="Dismiss error"'), 'Global errors need a dismiss action');
-assert.ok(source.includes("label={'Remove download · '+formatBytes(downloaded.bytes)}"), 'Downloaded server work action must clearly say it removes the download');
+assert.ok(source.includes("accessibilityLabel={'Remove download · '+formatBytes(downloaded.bytes)}"), 'Downloaded server work action must clearly say it removes the download');
 assert.ok(source.includes('accessibilityState={{selected:theme===mode}}'), 'Theme choices must expose selected state');
 assert.ok(source.includes('accessibilityState={{selected:sortTemplate===id}}'), 'Sort layout choices must expose selected state');
