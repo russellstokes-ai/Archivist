@@ -139,7 +139,7 @@ type DuplicateVerification = {
 };
 type LocalWorkProgress = {uri: string; seconds: number; complete?: boolean};
 type WorkPicker = {work: ServerWork; tracks: WorkTrack[]};
-type Tab = 'shelf' | 'player' | 'reader' | 'atlas' | 'profile' | 'settings';
+type Tab = 'shelf' | 'library' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'settings';
 type ThemeMode = 'system' | 'light' | 'dark';
 type Palette = {
   ink: string;
@@ -931,7 +931,7 @@ function Client() {
       setProfileLoading(false);
       return;
     }
-    if (activeTab !== 'profile') return;
+    if (activeTab !== 'profile' && activeTab !== 'insights') return;
     let cancelled=false;
     setProfileLoading(true);
     request(session,'/api/profile-stats')
@@ -2072,12 +2072,12 @@ function Client() {
   }
 
   function ContinueCard({
-    title,author,format,coverUri,serverPath,onPress,
+    title,author,format,coverUri,serverPath,onPress,action='Open',
   }: {
-    title:string;author:string;format:string;coverUri?:string;serverPath?:string;onPress:()=>void;
+    title:string;author:string;format:string;coverUri?:string;serverPath?:string;onPress:()=>void;action?:string;
   }) {
     return (
-      <Pressable accessibilityRole="button" accessibilityLabel={'Continue '+title+', '+(author||format)} onPress={onPress} style={styles.continueCard}>
+      <Pressable accessibilityRole="button" accessibilityLabel={action+' '+title+', '+(author||format)} onPress={onPress} style={({pressed})=>[styles.continueCard,pressed&&styles.cardPressed]}>
         <Artwork title={title} format={format} coverShape={format==='Audio'?'square':'portrait'} coverUri={coverUri} serverPath={serverPath} />
         <Text numberOfLines={2} style={[styles.continueTitle,{color:p.ink}]}>{title}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{author || format}</Text>
@@ -2093,6 +2093,7 @@ function Client() {
     const seriesCounts = new Map<string,number>();
     for (const work of shelfWorks) if (work.series) seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
     const seriesOptions = [...seriesCounts.entries()].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,10);
+    const libraryMode = activeTab === 'library';
     return (
       <View style={styles.shelfShell}>
         {wideLibraries ? <View style={[styles.libraryRail,{borderRightColor:p.line,backgroundColor:p.card}]}>
@@ -2101,9 +2102,15 @@ function Client() {
           {!session ? <Pressable accessibilityRole="button" onPress={() => void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'800'}}>+ Add folder</Text></Pressable> : null}
         </View> : null}
         <View style={[styles.content, {flex: 1}]}>
-        <Text style={[styles.title, {color: p.ink}]}>Shelf</Text>
-        <OnboardingGuide />
-        {!session && onboardingDone ? <View style={[styles.librarySummary,{backgroundColor:p.card,borderColor:p.line}]}>
+        <View style={styles.pageHeading}>
+          <View>
+            <Text style={[styles.pageEyebrow,{color:p.gold}]}>{libraryMode ? 'COLLECTION' : 'YOUR LIBRARY'}</Text>
+            <Text style={[styles.title, {color: p.ink}]}>{libraryMode ? 'Library' : 'Shelf'}</Text>
+          </View>
+          {libraryMode ? <Text style={[styles.headerMeta,{color:p.muted}]}>{session ? (serverSummary?.total ?? serverWorks.length) : localWorks.length} works</Text> : null}
+        </View>
+        {!libraryMode ? <OnboardingGuide /> : null}
+        {!libraryMode && !session && onboardingDone ? <View style={[styles.librarySummary,{backgroundColor:p.card,borderColor:p.line}]}>
           <View style={{flex:1}}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your libraries</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder${localFolders.length === 1 ? '' : 's'} · ${books.length} items${reviewCount ? ` · ${reviewCount} need review` : ''}</Text>
@@ -2127,7 +2134,7 @@ function Client() {
           </View>
         </View> : null}
         {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
-        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && continuing.length ? <View style={styles.shelfSection}>
+        {!libraryMode && !reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && continuing.length ? <View style={styles.shelfSection}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Continue</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
             {session ? continueWorks.map(work => <ContinueCard
@@ -2147,7 +2154,7 @@ function Client() {
             />)}
           </ScrollView>
         </View> : null}
-        {!reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && seriesOptions.length ? <View style={styles.shelfSection}>
+        {!libraryMode && !reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && seriesOptions.length ? <View style={styles.shelfSection}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
             {seriesOptions.map(([name,total]) => <Pressable
@@ -2160,6 +2167,7 @@ function Client() {
             </Pressable>)}
           </ScrollView>
         </View> : null}
+        {libraryMode ? <>
         <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false)}} placeholder="Search title, author, series or genre" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
         {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
         {reviewOnly ? (
@@ -2211,6 +2219,51 @@ function Client() {
             renderItem={({item}) => <LocalWorkCard work={item} />}
           />
         )}
+
+        </> : <>
+          {shelfWorks.length ? <View style={styles.shelfSection}>
+            <View style={styles.sectionHeadingRow}>
+              <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your library</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Open full library" onPress={()=>setActiveTab('library')} hitSlop={8}>
+                <Text style={[styles.sectionLink,{color:p.sage}]}>See all</Text>
+              </Pressable>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
+              {session ? visibleServerWorks.slice(0,10).map(work => <ContinueCard
+                key={'shelf-server-'+work.id}
+                action="Open"
+                title={work.title}
+                author={work.author}
+                format={work.format}
+                serverPath={'/api/works/'+work.id+'/cover'}
+                onPress={()=>void openServerWork(work)}
+              />) : visibleLocalWorks.slice(0,10).map(work => <ContinueCard
+                key={'shelf-local-'+work.key}
+                action="Open"
+                title={work.title}
+                author={work.author}
+                format={work.format}
+                coverUri={work.coverUri}
+                onPress={()=>openLocalWork(work)}
+              />)}
+            </ScrollView>
+          </View> : !shelfLoading && onboardingDone ? <View style={[styles.shelfEmpty,{borderColor:p.line}]}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>A quiet shelf, for now</Text>
+            <Text style={[styles.empty,{color:p.muted}]}>Add a library folder and Archivist will build your collection here.</Text>
+            {!session ? <Button label="Add your first folder" onPress={()=>void addLocalFolder()} /> : <Button label="Open Library settings" tone="quiet" onPress={()=>setActiveTab('settings')} />}
+          </View> : null}
+          {shelfWorks.length ? <Pressable accessibilityRole="button" accessibilityLabel="Browse full library" onPress={()=>setActiveTab('library')} style={({pressed})=>[styles.browseLibrary,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
+            <View style={{flex:1}}>
+              <Text style={[styles.browseLibraryTitle,{color:p.ink}]}>Browse the full library</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Search, filter and manage every title</Text>
+            </View>
+            <Text style={[styles.browseArrow,{color:p.sage}]}>›</Text>
+          </Pressable> : null}
+          <View style={styles.shelfSignature}>
+            <View style={[styles.shelfRule,{backgroundColor:p.gold}]} />
+            <Text style={[styles.shelfSignatureText,{color:p.muted}]}>Your library. Yours.</Text>
+          </View>
+        </>}
         <WorkPickerPanel />
         {editing ? <Modal transparent animationType="fade" visible onRequestClose={()=>!busy&&setEditing(null)}>
           <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
@@ -3011,11 +3064,11 @@ function Client() {
   }
 
   function CurrentTab() {
-    if (activeTab === 'shelf') return Shelf();
+    if (activeTab === 'shelf' || activeTab === 'library') return Shelf();
     if (activeTab === 'player') return Player();
     if (activeTab === 'reader') return Reader();
     if (activeTab === 'atlas') return Atlas();
-    if (activeTab === 'profile') return Profile();
+    if (activeTab === 'insights' || activeTab === 'profile') return Profile();
     return Settings();
   }
 
@@ -3027,20 +3080,26 @@ function Client() {
     );
   }
 
-  const tabs: Array<{id: Tab; label: string}> = [
-    {id: 'shelf', label: 'Shelf'},
-    {id: 'player', label: 'Player'},
-    {id: 'reader', label: 'Reader'},
-    {id: 'atlas', label: 'Atlas'},
-    {id: 'profile', label: 'Profile'},
-    {id: 'settings', label: 'Settings'},
+  const tabs: Array<{id: Tab; label: string; icon: string}> = [
+    {id: 'shelf', label: 'Shelf', icon: '⌂'},
+    {id: 'library', label: 'Library', icon: '▦'},
+    {id: 'atlas', label: 'Atlas', icon: '✦'},
+    {id: 'insights', label: 'Insights', icon: '◌'},
   ];
 
   return (
     <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
-      <View style={[styles.appHeader, {borderBottomColor: p.line}]}>
-        <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
-        <Text style={[styles.headerMeta, {color: p.muted}]}>{session ? `${serverSummary?.total ?? serverWorks.length} works` : `${localWorks.length} works`}</Text>
+      <View style={[styles.appHeader, {borderBottomColor: p.line,backgroundColor:p.paper}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Open Shelf" onPress={()=>setActiveTab('shelf')} style={styles.brandLockup}>
+          <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
+          <Text style={[styles.brandTagline,{color:p.muted}]}>YOUR LIBRARY. YOURS.</Text>
+        </Pressable>
+        <View style={styles.headerActions}>
+          <View accessibilityLabel={session?'Server connected':'Local library'} style={[styles.connectionDot,{backgroundColor:session?p.sage:p.gold}]} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={()=>setActiveTab('settings')} style={({pressed})=>[styles.headerButton,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
+            <Text style={[styles.headerButtonText,{color:p.ink}]}>⚙</Text>
+          </Pressable>
+        </View>
       </View>
       {error ? <View style={[styles.errorBanner,{borderColor:p.gold,backgroundColor:p.card}]}>
         <Text accessibilityRole="alert" style={[styles.error, {color: p.gold,flex:1}]}>{error}</Text>
@@ -3082,8 +3141,11 @@ function Client() {
       ) : null}
       <View style={[styles.tabBar, {backgroundColor: p.card, borderTopColor: p.line}]}>
         {tabs.map(tab => (
-          <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected: activeTab === tab.id}} onPress={() => setActiveTab(tab.id)} style={styles.tab}>
-            <Text style={[styles.tabText, {color: activeTab === tab.id ? p.sage : p.muted}]}>{tab.label}</Text>
+          <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected: activeTab === tab.id}} onPress={() => setActiveTab(tab.id)} style={({pressed})=>[styles.tab,pressed&&{opacity:.68}]}>
+            <View style={[styles.tabIconWrap,activeTab===tab.id&&{backgroundColor:p.raised}]}>
+              <Text style={[styles.tabIcon,{color:activeTab===tab.id?p.sage:p.muted}]}>{tab.icon}</Text>
+            </View>
+            <Text style={[styles.tabText, {color: activeTab === tab.id ? p.ink : p.muted}]}>{tab.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -3102,9 +3164,27 @@ const styles = StyleSheet.create({
   logoSmall: {fontFamily: 'serif', fontSize: 26},
   tagline: {fontSize: 12, letterSpacing: 4, textAlign: 'center', fontWeight: '700'},
   loginCopy: {fontSize: 16, lineHeight: 23, textAlign: 'center', marginBottom: 8},
-  appHeader: {height: 58, paddingHorizontal: 18, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+  appHeader: {minHeight: 68, paddingHorizontal: 20, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+  brandLockup: {gap:1},
+  brandTagline: {fontSize:8,fontWeight:'800',letterSpacing:2.2},
+  headerActions: {flexDirection:'row',alignItems:'center',gap:10},
+  connectionDot: {width:7,height:7,borderRadius:4},
+  headerButton: {width:40,height:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center'},
+  headerButtonText: {fontSize:17,fontWeight:'600'},
+  pageHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:16},
+  pageEyebrow: {fontSize:10,fontWeight:'900',letterSpacing:2.4,marginBottom:3},
+  sectionHeadingRow: {flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  sectionLink: {fontSize:13,fontWeight:'800'},
+  cardPressed: {opacity:.72,transform:[{scale:.985}]},
+  shelfEmpty: {borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:18,gap:10},
+  browseLibrary: {borderWidth:StyleSheet.hairlineWidth,borderRadius:14,paddingHorizontal:16,paddingVertical:14,flexDirection:'row',alignItems:'center',gap:14},
+  browseLibraryTitle: {fontSize:15,fontWeight:'800'},
+  browseArrow: {fontSize:30,fontWeight:'300',lineHeight:30},
+  shelfSignature: {alignItems:'center',gap:9,paddingVertical:10},
+  shelfRule: {width:26,height:1},
+  shelfSignatureText: {fontFamily:'serif',fontSize:13,fontStyle:'italic'},
   headerMeta: {fontSize: 13},
-  content: {padding: 16, gap: 14},
+  content: {padding: 20, gap: 18},
   setupPanel: {borderWidth: 1, borderRadius: 8, padding: 14, gap: 12},
   shelfShell: {flex: 1, flexDirection: 'row'},
   libraryRail: {width: 190, borderRightWidth: StyleSheet.hairlineWidth, padding: 14, gap: 10},
@@ -3118,8 +3198,8 @@ const styles = StyleSheet.create({
   librarySummary: {borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center'},
   reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
   shelfSection: {gap:8},
-  continueRow: {gap:12,paddingRight:6},
-  continueCard: {width:132,gap:6},
+  continueRow: {gap:14,paddingRight:20},
+  continueCard: {width:142,gap:7},
   continueTitle: {fontSize:14,fontWeight:'800'},
   seriesRow: {gap:8,paddingRight:6},
   seriesChip: {minWidth:140,maxWidth:220,borderWidth:1,borderRadius:12,paddingHorizontal:12,paddingVertical:10,gap:2},
@@ -3131,8 +3211,8 @@ const styles = StyleSheet.create({
   onboardingStepTitle: {fontSize: 15, fontWeight: '800', marginBottom: 2},
   sourceRow: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 4},
   tabBody: {flex: 1},
-  title: {fontFamily: 'serif', fontSize: 34, marginBottom: 2},
-  sectionTitle: {fontSize: 17, fontWeight: '700', marginTop: 10},
+  title: {fontFamily: 'serif', fontSize: 38, lineHeight:44, letterSpacing:-0.6, marginBottom: 2},
+  sectionTitle: {fontFamily:'serif',fontSize: 20, fontWeight: '700', marginTop: 10},
   input: {padding: 14, borderWidth: 1, borderRadius: 8, fontSize: 16},
   button: {backgroundColor: '#397076', borderRadius: 8, paddingHorizontal: 14, minHeight: 46, justifyContent: 'center', alignItems: 'center'},
   buttonGold: {backgroundColor: '#c6a374'},
@@ -3144,8 +3224,8 @@ const styles = StyleSheet.create({
   errorDismiss: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
-  book: {flex: 1, maxWidth: '50%', padding: 8, gap: 7},
-  cover: {aspectRatio: 2 / 3, borderRadius: 8, justifyContent: 'space-between', padding: 12, overflow: 'hidden'},
+  book: {flex: 1, maxWidth: '50%', paddingHorizontal: 7, paddingVertical: 10, gap: 7},
+  cover: {aspectRatio: 2 / 3, borderRadius: 10, justifyContent: 'space-between', padding: 12, overflow: 'hidden'},
   coverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
   coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
@@ -3227,9 +3307,11 @@ const styles = StyleSheet.create({
   miniMeta: {fontSize: 12},
   miniButton: {minWidth:64,minHeight:44,paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#f8f7f2',alignItems:'center',justifyContent:'center'},
   miniButtonText: {color: '#f8f7f2', fontWeight: '700'},
-  tabBar: {height: 62, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row'},
-  tab: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  tabText: {fontSize: 12, fontWeight: '800'},
+  tabBar: {minHeight: 70, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row',paddingHorizontal:8,paddingTop:5},
+  tab: {flex: 1, alignItems: 'center', justifyContent: 'center',gap:1},
+  tabIconWrap: {width:34,height:26,borderRadius:13,alignItems:'center',justifyContent:'center'},
+  tabIcon: {fontSize:16,fontWeight:'700'},
+  tabText: {fontSize: 10, fontWeight: '800',letterSpacing:.2},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
   celebrationParticle: {position:'absolute', fontSize:28, color:'#c6a374', fontWeight:'900'},
   celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
