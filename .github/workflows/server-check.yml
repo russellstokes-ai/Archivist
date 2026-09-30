@@ -9,8 +9,12 @@ on:
       - 'go.sum'
       - 'web/**'
       - 'scripts/ui-contract.cjs'
+      - 'scripts/package-ha-addon.sh'
+      - 'scripts/package-ha-repository.sh'
+      - 'scripts/package-ha.test.cjs'
+      - 'repository.yaml'
+      - 'README.md'
       - 'archivist/**'
-      - 'home-assistant/archivist/**'
       - '.github/workflows/server-check.yml'
 
 concurrency:
@@ -38,11 +42,10 @@ jobs:
       - name: Packaged server tests
         run: |
           (cd archivist/app && go mod tidy && go test ./...)
-          (cd home-assistant/archivist/app && go mod tidy && go test ./...)
 
       - name: Web JavaScript syntax
         run: |
-          for dir in web archivist/app/web home-assistant/archivist/app/web; do
+          for dir in web archivist/app/web; do
             for file in "$dir"/*.js; do
               node --check "$file"
             done
@@ -51,31 +54,27 @@ jobs:
       - name: UI wiring contract
         run: node scripts/ui-contract.cjs
 
+      - name: Home Assistant package contract
+        run: node scripts/package-ha.test.cjs
+
       - name: Add-on launcher syntax
-        run: |
-          sh -n archivist/run.sh
-          sh -n home-assistant/archivist/run.sh
+        run: sh -n archivist/run.sh
 
       - name: Verify packaged source parity
         run: |
           for file in *.go go.mod go.sum; do
             cmp "$file" "archivist/app/$file"
-            cmp "$file" "home-assistant/archivist/app/$file"
           done
           for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js reader.html reader.js reader.css speech-focus.js; do
             cmp "web/$file" "archivist/app/web/$file"
-            cmp "web/$file" "home-assistant/archivist/app/web/$file"
-          done
-          for file in config.yaml README.md DOCS.md CHANGELOG.md run.sh Dockerfile; do
-            cmp "archivist/$file" "home-assistant/archivist/$file"
           done
 
       - name: Home Assistant add-on smoke test
         run: |
           set -euo pipefail
-          VERSION=$(awk '/^version:/ {print $2; exit}' home-assistant/archivist/config.yaml)
+          VERSION=$(awk '/^version:/ {print $2; exit}' archivist/config.yaml)
           test -n "$VERSION"
-          docker build --build-arg BUILD_VERSION="$VERSION" --build-arg BUILD_ARCH=amd64 -t archivist-ha-test home-assistant/archivist
+          docker build --build-arg BUILD_VERSION="$VERSION" --build-arg BUILD_ARCH=amd64 -t archivist-ha-test archivist
 
           rm -rf .ci-data .ci-ssl
           mkdir -p .ci-data .ci-ssl
