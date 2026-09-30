@@ -11,7 +11,7 @@ Archivist is a private, local-first library for books, audiobooks, comics and PD
 | Component | Current version |
 | --- | --- |
 | Home Assistant app | **0.1.21** |
-| Android app | **0.0.9** |
+| Android app | **0.1.0** |
 
 ## What Archivist does
 
@@ -65,6 +65,8 @@ Archivist keeps its persistent database under `/data`.
 For full configuration and network guidance, see [archivist/DOCS.md](archivist/DOCS.md).
 
 ## Android
+
+Archivist 0.1.0 introduces the redesigned mobile shell: four fixed destinations — **Shelf, Library, Atlas and Insights** — with Player, Reader and Settings treated as contextual experiences rather than permanent navigation tabs. Shelf is the calm, curated home; Library contains the complete searchable collection; Atlas leads with the connected visual graph; and Insights brings reading history, achievements and statistics together.
 
 The Android app is local-first. You can add folders, scan and organise your library, read or listen without a server, then add an Archivist server later from Settings.
 
