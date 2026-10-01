@@ -30,14 +30,18 @@ var web embed.FS
 
 type app struct {
 	db     *sql.DB
+	dbPath string
 	token  string
 	scanMu sync.Mutex
 }
 type source struct {
-	ID         int64  `json:"id"`
-	Space      string `json:"space"`
-	Path       string `json:"path"`
-	Status     string `json:"status"`
+	ID           int64  `json:"id"`
+	Space        string `json:"space"`
+	Path         string `json:"path"`
+	Status       string `json:"status"`
+	Watched      bool   `json:"watched"`
+	WatchMinutes int    `json:"watchMinutes"`
+	LastWatch    int64  `json:"lastWatch,omitempty"`
 	Files      int64  `json:"files"`
 	Works      int64  `json:"works"`
 	Audiobooks int64  `json:"audiobooks"`
@@ -90,6 +94,9 @@ func openDB(path string) (*sql.DB, error) {
 		return nil, e
 	}
 	for _, stmt := range []string{
+		"ALTER TABLE sources ADD COLUMN watched INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE sources ADD COLUMN watch_minutes INTEGER NOT NULL DEFAULT 60",
+		"ALTER TABLE sources ADD COLUMN last_watch INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE assets ADD COLUMN author TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE assets ADD COLUMN series TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE assets ADD COLUMN genre TEXT NOT NULL DEFAULT ''",
@@ -426,6 +433,8 @@ func (a *app) routes() http.Handler {
 	a.householdRoutes(mux)
 	a.profileRoutes(mux)
 	a.activityRoutes(mux)
+	a.opdsRoutes(mux)
+	a.backupRoutes(mux)
 	a.atlasRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
@@ -438,7 +447,7 @@ func (a *app) routes() http.Handler {
 	static, _ := fs.Sub(web, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
 	mux.HandleFunc("GET /api/sources", func(w http.ResponseWriter, r *http.Request) {
-		rows, e := a.db.Query(`SELECT s.id,s.space,s.path,s.status,
+		rows, e := a.db.Query(`SELECT s.id,s.space,s.path,s.status,s.watched,s.watch_minutes,s.last_watch,
 			count(DISTINCT a.id),count(DISTINCT e.work_id),
 			count(DISTINCT CASE WHEN a.format='Audio' THEN e.work_id END),
 			count(DISTINCT CASE WHEN a.format='Comic' THEN e.work_id END),
@@ -458,7 +467,7 @@ func (a *app) routes() http.Handler {
 		out := []source{}
 		for rows.Next() {
 			var s source
-			if e = rows.Scan(&s.ID, &s.Space, &s.Path, &s.Status, &s.Files, &s.Works, &s.Audiobooks, &s.Comics, &s.Ebooks, &s.PDFs); e != nil {
+			if e = rows.Scan(&s.ID, &s.Space, &s.Path, &s.Status, &s.Watched, &s.WatchMinutes, &s.LastWatch, &s.Files, &s.Works, &s.Audiobooks, &s.Comics, &s.Ebooks, &s.PDFs); e != nil {
 				fail(w, 500, e)
 				return
 			}
@@ -471,17 +480,24 @@ func (a *app) routes() http.Handler {
 		reply(w, out)
 	})
 	mux.HandleFunc("GET /api/server-info", func(w http.ResponseWriter, r *http.Request) {
-		var sources, jobs, sessions int
+		var sources, jobs, sessions, watched int
 		a.db.QueryRow("SELECT count(*) FROM sources").Scan(&sources)
+		a.db.QueryRow("SELECT count(*) FROM sources WHERE watched=1").Scan(&watched)
 		a.db.QueryRow("SELECT count(*) FROM jobs WHERE state IN ('queued','running')").Scan(&jobs)
 		a.db.QueryRow("SELECT count(*) FROM sessions WHERE expires>?", time.Now().Unix()).Scan(&sessions)
+		var databaseBytes int64
+		if a.dbPath != "" {
+			if info, statErr := os.Stat(a.dbPath); statErr == nil { databaseBytes = info.Size() }
+		}
 		reply(w, map[string]any{
-			"address":    publicURL(r),
-			"configured": a.ownerConfigured(),
-			"sources":    sources,
-			"activeJobs": jobs,
-			"sessions":   sessions,
-			"roots":      browseRoots(),
+			"address":       publicURL(r),
+			"configured":    a.ownerConfigured(),
+			"sources":       sources,
+			"watchedSources": watched,
+			"activeJobs":    jobs,
+			"sessions":      sessions,
+			"databaseBytes": databaseBytes,
+			"mediaProbe":    false,
 		})
 	})
 	mux.HandleFunc("POST /api/owner-access", func(w http.ResponseWriter, r *http.Request) {
@@ -509,6 +525,23 @@ func (a *app) routes() http.Handler {
 			return
 		}
 		reply(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("PATCH /api/sources/{id}/watch", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Enabled bool `json:"enabled"`
+			Minutes int  `json:"minutes"`
+		}
+		if e := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&in); e != nil {
+			fail(w, 400, errors.New("invalid watch settings")); return
+		}
+		if in.Minutes == 0 { in.Minutes = 60 }
+		if in.Minutes < 15 || in.Minutes > 10080 {
+			fail(w, 400, errors.New("watch interval must be between 15 minutes and 7 days")); return
+		}
+		res,e:=a.db.Exec("UPDATE sources SET watched=?,watch_minutes=?,last_watch=CASE WHEN ? THEN 0 ELSE last_watch END WHERE id=?",in.Enabled,in.Minutes,in.Enabled,r.PathValue("id"))
+		if e!=nil{fail(w,500,e);return}
+		n,_:=res.RowsAffected();if n!=1{fail(w,404,errors.New("source not found"));return}
+		reply(w,map[string]any{"ok":true,"watched":in.Enabled,"watchMinutes":in.Minutes})
 	})
 	mux.HandleFunc("POST /api/sources/{id}/scan", func(w http.ResponseWriter, r *http.Request) {
 		var id int64
@@ -688,7 +721,11 @@ func (a *app) routes() http.Handler {
 				if bearer := r.Header.Get("Authorization"); strings.HasPrefix(bearer, "Bearer ") {
 					key = strings.TrimPrefix(bearer, "Bearer ")
 				}
-				profile, valid = a.sessionIdentity(key)
+				if _, password, basic := r.BasicAuth(); basic {
+					profile, valid = a.identify(password)
+				} else {
+					profile, valid = a.sessionIdentity(key)
+				}
 			}
 			if !valid {
 				fail(w, 401, errors.New("unlock this local session"))
@@ -783,7 +820,13 @@ func main() {
 	if e = os.MkdirAll(*data, 0700); e != nil {
 		log.Fatal(e)
 	}
-	db, e := openDB(filepath.Join(*data, "archivist.db"))
+	dbPath := filepath.Join(*data, "archivist.db")
+	if restored, restoreErr := applyPendingRestore(dbPath); restoreErr != nil {
+		log.Fatal(restoreErr)
+	} else if restored {
+		log.Printf("Archivist: applied staged database restore")
+	}
+	db, e := openDB(dbPath)
 	if e != nil {
 		log.Fatal(e)
 	}
@@ -792,7 +835,7 @@ func main() {
 	if _, e = rand.Read(raw); e != nil {
 		log.Fatal(e)
 	}
-	a := &app{db: db, token: hex.EncodeToString(raw)}
+	a := &app{db: db, dbPath: dbPath, token: hex.EncodeToString(raw)}
 	if e = a.initHousehold(); e != nil {
 		log.Fatal(e)
 	}
@@ -836,6 +879,7 @@ func main() {
 		log.Fatal(e)
 	}
 	go a.worker(context.Background())
+	go a.watcher(context.Background())
 	handler := a.routes()
 	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	if *tlsAddr != "" {

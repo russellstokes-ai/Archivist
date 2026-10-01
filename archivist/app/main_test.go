@@ -15,12 +15,14 @@ import (
 
 func fixture(t *testing.T) *app {
 	t.Helper()
-	db, e := openDB(filepath.Join(t.TempDir(), "test.db"))
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	db, e := openDB(dbPath)
 	if e != nil {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { db.Close() })
-	a := &app{db: db, token: "test-key"}
+	a := &app{db: db, dbPath: dbPath, token: "test-key"}
 	if e := a.initHousehold(); e != nil {
 		t.Fatal(e)
 	}

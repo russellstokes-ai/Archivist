@@ -155,7 +155,7 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 		return true
 	}
 	path := r.URL.Path
-	if path == "/api/me" || path == "/api/recommendations" || path == "/api/continue" || path == "/api/profile-stats" || path == "/api/activity" || path == "/api/atlas-relationships" || path == "/api/preferences" {
+	if path == "/api/me" || path == "/api/recommendations" || path == "/api/continue" || path == "/api/profile-stats" || path == "/api/activity" || path == "/api/opds" || path == "/api/atlas-relationships" || path == "/api/preferences" {
 		return r.Method == "GET"
 	}
 	if path == "/api/books" || path == "/api/works" || path == "/api/sources" || path == "/api/library-summary" {

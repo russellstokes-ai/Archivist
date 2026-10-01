@@ -107,3 +107,25 @@ func TestFailedBackgroundScanRetainsCatalogueAndReportsFailure(t *testing.T) {
 	}
 	t.Fatal("failed scan job did not settle")
 }
+
+
+func TestWatchedSourcesScheduleAtBoundedInterval(t *testing.T){
+	a:=fixture(t)
+	if e:=a.initJobs();e!=nil{t.Fatal(e)}
+	root:=t.TempDir()
+	if e:=os.WriteFile(filepath.Join(root,"Watch.pdf"),[]byte("pdf"),0600);e!=nil{t.Fatal(e)}
+	if e:=a.addSource("Watched",root);e!=nil{t.Fatal(e)}
+	if _,e:=a.db.Exec("UPDATE sources SET watched=1,watch_minutes=15,last_watch=0 WHERE id=1");e!=nil{t.Fatal(e)}
+	now:=time.Date(2026,10,1,12,0,0,0,time.UTC).Unix()
+	if e:=a.scheduleWatched(now);e!=nil{t.Fatal(e)}
+	var jobs int
+	if e:=a.db.QueryRow("SELECT count(*) FROM jobs").Scan(&jobs);e!=nil{t.Fatal(e)}
+	if jobs!=1{t.Fatalf("jobs=%d want 1",jobs)}
+	if _,e:=a.db.Exec("UPDATE jobs SET state='complete'");e!=nil{t.Fatal(e)}
+	if e:=a.scheduleWatched(now+14*60);e!=nil{t.Fatal(e)}
+	if e:=a.db.QueryRow("SELECT count(*) FROM jobs").Scan(&jobs);e!=nil{t.Fatal(e)}
+	if jobs!=1{t.Fatalf("watch scheduled too early jobs=%d",jobs)}
+	if e:=a.scheduleWatched(now+16*60);e!=nil{t.Fatal(e)}
+	if e:=a.db.QueryRow("SELECT count(*) FROM jobs").Scan(&jobs);e!=nil{t.Fatal(e)}
+	if jobs!=2{t.Fatalf("watch did not schedule after interval jobs=%d",jobs)}
+}
