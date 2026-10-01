@@ -2896,7 +2896,7 @@ function Client() {
   }
 
   function Library(){
-    const wide=width>=760;
+    const wide=width>=600;
     const columns=libraryView==='list'?1:(width>=1180?6:width>=940?5:width>=600?4:2);
     const filtersActive=[space,formatFilter,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
     const formatOptions=[...new Set(allUnifiedWorks.map(work=>work.format).filter(Boolean))].sort();
@@ -2976,7 +2976,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:24}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
+    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
   function LivingBook({book,chapterTitle,chapterNumber}:{book:Book;chapterTitle?:string;chapterNumber?:number}){
@@ -4180,17 +4180,18 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:28,paddingBottom:22,gap:8},
-  libraryRailTitle: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5,marginBottom:3},
+  libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:24,paddingBottom:20,gap:6},
+  libraryRailFold: {width:164,paddingHorizontal:12,paddingTop:20},
+  libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
-  libraryRailAdd: {minHeight:44,paddingHorizontal:12,justifyContent:'center'},
+  libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
   libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
   libraryChoiceVertical: {borderRadius: 10, minHeight: 44},
   libraryChipsScroll: {flexGrow:0,minHeight:46,maxHeight:50},
   libraryChips: {gap:8,paddingVertical:2,minHeight:46},
   libraryChipsRow: {flexDirection: 'row', gap: 20},
   librarySpaceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
-  librarySpaceTabVertical: {minHeight:44,paddingHorizontal:12},
+  librarySpaceTabVertical: {minHeight:42,paddingHorizontal:10},
   librarySpaceText: {fontSize:13},
   librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
   librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
@@ -4476,9 +4477,9 @@ const styles = StyleSheet.create({
   insightsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:28,maxWidth:1120,width:'100%',alignSelf:'center'},
   sourceSwitcherScroll: {flexGrow:0,minHeight:48,maxHeight:52},
   sourceSwitcher: {flexDirection:'row',gap:20,paddingRight:14,paddingVertical:2,minHeight:48,alignItems:'stretch'},
-  sourceSwitcherVertical: {gap:2},
+  sourceSwitcherVertical: {gap:0},
   sourceTab: {minHeight:46,justifyContent:'center',position:'relative',paddingHorizontal:1},
-  sourceTabVertical: {paddingHorizontal:12,minHeight:46},
+  sourceTabVertical: {paddingHorizontal:10,minHeight:42},
   sourceTabText: {fontSize:13},
   sourceTabCount: {fontSize:11,fontWeight:'600'},
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
@@ -4545,12 +4546,12 @@ const styles = StyleSheet.create({
   emptyMark: {fontFamily:'serif',fontSize:34,fontWeight:'800'},
   skeletonRow: {flexDirection:'row',gap:12,overflow:'hidden'},
   skeletonCard: {width:132,height:198,borderRadius:12,opacity:0.45},
-  unifiedCard: {flex:1,minWidth:0,gap:7,position:'relative'},
+  unifiedCard: {flex:1,minWidth:0,gap:6,position:'relative'},
   unifiedCardList: {flexDirection:'row',alignItems:'center',gap:14,paddingVertical:10},
   unifiedCardSelected: {borderWidth:1,borderRadius:12,padding:4},
   unifiedCoverWrap: {position:'relative'},
   unifiedCoverWrapList: {width:68},
-  unifiedCardCopy: {gap:3,minWidth:0,paddingHorizontal:1},
+  unifiedCardCopy: {gap:2,minWidth:0,paddingHorizontal:1},
   unifiedListMeta: {flexDirection:'row',alignItems:'center',gap:6,marginTop:2},
   workSourceDot: {width:5,height:5,borderRadius:3},
   workSource: {fontSize:11,fontWeight:'500',flexShrink:1},
@@ -4571,15 +4572,15 @@ const styles = StyleSheet.create({
   libraryMain: {flex:1,paddingHorizontal:18,paddingTop:18,gap:14},
   libraryMainFold: {paddingHorizontal:24,paddingTop:20,gap:16},
   libraryMainWide: {paddingHorizontal:28,paddingTop:24,gap:18},
-  libraryCatalogueHeader: {gap:4,paddingBottom:2},
+  libraryCatalogueHeader: {gap:2,paddingBottom:2},
   libraryKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.0},
   libraryTitle: {fontFamily:'sans-serif-medium',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
   libraryTitleCompact: {fontSize:28,lineHeight:34},
   libraryTitleFold: {fontSize:32,lineHeight:38},
-  librarySearchRow: {flexDirection:'row',alignItems:'center',gap:8},
+  librarySearchRow: {flexDirection:'row',alignItems:'center',gap:6},
   librarySearchShell: {flex:1,minHeight:44,borderRadius:10,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:12},
   librarySearch: {flex:1,borderWidth:0,minHeight:44,paddingHorizontal:0,fontSize:14},
-  libraryUtilityButton: {width:44,height:44,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
+  libraryUtilityButton: {width:42,height:42,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
   libraryFilterCount: {position:'absolute',right:3,top:2,minWidth:16,height:16,borderRadius:8,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
   libraryFilterCountText: {color:'#FFFFFF',fontSize:9,fontWeight:'700'},
   libraryFormatTabs: {gap:22,paddingRight:18,minHeight:42,paddingVertical:1,alignItems:'stretch'},
@@ -4592,8 +4593,8 @@ const styles = StyleSheet.create({
   toolbarButton: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
   librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
   librarySelectionAction: {minHeight:40,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
-  unifiedGrid: {paddingBottom:120,gap:18,paddingTop:4},
-  unifiedGridRow: {gap:12},
+  unifiedGrid: {paddingBottom:120,gap:16,paddingTop:2},
+  unifiedGridRow: {gap:10},
   unifiedList: {paddingBottom:120,gap:4},
   selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   selectionCount: {fontSize:13,fontWeight:'900'},
