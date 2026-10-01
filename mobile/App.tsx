@@ -3595,7 +3595,7 @@ function Client() {
           <Text style={[styles.bookTitle,{color:p.ink}]}>{title}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>{value} of {target}</Text>
         </View>
-        <TextInput accessibilityLabel={title+' target'} keyboardType="number-pad" value={draft} onChangeText={onDraft} style={[styles.insightGoalInput,{color:p.ink,backgroundColor:p.card}]}/>
+        <TextInput maxFontSizeMultiplier={1.15} accessibilityLabel={title+' target'} keyboardType="number-pad" value={draft} onChangeText={onDraft} style={[styles.insightGoalInput,{color:p.ink,borderBottomColor:p.line}]}/>
       </View>
       <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:p.sage,width:`${Math.round(progress*100)}%`}]} /></View>
     </View>;
@@ -3629,7 +3629,7 @@ function Client() {
     return <ScrollView contentContainerStyle={styles.insightsScreen}>
       <View style={styles.pageHeadingRow}>
         <View style={{flex:1}}>
-          <Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Insights</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.insightsTitle,{color:p.ink}]}>Insights</Text>
           <Text style={[styles.pageSubtitle,{color:p.muted}]}>A private record of how your library is becoming part of your life.</Text>
         </View>
       </View>
@@ -3642,7 +3642,7 @@ function Client() {
       </View>
 
       <View style={[styles.insightStatStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        {metrics.map(([label,value])=><View key={label} style={[styles.insightStat,width>=760&&styles.insightStatWide]}>
+        {metrics.map(([label,value])=><View key={label} style={[styles.insightStat,foldLayout&&styles.insightStatFold,width>=900&&styles.insightStatWide]}>
           <Text style={[styles.insightStatValue,{color:p.ink}]}>{value}</Text>
           <Text style={[styles.insightStatLabel,{color:p.muted}]}>{label}</Text>
         </View>)}
@@ -4475,7 +4475,8 @@ const styles = StyleSheet.create({
   atlasFocusTitle: {fontFamily:'sans-serif-medium',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
   atlasListAlternative: {gap:0},
   atlasHint: {fontSize:10.5,lineHeight:15,textAlign:'center',letterSpacing:.2},
-  insightsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:28,maxWidth:1120,width:'100%',alignSelf:'center'},
+  insightsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:24,maxWidth:1120,width:'100%',alignSelf:'center'},
+  insightsTitle: {fontFamily:'sans-serif-medium',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
   sourceSwitcherScroll: {flexGrow:0,minHeight:48,maxHeight:52},
   sourceSwitcher: {flexDirection:'row',gap:20,paddingRight:14,paddingVertical:2,minHeight:48,alignItems:'stretch'},
   sourceSwitcherVertical: {gap:0},
@@ -4611,31 +4612,32 @@ const styles = StyleSheet.create({
   ruleToken: {borderWidth:0,borderRadius:8,minHeight:36,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
   ruleInput: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:10,flexGrow:1,minWidth:92},
   ruleRemove: {width:34,height:34,alignItems:'center',justifyContent:'center'},
-  insightEditorialHero: {paddingVertical:8,gap:8,maxWidth:760},
-  insightEditorialKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5},
-  insightEditorialTitle: {fontFamily:'serif',fontSize:26,lineHeight:33,fontWeight:'500',letterSpacing:-.2},
-  insightStatStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:18,rowGap:18},
-  insightStat: {width:'33.333%',minWidth:110,gap:2},
+  insightEditorialHero: {paddingVertical:4,gap:6,maxWidth:760},
+  insightEditorialKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
+  insightEditorialTitle: {fontFamily:'sans-serif',fontSize:20,lineHeight:28,fontWeight:'400',letterSpacing:-.1},
+  insightStatStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:16,rowGap:16},
+  insightStat: {width:'50%',minWidth:130,gap:2},
+  insightStatFold: {width:'33.333%',minWidth:110},
   insightStatWide: {width:'16.666%',minWidth:96},
-  insightStatValue: {fontFamily:'serif',fontSize:28,lineHeight:32,fontWeight:'500'},
+  insightStatValue: {fontFamily:'sans-serif-medium',fontSize:24,lineHeight:29,fontWeight:'500'},
   insightStatLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
   insightRhythmSection: {gap:12},
-  insightRhythmChart: {height:108,flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:8,paddingHorizontal:2},
+  insightRhythmChart: {height:96,flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:8,paddingHorizontal:2},
   insightRhythmDay: {flex:1,height:'100%',alignItems:'center',justifyContent:'flex-end',gap:7},
-  insightRhythmBarArea: {height:76,width:'100%',alignItems:'center',justifyContent:'flex-end'},
-  insightRhythmBar: {width:12,maxWidth:18,borderRadius:9},
+  insightRhythmBarArea: {height:66,width:'100%',alignItems:'center',justifyContent:'flex-end'},
+  insightRhythmBar: {width:8,maxWidth:12,borderRadius:4},
   insightRhythmLabel: {fontSize:10,lineHeight:13,fontWeight:'600'},
   insightGoalGrid: {gap:0},
-  insightGoalCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
+  insightGoalCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:10},
   insightGoalEdit: {flexDirection:'row',alignItems:'center',justifyContent:'flex-end',gap:8},
-  insightGoalInput: {width:62,borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:8,textAlign:'center',fontWeight:'600',fontVariant:['tabular-nums']},
-  insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:13,flexDirection:'row',gap:12,alignItems:'center'},
+  insightGoalInput: {width:54,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,minHeight:36,paddingHorizontal:4,textAlign:'center',fontSize:13,fontWeight:'600',fontVariant:['tabular-nums']},
+  insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',gap:10,alignItems:'center'},
   activityMarker: {width:7,height:7,borderRadius:4},
-  annotationHubCard: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:8},
-  insightAchievementStrip: {flexDirection:'row',gap:20,paddingRight:18},
-  insightAchievementEditorial: {width:116,alignItems:'center',gap:7},
-  insightAchievementBadge: {width:64,height:64,borderRadius:32,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
-  insightAchievementMonogram: {fontFamily:'serif',fontSize:26,fontWeight:'500'},
+  annotationHubCard: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:7},
+  insightAchievementStrip: {flexDirection:'row',gap:18,paddingRight:18},
+  insightAchievementEditorial: {width:108,alignItems:'center',gap:6},
+  insightAchievementBadge: {width:56,height:56,borderRadius:28,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
+  insightAchievementMonogram: {fontFamily:'sans-serif-medium',fontSize:20,fontWeight:'500'},
   insightAchievement: {borderWidth:0,padding:11,minWidth:140,flexGrow:1},
 
 });
