@@ -278,7 +278,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
 
 function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
   const stroke=Math.max(2,Math.round(size/8));
@@ -316,6 +316,21 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   </View>;
   if(name==='list')return <View style={{width:size,height:size,position:'relative'}}>
     {[.18,.48,.78].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,top:size*(top-.02),width:size*.12,height:size*.12,borderRadius:2,backgroundColor:color}}/><View style={{position:'absolute',left:size*.30,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/></React.Fragment>)}
+  </View>;
+  if(name==='skipBack'||name==='skipForward')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{position:'absolute',width:size*.72,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderRadius:size*.36,borderLeftColor:name==='skipBack'?color:'transparent',borderRightColor:name==='skipForward'?color:'transparent'}}/>
+    <View style={{position:'absolute',left:name==='skipBack'?size*.02:undefined,right:name==='skipForward'?size*.02:undefined,top:size*.12,width:0,height:0,borderTopWidth:size*.12,borderBottomWidth:size*.12,borderTopColor:'transparent',borderBottomColor:'transparent',borderRightWidth:name==='skipBack'?size*.18:0,borderRightColor:name==='skipBack'?color:'transparent',borderLeftWidth:name==='skipForward'?size*.18:0,borderLeftColor:name==='skipForward'?color:'transparent'}}/>
+  </View>;
+  if(name==='bookmark')return <View style={{width:size,height:size,position:'relative',alignItems:'center'}}>
+    <View style={{width:size*.52,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderBottomWidth:0,borderTopLeftRadius:3,borderTopRightRadius:3}}/>
+    <View style={{position:'absolute',bottom:size*.10,width:size*.36,height:size*.36,borderLeftWidth:Math.max(1,stroke*.58),borderBottomWidth:Math.max(1,stroke*.58),borderColor:color,transform:[{rotate:'-45deg'}]}}/>
+  </View>;
+  if(name==='moon')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.15,top:size*.10,width:size*.68,height:size*.68,borderRadius:size*.34,borderWidth:Math.max(1,stroke*.58),borderColor:color}}/>
+    <View style={{position:'absolute',left:size*.36,top:size*.02,width:size*.58,height:size*.58,borderRadius:size*.29,backgroundColor:'transparent',borderLeftWidth:Math.max(2,stroke*1.4),borderLeftColor:color,transform:[{rotate:'18deg'}]}}/>
+  </View>;
+  if(name==='queue')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.18,.46,.74].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,top:size*top,width:size*.50,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',right:size*.08,top:size*(top-.09),width:size*.18,height:size*.18,borderRadius:size*.09,borderWidth:Math.max(1,stroke*.55),borderColor:color}}/></React.Fragment>)}
   </View>;
   if(name==='zoomIn'||name==='zoomOut')return <View style={{width:size,height:size,position:'relative'}}>
     <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:stroke,borderColor:color,borderRadius:size*.31,alignItems:'center',justifyContent:'center'}}>
@@ -3021,15 +3036,14 @@ function Client() {
               </View>
             </Pressable>
             <View style={styles.timeRow}>
-              <Text style={[styles.playerTime, {color: p.ink}]}>{formatTime(position)}</Text>
-              <Text style={[styles.meta, {color: p.muted}]}>−{formatTime(remaining)}</Text>
-              <Text style={[styles.playerTime, {color: p.ink}]}>{formatTime(duration)}</Text>
+              <Text style={[styles.playerTime,{color:p.muted}]}>{formatTime(position)}</Text>
+              <Text style={[styles.playerTime,{color:p.muted}]}>−{formatTime(remaining)}</Text>
             </View>
 
             <View style={styles.transport}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={() => seekTo(position - 15)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
-                <Text style={[styles.skipMain,{color:p.ink}]}>15</Text>
-                <Text style={[styles.skipMeta,{color:p.muted}]}>back</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={()=>seekTo(position-15)} style={styles.skipButton}>
+                <UiIcon name="skipBack" color={p.ink} size={32}/>
+                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -3039,34 +3053,34 @@ function Client() {
                 onPress={()=>void togglePlayback()}>
                 {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color="#FFFFFF" size={27}/>} 
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={() => seekTo(position + 30)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
-                <Text style={[styles.skipMain,{color:p.ink}]}>30</Text>
-                <Text style={[styles.skipMeta,{color:p.muted}]}>forward</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>seekTo(position+30)} style={styles.skipButton}>
+                <UiIcon name="skipForward" color={p.ink} size={32}/>
+                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
               </Pressable>
             </View>
 
-            <View style={styles.playerTools}>
-              <Pressable accessibilityRole="button" accessibilityLabel={'Playback speed '+speed+' times'} accessibilityState={{expanded:playerPanel==='speed'}} onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{speed}×</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
+            <View style={[styles.playerTools,{borderTopColor:p.line}]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Playback speed '+speed+' times'} accessibilityState={{expanded:playerPanel==='speed'}} onPress={()=>setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
+                <Text style={[styles.playerSpeedGlyph,{color:playerPanel==='speed'?p.sage:p.ink}]}>{speed}×</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel={'Bookmarks, '+currentBookmarks.length} accessibilityState={{expanded:playerPanel==='bookmarks'}} onPress={()=>setPlayerPanel(playerPanel==='bookmarks'?null:'bookmarks')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{currentBookmarks.length}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Bookmarks</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Bookmarks, '+currentBookmarks.length} accessibilityState={{expanded:playerPanel==='bookmarks'}} onPress={()=>setPlayerPanel(playerPanel==='bookmarks'?null:'bookmarks')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="bookmark" color={playerPanel==='bookmarks'?p.sage:p.ink} size={21}/>{currentBookmarks.length?<Text style={[styles.playerToolBadge,{color:p.muted}]}>{currentBookmarks.length}</Text>:null}</View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Bookmark</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel={'Chapters, '+effectiveChapters.length} accessibilityState={{expanded:playerPanel==='chapters'}} onPress={()=>setPlayerPanel(playerPanel==='chapters'?null:'chapters')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{effectiveChapters.length||'—'}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Chapters</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Chapters, '+effectiveChapters.length} accessibilityState={{expanded:playerPanel==='chapters'}} onPress={()=>setPlayerPanel(playerPanel==='chapters'?null:'chapters')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="list" color={playerPanel==='chapters'?p.sage:p.ink} size={21}/></View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Chapters</Text>
               </Pressable>
-              {serverPlayer && nativeSleepSupported ? <Pressable accessibilityRole="button" accessibilityLabel="Sleep timer" accessibilityState={{expanded:playerPanel==='sleep'}} onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{playback?.sleepAt ? 'On' : '—'}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
-              </Pressable> : null}
-              <Pressable accessibilityRole="button" accessibilityLabel={'Queue, '+queuedBooks.length+' item'+(queuedBooks.length===1?'':'s')} accessibilityState={{expanded:playerPanel==='queue'}} onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{queuedBooks.length}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
+              {serverPlayer&&nativeSleepSupported?<Pressable accessibilityRole="button" accessibilityLabel="Sleep timer" accessibilityState={{expanded:playerPanel==='sleep'}} onPress={()=>setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="moon" color={playerPanel==='sleep'?p.sage:p.ink} size={21}/></View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
+              </Pressable>:null}
+              <Pressable accessibilityRole="button" accessibilityLabel={'Queue, '+queuedBooks.length+' item'+(queuedBooks.length===1?'':'s')} accessibilityState={{expanded:playerPanel==='queue'}} onPress={()=>setPlayerPanel(playerPanel==='queue'?null:'queue')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="queue" color={playerPanel==='queue'?p.sage:p.ink} size={21}/>{queuedBooks.length?<Text style={[styles.playerToolBadge,{color:p.muted}]}>{queuedBooks.length}</Text>:null}</View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Edit audiobook structure" accessibilityState={{expanded:playerPanel==='structure'}} onPress={()=>setPlayerPanel(playerPanel==='structure'?null:'structure')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <UiIcon name="more" color={p.ink} size={18}/><Text style={[styles.playerToolLabel,{color:p.muted}]}>Structure</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Edit audiobook structure" accessibilityState={{expanded:playerPanel==='structure'}} onPress={()=>setPlayerPanel(playerPanel==='structure'?null:'structure')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="more" color={playerPanel==='structure'?p.sage:p.ink} size={21}/></View><Text style={[styles.playerToolLabel,{color:p.muted}]}>More</Text>
               </Pressable>
             </View>
 
-            {playback?.error ? <Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.sage,borderColor:p.sage}]}>{playback.error}</Text> : null}
+            {playback?.error?<Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.danger,backgroundColor:p.dangerSoft}]}>{playback.error}</Text>:null}
 
             {playerPanel==='speed' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Playback speed</Text>
@@ -3116,10 +3130,11 @@ function Client() {
             </View>
           </View>
         ) : (
-          <View style={[styles.playerEmpty,{backgroundColor:p.card,borderColor:p.line}]}>
+          <View style={styles.playerEmpty}>
+            <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Nothing playing</Text>
-            <Text style={[styles.empty, {color: p.muted}]}>Choose an audiobook from Shelf. Archivist will remember where you stopped.</Text>
-            <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')} />
+            <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Choose an audiobook from Shelf. Archivist will remember where you stopped.</Text>
+            <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/>
           </View>
         )}
       </ScrollView>
@@ -4045,24 +4060,28 @@ const styles = StyleSheet.create({
   progressHitArea: {paddingVertical:10},
   progressTrack: {height:4,borderRadius:999,overflow:'hidden'},
   progressFill: {height:4,borderRadius:999},
-  timeRow: {flexDirection: 'row', justifyContent: 'space-between',alignItems:'center',marginTop:-8},
-  playerTime: {fontSize:13,fontVariant:['tabular-nums'],fontWeight:'700'},
-  transport: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:28,marginVertical:8},
-  skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center'},
+  timeRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:-6},
+  playerTime: {fontSize:12,fontVariant:['tabular-nums'],fontWeight:'500'},
+  transport: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:30,marginVertical:10},
+  skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center',position:'relative'},
+  skipNumber: {position:'absolute',fontSize:9,lineHeight:11,fontWeight:'700',fontVariant:['tabular-nums']},
   skipMain: {fontSize:17,fontWeight:'900',lineHeight:19},
   skipMeta: {fontSize:10,fontWeight:'700',textTransform:'uppercase'},
   playButton: {width:80,height:80,borderRadius:40,alignItems:'center',justifyContent:'center',shadowColor:'#000',shadowOpacity:.16,shadowRadius:14,shadowOffset:{width:0,height:7},elevation:5},
   playButtonGlyph: {color:'#f8f7f2',fontSize:24,fontWeight:'900',lineHeight:28},
   playButtonCaption: {color:'#f8f7f2',fontSize:10,fontWeight:'800',textTransform:'uppercase',letterSpacing:0.6},
   playButtonText: {color: '#f8f7f2', fontSize: 17, fontWeight: '800'},
-  playerTools: {borderWidth:0,flexDirection:'row',justifyContent:'space-between',gap:4},
-  playerTool: {flex:1,minHeight:58,alignItems:'center',justifyContent:'center',paddingHorizontal:4,paddingVertical:6},
+  playerTools: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row',justifyContent:'space-between',gap:2,paddingTop:8},
+  playerTool: {flex:1,minHeight:56,alignItems:'center',justifyContent:'center',paddingHorizontal:2,paddingVertical:5,gap:3},
   playerToolBorder: {borderLeftWidth:0},
-  playerToolValue: {fontSize:16,fontWeight:'900'},
-  playerToolLabel: {fontSize:11,fontWeight:'700',marginTop:2},
+  playerToolIconWrap: {minHeight:24,alignItems:'center',justifyContent:'center',position:'relative'},
+  playerToolBadge: {position:'absolute',right:-12,top:-5,fontSize:9,fontWeight:'600'},
+  playerSpeedGlyph: {fontSize:16,lineHeight:22,fontWeight:'700',fontVariant:['tabular-nums']},
+  playerToolValue: {fontSize:16,fontWeight:'700'},
+  playerToolLabel: {fontSize:10,lineHeight:13,fontWeight:'500',marginTop:0},
   playerPanel: {borderWidth:0,borderRadius:16,padding:16,gap:12},
   playerPanelTitle: {fontSize:16,fontWeight:'900'},
-  playerNotice: {borderWidth:1,borderRadius:10,padding:12},
+  playerNotice: {borderWidth:0,borderRadius:12,padding:12},
   chapterRow: {flexDirection:'row',alignItems:'center',gap:10,padding:10,borderRadius:10},
   chapterIndex: {width:24,textAlign:'center',fontWeight:'900'},
   queueHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
@@ -4073,7 +4092,7 @@ const styles = StyleSheet.create({
   structureRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:50,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
   structureChapter: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,gap:8},
   boundaryRow: {flexDirection:'row',gap:12,flexWrap:'wrap'},
-  playerEmpty: {borderWidth:1,borderRadius:16,padding:18,gap:12},
+  playerEmpty: {borderWidth:0,padding:32,gap:10,alignItems:'center',justifyContent:'center',minHeight:260,maxWidth:420,alignSelf:'center'},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex: 1,position:'relative'},
   readerBar: {minHeight:50,flexDirection:'row',alignItems:'center',paddingHorizontal:4},
