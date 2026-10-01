@@ -4110,8 +4110,26 @@ function Client() {
 
   if (restoring) {
     return (
-      <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
-        <ActivityIndicator accessibilityLabel="Restoring session" />
+      <SafeAreaView style={[styles.screen,{backgroundColor:p.paper}]}>
+        <View style={styles.restoreScreen}>
+          <Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text>
+          <View style={styles.restoreBody}>
+            <View style={[styles.restoreKicker,{backgroundColor:p.line}]}/>
+            <View style={[styles.restoreTitle,{backgroundColor:p.card}]}/>
+            <View style={[styles.restoreHero,{backgroundColor:p.card}]}>
+              <View style={[styles.restoreCover,{backgroundColor:p.raised}]}/>
+              <View style={styles.restoreCopy}>
+                <View style={[styles.restoreLine,{backgroundColor:p.line,width:'72%'}]}/>
+                <View style={[styles.restoreLine,{backgroundColor:p.line,width:'54%'}]}/>
+                <View style={[styles.restoreLine,{backgroundColor:p.line,width:'40%'}]}/>
+              </View>
+            </View>
+            <View style={styles.restoreFooter}>
+              <ActivityIndicator accessibilityLabel="Opening Archivist library" color={p.sage}/>
+              <Text style={[styles.meta,{color:p.muted}]}>Opening your library…</Text>
+            </View>
+          </View>
+        </View>
       </SafeAreaView>
     );
   }
@@ -4131,7 +4149,7 @@ function Client() {
           <UiIcon name={activeTab==='settings'?'close':'settings'} color={p.muted} size={21}/>
         </Pressable>
       </View>:null}
-      {error ? <View style={[styles.errorBanner,{backgroundColor:p.dangerSoft}]}>
+      {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
           <UiIcon name="close" color={p.danger} size={18}/>
@@ -4183,6 +4201,16 @@ export default function App() {
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
+  restoreScreen: {flex:1,paddingHorizontal:18,paddingTop:8},
+  restoreBody: {flex:1,paddingTop:28,gap:18,maxWidth:760,width:'100%',alignSelf:'center'},
+  restoreKicker: {width:68,height:8,borderRadius:4,opacity:.6},
+  restoreTitle: {width:'42%',maxWidth:280,height:34,borderRadius:8,opacity:.72},
+  restoreHero: {minHeight:180,borderRadius:18,padding:18,flexDirection:'row',alignItems:'center',gap:18,opacity:.8},
+  restoreCover: {width:104,aspectRatio:1,borderRadius:8},
+  restoreCopy: {flex:1,gap:12},
+  restoreLine: {height:8,borderRadius:4,opacity:.72},
+  restoreFooter: {flexDirection:'row',alignItems:'center',gap:10,marginTop:4},
+
   login: {flexGrow: 1, justifyContent: 'center', padding: 24, gap: 14},
   logo: {fontFamily: 'serif', fontSize: 46, textAlign: 'center'},
   logoSmall: {fontFamily:'serif',fontSize:24,lineHeight:30,fontWeight:'500'},
@@ -4253,7 +4281,7 @@ const styles = StyleSheet.create({
   favouriteTextAction: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
 
   error: {paddingHorizontal: 16, paddingVertical: 8},
-  errorBanner: {marginHorizontal:12,marginTop:8,borderWidth:0,borderRadius:12,flexDirection:'row',alignItems:'center'},
+  errorBanner: {marginHorizontal:18,marginTop:4,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,flexDirection:'row',alignItems:'center'},
   errorDismiss: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
@@ -4385,7 +4413,10 @@ const styles = StyleSheet.create({
   readerHeading: {flex:1,alignItems:'center',justifyContent:'center',minWidth:0},
   readerTitle: {width:'100%',textAlign:'center',fontSize:12.5,lineHeight:17,fontWeight:'600'},
   readerFormat: {fontSize:8.5,lineHeight:11,fontWeight:'600',letterSpacing:1.1,textTransform:'uppercase',marginTop:0},
-  readerLoading: {flex:1,alignItems:'center',justifyContent:'center',gap:10,padding:24},
+  readerLoading: {flex:1,alignItems:'center',justifyContent:'center',gap:18,padding:24},
+  readerLoadingPage: {width:'72%',maxWidth:360,aspectRatio:.72,borderWidth:StyleSheet.hairlineWidth,borderRadius:8,paddingHorizontal:24,paddingTop:34,gap:14},
+  readerLoadingLine: {height:3,borderRadius:2},
+  readerLoadingStatus: {flexDirection:'row',alignItems:'center',gap:10},
   readerEmpty: {flex:1,alignItems:'center',justifyContent:'center',gap:10,padding:32,maxWidth:420,width:'100%',alignSelf:'center'},
   readerFailure: {margin:28,borderWidth:0,padding:22,gap:12,maxWidth:520,alignSelf:'center'},
   readerOverlay: {position:'absolute',top:0,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:.96},

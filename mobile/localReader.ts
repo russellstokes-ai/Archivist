@@ -85,7 +85,7 @@ main{width:100%;height:100%;margin:0;position:relative}
 .comic .comic-page{display:none;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;transform-origin:center center;will-change:transform,opacity;user-select:none;-webkit-user-drag:none}
 .comic .comic-page.active{display:block}
 .comic .comic-page.focused{cursor:zoom-out}
-.speech-focus-overlay{position:fixed;z-index:80;margin:0;padding:0;border:0;background:transparent;outline:none;opacity:.82;transform:scale(1);transform-origin:center center;transition:left .24s cubic-bezier(.2,.72,.2,1),top .24s cubic-bezier(.2,.72,.2,1),width .24s cubic-bezier(.2,.72,.2,1),height .24s cubic-bezier(.2,.72,.2,1),opacity .18s ease,filter .18s ease;filter:drop-shadow(0 12px 22px #0008);cursor:zoom-out}
+.speech-focus-overlay{position:fixed;z-index:80;margin:0;padding:0;border:0;background:transparent;outline:none;opacity:.82;transform:scale(1);transform-origin:center center;transition:left .34s cubic-bezier(.2,.72,.2,1),top .34s cubic-bezier(.2,.72,.2,1),width .34s cubic-bezier(.2,.72,.2,1),height .34s cubic-bezier(.2,.72,.2,1),opacity .22s ease,filter .22s ease;filter:drop-shadow(0 12px 22px #0008);cursor:zoom-out}
 .speech-focus-overlay.open{opacity:1;filter:drop-shadow(0 18px 34px #000a)}
 .speech-focus-overlay:focus-visible{outline:2px solid var(--gold);outline-offset:5px}
 .speech-focus-overlay canvas{display:block;width:100%;height:100%}
