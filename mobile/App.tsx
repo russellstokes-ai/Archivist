@@ -2553,8 +2553,8 @@ function Client() {
       setWorkMenu(null);
     };
     return <Modal transparent animationType="slide" visible onRequestClose={()=>setWorkMenu(null)}>
-      <Pressable style={styles.sheetBackdrop} onPress={()=>setWorkMenu(null)}>
-        <Pressable accessibilityViewIsModal accessibilityLabel={'Actions for '+work.title} style={[styles.actionSheet,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
+      <Pressable style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setWorkMenu(null)}>
+        <Pressable accessibilityViewIsModal accessibilityLabel={'Actions for '+work.title} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
           <View style={styles.sheetHandle}/>
           <Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{work.title}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'} · {sourceLabel(work.source)}</Text>
@@ -2643,8 +2643,8 @@ function Client() {
     if(!organisationModal)return null;
     const close=()=>{setOrganisationModal(null);setOrganisationName('');setCollectionTarget(null);setRenameTarget(null)};
     return <Modal transparent animationType="slide" visible onRequestClose={close}>
-      <View style={styles.sheetBackdrop}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled">
-        <View accessibilityViewIsModal style={[styles.actionSheet,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled">
+        <View accessibilityViewIsModal style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
           <View style={styles.sheetHandle}/>
           {organisationModal==='smart-shelf'?<>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Save Smart Shelf</Text>
@@ -2685,8 +2685,8 @@ function Client() {
     if(!shelfManageOpen)return null;
     const move=(index:number,direction:-1|1)=>{const target=index+direction;if(target<0||target>=shelfSections.length)return;const next=[...shelfSections];[next[index],next[target]]=[next[target],next[index]];void saveShelfSections(next)};
     const toggle=(id:ShelfSectionId)=>void saveShelfSections(shelfSections.map(item=>item.id===id?{...item,visible:!item.visible}:item));
-    return <Modal transparent animationType="slide" visible onRequestClose={()=>setShelfManageOpen(false)}><View style={styles.sheetBackdrop}>
-      <View accessibilityViewIsModal accessibilityLabel="Customise Shelf" style={[styles.actionSheet,{backgroundColor:p.card,borderColor:p.line}]}>
+    return <Modal transparent animationType="slide" visible onRequestClose={()=>setShelfManageOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
+      <View accessibilityViewIsModal accessibilityLabel="Customise Shelf" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
         <View style={styles.sheetHandle}/><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Customise Shelf</Text>
         <Text style={[styles.meta,{color:p.muted}]}>Choose what appears and arrange it around the way you use your library.</Text>
         {shelfSections.map((item,index)=><View key={item.id} style={[styles.manageRow,{borderColor:p.line}]}>
@@ -2969,7 +2969,7 @@ function Client() {
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
       <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/>
-      {libraryFiltersOpen?<Modal transparent animationType="slide" visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={styles.sheetBackdrop}><ScrollView contentContainerStyle={styles.sheetScroll}><View accessibilityViewIsModal accessibilityLabel="Library filters" style={[styles.actionSheet,{backgroundColor:p.card,borderColor:p.line}]}><View style={styles.sheetHandle}/><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
+      {libraryFiltersOpen?<Modal transparent animationType="slide" visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll}><View accessibilityViewIsModal accessibilityLabel="Library filters" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><View style={styles.sheetHandle}/><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.segment}>{(['title','author','rating'] as const).map(sort=><Pressable key={sort} accessibilityRole="button" accessibilityState={{selected:librarySort===sort}} onPress={()=>setLibrarySort(sort)} style={[styles.segmentItem,{backgroundColor:librarySort===sort?p.card:'transparent'}]}><Text style={{color:librarySort===sort?p.sage:p.muted,fontWeight:librarySort===sort?'700':'500'}}>{sort[0].toUpperCase()+sort.slice(1)}</Text></Pressable>)}</View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>READING STATE</Text><View style={styles.filterWrap}>{(['','not-started','in-progress','finished'] as const).map(state=><Pressable key={state||'any'} accessibilityRole="button" accessibilityState={{selected:readingFilter===state}} onPress={()=>setReadingFilter(state)} style={[styles.filterChip,{backgroundColor:readingFilter===state?p.card:'transparent'}]}><Text style={{color:readingFilter===state?p.sage:p.muted,fontWeight:readingFilter===state?'700':'500'}}>{state?state.replace('-',' '):'Any'}</Text></Pressable>)}</View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>AVAILABILITY</Text><View style={styles.filterWrap}>{(['all','available','unavailable'] as const).map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:availabilityFilter===value}} onPress={()=>setAvailabilityFilter(value)} style={[styles.filterChip,{backgroundColor:availabilityFilter===value?p.card:'transparent'}]}><Text style={{color:availabilityFilter===value?p.sage:p.muted,fontWeight:availabilityFilter===value?'700':'500'}}>{value[0].toUpperCase()+value.slice(1)}</Text></Pressable>)}</View>
@@ -3219,7 +3219,7 @@ function Client() {
   function ReaderTools(){
     if(!reading)return null;const workKey=readerWorkKey(reading);const bookmarks=workReaderBookmarks(readerBookmarks,workKey);const annotations=workReaderAnnotations(readerAnnotations,workKey);
     const updateScale=(delta:number)=>void persistReaderAppearance({...readerAppearance,scale:Math.max(.78,Math.min(1.5,readerAppearance.scale+delta))});
-    return <Modal transparent animationType="slide" visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={styles.sheetBackdrop}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled"><View accessibilityViewIsModal accessibilityLabel="Reader tools" style={[styles.actionSheet,{backgroundColor:p.card,borderColor:p.line}]}>
+    return <Modal transparent animationType="slide" visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled"><View accessibilityViewIsModal accessibilityLabel="Reader tools" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
       <View style={styles.sheetHandle}/>
       <View style={styles.readerSheetHeader}>
         <View style={{flex:1}}>
@@ -4110,13 +4110,12 @@ function Client() {
 
   return (
     <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
-      <View style={styles.appHeader}>
+      {activeTab!=='reader'?<View style={styles.appHeader}>
         <Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text>
-        <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
-          <Text style={[styles.headerMeta,{color:p.muted}]}>{sourceCounts.all} works</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={()=>setActiveTab('settings')} style={styles.settingsButton}><UiIcon name="settings" color={p.muted} size={22}/></Pressable>
-        </View>
-      </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={activeTab==='settings'?'Close Settings':'Settings'} onPress={()=>setActiveTab(activeTab==='settings'?'shelf':'settings')} style={styles.settingsButton}>
+          <UiIcon name={activeTab==='settings'?'close':'settings'} color={p.muted} size={21}/>
+        </Pressable>
+      </View>:null}
       {error ? <View style={[styles.errorBanner,{backgroundColor:p.dangerSoft}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
@@ -4135,7 +4134,7 @@ function Client() {
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
       <RatingPromptPanel />
-      {playing && activeTab!=='player' ? (
+      {playing && activeTab!=='player' && activeTab!=='reader' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>setActiveTab('player')} style={styles.miniPlayerMain}>
             <MiniArtwork book={playing}/>
@@ -4149,7 +4148,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      <View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
+      {activeTab!=='reader'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
@@ -4158,7 +4157,7 @@ function Client() {
             <Text style={[styles.tabText,{color:selected?p.sage:p.muted}]}>{tab.label}</Text>
           </Pressable>;
         })}
-      </View>
+      </View>:null}
     </SafeAreaView>
   );
 }
@@ -4171,16 +4170,16 @@ const styles = StyleSheet.create({
   screen: {flex: 1},
   login: {flexGrow: 1, justifyContent: 'center', padding: 24, gap: 14},
   logo: {fontFamily: 'serif', fontSize: 46, textAlign: 'center'},
-  logoSmall: {fontFamily: 'serif', fontSize: 26},
+  logoSmall: {fontFamily:'serif',fontSize:24,lineHeight:30,fontWeight:'500'},
   tagline: {fontSize: 12, letterSpacing: 4, textAlign: 'center', fontWeight: '700'},
   loginCopy: {fontSize: 16, lineHeight: 23, textAlign: 'center', marginBottom: 8},
   serverConnect: {gap:10,paddingVertical:2},
   serverConnectTitle: {fontFamily:'sans-serif-medium',fontSize:20,lineHeight:25,fontWeight:'500'},
   serverConnectCopy: {fontSize:13,lineHeight:19,maxWidth:560},
-  appHeader: {height:56,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  appHeader: {height:52,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   headerMeta: {fontSize:12,fontWeight:'500'},
   headerSettings: {borderWidth:0},
-  settingsButton: {width:44,height:44,alignItems:'center',justifyContent:'center',borderRadius:22},
+  settingsButton: {width:42,height:42,alignItems:'center',justifyContent:'center',borderRadius:10},
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
@@ -4252,12 +4251,12 @@ const styles = StyleSheet.create({
   editorCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   serverRecovery: {borderWidth:0,borderRadius:14,padding:16,gap:10},
   offlineSummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',gap:12,alignItems:'center'},
-  ratingPromptBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:24},
-  ratingPromptCard: {width:'100%',maxWidth:420,borderWidth:0,borderRadius:18,padding:20,gap:10},
+  ratingPromptBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',alignItems:'center',justifyContent:'center',padding:24},
+  ratingPromptCard: {width:'100%',maxWidth:400,borderWidth:0,borderRadius:18,padding:18,gap:9},
   modalKeyboard: {flex:1},
-  modalBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:20},
+  modalBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',alignItems:'center',justifyContent:'center',padding:20},
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
-  modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:20,gap:10},
+  modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:18,gap:9},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {paddingHorizontal:18,paddingTop:12,gap:14,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
   playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
@@ -4376,19 +4375,19 @@ const styles = StyleSheet.create({
   segment: {flexDirection:'row',gap:4},
   segmentItem: {flex:1,borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center',position:'relative'},
   segmentMarker: {position:'absolute',left:12,right:12,bottom:3,height:2,borderRadius:2},
-  miniPlayer: {minHeight:56,marginHorizontal:12,marginBottom:6,borderRadius:12,borderTopWidth:StyleSheet.hairlineWidth,paddingHorizontal:8,paddingVertical:6,flexDirection:'row',alignItems:'center',gap:8,shadowColor:'#000',shadowOpacity:.05,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:2},
-  miniPlayerMain: {flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:10,padding:2},
-  miniCover: {width:36,height:36,borderRadius:5,alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  miniPlayer: {minHeight:52,marginHorizontal:0,marginBottom:0,borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingVertical:5,flexDirection:'row',alignItems:'center',gap:8},
+  miniPlayerMain: {flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:9,padding:0},
+  miniCover: {width:34,height:34,borderRadius:5,alignItems:'center',justifyContent:'center',overflow:'hidden'},
   miniCoverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
   miniCoverLabel: {color:'#FFFFFF',fontSize:8,fontWeight:'700',letterSpacing:.7},
   miniTitle: {fontSize:12.5,lineHeight:17,fontWeight:'600'},
   miniMeta: {fontSize:10.5,lineHeight:14},
-  miniButton: {width:40,height:40,borderRadius:20,borderWidth:0,alignItems:'center',justifyContent:'center'},
+  miniButton: {width:40,height:40,borderRadius:10,borderWidth:0,alignItems:'center',justifyContent:'center'},
   miniButtonText: {fontWeight:'600'},
-  tabBar: {height:64,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
-  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:3,position:'relative'},
-  tabIndicator: {position:'absolute',top:0,width:20,height:2,borderRadius:2},
-  tabText: {fontSize:10,lineHeight:13,fontWeight:'600'},
+  tabBar: {height:60,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
+  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:2,position:'relative'},
+  tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
+  tabText: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
   celebrationParticle: {position:'absolute', fontSize:28, color:'#c6a374', fontWeight:'900'},
   celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
@@ -4573,10 +4572,12 @@ const styles = StyleSheet.create({
   offlineBadge: {position:'absolute',left:7,bottom:7,borderRadius:999,paddingHorizontal:7,paddingVertical:4},
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
   cardPressed: {opacity:0.72},
-  actionSheet: {width:'100%',maxWidth:620,borderWidth:0,borderTopLeftRadius:24,borderTopRightRadius:24,padding:20,gap:10,alignSelf:'center'},
-  sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.52)',justifyContent:'flex-end',padding:12},
+  actionSheet: {width:'100%',maxWidth:620,borderWidth:0,borderTopLeftRadius:24,borderTopRightRadius:24,padding:18,gap:9,alignSelf:'center'},
+  actionSheetFold: {width:420,maxWidth:420,height:'100%',borderTopLeftRadius:24,borderBottomLeftRadius:24,borderTopRightRadius:0,paddingHorizontal:22,paddingVertical:24,alignSelf:'flex-end'},
+  sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',justifyContent:'flex-end',padding:12},
+  sheetBackdropFold: {justifyContent:'center',alignItems:'flex-end',padding:0},
   sheetScroll: {flexGrow:1,justifyContent:'flex-end'},
-  sheetHandle: {width:42,height:4,borderRadius:999,backgroundColor:'#9aa9a6',alignSelf:'center',marginBottom:6,opacity:0.65},
+  sheetHandle: {width:36,height:3,borderRadius:2,backgroundColor:'#9aa9a6',alignSelf:'center',marginBottom:6,opacity:.5},
   manageRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:8},
   visibilityToggle: {width:44,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},
   orderButton: {width:38,height:38,alignItems:'center',justifyContent:'center'},
