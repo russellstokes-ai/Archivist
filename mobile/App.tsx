@@ -412,6 +412,8 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
 function Client() {
   const systemScheme = useColorScheme();
   const {width} = useWindowDimensions();
+  const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
+  const foldLayout = width >= 600;
   const [theme, setTheme] = useState<ThemeMode>('system');
   const p = useMemo(() => palette(theme, systemScheme), [theme, systemScheme]);
   const [session, setSession] = useState<Session | null>(null);
@@ -2726,7 +2728,7 @@ function Client() {
       <View style={[styles.shelfHeroArtwork,width>=760&&styles.shelfHeroArtworkWide]}>{workArtwork(primaryContinue)}</View>
       <View style={styles.shelfHeroCopy}>
         <Text style={[styles.shelfHeroEyebrow,{color:p.sage}]}>{primaryContinue.format==='Audio'?'CONTINUE LISTENING':'CONTINUE READING'}</Text>
-        <Text numberOfLines={3} style={[styles.shelfHeroTitle,{color:p.ink}]}>{primaryContinue.title}</Text>
+        <Text maxFontSizeMultiplier={1.12} numberOfLines={3} style={[styles.shelfHeroTitle,{color:p.ink},layoutTier==='compact'&&styles.shelfHeroTitleCompact,layoutTier==='fold'&&styles.shelfHeroTitleFold]}>{primaryContinue.title}</Text>
         <Text numberOfLines={1} style={[styles.shelfHeroAuthor,{color:p.muted}]}>{primaryContinue.author||'Unknown author'}{primaryContinue.series?' · '+primaryContinue.series:''}</Text>
         {primaryResumeLabel?<Text numberOfLines={1} style={[styles.shelfHeroResume,{color:p.sage}]}>{primaryResumeLabel}</Text>:null}
         <View style={styles.shelfHeroFooter}>
@@ -2834,11 +2836,11 @@ function Client() {
       onScroll={e=>{shelfScrollOffset.current=e.nativeEvent.contentOffset.y}}
       scrollEventThrottle={120}
       onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
-      contentContainerStyle={styles.shelfContent}>
-      <View style={styles.shelfEditorialHeader}>
+      contentContainerStyle={[styles.shelfContent,foldLayout&&styles.shelfContentFold]}>
+      <View style={[styles.shelfEditorialHeader,foldLayout&&styles.shelfEditorialHeaderFold]}>
         <View style={{flex:1,minWidth:0}}>
           <Text style={[styles.shelfKicker,{color:p.sage}]}>YOUR LIBRARY</Text>
-          <Text style={[styles.shelfGreeting,{color:p.ink}]}>{shelfGreeting}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.shelfGreeting,{color:p.ink},layoutTier==='compact'&&styles.shelfGreetingCompact,layoutTier==='fold'&&styles.shelfGreetingFold]}>{shelfGreeting}</Text>
           <Text style={[styles.shelfEditorialSubtitle,{color:p.muted}]}>Stories make a kinder world.</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
@@ -2887,7 +2889,7 @@ function Client() {
 
   function Library(){
     const wide=width>=760;
-    const columns=libraryView==='list'?1:(width>=1180?6:width>=940?5:width>=700?4:2);
+    const columns=libraryView==='list'?1:(width>=1180?6:width>=940?5:width>=600?4:2);
     const filtersActive=[space,formatFilter,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
     const formatOptions=[...new Set(allUnifiedWorks.map(work=>work.format).filter(Boolean))].sort();
     const authorOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.author).filter((value:string)=>!!value))).sort().slice(0,20);
@@ -2895,12 +2897,12 @@ function Client() {
     const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
     const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
     const ReviewList=()=>reviewOnly?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Metadata review</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} item{visibleBooks.length===1?'':'s'} need attention</Text></View><Button label="Done reviewing" tone="quiet" onPress={()=>setReviewOnly(false)}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>:null}</View>:null;
-    const main=<View style={[styles.libraryMain,wide&&styles.libraryMainWide]}>
+    const main=<View style={[styles.libraryMain,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
         <Text style={[styles.libraryKicker,{color:p.sage}]}>COLLECTION</Text>
         <View style={styles.pageHeadingRow}>
           <View style={{flex:1}}>
-            <Text style={[styles.libraryTitle,{color:p.ink}]}>Library</Text>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryTitle,{color:p.ink},layoutTier==='compact'&&styles.libraryTitleCompact,layoutTier==='fold'&&styles.libraryTitleFold]}>Library</Text>
             <Text style={[styles.pageSubtitle,{color:p.muted}]}>{sortedUnifiedWorks.length} work{sortedUnifiedWorks.length===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
           </View>
         </View>
@@ -3052,17 +3054,17 @@ function Client() {
     }
 
     return (
-      <ScrollView contentContainerStyle={styles.playerScreen}>
+      <ScrollView contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold]}>
         <View style={styles.playerHeading}>
           <Text style={[styles.playerEyebrow,{color:p.sage}]}>LIVING BOOK</Text>
           {current ? <Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>{speed}×</Text> : null}
         </View>
         {current ? (
-          <View style={[styles.playerAdaptive,wideLayout&&styles.playerAdaptiveWide]}>
+          <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
             <LivingBook book={current} chapterTitle={currentChapter?.title} chapterNumber={currentChapterIndex>=0?currentChapterIndex+1:undefined}/>
             <View style={styles.playerIdentity}>
-              <Text numberOfLines={2} style={[styles.nowTitle, {color: p.ink}]}>{current.title}</Text>
+              <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
                 {[current.author, current.series, current.space].filter(Boolean).join(' · ')}
               </Text>
@@ -4199,7 +4201,7 @@ const styles = StyleSheet.create({
   sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:4},
   tabBody: {flex: 1},
   title: {fontFamily: 'serif', fontSize: 36, lineHeight: 41, fontWeight: '500', marginBottom: 2, letterSpacing:-0.4},
-  sectionTitle: {fontFamily:'serif',fontSize: 20, lineHeight:25, fontWeight: '500', marginTop: 10,letterSpacing:-0.15},
+  sectionTitle: {fontFamily:'sans-serif-medium',fontSize:18,lineHeight:23,fontWeight:'500',marginTop:8,letterSpacing:-0.1},
   input: {paddingHorizontal:14,paddingVertical:12,borderWidth:0,borderRadius:12,fontSize:16},
   button: {backgroundColor: '#47736F', borderRadius: 12, paddingHorizontal: 18, minHeight: 48, justifyContent: 'center', alignItems: 'center'},
   buttonGold: {backgroundColor:'#B99A68'},
@@ -4233,7 +4235,8 @@ const styles = StyleSheet.create({
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
   modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:20,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {paddingHorizontal:20,paddingTop:22,gap:24,paddingBottom:120,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreen: {paddingHorizontal:18,paddingTop:16,gap:18,paddingBottom:120,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreenFold: {paddingHorizontal:24,paddingTop:16,gap:18},
   livingBookStage: {height:360,width:420,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
   livingBookShadow: {position:'absolute',width:342,height:42,borderRadius:171,top:282,transform:[{scaleY:.32}],shadowColor:'#000',shadowOpacity:.20,shadowRadius:28,elevation:5},
   livingBookSpread: {width:330,height:246,position:'relative'},
@@ -4256,9 +4259,9 @@ const styles = StyleSheet.create({
   livingBookPageNumber: {position:'absolute',bottom:10,alignSelf:'center',fontSize:7,lineHeight:10,fontWeight:'600',letterSpacing:.8},
   playerHeading: {minHeight:34,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   playerAdaptive: {gap:22},
-  playerAdaptiveWide: {flexDirection:'row',alignItems:'center',gap:64,paddingVertical:8},
-  playerHeroColumn: {gap:14,alignItems:'center',flexShrink:0},
-  playerControlColumn: {flex:1,minWidth:0,gap:18,justifyContent:'center'},
+  playerAdaptiveWide: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:36,paddingVertical:4},
+  playerHeroColumn: {gap:10,alignItems:'center',flexShrink:1,maxWidth:420},
+  playerControlColumn: {flex:1,minWidth:260,maxWidth:520,gap:14,justifyContent:'center'},
   playerEyebrow: {fontSize:11,lineHeight:14,fontWeight:'700',letterSpacing:1.6},
   playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},
   playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:10},
@@ -4266,7 +4269,9 @@ const styles = StyleSheet.create({
   playerSourcePill: {borderWidth:0,minHeight:28,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   playerStatusText: {fontSize:11,lineHeight:16},
   playerStatusAction: {minHeight:36,justifyContent:'center',paddingHorizontal:2},
-  nowTitle: {fontFamily:'serif',fontSize:34,lineHeight:39,fontWeight:'500',textAlign:'center',marginTop:2,letterSpacing:-.45},
+  nowTitle: {fontFamily:'sans-serif-medium',fontSize:25,lineHeight:30,fontWeight:'500',textAlign:'center',marginTop:0,letterSpacing:-.2,maxWidth:620},
+  nowTitleCompact: {fontSize:22,lineHeight:27},
+  nowTitleFold: {fontSize:24,lineHeight:29},
   playerByline: {fontSize:14,lineHeight:20,textAlign:'center'},
   playerChapter: {fontSize:13,fontWeight:'800',textAlign:'center',marginTop:3},
   progressHitArea: {paddingVertical:10},
@@ -4460,11 +4465,15 @@ const styles = StyleSheet.create({
   sourceTabCount: {fontSize:11,fontWeight:'600'},
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
-  shelfContent: {paddingHorizontal:18,paddingTop:24,paddingBottom:120,gap:38,maxWidth:1280,width:'100%',alignSelf:'center'},
-  shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:4,paddingBottom:2},
+  shelfContent: {paddingHorizontal:18,paddingTop:20,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
+  shelfContentFold: {paddingHorizontal:24,paddingTop:22,gap:34},
+  shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:2,paddingBottom:0},
+  shelfEditorialHeaderFold: {paddingTop:0},
   shelfKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.2,marginBottom:7},
-  shelfGreeting: {fontFamily:'serif',fontSize:40,lineHeight:44,fontWeight:'500',letterSpacing:-.8},
-  shelfEditorialSubtitle: {fontFamily:'serif',fontSize:16,lineHeight:23,fontStyle:'italic',marginTop:4,maxWidth:320},
+  shelfGreeting: {fontFamily:'serif',fontSize:34,lineHeight:40,fontWeight:'500',letterSpacing:-.55},
+  shelfGreetingCompact: {fontSize:30,lineHeight:36},
+  shelfGreetingFold: {fontSize:36,lineHeight:42},
+  shelfEditorialSubtitle: {fontFamily:'serif',fontSize:14,lineHeight:20,fontStyle:'italic',marginTop:3,maxWidth:320},
   shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
@@ -4480,7 +4489,9 @@ const styles = StyleSheet.create({
   shelfHeroArtworkWide: {width:204,minWidth:204},
   shelfHeroCopy: {flex:1,minWidth:0,gap:8,paddingVertical:4},
   shelfHeroEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.4},
-  shelfHeroTitle: {fontFamily:'serif',fontSize:30,lineHeight:35,fontWeight:'500',letterSpacing:-.45},
+  shelfHeroTitle: {fontFamily:'sans-serif-medium',fontSize:24,lineHeight:29,fontWeight:'500',letterSpacing:-.2},
+  shelfHeroTitleCompact: {fontSize:21,lineHeight:26},
+  shelfHeroTitleFold: {fontSize:25,lineHeight:30},
   shelfHeroAuthor: {fontSize:14,lineHeight:21},
   shelfHeroResume: {fontSize:12,lineHeight:17,fontWeight:'700',letterSpacing:.15},
   shelfHeroFooter: {marginTop:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
@@ -4506,7 +4517,7 @@ const styles = StyleSheet.create({
   seriesCoverStack: {height:136,position:'relative',marginBottom:8},
   seriesCover: {position:'absolute',width:80,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:3},
   seriesEmpty: {position:'absolute',left:0,top:0,width:104,height:108,borderWidth:StyleSheet.hairlineWidth,borderRadius:10},
-  seriesName: {fontFamily:'serif',fontSize:18,lineHeight:23,fontWeight:'500'},
+  seriesName: {fontFamily:'sans-serif-medium',fontSize:15,lineHeight:20,fontWeight:'500'},
   shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,flexDirection:'row',flexWrap:'wrap',gap:10},
   shelfUtilityAction: {minHeight:44,paddingHorizontal:4,paddingRight:14,justifyContent:'center'},
   brandSignature: {fontSize:10,fontWeight:'700',letterSpacing:3,textAlign:'center',marginTop:8},
@@ -4537,11 +4548,14 @@ const styles = StyleSheet.create({
   visibilityToggle: {width:44,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},
   orderButton: {width:38,height:38,alignItems:'center',justifyContent:'center'},
   libraryTwoPane: {flex:1,flexDirection:'row'},
-  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:24,gap:16},
-  libraryMainWide: {paddingHorizontal:28,paddingTop:28,gap:18},
+  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:18,gap:14},
+  libraryMainFold: {paddingHorizontal:24,paddingTop:20,gap:16},
+  libraryMainWide: {paddingHorizontal:28,paddingTop:24,gap:18},
   libraryCatalogueHeader: {gap:4,paddingBottom:2},
   libraryKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.0},
-  libraryTitle: {fontFamily:'serif',fontSize:36,lineHeight:41,fontWeight:'500',letterSpacing:-.65},
+  libraryTitle: {fontFamily:'sans-serif-medium',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  libraryTitleCompact: {fontSize:28,lineHeight:34},
+  libraryTitleFold: {fontSize:32,lineHeight:38},
   librarySearchRow: {flexDirection:'row',alignItems:'center',gap:8},
   librarySearchShell: {flex:1,minHeight:46,borderRadius:10,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:13},
   librarySearch: {flex:1,borderWidth:0,minHeight:46,paddingHorizontal:0,fontSize:15},
