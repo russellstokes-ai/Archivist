@@ -44,6 +44,13 @@ jobs:
           fi
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Upload reconstructed sprint tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconstructed-${{ steps.patch.outputs.name }}
+          path: mobile
+          retention-days: 3
+
       - name: Set up Node
         uses: actions/setup-node@v5
         with:
