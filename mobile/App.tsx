@@ -4519,7 +4519,7 @@ const styles = StyleSheet.create({
   insightRhythmChart: {height:108,flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:8,paddingHorizontal:2},
   insightRhythmDay: {flex:1,height:'100%',alignItems:'center',justifyContent:'flex-end',gap:7},
   insightRhythmBarArea: {height:76,width:'100%',alignItems:'center',justifyContent:'flex-end'},
-  insightRhythmBar: {width:width>=760?18:12,maxWidth:18,borderRadius:9},
+  insightRhythmBar: {width:12,maxWidth:18,borderRadius:9},
   insightRhythmLabel: {fontSize:10,lineHeight:13,fontWeight:'600'},
   insightGoalGrid: {gap:0},
   insightGoalCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
