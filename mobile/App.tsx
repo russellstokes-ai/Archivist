@@ -3820,7 +3820,7 @@ function Client() {
   function DuplicateReviewPanel() {
     if(!duplicatePanelOpen)return null;
     return (
-      <View style={[styles.duplicatePanel,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.duplicatePanel,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.queueHeader}>
           <View style={{flex:1}}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Duplicate review</Text>
@@ -3869,7 +3869,7 @@ function Client() {
   function LocalSortingPanel() {
     if(!localBooks.length)return null;
     return (
-      <View style={[styles.setupPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
         <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist copies into the organised layout and leaves originals untouched until you choose to clean up the copy history.</Text>
         <View style={styles.segment}>
@@ -3907,7 +3907,7 @@ function Client() {
     const free=offlineStorage?.freeBytes || 0;
     return <View style={{gap:10}}>
       <Text style={[styles.sectionTitle,{color:p.ink}]}>Offline downloads</Text>
-      <View style={[styles.offlineSummary,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.offlineSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={{flex:1}}>
           <Text style={{color:p.ink,fontWeight:'900'}}>{completed.length} downloaded · {formatBytes(used)}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>
@@ -3950,12 +3950,12 @@ function Client() {
       <ScrollView contentContainerStyle={styles.settingsScreen}>
         <View style={styles.pageHeadingRow}>
           <View style={{flex:1}}>
-            <Text style={[styles.title,{color:p.ink}]}>Settings</Text>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.settingsTitle,{color:p.ink}]}>Settings</Text>
             <Text style={[styles.pageSubtitle,{color:p.muted}]}>Your app, library and optional server.</Text>
           </View>
         </View>
 
-        <View style={[styles.settingsColumns,width>=760&&styles.settingsColumnsWide]}>
+        <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
           <View style={styles.settingsColumn}>
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>APPEARANCE</Text>
@@ -4244,7 +4244,7 @@ const styles = StyleSheet.create({
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   editorCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   serverRecovery: {borderWidth:0,borderRadius:14,padding:16,gap:10},
-  offlineSummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,flexDirection:'row',gap:12,alignItems:'center'},
+  offlineSummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',gap:12,alignItems:'center'},
   ratingPromptBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:24},
   ratingPromptCard: {width:'100%',maxWidth:420,borderWidth:0,borderRadius:18,padding:20,gap:10},
   modalKeyboard: {flex:1},
@@ -4388,22 +4388,23 @@ const styles = StyleSheet.create({
   celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
   celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
   profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
-  settingsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:24,maxWidth:1180,width:'100%',alignSelf:'center'},
-  settingsColumns: {gap:24},
-  settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:40},
-  settingsColumn: {flex:1,minWidth:0,gap:24},
-  settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
-  settingsSectionTitle: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5},
-  settingsRow: {minHeight:50,flexDirection:'row',alignItems:'center',gap:12},
+  settingsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:1060,width:'100%',alignSelf:'center'},
+  settingsTitle: {fontFamily:'sans-serif-medium',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  settingsColumns: {gap:22},
+  settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:36},
+  settingsColumn: {flex:1,minWidth:0,gap:22},
+  settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,gap:10},
+  settingsSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
+  settingsRow: {minHeight:46,flexDirection:'row',alignItems:'center',gap:12},
   settingsStatusDot: {width:8,height:8,borderRadius:4},
-  settingsTextAction: {minHeight:40,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
-  settingsInlineActions: {flexDirection:'row',alignItems:'center',gap:18,flexWrap:'wrap'},
+  settingsTextAction: {minHeight:38,paddingHorizontal:2,alignItems:'center',justifyContent:'center'},
+  settingsInlineActions: {flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
   settingsAddRow: {flexDirection:'row',alignItems:'center',gap:8},
   settingsInlineInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:13,fontSize:15},
   settingsAddButton: {minHeight:44,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
   settingsKeyReveal: {borderRadius:12,padding:14,gap:8},
   settingsKeyText: {fontSize:13,lineHeight:18,fontWeight:'600'},
-  settingsListRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:58,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:12},
+  settingsListRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:54,paddingVertical:9,flexDirection:'row',alignItems:'center',gap:12},
   settingsRowActions: {flexDirection:'row',alignItems:'center',gap:10},
   settingsAddFolder: {gap:8},
   settingsDangerRow: {minHeight:44,alignItems:'flex-start',justifyContent:'center'},
@@ -4606,7 +4607,7 @@ const styles = StyleSheet.create({
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
   filterChip: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
-  duplicatePanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
+  duplicatePanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:10},
   duplicateGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:7},
   duplicateExact: {borderWidth:0,borderLeftWidth:2,paddingLeft:10,paddingVertical:6,gap:4},
   ruleGroup: {borderWidth:0,borderLeftWidth:2,paddingLeft:12,paddingVertical:8,gap:8},
