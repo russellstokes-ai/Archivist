@@ -273,7 +273,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
 
 function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
   const stroke=Math.max(2,Math.round(size/8));
@@ -281,6 +281,10 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   if(name==='pause')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.18}}><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/></View>;
   if(name==='more')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.12}}>{[0,1,2].map(index=><View key={index} style={{width:stroke*1.35,height:stroke*1.35,borderRadius:stroke,backgroundColor:color}}/>)}</View>;
   if(name==='close')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'45deg'}]}}/><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'-45deg'}]}}/></View>;
+  if(name==='back')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,top:size*.31,transform:[{rotate:'-42deg'}]}}/>
+    <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,bottom:size*.31,transform:[{rotate:'42deg'}]}}/>
+  </View>;
   if(name==='zoomIn'||name==='zoomOut')return <View style={{width:size,height:size,position:'relative'}}>
     <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:stroke,borderColor:color,borderRadius:size*.31,alignItems:'center',justifyContent:'center'}}>
       <View style={{position:'absolute',width:size*.28,height:stroke,borderRadius:stroke,backgroundColor:color}}/>
@@ -565,12 +569,13 @@ function Client() {
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
     bookOpenAnim.stopAnimation();pageTurnAnim.stopAnimation();
-    Animated.timing(bookOpenAnim,{toValue:motion==='closed'?0:1,duration:reduceMotion?0:260,useNativeDriver:true}).start();
+    Animated.timing(bookOpenAnim,{toValue:motion==='closed'?0:1,duration:reduceMotion?0:520,useNativeDriver:true}).start();
     if(motion!=='turning'){pageTurnAnim.setValue(0);return;}
     const loop=Animated.loop(Animated.sequence([
-      Animated.timing(pageTurnAnim,{toValue:1,duration:850,useNativeDriver:true}),
-      Animated.timing(pageTurnAnim,{toValue:0,duration:850,useNativeDriver:true}),
-      Animated.delay(1200),
+      Animated.delay(5600),
+      Animated.timing(pageTurnAnim,{toValue:1,duration:620,useNativeDriver:true}),
+      Animated.timing(pageTurnAnim,{toValue:0,duration:0,useNativeDriver:true}),
+      Animated.delay(900),
     ]));
     loop.start();return()=>loop.stop();
   },[activeTab,appActive,bookOpenAnim,pageTurnAnim,playbackIsPlaying,playbackVisible,reduceMotion]);
@@ -2051,7 +2056,7 @@ function Client() {
   }: {
     title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;
   }) {
-    const square = coverShape === 'square' || format === 'Audio';
+    const square = coverShape ? coverShape === 'square' : format === 'Audio';
     const imageSource = session && serverPath
       ? {uri: session.server + serverPath, headers: {Authorization: 'Bearer ' + session.token}}
       : coverUri ? {uri: coverUri} : null;
@@ -2799,15 +2804,31 @@ function Client() {
   }
 
   function LivingBook({book}:{book:Book}){
-    const coverShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[0,-54]});
-    const coverTurn=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:['0deg','9deg']});
-    const pageShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[-74,48]});
-    const pageTurn=pageTurnAnim.interpolate({inputRange:[0,1],outputRange:['0deg','-10deg']});
+    const coverShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[0,-132]});
+    const coverTurn=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:['0deg','-138deg']});
+    const spreadScale=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]});
+    const shadowOpacity=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[.08,.18]});
+    const turningShift=pageTurnAnim.interpolate({inputRange:[0,1],outputRange:[0,-132]});
+    const turningRotate=pageTurnAnim.interpolate({inputRange:[0,1],outputRange:['0deg','-152deg']});
+    const pageTone=p.paper==='#000000'?'#111111':'#FAF8F2';
+    const lineTone=p.paper==='#000000'?'#303030':'#DDDAD2';
     return <View accessibilityLabel="Living book artwork" style={styles.livingBookStage}>
-      <Animated.View style={[styles.livingBookCover,{transform:[{perspective:1000},{translateX:coverShift},{rotateY:coverTurn}]}]}><Cover book={{...book,coverShape:'square'}} large/></Animated.View>
-      <Animated.View style={[styles.livingBookPage,{backgroundColor:p.ivory,borderColor:p.line,transform:[{perspective:1000},{translateX:pageShift},{rotateY:pageTurn}]}]}>
-        <View style={[styles.livingBookSpine,{backgroundColor:p.gold}]}/>
-        {[0,1,2,3,4,5].map(line=><View key={line} style={[styles.livingBookLine,{backgroundColor:line===0?p.gold:p.line,width:line===0?'46%':line===5?'62%':'78%'}]}/>) }
+      <Animated.View pointerEvents="none" style={[styles.livingBookShadow,{backgroundColor:'#000',opacity:shadowOpacity}]}/>
+      <Animated.View style={[styles.livingBookSpread,{transform:[{scale:spreadScale}]}]}>
+        <View style={[styles.livingBookStaticPage,styles.livingBookLeftPage,{backgroundColor:pageTone,borderColor:p.line}]}>
+          <View style={[styles.livingBookInnerSpine,{backgroundColor:p.sage,opacity:.36}]}/>
+          {[0,1,2,3,4,5,6].map(line=><View key={'l'+line} style={[styles.livingBookPageLine,{backgroundColor:lineTone,width:line===0?'48%':line===6?'58%':'76%'}]}/>)}
+        </View>
+        <View style={[styles.livingBookStaticPage,styles.livingBookRightPage,{backgroundColor:pageTone,borderColor:p.line}]}>
+          {[0,1,2,3,4,5,6].map(line=><View key={'r'+line} style={[styles.livingBookPageLine,{backgroundColor:lineTone,width:line===1?'52%':line===6?'64%':'80%'}]}/>)}
+        </View>
+        <Animated.View pointerEvents="none" style={[styles.livingBookTurningPage,{backgroundColor:pageTone,borderColor:p.line,transform:[{perspective:1400},{translateX:turningShift},{rotateY:turningRotate}]}]}>
+          {[0,1,2,3,4].map(line=><View key={'t'+line} style={[styles.livingBookPageLine,{backgroundColor:lineTone,width:line===0?'56%':'78%'}]}/>)}
+        </Animated.View>
+        <Animated.View style={[styles.livingBookFrontCover,{transform:[{perspective:1400},{translateX:coverShift},{rotateY:coverTurn}]}]}>
+          <View style={styles.livingBookCoverArt}><Cover book={{...book,coverShape:'portrait'}}/></View>
+        </Animated.View>
+        <View pointerEvents="none" style={[styles.livingBookCentreLine,{backgroundColor:p.line}]}/>
       </Animated.View>
     </View>;
   }
@@ -2860,11 +2881,8 @@ function Client() {
     return (
       <ScrollView contentContainerStyle={styles.playerScreen}>
         <View style={styles.playerHeading}>
-          <View>
-            <Text style={[styles.playerEyebrow, {color:p.gold}]}>NOW PLAYING</Text>
-            <Text style={[styles.title, {color: p.ink}]}>Listen</Text>
-          </View>
-          {current ? <Text style={[styles.meta,{color:p.muted}]}>{speed}×</Text> : null}
+          <Text style={[styles.playerEyebrow,{color:p.muted}]}>NOW PLAYING</Text>
+          {current ? <Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>{speed}×</Text> : null}
         </View>
         {current ? (
           <View style={[styles.playerAdaptive,wideLayout&&styles.playerAdaptiveWide]}>
@@ -2880,9 +2898,9 @@ function Client() {
               </Text> : null}
             </View>
             <View style={styles.playerStatusRow}>
-              <View style={[styles.playerSourcePill,{borderColor:p.line,backgroundColor:p.card}]}><Text style={[styles.playerToolLabel,{color:p.muted}]}>{current.source==='server'?'SERVER':current.source==='downloaded'?'DOWNLOADED':'ON DEVICE'}</Text></View>
-              {offlineCopy?<View style={[styles.playerSourcePill,{borderColor:p.sage,backgroundColor:p.raised}]}><Text style={[styles.playerToolLabel,{color:p.sage}]}>AVAILABLE OFFLINE</Text></View>:null}
-              {current.source==='server'&&currentServerWork&&!offlineCopy?<Pressable accessibilityRole="button" disabled={offlineBusyId===currentServerWork.id} onPress={()=>void downloadServerWork(currentServerWork)} style={[styles.playerSourcePill,{borderColor:p.sage,backgroundColor:p.card}]}><Text style={[styles.playerToolLabel,{color:p.sage}]}>{offlineBusyId===currentServerWork.id?'DOWNLOADING':'DOWNLOAD'}</Text></Pressable>:null}
+              <Text style={[styles.playerStatusText,{color:p.muted}]}>{current.source==='server'?'Server':current.source==='downloaded'?'Downloaded':'On this device'}</Text>
+              {offlineCopy?<Text style={[styles.playerStatusText,{color:p.sage}]}>Available offline</Text>:null}
+              {current.source==='server'&&currentServerWork&&!offlineCopy?<Pressable accessibilityRole="button" disabled={offlineBusyId===currentServerWork.id} onPress={()=>void downloadServerWork(currentServerWork)} style={styles.playerStatusAction}><Text style={[styles.playerStatusText,{color:p.sage,fontWeight:'600'}]}>{offlineBusyId===currentServerWork.id?'Downloading…':'Download'}</Text></Pressable>:null}
             </View>
             </View>
             <View style={styles.playerControlColumn}>
@@ -2905,7 +2923,7 @@ function Client() {
               }}
               style={[styles.progressHitArea,{maxWidth:560,alignSelf:'center',width:'100%'}]}>
               <View style={[styles.progressTrack, {backgroundColor: p.line}]}>
-                <View style={[styles.progressFill, {backgroundColor: p.gold, width: `${displayedProgress * 100}%`}]} />
+                <View style={[styles.progressFill, {backgroundColor: p.sage, width: `${displayedProgress * 100}%`}]} />
               </View>
             </Pressable>
             <View style={styles.timeRow}>
@@ -2925,8 +2943,7 @@ function Client() {
                 disabled={serverPlayer ? playback?.loading : false}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.sage,transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {serverPlayer && playback?.loading ? <ActivityIndicator color="#f8f7f2"/> : <UiIcon name={isPlaying?'pause':'play'} color="#f8f7f2" size={25}/>} 
-                <Text style={styles.playButtonCaption}>{serverPlayer && playback?.loading ? 'Loading' : isPlaying ? 'Pause' : 'Play'}</Text>
+                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color="#FFFFFF" size={27}/>} 
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={() => seekTo(position + 30)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
                 <Text style={[styles.skipMain,{color:p.ink}]}>30</Text>
@@ -2934,7 +2951,7 @@ function Client() {
               </Pressable>
             </View>
 
-            <View style={[styles.playerTools,{backgroundColor:p.card,borderColor:p.line}]}>
+            <View style={styles.playerTools}>
               <Pressable accessibilityRole="button" accessibilityLabel={'Playback speed '+speed+' times'} accessibilityState={{expanded:playerPanel==='speed'}} onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
                 <Text style={[styles.playerToolValue,{color:p.ink}]}>{speed}×</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
               </Pressable>
@@ -2955,7 +2972,7 @@ function Client() {
               </Pressable>
             </View>
 
-            {playback?.error ? <Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.gold,borderColor:p.gold}]}>{playback.error}</Text> : null}
+            {playback?.error ? <Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.sage,borderColor:p.sage}]}>{playback.error}</Text> : null}
 
             {playerPanel==='speed' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Playback speed</Text>
@@ -2969,19 +2986,19 @@ function Client() {
 
             {playerPanel==='bookmarks' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <View style={styles.queueHeader}><Text style={[styles.playerPanelTitle,{color:p.ink}]}>Bookmarks</Text><Button label="Add here" onPress={()=>void addCurrentBookmark(position)}/></View>
-              {!currentBookmarks.length?<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet. Add one at any point you want to return to.</Text>:currentBookmarks.map(mark=><View key={mark.id} style={[styles.chapterRow,{borderBottomWidth:1,borderBottomColor:p.line}]}><Pressable style={{flex:1}} onPress={()=>seekTo(mark.seconds)}><Text style={{color:p.ink,fontWeight:'800'}}>{mark.label}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(mark.seconds)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Delete bookmark at '+formatTime(mark.seconds)} onPress={()=>void deletePlayerBookmark(mark.id)}><Text style={{color:p.gold,fontWeight:'800'}}>Delete</Text></Pressable></View>)}
+              {!currentBookmarks.length?<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet. Add one at any point you want to return to.</Text>:currentBookmarks.map(mark=><View key={mark.id} style={[styles.chapterRow,{borderBottomWidth:1,borderBottomColor:p.line}]}><Pressable style={{flex:1}} onPress={()=>seekTo(mark.seconds)}><Text style={{color:p.ink,fontWeight:'800'}}>{mark.label}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(mark.seconds)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Delete bookmark at '+formatTime(mark.seconds)} onPress={()=>void deletePlayerBookmark(mark.id)}><Text style={{color:p.sage,fontWeight:'800'}}>Delete</Text></Pressable></View>)}
             </View> : null}
 
             {playerPanel==='chapters' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <View style={styles.queueHeader}><Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text><Text style={[styles.meta,{color:p.muted}]}>{effectiveChapters.length}</Text></View>
-              {chapterError?<Text accessibilityRole="alert" style={{color:p.gold}}>{chapterError}</Text>:!effectiveChapters.length?<Text style={{color:p.muted}}>No chapters are available for this file.</Text>:null}
-              {effectiveChapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index&&{backgroundColor:p.raised}]}><Text style={[styles.chapterIndex,{color:p.gold}]}>{index+1}</Text><View style={{flex:1}}><Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}{chapter.end>chapter.start?' – '+formatTime(chapter.end):''}</Text></View></Pressable>)}
+              {chapterError?<Text accessibilityRole="alert" style={{color:p.sage}}>{chapterError}</Text>:!effectiveChapters.length?<Text style={{color:p.muted}}>No chapters are available for this file.</Text>:null}
+              {effectiveChapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index&&{backgroundColor:p.raised}]}><Text style={[styles.chapterIndex,{color:p.sage}]}>{index+1}</Text><View style={{flex:1}}><Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}{chapter.end>chapter.start?' – '+formatTime(chapter.end):''}</Text></View></Pressable>)}
             </View> : null}
 
             {playerPanel==='structure' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Audiobook structure</Text><Text style={[styles.meta,{color:p.muted}]}>Corrections are stored by Archivist. Your original audio files are never rewritten.</Text>
               {((serverPlayer?playback?.tracks:activeLocalWork?.tracks)?.length||0)>1?<><Text style={[styles.filterLabel,{color:p.muted}]}>FILE ORDER</Text>{(serverPlayer?playback?.tracks||[]:activeLocalWork?.tracks||[]).map((track:any,index:number)=><View key={String(track.id||track.uri)} style={[styles.structureRow,{borderColor:p.line}]}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Pressable disabled={index===0} onPress={()=>void moveCurrentTrack(index,-1)}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900',padding:8}}>Up</Text></Pressable><Pressable disabled={index===(serverPlayer?playback?.tracks?.length||0:activeLocalWork?.tracks?.length||0)-1} onPress={()=>void moveCurrentTrack(index,1)}><Text style={{color:p.sage,fontWeight:'900',padding:8}}>Down</Text></Pressable></View>)}</>:null}
-              {effectiveChapters.length?<><View style={styles.queueHeader}><Text style={[styles.filterLabel,{color:p.muted}]}>CHAPTER EDITOR</Text>{chapterOverrides[workKey]?<Pressable onPress={()=>void saveChapterOverride(workKey,null)}><Text style={{color:p.gold,fontWeight:'800'}}>Reset embedded</Text></Pressable>:null}</View>{effectiveChapters.map((chapter,index)=><View key={index} style={[styles.structureChapter,{borderColor:p.line}]}><View style={{flex:1}}>{chapterEditIndex===index?<TextInput value={chapterEditTitle} onChangeText={setChapterEditTitle} autoFocus style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:<><Text style={[styles.bookTitle,{color:p.ink}]}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)} – {formatTime(chapter.end)}</Text></>}</View>{chapterEditIndex===index?<Pressable onPress={()=>{void saveChapterOverride(workKey,renameChapter(effectiveChapters,index,chapterEditTitle));setChapterEditIndex(null)}}><Text style={{color:p.sage,fontWeight:'800'}}>Save</Text></Pressable>:<Pressable onPress={()=>{setChapterEditIndex(index);setChapterEditTitle(chapter.title)}}><Text style={{color:p.sage,fontWeight:'800'}}>Rename</Text></Pressable>}<Pressable disabled={index!==currentChapterIndex} onPress={()=>void saveChapterOverride(workKey,splitChapter(effectiveChapters,index,position))}><Text style={{color:index===currentChapterIndex?p.sage:p.muted,fontWeight:'800'}}>Split here</Text></Pressable>{index<effectiveChapters.length-1?<Pressable onPress={()=>void saveChapterOverride(workKey,mergeChapter(effectiveChapters,index))}><Text style={{color:p.gold,fontWeight:'800'}}>Merge next</Text></Pressable>:null}{index>0?<View style={styles.boundaryRow}><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start-5))}><Text style={{color:p.muted,fontWeight:'800'}}>−5s start</Text></Pressable><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start+5))}><Text style={{color:p.muted,fontWeight:'800'}}>+5s start</Text></Pressable></View>:null}</View>)}</>:null}
+              {effectiveChapters.length?<><View style={styles.queueHeader}><Text style={[styles.filterLabel,{color:p.muted}]}>CHAPTER EDITOR</Text>{chapterOverrides[workKey]?<Pressable onPress={()=>void saveChapterOverride(workKey,null)}><Text style={{color:p.sage,fontWeight:'800'}}>Reset embedded</Text></Pressable>:null}</View>{effectiveChapters.map((chapter,index)=><View key={index} style={[styles.structureChapter,{borderColor:p.line}]}><View style={{flex:1}}>{chapterEditIndex===index?<TextInput value={chapterEditTitle} onChangeText={setChapterEditTitle} autoFocus style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:<><Text style={[styles.bookTitle,{color:p.ink}]}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)} – {formatTime(chapter.end)}</Text></>}</View>{chapterEditIndex===index?<Pressable onPress={()=>{void saveChapterOverride(workKey,renameChapter(effectiveChapters,index,chapterEditTitle));setChapterEditIndex(null)}}><Text style={{color:p.sage,fontWeight:'800'}}>Save</Text></Pressable>:<Pressable onPress={()=>{setChapterEditIndex(index);setChapterEditTitle(chapter.title)}}><Text style={{color:p.sage,fontWeight:'800'}}>Rename</Text></Pressable>}<Pressable disabled={index!==currentChapterIndex} onPress={()=>void saveChapterOverride(workKey,splitChapter(effectiveChapters,index,position))}><Text style={{color:index===currentChapterIndex?p.sage:p.muted,fontWeight:'800'}}>Split here</Text></Pressable>{index<effectiveChapters.length-1?<Pressable onPress={()=>void saveChapterOverride(workKey,mergeChapter(effectiveChapters,index))}><Text style={{color:p.sage,fontWeight:'800'}}>Merge next</Text></Pressable>:null}{index>0?<View style={styles.boundaryRow}><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start-5))}><Text style={{color:p.muted,fontWeight:'800'}}>−5s start</Text></Pressable><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start+5))}><Text style={{color:p.muted,fontWeight:'800'}}>+5s start</Text></Pressable></View>:null}</View>)}</>:null}
             </View> : null}
 
             {playerPanel==='queue' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
@@ -2998,7 +3015,7 @@ function Client() {
                 <View style={styles.queueActions}>
                   <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' up in queue'} disabled={index===0} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,-1))} style={styles.queueIconButton}><UiIcon name="chevronUp" color={index===0?p.muted:p.sage} size={17}/></Pressable>
                   <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' down in queue'} disabled={index===queuedBooks.length-1} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,1))} style={styles.queueIconButton}><UiIcon name="chevronDown" color={index===queuedBooks.length-1?p.muted:p.sage} size={17}/></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove '+book.title+' from queue'} onPress={()=>void updateLocalQueue(queuedBooks.filter((_,itemIndex)=>itemIndex!==index))}><Text style={{color:p.gold,fontWeight:'800'}}>Remove</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove '+book.title+' from queue'} onPress={()=>void updateLocalQueue(queuedBooks.filter((_,itemIndex)=>itemIndex!==index))}><Text style={{color:p.sage,fontWeight:'800'}}>Remove</Text></Pressable>
                 </View>
               </View>)}
             </View> : null}
@@ -3029,7 +3046,7 @@ function Client() {
 
   function Reader() {
     const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}><Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerAction,{color:p.sage}]}>Tools</Text></Pressable></View>;
+    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}><Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
     if (!reading) return <View style={styles.content}><Text style={[styles.title,{color:p.ink}]}>Reader</Text><Text style={[styles.empty,{color:p.muted}]}>Open an EPUB, PDF or comic from Shelf.</Text></View>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
@@ -3827,41 +3844,50 @@ const styles = StyleSheet.create({
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
   modalCard: {width:'100%',maxWidth:520,borderWidth:1,borderRadius:18,padding:18,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 920, width:'100%', alignSelf:'center'},
-  livingBookStage: {height:260,width:360,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
-  livingBookCover: {position:'absolute',zIndex:3,shadowColor:'#000',shadowOpacity:0.2,shadowRadius:18,elevation:7},
-  livingBookPage: {position:'absolute',width:218,height:218,borderWidth:1,borderRadius:10,paddingLeft:30,paddingRight:20,paddingTop:34,gap:16,shadowColor:'#000',shadowOpacity:0.1,shadowRadius:14,elevation:3,overflow:'hidden'},
-  livingBookSpine: {position:'absolute',left:14,top:10,bottom:10,width:3,borderRadius:2,opacity:0.7},
-  livingBookLine: {height:3,borderRadius:999,opacity:0.75},
-  playerHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between'},
-  playerAdaptive: {gap:16},
-  playerAdaptiveWide: {flexDirection:'row',alignItems:'flex-start',gap:32},
-  playerHeroColumn: {gap:12,alignItems:'center'},
-  playerControlColumn: {flex:1,minWidth:0,gap:14},
-  playerEyebrow: {fontSize:11,fontWeight:'900',letterSpacing:2},
+  playerScreen: {paddingHorizontal:20,paddingTop:18,gap:22,paddingBottom:120,maxWidth:1060,width:'100%',alignSelf:'center'},
+  livingBookStage: {height:330,width:390,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
+  livingBookShadow: {position:'absolute',width:310,height:38,borderRadius:155,top:256,transform:[{scaleY:.32}],shadowColor:'#000',shadowOpacity:.18,shadowRadius:24,elevation:4},
+  livingBookSpread: {width:304,height:226,position:'relative'},
+  livingBookStaticPage: {position:'absolute',top:2,width:150,height:220,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:22,paddingTop:34,gap:15,overflow:'hidden'},
+  livingBookLeftPage: {left:2,borderTopLeftRadius:12,borderBottomLeftRadius:12,borderTopRightRadius:3,borderBottomRightRadius:3},
+  livingBookRightPage: {left:152,borderTopRightRadius:12,borderBottomRightRadius:12,borderTopLeftRadius:3,borderBottomLeftRadius:3},
+  livingBookInnerSpine: {position:'absolute',right:0,top:8,bottom:8,width:3,borderRadius:2},
+  livingBookPageLine: {height:3,borderRadius:3,opacity:.8},
+  livingBookTurningPage: {position:'absolute',left:152,top:2,width:150,height:220,borderWidth:StyleSheet.hairlineWidth,borderTopRightRadius:12,borderBottomRightRadius:12,paddingHorizontal:22,paddingTop:38,gap:16,zIndex:4,backfaceVisibility:'hidden'},
+  livingBookFrontCover: {position:'absolute',left:152,top:0,width:150,zIndex:7,shadowColor:'#000',shadowOpacity:.20,shadowRadius:18,shadowOffset:{width:0,height:9},elevation:8,backfaceVisibility:'hidden'},
+  livingBookCoverArt: {width:150,overflow:'hidden',borderRadius:8},
+  livingBookCentreLine: {position:'absolute',left:150,top:8,bottom:8,width:2,zIndex:8,opacity:.7},
+  playerHeading: {minHeight:34,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  playerAdaptive: {gap:18},
+  playerAdaptiveWide: {flexDirection:'row',alignItems:'center',gap:58},
+  playerHeroColumn: {gap:12,alignItems:'center',flexShrink:0},
+  playerControlColumn: {flex:1,minWidth:0,gap:16},
+  playerEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5},
   playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},
   playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:10},
-  playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:7},
-  playerSourcePill: {borderWidth:1,borderRadius:999,minHeight:30,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
-  nowTitle: {fontFamily: 'serif', fontSize: 30, textAlign: 'center', marginTop: 4},
+  playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:12,minHeight:28},
+  playerSourcePill: {borderWidth:0,minHeight:28,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
+  playerStatusText: {fontSize:11,lineHeight:16},
+  playerStatusAction: {minHeight:36,justifyContent:'center',paddingHorizontal:2},
+  nowTitle: {fontFamily:'serif',fontSize:32,lineHeight:37,fontWeight:'500',textAlign:'center',marginTop:2,letterSpacing:-.25},
   playerByline: {fontSize:14,lineHeight:20,textAlign:'center'},
   playerChapter: {fontSize:13,fontWeight:'800',textAlign:'center',marginTop:3},
   progressHitArea: {paddingVertical:10},
-  progressTrack: {height: 7, borderRadius: 999, overflow: 'hidden'},
-  progressFill: {height: 7, borderRadius: 999},
+  progressTrack: {height:4,borderRadius:999,overflow:'hidden'},
+  progressFill: {height:4,borderRadius:999},
   timeRow: {flexDirection: 'row', justifyContent: 'space-between',alignItems:'center',marginTop:-8},
   playerTime: {fontSize:13,fontVariant:['tabular-nums'],fontWeight:'700'},
-  transport: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22,marginVertical:4},
-  skipButton: {width:64,height:64,borderRadius:32,borderWidth:1,alignItems:'center',justifyContent:'center'},
+  transport: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:28,marginVertical:8},
+  skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center'},
   skipMain: {fontSize:17,fontWeight:'900',lineHeight:19},
   skipMeta: {fontSize:10,fontWeight:'700',textTransform:'uppercase'},
-  playButton: {width: 82, height: 82, borderRadius: 41, alignItems: 'center', justifyContent: 'center',shadowColor:'#000',shadowOpacity:0.18,shadowRadius:12,elevation:5},
+  playButton: {width:80,height:80,borderRadius:40,alignItems:'center',justifyContent:'center',shadowColor:'#000',shadowOpacity:.16,shadowRadius:14,shadowOffset:{width:0,height:7},elevation:5},
   playButtonGlyph: {color:'#f8f7f2',fontSize:24,fontWeight:'900',lineHeight:28},
   playButtonCaption: {color:'#f8f7f2',fontSize:10,fontWeight:'800',textTransform:'uppercase',letterSpacing:0.6},
   playButtonText: {color: '#f8f7f2', fontSize: 17, fontWeight: '800'},
-  playerTools: {borderWidth:0,borderRadius:14,flexDirection:'row',overflow:'hidden'},
-  playerTool: {flex:1,minHeight:68,alignItems:'center',justifyContent:'center',padding:8},
-  playerToolBorder: {borderLeftWidth:StyleSheet.hairlineWidth},
+  playerTools: {borderWidth:0,flexDirection:'row',justifyContent:'space-between',gap:4},
+  playerTool: {flex:1,minHeight:58,alignItems:'center',justifyContent:'center',paddingHorizontal:4,paddingVertical:6},
+  playerToolBorder: {borderLeftWidth:0},
   playerToolValue: {fontSize:16,fontWeight:'900'},
   playerToolLabel: {fontSize:11,fontWeight:'700',marginTop:2},
   playerPanel: {borderWidth:0,borderRadius:16,padding:16,gap:12},
@@ -3880,20 +3906,21 @@ const styles = StyleSheet.create({
   playerEmpty: {borderWidth:1,borderRadius:16,padding:18,gap:12},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex: 1,position:'relative'},
-  readerBar: {minHeight: 54, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center'},
-  readerToolsButton: {width:72,minHeight:54,alignItems:'center',justifyContent:'center'},
+  readerBar: {minHeight:50,flexDirection:'row',alignItems:'center',paddingHorizontal:4},
+  readerToolsButton: {width:48,minHeight:48,alignItems:'center',justifyContent:'center'},
   searchRow:{flexDirection:'row',alignItems:'center',gap:8},
   filterPill:{borderWidth:1,borderRadius:999,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
   readerToolBlock: {gap:10,paddingVertical:8},
   readerSavedRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:12},
   readerQuote: {borderLeftWidth:3,paddingLeft:10,fontStyle:'italic',lineHeight:20},
-  readerBack: {width: 72, minHeight:54, alignItems: 'center', justifyContent: 'center'},
-  readerAction: {fontWeight: '700'},
+  readerBack: {width:48,minHeight:48,alignItems:'center',justifyContent:'center'},
+  readerAction: {fontWeight:'600'},
+  readerToolGlyph: {fontFamily:'serif',fontSize:18,fontWeight:'500'},
   readerHeading: {flex:1,alignItems:'center',justifyContent:'center',minWidth:0},
-  readerTitle: {width:'100%', textAlign: 'center', fontWeight: '700'},
-  readerFormat: {fontSize:10,fontWeight:'800',letterSpacing:1.1,textTransform:'uppercase',marginTop:1},
+  readerTitle: {width:'100%',textAlign:'center',fontSize:13,fontWeight:'600'},
+  readerFormat: {fontSize:9,fontWeight:'600',letterSpacing:1,textTransform:'uppercase',marginTop:1},
   readerLoading: {flex:1,alignItems:'center',justifyContent:'center',gap:10,padding:24},
-  readerFailure: {margin:18,borderWidth:1,borderRadius:16,padding:18,gap:12},
+  readerFailure: {margin:24,borderWidth:0,borderRadius:16,padding:20,gap:12},
   readerOverlay: {position:'absolute',top:54,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:0.94},
   readerErrorOverlay: {position:'absolute',left:18,right:18,top:82,zIndex:30,borderWidth:1,borderRadius:16,padding:18,gap:12},
   atlasGroup: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 10},
