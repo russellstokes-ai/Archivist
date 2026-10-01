@@ -2228,7 +2228,7 @@ function Client() {
               vertical&&styles.librarySpaceTabVertical,
               pressed&&{opacity:.62},
             ]}>
-            <Text numberOfLines={1} style={[styles.librarySpaceText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>
+            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.librarySpaceText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>
               {name || 'All spaces'}
             </Text>
             <View pointerEvents="none" style={[
@@ -2477,8 +2477,8 @@ function Client() {
           pressed&&{opacity:.62},
         ]}>
         <View style={{flexDirection:'row',alignItems:'baseline',gap:7,minWidth:0}}>
-          <Text numberOfLines={1} style={[styles.sourceTabText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>{item.label}</Text>
-          <Text style={[styles.sourceTabCount,{color:selected?p.sage:p.muted}]}>{item.count}</Text>
+          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.sourceTabText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>{item.label}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.sourceTabCount,{color:selected?p.sage:p.muted}]}>{item.count}</Text>
         </View>
         <View
           pointerEvents="none"
@@ -2491,7 +2491,7 @@ function Client() {
     });
     return vertical
       ? <View style={styles.sourceSwitcherVertical}>{body}</View>
-      : <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.sourceSwitcher}>{body}</ScrollView>;
+      : <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sourceSwitcherScroll} contentContainerStyle={styles.sourceSwitcher}>{body}</ScrollView>;
   }
 
   function UnifiedWorkCard({work,list=false}:{work:UnifiedWork;list?:boolean}){
@@ -2520,8 +2520,8 @@ function Client() {
           accessibilityLabel={'More actions for '+work.title}
           hitSlop={8}
           onPress={event=>{event.stopPropagation();setWorkMenu(work)}}
-          style={[styles.moreButton,{backgroundColor:p.paper},list&&styles.moreButtonList]}>
-          <UiIcon name="more" color={p.muted} size={18}/>
+          style={[styles.moreButton,{backgroundColor:'rgba(0,0,0,.48)'},list&&styles.moreButtonList]}>
+          <UiIcon name="more" color="#FFFFFF" size={16}/>
         </Pressable>
       </View>
       <View style={[styles.unifiedCardCopy,list&&{flex:1}]}>
@@ -2913,7 +2913,7 @@ function Client() {
           </View>
         </View>
       </View>
-      {!wide?<><SourceSwitcher/>{availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}</>:null}
+      {!wide?<><SourceSwitcher/>{availableSpaces.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.libraryChipsScroll} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}</>:null}
       {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
@@ -2923,7 +2923,7 @@ function Client() {
         <View style={styles.librarySearchRow}>
           <View style={[styles.librarySearchShell,{backgroundColor:p.card}]}>
             <UiIcon name="search" color={p.muted} size={19}/>
-            <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search books, authors, series or genres" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink}]}/>
+            <TextInput maxFontSizeMultiplier={1.15} accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search books, authors, series or genres" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink}]}/>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel={'Filters'+(filtersActive?', '+filtersActive+' active':'')} onPress={()=>setLibraryFiltersOpen(true)} style={[styles.libraryUtilityButton,{backgroundColor:filtersActive?p.card:'transparent'}]}>
             <UiIcon name="filter" color={filtersActive?p.sage:p.muted} size={21}/>
@@ -2935,11 +2935,11 @@ function Client() {
         </View>
         {formatOptions.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryFormatTabs}>
           <Pressable accessibilityRole="button" accessibilityState={{selected:!formatFilter}} onPress={()=>setFormatFilter('')} style={styles.libraryFormatTab}>
-            <Text style={[styles.libraryFormatText,{color:!formatFilter?p.ink:p.muted,fontWeight:!formatFilter?'700':'500'}]}>All</Text>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:!formatFilter?p.ink:p.muted,fontWeight:!formatFilter?'700':'500'}]}>All</Text>
             <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:!formatFilter?1:0}]}/>
           </Pressable>
           {formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:formatFilter===format}} onPress={()=>setFormatFilter(formatFilter===format?'':format)} style={styles.libraryFormatTab}>
-            <Text style={[styles.libraryFormatText,{color:formatFilter===format?p.ink:p.muted,fontWeight:formatFilter===format?'700':'500'}]}>{format}</Text>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:formatFilter===format?p.ink:p.muted,fontWeight:formatFilter===format?'700':'500'}]}>{format}</Text>
             <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:formatFilter===format?1:0}]}/>
           </Pressable>)}
         </ScrollView>:null}
@@ -4184,9 +4184,10 @@ const styles = StyleSheet.create({
   libraryRailAdd: {minHeight:44,paddingHorizontal:12,justifyContent:'center'},
   libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
   libraryChoiceVertical: {borderRadius: 10, minHeight: 44},
-  libraryChips: {gap: 8, paddingBottom: 2},
+  libraryChipsScroll: {flexGrow:0,minHeight:46,maxHeight:50},
+  libraryChips: {gap:8,paddingVertical:2,minHeight:46},
   libraryChipsRow: {flexDirection: 'row', gap: 20},
-  librarySpaceTab: {minHeight:42,justifyContent:'center',position:'relative',paddingHorizontal:1},
+  librarySpaceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
   librarySpaceTabVertical: {minHeight:44,paddingHorizontal:12},
   librarySpaceText: {fontSize:13},
   librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
@@ -4233,7 +4234,7 @@ const styles = StyleSheet.create({
   coverFormat: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.4},
   coverTitle: {fontFamily:'sans-serif-medium',fontSize:13,lineHeight:17,fontWeight:'500'},
   coverTitleLarge: {fontSize:16,lineHeight:21},
-  bookTitle: {fontSize: 14.5, lineHeight:19, fontWeight: '700'},
+  bookTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   editorCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   serverRecovery: {borderWidth:0,borderRadius:14,padding:16,gap:10},
@@ -4362,16 +4363,16 @@ const styles = StyleSheet.create({
   segment: {flexDirection:'row',gap:4},
   segmentItem: {flex:1,borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center',position:'relative'},
   segmentMarker: {position:'absolute',left:12,right:12,bottom:3,height:2,borderRadius:2},
-  miniPlayer: {minHeight:64,marginHorizontal:12,marginBottom:8,borderRadius:14,borderTopWidth:StyleSheet.hairlineWidth,padding:8,flexDirection:'row',alignItems:'center',gap:10,shadowColor:'#000',shadowOpacity:.06,shadowRadius:10,shadowOffset:{width:0,height:4},elevation:2},
+  miniPlayer: {minHeight:56,marginHorizontal:12,marginBottom:6,borderRadius:12,borderTopWidth:StyleSheet.hairlineWidth,paddingHorizontal:8,paddingVertical:6,flexDirection:'row',alignItems:'center',gap:8,shadowColor:'#000',shadowOpacity:.05,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:2},
   miniPlayerMain: {flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:10,padding:2},
-  miniCover: {width:42,height:42,borderRadius:6,alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  miniCover: {width:36,height:36,borderRadius:5,alignItems:'center',justifyContent:'center',overflow:'hidden'},
   miniCoverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
   miniCoverLabel: {color:'#FFFFFF',fontSize:8,fontWeight:'700',letterSpacing:.7},
-  miniTitle: {fontSize:13,fontWeight:'600'},
-  miniMeta: {fontSize:11},
-  miniButton: {width:44,height:44,borderRadius:22,borderWidth:0,alignItems:'center',justifyContent:'center'},
+  miniTitle: {fontSize:12.5,lineHeight:17,fontWeight:'600'},
+  miniMeta: {fontSize:10.5,lineHeight:14},
+  miniButton: {width:40,height:40,borderRadius:20,borderWidth:0,alignItems:'center',justifyContent:'center'},
   miniButtonText: {fontWeight:'600'},
-  tabBar: {height:68,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
+  tabBar: {height:64,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
   tab: {flex:1,alignItems:'center',justifyContent:'center',gap:3,position:'relative'},
   tabIndicator: {position:'absolute',top:0,width:20,height:2,borderRadius:2},
   tabText: {fontSize:10,lineHeight:13,fontWeight:'600'},
@@ -4467,9 +4468,10 @@ const styles = StyleSheet.create({
   atlasListAlternative: {gap:4},
   atlasHint: {fontSize:11,lineHeight:16,textAlign:'center',letterSpacing:.2},
   insightsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:28,maxWidth:1120,width:'100%',alignSelf:'center'},
-  sourceSwitcher: {flexDirection:'row',gap:22,paddingRight:14,minHeight:44,alignItems:'stretch'},
+  sourceSwitcherScroll: {flexGrow:0,minHeight:48,maxHeight:52},
+  sourceSwitcher: {flexDirection:'row',gap:20,paddingRight:14,paddingVertical:2,minHeight:48,alignItems:'stretch'},
   sourceSwitcherVertical: {gap:2},
-  sourceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
+  sourceTab: {minHeight:46,justifyContent:'center',position:'relative',paddingHorizontal:1},
   sourceTabVertical: {paddingHorizontal:12,minHeight:46},
   sourceTabText: {fontSize:13},
   sourceTabCount: {fontSize:11,fontWeight:'600'},
@@ -4547,7 +4549,7 @@ const styles = StyleSheet.create({
   workSourceDot: {width:5,height:5,borderRadius:3},
   workSource: {fontSize:11,fontWeight:'500',flexShrink:1},
   workRating: {fontSize:11,fontWeight:'600',marginLeft:'auto'},
-  moreButton: {position:'absolute',right:4,top:4,minWidth:36,minHeight:36,borderRadius:18,alignItems:'center',justifyContent:'center',opacity:.78},
+  moreButton: {position:'absolute',right:4,top:4,width:32,height:32,borderRadius:16,alignItems:'center',justifyContent:'center',opacity:.9},
   moreButtonList: {right:4,top:4},
   offlineBadge: {position:'absolute',left:7,bottom:7,borderRadius:999,paddingHorizontal:7,paddingVertical:4},
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
@@ -4569,12 +4571,12 @@ const styles = StyleSheet.create({
   libraryTitleCompact: {fontSize:28,lineHeight:34},
   libraryTitleFold: {fontSize:32,lineHeight:38},
   librarySearchRow: {flexDirection:'row',alignItems:'center',gap:8},
-  librarySearchShell: {flex:1,minHeight:46,borderRadius:10,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:13},
-  librarySearch: {flex:1,borderWidth:0,minHeight:46,paddingHorizontal:0,fontSize:15},
+  librarySearchShell: {flex:1,minHeight:44,borderRadius:10,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:12},
+  librarySearch: {flex:1,borderWidth:0,minHeight:44,paddingHorizontal:0,fontSize:14},
   libraryUtilityButton: {width:44,height:44,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
   libraryFilterCount: {position:'absolute',right:3,top:2,minWidth:16,height:16,borderRadius:8,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
   libraryFilterCountText: {color:'#FFFFFF',fontSize:9,fontWeight:'700'},
-  libraryFormatTabs: {gap:24,paddingRight:18,minHeight:40,alignItems:'stretch'},
+  libraryFormatTabs: {gap:22,paddingRight:18,minHeight:42,paddingVertical:1,alignItems:'stretch'},
   libraryFormatTab: {minHeight:40,justifyContent:'center',position:'relative'},
   libraryFormatText: {fontSize:13,lineHeight:18},
   libraryFormatMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
