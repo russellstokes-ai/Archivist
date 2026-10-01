@@ -1,6 +1,6 @@
-# Third-party notices added in Packs 3-9
+# Archivist third-party notices
 
-Pack 5 follow-up: Home Assistant images also install the distribution's FFmpeg
+Home Assistant images also install the distribution's FFmpeg
 package for its ffprobe executable. This is invoked as a subprocess, not linked
 into the Go server. FFmpeg and its distribution dependencies retain their own
 licences; include the exact built-image package/source notices in the pending
