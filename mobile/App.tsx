@@ -2872,7 +2872,7 @@ function Client() {
 
   function Library(){
     const wide=width>=760;
-    const columns=libraryView==='list'?1:(width>=1120?6:width>=760?5:width>=600?4:width>=480?3:2);
+    const columns=libraryView==='list'?1:(width>=1180?6:width>=940?5:width>=700?4:2);
     const filtersActive=[space,formatFilter,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
     const formatOptions=[...new Set(allUnifiedWorks.map(work=>work.format).filter(Boolean))].sort();
     const authorOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.author).filter((value:string)=>!!value))).sort().slice(0,20);
@@ -2880,7 +2880,7 @@ function Client() {
     const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
     const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
     const ReviewList=()=>reviewOnly?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Metadata review</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} item{visibleBooks.length===1?'':'s'} need attention</Text></View><Button label="Done reviewing" tone="quiet" onPress={()=>setReviewOnly(false)}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>:null}</View>:null;
-    const main=<View style={styles.libraryMain}>
+    const main=<View style={[styles.libraryMain,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
         <Text style={[styles.libraryKicker,{color:p.sage}]}>COLLECTION</Text>
         <View style={styles.pageHeadingRow}>
@@ -4155,7 +4155,7 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:220,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:18,paddingTop:30,paddingBottom:22,gap:8},
+  libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:28,paddingBottom:22,gap:8},
   libraryRailTitle: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5,marginBottom:3},
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:44,paddingHorizontal:12,justifyContent:'center'},
@@ -4501,7 +4501,7 @@ const styles = StyleSheet.create({
   skeletonCard: {width:132,height:198,borderRadius:12,opacity:0.45},
   unifiedCard: {flex:1,minWidth:0,gap:7,position:'relative'},
   unifiedCardList: {flexDirection:'row',alignItems:'center',gap:14,paddingVertical:10},
-  unifiedCardSelected: {borderWidth:1,borderRadius:12,padding:7},
+  unifiedCardSelected: {borderWidth:1,borderRadius:12,padding:4},
   unifiedCoverWrap: {position:'relative'},
   unifiedCoverWrapList: {width:68},
   unifiedCardCopy: {gap:3,minWidth:0,paddingHorizontal:1},
@@ -4509,7 +4509,7 @@ const styles = StyleSheet.create({
   workSourceDot: {width:5,height:5,borderRadius:3},
   workSource: {fontSize:11,fontWeight:'500',flexShrink:1},
   workRating: {fontSize:11,fontWeight:'600',marginLeft:'auto'},
-  moreButton: {position:'absolute',right:5,top:5,minWidth:34,minHeight:34,borderRadius:17,alignItems:'center',justifyContent:'center',opacity:.86},
+  moreButton: {position:'absolute',right:4,top:4,minWidth:36,minHeight:36,borderRadius:18,alignItems:'center',justifyContent:'center',opacity:.78},
   moreButtonList: {right:4,top:4},
   offlineBadge: {position:'absolute',left:7,bottom:7,borderRadius:999,paddingHorizontal:7,paddingVertical:4},
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
@@ -4522,18 +4522,19 @@ const styles = StyleSheet.create({
   visibilityToggle: {width:44,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},
   orderButton: {width:38,height:38,alignItems:'center',justifyContent:'center'},
   libraryTwoPane: {flex:1,flexDirection:'row'},
-  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:24,gap:18},
+  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:24,gap:16},
+  libraryMainWide: {paddingHorizontal:28,paddingTop:28,gap:18},
   libraryCatalogueHeader: {gap:4,paddingBottom:2},
   libraryKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.0},
-  libraryTitle: {fontFamily:'serif',fontSize:38,lineHeight:42,fontWeight:'500',letterSpacing:-.7},
+  libraryTitle: {fontFamily:'serif',fontSize:36,lineHeight:41,fontWeight:'500',letterSpacing:-.65},
   librarySearchRow: {flexDirection:'row',alignItems:'center',gap:8},
-  librarySearchShell: {flex:1,minHeight:48,borderRadius:14,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:14},
-  librarySearch: {flex:1,borderWidth:0,minHeight:48,paddingHorizontal:0,fontSize:15},
-  libraryUtilityButton: {width:46,height:46,borderRadius:12,alignItems:'center',justifyContent:'center',position:'relative'},
+  librarySearchShell: {flex:1,minHeight:46,borderRadius:10,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:13},
+  librarySearch: {flex:1,borderWidth:0,minHeight:46,paddingHorizontal:0,fontSize:15},
+  libraryUtilityButton: {width:44,height:44,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
   libraryFilterCount: {position:'absolute',right:3,top:2,minWidth:16,height:16,borderRadius:8,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
   libraryFilterCountText: {color:'#FFFFFF',fontSize:9,fontWeight:'700'},
-  libraryFormatTabs: {gap:26,paddingRight:18,minHeight:44,alignItems:'stretch'},
-  libraryFormatTab: {minHeight:44,justifyContent:'center',position:'relative'},
+  libraryFormatTabs: {gap:24,paddingRight:18,minHeight:40,alignItems:'stretch'},
+  libraryFormatTab: {minHeight:40,justifyContent:'center',position:'relative'},
   libraryFormatText: {fontSize:13,lineHeight:18},
   libraryFormatMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   libraryToolbar: {flexDirection:'row',alignItems:'center',gap:8},
@@ -4542,8 +4543,8 @@ const styles = StyleSheet.create({
   toolbarButton: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
   librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
   librarySelectionAction: {minHeight:40,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
-  unifiedGrid: {paddingBottom:120,gap:20,paddingTop:4},
-  unifiedGridRow: {gap:14},
+  unifiedGrid: {paddingBottom:120,gap:18,paddingTop:4},
+  unifiedGridRow: {gap:12},
   unifiedList: {paddingBottom:120,gap:4},
   selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   selectionCount: {fontSize:13,fontWeight:'900'},
