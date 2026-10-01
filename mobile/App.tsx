@@ -273,6 +273,21 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
+type UiIconName = 'play'|'pause'|'more'|'close'|'chevronUp'|'chevronDown';
+
+function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
+  const stroke=Math.max(2,Math.round(size/8));
+  if(name==='play')return <View style={{width:0,height:0,borderTopWidth:size*.36,borderBottomWidth:size*.36,borderLeftWidth:size*.58,borderTopColor:'transparent',borderBottomColor:'transparent',borderLeftColor:color,marginLeft:size*.08}}/>;
+  if(name==='pause')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.18}}><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/></View>;
+  if(name==='more')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.12}}>{[0,1,2].map(index=><View key={index} style={{width:stroke*1.35,height:stroke*1.35,borderRadius:stroke,backgroundColor:color}}/>)}</View>;
+  if(name==='close')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'45deg'}]}}/><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'-45deg'}]}}/></View>;
+  const up=name==='chevronUp';
+  return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',width:size*.58,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.08,top:size*.45,transform:[{rotate:up?'-42deg':'42deg'}]}}/>
+    <View style={{position:'absolute',width:size*.58,height:stroke,borderRadius:stroke,backgroundColor:color,right:size*.08,top:size*.45,transform:[{rotate:up?'42deg':'-42deg'}]}}/>
+  </View>;
+}
+
 function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.'}: {active: boolean;title?: string;copy?: string}) {
   const burst = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -2376,7 +2391,7 @@ function Client() {
         </View>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={'More actions for '+work.title} hitSlop={8} onPress={event=>{event.stopPropagation();setWorkMenu(work)}} style={styles.moreButton}>
-        <Text style={[styles.moreButtonText,{color:p.muted}]}>•••</Text>
+        <UiIcon name="more" color={p.muted} size={18}/>
       </Pressable>
     </Pressable>;
   }
@@ -2473,7 +2488,7 @@ function Client() {
           <Pressable onPress={()=>editSmartRule(childPath,{...child,field:nextIn(smartShelfFields,child.field)})} style={[styles.ruleToken,{borderColor:p.line}]}><Text style={{color:p.ink,fontWeight:'800'}}>{child.field}</Text></Pressable>
           <Pressable onPress={()=>editSmartRule(childPath,{...child,operator:nextIn(ruleOperators,child.operator)})} style={[styles.ruleToken,{borderColor:p.line}]}><Text style={{color:p.ink,fontWeight:'800'}}>{child.operator}</Text></Pressable>
           {!boolOp?<TextInput accessibilityLabel={'Rule value '+child.field} value={child.value} onChangeText={value=>editSmartRule(childPath,{...child,value})} placeholder="Value" placeholderTextColor={p.muted} style={[styles.ruleInput,{color:p.ink,borderColor:p.line}]}/>:null}
-          <Pressable accessibilityRole="button" accessibilityLabel="Remove rule" onPress={()=>setSmartShelfRules(current=>removeRuleNode(current,childPath))} style={styles.ruleRemove}><Text style={{color:p.muted,fontWeight:'900'}}>×</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Remove rule" onPress={()=>setSmartShelfRules(current=>removeRuleNode(current,childPath))} style={styles.ruleRemove}><UiIcon name="close" color={p.muted} size={16}/></Pressable>
         </View>;
       })}
       <View style={styles.toolRow}><Button label="Add rule" tone="quiet" onPress={()=>setSmartShelfRules(current=>addRuleAtPath(current,path))}/>{path.length<3?<Button label="Add group" tone="quiet" onPress={()=>setSmartShelfRules(current=>addGroupAtPath(current,path))}/>:null}</View>
@@ -2533,8 +2548,8 @@ function Client() {
         {shelfSections.map((item,index)=><View key={item.id} style={[styles.manageRow,{borderColor:p.line}]}>
           <Pressable accessibilityRole="switch" accessibilityState={{checked:item.visible}} onPress={()=>toggle(item.id)} style={[styles.visibilityToggle,{backgroundColor:item.visible?p.sage:p.line}]}><Text style={{color:p.ivory,fontWeight:'900'}}>{item.visible?'ON':'OFF'}</Text></Pressable>
           <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{item.title}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' up'} disabled={index===0} onPress={()=>move(index,-1)} style={styles.orderButton}><Text style={{color:index===0?p.muted:p.ink,fontWeight:'900'}}>↑</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' down'} disabled={index===shelfSections.length-1} onPress={()=>move(index,1)} style={styles.orderButton}><Text style={{color:index===shelfSections.length-1?p.muted:p.ink,fontWeight:'900'}}>↓</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' up'} disabled={index===0} onPress={()=>move(index,-1)} style={styles.orderButton}><UiIcon name="chevronUp" color={index===0?p.muted:p.ink} size={17}/></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' down'} disabled={index===shelfSections.length-1} onPress={()=>move(index,1)} style={styles.orderButton}><UiIcon name="chevronDown" color={index===shelfSections.length-1?p.muted:p.ink} size={17}/></Pressable>
         </View>)}
         <Button label="Done" onPress={()=>setShelfManageOpen(false)}/>
       </View>
@@ -2762,7 +2777,7 @@ function Client() {
                 disabled={serverPlayer ? playback?.loading : false}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.sage,transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                <Text style={styles.playButtonGlyph}>{serverPlayer && playback?.loading ? '…' : isPlaying ? 'Ⅱ' : '▶'}</Text>
+                {serverPlayer && playback?.loading ? <ActivityIndicator color="#f8f7f2"/> : <UiIcon name={isPlaying?'pause':'play'} color="#f8f7f2" size={25}/>} 
                 <Text style={styles.playButtonCaption}>{serverPlayer && playback?.loading ? 'Loading' : isPlaying ? 'Pause' : 'Play'}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={() => seekTo(position + 30)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
@@ -2788,7 +2803,7 @@ function Client() {
                 <Text style={[styles.playerToolValue,{color:p.ink}]}>{queuedBooks.length}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Edit audiobook structure" accessibilityState={{expanded:playerPanel==='structure'}} onPress={()=>setPlayerPanel(playerPanel==='structure'?null:'structure')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>⋯</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Structure</Text>
+                <UiIcon name="more" color={p.ink} size={18}/><Text style={[styles.playerToolLabel,{color:p.muted}]}>Structure</Text>
               </Pressable>
             </View>
 
@@ -2833,8 +2848,8 @@ function Client() {
                   <Text style={[styles.meta,{color:p.muted}]}>#{index+1}{book.author ? ' · '+book.author : ''} · {book.source==='server'?'Server':book.source==='downloaded'?'Downloaded':'Device'}</Text>
                 </Pressable>
                 <View style={styles.queueActions}>
-                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' up in queue'} disabled={index===0} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,-1))}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900'}}>↑</Text></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' down in queue'} disabled={index===queuedBooks.length-1} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,1))}><Text style={{color:index===queuedBooks.length-1?p.muted:p.sage,fontWeight:'900'}}>↓</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' up in queue'} disabled={index===0} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,-1))} style={styles.queueIconButton}><UiIcon name="chevronUp" color={index===0?p.muted:p.sage} size={17}/></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' down in queue'} disabled={index===queuedBooks.length-1} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,1))} style={styles.queueIconButton}><UiIcon name="chevronDown" color={index===queuedBooks.length-1?p.muted:p.sage} size={17}/></Pressable>
                   <Pressable accessibilityRole="button" accessibilityLabel={'Remove '+book.title+' from queue'} onPress={()=>void updateLocalQueue(queuedBooks.filter((_,itemIndex)=>itemIndex!==index))}><Text style={{color:p.gold,fontWeight:'800'}}>Remove</Text></Pressable>
                 </View>
               </View>)}
@@ -3077,7 +3092,7 @@ function Client() {
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
     return <View style={[styles.atlasInspector,{backgroundColor:p.card,borderColor:p.line},width>=760?styles.atlasInspectorWide:styles.atlasInspectorMobile]}>
-      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.gold}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')}><Text style={{color:p.muted,fontWeight:'900',fontSize:18}}>×</Text></Pressable></View>
+      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.gold}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
       {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
       <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
       <View style={styles.toolRow}>
@@ -3536,7 +3551,7 @@ function Client() {
       {error ? <View style={[styles.errorBanner,{borderColor:p.gold,backgroundColor:p.card}]}>
         <Text accessibilityRole="alert" style={[styles.error, {color: p.gold,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
-          <Text style={{color:p.gold,fontSize:20,fontWeight:'900'}}>×</Text>
+          <UiIcon name="close" color={p.gold} size={18}/>
         </Pressable>
       </View> : null}
       <View style={styles.tabBody}>
@@ -3701,6 +3716,8 @@ const styles = StyleSheet.create({
   queueHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   queueBook: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',gap:10,alignItems:'center'},
   queueActions: {flexDirection:'row',gap:14,alignItems:'center'},
+  queueIconButton: {width:38,height:38,alignItems:'center',justifyContent:'center'},
+  iconButton: {width:38,height:38,alignItems:'center',justifyContent:'center',borderRadius:19},
   structureRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:50,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
   structureChapter: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,gap:8},
   boundaryRow: {flexDirection:'row',gap:12,flexWrap:'wrap'},
