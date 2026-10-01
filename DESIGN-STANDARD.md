@@ -137,12 +137,43 @@ Loading uses real-size skeleton covers/surfaces; no blank spinner pages.
 Empty states: small Archivist mark, editorial heading, one short paragraph, one primary action.
 Errors stay near the failed action and use plain language; technical detail is secondary.
 
-## Fold
-Responsive thresholds are based on usable width:
-- compact <600
-- medium 600-759
-- wide 760+
-Wide means recomposition: Library rail, two-column Player, Atlas right inspector, reader width/two-page treatment where appropriate, multi-column Insights. Never simply scale the phone UI.
+## Responsive layout and Fold behavior
+Archivist must treat device width as a composition decision, not a scaling factor.
+
+Canonical width classes:
+- Compact phone: <430dp.
+- Phone: 430-599dp.
+- Fold / medium: 600-759dp.
+- Wide / tablet: 760dp and above.
+- Very wide compositions may introduce additional structure from roughly 900dp where content width genuinely supports it.
+
+Rules:
+- Open Fold is a first-class layout, not a stretched phone screen.
+- Library uses a slim source rail and a four-column catalogue on Fold-class widths when the available content width supports it.
+- Player becomes a deliberate two-column composition from Fold-class widths so artwork and transport remain visible without excessive vertical dead space.
+- Atlas uses a persistent inspector from Fold-class widths.
+- Settings stays single-column on Fold unless a form genuinely benefits from more space; do not create two cramped columns merely because width is available.
+- Reader preserves comfortable measure rather than filling the full Fold width.
+- Reflow must survive live fold/unfold changes without clipped controls, lost scroll position or hidden primary actions.
+
+### Typography on Android and variable-width devices
+- Do not rely on Android's generic `serif` for ordinary interface hierarchy. The generic serif may vary substantially by manufacturer and can produce poor metrics.
+- Until a licensed bundled editorial family is introduced, use the platform sans / `sans-serif-medium` for screen titles, feature titles, section titles and dense UI hierarchy.
+- Reserve serif treatment for the Archivist wordmark/mark and actual reading content where editorial texture is intentional.
+- Dense controls and navigation should generally cap font scaling around 1.15 while preserving accessibility through adequate control height and wrapping elsewhere.
+- Fixed-height controls must be tested with long labels and enlarged text. Text must never be vertically clipped.
+- Prefer the compact hierarchy around 30/24/18/14/12 rather than many unrelated one-off sizes.
+
+### Real-content stress cases
+Visual acceptance must use imperfect real library data, including long audiobook/file-derived titles, missing covers, unknown authors, long series names, mixed source labels, and active playback while browsing.
+
+Fallback artwork must remain quiet and must never become a giant text card. Artwork or the placeholder shape is primary; metadata belongs outside it.
+
+### First-viewport rules
+- Player must show identity, progress and primary transport without forcing a normal phone or Fold user to scroll.
+- Library should expose the catalogue quickly; filters and source controls must not consume most of the first viewport.
+- Shelf alerts are secondary to reading/listening content and should use quiet inline rows rather than admin-style banners.
+- Persistent header, mini-player and navigation chrome must be budgeted together; they must not crowd out content.
 
 ## Haptics
 Restrained only. Light for bookmark/selection/toggle/focus; medium for primary playback or significant success; warning for confirmed destructive action. Never vibrate during ordinary scrolling or every tap.

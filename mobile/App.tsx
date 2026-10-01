@@ -576,9 +576,6 @@ function Client() {
   const [offlineBusyId,setOfflineBusyId]=useState<number|null>(null);
   const [offlineProgress,setOfflineProgress]=useState('');
   const loadCancel = useRef<(() => void) | null>(null);
-  const wideLayout = width >= 700;
-  const compactLayout = width < 430;
-  const shelfColumns = width >= 1000 ? 6 : width >= 760 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
       const current = sessionRef.current;
@@ -3486,7 +3483,7 @@ function Client() {
     const node=atlasUniverse.nodes.find(item=>item.label.toLowerCase().includes(q)||item.subtitle?.toLowerCase().includes(q));
     if(!node)return;
     setAtlasNodeId(node.id);
-    const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=760?620:520;
+    const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=900?620:foldLayout?580:500;
     const scale=Math.max(.82,atlasTransform.scale);
     animateAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
   }
@@ -3542,7 +3539,7 @@ function Client() {
     const renderedIds=new Set(renderedNodes.map(node=>node.id));
     const renderedEdges=atlasUniverse.edges.filter(edge=>renderedIds.has(edge.from)&&renderedIds.has(edge.to));
     const nodeMap=new Map(atlasUniverse.nodes.map(node=>[node.id,node]));
-    const viewHeight=width>=760?640:540;
+    const viewHeight=width>=900?640:foldLayout?600:500;
     return (
       <ScrollView contentContainerStyle={styles.atlasScreen} keyboardShouldPersistTaps="handled">
         <View style={styles.pageHeadingRow}>
@@ -4415,10 +4412,10 @@ const styles = StyleSheet.create({
   tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
   tabText: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
-  celebrationParticle: {position:'absolute', fontSize:28, color:'#c6a374', fontWeight:'900'},
-  celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
-  celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
-  celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
+  celebrationParticle: {position:'absolute',fontSize:28,color:'#B99A68',fontWeight:'700'},
+  celebrationBadge: {backgroundColor:'#111111',borderRadius:18,paddingHorizontal:20,paddingVertical:16,alignItems:'center',shadowColor:'#000',shadowOpacity:.18,shadowRadius:14,elevation:8},
+  celebrationTitle: {color:'#F5F5F5',fontSize:18,lineHeight:23,fontWeight:'600'},
+  celebrationCopy: {color:'#A0A0A0',fontSize:12.5,lineHeight:18,marginTop:3},
   profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
   settingsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:1060,width:'100%',alignSelf:'center'},
   settingsTitle: {fontFamily:'sans-serif-medium',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
