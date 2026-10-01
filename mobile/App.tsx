@@ -2805,10 +2805,11 @@ function Client() {
       scrollEventThrottle={120}
       onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
       contentContainerStyle={styles.shelfContent}>
-      <View style={styles.pageHeadingRow}>
-        <View style={{flex:1}}>
-          <Text style={[styles.title,{color:p.ink}]}>Shelf</Text>
-          <Text style={[styles.pageSubtitle,{color:p.muted}]}>Your library, arranged around what matters now.</Text>
+      <View style={styles.shelfEditorialHeader}>
+        <View style={{flex:1,minWidth:0}}>
+          <Text style={[styles.shelfKicker,{color:p.sage}]}>YOUR LIBRARY</Text>
+          <Text style={[styles.shelfGreeting,{color:p.ink}]}>Good evening.</Text>
+          <Text style={[styles.shelfEditorialSubtitle,{color:p.muted}]}>Stories make a kinder world.</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
           <Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text>
@@ -2816,8 +2817,6 @@ function Client() {
       </View>
 
       <OnboardingGuide/>
-      <SourceSwitcher/>
-      {availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
 
       {reviewCount>0?<Pressable accessibilityRole="button" onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.line}]}>
         <View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>{reviewCount} item{reviewCount===1?'':'s'} need a metadata check</Text><Text style={[styles.meta,{color:p.muted}]}>Review uncertain matches before organising files.</Text></View>
@@ -2838,6 +2837,12 @@ function Client() {
 
       {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><View key={i} style={[styles.skeletonCard,{backgroundColor:p.card}]}/>)}</View>:null}
       {shelfSections.map(section)}
+
+      <View style={[styles.shelfBrowseBand,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <Text style={[styles.shelfBrowseLabel,{color:p.muted}]}>BROWSE</Text>
+        <SourceSwitcher/>
+        {availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
+      </View>
 
       <View style={[styles.shelfUtilityRow,{borderTopColor:p.line}]}>
         <Pressable accessibilityRole="button" onPress={()=>setActiveTab('library')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Browse library</Text></Pressable>
@@ -4404,46 +4409,52 @@ const styles = StyleSheet.create({
   sourceTabCount: {fontSize:11,fontWeight:'600'},
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
-  shelfContent: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
+  shelfContent: {paddingHorizontal:18,paddingTop:24,paddingBottom:120,gap:38,maxWidth:1280,width:'100%',alignSelf:'center'},
+  shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:4,paddingBottom:2},
+  shelfKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.2,marginBottom:7},
+  shelfGreeting: {fontFamily:'serif',fontSize:38,lineHeight:42,fontWeight:'500',letterSpacing:-.7},
+  shelfEditorialSubtitle: {fontFamily:'serif',fontSize:16,lineHeight:23,fontStyle:'italic',marginTop:5},
+  shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
+  shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
   headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:8,alignItems:'center',justifyContent:'center'},
   sectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   sectionLink: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
-  curatedRow: {gap:16,paddingRight:18},
-  curatedCardWrap: {width:148},
-  shelfHero: {borderRadius:18,padding:16,flexDirection:'row',gap:18,alignItems:'center',overflow:'hidden'},
-  shelfHeroWide: {padding:22,gap:28,minHeight:300},
-  shelfHeroArtwork: {width:112,minWidth:112},
-  shelfHeroArtworkWide: {width:178,minWidth:178},
-  shelfHeroCopy: {flex:1,minWidth:0,gap:7},
+  curatedRow: {gap:18,paddingRight:24},
+  curatedCardWrap: {width:154},
+  shelfHero: {borderRadius:24,padding:18,flexDirection:'row',gap:20,alignItems:'center',overflow:'hidden',minHeight:220,shadowColor:'#000',shadowOpacity:.10,shadowRadius:20,shadowOffset:{width:0,height:10},elevation:4},
+  shelfHeroWide: {padding:28,gap:36,minHeight:326},
+  shelfHeroArtwork: {width:132,minWidth:132},
+  shelfHeroArtworkWide: {width:204,minWidth:204},
+  shelfHeroCopy: {flex:1,minWidth:0,gap:8,paddingVertical:4},
   shelfHeroEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.4},
-  shelfHeroTitle: {fontFamily:'serif',fontSize:26,lineHeight:31,fontWeight:'500',letterSpacing:-.2},
-  shelfHeroAuthor: {fontSize:14,lineHeight:20},
+  shelfHeroTitle: {fontFamily:'serif',fontSize:30,lineHeight:35,fontWeight:'500',letterSpacing:-.45},
+  shelfHeroAuthor: {fontSize:14,lineHeight:21},
   shelfHeroFooter: {marginTop:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   shelfHeroMeta: {fontSize:12,lineHeight:17},
-  shelfHeroAction: {minWidth:48,height:48,borderRadius:24,alignItems:'center',justifyContent:'center',paddingHorizontal:14},
+  shelfHeroAction: {minWidth:52,height:52,borderRadius:26,alignItems:'center',justifyContent:'center',paddingHorizontal:16},
   shelfHeroActionText: {color:'#FFFFFF',fontSize:13,fontWeight:'700'},
-  smartShelfRow: {gap:20,paddingRight:18},
-  smartShelfTile: {width:172,gap:5},
-  smartShelfPreview: {height:116,position:'relative',marginBottom:7},
-  smartShelfCover: {position:'absolute',top:4,width:68,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.10,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  smartShelfRow: {gap:24,paddingRight:24},
+  smartShelfTile: {width:196,gap:6},
+  smartShelfPreview: {height:136,position:'relative',marginBottom:8},
+  smartShelfCover: {position:'absolute',top:4,width:78,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.14,shadowRadius:9,shadowOffset:{width:0,height:5},elevation:3},
   smartShelfBase: {position:'absolute',left:0,right:2,bottom:3,height:3,borderRadius:2,opacity:.9},
   smartShelfEmpty: {position:'absolute',left:8,right:18,bottom:8,height:82,borderBottomWidth:1,flexDirection:'row',alignItems:'flex-end',gap:7,paddingHorizontal:8},
   smartShelfEmptySpine: {width:18,height:60,borderRadius:3},
-  smartShelfName: {fontFamily:'serif',fontSize:17,lineHeight:21,fontWeight:'500'},
-  collectionRow: {gap:18,paddingRight:18},
-  collectionTile: {width:148,gap:5},
-  collectionCollage: {height:112,position:'relative',marginBottom:6},
-  collectionMiniCover: {position:'absolute',width:62,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.10,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  smartShelfName: {fontFamily:'serif',fontSize:18,lineHeight:23,fontWeight:'500'},
+  collectionRow: {gap:22,paddingRight:24},
+  collectionTile: {width:166,gap:6},
+  collectionCollage: {height:126,position:'relative',marginBottom:7},
+  collectionMiniCover: {position:'absolute',width:70,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.13,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:3},
   collectionEmptyMark: {width:92,height:108,borderRadius:12,alignItems:'center',justifyContent:'center'},
   collectionName: {fontSize:15,lineHeight:20,fontWeight:'600'},
-  seriesRow: {gap:20,paddingRight:18},
-  seriesTile: {width:164,borderWidth:0,gap:5},
-  seriesCoverStack: {height:116,position:'relative',marginBottom:7},
-  seriesCover: {position:'absolute',width:70,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.09,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  seriesRow: {gap:24,paddingRight:24},
+  seriesTile: {width:188,borderWidth:0,gap:6},
+  seriesCoverStack: {height:136,position:'relative',marginBottom:8},
+  seriesCover: {position:'absolute',width:80,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:3},
   seriesEmpty: {position:'absolute',left:0,top:0,width:104,height:108,borderWidth:StyleSheet.hairlineWidth,borderRadius:10},
-  seriesName: {fontFamily:'serif',fontSize:17,lineHeight:21,fontWeight:'500'},
+  seriesName: {fontFamily:'serif',fontSize:18,lineHeight:23,fontWeight:'500'},
   shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,flexDirection:'row',flexWrap:'wrap',gap:10},
   shelfUtilityAction: {minHeight:44,paddingHorizontal:4,paddingRight:14,justifyContent:'center'},
   brandSignature: {fontSize:10,fontWeight:'700',letterSpacing:3,textAlign:'center',marginTop:8},
