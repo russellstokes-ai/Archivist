@@ -10,7 +10,9 @@ Module._load = function(request, parent, isMain) {
   if (request === 'expo-file-system/legacy') return {
     EncodingType: {Base64: 'base64'},
     readAsStringAsync: async uri => files.get(uri),
+    getInfoAsync: async uri => ({exists: files.has(uri), size: files.has(uri) ? Math.ceil(String(files.get(uri)||'').length*3/4) : 0}),
   };
+  if (request === 'react-native') return {NativeModules:{ArchivistArchive:{readRarImages:async()=>[{name:'001.jpg',mime:'image/jpeg',base64:'AQID'}]}}};
   return load.call(this, request, parent, isMain);
 };
 
@@ -48,16 +50,24 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   assert(comic.html.includes('turn-next'));
   assert(comic.html.includes('Sound on'));
 
-  await assert.rejects(
-    buildLocalReaderDocument('legacy.cbr','Comic','Legacy CBR'),
-    /CBR\/RAR comics are not supported/,
-  );
-  await assert.rejects(
-    buildLocalReaderDocument('remote-only.cbt','Comic','Remote CBT'),
-    /Archivist server.*CBZ\/ZIP/,
-  );
+  files.set('legacy.cbr','AA==');
+  const cbr=await buildLocalReaderDocument('legacy.cbr','Comic','Legacy CBR');
+  assert(cbr.html.includes('data:image/jpeg;base64,AQID'),'CBR should use native archive bridge');
+
+  function tarEntry(name, bytes){
+    const header=Buffer.alloc(512);Buffer.from(name).copy(header,0,0,Math.min(100,name.length));
+    Buffer.from('0000644\0').copy(header,100);Buffer.from('0000000\0').copy(header,108);Buffer.from('0000000\0').copy(header,116);
+    Buffer.from(bytes.length.toString(8).padStart(11,'0')+'\0').copy(header,124);Buffer.from('00000000000\0').copy(header,136);
+    header.fill(32,148,156);header[156]='0'.charCodeAt(0);Buffer.from('ustar\0').copy(header,257);
+    let sum=0;for(const b of header)sum+=b;Buffer.from(sum.toString(8).padStart(6,'0')+'\0 ').copy(header,148);
+    const pad=Buffer.alloc((512-(bytes.length%512))%512);return Buffer.concat([header,Buffer.from(bytes),pad]);
+  }
+  const cbtBytes=Buffer.concat([tarEntry('001.jpg',[1,2,3]),Buffer.alloc(1024)]);
+  files.set('local.cbt',cbtBytes.toString('base64'));
+  const cbt=await buildLocalReaderDocument('local.cbt','Comic','Local CBT');
+  assert(cbt.html.includes('data:image/jpeg;base64,AQID'),'CBT tar archive should decode locally');
 
   const pdf = await buildLocalReaderDocument('file.pdf', 'PDF', 'PDF');
   assert.equal(pdf.uri, 'file.pdf');
-  console.log('PASS: local reader EPUB/CBZ paging, focus, pinch, sound, explicit CBR/CBT handling and PDF passthrough');
+  console.log('PASS: local reader EPUB/CBZ paging, focus, pinch, sound, local CBR/CBT archives and PDF passthrough');
 })().catch(e => { console.error(e); process.exitCode = 1; });

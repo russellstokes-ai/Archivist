@@ -8,6 +8,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
+  NativeModules,
   Platform,
   Pressable,
   ScrollView,
@@ -26,7 +27,7 @@ import {request, validateServer as checkServer, readerNavigationAllowed, setupSt
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
-import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
+import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
@@ -36,6 +37,8 @@ import {getPersistedJSON, setPersistedJSON} from './stateStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, LibraryCollection, applySmartShelf, collectionWorks, newOrganisationId, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
+import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
   downloadOfflineWork,
@@ -193,6 +196,9 @@ const shelfSectionsKey = 'archivist.shelfSections.v1';
 const playerBookmarksKey = 'archivist.playerBookmarks.v1';
 const trackOrdersKey = 'archivist.trackOrders.v1';
 const chapterOverridesKey = 'archivist.chapterOverrides.v1';
+const readerBookmarksKey = 'archivist.readerBookmarks.v1';
+const readerAnnotationsKey = 'archivist.readerAnnotations.v1';
+const readerAppearanceKey = 'archivist.readerAppearance.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'favourites',title:'Favourites',visible:true},
@@ -389,6 +395,18 @@ function Client() {
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerLoadError,setReaderLoadError]=useState('');
   const [readerReloadKey,setReaderReloadKey]=useState(0);
+  const readerWebRef=useRef<WebView|null>(null);
+  const [readerBookmarks,setReaderBookmarks]=useState<ReaderBookmark[]>([]);
+  const [readerAnnotations,setReaderAnnotations]=useState<ReaderAnnotation[]>([]);
+  const [readerAppearance,setReaderAppearance]=useState<ReaderAppearance>(defaultReaderAppearance);
+  const [readerToolsOpen,setReaderToolsOpen]=useState(false);
+  const [readerPage,setReaderPage]=useState(0);
+  const [readerCount,setReaderCount]=useState(0);
+  const [readerSelection,setReaderSelection]=useState('');
+  const [readerSearch,setReaderSearch]=useState('');
+  const [readerSearchCount,setReaderSearchCount]=useState<number|null>(null);
+  const [readerRequestedPage,setReaderRequestedPage]=useState<number|null>(null);
+  const [readerNote,setReaderNote]=useState('');
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
   const player = useAudioPlayer(null);
@@ -890,6 +908,9 @@ function Client() {
     getPersistedJSON<PlayerBookmark[]>(playerBookmarksKey).then(value=>setPlayerBookmarks(sanitizeBookmarks(value))).catch(()=>undefined);
     getPersistedJSON<TrackOrderMap>(trackOrdersKey).then(value=>setTrackOrders(sanitizeTrackOrders(value))).catch(()=>undefined);
     getPersistedJSON<ChapterOverrideMap>(chapterOverridesKey).then(value=>setChapterOverrides(sanitizeChapterOverrides(value))).catch(()=>undefined);
+    getPersistedJSON<ReaderBookmark[]>(readerBookmarksKey).then(value=>setReaderBookmarks(sanitizeReaderBookmarks(value))).catch(()=>undefined);
+    getPersistedJSON<ReaderAnnotation[]>(readerAnnotationsKey).then(value=>setReaderAnnotations(sanitizeReaderAnnotations(value))).catch(()=>undefined);
+    getPersistedJSON<ReaderAppearance>(readerAppearanceKey).then(value=>setReaderAppearance(sanitizeReaderAppearance(value))).catch(()=>undefined);
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
@@ -1711,6 +1732,39 @@ function Client() {
     }
   }
 
+  function readerWorkKey(book:Book|null){return playbackWorkKey(book);}
+  function sendReaderCommand(command:string,payload:Record<string,unknown>={}){readerWebRef.current?.postMessage(JSON.stringify({type:'reader-command',command,...payload}));}
+  async function persistReaderBookmarks(next:ReaderBookmark[]){setReaderBookmarks(next);await setPersistedJSON(readerBookmarksKey,next);}
+  async function persistReaderAnnotations(next:ReaderAnnotation[]){setReaderAnnotations(next);await setPersistedJSON(readerAnnotationsKey,next);}
+  async function persistReaderAppearance(next:ReaderAppearance){setReaderAppearance(next);await setPersistedJSON(readerAppearanceKey,next);sendReaderCommand('appearance',{value:next});}
+  async function toggleCurrentReaderBookmark(){const workKey=readerWorkKey(reading);if(!workKey)return;await persistReaderBookmarks(toggleReaderBookmark(readerBookmarks,workKey,readerPage));}
+  async function saveCurrentReaderAnnotation(kind:'highlight'|'note'){
+    const workKey=readerWorkKey(reading);const text=readerSelection.trim();if(!workKey||!text)return;
+    const next=addReaderAnnotation(readerAnnotations,{workKey,page:readerPage,kind,text,note:kind==='note'?readerNote:undefined});
+    await persistReaderAnnotations(next);setReaderNote('');
+  }
+  function handleReaderMessage(raw:string){
+    if(!reading)return;
+    try{
+      const message=JSON.parse(raw);
+      if(message?.type==='reader-position'||message?.type==='reader-ready'){
+        if(Number.isInteger(message.page)&&message.page>=0)setReaderPage(message.page);
+        if(Number.isInteger(message.count)&&message.count>=0)setReaderCount(message.count);
+      }
+      if(message?.type==='reader-selection')setReaderSelection(String(message.text||'').slice(0,4000));
+      if(message?.type==='reader-search-results')setReaderSearchCount(Math.max(0,Number(message.count)||0));
+      if(message?.type==='archivist-reader-ready'){setReaderLoading(false);setReaderLoadError('');}
+      if((message?.type==='archivist-reader-complete'||message?.complete===true)&&reading.serverWorkId&&reading.source==='server')setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
+      if(message?.type==='reader-position'&&reading.uri){
+        const page=Number(message.page);if(Number.isInteger(page)&&page>=0){
+          setLocalReadingProgress(current=>{if(current[reading.uri!]===page)return current;const next={...current,[reading.uri!]:page};void setPersistedJSON(localReadingProgressKey,next);return next;});
+          if(typeof message.complete==='boolean')setLocalReadingCurrentComplete(current=>{if(current[reading.uri!]===message.complete)return current;const next={...current,[reading.uri!]:message.complete};void setPersistedJSON(localReadingCurrentCompleteKey,next);return next;});
+          if(message.complete===true){if(!localReadingComplete[reading.uri!]&&reading.localWorkKey)setRatingPrompt({title:reading.title,localWorkKey:reading.localWorkKey});setLocalReadingComplete(current=>{if(current[reading.uri!])return current;const next={...current,[reading.uri!]:true};void setPersistedJSON(localReadingCompleteKey,next);return next;});}
+        }
+      }
+    }catch{}
+  }
+
   function openBook(book: Book) {
     if (!book.available) {
       setError('This file is currently unavailable.');
@@ -1718,6 +1772,7 @@ function Client() {
     }
     setError('');
     setReaderLoadError('');
+    setReaderPage(book.uri ? (localReadingProgress[book.uri]||0) : 0);setReaderCount(0);setReaderSelection('');setReaderSearch('');setReaderSearchCount(null);setReaderRequestedPage(null);setReaderToolsOpen(false);
     if (book.format === 'Audio') playBook(book);
     else if (book.source!=='server') {
       if (!book.uri) return;
@@ -2746,125 +2801,29 @@ function Client() {
     );
   }
 
+  function ReaderTools(){
+    if(!reading)return null;const workKey=readerWorkKey(reading);const bookmarks=workReaderBookmarks(readerBookmarks,workKey);const annotations=workReaderAnnotations(readerAnnotations,workKey);
+    const updateScale=(delta:number)=>void persistReaderAppearance({...readerAppearance,scale:Math.max(.78,Math.min(1.5,readerAppearance.scale+delta))});
+    return <Modal transparent animationType="slide" visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={styles.sheetBackdrop}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled"><View accessibilityViewIsModal accessibilityLabel="Reader tools" style={[styles.actionSheet,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={styles.sheetHandle}/><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader tools</Text><Text style={[styles.meta,{color:p.muted}]}>{readerCount?`Page ${readerPage+1} of ${readerCount}`:`Page ${readerPage+1}`}</Text></View><Button label="Done" tone="quiet" onPress={()=>setReaderToolsOpen(false)}/></View>
+      <View style={styles.readerToolBlock}><Text style={[styles.filterLabel,{color:p.muted}]}>SEARCH</Text><View style={styles.searchRow}><TextInput value={readerSearch} onChangeText={setReaderSearch} placeholder="Find in this book" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,flex:1}]}/><Button label="Find" onPress={()=>{setReaderSearchCount(null);sendReaderCommand('search',{query:readerSearch})}}/></View>{readerSearchCount!==null?<Text style={[styles.meta,{color:p.muted}]}>{readerSearchCount} match{readerSearchCount===1?'':'es'}</Text>:null}</View>
+      <View style={styles.readerToolBlock}><Text style={[styles.filterLabel,{color:p.muted}]}>APPEARANCE</Text><View style={styles.toolRow}><Button label="A−" tone="quiet" onPress={()=>updateScale(-.08)}/><Text style={[styles.meta,{color:p.muted}]}>{Math.round(readerAppearance.scale*100)}%</Text><Button label="A+" tone="quiet" onPress={()=>updateScale(.08)}/></View><View style={styles.atlasChipWrap}>{(['system','paper','sepia','dark'] as ReaderAppearance['theme'][]).map(theme=><Pressable key={theme} accessibilityRole="button" onPress={()=>void persistReaderAppearance({...readerAppearance,theme})} style={[styles.filterPill,{borderColor:readerAppearance.theme===theme?p.sage:p.line,backgroundColor:readerAppearance.theme===theme?p.raised:'transparent'}]}><Text style={{color:p.ink,fontWeight:'800',textTransform:'capitalize'}}>{theme}</Text></Pressable>)}</View></View>
+      <View style={styles.readerToolBlock}><View style={styles.sectionHeader}><Text style={[styles.filterLabel,{color:p.muted}]}>BOOKMARKS</Text><Button label={bookmarks.some(item=>item.page===readerPage)?'Remove current':'Bookmark current'} tone="quiet" onPress={()=>void toggleCurrentReaderBookmark()}/></View>{bookmarks.length?bookmarks.map(item=><View key={item.id} style={[styles.readerSavedRow,{borderColor:p.line}]}><Text style={[styles.bookTitle,{color:p.ink}]}>Page {item.page+1}</Text><View style={styles.toolRow}><Pressable onPress={()=>{setReaderRequestedPage(item.page);sendReaderCommand('goto',{page:item.page})}}><Text style={{color:p.sage,fontWeight:'800'}}>Go</Text></Pressable><Pressable onPress={()=>void persistReaderBookmarks(readerBookmarks.filter(saved=>saved.id!==item.id))}><Text style={{color:p.muted,fontWeight:'800'}}>Remove</Text></Pressable></View></View>):<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet.</Text>}</View>
+      <View style={styles.readerToolBlock}><Text style={[styles.filterLabel,{color:p.muted}]}>HIGHLIGHTS & NOTES</Text>{readerSelection?<><Text numberOfLines={4} style={[styles.readerQuote,{color:p.ink,borderColor:p.line}]}>{readerSelection}</Text><View style={styles.toolRow}><Button label="Highlight" tone="quiet" onPress={()=>void saveCurrentReaderAnnotation('highlight')}/></View><TextInput value={readerNote} onChangeText={setReaderNote} placeholder="Add a note to this selection" placeholderTextColor={p.muted} multiline style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:72}]}/><Button label="Save note" disabled={!readerNote.trim()} onPress={()=>void saveCurrentReaderAnnotation('note')}/></>:<Text style={[styles.meta,{color:p.muted}]}>Select text in the book to highlight it or attach a note.</Text>}{annotations.map(item=><View key={item.id} style={[styles.readerSavedRow,{borderColor:p.line}]}><View style={{flex:1}}><Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.text}</Text><Text style={[styles.meta,{color:p.muted}]}>Page {item.page+1} · {item.kind}{item.note?` · ${item.note}`:''}</Text></View><Pressable onPress={()=>void persistReaderAnnotations(readerAnnotations.filter(saved=>saved.id!==item.id))}><Text style={{color:p.muted,fontWeight:'800'}}>Remove</Text></Pressable></View>)}</View>
+    </View></ScrollView></View></Modal>;
+  }
+
   function Reader() {
-    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}>
-        <Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text>
-      </Pressable>
-      <View style={styles.readerHeading}>
-        <Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading?.title || 'Reader'}</Text>
-        {reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}
-      </View>
-    </View>;
-    if (!reading) {
-      return (
-        <View style={styles.content}>
-          <Text style={[styles.title, {color: p.ink}]}>Reader</Text>
-          <Text style={[styles.empty, {color: p.muted}]}>{session ? 'Open an EPUB, PDF or comic from Shelf.' : 'Open an EPUB, PDF or comic from Shelf.'}</Text>
-        </View>
-      );
+    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setActiveTab('shelf');};
+    const readerBar=<View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}><Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerAction,{color:p.sage}]}>Tools</Text></Pressable></View>;
+    if (!reading) return <View style={styles.content}><Text style={[styles.title,{color:p.ink}]}>Reader</Text><Text style={[styles.empty,{color:p.muted}]}>Open an EPUB, PDF or comic from Shelf.</Text></View>;
+    const localReaderMode=reading.source!=='server';
+    if(localReaderMode){
+      const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
+      return <View style={styles.readerScreen}>{readerBar}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={[styles.readerFailure,{backgroundColor:p.card,borderColor:p.line}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView ref={readerWebRef} originWhitelist={['*']} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)}/>:localReader?.uri?<WebView ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}<ReaderTools/></View>;
     }
-    if (!session) {
-      return (
-        <View style={styles.readerScreen}>
-          {readerBar}
-          {readerLoading ? <View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader" /><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View> : readerLoadError ? (
-            <View style={[styles.readerFailure,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>
-              <Button label="Back to Shelf" tone="quiet" onPress={closeReader} />
-            </View>
-          ) : localReader?.html ? (
-            <WebView
-              originWhitelist={['*']}
-              source={{html: localReader.html}}
-              onMessage={event => {
-                if (!reading?.uri) return;
-                try {
-                  const message = JSON.parse(event.nativeEvent.data);
-                  if (message?.type !== 'reader-position' || !Number.isInteger(message.page) || message.page < 0) return;
-                  setLocalReadingProgress(current => {
-                    if (current[reading.uri!] === message.page) return current;
-                    const next = {...current, [reading.uri!]: message.page};
-                    setPersistedJSON(localReadingProgressKey, next).catch(() => undefined);
-                    return next;
-                  });
-                  if (typeof message.complete === 'boolean') {
-                    setLocalReadingCurrentComplete(current => {
-                      if (current[reading.uri!] === message.complete) return current;
-                      const next={...current,[reading.uri!]:message.complete};
-                      setPersistedJSON(localReadingCurrentCompleteKey, next).catch(()=>undefined);
-                      return next;
-                    });
-                  }
-                  if (message.complete === true) {
-                    if(!localReadingComplete[reading.uri!] && reading.localWorkKey){
-                      setRatingPrompt({title:reading.title,localWorkKey:reading.localWorkKey});
-                    }
-                    setLocalReadingComplete(current => {
-                      if (current[reading.uri!]) return current;
-                      const next = {...current, [reading.uri!]: true};
-                      setPersistedJSON(localReadingCompleteKey, next).catch(() => undefined);
-                      return next;
-                    });
-                  }
-                } catch {}
-              }}
-            />
-          ) : localReader?.uri ? (
-            <WebView originWhitelist={['content://*', 'file://*']} source={{uri: localReader.uri}} allowFileAccess />
-          ) : <Text style={[styles.empty, {color: p.muted, padding: 16}]}>Unable to open this file.</Text>}
-        </View>
-      );
-    }
-    return (
-      <View style={styles.readerScreen}>
-        {readerBar}
-        <WebView
-          key={session.token + reading.id + ':' + readerReloadKey}
-          source={{uri: session.server + '/reader.html?asset=' + reading.id, headers: {Authorization: 'Bearer ' + session.token}}}
-          incognito
-          originWhitelist={[session.server]}
-          onShouldStartLoadWithRequest={r => readerNavigationAllowed(r.url, session.server)}
-          mixedContentMode="never"
-          onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('');}}
-          onLoadEnd={()=>setReaderLoading(false)}
-          onMessage={event=>{
-            try{
-              const message=JSON.parse(event.nativeEvent.data);
-              if(message?.type==='archivist-reader-ready'){
-                setReaderLoading(false);
-                setReaderLoadError('');
-              }
-              if(message?.type==='archivist-reader-complete' && reading.serverWorkId){
-                setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
-              }
-            }catch{}
-          }}
-          onHttpError={e => {
-            const message='Reader request failed: '+e.nativeEvent.statusCode;
-            setReaderLoadError(message);setReaderLoading(false);setError(message);
-          }}
-          onError={e => {
-            const message=e.nativeEvent.description || 'Reader failed to load.';
-            setReaderLoadError(message);setReaderLoading(false);setError(message);
-          }}
-          allowFileAccess={false}
-          javaScriptCanOpenWindowsAutomatically={false}
-          setSupportMultipleWindows={false}
-        />
-        {readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader" /><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}
-        {readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.card,borderColor:p.line}]}>
-          <Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>
-          <View style={styles.toolRow}>
-            <Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1);}} />
-            <Button label="Back to Shelf" tone="quiet" onPress={closeReader} />
-          </View>
-        </View>:null}
-      </View>
-    );
+    if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerBar}<View style={[styles.readerFailure,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View><ReaderTools/></View>;
+    return <View style={styles.readerScreen}>{readerBar}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.card,borderColor:p.line}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}<ReaderTools/></View>;
   }
 
   function atlasSelect(kind: AtlasKind, value: string) {
@@ -3510,7 +3469,13 @@ const styles = StyleSheet.create({
   playerEmpty: {borderWidth:1,borderRadius:16,padding:18,gap:12},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex: 1,position:'relative'},
-  readerBar: {minHeight: 54, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center',paddingRight:72},
+  readerBar: {minHeight: 54, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center'},
+  readerToolsButton: {width:72,minHeight:54,alignItems:'center',justifyContent:'center'},
+  searchRow:{flexDirection:'row',alignItems:'center',gap:8},
+  filterPill:{borderWidth:1,borderRadius:999,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  readerToolBlock: {gap:10,paddingVertical:8},
+  readerSavedRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:12},
+  readerQuote: {borderLeftWidth:3,paddingLeft:10,fontStyle:'italic',lineHeight:20},
   readerBack: {width: 72, minHeight:54, alignItems: 'center', justifyContent: 'center'},
   readerAction: {fontWeight: '700'},
   readerHeading: {flex:1,alignItems:'center',justifyContent:'center',minWidth:0},
