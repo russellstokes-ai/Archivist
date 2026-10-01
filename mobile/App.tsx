@@ -471,6 +471,7 @@ function Client() {
   const [readerNote,setReaderNote]=useState('');
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
+  const tabTransition=useRef(new Animated.Value(1)).current;
   const player = useAudioPlayer(null);
   const audio = useAudioPlayerStatus(player);
   const sessionRef = useRef(session);
@@ -588,6 +589,13 @@ function Client() {
     const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduceMotion);
     return()=>subscription.remove();
   },[]);
+
+  useEffect(()=>{
+    tabTransition.stopAnimation();
+    if(reduceMotion){tabTransition.setValue(1);return;}
+    tabTransition.setValue(0);
+    Animated.timing(tabTransition,{toValue:1,duration:220,useNativeDriver:true}).start();
+  },[activeTab,reduceMotion,tabTransition]);
 
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
@@ -2130,7 +2138,7 @@ function Client() {
           <TextInput accessibilityLabel="Profile access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={key} onChangeText={setKey} placeholder="Profile access key" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
           <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy} />
-          {serverNotice ? <Text style={[styles.meta, {color: p.gold}]}>{serverNotice}</Text> : null}
+          {serverNotice?<Text style={[styles.meta,{color:p.sage}]}>{serverNotice}</Text>:null}
           {error ? <Text accessibilityRole="alert" style={[styles.error, {color:p.danger}]}>{error}</Text> : null}
       </View>
     );
@@ -3476,79 +3484,76 @@ function Client() {
   function Profile() {
     const stats=profileStats;
     const unlocked=profileAchievements.filter(item=>item.unlocked).length;
+    const metrics=stats?[
+      ['Works',stats.works],
+      ['In progress',stats.inProgress],
+      ['Completed',stats.completed],
+      ['Favourites',stats.favourites||0],
+      ['Rated',stats.rated||0],
+      ['Achievements',unlocked],
+    ]:[];
     return (
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.profileHero,{backgroundColor:p.card,borderColor:p.line}]}>
+      <ScrollView contentContainerStyle={styles.profileScreen}>
+        <View style={styles.profileHero}>
           <View style={[styles.profileMonogram,{backgroundColor:p.ink}]}>
-            <Text style={[styles.profileMonogramText,{color:p.paper}]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
+            <Text style={[styles.profileMonogramText,{color:p.paper}]}>{(stats?.name||'A').trim().charAt(0).toUpperCase()||'A'}</Text>
           </View>
           <View style={{flex:1,gap:3}}>
-            <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name || 'Profile'}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>
-              {session ? (stats?.owner ? 'Admin' : 'User') : 'Local library on this device'}
-            </Text>
+            <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name||'Profile'}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{session?(stats?.owner?'Admin':'User'):'Local library on this device'}</Text>
           </View>
         </View>
 
-        {profileLoading && session ? <ActivityIndicator accessibilityLabel="Loading profile statistics" /> : null}
-        {!stats && !profileLoading ? <Text style={[styles.empty,{color:p.muted}]}>Profile statistics are unavailable.</Text> : null}
+        {profileLoading&&session?<ActivityIndicator accessibilityLabel="Loading profile statistics" color={p.sage}/>:null}
+        {!stats&&!profileLoading?<Text style={[styles.empty,{color:p.muted}]}>Profile statistics are unavailable.</Text>:null}
 
-        {stats ? <>
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Your library</Text>
-          <View style={styles.profileStatsGrid}>
-            {[
-              ['Works',stats.works],
-              ['In progress',stats.inProgress],
-              ['Completed',stats.completed],
-              ['Formats',stats.formats],
-              ['Series',stats.series],
-              ['Favourites',stats.favourites || 0],
-              ['Rated',stats.rated || 0],
-              ['Achievements',unlocked],
-            ].map(([label,value])=><View key={String(label)} style={[styles.profileStatCard,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Text style={[styles.profileStatValue,{color:p.ink}]}>{value}</Text>
-              <Text style={[styles.profileStatLabel,{color:p.muted}]}>{label}</Text>
+        {stats?<>
+          <View style={[styles.profileMetricStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+            {metrics.map(([label,value])=><View key={String(label)} style={styles.profileMetric}>
+              <Text style={[styles.profileMetricValue,{color:p.ink}]}>{value}</Text>
+              <Text style={[styles.profileMetricLabel,{color:p.muted}]}>{label}</Text>
             </View>)}
           </View>
 
-          {(stats.rated || 0)>0 ? <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
-            <View style={styles.profileBreakdownRow}>
-              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Your ratings</Text>
-              <Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{ratingLabel(stats.averageRating || 0)} average · {stats.favourites || 0} favourite{(stats.favourites||0)===1?'':'s'}</Text>
-            </View>
-          </View> : null}
-          <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
-            <View style={styles.profileBreakdownRow}>
-              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Listening</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {stats.inProgressAudio} in progress</Text>
-            </View>
-            <View style={[styles.profileDivider,{backgroundColor:p.line}]} />
-            <View style={styles.profileBreakdownRow}>
-              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Reading</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {stats.inProgressReading} in progress</Text>
-            </View>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>Your library</Text>
+          {(stats.rated||0)>0?<View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Ratings</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{ratingLabel(stats.averageRating||0)} average · {stats.favourites||0} favourite{(stats.favourites||0)===1?'':'s'}</Text>
+          </View>:null}
+          <View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Listening</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {stats.inProgressAudio} in progress</Text>
+          </View>
+          <View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Reading</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {stats.inProgressReading} in progress</Text>
           </View>
 
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Achievements</Text>
-          <Text style={[styles.empty,{color:p.muted}]}>{unlocked} of {profileAchievements.length} earned. Only verified library and progress data counts.</Text>
-          <View style={{gap:10}}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Achievements</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{unlocked} of {profileAchievements.length}</Text>
+          </View>
+          <View style={styles.profileAchievementList}>
             {profileAchievements.map(item=>{
               const ratio=clampProgress(item.progress,item.target);
-              return <View key={item.id} style={[styles.achievementCard,{backgroundColor:p.card,borderColor:item.unlocked?p.gold:p.line}]}>
-                <View style={styles.achievementHeader}>
-                  <View style={{flex:1,gap:2}}>
-                    <Text style={[styles.achievementTitle,{color:p.ink}]}>{item.title}</Text>
-                    <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
-                  </View>
-                  <Text style={[styles.achievementState,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+              return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
+                <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line}]}>
+                  <Text style={[styles.profileAchievementInitial,{color:item.unlocked?p.gold:p.muted}]}>{item.title.trim().charAt(0).toUpperCase()}</Text>
                 </View>
-                <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
-                  <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:`${Math.round(ratio*100)}%`}]} />
+                <View style={{flex:1,gap:3}}>
+                  <View style={styles.profileBreakdownRow}>
+                    <Text style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
+                    <Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+                  </View>
+                  <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
+                  <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
+                    <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(Math.round(ratio*100)+'%')}]} />
+                  </View>
                 </View>
               </View>;
             })}
           </View>
-        </> : null}
+        </>:null}
       </ScrollView>
     );
   }
@@ -3642,7 +3647,7 @@ function Client() {
             ['author-title','Author / Title'],
             ['author-series-title','Author / Series / Title'],
             ['format-author-title','Format / Author / Title'],
-          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
         <Button label="Preview visible local items" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
         <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
@@ -3679,7 +3684,7 @@ function Client() {
             {capacity>0 ? formatBytes(free)+' free of '+formatBytes(capacity) : 'Stored in Archivist app storage'}
           </Text>
           {partial.length?<Text style={[styles.meta,{color:p.sage}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} · {formatBytes(offlineStorage?.partialBytes||0)} partial data</Text>:null}
-          {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.gold}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
+          {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.danger}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
         </View>
       </View>
       <View style={styles.toolRow}>
@@ -3711,13 +3716,15 @@ function Client() {
 
   function Settings() {
     return (
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, {color: p.ink}]}>Settings</Text>
+      <ScrollView contentContainerStyle={styles.settingsScreen}>
+        <Text style={[styles.title,{color:p.ink}]}>Settings</Text>
+        <Text style={[styles.pageSubtitle,{color:p.muted}]}>Appearance, library health, offline storage and your optional server.</Text>
         <Text style={[styles.sectionTitle, {color: p.ink}]}>Appearance</Text>
         <View style={styles.segment}>
           {(['system', 'light', 'dark'] as ThemeMode[]).map(mode => (
-            <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={() => void chooseTheme(mode)} style={[styles.segmentItem, {borderColor: p.line, backgroundColor: theme === mode ? p.sage : p.card}]}>
-              <Text style={{color: theme === mode ? p.ivory : p.ink}}>{mode[0].toUpperCase() + mode.slice(1)}</Text>
+            <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}>
+              <Text style={{color:theme===mode?p.sage:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text>
+              <View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.sage,opacity:theme===mode?1:0}]}/>
             </Pressable>
           ))}
         </View>
@@ -3770,7 +3777,7 @@ function Client() {
               ['author-title','Author / Title'],
               ['author-series-title','Author / Series / Title'],
               ['format-author-title','Format / Author / Title'],
-            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
           </View>
           <Button label="Preview matching files" disabled={busy || shelfLoading} tone="quiet" onPress={()=>void previewLibrary(false)}/>
           <Button label="Preview entire library" disabled={busy} tone="quiet" onPress={()=>void previewLibrary(true)}/>
@@ -3823,9 +3830,12 @@ function Client() {
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
-      <View style={styles.tabBody}>
+      <Animated.View style={[styles.tabBody,{
+        opacity:tabTransition,
+        transform:[{translateY:tabTransition.interpolate({inputRange:[0,1],outputRange:[reduceMotion?0:6,0]})}],
+      }]}>
         {CurrentTab()}
-      </View>
+      </Animated.View>
       <CelebrationOverlay
         active={celebrating || !!achievementCelebration}
         title={achievementCelebration ? achievementCelebration.title : undefined}
@@ -3875,8 +3885,8 @@ const styles = StyleSheet.create({
   headerMeta: {fontSize:12,fontWeight:'500'},
   headerSettings: {borderWidth:0},
   settingsButton: {width:44,height:44,alignItems:'center',justifyContent:'center',borderRadius:22},
-  content: {padding: 16, gap: 14},
-  setupPanel: {borderWidth: 1, borderRadius: 8, padding: 14, gap: 12},
+  content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
+  setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
   libraryRail: {width: 190, borderRightWidth: StyleSheet.hairlineWidth, padding: 14, gap: 10},
   libraryRailTitle: {fontSize: 13, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4},
@@ -3891,7 +3901,7 @@ const styles = StyleSheet.create({
   librarySpaceText: {fontSize:13},
   librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
   librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
-  librarySummary: {borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center'},
+  librarySummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',gap:12,alignItems:'center'},
   reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
   shelfSection: {gap:8},
   continueRow: {gap:12,paddingRight:6},
@@ -3899,16 +3909,16 @@ const styles = StyleSheet.create({
   continueTitle: {fontSize:14,fontWeight:'800'},
   seriesChip: {minWidth:140,maxWidth:220,borderWidth:0,borderRadius:12,paddingHorizontal:14,paddingVertical:12,gap:2},
   scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
-  onboardingCard: {borderWidth: 1, borderRadius: 16, padding: 16, gap: 14},
+  onboardingCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:14},
   onboardingEyebrow: {fontSize: 11, fontWeight: '900', letterSpacing: 2},
   onboardingStep: {flexDirection: 'row', gap: 12, alignItems: 'flex-start'},
   onboardingNumber: {width: 28, height: 28, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', color: '#f8f7f2', fontWeight: '900', overflow: 'hidden'},
   onboardingStepTitle: {fontSize: 15, fontWeight: '800', marginBottom: 2},
-  sourceRow: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 4},
+  sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:4},
   tabBody: {flex: 1},
   title: {fontFamily: 'serif', fontSize: 36, lineHeight: 41, fontWeight: '500', marginBottom: 2, letterSpacing:-0.4},
   sectionTitle: {fontFamily:'serif',fontSize: 20, lineHeight:25, fontWeight: '500', marginTop: 10,letterSpacing:-0.15},
-  input: {padding: 14, borderWidth: 1, borderRadius: 8, fontSize: 16},
+  input: {paddingHorizontal:14,paddingVertical:12,borderWidth:0,borderRadius:12,fontSize:16},
   button: {backgroundColor: '#47736F', borderRadius: 12, paddingHorizontal: 18, minHeight: 48, justifyContent: 'center', alignItems: 'center'},
   buttonGold: {backgroundColor:'#B99A68'},
   buttonQuiet: {backgroundColor:'transparent',borderWidth:0},
@@ -3931,15 +3941,15 @@ const styles = StyleSheet.create({
   coverTitle: {fontFamily: 'serif', fontSize: 20},
   bookTitle: {fontSize: 15, fontWeight: '700'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
-  editorCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
-  serverRecovery: {borderWidth:1,borderRadius:14,padding:14,gap:10},
-  offlineSummary: {borderWidth:1,borderRadius:14,padding:14,flexDirection:'row',gap:12,alignItems:'center'},
+  editorCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
+  serverRecovery: {borderWidth:0,borderRadius:14,padding:16,gap:10},
+  offlineSummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,flexDirection:'row',gap:12,alignItems:'center'},
   ratingPromptBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:24},
-  ratingPromptCard: {width:'100%',maxWidth:420,borderWidth:1,borderRadius:18,padding:18,gap:10},
+  ratingPromptCard: {width:'100%',maxWidth:420,borderWidth:0,borderRadius:18,padding:20,gap:10},
   modalKeyboard: {flex:1},
   modalBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:20},
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
-  modalCard: {width:'100%',maxWidth:520,borderWidth:1,borderRadius:18,padding:18,gap:10},
+  modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:20,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {paddingHorizontal:20,paddingTop:18,gap:22,paddingBottom:120,maxWidth:1060,width:'100%',alignSelf:'center'},
   livingBookStage: {height:330,width:390,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
@@ -4006,7 +4016,7 @@ const styles = StyleSheet.create({
   readerBar: {minHeight:50,flexDirection:'row',alignItems:'center',paddingHorizontal:4},
   readerToolsButton: {width:48,minHeight:48,alignItems:'center',justifyContent:'center'},
   searchRow:{flexDirection:'row',alignItems:'center',gap:8},
-  filterPill:{borderWidth:1,borderRadius:999,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  filterPill:{borderWidth:0,borderRadius:10,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
   readerToolBlock: {gap:10,paddingVertical:8},
   readerSavedRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:12},
   readerQuote: {borderLeftWidth:3,paddingLeft:10,fontStyle:'italic',lineHeight:20},
@@ -4025,8 +4035,9 @@ const styles = StyleSheet.create({
   atlasText: {fontWeight: '700'},
   atlasBarTrack: {flex: 1, height: 8, borderRadius: 999, overflow: 'hidden'},
   atlasBarFill: {height: 8, borderRadius: 999},
-  segment: {flexDirection: 'row', gap: 8},
-  segmentItem: {flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center'},
+  segment: {flexDirection:'row',gap:4},
+  segmentItem: {flex:1,borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center',position:'relative'},
+  segmentMarker: {position:'absolute',left:12,right:12,bottom:3,height:2,borderRadius:2},
   miniPlayer: {minHeight:64,marginHorizontal:12,marginBottom:8,borderRadius:14,borderTopWidth:StyleSheet.hairlineWidth,padding:8,flexDirection:'row',alignItems:'center',gap:10,shadowColor:'#000',shadowOpacity:.06,shadowRadius:10,shadowOffset:{width:0,height:4},elevation:2},
   miniPlayerMain: {flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:10,padding:2},
   miniCover: {width:42,height:42,borderRadius:6,alignItems:'center',justifyContent:'center',overflow:'hidden'},
@@ -4045,20 +4056,26 @@ const styles = StyleSheet.create({
   celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
   celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
   celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
-  profileHero: {borderWidth:1,borderRadius:18,padding:16,flexDirection:'row',alignItems:'center',gap:14},
+  profileScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:26,maxWidth:920,width:'100%',alignSelf:'center'},
+  settingsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:20,maxWidth:920,width:'100%',alignSelf:'center'},
+  profileHero: {borderWidth:0,paddingVertical:6,flexDirection:'row',alignItems:'center',gap:16},
   profileMonogram: {width:58,height:58,borderRadius:29,alignItems:'center',justifyContent:'center'},
-  profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'800'},
-  profileStatsGrid: {flexDirection:'row',flexWrap:'wrap',gap:10},
-  profileStatCard: {width:'31%',minWidth:100,borderWidth:1,borderRadius:14,padding:12,gap:3},
-  profileStatValue: {fontFamily:'serif',fontSize:26,fontWeight:'700'},
-  profileStatLabel: {fontSize:12,fontWeight:'700'},
-  profileBreakdown: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'500'},
+  profileMetricStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:18,rowGap:18},
+  profileMetric: {width:'33.333%',minWidth:105,gap:2},
+  profileMetricValue: {fontFamily:'serif',fontSize:27,lineHeight:31,fontWeight:'500'},
+  profileMetricLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
+  profileDetailRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:16},
   profileBreakdownRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:12},
   profileDivider: {height:StyleSheet.hairlineWidth},
-  achievementCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  profileAchievementList: {gap:0},
+  profileAchievementRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',alignItems:'center',gap:14},
+  profileAchievementBadge: {width:50,height:50,borderRadius:25,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
+  profileAchievementInitial: {fontFamily:'serif',fontSize:21,fontWeight:'500'},
+  achievementCard: {borderWidth:0,paddingVertical:14,gap:10},
   achievementHeader: {flexDirection:'row',alignItems:'flex-start',gap:12},
-  achievementTitle: {fontSize:15,fontWeight:'900'},
-  achievementState: {fontSize:12,fontWeight:'900'},
+  achievementTitle: {fontSize:15,fontWeight:'600'},
+  achievementState: {fontSize:12,fontWeight:'600'},
   achievementTrack: {height:6,borderRadius:999,overflow:'hidden'},
   achievementFill: {height:'100%',borderRadius:999},
   atlasFocusHero: {borderWidth:0,paddingVertical:10,gap:5},
@@ -4163,7 +4180,7 @@ const styles = StyleSheet.create({
   offlineBadge: {position:'absolute',left:7,bottom:7,borderRadius:999,paddingHorizontal:7,paddingVertical:4},
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
   cardPressed: {opacity:0.72},
-  actionSheet: {width:'100%',maxWidth:620,borderWidth:1,borderRadius:24,padding:18,gap:10,alignSelf:'center'},
+  actionSheet: {width:'100%',maxWidth:620,borderWidth:0,borderTopLeftRadius:24,borderTopRightRadius:24,padding:20,gap:10,alignSelf:'center'},
   sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.52)',justifyContent:'flex-end',padding:12},
   sheetScroll: {flexGrow:1,justifyContent:'flex-end'},
   sheetHandle: {width:42,height:4,borderRadius:999,backgroundColor:'#9aa9a6',alignSelf:'center',marginBottom:6,opacity:0.65},
@@ -4186,13 +4203,13 @@ const styles = StyleSheet.create({
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
   filterChip: {borderWidth:1,borderRadius:999,minHeight:36,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
-  duplicatePanel: {borderWidth:1,borderRadius:16,padding:14,gap:12},
-  duplicateGroup: {borderWidth:1,borderRadius:12,padding:12,gap:7},
-  duplicateExact: {borderWidth:1,borderRadius:10,padding:10,gap:4},
-  ruleGroup: {borderWidth:1,borderRadius:14,padding:10,gap:8},
+  duplicatePanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
+  duplicateGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:7},
+  duplicateExact: {borderWidth:0,borderLeftWidth:2,paddingLeft:10,paddingVertical:6,gap:4},
+  ruleGroup: {borderWidth:0,borderLeftWidth:2,paddingLeft:12,paddingVertical:8,gap:8},
   ruleRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:8,flexDirection:'row',flexWrap:'wrap',gap:6,alignItems:'center'},
-  ruleToken: {borderWidth:1,borderRadius:999,minHeight:34,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
-  ruleInput: {borderWidth:1,borderRadius:9,minHeight:38,paddingHorizontal:10,flexGrow:1,minWidth:92},
+  ruleToken: {borderWidth:0,borderRadius:8,minHeight:36,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
+  ruleInput: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:10,flexGrow:1,minWidth:92},
   ruleRemove: {width:34,height:34,alignItems:'center',justifyContent:'center'},
   insightEditorialHero: {paddingVertical:8,gap:8,maxWidth:760},
   insightEditorialKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5},
