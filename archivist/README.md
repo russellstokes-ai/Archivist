@@ -1,41 +1,64 @@
-# Archivist Home Assistant add-on
+<p align="center"><img src="logo.png" alt="Archivist" width="420"></p>
 
-Internal development packaging for HAOS on Raspberry Pi 4 and amd64 test systems.
+# Archivist 0.9.0 for Home Assistant
 
-This is not a release add-on. It exposes the current Archivist internal server through Home Assistant ingress and port `5056`. The app still uses Archivist's own unlock/session flow and prints a temporary owner access key to the add-on log on startup.
+**Your library. Yours.**
 
-## First install check
+Archivist is a private library server for ebooks, audiobooks, comics and PDFs. The Home Assistant package provides persistent catalogue data, a browser interface and mapped access to Home Assistant media/storage folders.
 
-1. Add `https://github.com/russellstokes-ai/Archivist` to the Home Assistant store repositories, then install Archivist in a test environment.
-2. Start the add-on.
-3. Open the add-on log and copy the `Local access key`.
-4. Open the web UI through ingress or `http://homeassistant.local:5056`.
-5. Unlock with the key.
-6. Add a source such as `/media/books`, `/media/audiobooks`, `/share/books` or another mapped folder.
-7. Scan the source and confirm titles appear in Shelf.
-8. Restart the add-on and confirm the database, source list and catalogue survive.
+## First run
 
-The add-on exposes `/healthz` so Supervisor watchdog checks can confirm that the server and database are responsive.
+1. Install Archivist from the `russellstokes-ai/Archivist` repository.
+2. Start it and open the Archivist panel or local web interface.
+3. Create your Admin access key on the first-run screen.
+4. Add one or more mapped source folders and scan them.
+5. Connect the Android app later if wanted; the mobile app remains local-first.
 
-## Paths
+## Capabilities
 
-- Database defaults to `/data/archivist.db`.
-- Home Assistant `/media`, `/share` and `/backup` are mapped read/write so source folders can be added from those mount points.
-- Original media files are not modified by the scanner.
+- multiple source folders and library spaces;
+- Shelf/library web browsing;
+- Admin/User household access with isolated personal state;
+- audiobook streaming and reading endpoints;
+- safe preview-first file organisation;
+- persistent restart-safe scan jobs;
+- opt-in watched folders;
+- disconnected-source catalogue retention;
+- consistent SQLite backup and restart-time restore;
+- OPDS catalogue access;
+- optional HTTPS listener for a trusted remote-access setup.
 
-## Current limitations
+## Paths and ports
 
-- Brand icon and logo are included; final application visual polish is unfinished.
-- No migration from the older organiser add-ons.
-- No remote-access hardening beyond the current internal server.
-- Ingress has not been validated inside a real HAOS supervisor in this environment.
+- database: `/data/archivist.db`
+- media: `/media`
+- share: `/share`
+- backup: `/backup`
+- TLS: `/ssl`
+- local HTTP/API: `5056`
+- optional HTTPS/API: `5443`
+- Supervisor watchdog: `/healthz`
 
-## Runtime checkpoint 0.1.2-dev
+## Raspberry Pi / architectures
 
-Ingress-aware paths and scoped sessions now have automated tests. Direct LAN
-access continues to require Archivist authentication. Only Supervisor's ingress
-peer can supply ingress routing headers; these never bypass profile permissions.
-The container base supports both declared architectures; actual builds/installations
-still need verification. Keep data_path under /data and the internal port at 5056;
-change the published host port in Home Assistant when needed. Setting allow_lan
-to false requires loopback listen and disables ingress connectivity.
+The package declares `aarch64` and `amd64`. CI compiles the complete server for Linux ARM64 and builds/starts the Home Assistant container. The intended home-server target includes Raspberry Pi 4-class hardware.
+
+Physical Pi installation, real-drive standby and thermal/resource behaviour remain hardware acceptance checks.
+
+## Remote access
+
+Do not expose plain port 5056 directly to the public internet. For the native app use a stable trusted HTTPS origin provided by the host environment, such as a correctly configured reverse proxy/DuckDNS endpoint or Tailscale-accessible HTTPS service. The Home Assistant ingress/sidebar URL is not the native app API address.
+
+## Backups and media safety
+
+Archivist database backups do not copy media files. Dashboard/server-status requests do not browse media roots. Watched scans are explicitly opt-in.
+
+File organisation is preview-first and journaled. If a hard link or verified copy cannot complete, the original is retained.
+
+## Testing status
+
+Automated validation includes Go tests, source/package parity, browser contract checks, Linux ARM64 compilation, Docker package build/start and HTTP/HTTPS health checks.
+
+Before production release, complete the physical Home Assistant/Pi and remote-access checklist in `MOBILE-TESTING.md` / `TESTING-READINESS.md`.
+
+Archivist is proprietary software. See `LICENSE.md` and `THIRD-PARTY-NOTICES.md`.
