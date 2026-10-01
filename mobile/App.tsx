@@ -172,6 +172,8 @@ type Palette = {
   sage: string;
   gold: string;
   ivory: string;
+  danger: string;
+  dangerSoft: string;
 };
 
 const storageKey = 'archivist.session';
@@ -227,6 +229,8 @@ function palette(mode: ThemeMode, system: string | null | undefined): Palette {
     sage: '#47736F',
     gold: '#B99A68',
     ivory: '#FFFFFF',
+    danger: dark ? '#DE8585' : '#A94F4F',
+    dangerSoft: dark ? '#351F20' : '#F4E1DF',
   };
 }
 
@@ -254,7 +258,7 @@ function formatTime(seconds: number) {
   return `${mins}:${secs}`;
 }
 
-function Button({label, onPress, disabled, tone = 'primary'}: {label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'quiet' | 'gold'}) {
+function Button({label, onPress, disabled, tone = 'primary'}: {label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'quiet' | 'gold' | 'danger'}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -265,15 +269,16 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
         styles.button,
         tone === 'quiet' && styles.buttonQuiet,
         tone === 'gold' && styles.buttonGold,
-        (disabled || pressed) && {opacity: disabled ? 0.45 : 0.78},
+        tone === 'danger' && styles.buttonDanger,
+        (disabled || pressed) && {opacity: disabled ? 0.38 : 0.78},
       ]}
       onPress={onPress}>
-      <Text style={[styles.buttonText, tone === 'quiet' && styles.buttonQuietText]}>{label}</Text>
+      <Text style={[styles.buttonText, tone === 'quiet' && styles.buttonQuietText, tone === 'danger' && styles.buttonDangerText]}>{label}</Text>
     </Pressable>
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
 
 function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
   const stroke=Math.max(2,Math.round(size/8));
@@ -284,6 +289,24 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   if(name==='back')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
     <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,top:size*.31,transform:[{rotate:'-42deg'}]}}/>
     <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,bottom:size*.31,transform:[{rotate:'42deg'}]}}/>
+  </View>;
+  if(name==='shelf')return <View style={{width:size,height:size,position:'relative'}}>
+    {[0,.26,.52].map((offset,index)=><View key={index} style={{position:'absolute',left:size*(.12+offset),bottom:size*.18,width:size*.18,height:size*(index===1?.56:.66),borderWidth:Math.max(1,stroke*.65),borderColor:color,borderRadius:2}}/>)}
+    <View style={{position:'absolute',left:size*.08,right:size*.08,bottom:size*.08,height:Math.max(1,stroke*.65),backgroundColor:color,borderRadius:2}}/>
+  </View>;
+  if(name==='library')return <View style={{width:size,height:size,position:'relative'}}>
+    {[0,1].flatMap(row=>[0,1].map(col=><View key={row+'-'+col} style={{position:'absolute',left:size*(.12+col*.43),top:size*(.12+row*.43),width:size*.32,height:size*.32,borderWidth:Math.max(1,stroke*.65),borderColor:color,borderRadius:3}}/>))}
+  </View>;
+  if(name==='atlas')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.22,top:size*.23,width:size*.48,height:Math.max(1,stroke*.55),backgroundColor:color,transform:[{rotate:'28deg'}]}}/>
+    <View style={{position:'absolute',left:size*.31,top:size*.49,width:size*.42,height:Math.max(1,stroke*.55),backgroundColor:color,transform:[{rotate:'-34deg'}]}}/>
+    {[{l:.12,t:.12},{l:.68,t:.33},{l:.26,t:.68}].map((n,index)=><View key={index} style={{position:'absolute',left:size*n.l,top:size*n.t,width:size*.22,height:size*.22,borderRadius:size*.11,borderWidth:Math.max(1,stroke*.65),borderColor:color,backgroundColor:'transparent'}}/>)}
+  </View>;
+  if(name==='insights')return <View style={{width:size,height:size,position:'relative',flexDirection:'row',alignItems:'flex-end',justifyContent:'center',gap:size*.10,paddingBottom:size*.12}}>
+    {[.38,.62,.82].map((h,index)=><View key={index} style={{width:size*.17,height:size*h,borderRadius:2,backgroundColor:color,opacity:index===2?1:.72}}/>)}
+  </View>;
+  if(name==='settings')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.24,.5,.76].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',top:size*(top-.09),left:size*([.28,.58,.40][index]),width:size*.18,height:size*.18,borderRadius:size*.09,borderWidth:Math.max(1,stroke*.55),borderColor:color,backgroundColor:'transparent'}}/></React.Fragment>)}
   </View>;
   if(name==='zoomIn'||name==='zoomOut')return <View style={{width:size,height:size,position:'relative'}}>
     <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:stroke,borderColor:color,borderRadius:size*.31,alignItems:'center',justifyContent:'center'}}>
@@ -2063,9 +2086,9 @@ function Client() {
     const [coverFailed, setCoverFailed] = useState(false);
     useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
-      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor: '#0F2A36'}]}>
-        <Text numberOfLines={1} style={[styles.coverFormat, {color: p.gold}]}>{format.toUpperCase()}</Text>
-        <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle, {color: p.ivory}]}>{title}</Text>
+      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor:'#111111'}]}>
+        <Text numberOfLines={1} style={[styles.coverFormat,{color:p.sage}]}>{format.toUpperCase()}</Text>
+        <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle,{color:'#FFFFFF'}]}>{title}</Text>
         {imageSource && !coverFailed ? (
           <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
         ) : null}
@@ -2091,7 +2114,7 @@ function Client() {
     const [failed,setFailed]=useState(false);
     useEffect(()=>setFailed(false),[source?.uri]);
     return (
-      <View style={[styles.miniCover,{backgroundColor:p.gold}]}>
+      <View style={[styles.miniCover,{backgroundColor:'#111111'}]}>
         <Text numberOfLines={1} style={styles.miniCoverLabel}>{book.format.toUpperCase()}</Text>
         {source && !failed ? <Image accessible={false} source={source} resizeMode="cover" style={styles.miniCoverImage} onError={()=>setFailed(true)} /> : null}
       </View>
@@ -2108,7 +2131,7 @@ function Client() {
           <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
           <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy} />
           {serverNotice ? <Text style={[styles.meta, {color: p.gold}]}>{serverNotice}</Text> : null}
-          {error ? <Text accessibilityRole="alert" style={[styles.error, {color: p.gold}]}>{error}</Text> : null}
+          {error ? <Text accessibilityRole="alert" style={[styles.error, {color:p.danger}]}>{error}</Text> : null}
       </View>
     );
   }
@@ -2154,7 +2177,7 @@ function Client() {
     const hasBooks = localBooks.length > 0;
     return (
       <View style={[styles.onboardingCard, {backgroundColor: p.card, borderColor: p.line}]}>
-        <Text style={[styles.onboardingEyebrow, {color: p.gold}]}>START HERE</Text>
+        <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>START HERE</Text>
         <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Build your library in three simple steps</Text>
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber, {backgroundColor: hasFolder ? p.sage : p.ink}]}>1</Text>
@@ -2201,7 +2224,7 @@ function Client() {
         <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
           <Cover book={item} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
-          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
+          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
           <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}{item.genre ? ' · '+item.genre : ''}</Text>
         </Pressable>
         {(item.source!=='server' || owner) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
@@ -2223,15 +2246,15 @@ function Client() {
               accessibilityLabel={'Rate '+(star-0.5)+' or '+star+' stars'}
               onPress={event=>onRating((star-1)*2+(event.nativeEvent.locationX<13?1:2))}
               style={{width:26,height:30,alignItems:'center',justifyContent:'center'}}>
-              <Text style={{fontSize:20,color:full||half?p.gold:p.muted,opacity:half?0.55:1}}>★</Text>
+              <Text style={{fontSize:20,color:full||half?p.sage:p.muted,opacity:half?0.55:1}}>★</Text>
             </Pressable>;
           })}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel={favourite?'Remove favourite':'Add favourite'} onPress={onFavourite} style={{padding:5}}>
-          <Text style={{fontSize:22,color:favourite?p.gold:p.muted}}>{favourite?'♥':'♡'}</Text>
+          <Text style={{fontSize:22,color:favourite?p.sage:p.muted}}>{favourite?'♥':'♡'}</Text>
         </Pressable>
       </View>
-      {rating>0?<Text style={[styles.meta,{color:p.gold}]}>{ratingLabel(rating)}</Text>:null}
+      {rating>0?<Text style={[styles.meta,{color:p.sage}]}>{ratingLabel(rating)}</Text>:null}
     </View>;
   }
 
@@ -2243,7 +2266,7 @@ function Client() {
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
           <Artwork title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverUri} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
-          {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
+          {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
           <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
             {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.genre ? ' · '+work.genre : ''}{work.files>1 ? ' · '+work.files+' files' : ''}
           </Text>
@@ -2292,7 +2315,7 @@ function Client() {
     return <Modal transparent animationType="fade" visible onRequestClose={()=>setRatingPrompt(null)}>
       <View style={styles.ratingPromptBackdrop}>
       <View accessibilityViewIsModal accessibilityLabel={'Rate '+ratingPrompt.title} style={[styles.ratingPromptCard,{backgroundColor:p.card,borderColor:p.line}]}>
-        <Text style={[styles.playerEyebrow,{color:p.gold}]}>FINISHED</Text>
+        <Text style={[styles.playerEyebrow,{color:p.sage}]}>FINISHED</Text>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>How was it?</Text>
         <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{ratingPrompt.title}</Text>
         <PersonalControls
@@ -2504,7 +2527,7 @@ function Client() {
       <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
         <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
           <View accessibilityViewIsModal accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
-            <Text style={[styles.playerEyebrow,{color:p.gold}]}>METADATA REVIEW</Text>
+            <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA REVIEW</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
@@ -3457,7 +3480,7 @@ function Client() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={[styles.profileHero,{backgroundColor:p.card,borderColor:p.line}]}>
           <View style={[styles.profileMonogram,{backgroundColor:p.ink}]}>
-            <Text style={[styles.profileMonogramText,{color:p.gold}]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
+            <Text style={[styles.profileMonogramText,{color:p.paper]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
           </View>
           <View style={{flex:1,gap:3}}>
             <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name || 'Profile'}</Text>
@@ -3586,13 +3609,13 @@ function Client() {
               {group.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.title} — {item.path}</Text>)}
               {!result?<Button label="Verify exact duplicates" tone="quiet" disabled={duplicateLoading} onPress={()=>void verifyDuplicateGroup(group)} />:null}
               {result?<>
-                <Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{result.exact.reduce((n,set)=>n+set.items.length,0)} files confirmed in exact duplicate sets</Text>
-                {result.exact.map(set=><View key={set.sha256} style={[styles.duplicateExact,{borderColor:p.gold}]}>
+                <Text style={[styles.meta,{color:p.sage,fontWeight:'700'}]}>{result.exact.reduce((n,set)=>n+set.items.length,0)} files confirmed in exact duplicate sets</Text>
+                {result.exact.map(set=><View key={set.sha256} style={[styles.duplicateExact,{borderColor:p.sage}]}>
                   <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Exact SHA-256 match · {set.items.length} files</Text>
                   {set.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.muted}]}>• {item.path}</Text>)}
                 </View>)}
                 {result.unique.length?<Text style={[styles.meta,{color:p.muted}]}>{result.unique.length} candidate file{result.unique.length===1?'':'s'} proved unique.</Text>:null}
-                {result.errors.map(item=><Text key={'err-'+item.id} style={[styles.meta,{color:p.gold}]}>File {item.id}: {item.error}</Text>)}
+                {result.errors.map(item=><Text key={'err-'+item.id} style={[styles.meta,{color:p.danger}]}>File {item.id}: {item.error}</Text>)}
               </>:null}
             </View>;
           })}
@@ -3623,12 +3646,12 @@ function Client() {
         </View>
         <Button label="Preview visible local items" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
         <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
-        {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
+        {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
         {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
           <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
           <Text style={{color:p.muted}}>From: {item.from}</Text>
-          <Text style={{color:item.state==='conflict'||item.state==='review'?p.gold:p.muted}}>To: {item.to}</Text>
-          <Text style={{color:item.state==='review'?p.gold:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
+          <Text style={{color:item.state==='conflict'?p.danger:item.state==='review'?p.sage:p.muted}}>To: {item.to}</Text>
+          <Text style={{color:item.state==='review'?p.sage:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
         </View>)}
         {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text>:null}
         {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
@@ -3655,7 +3678,7 @@ function Client() {
           <Text style={[styles.meta,{color:p.muted}]}>
             {capacity>0 ? formatBytes(free)+' free of '+formatBytes(capacity) : 'Stored in Archivist app storage'}
           </Text>
-          {partial.length?<Text style={[styles.meta,{color:p.gold}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} · {formatBytes(offlineStorage?.partialBytes||0)} partial data</Text>:null}
+          {partial.length?<Text style={[styles.meta,{color:p.sage}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} · {formatBytes(offlineStorage?.partialBytes||0)} partial data</Text>:null}
           {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.gold}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
         </View>
       </View>
@@ -3663,7 +3686,7 @@ function Client() {
         <Button label={offlineStorageBusy?'Checking…':'Refresh storage'} disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void refreshOfflineStorage()} />
         <Button label="Clean up storage" disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void cleanupDownloads()} />
       </View>
-      {offlineProgress?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.gold}]}>{offlineProgress}</Text>:null}
+      {offlineProgress?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{offlineProgress}</Text>:null}
       {partial.map(checkpoint=>{
         const connectedWork=session && checkpoint.server===session.server ? serverWorks.find(work=>work.id===checkpoint.workId) : undefined;
         return <View key={'partial-'+checkpoint.key} style={[styles.sourceRow,{borderColor:p.line}]}>
@@ -3722,10 +3745,10 @@ function Client() {
           <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
           <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
           <Button label={busy?'Creating…':'Add user'} disabled={busy||!newUserName.trim()} tone="quiet" onPress={()=>void createFamilyUser()} />
-          {newUserKey?<View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.gold}]}>
+          {newUserKey?<View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.sage}]}>
             <Text style={{color:p.ink,fontWeight:'800'}}>User access key — shown once</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Give this key to the family member when they connect the Archivist server.</Text>
-            <Text selectable style={{color:p.gold,fontWeight:'800'}}>{newUserKey}</Text>
+            <Text selectable style={{color:p.sage,fontWeight:'700'}}>{newUserKey}</Text>
             <Button label="Hide key" tone="quiet" onPress={()=>setNewUserKey('')} />
           </View>:null}
           {householdUsers.map(user=><View key={user.id} style={[styles.sourceRow,{borderColor:p.line}]}>
@@ -3752,9 +3775,9 @@ function Client() {
           <Button label="Preview matching files" disabled={busy || shelfLoading} tone="quiet" onPress={()=>void previewLibrary(false)}/>
           <Button label="Preview entire library" disabled={busy} tone="quiet" onPress={()=>void previewLibrary(true)}/>
           <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
-          {moveStatus?<Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
+          {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
         </View>:null}
-        {session ? <Button label="Sign out" tone="gold" onPress={() => void signOut()} /> : null}
+        {session ? <Button label="Sign out" tone="danger" onPress={() => void signOut()} /> : null}
       </ScrollView>
     );
   }
@@ -3778,26 +3801,26 @@ function Client() {
     );
   }
 
-  const tabs: Array<{id: Tab; label: string}> = [
-    {id: 'shelf', label: 'Shelf'},
-    {id: 'library', label: 'Library'},
-    {id: 'atlas', label: 'Atlas'},
-    {id: 'insights', label: 'Insights'},
+  const tabs: Array<{id: Tab; label: string; icon: UiIconName}> = [
+    {id:'shelf',label:'Shelf',icon:'shelf'},
+    {id:'library',label:'Library',icon:'library'},
+    {id:'atlas',label:'Atlas',icon:'atlas'},
+    {id:'insights',label:'Insights',icon:'insights'},
   ];
 
   return (
     <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
-      <View style={[styles.appHeader, {borderBottomColor: p.line}]}>
-        <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
-        <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
-          <Text style={[styles.headerMeta, {color: p.muted}]}>{sourceCounts.all} works</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={()=>setActiveTab('settings')} style={[styles.headerSettings,{borderColor:p.line}]}><Text style={{color:p.ink,fontWeight:'800'}}>Settings</Text></Pressable>
+      <View style={styles.appHeader}>
+        <Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text>
+        <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+          <Text style={[styles.headerMeta,{color:p.muted}]}>{sourceCounts.all} works</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={()=>setActiveTab('settings')} style={styles.settingsButton}><UiIcon name="settings" color={p.muted} size={22}/></Pressable>
         </View>
       </View>
-      {error ? <View style={[styles.errorBanner,{borderColor:p.gold,backgroundColor:p.card}]}>
-        <Text accessibilityRole="alert" style={[styles.error, {color: p.gold,flex:1}]}>{error}</Text>
+      {error ? <View style={[styles.errorBanner,{backgroundColor:p.dangerSoft}]}>
+        <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
-          <UiIcon name="close" color={p.gold} size={18}/>
+          <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
       <View style={styles.tabBody}>
@@ -3810,34 +3833,28 @@ function Client() {
       />
       <RatingPromptPanel />
       {playing ? (
-        <View style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={'Open player for '+playing.title}
-            onPress={() => setActiveTab('player')}
-            style={styles.miniPlayerMain}>
-            <MiniArtwork book={playing} />
-            <View style={{flex: 1}}>
-              <Text numberOfLines={1} style={[styles.miniTitle, {color: p.ivory}]}>{playing.title}</Text>
-              <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(playing.source==='server' ? playback?.seconds || 0 : audio.currentTime || 0)} · {(playing.source==='server' ? playback?.playing : audio.playing) ? 'Playing' : 'Paused'}</Text>
+        <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>setActiveTab('player')} style={styles.miniPlayerMain}>
+            <MiniArtwork book={playing}/>
+            <View style={{flex:1,minWidth:0}}>
+              <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
+              <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>
             </View>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={(playing.source==='server' ? playback?.playing : audio.playing) ? 'Pause '+playing.title : 'Play '+playing.title}
-            hitSlop={6}
-            onPress={() => playing.source==='server' ? controller.toggle() : audio.playing ? player.pause() : player.play()}
-            style={styles.miniButton}>
-            <Text style={styles.miniButtonText}>{(playing.source==='server' ? playback?.playing : audio.playing) ? 'Pause' : 'Play'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={(playing.source==='server'?playback?.playing:audio.playing)?'Pause '+playing.title:'Play '+playing.title} hitSlop={6} onPress={()=>playing.source==='server'?controller.toggle():audio.playing?player.pause():player.play()} style={[styles.miniButton,{backgroundColor:p.raised}]}>
+            <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
           </Pressable>
         </View>
-      ) : null}
-      <View style={[styles.tabBar, {backgroundColor: p.card, borderTopColor: p.line}]}>
-        {tabs.map(tab => (
-          <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected: activeTab === tab.id}} onPress={() => setActiveTab(tab.id)} style={styles.tab}>
-            <Text style={[styles.tabText, {color: activeTab === tab.id ? p.sage : p.muted}]}>{tab.label}</Text>
-          </Pressable>
-        ))}
+      ):null}
+      <View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
+        {tabs.map(tab=>{
+          const selected=activeTab===tab.id;
+          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
+            <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:p.sage,opacity:selected?1:0}]}/>
+            <UiIcon name={tab.icon} color={selected?p.sage:p.muted} size={22}/>
+            <Text style={[styles.tabText,{color:selected?p.sage:p.muted}]}>{tab.label}</Text>
+          </Pressable>;
+        })}
       </View>
     </SafeAreaView>
   );
@@ -3854,9 +3871,10 @@ const styles = StyleSheet.create({
   logoSmall: {fontFamily: 'serif', fontSize: 26},
   tagline: {fontSize: 12, letterSpacing: 4, textAlign: 'center', fontWeight: '700'},
   loginCopy: {fontSize: 16, lineHeight: 23, textAlign: 'center', marginBottom: 8},
-  appHeader: {height: 58, paddingHorizontal: 18, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
-  headerMeta: {fontSize: 13},
-  headerSettings: {borderWidth:1,borderRadius:9,paddingHorizontal:10,paddingVertical:7},
+  appHeader: {height:56,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  headerMeta: {fontSize:12,fontWeight:'500'},
+  headerSettings: {borderWidth:0},
+  settingsButton: {width:44,height:44,alignItems:'center',justifyContent:'center',borderRadius:22},
   content: {padding: 16, gap: 14},
   setupPanel: {borderWidth: 1, borderRadius: 8, padding: 14, gap: 12},
   shelfShell: {flex: 1, flexDirection: 'row'},
@@ -3892,12 +3910,14 @@ const styles = StyleSheet.create({
   sectionTitle: {fontFamily:'serif',fontSize: 20, lineHeight:25, fontWeight: '500', marginTop: 10,letterSpacing:-0.15},
   input: {padding: 14, borderWidth: 1, borderRadius: 8, fontSize: 16},
   button: {backgroundColor: '#47736F', borderRadius: 12, paddingHorizontal: 18, minHeight: 48, justifyContent: 'center', alignItems: 'center'},
-  buttonGold: {backgroundColor: '#B99A68'},
-  buttonQuiet: {backgroundColor: 'transparent', borderWidth: 0},
-  buttonText: {color: '#FFFFFF', fontSize: 15, lineHeight:20, fontWeight: '600'},
-  buttonQuietText: {color: '#47736F'},
+  buttonGold: {backgroundColor:'#B99A68'},
+  buttonQuiet: {backgroundColor:'transparent',borderWidth:0},
+  buttonDanger: {backgroundColor:'transparent',borderWidth:0},
+  buttonText: {color:'#FFFFFF',fontSize:15,lineHeight:20,fontWeight:'600'},
+  buttonQuietText: {color:'#47736F'},
+  buttonDangerText: {color:'#A94F4F'},
   error: {paddingHorizontal: 16, paddingVertical: 8},
-  errorBanner: {marginHorizontal:12,marginTop:8,borderWidth:1,borderRadius:10,flexDirection:'row',alignItems:'center'},
+  errorBanner: {marginHorizontal:12,marginTop:8,borderWidth:0,borderRadius:12,flexDirection:'row',alignItems:'center'},
   errorDismiss: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
@@ -4007,18 +4027,19 @@ const styles = StyleSheet.create({
   atlasBarFill: {height: 8, borderRadius: 999},
   segment: {flexDirection: 'row', gap: 8},
   segmentItem: {flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center'},
-  miniPlayer: {minHeight: 66, marginHorizontal: 12, marginBottom: 8, borderRadius: 14, padding: 8, flexDirection: 'row', alignItems: 'center', gap: 10},
+  miniPlayer: {minHeight:64,marginHorizontal:12,marginBottom:8,borderRadius:14,borderTopWidth:StyleSheet.hairlineWidth,padding:8,flexDirection:'row',alignItems:'center',gap:10,shadowColor:'#000',shadowOpacity:.06,shadowRadius:10,shadowOffset:{width:0,height:4},elevation:2},
   miniPlayerMain: {flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:10,padding:2},
-  miniCover: {width: 42, height: 42, borderRadius: 5, alignItems: 'center', justifyContent: 'center'},
+  miniCover: {width:42,height:42,borderRadius:6,alignItems:'center',justifyContent:'center',overflow:'hidden'},
   miniCoverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
-  miniCoverLabel: {color:'#0f2a36',fontSize:8,fontWeight:'900',letterSpacing:0.6},
-  miniTitle: {fontWeight: '800'},
-  miniMeta: {fontSize: 12},
-  miniButton: {minWidth:64,minHeight:44,paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#f8f7f2',alignItems:'center',justifyContent:'center'},
-  miniButtonText: {color: '#f8f7f2', fontWeight: '700'},
-  tabBar: {height: 62, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row'},
-  tab: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  tabText: {fontSize: 12, fontWeight: '800'},
+  miniCoverLabel: {color:'#FFFFFF',fontSize:8,fontWeight:'700',letterSpacing:.7},
+  miniTitle: {fontSize:13,fontWeight:'600'},
+  miniMeta: {fontSize:11},
+  miniButton: {width:44,height:44,borderRadius:22,borderWidth:0,alignItems:'center',justifyContent:'center'},
+  miniButtonText: {fontWeight:'600'},
+  tabBar: {height:68,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
+  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:3,position:'relative'},
+  tabIndicator: {position:'absolute',top:0,width:20,height:2,borderRadius:2},
+  tabText: {fontSize:10,lineHeight:13,fontWeight:'600'},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
   celebrationParticle: {position:'absolute', fontSize:28, color:'#c6a374', fontWeight:'900'},
   celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
