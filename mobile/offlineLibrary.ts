@@ -11,6 +11,7 @@ import {
 } from 'expo-file-system/legacy';
 import {Session} from './connection';
 import {LocalWork} from './localWorks';
+import {Chapter} from './playback';
 
 export type OfflineServerTrack={
   id:number;
@@ -36,6 +37,7 @@ export type OfflineServerWork={
   bytes:number;
   tracks:Array<OfflineServerTrack & {uri:string;localFormat:string}>;
   coverUri?:string;
+  chaptersByTrackId?:Record<string,Chapter[]>;
 };
 
 export type OfflineDownloadCheckpoint={
@@ -183,6 +185,7 @@ export async function downloadOfflineWork(
   options?:{
     checkpoint?:OfflineDownloadCheckpoint;
     onCheckpoint?:(checkpoint:OfflineDownloadCheckpoint|null)=>Promise<void>|void;
+    chaptersByTrackId?:Record<string,Chapter[]>;
   },
 ):Promise<OfflineServerWork>{
   const root=offlineRoot();
@@ -344,6 +347,7 @@ export async function downloadOfflineWork(
       bytes:written,
       tracks:resultTracks,
       coverUri,
+      chaptersByTrackId:options?.chaptersByTrackId,
     };
   }catch(error){
     activeDownload=null;

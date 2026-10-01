@@ -79,6 +79,21 @@ export class Playback {
     });
     return this.saves;
   }
+  setTrackOrder(ids:number[]) {
+    if(!Array.isArray(ids)||!ids.length||!this.state.tracks.length)return;
+    const current=this.state.tracks[this.state.index]?.id;
+    const rank=new Map(ids.map((id,index)=>[Number(id),index]));
+    this.state.tracks=this.state.tracks.map((track,index)=>({track,index,rank:rank.get(track.id)}))
+      .sort((a,b)=>{
+        if(a.rank===undefined&&b.rank===undefined)return a.index-b.index;
+        if(a.rank===undefined)return 1;if(b.rank===undefined)return -1;
+        return a.rank-b.rank||a.index-b.index;
+      }).map(item=>item.track);
+    const next=this.state.tracks.findIndex(track=>track.id===current);
+    if(next>=0)this.state.index=next;
+    this.emit();
+  }
+
   async select(index: number) {
     if (this.state.loading || this.blocked || index < 0 || index >= this.state.tracks.length) return;
     const generation=this.generation;

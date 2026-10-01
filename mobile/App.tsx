@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
   AppState,
@@ -34,6 +35,7 @@ import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibilit
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, LibraryCollection, applySmartShelf, collectionWorks, newOrganisationId, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
+import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {
   cleanupOfflineStorage,
   downloadOfflineWork,
@@ -188,6 +190,9 @@ const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 const smartShelvesKey = 'archivist.smartShelves.v1';
 const collectionsKey = 'archivist.collections.v1';
 const shelfSectionsKey = 'archivist.shelfSections.v1';
+const playerBookmarksKey = 'archivist.playerBookmarks.v1';
+const trackOrdersKey = 'archivist.trackOrders.v1';
+const chapterOverridesKey = 'archivist.chapterOverrides.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'favourites',title:'Favourites',visible:true},
@@ -391,9 +396,18 @@ function Client() {
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
-  const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|null>(null);
+  const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|'bookmarks'|'chapters'|'structure'|null>(null);
   const [playerProgressWidth,setPlayerProgressWidth]=useState(1);
   const [localSpeed, setLocalSpeed] = useState(1);
+  const [playerBookmarks,setPlayerBookmarks]=useState<PlayerBookmark[]>([]);
+  const [trackOrders,setTrackOrders]=useState<TrackOrderMap>({});
+  const [chapterOverrides,setChapterOverrides]=useState<ChapterOverrideMap>({});
+  const [chapterEditIndex,setChapterEditIndex]=useState<number|null>(null);
+  const [chapterEditTitle,setChapterEditTitle]=useState('');
+  const [reduceMotion,setReduceMotion]=useState(false);
+  const [appActive,setAppActive]=useState(AppState.currentState==='active');
+  const bookOpenAnim=useRef(new Animated.Value(0)).current;
+  const pageTurnAnim=useRef(new Animated.Value(0)).current;
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
   const [localWorkProgress, setLocalWorkProgress] = useState<Record<string, LocalWorkProgress>>({});
@@ -487,6 +501,26 @@ function Client() {
   const serverPlaybackActive = playing?.source==='server';
   const localAudioProgress = !serverPlaybackActive && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
+  const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
+  const playbackVisible = activeTab==='player' && appActive && !!playing;
+
+  useEffect(()=>{
+    const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduceMotion);
+    return()=>subscription.remove();
+  },[]);
+
+  useEffect(()=>{
+    const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
+    bookOpenAnim.stopAnimation();pageTurnAnim.stopAnimation();
+    Animated.timing(bookOpenAnim,{toValue:motion==='closed'?0:1,duration:reduceMotion?0:260,useNativeDriver:true}).start();
+    if(motion!=='turning'){pageTurnAnim.setValue(0);return;}
+    const loop=Animated.loop(Animated.sequence([
+      Animated.timing(pageTurnAnim,{toValue:1,duration:850,useNativeDriver:true}),
+      Animated.timing(pageTurnAnim,{toValue:0,duration:850,useNativeDriver:true}),
+      Animated.delay(1200),
+    ]));
+    loop.start();return()=>loop.stop();
+  },[activeTab,appActive,bookOpenAnim,pageTurnAnim,playbackIsPlaying,playbackVisible,reduceMotion]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
@@ -733,9 +767,10 @@ function Client() {
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
     const lifecycle = AppState.addEventListener('change', state => {
+      setAppActive(state==='active');
       controller.tick();
       void controller.save();
-      if(state!=='active')void pauseActiveOfflineDownload();
+      if(state!=='active'){void pauseActiveOfflineDownload();void persistLocalPlaybackPosition();}
     });
     const timer = setInterval(() => controller.tick(),1000);
     return () => { subscription.remove(); lifecycle.remove(); clearInterval(timer); loadCancel.current?.(); void controller.stop(); };
@@ -785,9 +820,16 @@ function Client() {
   const activeAsset=playback?.tracks[playback.index]?.id;
   useEffect(()=>{
     let cancelled=false;setChapters([]);setChapterError('');
-    if(session && playing?.source==='server' && activeAsset)request(session,'/api/assets/'+activeAsset+'/chapters').then(items=>{if(!cancelled)setChapters(items);}).catch(e=>{if(!cancelled)setChapterError(e.message);});
+    if(session && playing?.source==='server' && activeAsset){
+      request(session,'/api/assets/'+activeAsset+'/chapters').then(items=>{if(!cancelled)setChapters(items);}).catch(e=>{if(!cancelled)setChapterError(e.message);});
+    }else if(playing?.source==='downloaded'&&activeLocalWork){
+      const downloaded=Object.values(offlineWorks).find(item=>item.server===activeLocalWork.originServer&&item.workId===activeLocalWork.originWorkId);
+      const currentUri=activeLocalWork.tracks[localWorkIndex]?.uri;
+      const sourceTrack=downloaded?.tracks.find(track=>track.uri===currentUri);
+      if(sourceTrack&&!cancelled)setChapters(downloaded?.chaptersByTrackId?.[String(sourceTrack.id)]||[]);
+    }
     return()=>{cancelled=true;};
-  },[session,activeAsset,playing?.source]);
+  },[session,activeAsset,playing?.source,activeLocalWork,localWorkIndex,offlineWorks]);
 
   useEffect(() => {
     SecureStore.getItemAsync(themeKey).then(value => {
@@ -845,6 +887,10 @@ function Client() {
       const byId=new Map(value.filter(item=>item&&defaultShelfSections.some(base=>base.id===item.id)).map(item=>[item.id,item]));
       setShelfSections(defaultShelfSections.map(base=>({...base,...byId.get(base.id)})).sort((a,b)=>{const ai=value.findIndex(item=>item.id===a.id),bi=value.findIndex(item=>item.id===b.id);return (ai<0?999:ai)-(bi<0?999:bi);}));
     }).catch(() => undefined);
+    getPersistedJSON<PlayerBookmark[]>(playerBookmarksKey).then(value=>setPlayerBookmarks(sanitizeBookmarks(value))).catch(()=>undefined);
+    getPersistedJSON<TrackOrderMap>(trackOrdersKey).then(value=>setTrackOrders(sanitizeTrackOrders(value))).catch(()=>undefined);
+    getPersistedJSON<ChapterOverrideMap>(chapterOverridesKey).then(value=>setChapterOverrides(sanitizeChapterOverrides(value))).catch(()=>undefined);
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
     }).catch(() => undefined);
@@ -1454,6 +1500,46 @@ function Client() {
     }
   }
 
+  function playbackWorkKey(book:Book|null){
+    if(!book)return '';
+    if((book.source==='server'||book.source==='downloaded')&&book.originServer&&book.serverWorkId){
+      return sourceIdentity({source:book.source,server:book.originServer,serverWorkId:book.serverWorkId,title:book.title,space:book.space}).canonicalKey;
+    }
+    if(book.localWorkKey)return sourceIdentity({source:'local',localKey:book.localWorkKey,title:book.title,space:book.space}).canonicalKey;
+    return book.uri?'asset:'+book.uri:'book:'+book.id+':'+book.title;
+  }
+
+  async function savePlayerBookmarks(next:PlayerBookmark[]){
+    setPlayerBookmarks(next);await setPersistedJSON(playerBookmarksKey,next);
+  }
+  async function addCurrentBookmark(seconds:number){
+    const workKey=playbackWorkKey(playing);if(!workKey)return;
+    await savePlayerBookmarks(addBookmark(playerBookmarks,{workKey,seconds,label:'Bookmark'}));
+  }
+  async function deletePlayerBookmark(id:string){await savePlayerBookmarks(removeBookmark(playerBookmarks,id));}
+  async function saveTrackOrder(workKey:string,order:string[]){const next={...trackOrders,[workKey]:order};setTrackOrders(next);await setPersistedJSON(trackOrdersKey,next);}
+  async function saveChapterOverride(workKey:string,nextChapters:Chapter[]|null){
+    const next={...chapterOverrides};if(nextChapters?.length)next[workKey]=nextChapters;else delete next[workKey];setChapterOverrides(next);await setPersistedJSON(chapterOverridesKey,next);
+  }
+  function orderedLocalWork(work:LocalWork){
+    const key=sourceIdentity({source:work.originServer?'downloaded':'local',localKey:work.key,server:work.originServer,serverWorkId:work.originWorkId,title:work.title,space:work.space}).canonicalKey;
+    return {...work,tracks:applyTrackOrder(work.tracks,trackOrders[key],track=>track.uri||String(track.id))};
+  }
+
+  async function persistLocalPlaybackPosition(seconds=audio.currentTime){
+    if(playing?.source==='server'||!playing?.uri)return;
+    const safe=Math.max(0,Number(seconds)||0);
+    const progress={...localProgress,[playing.uri]:safe};
+    setLocalProgress(progress);await setPersistedJSON(localProgressKey,progress);
+    if(activeLocalWork){
+      const track=activeLocalWork.tracks[localWorkIndex];
+      if(track?.uri){
+        const workProgress={...localWorkProgress,[activeLocalWork.key]:{uri:track.uri,seconds:safe,complete:!!localWorkProgress[activeLocalWork.key]?.complete}};
+        setLocalWorkProgress(workProgress);await setPersistedJSON(localWorkProgressKey,workProgress);
+      }
+    }
+  }
+
   async function loadLocalWorkTrack(work: LocalWork, index: number, seconds = 0) {
     const track = work.tracks[index];
     if (!track?.uri || !track.available) throw Error('This audiobook file is unavailable.');
@@ -1518,6 +1604,7 @@ function Client() {
   }
 
   async function playLocalWork(work: LocalWork) {
+    work=orderedLocalWork(work);
     if (!work.available || !work.tracks.length) {
       setError('This audiobook is currently unavailable.');
       return;
@@ -1565,6 +1652,8 @@ function Client() {
       setPlaying(book);
       setActiveTab('player');
       await controller.open(book.id);
+      const order=trackOrders[playbackWorkKey(book)]?.map(Number).filter(Number.isFinite);
+      if(order?.length)controller.setTrackOrder(order);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -1725,6 +1814,10 @@ function Client() {
     setOfflineProgress(offlineCheckpoints[checkpointKey]?'Resuming…':'Preparing download…');
     try{
       const tracks=await request(session,'/api/works/'+work.id+'/tracks') as WorkTrack[];
+      const chapterPairs=await Promise.all(tracks.filter(track=>track.available&&track.format==='Audio').map(async track=>{
+        try{return [String(track.id),await request(session,'/api/assets/'+track.id+'/chapters') as Chapter[]] as const;}catch{return [String(track.id),[] as Chapter[]] as const;}
+      }));
+      const chaptersByTrackId=Object.fromEntries(chapterPairs.filter(([,items])=>items.length));
       const downloaded=await downloadOfflineWork(
         session,
         work,
@@ -1733,6 +1826,7 @@ function Client() {
         {
           checkpoint:offlineCheckpoints[checkpointKey],
           onCheckpoint:checkpoint=>saveOfflineCheckpoint(checkpointKey,checkpoint),
+          chaptersByTrackId,
         },
       );
       setOfflineWorks(current=>{
@@ -2435,6 +2529,20 @@ function Client() {
     return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,{backgroundColor:p.card,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.ink}]}>Sources</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.ink,marginTop:18}]}>Spaces</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'800'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
+  function LivingBook({book}:{book:Book}){
+    const coverShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[0,-54]});
+    const coverTurn=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:['0deg','9deg']});
+    const pageShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[-74,48]});
+    const pageTurn=pageTurnAnim.interpolate({inputRange:[0,1],outputRange:['0deg','-10deg']});
+    return <View accessibilityLabel="Living book artwork" style={styles.livingBookStage}>
+      <Animated.View style={[styles.livingBookCover,{transform:[{perspective:1000},{translateX:coverShift},{rotateY:coverTurn}]}]}><Cover book={{...book,coverShape:'square'}} large/></Animated.View>
+      <Animated.View style={[styles.livingBookPage,{backgroundColor:p.ivory,borderColor:p.line,transform:[{perspective:1000},{translateX:pageShift},{rotateY:pageTurn}]}]}>
+        <View style={[styles.livingBookSpine,{backgroundColor:p.gold}]}/>
+        {[0,1,2,3,4,5].map(line=><View key={line} style={[styles.livingBookLine,{backgroundColor:line===0?p.gold:p.line,width:line===0?'46%':line===5?'62%':'78%'}]}/>) }
+      </Animated.View>
+    </View>;
+  }
+
   function Player() {
     const current = playing;
     const serverPlayer = current?.source==='server';
@@ -2442,10 +2550,25 @@ function Client() {
     const duration = serverPlayer ? playback?.duration || 0 : audio.duration || 0;
     const isPlaying = serverPlayer ? !!playback?.playing : !!audio.playing;
     const speed = serverPlayer ? playback?.speed || 1 : localSpeed;
-    const currentChapterIndex = chapters.findIndex(chapter => position >= chapter.start && (chapter.end <= chapter.start || position < chapter.end));
-    const currentChapter = currentChapterIndex >= 0 ? chapters[currentChapterIndex] : null;
+    const workKey=playbackWorkKey(current);
+    const effectiveChapters=chapterOverrides[workKey]?.length?chapterOverrides[workKey]:chapters;
+    const currentChapterIndex = effectiveChapters.findIndex(chapter => position >= chapter.start && (chapter.end <= chapter.start || position < chapter.end));
+    const currentChapter = currentChapterIndex >= 0 ? effectiveChapters[currentChapterIndex] : null;
+    const currentBookmarks=playerBookmarks.filter(item=>item.workKey===workKey);
     const remaining = Math.max(0, duration - position);
     const nativeSleepSupported = typeof (player as typeof player & {setSleepTimer?: (seconds:number)=>void}).setSleepTimer === 'function';
+    const currentServerWork=current?.serverWorkId?serverWorks.find(work=>work.id===current.serverWorkId):undefined;
+    const offlineCopy=currentServerWork?downloadedServerWork(currentServerWork):current?.source==='downloaded'?Object.values(offlineWorks).find(item=>item.server===current.originServer&&item.workId===current.serverWorkId):undefined;
+
+    async function togglePlayback(){
+      if(serverPlayer){controller.toggle();return;}
+      if(isPlaying){player.pause();await persistLocalPlaybackPosition(position);}else player.play();
+    }
+    async function moveCurrentTrack(index:number,direction:-1|1){
+      if(!workKey)return;
+      if(serverPlayer&&playback?.tracks){const order=moveTrackOrder(playback.tracks,index,direction,track=>String(track.id));controller.setTrackOrder(order.map(Number));await saveTrackOrder(workKey,order);return;}
+      if(activeLocalWork){const order=moveTrackOrder(activeLocalWork.tracks,index,direction,track=>track.uri||String(track.id));const currentUri=activeLocalWork.tracks[localWorkIndex]?.uri;const next={...activeLocalWork,tracks:applyTrackOrder(activeLocalWork.tracks,order,track=>track.uri||String(track.id))};setActiveLocalWork(next);setLocalWorkIndex(Math.max(0,next.tracks.findIndex(track=>track.uri===currentUri)));await saveTrackOrder(workKey,order);}
+    }
 
     function seekTo(seconds: number) {
       const target = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, seconds));
@@ -2454,7 +2577,7 @@ function Client() {
     }
 
     function setPlayerSpeed(rate: number) {
-      if (session) controller.setSpeed(rate);
+      if (serverPlayer) controller.setSpeed(rate);
       else {
         try {
           player.setPlaybackRate(rate);
@@ -2475,19 +2598,25 @@ function Client() {
           {current ? <Text style={[styles.meta,{color:p.muted}]}>{speed}×</Text> : null}
         </View>
         {current ? (
-          <>
-            <View style={[styles.playerArtworkFrame,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Cover book={{...current, coverShape:'square'}} large />
-            </View>
+          <View style={[styles.playerAdaptive,wideLayout&&styles.playerAdaptiveWide]}>
+            <View style={styles.playerHeroColumn}>
+            <LivingBook book={current}/>
             <View style={styles.playerIdentity}>
               <Text numberOfLines={2} style={[styles.nowTitle, {color: p.ink}]}>{current.title}</Text>
               <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
                 {[current.author, current.series, current.space].filter(Boolean).join(' · ')}
               </Text>
               {currentChapter ? <Text numberOfLines={1} style={[styles.playerChapter,{color:p.sage}]}>
-                Chapter {currentChapterIndex + 1} of {chapters.length} · {currentChapter.title}
+                Chapter {currentChapterIndex + 1} of {effectiveChapters.length} · {currentChapter.title}
               </Text> : null}
             </View>
+            <View style={styles.playerStatusRow}>
+              <View style={[styles.playerSourcePill,{borderColor:p.line,backgroundColor:p.card}]}><Text style={[styles.playerToolLabel,{color:p.muted}]}>{current.source==='server'?'SERVER':current.source==='downloaded'?'DOWNLOADED':'ON DEVICE'}</Text></View>
+              {offlineCopy?<View style={[styles.playerSourcePill,{borderColor:p.sage,backgroundColor:p.raised}]}><Text style={[styles.playerToolLabel,{color:p.sage}]}>AVAILABLE OFFLINE</Text></View>:null}
+              {current.source==='server'&&currentServerWork&&!offlineCopy?<Pressable accessibilityRole="button" disabled={offlineBusyId===currentServerWork.id} onPress={()=>void downloadServerWork(currentServerWork)} style={[styles.playerSourcePill,{borderColor:p.sage,backgroundColor:p.card}]}><Text style={[styles.playerToolLabel,{color:p.sage}]}>{offlineBusyId===currentServerWork.id?'DOWNLOADING':'DOWNLOAD'}</Text></Pressable>:null}
+            </View>
+            </View>
+            <View style={styles.playerControlColumn}>
 
             <Pressable
               accessibilityRole="adjustable"
@@ -2526,9 +2655,9 @@ function Client() {
                 accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
                 disabled={serverPlayer ? playback?.loading : false}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.sage,transform:[{scale:pressed?0.97:1}]}]}
-                onPress={() => serverPlayer ? controller.toggle() : isPlaying ? player.pause() : player.play()}>
-                <Text style={styles.playButtonGlyph}>{session && playback?.loading ? '…' : isPlaying ? 'Ⅱ' : '▶'}</Text>
-                <Text style={styles.playButtonCaption}>{session && playback?.loading ? 'Loading' : isPlaying ? 'Pause' : 'Play'}</Text>
+                onPress={()=>void togglePlayback()}>
+                <Text style={styles.playButtonGlyph}>{serverPlayer && playback?.loading ? '…' : isPlaying ? 'Ⅱ' : '▶'}</Text>
+                <Text style={styles.playButtonCaption}>{serverPlayer && playback?.loading ? 'Loading' : isPlaying ? 'Pause' : 'Play'}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={() => seekTo(position + 30)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
                 <Text style={[styles.skipMain,{color:p.ink}]}>30</Text>
@@ -2538,16 +2667,22 @@ function Client() {
 
             <View style={[styles.playerTools,{backgroundColor:p.card,borderColor:p.line}]}>
               <Pressable accessibilityRole="button" accessibilityLabel={'Playback speed '+speed+' times'} accessibilityState={{expanded:playerPanel==='speed'}} onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{speed}×</Text>
-                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{speed}×</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Bookmarks, '+currentBookmarks.length} accessibilityState={{expanded:playerPanel==='bookmarks'}} onPress={()=>setPlayerPanel(playerPanel==='bookmarks'?null:'bookmarks')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{currentBookmarks.length}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Bookmarks</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Chapters, '+effectiveChapters.length} accessibilityState={{expanded:playerPanel==='chapters'}} onPress={()=>setPlayerPanel(playerPanel==='chapters'?null:'chapters')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{effectiveChapters.length||'—'}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Chapters</Text>
               </Pressable>
               {serverPlayer && nativeSleepSupported ? <Pressable accessibilityRole="button" accessibilityLabel="Sleep timer" accessibilityState={{expanded:playerPanel==='sleep'}} onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{playback?.sleepAt ? 'On' : '—'}</Text>
-                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{playback?.sleepAt ? 'On' : '—'}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
               </Pressable> : null}
               <Pressable accessibilityRole="button" accessibilityLabel={'Queue, '+queuedBooks.length+' item'+(queuedBooks.length===1?'':'s')} accessibilityState={{expanded:playerPanel==='queue'}} onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{queuedBooks.length}</Text>
-                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>{queuedBooks.length}</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Edit audiobook structure" accessibilityState={{expanded:playerPanel==='structure'}} onPress={()=>setPlayerPanel(playerPanel==='structure'?null:'structure')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
+                <Text style={[styles.playerToolValue,{color:p.ink}]}>⋯</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Structure</Text>
               </Pressable>
             </View>
 
@@ -2563,32 +2698,24 @@ function Client() {
               <View style={styles.toolRow}>{[0,15,30,45,60].map(minutes=><Button key={minutes} label={minutes?minutes+' min':'Off'} tone="quiet" onPress={()=>controller.sleep(minutes)} />)}</View>
             </View> : null}
 
+            {playerPanel==='bookmarks' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <View style={styles.queueHeader}><Text style={[styles.playerPanelTitle,{color:p.ink}]}>Bookmarks</Text><Button label="Add here" onPress={()=>void addCurrentBookmark(position)}/></View>
+              {!currentBookmarks.length?<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet. Add one at any point you want to return to.</Text>:currentBookmarks.map(mark=><View key={mark.id} style={[styles.chapterRow,{borderBottomWidth:1,borderBottomColor:p.line}]}><Pressable style={{flex:1}} onPress={()=>seekTo(mark.seconds)}><Text style={{color:p.ink,fontWeight:'800'}}>{mark.label}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(mark.seconds)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Delete bookmark at '+formatTime(mark.seconds)} onPress={()=>void deletePlayerBookmark(mark.id)}><Text style={{color:p.gold,fontWeight:'800'}}>Delete</Text></Pressable></View>)}
+            </View> : null}
+
+            {playerPanel==='chapters' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <View style={styles.queueHeader}><Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text><Text style={[styles.meta,{color:p.muted}]}>{effectiveChapters.length}</Text></View>
+              {chapterError?<Text accessibilityRole="alert" style={{color:p.gold}}>{chapterError}</Text>:!effectiveChapters.length?<Text style={{color:p.muted}}>No chapters are available for this file.</Text>:null}
+              {effectiveChapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index&&{backgroundColor:p.raised}]}><Text style={[styles.chapterIndex,{color:p.gold}]}>{index+1}</Text><View style={{flex:1}}><Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}{chapter.end>chapter.start?' – '+formatTime(chapter.end):''}</Text></View></Pressable>)}
+            </View> : null}
+
+            {playerPanel==='structure' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Audiobook structure</Text><Text style={[styles.meta,{color:p.muted}]}>Corrections are stored by Archivist. Your original audio files are never rewritten.</Text>
+              {((serverPlayer?playback?.tracks:activeLocalWork?.tracks)?.length||0)>1?<><Text style={[styles.filterLabel,{color:p.muted}]}>FILE ORDER</Text>{(serverPlayer?playback?.tracks||[]:activeLocalWork?.tracks||[]).map((track:any,index:number)=><View key={String(track.id||track.uri)} style={[styles.structureRow,{borderColor:p.line}]}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Pressable disabled={index===0} onPress={()=>void moveCurrentTrack(index,-1)}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900',padding:8}}>Up</Text></Pressable><Pressable disabled={index===(serverPlayer?playback?.tracks?.length||0:activeLocalWork?.tracks?.length||0)-1} onPress={()=>void moveCurrentTrack(index,1)}><Text style={{color:p.sage,fontWeight:'900',padding:8}}>Down</Text></Pressable></View>)}</>:null}
+              {effectiveChapters.length?<><View style={styles.queueHeader}><Text style={[styles.filterLabel,{color:p.muted}]}>CHAPTER EDITOR</Text>{chapterOverrides[workKey]?<Pressable onPress={()=>void saveChapterOverride(workKey,null)}><Text style={{color:p.gold,fontWeight:'800'}}>Reset embedded</Text></Pressable>:null}</View>{effectiveChapters.map((chapter,index)=><View key={index} style={[styles.structureChapter,{borderColor:p.line}]}><View style={{flex:1}}>{chapterEditIndex===index?<TextInput value={chapterEditTitle} onChangeText={setChapterEditTitle} autoFocus style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:<><Text style={[styles.bookTitle,{color:p.ink}]}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)} – {formatTime(chapter.end)}</Text></>}</View>{chapterEditIndex===index?<Pressable onPress={()=>{void saveChapterOverride(workKey,renameChapter(effectiveChapters,index,chapterEditTitle));setChapterEditIndex(null)}}><Text style={{color:p.sage,fontWeight:'800'}}>Save</Text></Pressable>:<Pressable onPress={()=>{setChapterEditIndex(index);setChapterEditTitle(chapter.title)}}><Text style={{color:p.sage,fontWeight:'800'}}>Rename</Text></Pressable>}<Pressable disabled={index!==currentChapterIndex} onPress={()=>void saveChapterOverride(workKey,splitChapter(effectiveChapters,index,position))}><Text style={{color:index===currentChapterIndex?p.sage:p.muted,fontWeight:'800'}}>Split here</Text></Pressable>{index<effectiveChapters.length-1?<Pressable onPress={()=>void saveChapterOverride(workKey,mergeChapter(effectiveChapters,index))}><Text style={{color:p.gold,fontWeight:'800'}}>Merge next</Text></Pressable>:null}{index>0?<View style={styles.boundaryRow}><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start-5))}><Text style={{color:p.muted,fontWeight:'800'}}>−5s start</Text></Pressable><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start+5))}><Text style={{color:p.muted,fontWeight:'800'}}>+5s start</Text></Pressable></View>:null}</View>)}</>:null}
+            </View> : null}
+
             {playerPanel==='queue' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
-              {serverPlayer ? <>
-                <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text>
-                {chapterError?<Text accessibilityRole="alert" style={{color:p.gold}}>{chapterError}</Text>:chapters.length===0?<Text style={{color:p.muted}}>No embedded chapters</Text>:null}
-                {chapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index && {backgroundColor:p.raised}]}>
-                  <Text style={[styles.chapterIndex,{color:p.gold}]}>{index+1}</Text>
-                  <View style={{flex:1}}>
-                    <Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text>
-                    <Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}</Text>
-                  </View>
-                </Pressable>)}
-                {playback?.tracks && playback.tracks.length > 1 ? <>
-                  <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Files</Text>
-                  {playback.tracks.map((track,index)=><Button key={track.id} label={(index+1)+'. '+track.title} disabled={!track.available || playback.loading} tone={index===playback.index?'primary':'quiet'} onPress={()=>void controller.select(index)} />)}
-                </> : null}
-              </> : null}
-              {!serverPlayer && activeLocalWork && activeLocalWork.tracks.length > 1 ? <>
-                <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Files</Text>
-                {activeLocalWork.tracks.map((track,index)=><Button
-                  key={track.uri}
-                  label={(index+1)+'. '+track.title}
-                  disabled={!track.available}
-                  tone={index===localWorkIndex?'primary':'quiet'}
-                  onPress={()=>void loadLocalWorkTrack(activeLocalWork,index,0)}
-                />)}
-              </> : null}
               <View style={styles.queueHeader}>
                 <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Up next</Text>
                 <Text style={[styles.meta,{color:p.muted}]}>{queuedBooks.length} queued</Text>
@@ -2606,7 +2733,8 @@ function Client() {
                 </View>
               </View>)}
             </View> : null}
-          </>
+            </View>
+          </View>
         ) : (
           <View style={[styles.playerEmpty,{backgroundColor:p.card,borderColor:p.line}]}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Nothing playing</Text>
@@ -3331,11 +3459,22 @@ const styles = StyleSheet.create({
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
   modalCard: {width:'100%',maxWidth:520,borderWidth:1,borderRadius:18,padding:18,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 680, width:'100%', alignSelf:'center'},
+  playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 920, width:'100%', alignSelf:'center'},
+  livingBookStage: {height:260,width:360,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
+  livingBookCover: {position:'absolute',zIndex:3,shadowColor:'#000',shadowOpacity:0.2,shadowRadius:18,elevation:7},
+  livingBookPage: {position:'absolute',width:218,height:218,borderWidth:1,borderRadius:10,paddingLeft:30,paddingRight:20,paddingTop:34,gap:16,shadowColor:'#000',shadowOpacity:0.1,shadowRadius:14,elevation:3,overflow:'hidden'},
+  livingBookSpine: {position:'absolute',left:14,top:10,bottom:10,width:3,borderRadius:2,opacity:0.7},
+  livingBookLine: {height:3,borderRadius:999,opacity:0.75},
   playerHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between'},
+  playerAdaptive: {gap:16},
+  playerAdaptiveWide: {flexDirection:'row',alignItems:'flex-start',gap:32},
+  playerHeroColumn: {gap:12,alignItems:'center'},
+  playerControlColumn: {flex:1,minWidth:0,gap:14},
   playerEyebrow: {fontSize:11,fontWeight:'900',letterSpacing:2},
   playerArtworkFrame: {alignSelf:'center',borderWidth:1,borderRadius:24,padding:10,shadowColor:'#000',shadowOpacity:0.12,shadowRadius:18,elevation:5},
   playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:10},
+  playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:7},
+  playerSourcePill: {borderWidth:1,borderRadius:999,minHeight:30,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
   nowTitle: {fontFamily: 'serif', fontSize: 30, textAlign: 'center', marginTop: 4},
   playerByline: {fontSize:14,lineHeight:20,textAlign:'center'},
   playerChapter: {fontSize:13,fontWeight:'800',textAlign:'center',marginTop:3},
@@ -3365,6 +3504,9 @@ const styles = StyleSheet.create({
   queueHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   queueBook: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',gap:10,alignItems:'center'},
   queueActions: {flexDirection:'row',gap:14,alignItems:'center'},
+  structureRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:50,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
+  structureChapter: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,gap:8},
+  boundaryRow: {flexDirection:'row',gap:12,flexWrap:'wrap'},
   playerEmpty: {borderWidth:1,borderRadius:16,padding:18,gap:12},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex: 1,position:'relative'},
