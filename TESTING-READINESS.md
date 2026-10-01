@@ -1,10 +1,21 @@
-# Archivist 0.9.0 — Testing Readiness
+# Archivist 0.9.1 — Testing Readiness
 
 **Candidate branch:** `dev/archivist-work`  
-**Candidate mobile commit:** `b7842ab5`  
+**Candidate mobile commit:** `524ae17f`  
 **Target:** Android-first local app + optional Home Assistant/Docker server.
 
 This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
+
+## Current visual-review pass
+
+The canonical mobile UI is on `dev/archivist-work`. The current review candidate deliberately changes the first-glance composition of the three screens being reviewed:
+
+- Shelf editorial composition: `697d4e0f`
+- Dense Library catalogue: `c8671512`
+- Living Book Player: `dc2411f7`
+- 0.9.1 review-candidate version commit: `524ae17f`
+
+Do not substitute a `main` APK or an older 0.9.0 artifact when reviewing these screens.
 
 ## Readiness summary
 
