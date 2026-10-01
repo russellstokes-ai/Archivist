@@ -261,62 +261,52 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 
 ## Sprint 7 — Server, Resilience & Ecosystem
 
-### Existing baseline / proven work
-- Go server and HA packaging exist.
-- Go 1.25 server/HA validation previously passed on recovery branch.
-- Household, progress, file-move, reader, background-job and packaging tests exist in the recovered baseline.
-- HA add-on packaging had previously been kept synchronized.
+### Durable implementation
+- Go server, standalone Docker/HA packages and web UI remain source-synchronized.
+- Multiple roots and guided folder browsing are implemented.
+- Scan jobs are persisted and interrupted running jobs requeue safely after restart.
+- Watched folders are opt-in with a minimum 15-minute interval; enabling a watch is the explicit action that may wake that media source.
+- Dashboard/server status reads the database only and no longer probes media roots.
+- Disconnected sources retain their previous catalogue and report unavailable rather than deleting library state.
+- Safe organisation retains originals on hard-link/copy failure; a simulated disk-full copy failure is covered by regression tests.
+- Consistent SQLite backup uses VACUUM INTO; restores are validated, staged and applied before database open on the next restart with the previous database retained.
+- OPDS acquisition feed is available through the existing Admin/User credential model, including HTTP Basic authentication for compatible readers and profile isolation.
+- Admin/User permissions, session rotation/revocation and profile-scoped progress remain enforced.
+- Server CI cross-compiles the complete Go server for Linux ARM64 and verifies aarch64 remains declared in the HA package.
+- HA add-on smoke test continues to build/start the package and check HTTP/HTTPS health endpoints.
 
-### Outstanding release work
-- Pi 4B resource validation.
-- Library-first server UI polish.
-- Folder browser and multiple roots end-to-end.
-- Optional server connection/reconnection UX.
-- DuckDNS/Tailscale supported configuration behaviour.
-- Watched libraries and durable restart-safe jobs.
-- Bounded caches.
-- Low-disk/disconnected-drive behaviour.
-- Backup/restore on clean install.
-- Schema migration tests.
-- No media wake for dashboard.
-- OPDS.
-- Optional Kobo/KOReader/Hardcover/email/OIDC connectors.
-- Private sharing/RSS/casting where supported.
-- Cross-profile security tests.
+### Validation
+- Server checks passed on `8e13649e` (run `36907874679`), including root/package Go tests, package parity, browser contract checks, ARM64 compile, Docker add-on smoke and health checks.
+- The earlier watched-folder/backup/OPDS implementation passed on `3a8a3dd5`; server resilience UI passed on `af7d74ab`.
+- Physical Raspberry Pi installation, real HDD standby behaviour and external DuckDNS/Tailscale networking remain device acceptance items, not source-code claims.
 
-**Status: STRONG BASELINE; RELEASE HARDENING/ECOSYSTEM NOT COMPLETE.**
+### Deferred optional ecosystem
+- Kobo/KOReader/Hardcover/email/OIDC, private sharing/RSS/casting are optional integrations and are not required for the core 0.9 testing build.
+
+**Status: COMPLETE / DURABLE FOR AUTHORISED CORE SCOPE. Physical HA/Pi acceptance remains in Sprint 8 testing gates.**
 
 ---
 
 ## Sprint 8 — Perfect UI & Release Sweep
 
-### Existing direction
-- Approved visual system: Ink / Sage / Gold / Ivory.
-- Editorial typography direction: Literata + Inter.
-- Shelf/Library commercial redesign was substantially implemented before reset.
-- Signature UI direction for Atlas, Living Player and Comic Focus Zoom is specified.
-- Fold closed/open is a hard acceptance target.
+### Current work
+- Approved Ink / Sage / Gold / Ivory design system remains intact.
+- Shelf, Library, Living Player, Reader, Atlas and Insights are all implemented.
+- Fold breakpoints exist for closed-phone and open/tablet layouts.
+- Light/dark/system appearance and reduced-motion behaviour exist.
+- Native safe-area handling, keyboard avoidance, reader retry/error states and accessible playback timeline are implemented.
+- Final control/icon polish, coherent versioning, release documentation, APK build and acceptance evidence are now being completed.
 
-### Outstanding
-- Reconcile all screens onto the final design system.
-- Remove placeholder/generic admin UI.
-- Replace cheap Unicode/glyph controls with proper icons.
-- Perfect light/dark states.
-- Sheets, transitions and motion polish.
-- Loading/empty/error/offline states everywhere.
-- Safe areas, keyboard and accessibility.
-- Fold closed/open review.
-- Real-device Android acceptance.
-- HA/Pi acceptance.
-- Android APK build/sign/install path.
-- iOS parity through shared RN code and native platform work.
-- Screenshot review.
-- Dependency/licence review.
-- Clean install/upgrade/restore.
-- Release documentation.
-- Final no-placeholder/no-broken-button/no-regression sweep.
+### Remaining acceptance gates
+- Mobile CI after final polish/version changes.
+- Android testing APK build and emulator launch.
+- Real Galaxy Fold closed/open smoke test.
+- Home Assistant/Pi install/update/restart smoke.
+- Real remote-access test over the user's chosen DuckDNS/Tailscale setup.
+- Screenshot/visual review on physical device.
+- Production Play signing/AAB remains a publication step, not required for the installable test APK.
 
-**Status: NOT STARTED AS FINAL RELEASE SWEEP; earlier UI work feeds into it.**
+**Status: ACTIVE / FINAL RELEASE SWEEP.**
 
 ---
 
