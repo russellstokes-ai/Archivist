@@ -1,7 +1,7 @@
 # Archivist 0.9.2 — Testing Readiness
 
 **Candidate branch:** `dev/archivist-work`  
-**Candidate mobile commit:** `611fc7fd`  
+**Candidate mobile commit:** `77842e1f`  
 **Target:** Android-first local app + optional Home Assistant/Docker server.
 
 This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
@@ -25,6 +25,8 @@ Crafted commits:
 - Secondary controls and typography normalization: `b00b1cc2`
 - Canonical responsive/Fold acceptance rules: `bb9e3cc0`
 - Reader timing/palette consistency correction: `611fc7fd`
+- Loading/error/Comic Focus state refinement: `638e61b8`
+- Drawn rating control / final interactive-icon cleanup: `77842e1f`
 
 The physical review that triggered this sweep demonstrated these required rules:
 - open Fold is a first-class composition from 600dp, not a stretched phone;
@@ -35,7 +37,7 @@ The physical review that triggered this sweep demonstrated these required rules:
 - Reader suppresses global app chrome while reading;
 - CI/build success is not visual acceptance.
 
-Do not substitute a `main` APK or any pre-`611fc7fd` runtime when reviewing this sweep.
+Do not substitute a `main` APK or any pre-`77842e1f` runtime when reviewing this sweep.
 
 ## Readiness summary
 
@@ -70,7 +72,7 @@ Do not substitute a `main` APK or any pre-`611fc7fd` runtime when reviewing this
 - 0.9.0 version-aligned Mobile checks: commit `ffe9e545`, run `36908772223`.
 - Sprint 8 native-control polish: commit `c6e5776a`, run `36908101785`.
 
-Current runtime candidate `611fc7fd` is the crafted UI sweep head. Its Mobile checks are the engineering gate; physical screenshot/device review remains the visual gate.
+Current runtime candidate `77842e1f` is the crafted UI sweep head. Its Mobile checks are the engineering gate; physical screenshot/device review remains the visual gate.
 
 ## Sprint status
 
