@@ -639,16 +639,31 @@ function Client() {
 
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
-    bookOpenAnim.stopAnimation();pageTurnAnim.stopAnimation();
+    bookOpenAnim.stopAnimation();
     Animated.timing(bookOpenAnim,{toValue:motion==='closed'?0:1,duration:reduceMotion?0:520,useNativeDriver:true}).start();
-    if(motion!=='turning'){pageTurnAnim.setValue(0);return;}
+
+    if(motion!=='turning'){
+      pageTurnAnim.stopAnimation(value=>{
+        if(reduceMotion || value<=0.01){pageTurnAnim.setValue(0);return;}
+        Animated.timing(pageTurnAnim,{
+          toValue:1,
+          duration:Math.max(120,Math.round((1-value)*620)),
+          useNativeDriver:true,
+        }).start(()=>pageTurnAnim.setValue(0));
+      });
+      return;
+    }
+
+    pageTurnAnim.stopAnimation();
+    pageTurnAnim.setValue(0);
     const loop=Animated.loop(Animated.sequence([
-      Animated.delay(5600),
+      Animated.delay(7200),
       Animated.timing(pageTurnAnim,{toValue:1,duration:620,useNativeDriver:true}),
       Animated.timing(pageTurnAnim,{toValue:0,duration:0,useNativeDriver:true}),
       Animated.delay(900),
     ]));
-    loop.start();return()=>loop.stop();
+    loop.start();
+    return()=>loop.stop();
   },[activeTab,appActive,bookOpenAnim,pageTurnAnim,playbackIsPlaying,playbackVisible,reduceMotion]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
@@ -2954,7 +2969,7 @@ function Client() {
     return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:24}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
-  function LivingBook({book}:{book:Book}){
+  function LivingBook({book,chapterTitle,chapterNumber}:{book:Book;chapterTitle?:string;chapterNumber?:number}){
     const coverShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[0,-146]});
     const coverTurn=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:['0deg','-138deg']});
     const spreadScale=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]});
@@ -2970,15 +2985,15 @@ function Client() {
           <View style={[styles.livingBookInnerSpine,{backgroundColor:p.sage,opacity:.28}]}/>
           <View style={styles.livingBookInsetArt}><Cover book={{...book,coverShape:'portrait'}}/></View>
           <Text numberOfLines={1} style={[styles.livingBookPageCaption,{color:p.muted}]}>{book.series||'ARCHIVIST'}</Text>
-          <Text style={[styles.livingBookPageNumber,{color:p.muted}]}>12</Text>
+          <Text style={[styles.livingBookPageNumber,{color:p.muted}]}>ARCHIVIST</Text>
         </View>
         <View style={[styles.livingBookStaticPage,styles.livingBookRightPage,{backgroundColor:pageTone,borderColor:p.line}]}>
           <Text style={[styles.livingBookPageKicker,{color:p.sage}]}>NOW PLAYING</Text>
           <Text numberOfLines={3} style={[styles.livingBookPageTitle,{color:p.ink}]}>{book.title}</Text>
           <View style={[styles.livingBookPageRule,{backgroundColor:p.line}]}/>
           <Text numberOfLines={2} style={[styles.livingBookPageAuthor,{color:p.muted}]}>{book.author||'Unknown author'}</Text>
-          <Text numberOfLines={3} style={[styles.livingBookPageQuote,{color:p.ink}]}>A story worth returning to.</Text>
-          <Text style={[styles.livingBookPageNumber,{color:p.muted}]}>13</Text>
+          <Text numberOfLines={3} style={[styles.livingBookPageQuote,{color:p.ink}]}>{chapterTitle||'A story worth returning to.'}</Text>
+          <Text style={[styles.livingBookPageNumber,{color:p.muted}]}>{chapterNumber?'CH '+String(chapterNumber).padStart(2,'0'):'LISTEN'}</Text>
         </View>
         <Animated.View pointerEvents="none" style={[styles.livingBookTurningPage,{backgroundColor:pageTone,borderColor:p.line,transform:[{perspective:1400},{translateX:turningShift},{rotateY:turningRotate}]}]}>
           {[0,1,2,3,4].map(line=><View key={'t'+line} style={[styles.livingBookPageLine,{backgroundColor:lineTone,width:line===0?'56%':'78%'}]}/>)}
@@ -3045,7 +3060,7 @@ function Client() {
         {current ? (
           <View style={[styles.playerAdaptive,wideLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBook book={current}/>
+            <LivingBook book={current} chapterTitle={currentChapter?.title} chapterNumber={currentChapterIndex>=0?currentChapterIndex+1:undefined}/>
             <View style={styles.playerIdentity}>
               <Text numberOfLines={2} style={[styles.nowTitle, {color: p.ink}]}>{current.title}</Text>
               <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
@@ -4238,13 +4253,13 @@ const styles = StyleSheet.create({
   livingBookPageRule: {height:1,width:42,alignSelf:'center',marginVertical:2},
   livingBookPageAuthor: {fontSize:9,lineHeight:13,textAlign:'center'},
   livingBookPageQuote: {fontFamily:'serif',fontSize:12,lineHeight:17,fontStyle:'italic',textAlign:'center',marginTop:6},
-  livingBookPageNumber: {position:'absolute',bottom:10,alignSelf:'center',fontSize:7,fontVariant:['tabular-nums']},
+  livingBookPageNumber: {position:'absolute',bottom:10,alignSelf:'center',fontSize:7,lineHeight:10,fontWeight:'600',letterSpacing:.8},
   playerHeading: {minHeight:34,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   playerAdaptive: {gap:22},
   playerAdaptiveWide: {flexDirection:'row',alignItems:'center',gap:64,paddingVertical:8},
   playerHeroColumn: {gap:14,alignItems:'center',flexShrink:0},
   playerControlColumn: {flex:1,minWidth:0,gap:18,justifyContent:'center'},
-  playerEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5},
+  playerEyebrow: {fontSize:11,lineHeight:14,fontWeight:'700',letterSpacing:1.6},
   playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},
   playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:10},
   playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:12,minHeight:28},
@@ -4264,7 +4279,7 @@ const styles = StyleSheet.create({
   skipNumber: {position:'absolute',fontSize:9,lineHeight:11,fontWeight:'700',fontVariant:['tabular-nums']},
   skipMain: {fontSize:17,fontWeight:'900',lineHeight:19},
   skipMeta: {fontSize:10,fontWeight:'700',textTransform:'uppercase'},
-  playButton: {width:84,height:84,borderRadius:42,alignItems:'center',justifyContent:'center',shadowColor:'#000',shadowOpacity:.18,shadowRadius:17,shadowOffset:{width:0,height:8},elevation:6},
+  playButton: {width:80,height:80,borderRadius:40,alignItems:'center',justifyContent:'center',shadowColor:'#000',shadowOpacity:.17,shadowRadius:16,shadowOffset:{width:0,height:8},elevation:5},
   playButtonGlyph: {color:'#f8f7f2',fontSize:24,fontWeight:'900',lineHeight:28},
   playButtonCaption: {color:'#f8f7f2',fontSize:10,fontWeight:'800',textTransform:'uppercase',letterSpacing:0.6},
   playButtonText: {color: '#f8f7f2', fontSize: 17, fontWeight: '800'},
