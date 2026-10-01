@@ -2639,7 +2639,10 @@ function Client() {
     const favourites=base.filter((work:UnifiedWork)=>work.favourite).slice(0,12);
     const primaryContinue=continuing[0];
     const seriesCounts=new Map<string,number>();for(const work of base)if(work.series)seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
-    const seriesOptions=[...seriesCounts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,10);
+    const seriesGroups=[...seriesCounts.entries()]
+      .sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))
+      .slice(0,10)
+      .map(([name,total])=>({name,total,works:base.filter(work=>work.series===name).slice(0,4)}));
     const localReview=localBooks.filter(book=>book.needsReview).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=sourceFilter==='local'?localReview:sourceFilter==='server'?serverReview:sourceFilter==='downloaded'?0:localReview+serverReview;
@@ -2671,7 +2674,7 @@ function Client() {
       if(item.id==='favourites'&&!favourites.length)return null;
       if(item.id==='smart'&&!smartShelfRows.length)return null;
       if(item.id==='collections'&&!collectionRows.length)return null;
-      if(item.id==='series'&&!seriesOptions.length)return null;
+      if(item.id==='series'&&!seriesGroups.length)return null;
       if(item.id==='library'&&!base.length)return null;
       return <View key={item.id} style={styles.shelfSection}>
         <View style={styles.sectionHeader}>
@@ -2686,13 +2689,26 @@ function Client() {
           {smartShelfRows.map(({shelf,works})=><Pressable
             key={shelf.id}
             accessibilityRole="button"
+            accessibilityLabel={shelf.name+', '+works.length+(works.length===12?'+':'')+' matches'}
             onPress={()=>openSmartShelf(shelf)}
             onLongPress={()=>beginRename('shelf',shelf.id,shelf.name)}
-            style={({pressed})=>[styles.smartShelfTile,{backgroundColor:p.card},pressed&&styles.cardPressed]}>
-            <View style={styles.smartShelfStack}>
-              <View style={[styles.smartShelfStackLine,{backgroundColor:p.muted,opacity:.24,width:'76%'}]}/>
-              <View style={[styles.smartShelfStackLine,{backgroundColor:p.muted,opacity:.38,width:'88%'}]}/>
-              <View style={[styles.smartShelfStackLine,{backgroundColor:p.sage,width:'100%'}]}/>
+            style={({pressed})=>[styles.smartShelfTile,pressed&&styles.cardPressed]}>
+            <View style={styles.smartShelfPreview}>
+              {works.slice(0,4).map((work,index)=><View
+                key={work.key}
+                style={[styles.smartShelfCover,{
+                  left:index*30,
+                  zIndex:10-index,
+                  transform:[{rotate:index===0?'-4deg':index===3?'4deg':'0deg'}],
+                }]}>
+                {workArtwork(work)}
+              </View>)}
+              {!works.length?<View style={[styles.smartShelfEmpty,{borderColor:p.line}]}>
+                <View style={[styles.smartShelfEmptySpine,{backgroundColor:p.sage}]}/>
+                <View style={[styles.smartShelfEmptySpine,{backgroundColor:p.line,height:50}]}/>
+                <View style={[styles.smartShelfEmptySpine,{backgroundColor:p.line,height:42}]}/>
+              </View>:null}
+              <View style={[styles.smartShelfBase,{backgroundColor:p.ink}]}/>
             </View>
             <Text numberOfLines={2} style={[styles.smartShelfName,{color:p.ink}]}>{shelf.name}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{works.length}{works.length===12?'+':''} matches</Text>
@@ -2716,13 +2732,23 @@ function Client() {
         </ScrollView>:null}
 
         {item.id==='series'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
-          {seriesOptions.map(([name,total])=><Pressable
+          {seriesGroups.map(({name,total,works})=><Pressable
             key={name}
             accessibilityRole="button"
+            accessibilityLabel={name+', '+total+' work'+(total===1?'':'s')}
             onPress={()=>{clearLibraryFilters();setSeriesFilter(name);setActiveTab('library')}}
-            style={({pressed})=>[styles.seriesTile,{backgroundColor:p.card},pressed&&styles.cardPressed]}>
-            <View style={styles.seriesSpines}>
-              {[0,1,2,3].map(index=><View key={index} style={[styles.seriesSpine,{backgroundColor:index===3?p.sage:p.muted,opacity:index===3?1:.18+(index*.08),height:36+(index*7)}]}/>)}
+            style={({pressed})=>[styles.seriesTile,pressed&&styles.cardPressed]}>
+            <View style={styles.seriesCoverStack}>
+              {works.slice(0,3).map((work,index)=><View
+                key={work.key}
+                style={[styles.seriesCover,{
+                  left:index*34,
+                  top:index===1?3:index===2?6:0,
+                  zIndex:10-index,
+                }]}>
+                {workArtwork(work)}
+              </View>)}
+              {!works.length?<View style={[styles.seriesEmpty,{borderColor:p.line}]}/>:null}
             </View>
             <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
@@ -4142,21 +4168,25 @@ const styles = StyleSheet.create({
   shelfHeroMeta: {fontSize:12,lineHeight:17},
   shelfHeroAction: {minWidth:48,height:48,borderRadius:24,alignItems:'center',justifyContent:'center',paddingHorizontal:14},
   shelfHeroActionText: {color:'#FFFFFF',fontSize:13,fontWeight:'700'},
-  smartShelfRow: {gap:14,paddingRight:18},
-  smartShelfTile: {width:194,minHeight:134,borderRadius:16,padding:16,justifyContent:'flex-end',gap:5},
-  smartShelfStack: {height:34,justifyContent:'space-between',marginBottom:10},
-  smartShelfStackLine: {height:5,borderRadius:4},
-  smartShelfName: {fontFamily:'serif',fontSize:18,lineHeight:22,fontWeight:'500'},
+  smartShelfRow: {gap:20,paddingRight:18},
+  smartShelfTile: {width:172,gap:5},
+  smartShelfPreview: {height:116,position:'relative',marginBottom:7},
+  smartShelfCover: {position:'absolute',top:4,width:68,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.10,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  smartShelfBase: {position:'absolute',left:0,right:2,bottom:3,height:3,borderRadius:2,opacity:.9},
+  smartShelfEmpty: {position:'absolute',left:8,right:18,bottom:8,height:82,borderBottomWidth:1,flexDirection:'row',alignItems:'flex-end',gap:7,paddingHorizontal:8},
+  smartShelfEmptySpine: {width:18,height:60,borderRadius:3},
+  smartShelfName: {fontFamily:'serif',fontSize:17,lineHeight:21,fontWeight:'500'},
   collectionRow: {gap:18,paddingRight:18},
   collectionTile: {width:148,gap:5},
   collectionCollage: {height:112,position:'relative',marginBottom:6},
   collectionMiniCover: {position:'absolute',width:62,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.10,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
   collectionEmptyMark: {width:92,height:108,borderRadius:12,alignItems:'center',justifyContent:'center'},
   collectionName: {fontSize:15,lineHeight:20,fontWeight:'600'},
-  seriesRow: {gap:14,paddingRight:18},
-  seriesTile: {width:168,minHeight:126,borderWidth:0,borderRadius:16,padding:15,justifyContent:'flex-end',gap:4},
-  seriesSpines: {height:58,flexDirection:'row',alignItems:'flex-end',gap:5,marginBottom:8},
-  seriesSpine: {width:11,borderRadius:3},
+  seriesRow: {gap:20,paddingRight:18},
+  seriesTile: {width:164,borderWidth:0,gap:5},
+  seriesCoverStack: {height:116,position:'relative',marginBottom:7},
+  seriesCover: {position:'absolute',width:70,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.09,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  seriesEmpty: {position:'absolute',left:0,top:0,width:104,height:108,borderWidth:StyleSheet.hairlineWidth,borderRadius:10},
   seriesName: {fontFamily:'serif',fontSize:17,lineHeight:21,fontWeight:'500'},
   shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,flexDirection:'row',flexWrap:'wrap',gap:10},
   shelfUtilityAction: {minHeight:44,paddingHorizontal:4,paddingRight:14,justifyContent:'center'},
