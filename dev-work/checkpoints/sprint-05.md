@@ -17,4 +17,4 @@ Implemented:
 Validation:
 - Atlas relationship regression tests retained.
 - Added deterministic universe tests for stable positions, cover/person/series/collection/note/tag nodes, relationships and large-library work caps.
-- GitHub Mobile checks must pass before Sprint 5 is marked fully closed.
+- GitHub Mobile checks passed on commit `f9067cf6` (run `36904010022`): npm install, Expo Doctor, TypeScript and the mobile regression suites all succeeded.
