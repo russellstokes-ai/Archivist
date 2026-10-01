@@ -2117,22 +2117,27 @@ function Client() {
     const names = ['', ...availableSpaces];
     return (
       <View style={vertical ? styles.libraryRailList : styles.libraryChipsRow}>
-        {names.map(name => (
-          <Pressable
+        {names.map(name => {
+          const selected=space===name;
+          return <Pressable
             key={name || 'all'}
             accessibilityRole="button"
-            accessibilityState={{selected: space === name}}
+            accessibilityState={{selected}}
             onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false);}}
-            style={[
-              styles.libraryChoice,
-              vertical && styles.libraryChoiceVertical,
-              {borderColor: p.line, backgroundColor: space === name ? p.sage : p.card},
+            style={({pressed})=>[
+              styles.librarySpaceTab,
+              vertical&&styles.librarySpaceTabVertical,
+              pressed&&{opacity:.62},
             ]}>
-            <Text numberOfLines={1} style={{color: space === name ? p.ivory : p.ink, fontWeight: '700'}}>
+            <Text numberOfLines={1} style={[styles.librarySpaceText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>
               {name || 'All spaces'}
             </Text>
-          </Pressable>
-        ))}
+            <View pointerEvents="none" style={[
+              vertical?styles.librarySpaceMarkerVertical:styles.librarySpaceMarker,
+              {backgroundColor:p.sage,opacity:selected?1:0},
+            ]}/>
+          </Pressable>;
+        })}
       </View>
     );
   }
@@ -2360,16 +2365,34 @@ function Client() {
       {id:'server',label:'Server',count:sourceCounts.server,show:!!session},
       {id:'downloaded',label:'Downloaded',count:sourceCounts.downloaded,show:sourceCounts.downloaded>0},
     ];
-    const body=options.filter(item=>item.show).map(item=><Pressable
-      key={item.id}
-      accessibilityRole="button"
-      accessibilityState={{selected:sourceFilter===item.id}}
-      onPress={()=>{setSourceFilter(item.id);setCollectionFilter('')}}
-      style={[styles.sourceChoice,vertical&&styles.sourceChoiceVertical,{borderColor:sourceFilter===item.id?p.sage:p.line,backgroundColor:sourceFilter===item.id?p.sage:p.card}]}>
-      <Text numberOfLines={1} style={[styles.sourceChoiceText,{color:sourceFilter===item.id?p.ivory:p.ink}]}>{item.label}</Text>
-      <Text style={[styles.sourceChoiceCount,{color:sourceFilter===item.id?'#dfe9e7':p.muted}]}>{item.count}</Text>
-    </Pressable>);
-    return vertical?<View style={styles.sourceSwitcherVertical}>{body}</View>:<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.sourceSwitcher}>{body}</ScrollView>;
+    const body=options.filter(item=>item.show).map(item=>{
+      const selected=sourceFilter===item.id;
+      return <Pressable
+        key={item.id}
+        accessibilityRole="button"
+        accessibilityState={{selected}}
+        onPress={()=>{setSourceFilter(item.id);setCollectionFilter('')}}
+        style={({pressed})=>[
+          styles.sourceTab,
+          vertical&&styles.sourceTabVertical,
+          pressed&&{opacity:.62},
+        ]}>
+        <View style={{flexDirection:'row',alignItems:'baseline',gap:7,minWidth:0}}>
+          <Text numberOfLines={1} style={[styles.sourceTabText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>{item.label}</Text>
+          <Text style={[styles.sourceTabCount,{color:selected?p.sage:p.muted}]}>{item.count}</Text>
+        </View>
+        <View
+          pointerEvents="none"
+          style={[
+            vertical?styles.sourceTabMarkerVertical:styles.sourceTabMarker,
+            {backgroundColor:p.sage,opacity:selected?1:0},
+          ]}
+        />
+      </Pressable>;
+    });
+    return vertical
+      ? <View style={styles.sourceSwitcherVertical}>{body}</View>
+      : <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.sourceSwitcher}>{body}</ScrollView>;
   }
 
   function UnifiedWorkCard({work,list=false}:{work:UnifiedWork;list?:boolean}){
@@ -2384,22 +2407,33 @@ function Client() {
       accessibilityHint={selecting?'Toggle selection.':'Open. Long press to select.'}
       onPress={()=>selecting?toggleSelected():openUnifiedWork(work)}
       onLongPress={()=>{if(!selected)setSelectedWorkKeys(current=>[...current,work.canonicalKey]);}}
-      style={({pressed})=>[styles.unifiedCard,list&&styles.unifiedCardList,selected&&{backgroundColor:p.raised,borderColor:p.sage,borderWidth:1,borderRadius:14,padding:8},pressed&&styles.cardPressed]}>
+      style={({pressed})=>[
+        styles.unifiedCard,
+        list&&styles.unifiedCardList,
+        selected&&[styles.unifiedCardSelected,{borderColor:p.sage,backgroundColor:p.card}],
+        pressed&&styles.cardPressed,
+      ]}>
       <View style={[styles.unifiedCoverWrap,list&&styles.unifiedCoverWrapList]}>
         <Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath}/>
-        {work.source==='downloaded'?<View style={[styles.offlineBadge,{backgroundColor:p.sage}]}><Text style={styles.offlineBadgeText}>OFFLINE</Text></View>:null}
+        {work.source==='downloaded'?<View style={[styles.offlineBadge,{backgroundColor:p.sage}]}><Text style={styles.offlineBadgeText}>SAVED</Text></View>:null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={'More actions for '+work.title}
+          hitSlop={8}
+          onPress={event=>{event.stopPropagation();setWorkMenu(work)}}
+          style={[styles.moreButton,{backgroundColor:p.paper},list&&styles.moreButtonList]}>
+          <UiIcon name="more" color={p.muted} size={18}/>
+        </Pressable>
       </View>
       <View style={[styles.unifiedCardCopy,list&&{flex:1}]}>
         <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
-        <View style={styles.workMetaRow}>
-          <Text numberOfLines={1} style={[styles.workSource,{color:work.source==='downloaded'?p.sage:p.muted}]}>{sourceLabel(work.source)}</Text>
-          {work.rating>0?<Text style={[styles.workRating,{color:p.gold}]}>{ratingLabel(work.rating)}</Text>:null}
-        </View>
+        {list?<View style={styles.unifiedListMeta}>
+          <View style={[styles.workSourceDot,{backgroundColor:work.source==='downloaded'?p.sage:p.muted}]}/>
+          <Text numberOfLines={1} style={[styles.workSource,{color:p.muted}]}>{sourceLabel(work.source)} · {work.format}{work.series?' · '+work.series:''}</Text>
+          {work.rating>0?<Text style={[styles.workRating,{color:p.muted}]}>{ratingLabel(work.rating)}</Text>:null}
+        </View>:null}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={'More actions for '+work.title} hitSlop={8} onPress={event=>{event.stopPropagation();setWorkMenu(work)}} style={styles.moreButton}>
-        <UiIcon name="more" color={p.muted} size={18}/>
-      </Pressable>
     </Pressable>;
   }
 
@@ -2567,12 +2601,34 @@ function Client() {
     const base:UnifiedWork[]=(sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter))).filter((work:UnifiedWork)=>!space||work.space===space);
     const continuing=base.filter((work:UnifiedWork)=>work.readingState==='in-progress').slice(0,12);
     const favourites=base.filter((work:UnifiedWork)=>work.favourite).slice(0,12);
+    const primaryContinue=continuing[0];
     const seriesCounts=new Map<string,number>();for(const work of base)if(work.series)seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
     const seriesOptions=[...seriesCounts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,10);
     const localReview=localBooks.filter(book=>book.needsReview).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=sourceFilter==='local'?localReview:sourceFilter==='server'?serverReview:sourceFilter==='downloaded'?0:localReview+serverReview;
+    const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
+    const workArtwork=(work:UnifiedWork)=><Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPathFor(work)}/>;
     const renderWorks=(works:UnifiedWork[])=>works.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedRow}>{works.map(work=><View key={work.key} style={styles.curatedCardWrap}><UnifiedWorkCard work={work}/></View>)}</ScrollView>:null;
+    const continueHero=primaryContinue?<Pressable
+      accessibilityRole="button"
+      accessibilityLabel={'Continue '+primaryContinue.title}
+      onPress={()=>openUnifiedWork(primaryContinue)}
+      style={({pressed})=>[styles.shelfHero,width>=760&&styles.shelfHeroWide,{backgroundColor:p.card},pressed&&styles.cardPressed]}>
+      <View style={[styles.shelfHeroArtwork,width>=760&&styles.shelfHeroArtworkWide]}>{workArtwork(primaryContinue)}</View>
+      <View style={styles.shelfHeroCopy}>
+        <Text style={[styles.shelfHeroEyebrow,{color:p.sage}]}>{primaryContinue.format==='Audio'?'CONTINUE LISTENING':'CONTINUE READING'}</Text>
+        <Text numberOfLines={3} style={[styles.shelfHeroTitle,{color:p.ink}]}>{primaryContinue.title}</Text>
+        <Text numberOfLines={1} style={[styles.shelfHeroAuthor,{color:p.muted}]}>{primaryContinue.author||'Unknown author'}{primaryContinue.series?' · '+primaryContinue.series:''}</Text>
+        <View style={styles.shelfHeroFooter}>
+          <Text style={[styles.shelfHeroMeta,{color:p.muted}]}>{primaryContinue.format} · {sourceLabel(primaryContinue.source)}</Text>
+          <View style={[styles.shelfHeroAction,{backgroundColor:p.sage}]}>
+            {primaryContinue.format==='Audio'?<UiIcon name="play" color="#FFFFFF" size={18}/>:<Text style={styles.shelfHeroActionText}>Open</Text>}
+          </View>
+        </View>
+      </View>
+    </Pressable>:null;
+
     const section=(item:ShelfSectionPref)=>{
       if(!item.visible)return null;
       if(item.id==='continue'&&!continuing.length)return null;
@@ -2582,26 +2638,111 @@ function Client() {
       if(item.id==='series'&&!seriesOptions.length)return null;
       if(item.id==='library'&&!base.length)return null;
       return <View key={item.id} style={styles.shelfSection}>
-        <View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{item.title}</Text>{item.id==='library'?<Pressable accessibilityRole="button" onPress={()=>setActiveTab('library')}><Text style={{color:p.sage,fontWeight:'800'}}>See all</Text></Pressable>:null}</View>
-        {item.id==='continue'?renderWorks(continuing):null}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{item.title}</Text>
+          {item.id==='library'?<Pressable accessibilityRole="button" onPress={()=>setActiveTab('library')} style={styles.sectionLink}><Text style={{color:p.sage,fontWeight:'600'}}>See all</Text></Pressable>:null}
+        </View>
+
+        {item.id==='continue'?<>{continueHero}{continuing.length>1?renderWorks(continuing.slice(1)):null}</>:null}
         {item.id==='favourites'?renderWorks(favourites):null}
-        {item.id==='smart'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartShelfRow}>{smartShelfRows.map(({shelf,works})=><Pressable key={shelf.id} accessibilityRole="button" onPress={()=>openSmartShelf(shelf)} onLongPress={()=>beginRename('shelf',shelf.id,shelf.name)} style={[styles.smartShelfCard,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.playerEyebrow,{color:p.gold}]}>SMART SHELF</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{shelf.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{works.length}{works.length===12?'+':''} matches</Text></Pressable>)}</ScrollView>:null}
-        {item.id==='collections'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartShelfRow}>{collectionRows.map(({collection,works})=><Pressable key={collection.id} accessibilityRole="button" onPress={()=>openCollection(collection)} onLongPress={()=>beginRename('collection',collection.id,collection.name)} style={[styles.smartShelfCard,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.playerEyebrow,{color:p.gold}]}>COLLECTION</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{collection.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{works.length} work{works.length===1?'':'s'}</Text></Pressable>)}</ScrollView>:null}
-        {item.id==='series'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>{seriesOptions.map(([name,total])=><Pressable key={name} accessibilityRole="button" onPress={()=>{clearLibraryFilters();setSeriesFilter(name);setActiveTab('library')}} style={[styles.seriesChip,{borderColor:p.line,backgroundColor:p.card}]}><Text numberOfLines={2} style={{color:p.ink,fontWeight:'800'}}>{name}</Text><Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text></Pressable>)}</ScrollView>:null}
+
+        {item.id==='smart'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartShelfRow}>
+          {smartShelfRows.map(({shelf,works})=><Pressable
+            key={shelf.id}
+            accessibilityRole="button"
+            onPress={()=>openSmartShelf(shelf)}
+            onLongPress={()=>beginRename('shelf',shelf.id,shelf.name)}
+            style={({pressed})=>[styles.smartShelfTile,{backgroundColor:p.card},pressed&&styles.cardPressed]}>
+            <View style={styles.smartShelfStack}>
+              <View style={[styles.smartShelfStackLine,{backgroundColor:p.muted,opacity:.24,width:'76%'}]}/>
+              <View style={[styles.smartShelfStackLine,{backgroundColor:p.muted,opacity:.38,width:'88%'}]}/>
+              <View style={[styles.smartShelfStackLine,{backgroundColor:p.sage,width:'100%'}]}/>
+            </View>
+            <Text numberOfLines={2} style={[styles.smartShelfName,{color:p.ink}]}>{shelf.name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{works.length}{works.length===12?'+':''} matches</Text>
+          </Pressable>)}
+        </ScrollView>:null}
+
+        {item.id==='collections'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionRow}>
+          {collectionRows.map(({collection,works})=><Pressable
+            key={collection.id}
+            accessibilityRole="button"
+            onPress={()=>openCollection(collection)}
+            onLongPress={()=>beginRename('collection',collection.id,collection.name)}
+            style={({pressed})=>[styles.collectionTile,pressed&&styles.cardPressed]}>
+            <View style={styles.collectionCollage}>
+              {works.slice(0,3).map((work,index)=><View key={work.key} style={[styles.collectionMiniCover,{left:index*24,top:index===1?2:index===2?5:7,zIndex:3-index,transform:[{rotate:index===0?'-5deg':index===2?'5deg':'0deg'}]}]}>{workArtwork(work)}</View>)}
+              {!works.length?<View style={[styles.collectionEmptyMark,{backgroundColor:p.card}]}><Text style={[styles.emptyMark,{color:p.muted}]}>A</Text></View>:null}
+            </View>
+            <Text numberOfLines={2} style={[styles.collectionName,{color:p.ink}]}>{collection.name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{works.length} work{works.length===1?'':'s'}</Text>
+          </Pressable>)}
+        </ScrollView>:null}
+
+        {item.id==='series'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
+          {seriesOptions.map(([name,total])=><Pressable
+            key={name}
+            accessibilityRole="button"
+            onPress={()=>{clearLibraryFilters();setSeriesFilter(name);setActiveTab('library')}}
+            style={({pressed})=>[styles.seriesTile,{backgroundColor:p.card},pressed&&styles.cardPressed]}>
+            <View style={styles.seriesSpines}>
+              {[0,1,2,3].map(index=><View key={index} style={[styles.seriesSpine,{backgroundColor:index===3?p.sage:p.muted,opacity:index===3?1:.18+(index*.08),height:36+(index*7)}]}/>)}
+            </View>
+            <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
+          </Pressable>)}
+        </ScrollView>:null}
+
         {item.id==='library'?renderWorks(base.slice(0,12)):null}
       </View>;
     };
-    return <ScrollView ref={shelfScrollRef} onScroll={e=>{shelfScrollOffset.current=e.nativeEvent.contentOffset.y}} scrollEventThrottle={120} onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}} contentContainerStyle={styles.shelfContent}>
-      <View style={styles.pageHeadingRow}><View style={{flex:1}}><Text style={[styles.title,{color:p.ink}]}>Shelf</Text><Text style={[styles.pageSubtitle,{color:p.muted}]}>Your library, arranged around what matters now.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={[styles.headerAction,{borderColor:p.line,backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'800'}}>Arrange</Text></Pressable></View>
+
+    return <ScrollView
+      ref={shelfScrollRef}
+      onScroll={e=>{shelfScrollOffset.current=e.nativeEvent.contentOffset.y}}
+      scrollEventThrottle={120}
+      onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
+      contentContainerStyle={styles.shelfContent}>
+      <View style={styles.pageHeadingRow}>
+        <View style={{flex:1}}>
+          <Text style={[styles.title,{color:p.ink}]}>Shelf</Text>
+          <Text style={[styles.pageSubtitle,{color:p.muted}]}>Your library, arranged around what matters now.</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
+          <Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text>
+        </Pressable>
+      </View>
+
       <OnboardingGuide/>
       <SourceSwitcher/>
       {availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
-      {reviewCount>0?<Pressable accessibilityRole="button" onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.gold}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>{reviewCount} item{reviewCount===1?'':'s'} need a metadata check</Text><Text style={[styles.meta,{color:p.muted}]}>Review uncertain matches before organising files.</Text></View><Text style={{color:p.gold,fontWeight:'900'}}>Review</Text></Pressable>:null}
-      {localScanning&&scanProgress?<View style={[styles.scanBanner,{backgroundColor:'#0F2A36'}]}><ActivityIndicator accessibilityLabel="Scanning local library" color="#F8F7F2"/><View style={{flex:1}}><Text style={{color:'#F8F7F2',fontWeight:'800'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:'#c8d4d2'}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found</Text></View></View>:null}
-      {!base.length&&!shelfLoading?<View style={[styles.designedEmpty,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.emptyMark,{color:p.gold}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Shelf is ready for books</Text><Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{localFolders.length||session?'No works match this source or Space.':'Add a folder on this device, or connect your Archivist server from Settings.'}</Text>{!localFolders.length?<Button label="Add local folder" onPress={()=>void addLocalFolder()}/>:null}</View>:null}
-      {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><View key={i} style={[styles.skeletonCard,{backgroundColor:p.line}]}/>)}</View>:null}
+
+      {reviewCount>0?<Pressable accessibilityRole="button" onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.line}]}>
+        <View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>{reviewCount} item{reviewCount===1?'':'s'} need a metadata check</Text><Text style={[styles.meta,{color:p.muted}]}>Review uncertain matches before organising files.</Text></View>
+        <Text style={{color:p.sage,fontWeight:'700'}}>Review</Text>
+      </Pressable>:null}
+
+      {localScanning&&scanProgress?<View style={[styles.scanBanner,{backgroundColor:p.card}]}>
+        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+        <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found</Text></View>
+      </View>:null}
+
+      {!base.length&&!shelfLoading?<View style={styles.designedEmpty}>
+        <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Shelf is waiting</Text>
+        <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{localFolders.length||session?'No works match this source or Space.':'Choose a folder and Archivist will begin building your library.'}</Text>
+        {!localFolders.length?<Button label="Choose a folder" onPress={()=>void addLocalFolder()}/>:null}
+      </View>:null}
+
+      {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><View key={i} style={[styles.skeletonCard,{backgroundColor:p.card}]}/>)}</View>:null}
       {shelfSections.map(section)}
-      <View style={styles.shelfActions}><Button label="Browse full library" onPress={()=>setActiveTab('library')}/><Button label="New Smart Shelf" tone="quiet" onPress={()=>{setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/><Button label="Manage collections" tone="quiet" onPress={()=>setOrganisationModal('manage')}/></View>
+
+      <View style={[styles.shelfUtilityRow,{borderTopColor:p.line}]}>
+        <Pressable accessibilityRole="button" onPress={()=>setActiveTab('library')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Browse library</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>{setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>New Smart Shelf</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('manage')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Manage collections</Text></Pressable>
+      </View>
+
       <Text style={[styles.brandSignature,{color:p.muted}]}>YOUR LIBRARY. YOURS.</Text>
       <WorkActionSheet/><OrganisationPanel/><ShelfManagePanel/><MetadataEditorPanel/>
     </ScrollView>;
@@ -2622,7 +2763,7 @@ function Client() {
       {!wide?<><SourceSwitcher/>{availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}</>:null}
       {selectedWorkKeys.length?<View style={[styles.selectionToolbar,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text><Button label="Add to collection" tone="quiet" onPress={()=>setOrganisationModal('add-to-collection')}/><Button label="Favourite" tone="quiet" onPress={favouriteSelected}/><Button label="Done" onPress={()=>setSelectedWorkKeys([])}/></View>:<>
         <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search title, author, series or genre" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink,borderColor:p.line,backgroundColor:p.card}]}/>
-        <View style={styles.libraryToolbar}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>{formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:formatFilter===format}} onPress={()=>setFormatFilter(formatFilter===format?'':format)} style={[styles.quickFilter,{borderColor:formatFilter===format?p.sage:p.line,backgroundColor:formatFilter===format?p.sage:p.card}]}><Text style={{color:formatFilter===format?p.ivory:p.ink,fontWeight:'700'}}>{format}</Text></Pressable>)}</ScrollView><Pressable accessibilityRole="button" onPress={()=>setLibraryFiltersOpen(true)} style={[styles.toolbarButton,{borderColor:p.line,backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'800'}}>Filters{filtersActive?' · '+filtersActive:''}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={libraryView==='grid'?'Switch to list':'Switch to grid'} onPress={()=>setLibraryView(libraryView==='grid'?'list':'grid')} style={[styles.toolbarButton,{borderColor:p.line,backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'800'}}>{libraryView==='grid'?'List':'Grid'}</Text></Pressable></View>
+        <View style={styles.libraryToolbar}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>{formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:formatFilter===format}} onPress={()=>setFormatFilter(formatFilter===format?'':format)} style={[styles.quickFilter,{backgroundColor:p.card}]}><Text style={{color:formatFilter===format?p.sage:p.muted,fontWeight:formatFilter===format?'700':'500'}}>{format}</Text></Pressable>)}</ScrollView><Pressable accessibilityRole="button" onPress={()=>setLibraryFiltersOpen(true)} style={[styles.toolbarButton,{borderColor:p.line,backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'800'}}>Filters{filtersActive?' · '+filtersActive:''}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={libraryView==='grid'?'Switch to list':'Switch to grid'} onPress={()=>setLibraryView(libraryView==='grid'?'list':'grid')} style={[styles.toolbarButton,{borderColor:p.line,backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'800'}}>{libraryView==='grid'?'List':'Grid'}</Text></Pressable></View>
       </>}
       <ReviewList/>
       {!reviewOnly?<FlatList
@@ -3632,7 +3773,12 @@ const styles = StyleSheet.create({
   libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
   libraryChoiceVertical: {borderRadius: 10, minHeight: 44},
   libraryChips: {gap: 8, paddingBottom: 2},
-  libraryChipsRow: {flexDirection: 'row', gap: 8},
+  libraryChipsRow: {flexDirection: 'row', gap: 20},
+  librarySpaceTab: {minHeight:42,justifyContent:'center',position:'relative',paddingHorizontal:1},
+  librarySpaceTabVertical: {minHeight:44,paddingHorizontal:12},
+  librarySpaceText: {fontSize:13},
+  librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
+  librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
   librarySummary: {borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center'},
   reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
   shelfSection: {gap:8},
@@ -3821,37 +3967,69 @@ const styles = StyleSheet.create({
   atlasInspectorMobile: {position:'absolute',left:10,right:10,bottom:10},
   atlasInspectorWide: {width:260,minHeight:220,alignSelf:'stretch'},
 
-  sourceSwitcher: {flexDirection:'row',gap:8,paddingVertical:2,paddingRight:8},
-  sourceSwitcherVertical: {gap:8},
-  sourceChoice: {borderWidth:0,borderRadius:999,minHeight:40,paddingHorizontal:13,flexDirection:'row',alignItems:'center',gap:8},
-  sourceChoiceVertical: {borderRadius:10,minHeight:44,justifyContent:'space-between'},
-  sourceChoiceText: {fontSize:13,fontWeight:'800'},
-  sourceChoiceCount: {fontSize:11,fontWeight:'900'},
-  shelfContent: {paddingHorizontal:18,paddingTop:18,paddingBottom:120,gap:22,maxWidth:1280,width:'100%',alignSelf:'center'},
+  sourceSwitcher: {flexDirection:'row',gap:22,paddingRight:14,minHeight:44,alignItems:'stretch'},
+  sourceSwitcherVertical: {gap:2},
+  sourceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
+  sourceTabVertical: {paddingHorizontal:12,minHeight:46},
+  sourceTabText: {fontSize:13},
+  sourceTabCount: {fontSize:11,fontWeight:'600'},
+  sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
+  sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
+  shelfContent: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
-  headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:8,alignItems:'center',justifyContent:'center'},
   sectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
-  curatedRow: {gap:14,paddingRight:8},
+  sectionLink: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
+  curatedRow: {gap:16,paddingRight:18},
   curatedCardWrap: {width:148},
-  smartShelfRow: {gap:12,paddingRight:8},
-  smartShelfCard: {width:190,minHeight:112,borderWidth:0,borderRadius:16,padding:16,justifyContent:'space-between'},
-  shelfActions: {gap:8,marginTop:2},
-  brandSignature: {fontSize:10,fontWeight:'900',letterSpacing:3,textAlign:'center',marginTop:14},
-  designedEmpty: {borderWidth:1,borderRadius:18,padding:24,gap:10,alignItems:'center',justifyContent:'center',minHeight:170},
+  shelfHero: {borderRadius:18,padding:16,flexDirection:'row',gap:18,alignItems:'center',overflow:'hidden'},
+  shelfHeroWide: {padding:22,gap:28,minHeight:300},
+  shelfHeroArtwork: {width:112,minWidth:112},
+  shelfHeroArtworkWide: {width:178,minWidth:178},
+  shelfHeroCopy: {flex:1,minWidth:0,gap:7},
+  shelfHeroEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.4},
+  shelfHeroTitle: {fontFamily:'serif',fontSize:26,lineHeight:31,fontWeight:'500',letterSpacing:-.2},
+  shelfHeroAuthor: {fontSize:14,lineHeight:20},
+  shelfHeroFooter: {marginTop:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  shelfHeroMeta: {fontSize:12,lineHeight:17},
+  shelfHeroAction: {minWidth:48,height:48,borderRadius:24,alignItems:'center',justifyContent:'center',paddingHorizontal:14},
+  shelfHeroActionText: {color:'#FFFFFF',fontSize:13,fontWeight:'700'},
+  smartShelfRow: {gap:14,paddingRight:18},
+  smartShelfTile: {width:194,minHeight:134,borderRadius:16,padding:16,justifyContent:'flex-end',gap:5},
+  smartShelfStack: {height:34,justifyContent:'space-between',marginBottom:10},
+  smartShelfStackLine: {height:5,borderRadius:4},
+  smartShelfName: {fontFamily:'serif',fontSize:18,lineHeight:22,fontWeight:'500'},
+  collectionRow: {gap:18,paddingRight:18},
+  collectionTile: {width:148,gap:5},
+  collectionCollage: {height:112,position:'relative',marginBottom:6},
+  collectionMiniCover: {position:'absolute',width:62,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.10,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  collectionEmptyMark: {width:92,height:108,borderRadius:12,alignItems:'center',justifyContent:'center'},
+  collectionName: {fontSize:15,lineHeight:20,fontWeight:'600'},
+  seriesRow: {gap:14,paddingRight:18},
+  seriesTile: {width:168,minHeight:126,borderWidth:0,borderRadius:16,padding:15,justifyContent:'flex-end',gap:4},
+  seriesSpines: {height:58,flexDirection:'row',alignItems:'flex-end',gap:5,marginBottom:8},
+  seriesSpine: {width:11,borderRadius:3},
+  seriesName: {fontFamily:'serif',fontSize:17,lineHeight:21,fontWeight:'500'},
+  shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,flexDirection:'row',flexWrap:'wrap',gap:10},
+  shelfUtilityAction: {minHeight:44,paddingHorizontal:4,paddingRight:14,justifyContent:'center'},
+  brandSignature: {fontSize:10,fontWeight:'700',letterSpacing:3,textAlign:'center',marginTop:8},
+  designedEmpty: {borderWidth:0,padding:28,gap:10,alignItems:'center',justifyContent:'center',minHeight:180},
   emptyMark: {fontFamily:'serif',fontSize:34,fontWeight:'800'},
   skeletonRow: {flexDirection:'row',gap:12,overflow:'hidden'},
   skeletonCard: {width:132,height:198,borderRadius:12,opacity:0.45},
-  unifiedCard: {flex:1,minWidth:0,gap:7,position:'relative'},
-  unifiedCardList: {flexDirection:'row',alignItems:'center',gap:12,paddingVertical:8},
+  unifiedCard: {flex:1,minWidth:0,gap:8,position:'relative'},
+  unifiedCardList: {flexDirection:'row',alignItems:'center',gap:14,paddingVertical:10},
+  unifiedCardSelected: {borderWidth:1,borderRadius:12,padding:7},
   unifiedCoverWrap: {position:'relative'},
-  unifiedCoverWrapList: {width:72},
+  unifiedCoverWrapList: {width:68},
   unifiedCardCopy: {gap:2,minWidth:0},
-  workMetaRow: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6},
-  workSource: {fontSize:11,fontWeight:'800'},
-  workRating: {fontSize:11,fontWeight:'900'},
-  moreButton: {position:'absolute',right:2,top:2,minWidth:34,minHeight:34,borderRadius:17,alignItems:'center',justifyContent:'center'},
-  moreButtonText: {fontSize:17,fontWeight:'900',letterSpacing:1},
+  unifiedListMeta: {flexDirection:'row',alignItems:'center',gap:6,marginTop:2},
+  workSourceDot: {width:5,height:5,borderRadius:3},
+  workSource: {fontSize:11,fontWeight:'500',flexShrink:1},
+  workRating: {fontSize:11,fontWeight:'600',marginLeft:'auto'},
+  moreButton: {position:'absolute',right:6,top:6,minWidth:36,minHeight:36,borderRadius:18,alignItems:'center',justifyContent:'center',opacity:.92},
+  moreButtonList: {right:4,top:4},
   offlineBadge: {position:'absolute',left:7,bottom:7,borderRadius:999,paddingHorizontal:7,paddingVertical:4},
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
   cardPressed: {opacity:0.72},
@@ -3863,14 +4041,14 @@ const styles = StyleSheet.create({
   visibilityToggle: {width:44,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},
   orderButton: {width:38,height:38,alignItems:'center',justifyContent:'center'},
   libraryTwoPane: {flex:1,flexDirection:'row'},
-  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:18,gap:12},
-  librarySearch: {borderWidth:1,borderRadius:14,minHeight:48,paddingHorizontal:15,fontSize:16},
+  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:22,gap:14},
+  librarySearch: {borderWidth:0,borderRadius:12,minHeight:46,paddingHorizontal:15,fontSize:16},
   libraryToolbar: {flexDirection:'row',alignItems:'center',gap:8},
-  quickFilters: {gap:7,paddingRight:6},
-  quickFilter: {borderWidth:1,borderRadius:999,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
-  toolbarButton: {borderWidth:1,borderRadius:10,minHeight:40,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
-  unifiedGrid: {paddingBottom:120,gap:18},
-  unifiedGridRow: {gap:14},
+  quickFilters: {gap:4,paddingRight:8},
+  quickFilter: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
+  toolbarButton: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  unifiedGrid: {paddingBottom:120,gap:22},
+  unifiedGridRow: {gap:16},
   unifiedList: {paddingBottom:120,gap:4},
   selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   selectionCount: {fontSize:13,fontWeight:'900'},
