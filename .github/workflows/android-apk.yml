@@ -3,8 +3,10 @@ name: Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, dev/archivist-work, dev/archivist-sprint8]
     paths:
+      - 'mobile/**'
+      - '.github/scripts/android-emulator-smoke.sh'
       - '.github/workflows/android-apk.yml'
 
 concurrency:
@@ -74,6 +76,8 @@ jobs:
           node local-library.test.cjs
           node local-works.test.cjs
           node atlas.test.cjs
+          node library-organisation.test.cjs
+          node insights.test.cjs
           node duplicates.test.cjs
           node local-reader.test.cjs
           node profile-stats.test.cjs
