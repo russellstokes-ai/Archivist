@@ -3134,7 +3134,7 @@ function Client() {
       <ScrollView contentContainerStyle={styles.content}>
         <Button label="Back to Atlas" tone="quiet" onPress={()=>setAtlasFocus(null)} />
         <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
-          <Text style={[styles.playerEyebrow,{color:p.gold}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
+          <Text style={[styles.playerEyebrow,{color:p.sage}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
           <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{atlasFocus.value}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>{relation ? relation.workCount+' work'+(relation.workCount===1?'':'s') : 'No matching works'}</Text>
         </View>
@@ -3164,11 +3164,28 @@ function Client() {
     );
   }
 
+  function animateAtlasTransform(target:{x:number;y:number;scale:number},duration=420){
+    if(reduceMotion){setAtlasTransform(target);return;}
+    const start={...atlasTransform};
+    const started=Date.now();
+    const frame=()=>{
+      const raw=Math.min(1,(Date.now()-started)/duration);
+      const t=1-Math.pow(1-raw,3);
+      setAtlasTransform({
+        x:start.x+(target.x-start.x)*t,
+        y:start.y+(target.y-start.y)*t,
+        scale:start.scale+(target.scale-start.scale)*t,
+      });
+      if(raw<1)requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+
   function atlasResetView(){
     const viewWidth=Math.max(286,Math.min(1244,width-36));
-    const viewHeight=width>=760?620:520;
+    const viewHeight=width>=760?640:540;
     const scale=Math.max(.34,Math.min(1.08,Math.min(viewWidth/atlasUniverse.width,viewHeight/atlasUniverse.height)*.94));
-    setAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
+    animateAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
   }
 
   function atlasGestureStart(event:any){
@@ -3202,12 +3219,11 @@ function Client() {
   }
 
   function atlasNodeColor(node:AtlasUniverseNode){
-    if(node.kind==='genre')return p.sage;
-    if(node.kind==='collection'||node.kind==='tag')return p.gold;
     if(node.kind==='author')return p.ink;
-    if(node.kind==='series')return p.muted;
     if(node.kind==='note')return p.raised;
-    return p.card;
+    if(node.kind==='genre')return p.paper;
+    if(node.kind==='series'||node.kind==='collection')return p.card;
+    return p.paper;
   }
 
   function atlasNodeVisible(node:AtlasUniverseNode){
@@ -3224,12 +3240,12 @@ function Client() {
     setAtlasNodeId(node.id);
     const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=760?620:520;
     const scale=Math.max(.82,atlasTransform.scale);
-    setAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
+    animateAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
   }
 
   function AtlasEdgeView({from,to,kind}:{from:AtlasUniverseNode;to:AtlasUniverseNode;kind:string}){
     const dx=to.x-from.x,dy=to.y-from.y,length=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI;
-    return <View pointerEvents="none" style={[styles.atlasUniverseEdge,{left:from.x,top:from.y,width:length,opacity:kind==='genre'?.34:.18,backgroundColor:kind==='genre'?p.sage:p.line,transform:[{rotateZ:angle+'deg'}]}]}/>;
+    return <View pointerEvents="none" style={[styles.atlasUniverseEdge,{left:from.x,top:from.y,width:length,opacity:kind==='genre'?.24:.14,backgroundColor:p.line,transform:[{rotateZ:angle+'deg'}]}]}/>;
   }
 
   function AtlasUniverseNodeView({node}:{node:AtlasUniverseNode}){
@@ -3238,16 +3254,16 @@ function Client() {
     const q=atlasSearch.trim().toLowerCase();
     const searchMatch=!q||node.label.toLowerCase().includes(q)||!!node.subtitle?.toLowerCase().includes(q);
     const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
-    const size=node.kind==='genre'?82:node.kind==='author'?54:node.kind==='work'?64:node.kind==='series'?58:node.kind==='collection'?66:42;
-    const common={left:node.x-size/2,top:node.y-size/2,width:size,minHeight:size,opacity:searchMatch?1:.24,borderColor:selected?p.gold:p.line,backgroundColor:atlasNodeColor(node)};
+    const size=node.kind==='genre'?96:node.kind==='author'?58:node.kind==='work'?72:node.kind==='series'?62:node.kind==='collection'?70:42;
+    const common={left:node.x-size/2,top:node.y-size/2,width:size,minHeight:size,opacity:searchMatch?1:.24,borderColor:selected?p.sage:p.line,backgroundColor:atlasNodeColor(node)};
     return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>setAtlasNodeId(node.id)} style={[
       styles.atlasUniverseNode,common,node.kind==='genre'&&styles.atlasGenreNode,node.kind==='author'&&styles.atlasAuthorNode,node.kind==='series'&&styles.atlasSeriesNode,node.kind==='work'&&styles.atlasWorkNode,node.kind==='collection'&&styles.atlasCollectionNode,selected&&styles.atlasUniverseNodeSelected,
     ]}>
       {node.kind==='work'&&node.coverUri?<Image source={{uri:node.coverUri}} style={styles.atlasNodeCover}/>:null}
       {node.kind==='author'?<Text style={[styles.atlasNodeMonogram,{color:p.paper}]}>{node.label.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')}</Text>:null}
-      {node.kind!=='author'&&!(node.kind==='work'&&node.coverUri)?<Text numberOfLines={node.kind==='genre'?2:3} style={[styles.atlasNodeLabel,{color:node.kind==='genre'||node.kind==='collection'?p.paper:p.ink}]}>{node.kind==='tag'?node.label:node.label}</Text>:null}
-      {node.kind==='genre'?<Text style={[styles.atlasNodeCount,{color:p.paper}]}>{node.count}</Text>:null}
-      {node.kind==='work'&&work?.source==='downloaded'?<View style={[styles.atlasNodeSourceDot,{backgroundColor:p.gold}]}/>:null}
+      {node.kind!=='author'&&!(node.kind==='work'&&node.coverUri)?<Text numberOfLines={node.kind==='genre'?2:3} style={[styles.atlasNodeLabel,{color:p.ink}]}>{node.label}</Text>:null}
+      {node.kind==='genre'?<Text style={[styles.atlasNodeCount,{color:p.muted}]}>{node.count}</Text>:null}
+      {node.kind==='work'&&work?.source==='downloaded'?<View style={[styles.atlasNodeSourceDot,{backgroundColor:p.sage}]}/>:null}
     </Pressable>;
   }
 
@@ -3256,8 +3272,8 @@ function Client() {
     const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
-    return <View style={[styles.atlasInspector,{backgroundColor:p.card,borderColor:p.line},width>=760?styles.atlasInspectorWide:styles.atlasInspectorMobile]}>
-      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.gold}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
+    return <View style={[styles.atlasInspector,{backgroundColor:p.raised},width>=760?styles.atlasInspectorWide:styles.atlasInspectorMobile]}>
+      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
       {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
       <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
       <View style={styles.toolRow}>
@@ -3274,15 +3290,23 @@ function Client() {
     const renderedIds=new Set(renderedNodes.map(node=>node.id));
     const renderedEdges=atlasUniverse.edges.filter(edge=>renderedIds.has(edge.from)&&renderedIds.has(edge.to));
     const nodeMap=new Map(atlasUniverse.nodes.map(node=>[node.id,node]));
-    const viewHeight=width>=760?620:520;
+    const viewHeight=width>=760?640:540;
     return (
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.pageHeadingRow}><View style={{flex:1}}><Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Atlas</Text><Text style={[styles.pageSubtitle,{color:p.muted}]}>A living map of the books, people, series and ideas already in your library.</Text></View><Button label={atlasListMode?'Universe':'List'} tone="quiet" onPress={()=>setAtlasListMode(value=>!value)}/></View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
-          {(['all','local','server','downloaded'] as LibrarySource[]).map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:sourceFilter===value}} onPress={()=>setSourceFilter(value)} style={[styles.filterPill,{borderColor:sourceFilter===value?p.sage:p.line,backgroundColor:sourceFilter===value?p.raised:'transparent'}]}><Text style={{color:p.ink,fontWeight:'800'}}>{value==='all'?'All':value==='local'?'Device':value==='server'?'Server':'Downloaded'}</Text></Pressable>)}
-          {availableSpaces.slice(0,8).map(value=><Pressable key={'atlas-space-'+value} accessibilityRole="button" accessibilityState={{selected:space===value}} onPress={()=>setSpace(space===value?'':value)} style={[styles.filterPill,{borderColor:space===value?p.gold:p.line,backgroundColor:space===value?p.raised:'transparent'}]}><Text style={{color:p.ink,fontWeight:'800'}}>{value}</Text></Pressable>)}
-        </ScrollView>
-        {atlasListMode?<View style={{gap:12}}>
+      <ScrollView contentContainerStyle={styles.atlasScreen} keyboardShouldPersistTaps="handled">
+        <View style={styles.pageHeadingRow}>
+          <View style={{flex:1}}>
+            <Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Atlas</Text>
+            <Text style={[styles.pageSubtitle,{color:p.muted}]}>A living map of the books, people, series and ideas in your library.</Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}>
+            <Text style={{color:p.muted,fontWeight:'600'}}>{atlasListMode?'Universe':'List'}</Text>
+          </Pressable>
+        </View>
+
+        <SourceSwitcher/>
+        {availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
+
+        {atlasListMode?<View style={styles.atlasListAlternative}>
           <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
           <AtlasGroup title="Ratings" kind="rating" items={atlas.ratings} />
           <AtlasGroup title="Favourites" kind="favourite" items={atlas.favourites} />
@@ -3293,27 +3317,34 @@ function Client() {
           <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
           <AtlasGroup title="Availability" kind="status" items={atlas.status} />
         </View>:<>
-          <View style={styles.atlasSearchRow}><TextInput value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find an author, series, title, collection or tag" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink,borderColor:p.line,backgroundColor:p.card,flex:1}]}/><Button label="Find" onPress={atlasSearchGo}/></View>
+          <View style={styles.atlasSearchRow}>
+            <TextInput value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find a title, person, series, collection or tag" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink,backgroundColor:p.card,flex:1}]}/>
+            <Pressable accessibilityRole="button" accessibilityLabel="Find in Atlas" onPress={atlasSearchGo} style={[styles.atlasFindButton,{backgroundColor:p.sage}]}><Text style={styles.atlasFindText}>Find</Text></Pressable>
+          </View>
+
           <View style={[styles.atlasUniverseLayout,width>=760&&styles.atlasUniverseLayoutWide]}>
-            <View style={[styles.atlasViewport,{height:viewHeight,backgroundColor:p.card,borderColor:p.line}]}
+            <View style={[styles.atlasViewport,{height:viewHeight,backgroundColor:p.paper}]}
               onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
               onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
               onResponderRelease={()=>{atlasGesture.current=null}} onResponderTerminate={()=>{atlasGesture.current=null}}>
               <View style={styles.atlasViewportTools}>
-                <Button label="Fit" tone="quiet" onPress={atlasResetView}/>
-                <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>setAtlasTransform(value=>({...value,scale:Math.max(.34,value.scale-.15)}))} style={[styles.iconButton,styles.atlasZoomButton,{borderColor:p.line,backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>setAtlasTransform(value=>({...value,scale:Math.min(2.25,value.scale+.15)}))} style={[styles.iconButton,styles.atlasZoomButton,{borderColor:p.line,backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><Text style={[styles.meta,{color:p.ink,fontWeight:'600'}]}>Fit</Text></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.max(.34,atlasTransform.scale-.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.min(2.25,atlasTransform.scale+.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
               </View>
+
               <View style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
                 {renderedEdges.map(edge=>{const from=nodeMap.get(edge.from),to=nodeMap.get(edge.to);return from&&to?<AtlasEdgeView key={edge.id} from={from} to={to} kind={edge.kind}/>:null})}
                 {renderedNodes.map(node=><AtlasUniverseNodeView key={node.id} node={node}/>)}
               </View>
+
               {width<760?<AtlasInspector/>:null}
-              {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper,borderColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Showing a stable sample for smooth navigation · {atlasUniverse.hiddenWorks} more works available through clusters and search.</Text></View>:null}
+              {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
             {width>=760?<AtlasInspector/>:null}
           </View>
-          <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>Drag to pan · pinch or use ± to zoom · tap a node to inspect. Lower zoom levels automatically collapse detail.</Text>
+
+          <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>Drag to pan · pinch to zoom · tap a node to inspect.</Text>
         </>}
       </ScrollView>
     );
@@ -3326,50 +3357,96 @@ function Client() {
   }
 
   function InsightGoalCard({title,value,target,progress,draft,onDraft}:{title:string;value:number;target:number;progress:number;draft:string;onDraft:(value:string)=>void}){
-    return <View style={[styles.insightGoalCard,{backgroundColor:p.card,borderColor:p.line}]}>
-      <View style={styles.profileBreakdownRow}><Text style={[styles.bookTitle,{color:p.ink}]}>{title}</Text><Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{value} / {target}</Text></View>
+    return <View style={[styles.insightGoalCard,{borderBottomColor:p.line}]}>
+      <View style={styles.profileBreakdownRow}>
+        <View style={{flex:1}}>
+          <Text style={[styles.bookTitle,{color:p.ink}]}>{title}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{value} of {target}</Text>
+        </View>
+        <TextInput accessibilityLabel={title+' target'} keyboardType="number-pad" value={draft} onChangeText={onDraft} style={[styles.insightGoalInput,{color:p.ink,backgroundColor:p.card}]}/>
+      </View>
       <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:p.sage,width:`${Math.round(progress*100)}%`}]} /></View>
-      <View style={styles.insightGoalEdit}><Text style={[styles.meta,{color:p.muted}]}>Target</Text><TextInput keyboardType="number-pad" value={draft} onChangeText={onDraft} style={[styles.insightGoalInput,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/></View>
     </View>;
   }
 
   function Insights(){
     const summary=insightSummary;
     const listeningHours=summary.listeningSeconds/3600;
-    return <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.pageHeadingRow}><View style={{flex:1}}><Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Insights</Text><Text style={[styles.pageSubtitle,{color:p.muted}]}>Your library history, goals, ratings and notes—derived from your own activity.</Text></View></View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
-        {(['all','local','server','downloaded'] as LibrarySource[]).map(value=><Pressable key={'insight-'+value} accessibilityRole="button" accessibilityState={{selected:sourceFilter===value}} onPress={()=>setSourceFilter(value)} style={[styles.filterPill,{borderColor:sourceFilter===value?p.sage:p.line,backgroundColor:sourceFilter===value?p.raised:'transparent'}]}><Text style={{color:p.ink,fontWeight:'800'}}>{value==='all'?'All':value==='local'?'Device':value==='server'?'Server':'Downloaded'}</Text></Pressable>)}
-      </ScrollView>
-      <View style={styles.insightHeroGrid}>
-        {[
-          ['Finished',summary.completed],
-          ['In progress',summary.inProgress],
-          ['Listening',listeningHours<10?listeningHours.toFixed(1)+'h':Math.round(listeningHours)+'h'],
-          ['Active days',summary.activeDays],
-          ['Notes & highlights',summary.annotationCount],
-          ['Average rating',summary.rated?ratingLabel(summary.averageRating):'—'],
-        ].map(([label,value])=><View key={String(label)} style={[styles.insightMetric,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.profileStatValue,{color:p.ink}]}>{value}</Text><Text style={[styles.profileStatLabel,{color:p.muted}]}>{label}</Text></View>)}
+    const listeningLabel=listeningHours<10?listeningHours.toFixed(1)+'h':Math.round(listeningHours)+'h';
+    const lead=summary.completed
+      ? `${summary.completed} finished · ${summary.activeDays} active day${summary.activeDays===1?'':'s'} · ${summary.annotationCount} saved idea${summary.annotationCount===1?'':'s'}`
+      : 'Your reading and listening history will build here as you use Archivist.';
+    const metrics:Array<[string,string|number]>=[
+      ['Finished',summary.completed],
+      ['In progress',summary.inProgress],
+      ['Listening',listeningLabel],
+      ['Active days',summary.activeDays],
+      ['Notes',summary.annotationCount],
+      ['Average rating',summary.rated?ratingLabel(summary.averageRating):'—'],
+    ];
+    return <ScrollView contentContainerStyle={styles.insightsScreen}>
+      <View style={styles.pageHeadingRow}>
+        <View style={{flex:1}}>
+          <Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Insights</Text>
+          <Text style={[styles.pageSubtitle,{color:p.muted}]}>A private record of how your library is becoming part of your life.</Text>
+        </View>
       </View>
-      <View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink}]}>Goals</Text><Button label="Save targets" tone="quiet" onPress={()=>void saveInsightGoals()}/></View>
+
+      <SourceSwitcher/>
+
+      <View style={styles.insightEditorialHero}>
+        <Text style={[styles.insightEditorialKicker,{color:p.sage}]}>YOUR READING LIFE</Text>
+        <Text style={[styles.insightEditorialTitle,{color:p.ink}]}>{lead}</Text>
+      </View>
+
+      <View style={[styles.insightStatStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        {metrics.map(([label,value])=><View key={label} style={styles.insightStat}>
+          <Text style={[styles.insightStatValue,{color:p.ink}]}>{value}</Text>
+          <Text style={[styles.insightStatLabel,{color:p.muted}]}>{label}</Text>
+        </View>)}
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Goals</Text>
+        <Pressable accessibilityRole="button" onPress={()=>void saveInsightGoals()} style={styles.sectionLink}><Text style={{color:p.sage,fontWeight:'600'}}>Save targets</Text></Pressable>
+      </View>
       <View style={styles.insightGoalGrid}>
         <InsightGoalCard title="Finish works" value={summary.completedGoal.value} target={summary.completedGoal.target} progress={summary.completedGoal.progress} draft={goalDraft.completed} onDraft={value=>setGoalDraft(current=>({...current,completed:value}))}/>
         <InsightGoalCard title="Capture ideas" value={summary.annotationGoal.value} target={summary.annotationGoal.target} progress={summary.annotationGoal.progress} draft={goalDraft.annotations} onDraft={value=>setGoalDraft(current=>({...current,annotations:value}))}/>
       </View>
-      <Text style={[styles.sectionTitle,{color:p.ink}]}>Recent activity</Text>
-      {summary.recentActivity.length?summary.recentActivity.slice(0,12).map(item=><View key={item.id} style={[styles.insightActivityRow,{borderColor:p.line}]}>
-        <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.kind} · {new Date(item.updatedAt*1000).toLocaleDateString()} · {item.events} update{item.events===1?'':'s'}</Text></View>
-        {item.kind==='Listening'&&item.activeSeconds>0?<Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{Math.max(1,Math.round(item.activeSeconds/60))}m</Text>:null}
-      </View>):<Text style={[styles.empty,{color:p.muted}]}>{session&&sourceFilter!=='local'&&sourceFilter!=='downloaded'?'Activity will appear as you read and listen.':'Local history stays private on this device; current progress and notes are shown below.'}</Text>}
+
+      <Text style={[styles.sectionTitle,{color:p.ink,marginTop:4}]}>Recent activity</Text>
+      <View>
+        {summary.recentActivity.length?summary.recentActivity.slice(0,12).map(item=><View key={item.id} style={[styles.insightActivityRow,{borderColor:p.line}]}>
+          <View style={[styles.activityMarker,{backgroundColor:p.sage}]}/>
+          <View style={{flex:1,minWidth:0}}>
+            <Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{item.kind} · {new Date(item.updatedAt*1000).toLocaleDateString()} · {item.events} update{item.events===1?'':'s'}</Text>
+          </View>
+          {item.kind==='Listening'&&item.activeSeconds>0?<Text style={[styles.meta,{color:p.sage,fontWeight:'600'}]}>{Math.max(1,Math.round(item.activeSeconds/60))}m</Text>:null}
+        </View>):<Text style={[styles.empty,{color:p.muted}]}>{session&&sourceFilter!=='local'&&sourceFilter!=='downloaded'?'Activity will appear as you read and listen.':'Local history stays private on this device; current progress and notes are shown below.'}</Text>}
+      </View>
+
       <Text style={[styles.sectionTitle,{color:p.ink}]}>Annotation hub</Text>
-      {summary.recentAnnotations.length?summary.recentAnnotations.slice(0,12).map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>item.work&&openUnifiedWork(item.work as UnifiedWork)} style={[styles.annotationHubCard,{backgroundColor:p.card,borderColor:p.line}]}>
-        <View style={styles.profileBreakdownRow}><Text style={[styles.playerEyebrow,{color:p.gold}]}>{item.kind.toUpperCase()} · PAGE {item.page+1}</Text><Text style={[styles.meta,{color:p.muted}]}>{new Date(item.createdAt).toLocaleDateString()}</Text></View>
-        <Text numberOfLines={3} style={[styles.readerQuote,{color:p.ink,borderColor:p.gold}]}>{item.text}</Text>
-        {item.note?<Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.note}</Text>:null}
-        <Text numberOfLines={1} style={[styles.meta,{color:p.sage,fontWeight:'800'}]}>{item.work?.title||'Saved annotation'}</Text>
-      </Pressable>):<Text style={[styles.empty,{color:p.muted}]}>Highlights and notes from the Reader will collect here automatically.</Text>}
+      <View>
+        {summary.recentAnnotations.length?summary.recentAnnotations.slice(0,12).map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>item.work&&openUnifiedWork(item.work as UnifiedWork)} style={[styles.annotationHubCard,{borderBottomColor:p.line}]}>
+          <View style={styles.profileBreakdownRow}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{item.kind.toUpperCase()} · PAGE {item.page+1}</Text><Text style={[styles.meta,{color:p.muted}]}>{new Date(item.createdAt).toLocaleDateString()}</Text></View>
+          <Text numberOfLines={3} style={[styles.readerQuote,{color:p.ink,borderColor:p.sage}]}>{item.text}</Text>
+          {item.note?<Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.note}</Text>:null}
+          <Text numberOfLines={1} style={[styles.meta,{color:p.sage,fontWeight:'600'}]}>{item.work?.title||'Saved annotation'}</Text>
+        </Pressable>):<Text style={[styles.empty,{color:p.muted}]}>Highlights and notes from the Reader will collect here automatically.</Text>}
+      </View>
+
       <Text style={[styles.sectionTitle,{color:p.ink}]}>Achievements</Text>
-      <View style={styles.insightAchievementStrip}>{profileAchievements.slice(0,5).map(item=><View key={item.id} style={[styles.insightAchievement,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:p.card}]}><Text style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text></View>)}</View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightAchievementStrip}>
+        {profileAchievements.slice(0,8).map(item=><View key={item.id} style={styles.insightAchievementEditorial}>
+          <View style={[styles.insightAchievementBadge,{borderColor:item.unlocked?p.sage:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}>
+            <Text style={[styles.insightAchievementMonogram,{color:item.unlocked?p.sage:p.muted}]}>{item.title.trim().charAt(0).toUpperCase()}</Text>
+          </View>
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink,textAlign:'center'}]}>{item.title}</Text>
+          <Text style={[styles.meta,{color:item.unlocked?p.sage:p.muted,textAlign:'center'}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+        </View>)}
+      </ScrollView>
     </ScrollView>;
   }
 
@@ -3963,36 +4040,42 @@ const styles = StyleSheet.create({
   achievementState: {fontSize:12,fontWeight:'900'},
   achievementTrack: {height:6,borderRadius:999,overflow:'hidden'},
   achievementFill: {height:'100%',borderRadius:999},
-  atlasFocusHero: {borderWidth:1,borderRadius:18,padding:16,gap:5},
-  atlasRelationGroup: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  atlasFocusHero: {borderWidth:0,paddingVertical:10,gap:5},
+  atlasRelationGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   atlasChipWrap: {flexDirection:'row',flexWrap:'wrap',gap:8},
-  atlasRelationChip: {borderWidth:1,borderRadius:999,paddingHorizontal:11,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
-  atlasWorkRow: {borderWidth:1,borderRadius:12,padding:12,flexDirection:'row',alignItems:'center',gap:10},
+  atlasRelationChip: {borderWidth:0,borderRadius:10,paddingHorizontal:10,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
+  atlasWorkRow: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',alignItems:'center',gap:10},
   atlasSearchRow: {flexDirection:'row',alignItems:'center',gap:8},
-  atlasUniverseLayout: {position:'relative',gap:12},
+  atlasUniverseLayout: {position:'relative',gap:16},
   atlasUniverseLayoutWide: {flexDirection:'row',alignItems:'stretch'},
   atlasViewport: {flex:1,borderWidth:0,borderRadius:22,overflow:'hidden',position:'relative',minWidth:0},
   atlasUniverseCanvas: {position:'absolute'},
   atlasUniverseEdge: {position:'absolute',height:1},
   atlasUniverseNode: {position:'absolute',borderWidth:0,borderRadius:14,padding:5,alignItems:'center',justifyContent:'center',overflow:'hidden',shadowColor:'#000',shadowOpacity:.08,shadowRadius:4,elevation:2},
   atlasUniverseNodeSelected: {borderWidth:2,shadowOpacity:.2,shadowRadius:9,elevation:5},
-  atlasGenreNode: {borderRadius:41,padding:9},
-  atlasAuthorNode: {borderRadius:27},
-  atlasSeriesNode: {borderRadius:10,borderLeftWidth:5},
+  atlasGenreNode: {borderRadius:48,padding:10,borderWidth:StyleSheet.hairlineWidth},
+  atlasAuthorNode: {borderRadius:29},
+  atlasSeriesNode: {borderRadius:10,borderLeftWidth:4},
   atlasWorkNode: {borderRadius:7,padding:3},
-  atlasCollectionNode: {borderRadius:18,paddingHorizontal:8},
+  atlasCollectionNode: {borderRadius:18,paddingHorizontal:8,borderWidth:StyleSheet.hairlineWidth},
   atlasNodeCover: {position:'absolute',left:0,top:0,right:0,bottom:0,width:'100%',height:'100%'},
   atlasNodeLabel: {fontSize:9,fontWeight:'900',textAlign:'center',lineHeight:11},
   atlasNodeMonogram: {fontFamily:'serif',fontSize:16,fontWeight:'900'},
   atlasNodeCount: {fontSize:10,fontWeight:'900',marginTop:2},
   atlasNodeSourceDot: {position:'absolute',right:4,bottom:4,width:8,height:8,borderRadius:4,borderWidth:1,borderColor:'#f8f7f2'},
-  atlasViewportTools: {position:'absolute',right:10,top:10,zIndex:20,flexDirection:'row',gap:6},
-  atlasZoomButton: {borderWidth:1},
-  atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:1,borderRadius:12,paddingHorizontal:10,paddingVertical:7},
-  atlasInspector: {borderWidth:1,borderRadius:18,padding:14,gap:8,zIndex:25},
-  atlasInspectorMobile: {position:'absolute',left:10,right:10,bottom:10},
-  atlasInspectorWide: {width:260,minHeight:220,alignSelf:'stretch'},
+  atlasViewportTools: {position:'absolute',right:12,top:12,zIndex:20,flexDirection:'row',gap:6},
+  atlasZoomButton: {borderWidth:0},
+  atlasToolButton: {minHeight:38,paddingHorizontal:12,borderRadius:10,alignItems:'center',justifyContent:'center'},
+  atlasFindButton: {height:46,paddingHorizontal:16,borderRadius:12,alignItems:'center',justifyContent:'center'},
+  atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
+  atlasClusterNotice: {position:'absolute',left:12,bottom:12,maxWidth:320,borderWidth:0,borderRadius:10,paddingHorizontal:10,paddingVertical:7},
+  atlasInspector: {borderWidth:0,borderRadius:18,padding:16,gap:8,zIndex:25,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
+  atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12},
+  atlasInspectorWide: {width:280,minHeight:220,alignSelf:'stretch'},
 
+  atlasScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:22,maxWidth:1280,width:'100%',alignSelf:'center'},
+  atlasListAlternative: {gap:4},
+  insightsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:28,maxWidth:1120,width:'100%',alignSelf:'center'},
   sourceSwitcher: {flexDirection:'row',gap:22,paddingRight:14,minHeight:44,alignItems:'stretch'},
   sourceSwitcherVertical: {gap:2},
   sourceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
@@ -4090,15 +4173,24 @@ const styles = StyleSheet.create({
   ruleToken: {borderWidth:1,borderRadius:999,minHeight:34,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
   ruleInput: {borderWidth:1,borderRadius:9,minHeight:38,paddingHorizontal:10,flexGrow:1,minWidth:92},
   ruleRemove: {width:34,height:34,alignItems:'center',justifyContent:'center'},
-  insightHeroGrid: {flexDirection:'row',flexWrap:'wrap',gap:10},
-  insightMetric: {flexGrow:1,width:'30%',minWidth:100,borderWidth:1,borderRadius:16,padding:14,gap:3},
-  insightGoalGrid: {gap:10},
-  insightGoalCard: {borderWidth:1,borderRadius:16,padding:14,gap:10},
+  insightEditorialHero: {paddingVertical:8,gap:8,maxWidth:760},
+  insightEditorialKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5},
+  insightEditorialTitle: {fontFamily:'serif',fontSize:26,lineHeight:33,fontWeight:'500',letterSpacing:-.2},
+  insightStatStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:18,rowGap:18},
+  insightStat: {width:'33.333%',minWidth:110,gap:2},
+  insightStatValue: {fontFamily:'serif',fontSize:28,lineHeight:32,fontWeight:'500'},
+  insightStatLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
+  insightGoalGrid: {gap:0},
+  insightGoalCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
   insightGoalEdit: {flexDirection:'row',alignItems:'center',justifyContent:'flex-end',gap:8},
-  insightGoalInput: {width:76,borderWidth:1,borderRadius:9,minHeight:38,paddingHorizontal:10,textAlign:'center',fontWeight:'800'},
-  insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',gap:12,alignItems:'center'},
-  annotationHubCard: {borderWidth:1,borderRadius:16,padding:14,gap:8},
-  insightAchievementStrip: {flexDirection:'row',flexWrap:'wrap',gap:8},
-  insightAchievement: {borderWidth:1,borderRadius:12,padding:11,minWidth:140,flexGrow:1},
+  insightGoalInput: {width:72,borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:10,textAlign:'center',fontWeight:'600'},
+  insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:13,flexDirection:'row',gap:12,alignItems:'center'},
+  activityMarker: {width:7,height:7,borderRadius:4},
+  annotationHubCard: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:8},
+  insightAchievementStrip: {flexDirection:'row',gap:20,paddingRight:18},
+  insightAchievementEditorial: {width:116,alignItems:'center',gap:7},
+  insightAchievementBadge: {width:64,height:64,borderRadius:32,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
+  insightAchievementMonogram: {fontFamily:'serif',fontSize:26,fontWeight:'500'},
+  insightAchievement: {borderWidth:0,padding:11,minWidth:140,flexGrow:1},
 
 });
