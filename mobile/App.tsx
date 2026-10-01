@@ -504,6 +504,7 @@ function Client() {
   const [readerAnnotations,setReaderAnnotations]=useState<ReaderAnnotation[]>([]);
   const [readerAppearance,setReaderAppearance]=useState<ReaderAppearance>(defaultReaderAppearance);
   const [readerToolsOpen,setReaderToolsOpen]=useState(false);
+  const [readerChromeVisible,setReaderChromeVisible]=useState(true);
   const [readerPage,setReaderPage]=useState(0);
   const [readerCount,setReaderCount]=useState(0);
   const [readerSelection,setReaderSelection]=useState('');
@@ -1894,6 +1895,7 @@ function Client() {
         if(Number.isInteger(message.count)&&message.count>=0)setReaderCount(message.count);
       }
       if(message?.type==='reader-selection')setReaderSelection(String(message.text||'').slice(0,4000));
+      if(message?.type==='reader-chrome-toggle')setReaderChromeVisible(value=>!value);
       if(message?.type==='reader-search-results')setReaderSearchCount(Math.max(0,Number(message.count)||0));
       if(message?.type==='archivist-reader-ready'){setReaderLoading(false);setReaderLoadError('');}
       if((message?.type==='archivist-reader-complete'||message?.complete===true)&&reading.serverWorkId&&reading.source==='server')setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
@@ -1914,7 +1916,7 @@ function Client() {
     }
     setError('');
     setReaderLoadError('');
-    setReaderPage(book.uri ? (localReadingProgress[book.uri]||0) : 0);setReaderCount(0);setReaderSelection('');setReaderSearch('');setReaderSearchCount(null);setReaderRequestedPage(null);setReaderToolsOpen(false);
+    setReaderPage(book.uri ? (localReadingProgress[book.uri]||0) : 0);setReaderCount(0);setReaderSelection('');setReaderSearch('');setReaderSearchCount(null);setReaderRequestedPage(null);setReaderToolsOpen(false);setReaderChromeVisible(true);
     if (book.format === 'Audio') playBook(book);
     else if (book.source!=='server') {
       if (!book.uri) return;
@@ -3271,16 +3273,16 @@ function Client() {
   }
 
   function Reader() {
-    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setActiveTab('shelf');};
+    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
     const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}><Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
     if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Open an EPUB, PDF or comic from Shelf.</Text></View>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
-      return <View style={styles.readerScreen}>{readerBar}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView ref={readerWebRef} originWhitelist={['*']} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)}/>:localReader?.uri?<WebView ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}<ReaderTools/></View>;
+      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView ref={readerWebRef} originWhitelist={['*']} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)}/>:localReader?.uri?<WebView ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}<ReaderTools/></View>;
     }
-    if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerBar}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View><ReaderTools/></View>;
-    return <View style={styles.readerScreen}>{readerBar}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}<ReaderTools/></View>;
+    if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View><ReaderTools/></View>;
+    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}<ReaderTools/></View>;
   }
 
   function atlasSelect(kind: AtlasKind, value: string) {
@@ -4327,38 +4329,38 @@ const styles = StyleSheet.create({
   playerEmpty: {borderWidth:0,padding:32,gap:10,alignItems:'center',justifyContent:'center',minHeight:260,maxWidth:420,alignSelf:'center'},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex:1,position:'relative'},
-  readerBar: {minHeight:48,flexDirection:'row',alignItems:'center',paddingHorizontal:2},
-  readerToolsButton: {width:46,minHeight:46,alignItems:'center',justifyContent:'center'},
+  readerBar: {position:'absolute',left:0,right:0,top:0,zIndex:25,minHeight:44,flexDirection:'row',alignItems:'center',paddingHorizontal:2,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.16)'},
+  readerToolsButton: {width:44,minHeight:44,alignItems:'center',justifyContent:'center'},
   searchRow:{flexDirection:'row',alignItems:'center',gap:6},
   filterPill:{borderWidth:0,borderRadius:10,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
   readerSheetHeader: {flexDirection:'row',alignItems:'center',gap:12,paddingBottom:8},
   readerSheetClose: {width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center'},
   readerSearchInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:14,fontSize:15},
   readerSearchButton: {width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center'},
-  readerToolBlock: {gap:10,paddingVertical:15,borderTopWidth:StyleSheet.hairlineWidth},
+  readerToolBlock: {gap:10,paddingVertical:14,borderTopWidth:StyleSheet.hairlineWidth},
   readerAppearanceHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   readerScaleControl: {flexDirection:'row',alignItems:'center',gap:6},
   readerScaleButton: {width:38,height:38,borderRadius:19,alignItems:'center',justifyContent:'center'},
   readerScaleValue: {minWidth:48,textAlign:'center',fontSize:13,fontVariant:['tabular-nums'],fontWeight:'600'},
   readerThemeTabs: {flexDirection:'row',gap:4},
-  readerThemeTab: {flex:1,minHeight:42,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
+  readerThemeTab: {flex:1,minHeight:40,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
   readerThemeMarker: {position:'absolute',left:14,right:14,bottom:3,height:2,borderRadius:2},
   readerToolSectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   readerBookmarkAction: {minHeight:40,flexDirection:'row',alignItems:'center',gap:7,paddingHorizontal:4},
   readerSavedAction: {minHeight:38,paddingHorizontal:5,alignItems:'center',justifyContent:'center'},
   readerSavedRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:12},
   readerQuote: {borderLeftWidth:3,paddingLeft:10,fontStyle:'italic',lineHeight:20},
-  readerBack: {width:48,minHeight:48,alignItems:'center',justifyContent:'center'},
+  readerBack: {width:44,minHeight:44,alignItems:'center',justifyContent:'center'},
   readerAction: {fontWeight:'600'},
   readerToolGlyph: {fontFamily:'serif',fontSize:18,fontWeight:'500'},
   readerHeading: {flex:1,alignItems:'center',justifyContent:'center',minWidth:0},
-  readerTitle: {width:'100%',textAlign:'center',fontSize:13,fontWeight:'600'},
-  readerFormat: {fontSize:9,fontWeight:'600',letterSpacing:1,textTransform:'uppercase',marginTop:1},
+  readerTitle: {width:'100%',textAlign:'center',fontSize:12.5,lineHeight:17,fontWeight:'600'},
+  readerFormat: {fontSize:8.5,lineHeight:11,fontWeight:'600',letterSpacing:1.1,textTransform:'uppercase',marginTop:0},
   readerLoading: {flex:1,alignItems:'center',justifyContent:'center',gap:10,padding:24},
   readerEmpty: {flex:1,alignItems:'center',justifyContent:'center',gap:10,padding:32,maxWidth:420,width:'100%',alignSelf:'center'},
   readerFailure: {margin:28,borderWidth:0,padding:22,gap:12,maxWidth:520,alignSelf:'center'},
-  readerOverlay: {position:'absolute',top:48,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:.96},
-  readerErrorOverlay: {position:'absolute',left:24,right:24,top:78,zIndex:30,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
+  readerOverlay: {position:'absolute',top:0,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:.96},
+  readerErrorOverlay: {position:'absolute',left:24,right:24,top:64,zIndex:30,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   atlasGroup: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 10},
   atlasRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36},
   atlasText: {fontWeight: '700'},
