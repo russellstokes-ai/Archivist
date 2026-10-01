@@ -53,6 +53,16 @@
   <section id="config" role="tabpanel" data-settings-panel="server" hidden>
     <section class="panel-card"><div class="section-heading"><div><h2>Server</h2><p>Connection details, phone access and active sessions.</p></div></div><div id="config-summary" class="summary"></div></section>
     <section class="panel-card"><h2>Phone connection</h2><p>In the Archivist app, open Settings → Add server, then enter the server address and access key.</p><form id="owner-access-form"><label>Phone access key<input id="owner-access-key" type="password" minlength="8" maxlength="256" autocomplete="new-password" placeholder="At least 8 characters"></label><button id="owner-access-save">Set / replace access key</button></form><p class="note">This key is for connecting apps. Home Assistant ingress remains trusted owner access.</p></section>
+    <section class="panel-card">
+      <div class="section-heading"><div><h2>Backup & recovery</h2><p>Back up Archivist’s database without copying or waking your media drives.</p></div><a class="button-link primary" href="./api/backup" download="archivist-backup.db">Download backup</a></div>
+      <div class="restore-row"><label>Restore from an Archivist backup<input id="restore-file" type="file" accept=".db,application/vnd.sqlite3,application/octet-stream"></label><button id="restore-button">Verify & stage restore</button></div>
+      <p class="note">Restore is deliberately restart-safe: the upload is validated first, then applied on the next Archivist restart. The previous database is retained as <code>archivist.db.before-restore</code>.</p>
+    </section>
+    <section class="panel-card">
+      <h2>OPDS library access</h2>
+      <p>Compatible readers can browse your Archivist library at <code>/api/opds</code>. Use any username and your Archivist access key as the password. Each family user sees only their own authorised library.</p>
+      <p class="note">OPDS is read-only. It does not enable file management or server administration.</p>
+    </section>
     <section class="panel-card"><h2>Active sessions</h2><div id="session-list"></div></section>
   </section>
 </section>

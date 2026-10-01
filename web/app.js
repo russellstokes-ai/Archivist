@@ -158,13 +158,27 @@ async function loadSources(){
       try{await api('./api/sources/'+s.id+'/scan','POST');message('Scan started. Shelf updates automatically when it completes.');pollJobs()}
       catch(e){message(e.message)}finally{activity('');scan.disabled=false;scan.textContent='Scan / refresh'}
     };
+    const watchWrap=element('span');watchWrap.className='watch-controls';
+    const watchEvery=element('select');watchEvery.setAttribute('aria-label','Automatic scan interval for '+s.space);
+    for(const [label,minutes] of [['15 min',15],['1 hour',60],['6 hours',360],['Daily',1440],['Weekly',10080]])watchEvery.add(new Option(label,String(minutes)));
+    watchEvery.value=String(s.watchMinutes||60);
+    const watch=element('button',s.watched?'Stop watching':'Watch automatically');watch.type='button';
+    watch.onclick=async()=>{
+      watch.disabled=true;activity(s.watched?'Disabling watched folder':'Enabling watched folder',s.space);
+      try{
+        await api('./api/sources/'+s.id+'/watch','PATCH',{enabled:!s.watched,minutes:Number(watchEvery.value)});
+        message(s.watched?'Automatic scans disabled.':'Automatic scans enabled. Archivist will only wake this source on the interval you chose.');
+        await loadSources();await loadConfig();
+      }catch(e){message(e.message)}finally{activity('');watch.disabled=false}
+    };
+    watchWrap.append(watchEvery,watch);
     const remove=element('button','Remove');remove.className='danger-quiet';remove.onclick=async()=>{
       if(!confirm('Remove this source and its catalogue entries? Original files will remain untouched.'))return;
       remove.disabled=true;remove.textContent='Removing…';activity('Removing source',s.space);
       try{await api('./api/sources/'+s.id,'DELETE');await loadSources();await loadLibrarySummary();await loadBooks(false);message('Source removed. Original files were not changed.')}
       catch(e){message(e.message)}finally{activity('');remove.disabled=false;remove.textContent='Remove'}
     };
-    actions.append(scan,remove);row.append(head,actions);$('source-list').append(row)
+    actions.append(scan,watchWrap,remove);row.append(head,actions);$('source-list').append(row)
   }
 }
 
@@ -172,7 +186,8 @@ async function loadConfig(){
   if(!currentProfile?.owner)return;
   const [info,sessions]=await Promise.all([api('./api/server-info'),api('./api/sessions')]);
   $('config-summary').replaceChildren();
-  for(const [label,value] of [['Server address',info.address],['Owner access',info.configured?'Ready':'Not set'],['Source folders',String(info.sources)],['Active scans',String(info.activeJobs)],['Signed-in sessions',String(info.sessions)]]){
+  const bytes=Number(info.databaseBytes||0),databaseSize=bytes<1024?'—':bytes<1024*1024?Math.round(bytes/1024)+' KB':(bytes/1024/1024).toFixed(1)+' MB';
+  for(const [label,value] of [['Server address',info.address],['Owner access',info.configured?'Ready':'Not set'],['Source folders',String(info.sources)],['Watched folders',String(info.watchedSources||0)],['Active scans',String(info.activeJobs)],['Signed-in sessions',String(info.sessions)],['Database',databaseSize],['Dashboard media probes',info.mediaProbe?'Enabled':'Off']]){
     const row=element('p');row.append(element('strong',label+': '),document.createTextNode(value));$('config-summary').append(row)
   }
   $('owner-access-save').textContent=info.configured?'Replace access key':'Set access key';
@@ -207,6 +222,16 @@ async function boot(){try{await start()}catch(e){try{const setup=await api('./se
 $('setup-form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;b.textContent='Creating…';try{await api('./setup','POST',{token:$('setup-key').value});$('setup-key').value='';await start()}catch(e){message(e.message)}finally{b.disabled=false;b.textContent='Create access'}};
 $('login').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;b.textContent='Unlocking…';try{await api('./unlock','POST',{token:$('key').value});$('key').value='';await start()}catch(e){message(e.message)}finally{b.disabled=false;b.textContent='Unlock'}};
 $('owner-access-form').onsubmit=async e=>{e.preventDefault();const button=$('owner-access-save'),label=button.textContent;button.disabled=true;button.textContent='Saving…';activity('Saving server access key');try{await api('./api/owner-access','POST',{token:$('owner-access-key').value});$('owner-access-key').value='';message('Server access key saved.');await loadConfig()}catch(e){message(e.message)}finally{activity('');button.disabled=false;button.textContent=label}};
+$('restore-button').onclick=async()=>{
+  const file=$('restore-file').files?.[0];if(!file){message('Choose an Archivist backup file first.');return}
+  if(!confirm('Stage this backup for restore? Archivist will apply it on the next server restart.'))return;
+  const button=$('restore-button');button.disabled=true;activity('Checking backup',file.name);
+  try{
+    const res=await fetch('./api/restore',{method:'POST',headers:{'X-Archivist-Action':'1'},body:file});
+    const body=await res.json();if(!res.ok)throw Error(body.error||'Restore could not be staged.');
+    $('restore-file').value='';message('Backup verified and staged. Restart the Archivist add-on to apply it.');
+  }catch(e){message(e.message)}finally{activity('');button.disabled=false}
+};
 $('add').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button'),label=b.textContent;b.disabled=true;b.textContent='Adding…';activity('Adding source folder',$('new-space').value);try{await api('./api/sources','POST',{path:$('path').value,space:$('new-space').value});$('path').value='';await loadSources();message('Folder added. Scan it to build the Shelf.')}catch(e){message(e.message)}finally{activity('');b.disabled=false;b.textContent=label}};
 
 let searchTimer;
