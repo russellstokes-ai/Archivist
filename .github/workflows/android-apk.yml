@@ -1,4 +1,4 @@
-name: Android APK
+name: Android Test APK
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build-android-apk:
-    name: Build Android APK
+    name: Build Android test APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -110,15 +110,20 @@ jobs:
           console.log('Release version metadata:',version);
           NODE
 
-      - name: Android release lint
+      - name: Android test-release lint
         working-directory: mobile/android
         run: ./gradlew :app:lintRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
 
-      - name: Build release APK
+      - name: Build test release APK (debug-signed)
         working-directory: mobile/android
         run: ./gradlew :app:assembleRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
 
-      - name: Locate release APK
+      - name: Declare test signing
+        run: |
+          echo "Archivist testing APK: optimized release variant signed with the repository debug key."
+          echo "This artifact is for device acceptance only, not Google Play publication."
+
+      - name: Locate test APK
         id: release_apk
         shell: bash
         run: |
@@ -129,7 +134,7 @@ jobs:
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "Found release APK: $APK"
 
-      - name: Verify release APK package, signature and alignment
+      - name: Verify test APK package, signature and alignment
         shell: bash
         run: |
           set -euo pipefail
@@ -156,7 +161,7 @@ jobs:
             exit 1
           fi
 
-      - name: Launch release APK in Android emulator
+      - name: Launch test APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -171,20 +176,20 @@ jobs:
             adb devices
           script: bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
 
-      - name: Name and checksum versioned APK
+      - name: Name and checksum versioned test APK
         shell: bash
         run: |
           set -euo pipefail
           APK="${{ steps.release_apk.outputs.path }}"
-          OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk"
+          OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test.apk"
           cp "$APK" "$OUT"
           sha256sum "$OUT" > "$OUT.sha256"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Archivist-${{ steps.app_version.outputs.version }}-APK
+          name: Archivist-${{ steps.app_version.outputs.version }}-Test-APK
           path: |
-            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk
-            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}.apk.sha256
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test.apk
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test.apk.sha256
           if-no-files-found: error
