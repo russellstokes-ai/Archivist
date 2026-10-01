@@ -31,6 +31,7 @@ import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} f
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
+import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {possibleLocalDuplicateGroups} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
@@ -338,6 +339,11 @@ function Client() {
   const [localPreferences,setLocalPreferences]=useState<Record<string,PersonalPreference>>({});
   const [profileLoading, setProfileLoading] = useState(false);
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
+  const [atlasListMode,setAtlasListMode]=useState(false);
+  const [atlasSearch,setAtlasSearch]=useState('');
+  const [atlasNodeId,setAtlasNodeId]=useState('');
+  const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
+  const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number}|null>(null);
   const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
   const [duplicateScope,setDuplicateScope]=useState<'local'|'server'>('local');
   const [duplicateLoading,setDuplicateLoading]=useState(false);
@@ -595,6 +601,9 @@ function Client() {
 
   const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
+  const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
+  const atlasUniverse=useMemo(()=>buildAtlasUniverse(atlasUniverseWorks,collections,readerAnnotations),[atlasUniverseWorks,collections,readerAnnotations]);
+  const atlasSelectedNode=useMemo(()=>atlasUniverse.nodes.find(node=>node.id===atlasNodeId)||null,[atlasNodeId,atlasUniverse]);
 
   const localDuplicateGroups = useMemo(() => {
     const local=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
@@ -2933,21 +2942,153 @@ function Client() {
     );
   }
 
+  function atlasResetView(){
+    const viewWidth=Math.max(286,Math.min(1244,width-36));
+    const viewHeight=width>=760?620:520;
+    const scale=Math.max(.34,Math.min(1.08,Math.min(viewWidth/atlasUniverse.width,viewHeight/atlasUniverse.height)*.94));
+    setAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
+  }
+
+  function atlasGestureStart(event:any){
+    const touches=event.nativeEvent.touches||[];
+    if(touches.length>=2){
+      const [a,b]=touches;
+      const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
+      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:Math.max(1,Math.hypot(dx,dy)),focusX:(a.locationX+b.locationX)/2,focusY:(a.locationY+b.locationY)/2};
+      return;
+    }
+    const point=touches[0]||event.nativeEvent;
+    atlasGesture.current={mode:'pan',startX:point.locationX||0,startY:point.locationY||0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:0,focusX:0,focusY:0};
+  }
+
+  function atlasGestureMove(event:any){
+    const gesture=atlasGesture.current;if(!gesture)return;
+    const touches=event.nativeEvent.touches||[];
+    if(touches.length>=2){
+      const [a,b]=touches;
+      const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
+      const distance=Math.max(1,Math.hypot(dx,dy));
+      if(gesture.mode!=='pinch'){atlasGestureStart(event);return;}
+      const nextScale=Math.max(.34,Math.min(2.25,gesture.baseScale*(distance/gesture.distance)));
+      const ratio=nextScale/gesture.baseScale;
+      setAtlasTransform({x:gesture.focusX-(gesture.focusX-gesture.baseX)*ratio,y:gesture.focusY-(gesture.focusY-gesture.baseY)*ratio,scale:nextScale});
+      return;
+    }
+    if(gesture.mode==='pinch')return;
+    const point=touches[0]||event.nativeEvent;
+    setAtlasTransform(current=>({...current,x:gesture.baseX+(point.locationX-gesture.startX),y:gesture.baseY+(point.locationY-gesture.startY)}));
+  }
+
+  function atlasNodeColor(node:AtlasUniverseNode){
+    if(node.kind==='genre')return p.sage;
+    if(node.kind==='collection'||node.kind==='tag')return p.gold;
+    if(node.kind==='author')return p.ink;
+    if(node.kind==='series')return p.muted;
+    if(node.kind==='note')return p.raised;
+    return p.card;
+  }
+
+  function atlasNodeVisible(node:AtlasUniverseNode){
+    const scale=atlasTransform.scale;
+    if(scale<.52)return node.kind==='genre'||node.kind==='collection';
+    if(scale<.76)return node.kind!=='work'&&node.kind!=='note';
+    return true;
+  }
+
+  function atlasSearchGo(){
+    const q=atlasSearch.trim().toLowerCase();if(!q)return;
+    const node=atlasUniverse.nodes.find(item=>item.label.toLowerCase().includes(q)||item.subtitle?.toLowerCase().includes(q));
+    if(!node)return;
+    setAtlasNodeId(node.id);
+    const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=760?620:520;
+    const scale=Math.max(.82,atlasTransform.scale);
+    setAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
+  }
+
+  function AtlasEdgeView({from,to,kind}:{from:AtlasUniverseNode;to:AtlasUniverseNode;kind:string}){
+    const dx=to.x-from.x,dy=to.y-from.y,length=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI;
+    return <View pointerEvents="none" style={[styles.atlasUniverseEdge,{left:from.x,top:from.y,width:length,opacity:kind==='genre'?.34:.18,backgroundColor:kind==='genre'?p.sage:p.line,transform:[{rotateZ:angle+'deg'}]}]}/>;
+  }
+
+  function AtlasUniverseNodeView({node}:{node:AtlasUniverseNode}){
+    if(!atlasNodeVisible(node))return null;
+    const selected=node.id===atlasNodeId;
+    const q=atlasSearch.trim().toLowerCase();
+    const searchMatch=!q||node.label.toLowerCase().includes(q)||!!node.subtitle?.toLowerCase().includes(q);
+    const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
+    const size=node.kind==='genre'?82:node.kind==='author'?54:node.kind==='work'?64:node.kind==='series'?58:node.kind==='collection'?66:42;
+    const common={left:node.x-size/2,top:node.y-size/2,width:size,minHeight:size,opacity:searchMatch?1:.24,borderColor:selected?p.gold:p.line,backgroundColor:atlasNodeColor(node)};
+    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>setAtlasNodeId(node.id)} style={[
+      styles.atlasUniverseNode,common,node.kind==='genre'&&styles.atlasGenreNode,node.kind==='author'&&styles.atlasAuthorNode,node.kind==='series'&&styles.atlasSeriesNode,node.kind==='work'&&styles.atlasWorkNode,node.kind==='collection'&&styles.atlasCollectionNode,selected&&styles.atlasUniverseNodeSelected,
+    ]}>
+      {node.kind==='work'&&node.coverUri?<Image source={{uri:node.coverUri}} style={styles.atlasNodeCover}/>:null}
+      {node.kind==='author'?<Text style={[styles.atlasNodeMonogram,{color:p.paper}]}>{node.label.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')}</Text>:null}
+      {node.kind!=='author'&&!(node.kind==='work'&&node.coverUri)?<Text numberOfLines={node.kind==='genre'?2:3} style={[styles.atlasNodeLabel,{color:node.kind==='genre'||node.kind==='collection'?p.paper:p.ink}]}>{node.kind==='tag'?node.label:node.label}</Text>:null}
+      {node.kind==='genre'?<Text style={[styles.atlasNodeCount,{color:p.paper}]}>{node.count}</Text>:null}
+      {node.kind==='work'&&work?.source==='downloaded'?<View style={[styles.atlasNodeSourceDot,{backgroundColor:p.gold}]}/>:null}
+    </Pressable>;
+  }
+
+  function AtlasInspector(){
+    const node=atlasSelectedNode;if(!node)return null;
+    const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
+    const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
+    const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
+    return <View style={[styles.atlasInspector,{backgroundColor:p.card,borderColor:p.line},width>=760?styles.atlasInspectorWide:styles.atlasInspectorMobile]}>
+      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.gold}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')}><Text style={{color:p.muted,fontWeight:'900',fontSize:18}}>×</Text></Pressable></View>
+      {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
+      <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
+      <View style={styles.toolRow}>
+        {work?<Button label="Open" onPress={()=>openUnifiedWork(work)}/>:null}
+        {node.relationKind&&node.relationValue?<Button label="Explore" onPress={()=>setAtlasFocus({kind:node.relationKind as AtlasKind,value:node.relationValue!})}/>:null}
+        {collection?<Button label="Open collection" onPress={()=>openCollection(collection)}/>:null}
+      </View>
+    </View>;
+  }
+
   function Atlas() {
     if(atlasFocus)return <AtlasRelationshipView />;
+    const renderedNodes=atlasUniverse.nodes.filter(atlasNodeVisible);
+    const renderedIds=new Set(renderedNodes.map(node=>node.id));
+    const renderedEdges=atlasUniverse.edges.filter(edge=>renderedIds.has(edge.from)&&renderedIds.has(edge.to));
+    const nodeMap=new Map(atlasUniverse.nodes.map(node=>[node.id,node]));
+    const viewHeight=width>=760?620:520;
     return (
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, {color: p.ink}]}>Atlas</Text>
-        <Text style={[styles.empty, {color: p.muted}]}>Explore your library and your own reading history, ratings and favourites.</Text>
-        <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
-        <AtlasGroup title="Ratings" kind="rating" items={atlas.ratings} />
-        <AtlasGroup title="Favourites" kind="favourite" items={atlas.favourites} />
-        <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
-        <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
-        <AtlasGroup title="Series" kind="series" items={atlas.series} />
-        <AtlasGroup title="Genres" kind="genre" items={atlas.genres} />
-        <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
-        <AtlasGroup title="Availability" kind="status" items={atlas.status} />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.pageHeadingRow}><View style={{flex:1}}><Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Atlas</Text><Text style={[styles.pageSubtitle,{color:p.muted}]}>A living map of the books, people, series and ideas already in your library.</Text></View><Button label={atlasListMode?'Universe':'List'} tone="quiet" onPress={()=>setAtlasListMode(value=>!value)}/></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
+          {(['all','local','server','downloaded'] as LibrarySource[]).map(value=><Pressable key={value} onPress={()=>setSourceFilter(value)} style={[styles.filterPill,{borderColor:sourceFilter===value?p.sage:p.line,backgroundColor:sourceFilter===value?p.raised:'transparent'}]}><Text style={{color:p.ink,fontWeight:'800'}}>{value==='all'?'All':value==='local'?'Device':value==='server'?'Server':'Downloaded'}</Text></Pressable>)}
+          {availableSpaces.slice(0,8).map(value=><Pressable key={'atlas-space-'+value} onPress={()=>setSpace(space===value?'':value)} style={[styles.filterPill,{borderColor:space===value?p.gold:p.line,backgroundColor:space===value?p.raised:'transparent'}]}><Text style={{color:p.ink,fontWeight:'800'}}>{value}</Text></Pressable>)}
+        </ScrollView>
+        {atlasListMode?<View style={{gap:12}}>
+          <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
+          <AtlasGroup title="Ratings" kind="rating" items={atlas.ratings} />
+          <AtlasGroup title="Favourites" kind="favourite" items={atlas.favourites} />
+          <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
+          <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
+          <AtlasGroup title="Series" kind="series" items={atlas.series} />
+          <AtlasGroup title="Genres" kind="genre" items={atlas.genres} />
+          <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
+          <AtlasGroup title="Availability" kind="status" items={atlas.status} />
+        </View>:<>
+          <View style={styles.atlasSearchRow}><TextInput value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find an author, series, title, collection or tag" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink,borderColor:p.line,backgroundColor:p.card,flex:1}]}/><Button label="Find" onPress={atlasSearchGo}/></View>
+          <View style={[styles.atlasUniverseLayout,width>=760&&styles.atlasUniverseLayoutWide]}>
+            <View style={[styles.atlasViewport,{height:viewHeight,backgroundColor:p.card,borderColor:p.line}]}
+              onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
+              onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
+              onResponderRelease={()=>{atlasGesture.current=null}} onResponderTerminate={()=>{atlasGesture.current=null}}>
+              <View style={styles.atlasViewportTools}><Button label="Fit" tone="quiet" onPress={atlasResetView}/><Button label="−" tone="quiet" onPress={()=>setAtlasTransform(value=>({...value,scale:Math.max(.34,value.scale-.15)}))}/><Button label="+" tone="quiet" onPress={()=>setAtlasTransform(value=>({...value,scale:Math.min(2.25,value.scale+.15)}))}/></View>
+              <View style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
+                {renderedEdges.map(edge=>{const from=nodeMap.get(edge.from),to=nodeMap.get(edge.to);return from&&to?<AtlasEdgeView key={edge.id} from={from} to={to} kind={edge.kind}/>:null})}
+                {renderedNodes.map(node=><AtlasUniverseNodeView key={node.id} node={node}/>)}
+              </View>
+              {width<760?<AtlasInspector/>:null}
+              {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper,borderColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Showing a stable sample for smooth navigation · {atlasUniverse.hiddenWorks} more works available through clusters and search.</Text></View>:null}
+            </View>
+            {width>=760?<AtlasInspector/>:null}
+          </View>
+          <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>Drag to pan · pinch or use ± to zoom · tap a node to inspect. Lower zoom levels automatically collapse detail.</Text>
+        </>}
       </ScrollView>
     );
   }
@@ -3530,6 +3671,29 @@ const styles = StyleSheet.create({
   atlasChipWrap: {flexDirection:'row',flexWrap:'wrap',gap:8},
   atlasRelationChip: {borderWidth:1,borderRadius:999,paddingHorizontal:11,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
   atlasWorkRow: {borderWidth:1,borderRadius:12,padding:12,flexDirection:'row',alignItems:'center',gap:10},
+  atlasSearchRow: {flexDirection:'row',alignItems:'center',gap:8},
+  atlasUniverseLayout: {position:'relative',gap:12},
+  atlasUniverseLayoutWide: {flexDirection:'row',alignItems:'stretch'},
+  atlasViewport: {flex:1,borderWidth:1,borderRadius:22,overflow:'hidden',position:'relative',minWidth:0},
+  atlasUniverseCanvas: {position:'absolute'},
+  atlasUniverseEdge: {position:'absolute',height:1},
+  atlasUniverseNode: {position:'absolute',borderWidth:1.5,borderRadius:14,padding:5,alignItems:'center',justifyContent:'center',overflow:'hidden',shadowColor:'#000',shadowOpacity:.08,shadowRadius:4,elevation:2},
+  atlasUniverseNodeSelected: {borderWidth:3,shadowOpacity:.2,shadowRadius:9,elevation:5},
+  atlasGenreNode: {borderRadius:41,padding:9},
+  atlasAuthorNode: {borderRadius:27},
+  atlasSeriesNode: {borderRadius:10,borderLeftWidth:5},
+  atlasWorkNode: {borderRadius:7,padding:3},
+  atlasCollectionNode: {borderRadius:18,paddingHorizontal:8},
+  atlasNodeCover: {position:'absolute',left:0,top:0,right:0,bottom:0,width:'100%',height:'100%'},
+  atlasNodeLabel: {fontSize:9,fontWeight:'900',textAlign:'center',lineHeight:11},
+  atlasNodeMonogram: {fontFamily:'serif',fontSize:16,fontWeight:'900'},
+  atlasNodeCount: {fontSize:10,fontWeight:'900',marginTop:2},
+  atlasNodeSourceDot: {position:'absolute',right:4,bottom:4,width:8,height:8,borderRadius:4,borderWidth:1,borderColor:'#f8f7f2'},
+  atlasViewportTools: {position:'absolute',right:10,top:10,zIndex:20,flexDirection:'row',gap:6},
+  atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:1,borderRadius:12,paddingHorizontal:10,paddingVertical:7},
+  atlasInspector: {borderWidth:1,borderRadius:18,padding:14,gap:8,zIndex:25},
+  atlasInspectorMobile: {position:'absolute',left:10,right:10,bottom:10},
+  atlasInspectorWide: {width:260,minHeight:220,alignSelf:'stretch'},
 
   sourceSwitcher: {flexDirection:'row',gap:8,paddingVertical:2,paddingRight:8},
   sourceSwitcherVertical: {gap:8},

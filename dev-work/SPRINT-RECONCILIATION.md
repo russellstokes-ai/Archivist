@@ -229,7 +229,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Accessible list/tree alternative.
 - Performance tests with realistic large libraries.
 
-**Status: BASELINE EXISTS; RELEASE ATLAS NOT COMPLETE.**
+**Status: IMPLEMENTED ON `dev/archivist-work`; CI validation pending.**
 
 ---
 
