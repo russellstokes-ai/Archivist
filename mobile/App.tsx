@@ -3547,7 +3547,7 @@ function Client() {
                   </View>
                   <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
                   <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
-                    <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(Math.round(ratio*100)+'%')}]} />
+                    <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(Math.round(ratio*100)+'%') as any}]} />
                   </View>
                 </View>
               </View>;
