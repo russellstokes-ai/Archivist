@@ -3888,76 +3888,137 @@ function Client() {
   }
 
   function Settings() {
+    const connected=!!session;
     return (
       <ScrollView contentContainerStyle={styles.settingsScreen}>
-        <Text style={[styles.title,{color:p.ink}]}>Settings</Text>
-        <Text style={[styles.pageSubtitle,{color:p.muted}]}>Appearance, library health, offline storage and your optional server.</Text>
-        <Text style={[styles.sectionTitle, {color: p.ink}]}>Appearance</Text>
-        <View style={styles.segment}>
-          {(['system', 'light', 'dark'] as ThemeMode[]).map(mode => (
-            <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}>
-              <Text style={{color:theme===mode?p.sage:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text>
-              <View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.sage,opacity:theme===mode?1:0}]}/>
-            </Pressable>
-          ))}
+        <View style={styles.pageHeadingRow}>
+          <View style={{flex:1}}>
+            <Text style={[styles.title,{color:p.ink}]}>Settings</Text>
+            <Text style={[styles.pageSubtitle,{color:p.muted}]}>Your app, library and optional server.</Text>
+          </View>
         </View>
-        <Text style={[styles.sectionTitle,{color:p.ink}]}>Library health</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Review possible duplicate files without making destructive changes.</Text>
-        {(!session || owner)?<Button label="Review duplicates" tone="quiet" onPress={()=>void openDuplicateReview()} />:null}
-        <DuplicateReviewPanel />
-        <LocalSortingPanel />
-        <OfflineDownloadsPanel />
-        <Text style={[styles.sectionTitle, {color: p.ink}]}>Server</Text>
-        {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : recoverableSession ? (
-          <View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.line}]}>
-            <Text style={{color:p.ink,fontWeight:'800'}}>Saved server offline</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{recoverableSession.server}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Your local library remains available. Retry without re-entering your access key.</Text>
-            <View style={styles.toolRow}>
-              <Button label={busy?'Retrying…':'Retry server'} disabled={busy} onPress={()=>void retrySavedServer()} />
-              <Button label="Forget saved server" disabled={busy} tone="quiet" onPress={()=>void forgetSavedServer()} />
+
+        <View style={[styles.settingsColumns,width>=760&&styles.settingsColumnsWide]}>
+          <View style={styles.settingsColumn}>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>APPEARANCE</Text>
+              <View style={styles.settingsRow}>
+                <View style={{flex:1}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>Theme</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>Follow the device or choose a fixed appearance.</Text>
+                </View>
+              </View>
+              <View style={styles.segment}>
+                {(['system','light','dark'] as ThemeMode[]).map(mode=>(
+                  <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}>
+                    <Text style={{color:theme===mode?p.sage:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text>
+                    <View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.sage,opacity:theme===mode?1:0}]}/>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-          </View>
-        ) : <Text style={[styles.meta, {color: p.muted}]}>No server connected. Your phone library works locally.</Text>}
-        {!session && !recoverableSession ? (serverPanelOpen ? <ServerConnect /> : <Button label="Add server" tone="quiet" onPress={() => setServerPanelOpen(true)} />) : null}
-        {owner ? <View style={{gap:10}}>
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Family users</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
-          <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-          <Button label={busy?'Creating…':'Add user'} disabled={busy||!newUserName.trim()} tone="quiet" onPress={()=>void createFamilyUser()} />
-          {newUserKey?<View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.sage}]}>
-            <Text style={{color:p.ink,fontWeight:'800'}}>User access key — shown once</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Give this key to the family member when they connect the Archivist server.</Text>
-            <Text selectable style={{color:p.sage,fontWeight:'700'}}>{newUserKey}</Text>
-            <Button label="Hide key" tone="quiet" onPress={()=>setNewUserKey('')} />
-          </View>:null}
-          {householdUsers.map(user=><View key={user.id} style={[styles.sourceRow,{borderColor:p.line}]}>
-            <View style={{flex:1}}>
-              <Text style={{color:p.ink,fontWeight:'800'}}>{user.name}</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text>
+
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY HEALTH</Text>
+              <View style={styles.settingsRow}>
+                <View style={{flex:1}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>Duplicate review</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>Find possible copies without deleting or changing files.</Text>
+                </View>
+                {(!session||owner)?<Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Review</Text></Pressable>:null}
+              </View>
+              <DuplicateReviewPanel/>
             </View>
-            {!user.revoked?<Button label="Revoke" tone="quiet" disabled={busy} onPress={()=>void revokeFamilyUser(user.id)} />:null}
-          </View>)}
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Source folders</Text>
-          {sources.map(s=><View key={s.id} style={{gap:6}}><Text style={{color:p.ink}}>{s.space}</Text><Text style={{color:p.muted}}>{s.path}</Text><Text style={{color:p.muted}}>{s.status}</Text><Button label="Scan folder" disabled={busy} tone="quiet" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')}/><Button label="Remove folder" disabled={busy} tone="quiet" onPress={()=>void removeSource(s.id)}/></View>)}
-          <TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
-          <TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
-          <Button label="Add folder" disabled={busy || !folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/>
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Safe file sorting</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist verifies data before removing originals; unresolved moves block scans until applied or reviewed.</Text>
-          <View style={styles.segment}>
-            {[
-              ['author-title','Author / Title'],
-              ['author-series-title','Author / Series / Title'],
-              ['format-author-title','Format / Author / Title'],
-            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
+
+            <LocalSortingPanel/>
+            <OfflineDownloadsPanel/>
           </View>
-          <Button label="Preview matching files" disabled={busy || shelfLoading} tone="quiet" onPress={()=>void previewLibrary(false)}/>
-          <Button label="Preview entire library" disabled={busy} tone="quiet" onPress={()=>void previewLibrary(true)}/>
-          <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
-          {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
-        </View>:null}
-        {session ? <Button label="Sign out" tone="danger" onPress={() => void signOut()} /> : null}
+
+          <View style={styles.settingsColumn}>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SERVER</Text>
+              <View style={styles.settingsRow}>
+                <View style={[styles.settingsStatusDot,{backgroundColor:connected?p.sage:recoverableSession?p.danger:p.line}]}/>
+                <View style={{flex:1,minWidth:0}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>{connected?'Connected':recoverableSession?'Server offline':'No server connected'}</Text>
+                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{connected?session?.server:recoverableSession?.server||'Archivist works fully with the library on this device.'}</Text>
+                </View>
+              </View>
+
+              {recoverableSession&&!session?<View style={styles.settingsInlineActions}>
+                <Pressable accessibilityRole="button" onPress={()=>void retrySavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Retrying…':'Retry server'}</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={()=>void forgetSavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Forget</Text></Pressable>
+              </View>:null}
+
+              {!session&&!recoverableSession?(serverPanelOpen?<ServerConnect/>:<Pressable accessibilityRole="button" onPress={()=>setServerPanelOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Add server</Text></Pressable>):null}
+            </View>
+
+            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FAMILY USERS</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
+              <View style={styles.settingsAddRow}>
+                <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                <Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?.38:1}]}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Creating…':'Add user'}</Text></Pressable>
+              </View>
+
+              {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}>
+                <Text style={[styles.bookTitle,{color:p.ink}]}>User access key — shown once</Text>
+                <Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text>
+                <Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Hide key</Text></Pressable>
+              </View>:null}
+
+              {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                <View style={{flex:1}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>{user.name}</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text>
+                </View>
+                {!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Revoke</Text></Pressable>:null}
+              </View>)}
+            </View>:null}
+
+            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SOURCE FOLDERS</Text>
+              {sources.map(s=><View key={s.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                <View style={{flex:1,minWidth:0}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>{s.space}</Text>
+                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{s.path}</Text>
+                  <Text style={[styles.meta,{color:s.status==='ok'?p.sage:p.muted}]}>{s.status}</Text>
+                </View>
+                <View style={styles.settingsRowActions}>
+                  <Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Scan</Text></Pressable>
+                  <Pressable accessibilityRole="button" onPress={()=>void removeSource(s.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Remove</Text></Pressable>
+                </View>
+              </View>)}
+              <View style={styles.settingsAddFolder}>
+                <TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                <TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                <Button label="Add folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/>
+              </View>
+            </View>:null}
+
+            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SAFE FILE SORTING</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist verifies data before removing originals; unresolved moves block scans until applied or reviewed.</Text>
+              <View style={styles.segment}>
+                {[
+                  ['author-title','Author / Title'],
+                  ['author-series-title','Author / Series / Title'],
+                  ['format-author-title','Format / Author / Title'],
+                ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
+              </View>
+              <View style={styles.settingsInlineActions}>
+                <Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Preview matching</Text></Pressable>
+                <Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Preview all</Text></Pressable>
+              </View>
+              <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
+              {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+            </View>:null}
+
+            {session?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Pressable accessibilityRole="button" onPress={()=>void signOut()} style={styles.settingsDangerRow}><Text style={{color:p.danger,fontWeight:'600'}}>Sign out</Text></Pressable>
+            </View>:null}
+          </View>
+        </View>
       </ScrollView>
     );
   }
@@ -4249,7 +4310,25 @@ const styles = StyleSheet.create({
   celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
   celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
   profileScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:26,maxWidth:920,width:'100%',alignSelf:'center'},
-  settingsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:20,maxWidth:920,width:'100%',alignSelf:'center'},
+  settingsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:24,maxWidth:1180,width:'100%',alignSelf:'center'},
+  settingsColumns: {gap:24},
+  settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:40},
+  settingsColumn: {flex:1,minWidth:0,gap:24},
+  settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
+  settingsSectionTitle: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5},
+  settingsRow: {minHeight:50,flexDirection:'row',alignItems:'center',gap:12},
+  settingsStatusDot: {width:8,height:8,borderRadius:4},
+  settingsTextAction: {minHeight:40,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
+  settingsInlineActions: {flexDirection:'row',alignItems:'center',gap:18,flexWrap:'wrap'},
+  settingsAddRow: {flexDirection:'row',alignItems:'center',gap:8},
+  settingsInlineInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:13,fontSize:15},
+  settingsAddButton: {minHeight:44,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
+  settingsKeyReveal: {borderRadius:12,padding:14,gap:8},
+  settingsKeyText: {fontSize:13,lineHeight:18,fontWeight:'600'},
+  settingsListRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:58,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:12},
+  settingsRowActions: {flexDirection:'row',alignItems:'center',gap:10},
+  settingsAddFolder: {gap:8},
+  settingsDangerRow: {minHeight:44,alignItems:'flex-start',justifyContent:'center'},
   profileHero: {borderWidth:0,paddingVertical:6,flexDirection:'row',alignItems:'center',gap:16},
   profileMonogram: {width:58,height:58,borderRadius:29,alignItems:'center',justifyContent:'center'},
   profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'500'},
