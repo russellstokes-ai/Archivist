@@ -1,4 +1,4 @@
-# Build the Archivist 0.9.1 Android testing APK
+# Build the Archivist 0.9.2 Android testing APK
 
 Archivist builds Android in GitHub Actions, so a Windows Android SDK is not required for normal testing.
 
@@ -11,7 +11,7 @@ Archivist builds Android in GitHub Actions, so a Windows Android SDK is not requ
 5. Select branch `dev/archivist-work`.
 6. Start the workflow.
 
-A successful run uploads `Archivist-0.9.1-Test-APK`, containing the APK and SHA-256 checksum.
+A successful run uploads `Archivist-0.9.2-Test-APK`, containing the APK and SHA-256 checksum.
 
 ## What the workflow proves
 
@@ -31,7 +31,7 @@ It:
 
 ## Signing
 
-The 0.9.1 testing APK is deliberately signed with the repository **debug key** so authorised testers can install it without access to a production secret.
+The 0.9.2 testing APK is deliberately signed with the repository **debug key** so authorised testers can install it without access to a production secret.
 
 Do not upload this artifact to Google Play. Production Play builds require a private production signing key and AAB workflow.
 

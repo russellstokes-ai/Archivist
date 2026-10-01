@@ -28,9 +28,9 @@ GitHub Actions includes **Android Test APK**. It builds an optimized release var
 
 Successful output:
 
-- artifact: `Archivist-0.9.1-Test-APK`
-- APK: `Archivist-0.9.1-test.apk`
-- checksum: `Archivist-0.9.1-test.apk.sha256`
+- artifact: `Archivist-0.9.2-Test-APK`
+- APK: `Archivist-0.9.2-test.apk`
+- checksum: `Archivist-0.9.2-test.apk.sha256`
 
 This is an installable testing APK, not a Google Play production build. Production publication still requires private production signing, an AAB, Play Console testing/review and store assets.
 

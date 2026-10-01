@@ -1,4 +1,4 @@
-# Archivist 0.9.1 mobile acceptance
+# Archivist 0.9.2 mobile acceptance
 
 This is the hands-on checklist for the installable Android testing APK. Automated CI is necessary but does not replace real-device acceptance.
 
@@ -8,9 +8,9 @@ Run **Actions → Android Test APK → Run workflow** on `dev/archivist-work`.
 
 Successful output:
 
-- artifact: `Archivist-0.9.1-Test-APK`
-- APK: `Archivist-0.9.1-test.apk`
-- checksum: `Archivist-0.9.1-test.apk.sha256`
+- artifact: `Archivist-0.9.2-Test-APK`
+- APK: `Archivist-0.9.2-test.apk`
+- checksum: `Archivist-0.9.2-test.apk.sha256`
 
 The APK is an optimized release variant signed with the repository debug key. It is for testing only.
 
@@ -71,7 +71,7 @@ With local folders, a connected server and downloaded server content:
 
 On the intended Pi/Home Assistant system:
 
-- install/update Archivist 0.9.1 and restart it;
+- install/update Archivist 0.9.2 and restart it;
 - confirm database/catalogue persistence;
 - add multiple folders through the browser;
 - enable a watched source and verify scheduled refresh;
