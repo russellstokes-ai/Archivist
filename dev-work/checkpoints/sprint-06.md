@@ -23,4 +23,4 @@ Release-safe scope:
 Validation:
 - Added mobile tests for nested Smart Shelf semantics and Insights aggregation.
 - Added server activity tests in the preceding Sprint 6 server commit.
-- CI must pass before this sprint is closed.
+- Mobile checks passed on `6c611f83` (run `36905496035`) and Server checks passed on the synchronized server packages at `a695f5ff` (run `36905443788`).
