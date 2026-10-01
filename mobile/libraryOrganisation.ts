@@ -1,5 +1,10 @@
 import {LibrarySource} from './librarySources';
 
+export type SmartShelfField='source'|'format'|'author'|'series'|'genre'|'space'|'readingState'|'rating'|'favourite'|'available';
+export type SmartShelfOperator='equals'|'not-equals'|'contains'|'at-least'|'is-true'|'is-false';
+export type SmartShelfRule={kind:'rule';field:SmartShelfField;operator:SmartShelfOperator;value:string};
+export type SmartShelfRuleGroup={kind:'group';mode:'all'|'any';children:Array<SmartShelfRule|SmartShelfRuleGroup>};
+
 export type SmartShelfDefinition = {
   id: string;
   name: string;
@@ -14,6 +19,7 @@ export type SmartShelfDefinition = {
   favouriteOnly: boolean;
   availableOnly: boolean;
   sort: 'title' | 'author' | 'rating';
+  rules?: SmartShelfRuleGroup;
   createdAt: string;
 };
 
@@ -39,8 +45,52 @@ type OrganisableWork = {
   favourite: boolean;
 };
 
+const fields:SmartShelfField[]=['source','format','author','series','genre','space','readingState','rating','favourite','available'];
+const operators:SmartShelfOperator[]=['equals','not-equals','contains','at-least','is-true','is-false'];
+
 export function newOrganisationId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export function emptySmartShelfRules(mode:'all'|'any'='all'):SmartShelfRuleGroup {
+  return {kind:'group',mode,children:[]};
+}
+
+export function smartShelfRule(field:SmartShelfField='genre',operator:SmartShelfOperator='equals',value=''):SmartShelfRule {
+  return {kind:'rule',field,operator,value};
+}
+
+function sanitizeRule(raw:any,depth=0):SmartShelfRule|SmartShelfRuleGroup|null {
+  if(!raw||typeof raw!=='object'||depth>4)return null;
+  if(raw.kind==='group'){
+    const children=Array.isArray(raw.children)?raw.children.slice(0,30).map((item:any)=>sanitizeRule(item,depth+1)).filter(Boolean) as Array<SmartShelfRule|SmartShelfRuleGroup>:[];
+    return {kind:'group',mode:raw.mode==='any'?'any':'all',children};
+  }
+  if(raw.kind==='rule'&&fields.includes(raw.field)){
+    const operator:SmartShelfOperator=operators.includes(raw.operator)?raw.operator:'equals';
+    return {kind:'rule',field:raw.field,operator,value:String(raw.value??'').slice(0,500)};
+  }
+  return null;
+}
+
+export function sanitizeRuleGroup(raw:unknown):SmartShelfRuleGroup|undefined {
+  const rule=sanitizeRule(raw);
+  return rule?.kind==='group'?rule:undefined;
+}
+
+export function legacyRules(shelf:Pick<SmartShelfDefinition,'source'|'format'|'author'|'series'|'genre'|'space'|'readingState'|'minimumRating'|'favouriteOnly'|'availableOnly'>,mode:'all'|'any'='all'):SmartShelfRuleGroup {
+  const children:SmartShelfRule[]=[];
+  if(shelf.source!=='all')children.push(smartShelfRule('source','equals',shelf.source));
+  if(shelf.format)children.push(smartShelfRule('format','equals',shelf.format));
+  if(shelf.author)children.push(smartShelfRule('author','equals',shelf.author));
+  if(shelf.series)children.push(smartShelfRule('series','equals',shelf.series));
+  if(shelf.genre)children.push(smartShelfRule('genre','equals',shelf.genre));
+  if(shelf.space)children.push(smartShelfRule('space','equals',shelf.space));
+  if(shelf.readingState)children.push(smartShelfRule('readingState','equals',shelf.readingState));
+  if(shelf.minimumRating>0)children.push(smartShelfRule('rating','at-least',String(shelf.minimumRating)));
+  if(shelf.favouriteOnly)children.push(smartShelfRule('favourite','is-true',''));
+  if(shelf.availableOnly)children.push(smartShelfRule('available','is-true',''));
+  return {kind:'group',mode,children};
 }
 
 export function sanitizeSmartShelves(value: unknown): SmartShelfDefinition[] {
@@ -55,6 +105,7 @@ export function sanitizeSmartShelves(value: unknown): SmartShelfDefinition[] {
       genre: String(raw.genre || ''), space: String(raw.space || ''), readingState: ['not-started','in-progress','finished'].includes(raw.readingState) ? raw.readingState : '',
       minimumRating: Math.max(0, Math.min(10, Number(raw.minimumRating) || 0)),
       favouriteOnly: !!raw.favouriteOnly, availableOnly: !!raw.availableOnly, sort,
+      rules:sanitizeRuleGroup(raw.rules),
       createdAt: String(raw.createdAt || new Date(0).toISOString()),
     }];
   });
@@ -73,20 +124,67 @@ export function sanitizeCollections(value: unknown): LibraryCollection[] {
   });
 }
 
+function textValue(work:OrganisableWork,field:SmartShelfField):string {
+  if(field==='rating')return String(work.rating);
+  if(field==='favourite')return String(work.favourite);
+  if(field==='available')return String(work.available);
+  return String(work[field]??'');
+}
+
+export function ruleMatches(work:OrganisableWork,rule:SmartShelfRule):boolean {
+  const actual=textValue(work,rule.field);
+  const expected=rule.value.trim();
+  switch(rule.operator){
+    case 'equals': return actual.localeCompare(expected,undefined,{sensitivity:'accent'})===0;
+    case 'not-equals': return actual.localeCompare(expected,undefined,{sensitivity:'accent'})!==0;
+    case 'contains': return actual.toLocaleLowerCase().includes(expected.toLocaleLowerCase());
+    case 'at-least': return Number(actual)>=Number(expected||0);
+    case 'is-true': return actual==='true';
+    case 'is-false': return actual==='false';
+  }
+}
+
+export function groupMatches(work:OrganisableWork,group:SmartShelfRuleGroup):boolean {
+  if(!group.children.length)return true;
+  const results=group.children.map(child=>child.kind==='group'?groupMatches(work,child):ruleMatches(work,child));
+  return group.mode==='all'?results.every(Boolean):results.some(Boolean);
+}
+
+function getGroup(root:SmartShelfRuleGroup,path:number[]):SmartShelfRuleGroup|null {
+  let current=root;
+  for(const index of path){
+    const child=current.children[index];
+    if(!child||child.kind!=='group')return null;
+    current=child;
+  }
+  return current;
+}
+function cloneGroup(group:SmartShelfRuleGroup):SmartShelfRuleGroup {
+  return {kind:'group',mode:group.mode,children:group.children.map(child=>child.kind==='group'?cloneGroup(child):{...child})};
+}
+export function updateGroupAtPath(root:SmartShelfRuleGroup,path:number[],fn:(group:SmartShelfRuleGroup)=>void){
+  const next=cloneGroup(root),group=getGroup(next,path);if(group)fn(group);return next;
+}
+export function addRuleAtPath(root:SmartShelfRuleGroup,path:number[],rule:SmartShelfRule=smartShelfRule()){
+  return updateGroupAtPath(root,path,group=>{if(group.children.length<30)group.children.push(rule)});
+}
+export function addGroupAtPath(root:SmartShelfRuleGroup,path:number[]){
+  return updateGroupAtPath(root,path,group=>{if(group.children.length<30)group.children.push(emptySmartShelfRules('all'))});
+}
+export function removeRuleNode(root:SmartShelfRuleGroup,path:number[]){
+  if(!path.length)return root;
+  const parent=path.slice(0,-1),index=path[path.length-1];
+  return updateGroupAtPath(root,parent,group=>group.children.splice(index,1));
+}
+export function replaceRuleNode(root:SmartShelfRuleGroup,path:number[],node:SmartShelfRule|SmartShelfRuleGroup){
+  if(!path.length)return node.kind==='group'?node:root;
+  const parent=path.slice(0,-1),index=path[path.length-1];
+  return updateGroupAtPath(root,parent,group=>{if(index>=0&&index<group.children.length)group.children[index]=node});
+}
+
 export function applySmartShelf<T extends OrganisableWork>(items: T[], shelf: SmartShelfDefinition): T[] {
-  const filtered = items.filter(work => {
-    if (shelf.source !== 'all' && work.source !== shelf.source) return false;
-    if (shelf.format && work.format !== shelf.format) return false;
-    if (shelf.author && work.author !== shelf.author) return false;
-    if (shelf.series && work.series !== shelf.series) return false;
-    if (shelf.genre && work.genre !== shelf.genre) return false;
-    if (shelf.space && work.space !== shelf.space) return false;
-    if (shelf.readingState && work.readingState !== shelf.readingState) return false;
-    if (shelf.minimumRating > 0 && work.rating < shelf.minimumRating) return false;
-    if (shelf.favouriteOnly && !work.favourite) return false;
-    if (shelf.availableOnly && !work.available) return false;
-    return true;
-  });
+  const ruleGroup=shelf.rules&&shelf.rules.children.length?shelf.rules:legacyRules(shelf);
+  const filtered = items.filter(work => groupMatches(work,ruleGroup));
   return filtered.slice().sort((a, b) => {
     if (shelf.sort === 'rating') return b.rating - a.rating || a.title.localeCompare(b.title);
     if (shelf.sort === 'author') return (a.author || '').localeCompare(b.author || '') || a.title.localeCompare(b.title);

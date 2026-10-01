@@ -255,7 +255,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Interrupted move, low-space and recovery tests.
 - Optional M4B consolidation / metadata-cover writeback workflows with preview and retained originals.
 
-**Status: FOUNDATIONS EXIST; SPRINT NOT COMPLETE.**
+**Status: IMPLEMENTED ON `dev/archivist-work`; CI validation pending.**
 
 ---
 

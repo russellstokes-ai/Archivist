@@ -36,9 +36,10 @@ import {possibleLocalDuplicateGroups} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
-import {SmartShelfDefinition, LibraryCollection, applySmartShelf, collectionWorks, newOrganisationId, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
+import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
+import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -200,6 +201,7 @@ const chapterOverridesKey = 'archivist.chapterOverrides.v1';
 const readerBookmarksKey = 'archivist.readerBookmarks.v1';
 const readerAnnotationsKey = 'archivist.readerAnnotations.v1';
 const readerAppearanceKey = 'archivist.readerAppearance.v1';
+const insightGoalKey = 'archivist.insightGoal.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'favourites',title:'Favourites',visible:true},
@@ -338,6 +340,9 @@ function Client() {
   const [serverPreferences,setServerPreferences]=useState<Record<number,PersonalPreference>>({});
   const [localPreferences,setLocalPreferences]=useState<Record<string,PersonalPreference>>({});
   const [profileLoading, setProfileLoading] = useState(false);
+  const [serverActivity,setServerActivity]=useState<ProfileActivity[]>([]);
+  const [insightGoal,setInsightGoal]=useState(defaultInsightGoal);
+  const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
   const [atlasSearch,setAtlasSearch]=useState('');
@@ -373,6 +378,8 @@ function Client() {
   const [collections,setCollections]=useState<LibraryCollection[]>([]);
   const [organisationModal,setOrganisationModal]=useState<'smart-shelf'|'new-collection'|'manage'|'add-to-collection'|null>(null);
   const [organisationName,setOrganisationName]=useState('');
+  const [smartShelfRules,setSmartShelfRules]=useState<SmartShelfRuleGroup>(emptySmartShelfRules());
+  const [smartShelfAdvanced,setSmartShelfAdvanced]=useState(false);
   const [collectionTarget,setCollectionTarget]=useState<UnifiedWork|null>(null);
   const [selectedWorkKeys,setSelectedWorkKeys]=useState<string[]>([]);
   const [collectionFilter,setCollectionFilter]=useState('');
@@ -639,6 +646,8 @@ function Client() {
     : combinedProfileStats;
 
   const profileAchievements = useMemo(() => profileStats ? achievementsFor(profileStats) : [], [profileStats]);
+  const insightWorks=useMemo(()=>sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter(work=>matchesSource(work.source,sourceFilter)),[allUnifiedWorks,sourceFilter,sourceWorks]);
+  const insightSummary=useMemo(()=>buildInsights(insightWorks,readerAnnotations,sourceFilter==='local'||sourceFilter==='downloaded'?[]:serverActivity,insightGoal),[insightGoal,insightWorks,readerAnnotations,serverActivity,sourceFilter]);
 
   useEffect(()=>{
     if(!profileStats)return;
@@ -721,7 +730,12 @@ function Client() {
   function clearLibraryFilters(){setQuery('');setSpace('');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setReadingFilter('');setRatingFilter(0);setFavouriteOnly(false);setUnknownAuthorOnly(false);setAvailabilityFilter('all');setCollectionFilter('');}
   function openSmartShelf(shelf:SmartShelfDefinition){clearLibraryFilters();setSourceFilter(shelf.source);setSpace(shelf.space);setFormatFilter(shelf.format);setAuthorFilter(shelf.author);setSeriesFilter(shelf.series);setGenreFilter(shelf.genre);setReadingFilter(shelf.readingState);setRatingFilter(shelf.minimumRating);setFavouriteOnly(shelf.favouriteOnly);setAvailabilityFilter(shelf.availableOnly?'available':'all');setLibrarySort(shelf.sort);setActiveTab('library');}
   function openCollection(collection:LibraryCollection){clearLibraryFilters();setSourceFilter('all');setCollectionFilter(collection.id);setActiveTab('library');}
-  async function createSmartShelf(){const name=organisationName.trim();if(!name)return;const next=[{id:newOrganisationId('shelf'),name,source:sourceFilter,format:formatFilter,author:authorFilter,series:seriesFilter,genre:genreFilter,space,readingState:readingFilter,minimumRating:ratingFilter,favouriteOnly,availableOnly:availabilityFilter==='available',sort:librarySort,createdAt:new Date().toISOString()},...smartShelves];await persistSmartShelves(next);setOrganisationName('');setOrganisationModal(null);}
+  async function createSmartShelf(){
+    const name=organisationName.trim();if(!name)return;
+    const base={id:newOrganisationId('shelf'),name,source:sourceFilter,format:formatFilter,author:authorFilter,series:seriesFilter,genre:genreFilter,space,readingState:readingFilter,minimumRating:ratingFilter,favouriteOnly,availableOnly:availabilityFilter==='available',sort:librarySort,createdAt:new Date().toISOString()};
+    const rules=smartShelfRules.children.length?smartShelfRules:legacyRules(base);
+    await persistSmartShelves([{...base,rules},...smartShelves]);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal(null);
+  }
   async function createCollection(){const name=organisationName.trim();if(!name)return;const keys=collectionTarget?[collectionTarget.canonicalKey]:selectedWorks.map(work=>work.canonicalKey);const next=[{id:newOrganisationId('collection'),name,canonicalKeys:[...new Set(keys)],createdAt:new Date().toISOString()},...collections];await persistCollections(next);setOrganisationName('');setCollectionTarget(null);setSelectedWorkKeys([]);setOrganisationModal(null);}
   async function toggleWorkInCollection(collection:LibraryCollection,work:UnifiedWork){await persistCollections(collections.map(item=>item.id===collection.id?toggleCollectionWork(item,work.canonicalKey):item));}
   async function addSelectedToCollection(collection:LibraryCollection){const wanted=selectedWorks.map(work=>work.canonicalKey);const keys=[...new Set([...collection.canonicalKeys,...wanted])];await persistCollections(collections.map(item=>item.id===collection.id?{...item,canonicalKeys:keys}:item));setSelectedWorkKeys([]);setOrganisationModal(null);}
@@ -920,6 +934,7 @@ function Client() {
     getPersistedJSON<ReaderBookmark[]>(readerBookmarksKey).then(value=>setReaderBookmarks(sanitizeReaderBookmarks(value))).catch(()=>undefined);
     getPersistedJSON<ReaderAnnotation[]>(readerAnnotationsKey).then(value=>setReaderAnnotations(sanitizeReaderAnnotations(value))).catch(()=>undefined);
     getPersistedJSON<ReaderAppearance>(readerAppearanceKey).then(value=>setReaderAppearance(sanitizeReaderAppearance(value))).catch(()=>undefined);
+    getPersistedJSON(insightGoalKey).then(value=>{const goal=sanitizeInsightGoal(value);setInsightGoal(goal);setGoalDraft({completed:String(goal.completedTarget),annotations:String(goal.annotationTarget)});}).catch(()=>undefined);
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
@@ -1088,6 +1103,9 @@ function Client() {
       .then(stats=>{if(!cancelled)setServerProfileStats(stats);})
       .catch(e=>{if(!cancelled)setError(e.message);})
       .finally(()=>{if(!cancelled)setProfileLoading(false);});
+    if(activeTab==='insights')request(session,'/api/activity?limit=100')
+      .then(items=>{if(!cancelled)setServerActivity(items as ProfileActivity[]);})
+      .catch(e=>{if(!cancelled)setError(e.message);});
     return()=>{cancelled=true;};
   }, [activeTab, playback?.completed, session]);
 
@@ -2440,6 +2458,28 @@ function Client() {
     </Modal>;
   }
 
+  const smartShelfFields:SmartShelfField[]=['source','format','author','series','genre','space','readingState','rating','favourite','available'];
+  const ruleOperators:SmartShelfOperator[]=['equals','not-equals','contains','at-least','is-true','is-false'];
+  function nextIn<T>(values:T[],value:T){const index=values.indexOf(value);return values[(index+1+values.length)%values.length];}
+  function editSmartRule(path:number[],rule:SmartShelfRule){setSmartShelfRules(current=>replaceRuleNode(current,path,rule));}
+  function SmartRuleGroupEditor({group,path=[]}:{group:SmartShelfRuleGroup;path?:number[]}){
+    return <View style={[styles.ruleGroup,{borderColor:p.line,backgroundColor:path.length?p.raised:'transparent'}]}>
+      <View style={styles.sectionHeader}><Text style={[styles.meta,{color:p.ink,fontWeight:'900'}]}>Match {group.mode==='all'?'ALL':'ANY'}</Text><Button label={group.mode==='all'?'ALL':'ANY'} tone="quiet" onPress={()=>setSmartShelfRules(current=>replaceRuleNode(current,path,{...group,mode:group.mode==='all'?'any':'all'}))}/></View>
+      {group.children.map((child,index)=>{
+        const childPath=[...path,index];
+        if(child.kind==='group')return <View key={childPath.join('.')}><SmartRuleGroupEditor group={child} path={childPath}/><Button label="Remove group" tone="quiet" onPress={()=>setSmartShelfRules(current=>removeRuleNode(current,childPath))}/></View>;
+        const boolOp=child.operator==='is-true'||child.operator==='is-false';
+        return <View key={childPath.join('.')} style={[styles.ruleRow,{borderColor:p.line}]}>
+          <Pressable onPress={()=>editSmartRule(childPath,{...child,field:nextIn(smartShelfFields,child.field)})} style={[styles.ruleToken,{borderColor:p.line}]}><Text style={{color:p.ink,fontWeight:'800'}}>{child.field}</Text></Pressable>
+          <Pressable onPress={()=>editSmartRule(childPath,{...child,operator:nextIn(ruleOperators,child.operator)})} style={[styles.ruleToken,{borderColor:p.line}]}><Text style={{color:p.ink,fontWeight:'800'}}>{child.operator}</Text></Pressable>
+          {!boolOp?<TextInput accessibilityLabel={'Rule value '+child.field} value={child.value} onChangeText={value=>editSmartRule(childPath,{...child,value})} placeholder="Value" placeholderTextColor={p.muted} style={[styles.ruleInput,{color:p.ink,borderColor:p.line}]}/>:null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Remove rule" onPress={()=>setSmartShelfRules(current=>removeRuleNode(current,childPath))} style={styles.ruleRemove}><Text style={{color:p.muted,fontWeight:'900'}}>×</Text></Pressable>
+        </View>;
+      })}
+      <View style={styles.toolRow}><Button label="Add rule" tone="quiet" onPress={()=>setSmartShelfRules(current=>addRuleAtPath(current,path))}/>{path.length<3?<Button label="Add group" tone="quiet" onPress={()=>setSmartShelfRules(current=>addGroupAtPath(current,path))}/>:null}</View>
+    </View>;
+  }
+
   function OrganisationPanel(){
     if(!organisationModal)return null;
     const close=()=>{setOrganisationModal(null);setOrganisationName('');setCollectionTarget(null);setRenameTarget(null)};
@@ -2449,8 +2489,10 @@ function Client() {
           <View style={styles.sheetHandle}/>
           {organisationModal==='smart-shelf'?<>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Save Smart Shelf</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Save the filters you are using now as a live shelf. It updates automatically as your library changes.</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Start with the filters you are using now, or build nested ALL / ANY rules for a shelf that updates itself.</Text>
             <TextInput accessibilityLabel="Smart Shelf name" value={organisationName} onChangeText={setOrganisationName} placeholder="Shelf name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
+            <View style={styles.toolRow}><Button label="Use current filters" tone="quiet" onPress={()=>setSmartShelfRules(legacyRules({source:sourceFilter,format:formatFilter,author:authorFilter,series:seriesFilter,genre:genreFilter,space,readingState:readingFilter,minimumRating:ratingFilter,favouriteOnly,availableOnly:availabilityFilter==='available'}))}/><Button label={smartShelfAdvanced?'Simple':'Advanced rules'} tone="quiet" onPress={()=>setSmartShelfAdvanced(value=>!value)}/></View>
+            {smartShelfAdvanced?<SmartRuleGroupEditor group={smartShelfRules}/>:<Text style={[styles.meta,{color:p.muted}]}>{smartShelfRules.children.length?smartShelfRules.children.length+' rule'+(smartShelfRules.children.length===1?'':'s')+' configured.':'No advanced rules yet; current filters will be used.'}</Text>}
             <Button label="Save Smart Shelf" disabled={!organisationName.trim()} onPress={()=>void createSmartShelf()}/>
           </>:null}
           {organisationModal==='new-collection'?<>
@@ -2537,7 +2579,7 @@ function Client() {
       {!base.length&&!shelfLoading?<View style={[styles.designedEmpty,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.emptyMark,{color:p.gold}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Shelf is ready for books</Text><Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{localFolders.length||session?'No works match this source or Space.':'Add a folder on this device, or connect your Archivist server from Settings.'}</Text>{!localFolders.length?<Button label="Add local folder" onPress={()=>void addLocalFolder()}/>:null}</View>:null}
       {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><View key={i} style={[styles.skeletonCard,{backgroundColor:p.line}]}/>)}</View>:null}
       {shelfSections.map(section)}
-      <View style={styles.shelfActions}><Button label="Browse full library" onPress={()=>setActiveTab('library')}/><Button label="New Smart Shelf" tone="quiet" onPress={()=>{setOrganisationName('');setOrganisationModal('smart-shelf')}}/><Button label="Manage collections" tone="quiet" onPress={()=>setOrganisationModal('manage')}/></View>
+      <View style={styles.shelfActions}><Button label="Browse full library" onPress={()=>setActiveTab('library')}/><Button label="New Smart Shelf" tone="quiet" onPress={()=>{setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/><Button label="Manage collections" tone="quiet" onPress={()=>setOrganisationModal('manage')}/></View>
       <Text style={[styles.brandSignature,{color:p.muted}]}>YOUR LIBRARY. YOURS.</Text>
       <WorkActionSheet/><OrganisationPanel/><ShelfManagePanel/><MetadataEditorPanel/>
     </ScrollView>;
@@ -2587,7 +2629,7 @@ function Client() {
         <Text style={[styles.filterLabel,{color:p.muted}]}>AUTHOR</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable onPress={()=>setAuthorFilter('')} style={[styles.filterChip,{borderColor:!authorFilter?p.sage:p.line}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{authorOptions.map(value=><Pressable key={value} onPress={()=>setAuthorFilter(value)} style={[styles.filterChip,{borderColor:authorFilter===value?p.sage:p.line}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SERIES</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable onPress={()=>setSeriesFilter('')} style={[styles.filterChip,{borderColor:!seriesFilter?p.sage:p.line}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{seriesOptions.map(value=><Pressable key={value} onPress={()=>setSeriesFilter(value)} style={[styles.filterChip,{borderColor:seriesFilter===value?p.sage:p.line}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
         <Text style={[styles.filterLabel,{color:p.muted}]}>GENRE</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable onPress={()=>setGenreFilter('')} style={[styles.filterChip,{borderColor:!genreFilter?p.sage:p.line}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{genreOptions.map(value=><Pressable key={value} onPress={()=>setGenreFilter(value)} style={[styles.filterChip,{borderColor:genreFilter===value?p.sage:p.line}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
-        <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setOrganisationModal('smart-shelf')}}/>
+        <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
     return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,{backgroundColor:p.card,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.ink}]}>Sources</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.ink,marginTop:18}]}>Spaces</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'800'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
@@ -3093,6 +3135,60 @@ function Client() {
     );
   }
 
+  async function saveInsightGoals(){
+    const next=sanitizeInsightGoal({completedTarget:Number(goalDraft.completed),annotationTarget:Number(goalDraft.annotations)});
+    setInsightGoal(next);setGoalDraft({completed:String(next.completedTarget),annotations:String(next.annotationTarget)});
+    await setPersistedJSON(insightGoalKey,next);
+  }
+
+  function InsightGoalCard({title,value,target,progress,draft,onDraft}:{title:string;value:number;target:number;progress:number;draft:string;onDraft:(value:string)=>void}){
+    return <View style={[styles.insightGoalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={styles.profileBreakdownRow}><Text style={[styles.bookTitle,{color:p.ink}]}>{title}</Text><Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{value} / {target}</Text></View>
+      <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:p.sage,width:`${Math.round(progress*100)}%`}]} /></View>
+      <View style={styles.insightGoalEdit}><Text style={[styles.meta,{color:p.muted}]}>Target</Text><TextInput keyboardType="number-pad" value={draft} onChangeText={onDraft} style={[styles.insightGoalInput,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/></View>
+    </View>;
+  }
+
+  function Insights(){
+    const summary=insightSummary;
+    const listeningHours=summary.listeningSeconds/3600;
+    return <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.pageHeadingRow}><View style={{flex:1}}><Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Insights</Text><Text style={[styles.pageSubtitle,{color:p.muted}]}>Your library history, goals, ratings and notes—derived from your own activity.</Text></View></View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
+        {(['all','local','server','downloaded'] as LibrarySource[]).map(value=><Pressable key={'insight-'+value} onPress={()=>setSourceFilter(value)} style={[styles.filterPill,{borderColor:sourceFilter===value?p.sage:p.line,backgroundColor:sourceFilter===value?p.raised:'transparent'}]}><Text style={{color:p.ink,fontWeight:'800'}}>{value==='all'?'All':value==='local'?'Device':value==='server'?'Server':'Downloaded'}</Text></Pressable>)}
+      </ScrollView>
+      <View style={styles.insightHeroGrid}>
+        {[
+          ['Finished',summary.completed],
+          ['In progress',summary.inProgress],
+          ['Listening',listeningHours<10?listeningHours.toFixed(1)+'h':Math.round(listeningHours)+'h'],
+          ['Active days',summary.activeDays],
+          ['Notes & highlights',summary.annotationCount],
+          ['Average rating',summary.rated?ratingLabel(summary.averageRating):'—'],
+        ].map(([label,value])=><View key={String(label)} style={[styles.insightMetric,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.profileStatValue,{color:p.ink}]}>{value}</Text><Text style={[styles.profileStatLabel,{color:p.muted}]}>{label}</Text></View>)}
+      </View>
+      <View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink}]}>Goals</Text><Button label="Save targets" tone="quiet" onPress={()=>void saveInsightGoals()}/></View>
+      <View style={styles.insightGoalGrid}>
+        <InsightGoalCard title="Finish works" value={summary.completedGoal.value} target={summary.completedGoal.target} progress={summary.completedGoal.progress} draft={goalDraft.completed} onDraft={value=>setGoalDraft(current=>({...current,completed:value}))}/>
+        <InsightGoalCard title="Capture ideas" value={summary.annotationGoal.value} target={summary.annotationGoal.target} progress={summary.annotationGoal.progress} draft={goalDraft.annotations} onDraft={value=>setGoalDraft(current=>({...current,annotations:value}))}/>
+      </View>
+      <Text style={[styles.sectionTitle,{color:p.ink}]}>Recent activity</Text>
+      {summary.recentActivity.length?summary.recentActivity.slice(0,12).map(item=><View key={item.id} style={[styles.insightActivityRow,{borderColor:p.line}]}>
+        <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.kind} · {new Date(item.updatedAt*1000).toLocaleDateString()} · {item.events} update{item.events===1?'':'s'}</Text></View>
+        {item.kind==='Listening'&&item.activeSeconds>0?<Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{Math.max(1,Math.round(item.activeSeconds/60))}m</Text>:null}
+      </View>):<Text style={[styles.empty,{color:p.muted}]}>{session&&sourceFilter!=='local'&&sourceFilter!=='downloaded'?'Activity will appear as you read and listen.':'Local history stays private on this device; current progress and notes are shown below.'}</Text>}
+      <Text style={[styles.sectionTitle,{color:p.ink}]}>Annotation hub</Text>
+      {summary.recentAnnotations.length?summary.recentAnnotations.slice(0,12).map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>item.work&&openUnifiedWork(item.work as UnifiedWork)} style={[styles.annotationHubCard,{backgroundColor:p.card,borderColor:p.line}]}>
+        <View style={styles.profileBreakdownRow}><Text style={[styles.playerEyebrow,{color:p.gold}]}>{item.kind.toUpperCase()} · PAGE {item.page+1}</Text><Text style={[styles.meta,{color:p.muted}]}>{new Date(item.createdAt).toLocaleDateString()}</Text></View>
+        <Text numberOfLines={3} style={[styles.readerQuote,{color:p.ink,borderColor:p.gold}]}>{item.text}</Text>
+        {item.note?<Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.note}</Text>:null}
+        <Text numberOfLines={1} style={[styles.meta,{color:p.sage,fontWeight:'800'}]}>{item.work?.title||'Saved annotation'}</Text>
+      </Pressable>):<Text style={[styles.empty,{color:p.muted}]}>Highlights and notes from the Reader will collect here automatically.</Text>}
+      <Text style={[styles.sectionTitle,{color:p.ink}]}>Achievements</Text>
+      <View style={styles.insightAchievementStrip}>{profileAchievements.slice(0,5).map(item=><View key={item.id} style={[styles.insightAchievement,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:p.card}]}><Text style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text></View>)}</View>
+    </ScrollView>;
+  }
+
   function Profile() {
     const stats=profileStats;
     const unlocked=profileAchievements.filter(item=>item.unlocked).length;
@@ -3408,7 +3504,8 @@ function Client() {
     if (activeTab === 'player') return Player();
     if (activeTab === 'reader') return Reader();
     if (activeTab === 'atlas') return Atlas();
-    if (activeTab === 'insights' || activeTab === 'profile') return Profile();
+    if (activeTab === 'insights') return Insights();
+    if (activeTab === 'profile') return Profile();
     return Settings();
   }
 
@@ -3755,4 +3852,20 @@ const styles = StyleSheet.create({
   duplicatePanel: {borderWidth:1,borderRadius:16,padding:14,gap:12},
   duplicateGroup: {borderWidth:1,borderRadius:12,padding:12,gap:7},
   duplicateExact: {borderWidth:1,borderRadius:10,padding:10,gap:4},
+  ruleGroup: {borderWidth:1,borderRadius:14,padding:10,gap:8},
+  ruleRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:8,flexDirection:'row',flexWrap:'wrap',gap:6,alignItems:'center'},
+  ruleToken: {borderWidth:1,borderRadius:999,minHeight:34,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
+  ruleInput: {borderWidth:1,borderRadius:9,minHeight:38,paddingHorizontal:10,flexGrow:1,minWidth:92},
+  ruleRemove: {width:34,height:34,alignItems:'center',justifyContent:'center'},
+  insightHeroGrid: {flexDirection:'row',flexWrap:'wrap',gap:10},
+  insightMetric: {flexGrow:1,width:'30%',minWidth:100,borderWidth:1,borderRadius:16,padding:14,gap:3},
+  insightGoalGrid: {gap:10},
+  insightGoalCard: {borderWidth:1,borderRadius:16,padding:14,gap:10},
+  insightGoalEdit: {flexDirection:'row',alignItems:'center',justifyContent:'flex-end',gap:8},
+  insightGoalInput: {width:76,borderWidth:1,borderRadius:9,minHeight:38,paddingHorizontal:10,textAlign:'center',fontWeight:'800'},
+  insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',gap:12,alignItems:'center'},
+  annotationHubCard: {borderWidth:1,borderRadius:16,padding:14,gap:8},
+  insightAchievementStrip: {flexDirection:'row',flexWrap:'wrap',gap:8},
+  insightAchievement: {borderWidth:1,borderRadius:12,padding:11,minWidth:140,flexGrow:1},
+
 });
