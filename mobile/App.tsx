@@ -3785,7 +3785,6 @@ const styles = StyleSheet.create({
   continueRow: {gap:12,paddingRight:6},
   continueCard: {width:132,gap:6},
   continueTitle: {fontSize:14,fontWeight:'800'},
-  seriesRow: {gap:8,paddingRight:6},
   seriesChip: {minWidth:140,maxWidth:220,borderWidth:0,borderRadius:12,paddingHorizontal:14,paddingVertical:12,gap:2},
   scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
   onboardingCard: {borderWidth: 1, borderRadius: 16, padding: 16, gap: 14},
