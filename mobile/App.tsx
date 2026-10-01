@@ -2980,8 +2980,8 @@ function Client() {
   }
 
   function LivingBook({book,chapterTitle,chapterNumber}:{book:Book;chapterTitle?:string;chapterNumber?:number}){
-    const coverShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[0,-18]});
-    const coverTurn=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:['0deg','-24deg']});
+    const coverShift=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[0,-26]});
+    const coverTurn=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:['0deg','-34deg']});
     const spreadScale=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[.97,1]});
     const shadowOpacity=bookOpenAnim.interpolate({inputRange:[0,1],outputRange:[.08,.18]});
     const turningShift=pageTurnAnim.interpolate({inputRange:[0,1],outputRange:[0,10]});
@@ -2992,18 +2992,15 @@ function Client() {
       <Animated.View pointerEvents="none" style={[styles.livingBookShadow,{backgroundColor:'#000',opacity:shadowOpacity}]}/>
       <Animated.View style={[styles.livingBookSpread,{transform:[{scale:spreadScale}]}]}>
         <View style={[styles.livingBookStaticPage,styles.livingBookLeftPage,{backgroundColor:pageTone,borderColor:p.line}]}>
-          <View style={[styles.livingBookInnerSpine,{backgroundColor:p.sage,opacity:.28}]}/>
-          <View style={styles.livingBookInsetArt}><Cover book={book}/></View>
-          <Text numberOfLines={1} style={[styles.livingBookPageCaption,{color:p.muted}]}>{book.series||'ARCHIVIST'}</Text>
-          <Text style={[styles.livingBookPageNumber,{color:p.muted}]}>ARCHIVIST</Text>
+          <View style={[styles.livingBookInnerSpine,{backgroundColor:p.line}]}/>
+          {[0,1,2,3,4,5,6].map(line=><View key={'left-page-'+line} style={[styles.livingBookPageLine,{backgroundColor:lineTone,width:line===0?'52%':line===6?'62%':'78%'}]}/>)}
         </View>
         <View style={[styles.livingBookStaticPage,styles.livingBookRightPage,{backgroundColor:pageTone,borderColor:p.line}]}>
-          <Text style={[styles.livingBookPageKicker,{color:p.sage}]}>NOW PLAYING</Text>
-          <Text numberOfLines={3} style={[styles.livingBookPageTitle,{color:p.ink}]}>{book.title}</Text>
+          <Text style={[styles.livingBookPageKicker,{color:p.sage}]}>LISTENING</Text>
+          <Text numberOfLines={3} style={[styles.livingBookPageTitle,{color:p.ink}]}>{chapterTitle||'Current chapter'}</Text>
           <View style={[styles.livingBookPageRule,{backgroundColor:p.line}]}/>
           <Text numberOfLines={2} style={[styles.livingBookPageAuthor,{color:p.muted}]}>{book.author||'Unknown author'}</Text>
-          <Text numberOfLines={3} style={[styles.livingBookPageQuote,{color:p.ink}]}>{chapterTitle||'A story worth returning to.'}</Text>
-          <Text style={[styles.livingBookPageNumber,{color:p.muted}]}>{chapterNumber?'CH '+String(chapterNumber).padStart(2,'0'):'LISTEN'}</Text>
+          {chapterNumber?<Text style={[styles.livingBookPageNumber,{color:p.muted}]}>CHAPTER {chapterNumber}</Text>:null}
         </View>
         <Animated.View pointerEvents="none" style={[styles.livingBookTurningPage,{backgroundColor:pageTone,borderColor:p.line,transform:[{perspective:1400},{translateX:turningShift},{rotateY:turningRotate}]}]}>
           {[0,1,2,3,4].map(line=><View key={'t'+line} style={[styles.livingBookPageLine,{backgroundColor:lineTone,width:line===0?'56%':'78%'}]}/>)}
@@ -4134,7 +4131,7 @@ function Client() {
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
       <RatingPromptPanel />
-      {playing ? (
+      {playing && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>setActiveTab('player')} style={styles.miniPlayerMain}>
             <MiniArtwork book={playing}/>
@@ -4253,20 +4250,20 @@ const styles = StyleSheet.create({
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
   modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:20,gap:10},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {paddingHorizontal:18,paddingTop:16,gap:18,paddingBottom:120,maxWidth:1120,width:'100%',alignSelf:'center'},
-  playerScreenFold: {paddingHorizontal:24,paddingTop:16,gap:18},
-  livingBookStage: {height:238,width:292,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
-  livingBookShadow: {position:'absolute',width:210,height:30,borderRadius:105,top:192,transform:[{scaleY:.3}],shadowColor:'#000',shadowOpacity:.18,shadowRadius:20,elevation:4},
-  livingBookSpread: {width:224,height:176,position:'relative'},
-  livingBookStaticPage: {position:'absolute',top:2,width:110,height:170,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,paddingTop:12,gap:6,overflow:'hidden'},
+  playerScreen: {paddingHorizontal:18,paddingTop:12,gap:14,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
+  livingBookStage: {height:220,width:276,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
+  livingBookShadow: {position:'absolute',width:202,height:28,borderRadius:101,top:178,transform:[{scaleY:.3}],shadowColor:'#000',shadowOpacity:.16,shadowRadius:18,elevation:4},
+  livingBookSpread: {width:216,height:168,position:'relative'},
+  livingBookStaticPage: {position:'absolute',top:2,width:106,height:162,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,paddingTop:14,gap:7,overflow:'hidden'},
   livingBookLeftPage: {left:2,borderTopLeftRadius:10,borderBottomLeftRadius:10,borderTopRightRadius:3,borderBottomRightRadius:3,alignItems:'center'},
-  livingBookRightPage: {left:112,borderTopRightRadius:10,borderBottomRightRadius:10,borderTopLeftRadius:3,borderBottomLeftRadius:3},
+  livingBookRightPage: {left:108,borderTopRightRadius:10,borderBottomRightRadius:10,borderTopLeftRadius:3,borderBottomLeftRadius:3},
   livingBookInnerSpine: {position:'absolute',right:0,top:8,bottom:8,width:3,borderRadius:2},
   livingBookPageLine: {height:3,borderRadius:3,opacity:.8},
-  livingBookTurningPage: {position:'absolute',left:112,top:2,width:110,height:170,borderWidth:StyleSheet.hairlineWidth,borderTopRightRadius:10,borderBottomRightRadius:10,paddingHorizontal:12,paddingTop:24,gap:10,zIndex:4,backfaceVisibility:'hidden'},
-  livingBookFrontCover: {position:'absolute',left:112,top:0,width:110,zIndex:7,shadowColor:'#000',shadowOpacity:.20,shadowRadius:14,shadowOffset:{width:0,height:7},elevation:7,backfaceVisibility:'hidden'},
-  livingBookCoverArt: {width:110,overflow:'hidden',borderRadius:8},
-  livingBookCentreLine: {position:'absolute',left:110,top:7,bottom:7,width:2,zIndex:8,opacity:.62},
+  livingBookTurningPage: {position:'absolute',left:108,top:2,width:106,height:162,borderWidth:StyleSheet.hairlineWidth,borderTopRightRadius:10,borderBottomRightRadius:10,paddingHorizontal:12,paddingTop:24,gap:10,zIndex:4,backfaceVisibility:'hidden'},
+  livingBookFrontCover: {position:'absolute',left:108,top:0,width:106,zIndex:7,shadowColor:'#000',shadowOpacity:.20,shadowRadius:14,shadowOffset:{width:0,height:7},elevation:7,backfaceVisibility:'hidden'},
+  livingBookCoverArt: {width:106,overflow:'hidden',borderRadius:8},
+  livingBookCentreLine: {position:'absolute',left:106,top:7,bottom:7,width:2,zIndex:8,opacity:.5},
   livingBookInsetArt: {width:76,marginTop:2,shadowColor:'#000',shadowOpacity:.10,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
   livingBookPageCaption: {fontSize:7,lineHeight:9,fontWeight:'700',letterSpacing:.9,marginTop:1},
   livingBookPageKicker: {fontSize:6,lineHeight:8,fontWeight:'700',letterSpacing:1.0,marginTop:6},
@@ -4275,15 +4272,15 @@ const styles = StyleSheet.create({
   livingBookPageAuthor: {fontSize:7,lineHeight:10,textAlign:'center'},
   livingBookPageQuote: {fontFamily:'serif',fontSize:8,lineHeight:11,fontStyle:'italic',textAlign:'center',marginTop:3},
   livingBookPageNumber: {position:'absolute',bottom:6,alignSelf:'center',fontSize:6,lineHeight:8,fontWeight:'600',letterSpacing:.6},
-  playerHeading: {minHeight:34,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
-  playerAdaptive: {gap:22},
-  playerAdaptiveWide: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:36,paddingVertical:4},
-  playerHeroColumn: {gap:10,alignItems:'center',flexShrink:1,maxWidth:420},
-  playerControlColumn: {flex:1,minWidth:260,maxWidth:520,gap:14,justifyContent:'center'},
+  playerHeading: {minHeight:28,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  playerAdaptive: {gap:16},
+  playerAdaptiveWide: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:32,paddingVertical:2},
+  playerHeroColumn: {gap:8,alignItems:'center',flexShrink:1,maxWidth:360},
+  playerControlColumn: {flex:1,minWidth:250,maxWidth:500,gap:12,justifyContent:'center'},
   playerEyebrow: {fontSize:11,lineHeight:14,fontWeight:'700',letterSpacing:1.6},
   playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},
   playerIdentity: {alignItems:'center',gap:4,paddingHorizontal:8,maxWidth:620},
-  playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:12,minHeight:28},
+  playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:8,minHeight:20},
   playerSourcePill: {borderWidth:0,minHeight:28,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   playerStatusText: {fontSize:11,lineHeight:16},
   playerStatusAction: {minHeight:36,justifyContent:'center',paddingHorizontal:2},
