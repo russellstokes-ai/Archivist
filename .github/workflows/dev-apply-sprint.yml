@@ -35,7 +35,9 @@ jobs:
           echo "Patch bytes: $(wc -c < /tmp/sprint.patch)"
           git apply --check /tmp/sprint.patch
           git apply /tmp/sprint.patch
-          if [[ -f "$DIR/fix.patch" ]]; then
+          if [[ -f "$DIR/fix.py" ]]; then
+            python "$DIR/fix.py"
+          elif [[ -f "$DIR/fix.patch" ]]; then
             git apply --check "$DIR/fix.patch"
             git apply "$DIR/fix.patch"
           fi
