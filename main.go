@@ -425,6 +425,7 @@ func (a *app) routes() http.Handler {
 	a.playerFeatureRoutes(mux)
 	a.householdRoutes(mux)
 	a.profileRoutes(mux)
+	a.activityRoutes(mux)
 	a.atlasRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
@@ -820,6 +821,9 @@ func main() {
 		log.Fatal(e)
 	}
 	if e = a.initCompletions(); e != nil {
+		log.Fatal(e)
+	}
+	if e = a.initActivity(); e != nil {
 		log.Fatal(e)
 	}
 	if e = a.initPerformance(); e != nil {

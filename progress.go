@@ -65,7 +65,9 @@ func (a *app) saveProfileProgress(profile, edition int64, p progress) (progress,
 		return p, errors.New("track does not belong to this audio edition")
 	}
 	var revision int64
-	e = tx.QueryRow("SELECT revision FROM profile_progress WHERE profile_id=? AND edition_id=?", profile, edition).Scan(&revision)
+	var previousAsset int64
+	var previousSeconds float64
+	e = tx.QueryRow("SELECT revision,asset_id,seconds FROM profile_progress WHERE profile_id=? AND edition_id=?", profile, edition).Scan(&revision,&previousAsset,&previousSeconds)
 	if e != nil && e != sql.ErrNoRows {
 		return p, e
 	}
@@ -77,7 +79,11 @@ func (a *app) saveProfileProgress(profile, edition int64, p progress) (progress,
 	if e != nil {
 		return p, e
 	}
-	return p, tx.Commit()
+	if e=tx.Commit();e!=nil{return p,e}
+	delta:=p.Seconds
+	if previousAsset==p.Asset && p.Seconds>=previousSeconds { delta=p.Seconds-previousSeconds }
+	if workID,workErr:=a.workForEdition(edition);workErr==nil { _=a.recordActivity(profile,workID,"Listening",delta) }
+	return p,nil
 }
 func (a *app) progressRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/editions/{id}/progress", func(w http.ResponseWriter, r *http.Request) {
