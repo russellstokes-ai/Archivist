@@ -343,6 +343,8 @@ func copyMoveFile(root *os.Root, from, to, wantHash string) error {
 	return nil
 }
 
+var moveCopyFile = copyMoveFile
+
 func syncMoveDir(root *os.Root, name string) error {
 	f, e := root.Open(filepath.Dir(name))
 	if e != nil {
@@ -405,7 +407,7 @@ func (a *app) applyMove(id string) (fileMove, error) {
 			}
 			if e = moveLinkFile(root, m.From, m.To); e != nil {
 				linkedMove = false
-				if e = copyMoveFile(root, m.From, m.To, m.Hash); e != nil {
+				if e = moveCopyFile(root, m.From, m.To, m.Hash); e != nil {
 					return m, errors.New("copy fallback failed; original retained: " + e.Error())
 				}
 			}

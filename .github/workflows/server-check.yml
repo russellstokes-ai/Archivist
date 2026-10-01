@@ -40,6 +40,13 @@ jobs:
           (cd archivist/app && go mod tidy && go test ./...)
           (cd home-assistant/archivist/app && go mod tidy && go test ./...)
 
+      - name: Raspberry Pi ARM64 compile
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...
+          (cd archivist/app && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build .)
+          (cd home-assistant/archivist/app && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build .)
+          grep -q -- '- aarch64' home-assistant/archivist/config.yaml
+
       - name: Web JavaScript syntax
         run: |
           for dir in web archivist/app/web home-assistant/archivist/app/web; do
