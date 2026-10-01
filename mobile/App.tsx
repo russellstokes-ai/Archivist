@@ -3682,7 +3682,7 @@ function Client() {
 
         {stats?<>
           <View style={[styles.profileMetricStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-            {metrics.map(([label,value])=><View key={String(label)} style={styles.profileMetric}>
+            {metrics.map(([label,value])=><View key={String(label)} style={[styles.profileMetric,width>=760&&styles.profileMetricWide]}>
               <Text style={[styles.profileMetricValue,{color:p.ink}]}>{value}</Text>
               <Text style={[styles.profileMetricLabel,{color:p.muted}]}>{label}</Text>
             </View>)}
@@ -4255,6 +4255,7 @@ const styles = StyleSheet.create({
   profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'500'},
   profileMetricStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:18,rowGap:18},
   profileMetric: {width:'33.333%',minWidth:105,gap:2},
+  profileMetricWide: {width:'16.666%',minWidth:90},
   profileMetricValue: {fontFamily:'serif',fontSize:27,lineHeight:31,fontWeight:'500'},
   profileMetricLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
   profileDetailRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:16},
