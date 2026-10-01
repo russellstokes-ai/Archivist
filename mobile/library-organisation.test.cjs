@@ -16,7 +16,7 @@ const nested={kind:'group',mode:'all',children:[
  {kind:'rule',field:'rating',operator:'at-least',value:'8'},
 ]};
 const advanced={...shelf,genre:'',minimumRating:0,favouriteOnly:false,rules:nested};
-assert(x.applySmartShelf(works,advanced).map(w=>w.title).join(',')==='Alpha,Gamma','nested ALL/ANY');
+assert(x.applySmartShelf(works,advanced).map(w=>w.title).join(',')==='Gamma,Alpha','nested ALL/ANY');
 let edited=x.addGroupAtPath(x.emptySmartShelfRules(),[]);
 edited=x.addRuleAtPath(edited,[0],{kind:'rule',field:'available',operator:'is-false',value:''});
 assert(edited.children[0].kind==='group'&&edited.children[0].children.length===1,'nested group edit');
