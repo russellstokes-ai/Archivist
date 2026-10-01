@@ -3559,6 +3559,16 @@ function Client() {
       ['Notes',summary.annotationCount],
       ['Average rating',summary.rated?ratingLabel(summary.averageRating):'—'],
     ];
+    const today=new Date();today.setHours(0,0,0,0);
+    const activityWeek=Array.from({length:7},(_,index)=>{
+      const date=new Date(today);date.setDate(today.getDate()-(6-index));
+      const next=new Date(date);next.setDate(date.getDate()+1);
+      const from=date.getTime()/1000,to=next.getTime()/1000;
+      const items=summary.recentActivity.filter(item=>item.updatedAt>=from&&item.updatedAt<to);
+      const seconds=items.reduce((total,item)=>total+Math.max(0,item.activeSeconds||0),0);
+      return {key:date.toISOString().slice(0,10),label:date.toLocaleDateString(undefined,{weekday:'short'}).slice(0,1),seconds,events:items.reduce((total,item)=>total+item.events,0)};
+    });
+    const maxDaySeconds=Math.max(1,...activityWeek.map(day=>day.seconds));
     return <ScrollView contentContainerStyle={styles.insightsScreen}>
       <View style={styles.pageHeadingRow}>
         <View style={{flex:1}}>
@@ -3575,15 +3585,34 @@ function Client() {
       </View>
 
       <View style={[styles.insightStatStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        {metrics.map(([label,value])=><View key={label} style={styles.insightStat}>
+        {metrics.map(([label,value])=><View key={label} style={[styles.insightStat,width>=760&&styles.insightStatWide]}>
           <Text style={[styles.insightStatValue,{color:p.ink}]}>{value}</Text>
           <Text style={[styles.insightStatLabel,{color:p.muted}]}>{label}</Text>
         </View>)}
       </View>
 
+      <View style={styles.insightRhythmSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Last 7 days</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{activityWeek.reduce((total,day)=>total+day.events,0)} update{activityWeek.reduce((total,day)=>total+day.events,0)===1?'':'s'}</Text>
+        </View>
+        <View style={styles.insightRhythmChart}>
+          {activityWeek.map(day=>{
+            const active=day.seconds>0;
+            const barHeight=active?Math.max(10,Math.round((day.seconds/maxDaySeconds)*72)):3;
+            return <View key={day.key} style={styles.insightRhythmDay}>
+              <View style={styles.insightRhythmBarArea}>
+                <View style={[styles.insightRhythmBar,{height:barHeight,backgroundColor:active?p.sage:p.line,opacity:active?1:.7}]}/>
+              </View>
+              <Text style={[styles.insightRhythmLabel,{color:p.muted}]}>{day.label}</Text>
+            </View>;
+          })}
+        </View>
+      </View>
+
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Goals</Text>
-        <Pressable accessibilityRole="button" onPress={()=>void saveInsightGoals()} style={styles.sectionLink}><Text style={{color:p.sage,fontWeight:'600'}}>Save targets</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>void saveInsightGoals()} style={styles.sectionLink}><Text style={{color:p.sage,fontWeight:'600'}}>Save</Text></Pressable>
       </View>
       <View style={styles.insightGoalGrid}>
         <InsightGoalCard title="Finish works" value={summary.completedGoal.value} target={summary.completedGoal.target} progress={summary.completedGoal.progress} draft={goalDraft.completed} onDraft={value=>setGoalDraft(current=>({...current,completed:value}))}/>
@@ -3615,11 +3644,11 @@ function Client() {
       <Text style={[styles.sectionTitle,{color:p.ink}]}>Achievements</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightAchievementStrip}>
         {profileAchievements.slice(0,8).map(item=><View key={item.id} style={styles.insightAchievementEditorial}>
-          <View style={[styles.insightAchievementBadge,{borderColor:item.unlocked?p.sage:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}>
-            <Text style={[styles.insightAchievementMonogram,{color:item.unlocked?p.sage:p.muted}]}>{item.title.trim().charAt(0).toUpperCase()}</Text>
+          <View style={[styles.insightAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:'transparent'}]}>
+            <Text style={[styles.insightAchievementMonogram,{color:item.unlocked?p.gold:p.muted}]}>{item.title.trim().charAt(0).toUpperCase()}</Text>
           </View>
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink,textAlign:'center'}]}>{item.title}</Text>
-          <Text style={[styles.meta,{color:item.unlocked?p.sage:p.muted,textAlign:'center'}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+          <Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted,textAlign:'center'}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
         </View>)}
       </ScrollView>
     </ScrollView>;
@@ -4403,12 +4432,19 @@ const styles = StyleSheet.create({
   insightEditorialTitle: {fontFamily:'serif',fontSize:26,lineHeight:33,fontWeight:'500',letterSpacing:-.2},
   insightStatStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:18,rowGap:18},
   insightStat: {width:'33.333%',minWidth:110,gap:2},
+  insightStatWide: {width:'16.666%',minWidth:96},
   insightStatValue: {fontFamily:'serif',fontSize:28,lineHeight:32,fontWeight:'500'},
   insightStatLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
+  insightRhythmSection: {gap:12},
+  insightRhythmChart: {height:108,flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:8,paddingHorizontal:2},
+  insightRhythmDay: {flex:1,height:'100%',alignItems:'center',justifyContent:'flex-end',gap:7},
+  insightRhythmBarArea: {height:76,width:'100%',alignItems:'center',justifyContent:'flex-end'},
+  insightRhythmBar: {width:width>=760?18:12,maxWidth:18,borderRadius:9},
+  insightRhythmLabel: {fontSize:10,lineHeight:13,fontWeight:'600'},
   insightGoalGrid: {gap:0},
   insightGoalCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
   insightGoalEdit: {flexDirection:'row',alignItems:'center',justifyContent:'flex-end',gap:8},
-  insightGoalInput: {width:72,borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:10,textAlign:'center',fontWeight:'600'},
+  insightGoalInput: {width:62,borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:8,textAlign:'center',fontWeight:'600',fontVariant:['tabular-nums']},
   insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:13,flexDirection:'row',gap:12,alignItems:'center'},
   activityMarker: {width:7,height:7,borderRadius:4},
   annotationHubCard: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:8},
