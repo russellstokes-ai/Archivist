@@ -8,6 +8,12 @@ on:
       - 'mobile/**'
       - '.github/scripts/android-emulator-smoke.sh'
       - '.github/workflows/android-apk.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/scripts/android-emulator-smoke.sh'
+      - '.github/workflows/android-apk.yml'
 
 concurrency:
   group: android-apk-${{ github.ref }}
