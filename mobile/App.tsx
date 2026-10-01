@@ -3480,7 +3480,7 @@ function Client() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={[styles.profileHero,{backgroundColor:p.card,borderColor:p.line}]}>
           <View style={[styles.profileMonogram,{backgroundColor:p.ink}]}>
-            <Text style={[styles.profileMonogramText,{color:p.paper]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
+            <Text style={[styles.profileMonogramText,{color:p.paper}]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
           </View>
           <View style={{flex:1,gap:3}}>
             <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name || 'Profile'}</Text>
