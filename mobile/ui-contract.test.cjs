@@ -8,6 +8,11 @@ for (const banned of ['Coming soon','Not implemented','TODO','FIXME','Genre is c
   assert.equal(source.includes(banned), false, 'Banned placeholder/dead-state marker found: ' + banned);
 }
 
+for (const legacyControl of [">•••</Text>",">⋯</Text>","'Ⅱ'","'▶'",">↑</Text>",">↓</Text>"]) {
+  assert.equal(source.includes(legacyControl), false, 'Legacy text-glyph control found: ' + legacyControl);
+}
+assert.ok(source.includes("function UiIcon("), 'Drawn native icon component is missing');
+
 for (const match of source.matchAll(/<Button\b[\s\S]*?\/>/g)) {
   assert.match(match[0], /\bonPress\s*=/, 'Button without onPress handler: ' + match[0].slice(0,180));
 }
