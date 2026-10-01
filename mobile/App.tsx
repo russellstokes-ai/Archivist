@@ -278,7 +278,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
 
 function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
   const stroke=Math.max(2,Math.round(size/8));
@@ -339,6 +339,14 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   if(name==='minus'||name==='plus')return <View style={{width:size,height:size,alignItems:'center',justifyContent:'center'}}>
     <View style={{position:'absolute',width:size*.62,height:Math.max(1,stroke*.6),backgroundColor:color,borderRadius:2}}/>
     {name==='plus'?<View style={{position:'absolute',height:size*.62,width:Math.max(1,stroke*.6),backgroundColor:color,borderRadius:2}}/>:null}
+  </View>;
+  if(name==='fit')return <View style={{width:size,height:size,position:'relative'}}>
+    {[
+      {left:size*.08,top:size*.08,borderLeftWidth:Math.max(1,stroke*.55),borderTopWidth:Math.max(1,stroke*.55)},
+      {right:size*.08,top:size*.08,borderRightWidth:Math.max(1,stroke*.55),borderTopWidth:Math.max(1,stroke*.55)},
+      {left:size*.08,bottom:size*.08,borderLeftWidth:Math.max(1,stroke*.55),borderBottomWidth:Math.max(1,stroke*.55)},
+      {right:size*.08,bottom:size*.08,borderRightWidth:Math.max(1,stroke*.55),borderBottomWidth:Math.max(1,stroke*.55)},
+    ].map((corner,index)=><View key={index} style={{position:'absolute',width:size*.28,height:size*.28,borderColor:color,...corner}}/>)}
   </View>;
   if(name==='zoomIn'||name==='zoomOut')return <View style={{width:size,height:size,position:'relative'}}>
     <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:stroke,borderColor:color,borderRadius:size*.31,alignItems:'center',justifyContent:'center'}}>
@@ -3424,7 +3432,11 @@ function Client() {
     ]}>
       {node.kind==='work'&&node.coverUri?<Image source={{uri:node.coverUri}} style={styles.atlasNodeCover}/>:null}
       {node.kind==='author'?<Text style={[styles.atlasNodeMonogram,{color:p.paper}]}>{node.label.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')}</Text>:null}
-      {node.kind!=='author'&&!(node.kind==='work'&&node.coverUri)?<Text numberOfLines={node.kind==='genre'?2:3} style={[styles.atlasNodeLabel,{color:p.ink}]}>{node.label}</Text>:null}
+      {node.kind==='series'?<View style={styles.atlasSeriesGlyph}><View style={[styles.atlasSeriesSpine,{height:28,backgroundColor:p.line}]}/><View style={[styles.atlasSeriesSpine,{height:34,backgroundColor:p.muted,opacity:.45}]}/><View style={[styles.atlasSeriesSpine,{height:40,backgroundColor:p.sage}]}/></View>:null}
+      {node.kind==='collection'?<View style={styles.atlasCollectionGlyph}><View style={[styles.atlasCollectionSheet,{left:0,top:6,borderColor:p.line}]}/><View style={[styles.atlasCollectionSheet,{left:7,top:3,borderColor:p.line}]}/><View style={[styles.atlasCollectionSheet,{left:14,top:0,borderColor:p.sage}]}/></View>:null}
+      {node.kind==='note'?<View style={[styles.atlasNoteGlyph,{borderColor:p.line}]}><View style={[styles.atlasNoteLine,{backgroundColor:p.muted,width:'72%'}]}/><View style={[styles.atlasNoteLine,{backgroundColor:p.muted,width:'54%'}]}/></View>:null}
+      {node.kind!=='author'&&node.kind!=='series'&&node.kind!=='collection'&&node.kind!=='note'&&!(node.kind==='work'&&node.coverUri)?<Text numberOfLines={node.kind==='genre'?2:3} style={[styles.atlasNodeLabel,{color:p.ink}]}>{node.label}</Text>:null}
+      {(node.kind==='series'||node.kind==='collection'||node.kind==='note')?<Text numberOfLines={2} style={[styles.atlasNodeLabel,styles.atlasNodeCaption,{color:p.ink}]}>{node.label}</Text>:null}
       {node.kind==='genre'?<Text style={[styles.atlasNodeCount,{color:p.muted}]}>{node.count}</Text>:null}
       {node.kind==='work'&&work?.source==='downloaded'?<View style={[styles.atlasNodeSourceDot,{backgroundColor:p.sage}]}/>:null}
     </Pressable>;
@@ -3435,7 +3447,7 @@ function Client() {
     const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
-    return <View style={[styles.atlasInspector,{backgroundColor:p.raised},width>=760?styles.atlasInspectorWide:styles.atlasInspectorMobile]}>
+    return <View style={[styles.atlasInspector,{backgroundColor:width>=760?p.paper:p.raised},width>=760?styles.atlasInspectorWide:styles.atlasInspectorMobile,width>=760&&{borderLeftColor:p.line}]}>
       <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
       {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
       <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
@@ -3461,8 +3473,8 @@ function Client() {
             <Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Atlas</Text>
             <Text style={[styles.pageSubtitle,{color:p.muted}]}>A living map of the books, people, series and ideas in your library.</Text>
           </View>
-          <Pressable accessibilityRole="button" onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}>
-            <Text style={{color:p.muted,fontWeight:'600'}}>{atlasListMode?'Universe':'List'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}>
+            <UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/>
           </Pressable>
         </View>
 
@@ -3481,8 +3493,8 @@ function Client() {
           <AtlasGroup title="Availability" kind="status" items={atlas.status} />
         </View>:<>
           <View style={styles.atlasSearchRow}>
-            <TextInput value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find a title, person, series, collection or tag" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink,backgroundColor:p.card,flex:1}]}/>
-            <Pressable accessibilityRole="button" accessibilityLabel="Find in Atlas" onPress={atlasSearchGo} style={[styles.atlasFindButton,{backgroundColor:p.sage}]}><Text style={styles.atlasFindText}>Find</Text></Pressable>
+            <TextInput value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find a title, person, series, collection or tag" placeholderTextColor={p.muted} style={[styles.atlasSearchInput,{color:p.ink,backgroundColor:p.card}]}/>
+            <Pressable accessibilityRole="button" accessibilityLabel="Find in Atlas" onPress={atlasSearchGo} style={styles.atlasSearchButton}><UiIcon name="search" color={p.ink} size={20}/></Pressable>
           </View>
 
           <View style={[styles.atlasUniverseLayout,width>=760&&styles.atlasUniverseLayoutWide]}>
@@ -3491,7 +3503,7 @@ function Client() {
               onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
               onResponderRelease={()=>{atlasGesture.current=null}} onResponderTerminate={()=>{atlasGesture.current=null}}>
               <View style={styles.atlasViewportTools}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><Text style={[styles.meta,{color:p.ink,fontWeight:'600'}]}>Fit</Text></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><UiIcon name="fit" color={p.ink} size={18}/></Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.max(.34,atlasTransform.scale-.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.min(2.25,atlasTransform.scale+.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
               </View>
@@ -3507,7 +3519,7 @@ function Client() {
             {width>=760?<AtlasInspector/>:null}
           </View>
 
-          <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>Drag to pan · pinch to zoom · tap a node to inspect.</Text>
+          <Text style={[styles.atlasHint,{color:p.muted}]}>Pinch, pan and explore</Text>
         </>}
       </ScrollView>
     );
@@ -4234,19 +4246,28 @@ const styles = StyleSheet.create({
   atlasChipWrap: {flexDirection:'row',flexWrap:'wrap',gap:8},
   atlasRelationChip: {borderWidth:0,borderRadius:10,paddingHorizontal:10,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
   atlasWorkRow: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',alignItems:'center',gap:10},
-  atlasSearchRow: {flexDirection:'row',alignItems:'center',gap:8},
-  atlasUniverseLayout: {position:'relative',gap:16},
+  atlasSearchRow: {flexDirection:'row',alignItems:'center',gap:6},
+  atlasSearchInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:14,fontSize:15},
+  atlasSearchButton: {width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center'},
+  atlasUniverseLayout: {position:'relative',gap:0},
   atlasUniverseLayoutWide: {flexDirection:'row',alignItems:'stretch'},
-  atlasViewport: {flex:1,borderWidth:0,borderRadius:22,overflow:'hidden',position:'relative',minWidth:0},
+  atlasViewport: {flex:1,borderWidth:0,borderRadius:0,overflow:'hidden',position:'relative',minWidth:0},
   atlasUniverseCanvas: {position:'absolute'},
   atlasUniverseEdge: {position:'absolute',height:1},
-  atlasUniverseNode: {position:'absolute',borderWidth:0,borderRadius:14,padding:5,alignItems:'center',justifyContent:'center',overflow:'hidden',shadowColor:'#000',shadowOpacity:.08,shadowRadius:4,elevation:2},
-  atlasUniverseNodeSelected: {borderWidth:2,shadowOpacity:.2,shadowRadius:9,elevation:5},
-  atlasGenreNode: {borderRadius:48,padding:10,borderWidth:StyleSheet.hairlineWidth},
-  atlasAuthorNode: {borderRadius:29},
-  atlasSeriesNode: {borderRadius:10,borderLeftWidth:4},
-  atlasWorkNode: {borderRadius:7,padding:3},
-  atlasCollectionNode: {borderRadius:18,paddingHorizontal:8,borderWidth:StyleSheet.hairlineWidth},
+  atlasUniverseNode: {position:'absolute',borderWidth:0,borderRadius:14,padding:5,alignItems:'center',justifyContent:'center',overflow:'visible',shadowColor:'#000',shadowOpacity:.06,shadowRadius:4,elevation:2},
+  atlasUniverseNodeSelected: {borderWidth:2,shadowOpacity:.16,shadowRadius:9,elevation:5},
+  atlasGenreNode: {borderRadius:48,padding:10,borderWidth:StyleSheet.hairlineWidth,shadowOpacity:.04,shadowRadius:12},
+  atlasAuthorNode: {borderRadius:29,overflow:'hidden'},
+  atlasSeriesNode: {borderRadius:10,paddingHorizontal:4,paddingTop:3,paddingBottom:12},
+  atlasWorkNode: {borderRadius:7,padding:3,overflow:'hidden'},
+  atlasCollectionNode: {borderRadius:14,paddingHorizontal:5,paddingTop:4,paddingBottom:12},
+  atlasSeriesGlyph: {height:42,flexDirection:'row',alignItems:'flex-end',gap:3},
+  atlasSeriesSpine: {width:7,borderRadius:2},
+  atlasCollectionGlyph: {width:42,height:34,position:'relative'},
+  atlasCollectionSheet: {position:'absolute',width:28,height:30,borderWidth:StyleSheet.hairlineWidth,borderRadius:4,backgroundColor:'transparent'},
+  atlasNoteGlyph: {width:32,height:38,borderWidth:StyleSheet.hairlineWidth,borderRadius:4,paddingHorizontal:5,paddingTop:9,gap:5},
+  atlasNoteLine: {height:2,borderRadius:2},
+  atlasNodeCaption: {position:'absolute',top:'100%',marginTop:3,minWidth:72,maxWidth:92},
   atlasNodeCover: {position:'absolute',left:0,top:0,right:0,bottom:0,width:'100%',height:'100%'},
   atlasNodeLabel: {fontSize:9,fontWeight:'900',textAlign:'center',lineHeight:11},
   atlasNodeMonogram: {fontFamily:'serif',fontSize:16,fontWeight:'900'},
@@ -4258,12 +4279,13 @@ const styles = StyleSheet.create({
   atlasFindButton: {height:46,paddingHorizontal:16,borderRadius:12,alignItems:'center',justifyContent:'center'},
   atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
   atlasClusterNotice: {position:'absolute',left:12,bottom:12,maxWidth:320,borderWidth:0,borderRadius:10,paddingHorizontal:10,paddingVertical:7},
-  atlasInspector: {borderWidth:0,borderRadius:18,padding:16,gap:8,zIndex:25,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
-  atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12},
-  atlasInspectorWide: {width:280,minHeight:220,alignSelf:'stretch'},
+  atlasInspector: {borderWidth:0,padding:16,gap:8,zIndex:25},
+  atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12,borderTopLeftRadius:20,borderTopRightRadius:20,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
+  atlasInspectorWide: {width:280,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:20},
 
-  atlasScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:22,maxWidth:1280,width:'100%',alignSelf:'center'},
+  atlasScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:20,maxWidth:1280,width:'100%',alignSelf:'center'},
   atlasListAlternative: {gap:4},
+  atlasHint: {fontSize:11,lineHeight:16,textAlign:'center',letterSpacing:.2},
   insightsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:28,maxWidth:1120,width:'100%',alignSelf:'center'},
   sourceSwitcher: {flexDirection:'row',gap:22,paddingRight:14,minHeight:44,alignItems:'stretch'},
   sourceSwitcherVertical: {gap:2},
