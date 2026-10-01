@@ -2884,7 +2884,7 @@ function Client() {
       <View style={[styles.shelfBrowseBand,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.shelfBrowseLabel,{color:p.muted}]}>BROWSE</Text>
         <SourceSwitcher/>
-        {availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
+        {availableSpaces.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.libraryChipsScroll} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
       </View>
 
       <View style={[styles.shelfUtilityRow,{borderTopColor:p.line}]}>
@@ -3325,7 +3325,7 @@ function Client() {
   function AtlasGroup({title, items, kind}: {title: string; items: Array<[string, number]>; kind: AtlasKind}) {
     const max = Math.max(1, ...items.map(([, total]) => total));
     return (
-      <View style={[styles.atlasGroup, {borderColor: p.line, backgroundColor: p.card}]}>
+      <View style={[styles.atlasGroup,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>{title}</Text>
         {items.length ? items.map(([name, total]) => (
           <Pressable key={title + name} accessibilityRole="button" onPress={() => setAtlasFocus({kind,value:name})} style={styles.atlasRow}>
@@ -3363,7 +3363,7 @@ function Client() {
         <Button label="Back to Atlas" tone="quiet" onPress={()=>setAtlasFocus(null)} />
         <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
           <Text style={[styles.playerEyebrow,{color:p.sage}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
-          <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{atlasFocus.value}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.atlasFocusTitle,{color:p.ink}]}>{atlasFocus.value}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>{relation ? relation.workCount+' work'+(relation.workCount===1?'':'s') : 'No matching works'}</Text>
         </View>
         {relation ? <>
@@ -3411,7 +3411,7 @@ function Client() {
 
   function atlasResetView(){
     const viewWidth=Math.max(286,Math.min(1244,width-36));
-    const viewHeight=width>=760?640:540;
+    const viewHeight=width>=900?640:foldLayout?600:500;
     const scale=Math.max(.34,Math.min(1.08,Math.min(viewWidth/atlasUniverse.width,viewHeight/atlasUniverse.height)*.94));
     animateAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
   }
@@ -3504,7 +3504,7 @@ function Client() {
     const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
-    return <View style={[styles.atlasInspector,{backgroundColor:width>=760?p.paper:p.raised},width>=760?styles.atlasInspectorWide:styles.atlasInspectorMobile,width>=760&&{borderLeftColor:p.line}]}>
+    return <View style={[styles.atlasInspector,{backgroundColor:foldLayout?p.paper:p.raised},foldLayout?styles.atlasInspectorWide:styles.atlasInspectorMobile,foldLayout&&{borderLeftColor:p.line}]}>
       <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
       {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
       <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
@@ -3527,7 +3527,7 @@ function Client() {
       <ScrollView contentContainerStyle={styles.atlasScreen} keyboardShouldPersistTaps="handled">
         <View style={styles.pageHeadingRow}>
           <View style={{flex:1}}>
-            <Text style={[styles.title,{color:p.ink,marginBottom:2}]}>Atlas</Text>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.atlasTitle,{color:p.ink}]}>Atlas</Text>
             <Text style={[styles.pageSubtitle,{color:p.muted}]}>A living map of the books, people, series and ideas in your library.</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}>
@@ -3550,11 +3550,11 @@ function Client() {
           <AtlasGroup title="Availability" kind="status" items={atlas.status} />
         </View>:<>
           <View style={styles.atlasSearchRow}>
-            <TextInput value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find a title, person, series, collection or tag" placeholderTextColor={p.muted} style={[styles.atlasSearchInput,{color:p.ink,backgroundColor:p.card}]}/>
+            <TextInput maxFontSizeMultiplier={1.15} value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find a title, person, series, collection or tag" placeholderTextColor={p.muted} style={[styles.atlasSearchInput,{color:p.ink}]}/>
             <Pressable accessibilityRole="button" accessibilityLabel="Find in Atlas" onPress={atlasSearchGo} style={styles.atlasSearchButton}><UiIcon name="search" color={p.ink} size={20}/></Pressable>
           </View>
 
-          <View style={[styles.atlasUniverseLayout,width>=760&&styles.atlasUniverseLayoutWide]}>
+          <View style={[styles.atlasUniverseLayout,foldLayout&&styles.atlasUniverseLayoutWide]}>
             <View style={[styles.atlasViewport,{height:viewHeight,backgroundColor:p.paper}]}
               onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
               onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
@@ -3570,10 +3570,10 @@ function Client() {
                 {renderedNodes.map(node=><AtlasUniverseNodeView key={node.id} node={node}/>)}
               </View>
 
-              {width<760?<AtlasInspector/>:null}
+              {!foldLayout?<AtlasInspector/>:null}
               {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
-            {width>=760?<AtlasInspector/>:null}
+            {foldLayout?<AtlasInspector/>:null}
           </View>
 
           <Text style={[styles.atlasHint,{color:p.muted}]}>Pinch, pan and explore</Text>
@@ -4361,11 +4361,11 @@ const styles = StyleSheet.create({
   readerFailure: {margin:28,borderWidth:0,padding:22,gap:12,maxWidth:520,alignSelf:'center'},
   readerOverlay: {position:'absolute',top:0,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:.96},
   readerErrorOverlay: {position:'absolute',left:24,right:24,top:64,zIndex:30,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
-  atlasGroup: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 10},
+  atlasGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingVertical:16,gap:10},
   atlasRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36},
   atlasText: {fontWeight: '700'},
-  atlasBarTrack: {flex: 1, height: 8, borderRadius: 999, overflow: 'hidden'},
-  atlasBarFill: {height: 8, borderRadius: 999},
+  atlasBarTrack: {flex:1,height:4,borderRadius:2,overflow:'hidden'},
+  atlasBarFill: {height:4,borderRadius:2},
   segment: {flexDirection:'row',gap:4},
   segmentItem: {flex:1,borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center',position:'relative'},
   segmentMarker: {position:'absolute',left:12,right:12,bottom:3,height:2,borderRadius:2},
@@ -4433,9 +4433,9 @@ const styles = StyleSheet.create({
   atlasChipWrap: {flexDirection:'row',flexWrap:'wrap',gap:8},
   atlasRelationChip: {borderWidth:0,borderRadius:10,paddingHorizontal:10,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
   atlasWorkRow: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',alignItems:'center',gap:10},
-  atlasSearchRow: {flexDirection:'row',alignItems:'center',gap:6},
-  atlasSearchInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:14,fontSize:15},
-  atlasSearchButton: {width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center'},
+  atlasSearchRow: {flexDirection:'row',alignItems:'center',gap:6,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.24)'},
+  atlasSearchInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:0,paddingHorizontal:2,fontSize:14},
+  atlasSearchButton: {width:42,height:42,borderRadius:0,alignItems:'center',justifyContent:'center'},
   atlasUniverseLayout: {position:'relative',gap:0},
   atlasUniverseLayoutWide: {flexDirection:'row',alignItems:'stretch'},
   atlasViewport: {flex:1,borderWidth:0,borderRadius:0,overflow:'hidden',position:'relative',minWidth:0},
@@ -4460,19 +4460,21 @@ const styles = StyleSheet.create({
   atlasNodeMonogram: {fontFamily:'serif',fontSize:16,fontWeight:'900'},
   atlasNodeCount: {fontSize:10,fontWeight:'900',marginTop:2},
   atlasNodeSourceDot: {position:'absolute',right:4,bottom:4,width:8,height:8,borderRadius:4,borderWidth:1,borderColor:'#f8f7f2'},
-  atlasViewportTools: {position:'absolute',right:12,top:12,zIndex:20,flexDirection:'row',gap:6},
+  atlasViewportTools: {position:'absolute',right:8,top:8,zIndex:20,flexDirection:'row',gap:4},
   atlasZoomButton: {borderWidth:0},
-  atlasToolButton: {minHeight:38,paddingHorizontal:12,borderRadius:10,alignItems:'center',justifyContent:'center'},
+  atlasToolButton: {minHeight:38,paddingHorizontal:10,borderRadius:8,alignItems:'center',justifyContent:'center'},
   atlasFindButton: {height:46,paddingHorizontal:16,borderRadius:12,alignItems:'center',justifyContent:'center'},
   atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
-  atlasClusterNotice: {position:'absolute',left:12,bottom:12,maxWidth:320,borderWidth:0,borderRadius:10,paddingHorizontal:10,paddingVertical:7},
-  atlasInspector: {borderWidth:0,padding:16,gap:8,zIndex:25},
+  atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:0,borderRadius:0,paddingHorizontal:6,paddingVertical:4,opacity:.88},
+  atlasInspector: {borderWidth:0,padding:14,gap:8,zIndex:25},
   atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12,borderTopLeftRadius:20,borderTopRightRadius:20,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
-  atlasInspectorWide: {width:280,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:20},
+  atlasInspectorWide: {width:236,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
 
-  atlasScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:20,maxWidth:1280,width:'100%',alignSelf:'center'},
-  atlasListAlternative: {gap:4},
-  atlasHint: {fontSize:11,lineHeight:16,textAlign:'center',letterSpacing:.2},
+  atlasScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
+  atlasTitle: {fontFamily:'sans-serif-medium',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  atlasFocusTitle: {fontFamily:'sans-serif-medium',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
+  atlasListAlternative: {gap:0},
+  atlasHint: {fontSize:10.5,lineHeight:15,textAlign:'center',letterSpacing:.2},
   insightsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:28,maxWidth:1120,width:'100%',alignSelf:'center'},
   sourceSwitcherScroll: {flexGrow:0,minHeight:48,maxHeight:52},
   sourceSwitcher: {flexDirection:'row',gap:20,paddingRight:14,paddingVertical:2,minHeight:48,alignItems:'stretch'},
