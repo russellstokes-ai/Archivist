@@ -33,8 +33,13 @@ jobs:
           gzip -t /tmp/sprint.patch.gz
           gunzip -c /tmp/sprint.patch.gz > /tmp/sprint.patch
           echo "Patch bytes: $(wc -c < /tmp/sprint.patch)"
-          git apply --check /tmp/sprint.patch
-          git apply /tmp/sprint.patch
+          if grep -q '^diff --git a/App.tsx b/App.tsx' /tmp/sprint.patch; then
+            git apply --check --directory=mobile /tmp/sprint.patch
+            git apply --directory=mobile /tmp/sprint.patch
+          else
+            git apply --check /tmp/sprint.patch
+            git apply /tmp/sprint.patch
+          fi
           if [[ -f "$DIR/fix.py" ]]; then
             python "$DIR/fix.py"
           elif [[ -f "$DIR/fix.patch" ]]; then
