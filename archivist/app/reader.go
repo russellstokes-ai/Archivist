@@ -307,6 +307,9 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			fail(w, 500, e)
 			return
 		}
+		if assetID,parseErr:=strconv.ParseInt(r.PathValue("id"),10,64);parseErr==nil {
+			if workID,workErr:=a.workForAsset(assetID);workErr==nil { _=a.recordActivity(who(r).ID,workID,"Reading",0) }
+		}
 		reply(w, p)
 	})
 }
