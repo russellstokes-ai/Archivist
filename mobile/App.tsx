@@ -2196,9 +2196,10 @@ function Client() {
 
   function ServerConnect() {
     return (
-      <View style={{gap: 12}}>
-          <Text style={[styles.sectionTitle, {color: p.ink}]}>Add Server</Text>
-          <Text style={[styles.loginCopy, {color: p.muted, textAlign: 'left'}]}>Connect a private Archivist server when you want a shared household library. Your phone library keeps working locally.</Text>
+      <View style={styles.serverConnect}>
+          <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>OPTIONAL SERVER</Text>
+          <Text style={[styles.serverConnectTitle,{color:p.ink}]}>Add a server</Text>
+          <Text style={[styles.serverConnectCopy,{color:p.muted}]}>Connect a private Archivist server for household sharing and remote storage. Your library on this device continues to work without it.</Text>
           <TextInput accessibilityLabel="Server address" autoCapitalize="none" autoCorrect={false} keyboardType="url" value={server} onChangeText={setServer} placeholder="https://books.example.com" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <TextInput accessibilityLabel="Profile access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={key} onChangeText={setKey} placeholder="Profile access key" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
@@ -2249,18 +2250,19 @@ function Client() {
     const hasFolder = localFolders.length > 0;
     const hasBooks = localBooks.length > 0;
     return (
-      <View style={[styles.onboardingCard, {backgroundColor: p.card, borderColor: p.line}]}>
-        <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>START HERE</Text>
-        <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Build your library in three simple steps</Text>
+      <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
+        <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your library</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Choose your folders once. Archivist will identify the library and only ask about uncertain matches.</Text>
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber, {backgroundColor: hasFolder ? p.sage : p.ink}]}>1</Text>
+          <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle, {color:p.ink}]}>Choose where your books live</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} folder${localFolders.length === 1 ? '' : 's'} added` : 'Pick a Books, Comics or Audiobooks folder. You can add more later.'}</Text>
           </View>
         </View>
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber, {backgroundColor: hasBooks ? p.sage : hasFolder ? p.ink : p.line}]}>2</Text>
+          <Text style={[styles.onboardingNumber,{color:hasBooks?p.sage:p.muted}]}>02</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist finds and identifies everything</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
@@ -2269,7 +2271,7 @@ function Client() {
           </View>
         </View>
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber, {backgroundColor: hasBooks && reviewCount === 0 ? p.sage : hasBooks ? p.ink : p.line}]}>3</Text>
+          <Text style={[styles.onboardingNumber,{color:hasBooks&&reviewCount===0?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Archivist keeps confident matches out of your way.' : reviewCount ? `${reviewCount} item${reviewCount === 1 ? '' : 's'} need a quick check.` : 'Everything found so far looks good.'}</Text>
@@ -4172,6 +4174,9 @@ const styles = StyleSheet.create({
   logoSmall: {fontFamily: 'serif', fontSize: 26},
   tagline: {fontSize: 12, letterSpacing: 4, textAlign: 'center', fontWeight: '700'},
   loginCopy: {fontSize: 16, lineHeight: 23, textAlign: 'center', marginBottom: 8},
+  serverConnect: {gap:10,paddingVertical:2},
+  serverConnectTitle: {fontFamily:'sans-serif-medium',fontSize:20,lineHeight:25,fontWeight:'500'},
+  serverConnectCopy: {fontSize:13,lineHeight:19,maxWidth:560},
   appHeader: {height:56,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   headerMeta: {fontSize:12,fontWeight:'500'},
   headerSettings: {borderWidth:0},
@@ -4206,11 +4211,13 @@ const styles = StyleSheet.create({
   continueTitle: {fontSize:14,fontWeight:'800'},
   seriesChip: {minWidth:140,maxWidth:220,borderWidth:0,borderRadius:12,paddingHorizontal:14,paddingVertical:12,gap:2},
   scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
-  onboardingCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:14},
-  onboardingEyebrow: {fontSize: 11, fontWeight: '900', letterSpacing: 2},
-  onboardingStep: {flexDirection: 'row', gap: 12, alignItems: 'flex-start'},
-  onboardingNumber: {width: 28, height: 28, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', color: '#f8f7f2', fontWeight: '900', overflow: 'hidden'},
-  onboardingStepTitle: {fontSize: 15, fontWeight: '800', marginBottom: 2},
+  onboardingCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
+  onboardingEyebrow: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.5},
+  onboardingTitle: {fontFamily:'sans-serif-medium',fontSize:20,lineHeight:25,fontWeight:'500',letterSpacing:-.15},
+  onboardingIntro: {fontSize:13,lineHeight:19,maxWidth:560},
+  onboardingStep: {flexDirection:'row',gap:12,alignItems:'flex-start',paddingVertical:2},
+  onboardingNumber: {width:24,fontSize:11,lineHeight:18,fontWeight:'700',letterSpacing:.7,textAlign:'left'},
+  onboardingStepTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600',marginBottom:2},
   sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:4},
   tabBody: {flex: 1},
   title: {fontFamily: 'serif', fontSize: 36, lineHeight: 41, fontWeight: '500', marginBottom: 2, letterSpacing:-0.4},
