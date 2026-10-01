@@ -8,7 +8,7 @@ for (const banned of ['Coming soon','Not implemented','TODO','FIXME','Genre is c
   assert.equal(source.includes(banned), false, 'Banned placeholder/dead-state marker found: ' + banned);
 }
 
-for (const legacyControl of [">•••</Text>",">⋯</Text>","'Ⅱ'","'▶'",">↑</Text>",">↓</Text>"]) {
+for (const legacyControl of [">•••</Text>",">⋯</Text>","'Ⅱ'","'▶'",">↑</Text>",">↓</Text>",'label="−"','label="+"','label="A−"','label="A+"']) {
   assert.equal(source.includes(legacyControl), false, 'Legacy text-glyph control found: ' + legacyControl);
 }
 assert.ok(source.includes("function UiIcon("), 'Drawn native icon component is missing');
@@ -94,3 +94,5 @@ assert.ok(source.includes('accessibilityLabel="Dismiss error"'), 'Global errors 
 assert.ok(source.includes("label={'Remove download · '+formatBytes(downloaded.bytes)}"), 'Downloaded server work action must clearly say it removes the download');
 assert.ok(source.includes('accessibilityState={{selected:theme===mode}}'), 'Theme choices must expose selected state');
 assert.ok(source.includes('accessibilityState={{selected:sortTemplate===id}}'), 'Sort layout choices must expose selected state');
+
+assert.ok(source.includes('name="zoomIn"') && source.includes('name="zoomOut"'), 'Atlas zoom must use drawn native controls');
