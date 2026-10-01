@@ -60,7 +60,7 @@ assert.ok(source.includes('function PersonalControls('), 'Personal star/favourit
 assert.ok(source.includes("kind=\"reading\""), 'Atlas reading-state relationship is missing');
 assert.ok(source.includes("kind=\"rating\""), 'Atlas rating relationship is missing');
 assert.ok(source.includes("kind=\"favourite\""), 'Atlas favourite relationship is missing');
-assert.ok(source.includes('>Family users</Text>'), 'Admin family-user management is missing');
+assert.match(source,/>\s*FAMILY USERS\s*<\/Text>/i, 'Admin family-user management is missing');
 assert.ok(source.includes('User · whole library'), 'Family user UI must use simple whole-library User semantics');
 assert.equal(source.includes('Change library access'),false,'Mobile UI must not expose per-library User permissions');
 assert.ok(source.includes("profile.admin ?? profile.owner"), 'Mobile must understand new Admin role while remaining compatible with older servers');
