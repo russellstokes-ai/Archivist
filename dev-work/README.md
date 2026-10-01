@@ -23,3 +23,11 @@ Planned checkpoints:
 - Sprint 6 — Insights, Family & Organisation
 - Sprint 7 — Server, Resilience & Ecosystem
 - Sprint 8 — Perfect UI & Release Sweep
+
+
+## Git workflow performance rule
+- Do development against a local extracted working tree and local Git repository.
+- Do not use GitHub directory listings as the normal filesystem browser.
+- Use targeted `fetch_file` reads only when remote verification is needed.
+- Publish checkpoints to GitHub in batched commits; avoid chunk-by-chunk source transfers.
+- If a GitHub operation stalls or fails twice, stop that path and ask for direction.
