@@ -2112,114 +2112,6 @@ function Client() {
     for (const work of shelfWorks) if (work.series) seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
     const seriesOptions = [...seriesCounts.entries()].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,10);
     const libraryMode = activeTab === 'library';
-    const allLibraryWorks: Array<LocalWork | ServerWork> = session ? serverWorks : localPersonalWorks;
-    const activeLibraryWorks: Array<LocalWork | ServerWork> = session ? visibleServerWorks : visibleLocalWorks;
-    const formatOptions = [...new Set(allLibraryWorks.map(work=>work.format).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    const libraryFilterCount =
-      (formatFilter ? 1 : 0) +
-      (readingFilter ? 1 : 0) +
-      (favouriteOnly ? 1 : 0) +
-      (availabilityFilter !== 'all' ? 1 : 0) +
-      (authorFilter ? 1 : 0) +
-      (seriesFilter ? 1 : 0) +
-      (genreFilter ? 1 : 0) +
-      (unknownAuthorOnly ? 1 : 0) +
-      (ratingFilter > 0 ? 1 : 0);
-
-    const smartInProgress: Array<LocalWork | ServerWork> = session
-      ? serverWorks.filter(work => serverPreferences[work.id]?.state === 'in-progress')
-      : localPersonalWorks.filter(work => work.readingState === 'in-progress');
-    const smartFavourites: Array<LocalWork | ServerWork> = session
-      ? serverWorks.filter(work => !!serverPreferences[work.id]?.favourite)
-      : localPersonalWorks.filter(work => !!work.favourite);
-    const smartUnread: Array<LocalWork | ServerWork> = session
-      ? serverWorks.filter(work => (serverPreferences[work.id]?.state || 'not-started') === 'not-started')
-      : localPersonalWorks.filter(work => work.readingState === 'not-started');
-
-    const seriesMap = new Map<string,{count:number;work:LocalWork|ServerWork}>();
-    for (const work of allLibraryWorks) {
-      if (!work.series) continue;
-      const current=seriesMap.get(work.series);
-      if (current) current.count += 1;
-      else seriesMap.set(work.series,{count:1,work});
-    }
-    const seriesOptions = [...seriesMap.entries()]
-      .map(([name,value])=>({name,count:value.count,work:value.work}))
-      .sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name))
-      .slice(0,10);
-
-    const clearLibraryFilters = () => {
-      setQuery('');
-      setAvailabilityFilter('all');
-      setFormatFilter('');
-      setAuthorFilter('');
-      setSeriesFilter('');
-      setGenreFilter('');
-      setReadingFilter('');
-      setRatingFilter(0);
-      setFavouriteOnly(false);
-      setUnknownAuthorOnly(false);
-      setReviewOnly(false);
-    };
-
-    const openSmartShelf = (kind:'progress'|'favourites'|'unread') => {
-      clearLibraryFilters();
-      if (kind === 'progress') setReadingFilter('in-progress');
-      if (kind === 'favourites') setFavouriteOnly(true);
-      if (kind === 'unread') setReadingFilter('not-started');
-      setActiveTab('library');
-    };
-
-    function ShelfFeatureCard({
-      title,caption,count,work,onPress,
-    }: {
-      title:string;caption:string;count:number;work?:LocalWork|ServerWork;onPress:()=>void;
-    }) {
-      return <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title+', '+count+' works'}
-        onPress={onPress}
-        style={({pressed})=>[
-          styles.shelfFeatureCard,
-          {borderColor:p.line,backgroundColor:p.card},
-          pressed&&styles.cardPressed,
-        ]}>
-        <View style={[styles.shelfFeatureArt,{backgroundColor:p.raised}]}>
-          {work ? <Artwork
-            title={work.title}
-            format={work.format}
-            coverShape={'coverShape' in work ? work.coverShape : work.format==='Audio'?'square':'portrait'}
-            coverUri={'coverUri' in work ? work.coverUri : undefined}
-            serverPath={session && 'id' in work ? '/api/works/'+work.id+'/cover' : undefined}
-          /> : <Text style={[styles.shelfFeatureFallback,{color:p.muted}]}>A</Text>}
-        </View>
-        <View style={{flex:1,minWidth:0}}>
-          <Text numberOfLines={1} style={[styles.shelfFeatureTitle,{color:p.ink}]}>{title}</Text>
-          <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{caption}</Text>
-        </View>
-        <Text style={[styles.shelfFeatureCount,{color:p.sage}]}>{count}</Text>
-      </Pressable>;
-    }
-
-    function LibraryFilterPill({
-      label,selected,onPress,count,
-    }: {
-      label:string;selected:boolean;onPress:()=>void;count?:number;
-    }) {
-      return <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityState={{selected}}
-        onPress={onPress}
-        style={({pressed})=>[
-          styles.libraryFilterPill,
-          {borderColor:selected?p.sage:p.line,backgroundColor:selected?p.sage:p.card},
-          pressed&&{opacity:.72},
-        ]}>
-        <Text style={[styles.libraryFilterText,{color:selected?p.ivory:p.ink}]}>{label}</Text>
-        {typeof count==='number' ? <Text style={[styles.libraryFilterCount,{color:selected?p.ivory:p.muted}]}>{count}</Text> : null}
-      </Pressable>;
-    }
     return (
       <View style={styles.shelfShell}>
         {wideLibraries ? <View style={[styles.libraryRail,{borderRightColor:p.line,backgroundColor:p.card}]}>
@@ -2260,204 +2152,102 @@ function Client() {
           </View>
         </View> : null}
         {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
+        {!libraryMode && !reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && continuing.length ? <View style={styles.shelfSection}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Continue</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
+            {session ? continueWorks.map(work => <ContinueCard
+              key={'continue-server-'+work.id}
+              title={work.title}
+              author={work.author}
+              format={work.format}
+              serverPath={'/api/works/'+work.id+'/cover'}
+              onPress={()=>void openServerWork(work)}
+            />) : localContinueWorks.map(work => <ContinueCard
+              key={'continue-local-'+work.key}
+              title={work.title}
+              author={work.author}
+              format={work.format}
+              coverUri={work.coverUri}
+              onPress={()=>openLocalWork(work)}
+            />)}
+          </ScrollView>
+        </View> : null}
+        {!libraryMode && !reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && seriesOptions.length ? <View style={styles.shelfSection}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
+            {seriesOptions.map(([name,total]) => <Pressable
+              key={name}
+              accessibilityRole="button"
+              onPress={()=>{setQuery('');setSeriesFilter(name);setAuthorFilter('');setGenreFilter('');setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false)}}
+              style={[styles.seriesChip,{borderColor:p.line,backgroundColor:p.card}]}>
+              <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{name}</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{total}</Text>
+            </Pressable>)}
+          </ScrollView>
+        </View> : null}
         {libraryMode ? <>
-          <View style={styles.libraryToolbar}>
-            <View style={[styles.librarySearchShell,{borderColor:p.line,backgroundColor:p.card}]}>
-              <Text style={[styles.librarySearchIcon,{color:p.muted}]}>⌕</Text>
-              <TextInput
-                accessibilityLabel="Search your library"
-                value={query}
-                onChangeText={value=>{
-                  setQuery(value);
-                  setAvailabilityFilter('all');
-                  setAuthorFilter('');
-                  setSeriesFilter('');
-                  setGenreFilter('');
-                  setUnknownAuthorOnly(false);
-                }}
-                placeholder="Search title, author, series or genre"
-                placeholderTextColor={p.muted}
-                style={[styles.librarySearchInput,{color:p.ink}]}
-              />
-              {query ? <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={8} onPress={()=>setQuery('')} style={styles.librarySearchClear}>
-                <Text style={[styles.librarySearchClearText,{color:p.muted}]}>×</Text>
-              </Pressable> : null}
-            </View>
+        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false)}} placeholder="Search title, author, series or genre" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
+        {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
+        {reviewOnly ? (
+          <FlatList
+            key={'review-'+shelfColumns}
+            data={visibleBooks}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews
+            keyExtractor={b => 'asset-'+b.id}
+            numColumns={shelfColumns}
+            contentContainerStyle={styles.grid}
+            ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>}
+            renderItem={({item}) => <RawAssetCard item={item} />}
+            onEndReachedThreshold={0.55}
+            onEndReached={()=>void loadMoreServerBooks()}
+            ListFooterComponent={session && serverBooksLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more review files" /> : null}
+          />
+        ) : session ? (
+          <FlatList
+            key={'server-works-'+shelfColumns}
+            data={visibleServerWorks}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews
+            keyExtractor={work => 'work-'+work.id}
+            numColumns={shelfColumns}
+            contentContainerStyle={styles.grid}
+            ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>No matching works. Add and scan folders in Settings.</Text> : null}
+            renderItem={({item}) => <ServerWorkCard work={item} />}
+            onEndReachedThreshold={0.55}
+            onEndReached={()=>void loadMoreServerWorks()}
+            ListFooterComponent={serverLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more works" /> : null}
+          />
+        ) : (
+          <FlatList
+            key={'local-works-'+shelfColumns}
+            data={visibleLocalWorks}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews
+            keyExtractor={work => work.key}
+            numColumns={shelfColumns}
+            contentContainerStyle={styles.grid}
+            ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>{localFolders.length?'No matching works.':'No books yet. Add folders to build your local library.'}</Text> : null}
+            renderItem={({item}) => <LocalWorkCard work={item} />}
+          />
+        )}
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryFilterRow}>
-              <LibraryFilterPill label="All" selected={!formatFilter} onPress={()=>setFormatFilter('')} count={allLibraryWorks.length} />
-              {formatOptions.map(format=><LibraryFilterPill
-                key={format}
-                label={format==='Audio'?'Audiobooks':format}
-                selected={formatFilter===format}
-                onPress={()=>setFormatFilter(formatFilter===format?'':format)}
-                count={allLibraryWorks.filter(work=>work.format===format).length}
-              />)}
-            </ScrollView>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryFilterRow}>
-              <LibraryFilterPill label="In progress" selected={readingFilter==='in-progress'} onPress={()=>setReadingFilter(readingFilter==='in-progress'?'':'in-progress')} />
-              <LibraryFilterPill label="Favourites" selected={favouriteOnly} onPress={()=>setFavouriteOnly(!favouriteOnly)} />
-              <LibraryFilterPill label="Available" selected={availabilityFilter==='available'} onPress={()=>setAvailabilityFilter(availabilityFilter==='available'?'all':'available')} />
-              <LibraryFilterPill label="Unknown author" selected={unknownAuthorOnly} onPress={()=>setUnknownAuthorOnly(!unknownAuthorOnly)} />
-            </ScrollView>
-
-            <View style={styles.libraryResultRow}>
-              <Text style={[styles.libraryResultText,{color:p.muted}]}>
-                {activeLibraryWorks.length} shown · {allLibraryWorks.length} total
-              </Text>
-              {libraryFilterCount || query ? <Pressable accessibilityRole="button" accessibilityLabel="Clear library filters" onPress={clearLibraryFilters} hitSlop={8}>
-                <Text style={[styles.libraryClearFilters,{color:p.sage}]}>Clear filters</Text>
-              </Pressable> : null}
-            </View>
-          </View>
-
-          {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
-          {reviewOnly ? (
-            <FlatList
-              key={'review-'+shelfColumns}
-              style={styles.libraryList}
-              data={visibleBooks}
-              initialNumToRender={12}
-              maxToRenderPerBatch={12}
-              windowSize={7}
-              removeClippedSubviews
-              keyExtractor={b => 'asset-'+b.id}
-              numColumns={shelfColumns}
-              contentContainerStyle={styles.grid}
-              ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>}
-              renderItem={({item}) => <RawAssetCard item={item} />}
-              onEndReachedThreshold={0.55}
-              onEndReached={()=>void loadMoreServerBooks()}
-              ListFooterComponent={session && serverBooksLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more review files" /> : null}
-            />
-          ) : session ? (
-            <FlatList
-              key={'server-works-'+shelfColumns}
-              style={styles.libraryList}
-              data={visibleServerWorks}
-              initialNumToRender={12}
-              maxToRenderPerBatch={12}
-              windowSize={7}
-              removeClippedSubviews
-              keyExtractor={work => 'work-'+work.id}
-              numColumns={shelfColumns}
-              contentContainerStyle={styles.grid}
-              ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>No matching works. Add and scan folders in Settings.</Text> : null}
-              renderItem={({item}) => <ServerWorkCard work={item} />}
-              onEndReachedThreshold={0.55}
-              onEndReached={()=>void loadMoreServerWorks()}
-              ListFooterComponent={serverLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more works" /> : null}
-            />
-          ) : (
-            <FlatList
-              key={'local-works-'+shelfColumns}
-              style={styles.libraryList}
-              data={visibleLocalWorks}
-              initialNumToRender={12}
-              maxToRenderPerBatch={12}
-              windowSize={7}
-              removeClippedSubviews
-              keyExtractor={work => work.key}
-              numColumns={shelfColumns}
-              contentContainerStyle={styles.grid}
-              ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>{localFolders.length?'No matching works.':'No books yet. Add folders to build your local library.'}</Text> : null}
-              renderItem={({item}) => <LocalWorkCard work={item} />}
-            />
-          )}
-        </> : <ScrollView
-          style={styles.shelfVerticalScroll}
-          contentContainerStyle={styles.shelfHomeContent}
-          showsVerticalScrollIndicator={false}>
-          {!reviewOnly && continuing.length ? <View style={styles.shelfSection}>
+        </> : <>
+          {shelfWorks.length ? <View style={styles.shelfSection}>
             <View style={styles.sectionHeadingRow}>
-              <View>
-                <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Continue</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>Pick up exactly where you left off</Text>
-              </View>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
-              {session ? continueWorks.map(work => <ContinueCard
-                key={'continue-server-'+work.id}
-                title={work.title}
-                author={work.author}
-                format={work.format}
-                serverPath={'/api/works/'+work.id+'/cover'}
-                onPress={()=>void openServerWork(work)}
-              />) : localContinueWorks.map(work => <ContinueCard
-                key={'continue-local-'+work.key}
-                title={work.title}
-                author={work.author}
-                format={work.format}
-                coverUri={work.coverUri}
-                onPress={()=>openLocalWork(work)}
-              />)}
-            </ScrollView>
-          </View> : null}
-
-          {(smartInProgress.length || smartFavourites.length || smartUnread.length) ? <View style={styles.shelfSection}>
-            <View>
-              <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Smart shelves</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Useful views built quietly from your own library</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelfFeatureRow}>
-              {smartInProgress.length ? <ShelfFeatureCard
-                title="In progress"
-                caption="Books and audiobooks already under way"
-                count={smartInProgress.length}
-                work={smartInProgress[0]}
-                onPress={()=>openSmartShelf('progress')}
-              /> : null}
-              {smartFavourites.length ? <ShelfFeatureCard
-                title="Favourites"
-                caption="The titles you have marked to keep close"
-                count={smartFavourites.length}
-                work={smartFavourites[0]}
-                onPress={()=>openSmartShelf('favourites')}
-              /> : null}
-              {smartUnread.length ? <ShelfFeatureCard
-                title="Unread"
-                caption="Something new for the next quiet hour"
-                count={smartUnread.length}
-                work={smartUnread[0]}
-                onPress={()=>openSmartShelf('unread')}
-              /> : null}
-            </ScrollView>
-          </View> : null}
-
-          {seriesOptions.length ? <View style={styles.shelfSection}>
-            <View>
-              <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Return to a world, not a file list</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelfFeatureRow}>
-              {seriesOptions.map(series=><ShelfFeatureCard
-                key={series.name}
-                title={series.name}
-                caption={series.count+' title'+(series.count===1?'':'s')}
-                count={series.count}
-                work={series.work}
-                onPress={()=>{
-                  clearLibraryFilters();
-                  setSeriesFilter(series.name);
-                  setActiveTab('library');
-                }}
-              />)}
-            </ScrollView>
-          </View> : null}
-
-          {allLibraryWorks.length ? <View style={styles.shelfSection}>
-            <View style={styles.sectionHeadingRow}>
-              <View>
-                <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your library</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>A small window into the full collection</Text>
-              </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Open full library" onPress={()=>{clearLibraryFilters();setActiveTab('library')}} hitSlop={8}>
+              <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your library</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Open full library" onPress={()=>setActiveTab('library')} hitSlop={8}>
                 <Text style={[styles.sectionLink,{color:p.sage}]}>See all</Text>
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
-              {session ? serverWorks.slice(0,10).map(work => <ContinueCard
+              {session ? visibleServerWorks.slice(0,10).map(work => <ContinueCard
                 key={'shelf-server-'+work.id}
                 action="Open"
                 title={work.title}
@@ -2465,7 +2255,7 @@ function Client() {
                 format={work.format}
                 serverPath={'/api/works/'+work.id+'/cover'}
                 onPress={()=>void openServerWork(work)}
-              />) : localPersonalWorks.slice(0,10).map(work => <ContinueCard
+              />) : visibleLocalWorks.slice(0,10).map(work => <ContinueCard
                 key={'shelf-local-'+work.key}
                 action="Open"
                 title={work.title}
@@ -2480,24 +2270,18 @@ function Client() {
             <Text style={[styles.empty,{color:p.muted}]}>Add a library folder and Archivist will build your collection here.</Text>
             {!session ? <Button label="Add your first folder" onPress={()=>void addLocalFolder()} /> : <Button label="Open Library settings" tone="quiet" onPress={()=>setActiveTab('settings')} />}
           </View> : null}
-
-          {allLibraryWorks.length ? <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Browse full library"
-            onPress={()=>{clearLibraryFilters();setActiveTab('library')}}
-            style={({pressed})=>[styles.browseLibrary,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
+          {shelfWorks.length ? <Pressable accessibilityRole="button" accessibilityLabel="Browse full library" onPress={()=>setActiveTab('library')} style={({pressed})=>[styles.browseLibrary,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
             <View style={{flex:1}}>
               <Text style={[styles.browseLibraryTitle,{color:p.ink}]}>Browse the full library</Text>
               <Text style={[styles.meta,{color:p.muted}]}>Search, filter and manage every title</Text>
             </View>
             <Text style={[styles.browseArrow,{color:p.sage}]}>›</Text>
           </Pressable> : null}
-
           <View style={styles.shelfSignature}>
-            <View style={[styles.shelfRule,{backgroundColor:p.sage}]} />
+            <View style={[styles.shelfRule,{backgroundColor:p.gold}]} />
             <Text style={[styles.shelfSignatureText,{color:p.muted}]}>Your library. Yours.</Text>
           </View>
-        </ScrollView>}
+        </>}
         <WorkPickerPanel />
         {editing ? <Modal transparent animationType="fade" visible onRequestClose={()=>!busy&&setEditing(null)}>
           <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
@@ -3505,29 +3289,6 @@ const styles = StyleSheet.create({
   content: {padding: 20, gap: 18},
   setupPanel: {borderWidth: 1, borderRadius: 8, padding: 14, gap: 12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-
-  shelfVerticalScroll: {flex:1,marginHorizontal:-20},
-  shelfHomeContent: {paddingHorizontal:20,paddingBottom:116,gap:24},
-  shelfFeatureRow: {gap:12,paddingRight:20},
-  shelfFeatureCard: {width:238,minHeight:104,borderWidth:StyleSheet.hairlineWidth,borderRadius:18,padding:10,flexDirection:'row',alignItems:'center',gap:12},
-  shelfFeatureArt: {width:58,height:78,borderRadius:10,overflow:'hidden',justifyContent:'center'},
-  shelfFeatureFallback: {fontFamily:'serif',fontSize:28,textAlign:'center'},
-  shelfFeatureTitle: {fontFamily:'serif',fontSize:18,fontWeight:'700',marginBottom:3},
-  shelfFeatureCount: {fontSize:12,fontWeight:'900',alignSelf:'flex-start',paddingTop:2},
-  libraryToolbar: {gap:12},
-  librarySearchShell: {minHeight:50,borderWidth:StyleSheet.hairlineWidth,borderRadius:16,flexDirection:'row',alignItems:'center',paddingHorizontal:14},
-  librarySearchIcon: {fontSize:21,width:28,textAlign:'left'},
-  librarySearchInput: {flex:1,fontSize:16,paddingVertical:12},
-  librarySearchClear: {width:34,height:34,alignItems:'center',justifyContent:'center'},
-  librarySearchClearText: {fontSize:24,lineHeight:26,fontWeight:'400'},
-  libraryFilterRow: {gap:8,paddingRight:18},
-  libraryFilterPill: {minHeight:34,borderWidth:StyleSheet.hairlineWidth,borderRadius:999,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:7},
-  libraryFilterText: {fontSize:12,fontWeight:'800'},
-  libraryFilterCount: {fontSize:11,fontWeight:'800'},
-  libraryResultRow: {minHeight:28,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
-  libraryResultText: {fontSize:12,fontWeight:'600'},
-  libraryClearFilters: {fontSize:12,fontWeight:'900'},
-  libraryList: {flex:1,marginHorizontal:-7},
   libraryRail: {width: 190, borderRightWidth: StyleSheet.hairlineWidth, padding: 14, gap: 10},
   libraryRailTitle: {fontSize: 13, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4},
   libraryRailList: {gap: 8},
