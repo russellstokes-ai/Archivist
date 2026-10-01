@@ -38,6 +38,8 @@ jobs:
           echo "Patch bytes: $(wc -c < /tmp/sprint12.patch)"
           git apply --check /tmp/sprint12.patch
           git apply /tmp/sprint12.patch
+          git apply --check dev-work/import/sprint12/typefix.patch
+          git apply dev-work/import/sprint12/typefix.patch
           echo "already_applied=false" >> "$GITHUB_OUTPUT"
 
       - name: Upload reconstructed mobile tree
