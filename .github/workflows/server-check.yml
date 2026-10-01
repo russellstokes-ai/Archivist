@@ -42,9 +42,9 @@ jobs:
 
       - name: Raspberry Pi ARM64 compile
         run: |
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...
-          (cd archivist/app && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build .)
-          (cd home-assistant/archivist/app && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build .)
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/archivist-root-arm64 .
+          (cd archivist/app && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/archivist-package-arm64 .)
+          (cd home-assistant/archivist/app && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/archivist-ha-arm64 .)
           grep -q -- '- aarch64' home-assistant/archivist/config.yaml
 
       - name: Web JavaScript syntax
