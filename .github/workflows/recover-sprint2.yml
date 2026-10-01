@@ -8,19 +8,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Reconstruct v2 patch
+      - name: Salvage truncated patch
         run: |
-          cat .ci/sprint2v2/part-* > /tmp/sprint2.b64
-          echo "Base64 chars: $(wc -c < /tmp/sprint2.b64)"
+          cat .ci/sprint2/part-* > /tmp/sprint2.b64
           base64 -d /tmp/sprint2.b64 > /tmp/sprint2.patch.gz
-          gzip -t /tmp/sprint2.patch.gz
-          gunzip -c /tmp/sprint2.patch.gz > /tmp/sprint2.patch
-          echo "Patch bytes: $(wc -c < /tmp/sprint2.patch)"
-          echo "Patch lines: $(wc -l < /tmp/sprint2.patch)"
-          git apply --stat /tmp/sprint2.patch
-          git apply --check /tmp/sprint2.patch
+          gzip -dc /tmp/sprint2.patch.gz > /tmp/sprint2.partial.patch || true
+          echo "Recovered bytes: $(wc -c < /tmp/sprint2.partial.patch)"
+          echo "Recovered lines: $(wc -l < /tmp/sprint2.partial.patch)"
+          echo "Files present:"
+          grep '^diff --git ' /tmp/sprint2.partial.patch || true
       - uses: actions/upload-artifact@v4
         with:
-          name: recovered-sprint2-patch-v2
-          path: /tmp/sprint2.patch
+          name: salvaged-sprint2-partial-patch
+          path: /tmp/sprint2.partial.patch
           retention-days: 30
