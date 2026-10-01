@@ -280,6 +280,34 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
 
 type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
 
+function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
+  const k=size/20;
+  return <View pointerEvents="none" style={{width:size,height:size,opacity,position:'relative'}}>
+    <View style={{
+      position:'absolute',left:size/2,top:size*.33,width:0,height:0,
+      borderRightWidth:10*k,borderRightColor:'transparent',
+      borderBottomWidth:7*k,borderBottomColor:color,
+      borderLeftWidth:10*k,borderLeftColor:'transparent',
+      transform:[{rotate:'35deg'}],
+    }}>
+      <View style={{
+        position:'absolute',top:-4.5*k,left:-6.5*k,width:0,height:0,
+        borderLeftWidth:3*k,borderLeftColor:'transparent',
+        borderRightWidth:3*k,borderRightColor:'transparent',
+        borderBottomWidth:8*k,borderBottomColor:color,
+        transform:[{rotate:'-35deg'}],
+      }}/>
+      <View style={{
+        position:'absolute',top:.3*k,left:-10.5*k,width:0,height:0,
+        borderRightWidth:10*k,borderRightColor:'transparent',
+        borderBottomWidth:7*k,borderBottomColor:color,
+        borderLeftWidth:10*k,borderLeftColor:'transparent',
+        transform:[{rotate:'-70deg'}],
+      }}/>
+    </View>
+  </View>;
+}
+
 function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
   const stroke=Math.max(2,Math.round(size/8));
   if(name==='play')return <View style={{width:0,height:0,borderTopWidth:size*.36,borderBottomWidth:size*.36,borderLeftWidth:size*.58,borderTopColor:'transparent',borderBottomColor:'transparent',borderLeftColor:color,marginLeft:size*.08}}/>;
@@ -2319,7 +2347,7 @@ function Client() {
               accessibilityLabel={'Rate '+(star-0.5)+' or '+star+' stars'}
               onPress={event=>onRating((star-1)*2+(event.nativeEvent.locationX<22?1:2))}
               style={({pressed})=>[styles.ratingStarButton,pressed&&{opacity:.72,transform:[{scale:.96}]}]}>
-              <Text maxFontSizeMultiplier={1} style={[styles.ratingStarGlyph,{color:full||half?p.sage:p.muted,opacity:half?.55:1}]}>★</Text>
+              <RatingStarMark color={full||half?p.sage:p.muted} opacity={half?.55:1} size={20}/>
             </Pressable>;
           })}
         </View>
@@ -4277,7 +4305,6 @@ const styles = StyleSheet.create({
   personalControlRow: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},
   ratingStars: {flexDirection:'row',marginLeft:-6},
   ratingStarButton: {width:44,height:44,alignItems:'center',justifyContent:'center'},
-  ratingStarGlyph: {fontSize:20,lineHeight:24},
   favouriteTextAction: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
 
   error: {paddingHorizontal: 16, paddingVertical: 8},
