@@ -2856,9 +2856,12 @@ function Client() {
 
       <OnboardingGuide/>
 
-      {reviewCount>0?<Pressable accessibilityRole="button" onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>{reviewCount} item{reviewCount===1?'':'s'} need a metadata check</Text><Text style={[styles.meta,{color:p.muted}]}>Review uncertain matches before organising files.</Text></View>
-        <Text style={{color:p.sage,fontWeight:'700'}}>Review</Text>
+      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <View style={styles.reviewBannerCopy}>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerTitle,{color:p.ink}]}>Metadata review</Text>
+          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} item{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
+        </View>
+        <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
       </Pressable>:null}
 
       {localScanning&&scanProgress?<View style={[styles.scanBanner,{backgroundColor:p.card}]}>
@@ -2888,7 +2891,6 @@ function Client() {
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('manage')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Manage collections</Text></Pressable>
       </View>
 
-      <Text style={[styles.brandSignature,{color:p.muted}]}>YOUR LIBRARY. YOURS.</Text>
       <WorkActionSheet/><OrganisationPanel/><ShelfManagePanel/><MetadataEditorPanel/>
     </ScrollView>;
   }
@@ -4193,8 +4195,12 @@ const styles = StyleSheet.create({
   librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
   librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
   librarySummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',gap:12,alignItems:'center'},
-  reviewBanner: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingVertical:11,paddingHorizontal:0,flexDirection:'row',gap:12,alignItems:'center'},
-  shelfSection: {gap:8},
+  reviewBanner: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,minHeight:48,paddingVertical:8,paddingHorizontal:0,flexDirection:'row',gap:12,alignItems:'center'},
+  reviewBannerCopy: {flex:1,minWidth:0,flexDirection:'row',alignItems:'baseline',gap:10},
+  reviewBannerTitle: {fontSize:12.5,lineHeight:18,fontWeight:'600'},
+  reviewBannerMeta: {fontSize:12,lineHeight:17,flexShrink:1},
+  reviewBannerAction: {fontSize:12.5,lineHeight:18,fontWeight:'600'},
+  shelfSection: {gap:10},
   continueRow: {gap:12,paddingRight:6},
   continueCard: {width:132,gap:6},
   continueTitle: {fontSize:14,fontWeight:'800'},
@@ -4486,7 +4492,7 @@ const styles = StyleSheet.create({
   shelfGreetingCompact: {fontSize:30,lineHeight:36},
   shelfGreetingFold: {fontSize:36,lineHeight:42},
   shelfEditorialSubtitle: {fontFamily:'serif',fontSize:14,lineHeight:20,fontStyle:'italic',marginTop:3,maxWidth:320},
-  shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
+  shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8},
   shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
@@ -4495,20 +4501,20 @@ const styles = StyleSheet.create({
   sectionLink: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   curatedRow: {gap:18,paddingRight:24},
   curatedCardWrap: {width:136},
-  shelfHero: {borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,paddingHorizontal:0,flexDirection:'row',gap:16,alignItems:'center',overflow:'hidden',minHeight:168},
-  shelfHeroFold: {paddingVertical:18,gap:20,minHeight:184},
-  shelfHeroWide: {paddingVertical:20,gap:24,minHeight:198},
+  shelfHero: {borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,paddingHorizontal:0,flexDirection:'row',gap:16,alignItems:'center',overflow:'hidden',minHeight:156},
+  shelfHeroFold: {paddingVertical:16,gap:20,minHeight:168},
+  shelfHeroWide: {paddingVertical:18,gap:24,minHeight:180},
   shelfHeroArtwork: {width:104,minWidth:104},
   shelfHeroArtworkFold: {width:120,minWidth:120},
   shelfHeroArtworkWide: {width:132,minWidth:132},
-  shelfHeroCopy: {flex:1,minWidth:0,gap:8,paddingVertical:4},
-  shelfHeroEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.4},
+  shelfHeroCopy: {flex:1,minWidth:0,gap:6,paddingVertical:2},
+  shelfHeroEyebrow: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.35},
   shelfHeroTitle: {fontFamily:'sans-serif-medium',fontSize:24,lineHeight:29,fontWeight:'500',letterSpacing:-.2},
   shelfHeroTitleCompact: {fontSize:21,lineHeight:26},
   shelfHeroTitleFold: {fontSize:25,lineHeight:30},
   shelfHeroAuthor: {fontSize:14,lineHeight:21},
   shelfHeroResume: {fontSize:12,lineHeight:17,fontWeight:'700',letterSpacing:.15},
-  shelfHeroFooter: {marginTop:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  shelfHeroFooter: {marginTop:4,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   shelfHeroMeta: {fontSize:12,lineHeight:17},
   shelfHeroAction: {minWidth:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center',paddingHorizontal:14},
   shelfHeroActionText: {color:'#FFFFFF',fontSize:13,fontWeight:'700'},
@@ -4532,8 +4538,8 @@ const styles = StyleSheet.create({
   seriesCover: {position:'absolute',width:64,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.09,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
   seriesEmpty: {position:'absolute',left:0,top:0,width:104,height:108,borderWidth:StyleSheet.hairlineWidth,borderRadius:10},
   seriesName: {fontFamily:'sans-serif-medium',fontSize:15,lineHeight:20,fontWeight:'500'},
-  shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,flexDirection:'row',flexWrap:'wrap',gap:10},
-  shelfUtilityAction: {minHeight:44,paddingHorizontal:4,paddingRight:14,justifyContent:'center'},
+  shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,flexDirection:'row',flexWrap:'wrap',gap:16},
+  shelfUtilityAction: {minHeight:40,paddingHorizontal:0,paddingRight:8,justifyContent:'center'},
   brandSignature: {fontSize:10,fontWeight:'700',letterSpacing:3,textAlign:'center',marginTop:8},
   designedEmpty: {borderWidth:0,padding:28,gap:10,alignItems:'center',justifyContent:'center',minHeight:180},
   emptyMark: {fontFamily:'serif',fontSize:34,fontWeight:'800'},
