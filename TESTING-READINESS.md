@@ -1,34 +1,54 @@
 # Archivist 0.9.2 — Testing Readiness
 
 **Candidate branch:** `dev/archivist-work`  
-**Candidate mobile commit:** `2789d75c`  
+**Candidate mobile commit:** `611fc7fd`  
 **Target:** Android-first local app + optional Home Assistant/Docker server.
 
 This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
 
-## Current visual-review pass
+## Current crafted UI sweep
 
-The canonical mobile UI is on `dev/archivist-work`. The current review candidate deliberately changes the first-glance composition of the three screens being reviewed:
+The canonical mobile UI is on `dev/archivist-work`. This sweep was completed screen-by-screen after physical Galaxy Fold screenshots exposed scaling, typography, fallback-artwork and Fold breakpoint problems. It is **not visually accepted yet**; automated checks verify engineering only.
 
-- Shelf editorial composition: `697d4e0f`; crafted refinement: `fcfffb27`
-- Dense Library catalogue: `c8671512`; crafted refinement: `7ac85fd9`
-- Living Book Player: `dc2411f7`; crafted refinement: `2789d75c`
-- 0.9.2 review candidate is versioned after the crafted three-screen refinement pass.
+Crafted commits:
 
-Do not substitute a `main` APK or an older 0.9.0 artifact when reviewing these screens.
+- Shelf hierarchy from physical Fold review: `a24f19cb`
+- Library phone/open-Fold composition: `8b526c9d`
+- Responsive audiobook Player hierarchy: `55e792fc`
+- Immersive Reader UI + embedded reader palette/motion: `0c64237d`
+- Atlas continuous-universe responsive refinement: `d065b02c`
+- Insights reading-journal refinement: `5b3f3833`
+- Profile phone/Fold refinement: `2c5dcc8d`
+- Settings calm readable sections: `62d6d109`
+- Onboarding and optional server setup: `8516ed33`
+- Shared header/navigation/mini-player/Fold sheets: `ba3ee74c`
+- Secondary controls and typography normalization: `b00b1cc2`
+- Canonical responsive/Fold acceptance rules: `bb9e3cc0`
+- Reader timing/palette consistency correction: `611fc7fd`
+
+The physical review that triggered this sweep demonstrated these required rules:
+- open Fold is a first-class composition from 600dp, not a stretched phone;
+- normal UI hierarchy must not depend on Android's generic serif metrics;
+- long real titles, missing covers and unknown metadata are mandatory stress cases;
+- the Player must expose progress and transport in the first viewport;
+- Library controls must never clip or consume most of the catalogue viewport;
+- Reader suppresses global app chrome while reading;
+- CI/build success is not visual acceptance.
+
+Do not substitute a `main` APK or any pre-`611fc7fd` runtime when reviewing this sweep.
 
 ## Readiness summary
 
 | Area | Source / automated status | Physical acceptance |
 | --- | --- | --- |
-| Shelf & unified Library | Implemented; Mobile CI-covered | Fold closed/open visual/scroll smoke |
+| Shelf & unified Library | Crafted responsive sweep; Mobile CI gate | Re-review Fold closed/open visuals, clipping and scroll |
 | Local folders | Implemented; scan/cache tests | Android Storage Access Framework with real folders |
 | Server connection | Implemented; HTTPS/session compatibility tests | Real DuckDNS/Tailscale HTTPS |
-| Audiobook player | Implemented; state/queue/native-patch tests | Background, lock screen, Bluetooth, calls |
-| Reader | EPUB/PDF/comic paths implemented; automated reader tests | Representative real-book/comic corpus |
+| Audiobook player | Crafted responsive Player + existing playback tests | Re-review closed/open Fold first viewport, then background/lock screen/Bluetooth/calls |
+| Reader | Immersive chrome + 520ms turn timing + automated reader tests | Closed/open Fold, real EPUB/PDF/comic corpus and page-turn quality |
 | Comic Focus Zoom | Implemented foundations and regression tests | Real comic gesture/focus quality |
-| Atlas | Continuous pan/zoom universe; deterministic graph tests | Fold gesture/performance review |
-| Insights | History/goals/annotation hub implemented/tested | UX review with real usage data |
+| Atlas | Continuous universe retained; responsive inspector refinement | Phone/Fold visual, gesture and performance review |
+| Insights | Crafted journal hierarchy + existing tests | Phone/Fold UX review with real usage data |
 | Smart Shelves | Nested ALL/ANY engine implemented/tested | Touch/keyboard UX review |
 | Safe organisation | Preview/journal/hash/copy fallback tested | Real power-loss/storage scenarios |
 | Offline downloads | Implemented with checkpoints/storage cleanup | Long download/background/device test |
@@ -37,7 +57,7 @@ Do not substitute a `main` APK or an older 0.9.0 artifact when reviewing these s
 | Backup/restore | SQLite snapshot/staged restore tested | Disposable real HA restore |
 | OPDS | Feed/auth/profile filtering tested | Compatible reader smoke |
 | Home Assistant package | Server CI, ARM64 compile, Docker smoke | Pi 4B install/update/restart |
-| Android test APK | Workflow running for candidate | Install on Galaxy Fold |
+| Android test APK | Workflow available; do not treat artifact as visual approval | Build only after final CI; install on Galaxy Fold for acceptance |
 | Google Play production | Not a 0.9 testing gate | Private signing + AAB + Play Console |
 
 ## Automated evidence already green
@@ -50,7 +70,7 @@ Do not substitute a `main` APK or an older 0.9.0 artifact when reviewing these s
 - 0.9.0 version-aligned Mobile checks: commit `ffe9e545`, run `36908772223`.
 - Sprint 8 native-control polish: commit `c6e5776a`, run `36908101785`.
 
-Final candidate `b7842ab5` adds the last filter/accessibility polish. Its Mobile and Android Test APK workflows are the final automated gates for this checkpoint.
+Current runtime candidate `611fc7fd` is the crafted UI sweep head. Its Mobile checks are the engineering gate; physical screenshot/device review remains the visual gate.
 
 ## Sprint status
 
@@ -60,13 +80,13 @@ Final candidate `b7842ab5` adds the last filter/accessibility polish. Its Mobile
 - **Sprint 7:** core server/resilience/ecosystem scope complete and CI-proven.
 - **Sprint 8:** source/UI/release sweep complete; final candidate CI/APK plus physical acceptance remain.
 
-## 0.9.0 Android test artifact
+## 0.9.2 Android test artifact
 
 The `Android Test APK` workflow produces an optimized release variant signed with the repository debug key:
 
-- artifact: `Archivist-0.9.0-Test-APK`
-- APK: `Archivist-0.9.0-test.apk`
-- checksum: `Archivist-0.9.0-test.apk.sha256`
+- artifact: `Archivist-0.9.2-Test-APK`
+- APK: `Archivist-0.9.2-test.apk`
+- checksum: `Archivist-0.9.2-test.apk.sha256`
 
 The workflow runs dependency/Expo checks, TypeScript, behavioural tests, Android lint, release assembly, package/permission/signature/alignment/ABI verification and emulator launch.
 
@@ -89,6 +109,6 @@ Use `MOBILE-TESTING.md` and record results for:
 
 ## Release boundary
 
-Do not call 0.9.0 a production store release until the physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
+Do not call 0.9.2 a production store release until the physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
 
 Do not merge `dev/archivist-work` to `main` solely because CI is green; merge only after the user approves the physical testing candidate.
