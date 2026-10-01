@@ -3729,7 +3729,7 @@ function Client() {
             <Text style={[styles.profileMonogramText,{color:p.paper}]}>{(stats?.name||'A').trim().charAt(0).toUpperCase()||'A'}</Text>
           </View>
           <View style={{flex:1,gap:3}}>
-            <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{stats?.name||'Profile'}</Text>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.profileTitle,{color:p.ink}]}>{stats?.name||'Profile'}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{session?(stats?.owner?'Admin':'User'):'Local library on this device'}</Text>
           </View>
         </View>
@@ -3739,7 +3739,7 @@ function Client() {
 
         {stats?<>
           <View style={[styles.profileMetricStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-            {metrics.map(([label,value])=><View key={String(label)} style={[styles.profileMetric,width>=760&&styles.profileMetricWide]}>
+            {metrics.map(([label,value])=><View key={String(label)} style={[styles.profileMetric,foldLayout&&styles.profileMetricFold,width>=900&&styles.profileMetricWide]}>
               <Text style={[styles.profileMetricValue,{color:p.ink}]}>{value}</Text>
               <Text style={[styles.profileMetricLabel,{color:p.muted}]}>{label}</Text>
             </View>)}
@@ -4387,7 +4387,7 @@ const styles = StyleSheet.create({
   celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
   celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
   celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
-  profileScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:26,maxWidth:920,width:'100%',alignSelf:'center'},
+  profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
   settingsScreen: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:24,maxWidth:1180,width:'100%',alignSelf:'center'},
   settingsColumns: {gap:24},
   settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:40},
@@ -4407,21 +4407,23 @@ const styles = StyleSheet.create({
   settingsRowActions: {flexDirection:'row',alignItems:'center',gap:10},
   settingsAddFolder: {gap:8},
   settingsDangerRow: {minHeight:44,alignItems:'flex-start',justifyContent:'center'},
-  profileHero: {borderWidth:0,paddingVertical:6,flexDirection:'row',alignItems:'center',gap:16},
-  profileMonogram: {width:58,height:58,borderRadius:29,alignItems:'center',justifyContent:'center'},
-  profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'500'},
-  profileMetricStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:18,rowGap:18},
-  profileMetric: {width:'33.333%',minWidth:105,gap:2},
+  profileHero: {borderWidth:0,paddingVertical:4,flexDirection:'row',alignItems:'center',gap:14},
+  profileTitle: {fontFamily:'sans-serif-medium',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
+  profileMonogram: {width:50,height:50,borderRadius:25,alignItems:'center',justifyContent:'center'},
+  profileMonogramText: {fontFamily:'sans-serif-medium',fontSize:20,fontWeight:'500'},
+  profileMetricStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:16,rowGap:16},
+  profileMetric: {width:'50%',minWidth:130,gap:2},
+  profileMetricFold: {width:'33.333%',minWidth:105},
   profileMetricWide: {width:'16.666%',minWidth:90},
-  profileMetricValue: {fontFamily:'serif',fontSize:27,lineHeight:31,fontWeight:'500'},
+  profileMetricValue: {fontFamily:'sans-serif-medium',fontSize:23,lineHeight:28,fontWeight:'500'},
   profileMetricLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
-  profileDetailRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:16},
+  profileDetailRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:16},
   profileBreakdownRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:12},
   profileDivider: {height:StyleSheet.hairlineWidth},
   profileAchievementList: {gap:0},
-  profileAchievementRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',alignItems:'center',gap:14},
-  profileAchievementBadge: {width:50,height:50,borderRadius:25,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
-  profileAchievementInitial: {fontFamily:'serif',fontSize:21,fontWeight:'500'},
+  profileAchievementRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',alignItems:'center',gap:12},
+  profileAchievementBadge: {width:44,height:44,borderRadius:22,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
+  profileAchievementInitial: {fontFamily:'sans-serif-medium',fontSize:17,fontWeight:'500'},
   achievementCard: {borderWidth:0,paddingVertical:14,gap:10},
   achievementHeader: {flexDirection:'row',alignItems:'flex-start',gap:12},
   achievementTitle: {fontSize:15,fontWeight:'600'},
