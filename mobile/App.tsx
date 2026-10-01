@@ -2151,12 +2151,18 @@ function Client() {
     const [coverFailed, setCoverFailed] = useState(false);
     useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
-      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor:'#111111'}]}>
-        <Text numberOfLines={1} style={[styles.coverFormat,{color:p.sage}]}>{format.toUpperCase()}</Text>
-        <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle,{color:'#FFFFFF'}]}>{title}</Text>
+      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor:p.card}]}>
         {imageSource && !coverFailed ? (
           <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
-        ) : null}
+        ) : (
+          <View style={styles.coverFallback}>
+            <Text style={[styles.coverFallbackMark,{color:p.muted}]}>A</Text>
+            <View style={styles.coverFallbackCopy}>
+              <Text numberOfLines={1} style={[styles.coverFormat,{color:p.sage}]}>{format.toUpperCase()}</Text>
+              <Text maxFontSizeMultiplier={1.1} numberOfLines={large ? 3 : 2} style={[styles.coverTitle,{color:p.ink},large&&styles.coverTitleLarge]}>{title}</Text>
+            </View>
+          </View>
+        )}
       </View>
     );
   }
@@ -2724,8 +2730,8 @@ function Client() {
       accessibilityRole="button"
       accessibilityLabel={'Continue '+primaryContinue.title}
       onPress={()=>openUnifiedWork(primaryContinue)}
-      style={({pressed})=>[styles.shelfHero,width>=760&&styles.shelfHeroWide,{backgroundColor:p.card},pressed&&styles.cardPressed]}>
-      <View style={[styles.shelfHeroArtwork,width>=760&&styles.shelfHeroArtworkWide]}>{workArtwork(primaryContinue)}</View>
+      style={({pressed})=>[styles.shelfHero,foldLayout&&styles.shelfHeroFold,width>=900&&styles.shelfHeroWide,{borderTopColor:p.line,borderBottomColor:p.line},pressed&&styles.cardPressed]}>
+      <View style={[styles.shelfHeroArtwork,foldLayout&&styles.shelfHeroArtworkFold,width>=900&&styles.shelfHeroArtworkWide]}>{workArtwork(primaryContinue)}</View>
       <View style={styles.shelfHeroCopy}>
         <Text style={[styles.shelfHeroEyebrow,{color:p.sage}]}>{primaryContinue.format==='Audio'?'CONTINUE LISTENING':'CONTINUE READING'}</Text>
         <Text maxFontSizeMultiplier={1.12} numberOfLines={3} style={[styles.shelfHeroTitle,{color:p.ink},layoutTier==='compact'&&styles.shelfHeroTitleCompact,layoutTier==='fold'&&styles.shelfHeroTitleFold]}>{primaryContinue.title}</Text>
@@ -2850,7 +2856,7 @@ function Client() {
 
       <OnboardingGuide/>
 
-      {reviewCount>0?<Pressable accessibilityRole="button" onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.line}]}>
+      {reviewCount>0?<Pressable accessibilityRole="button" onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>{reviewCount} item{reviewCount===1?'':'s'} need a metadata check</Text><Text style={[styles.meta,{color:p.muted}]}>Review uncertain matches before organising files.</Text></View>
         <Text style={{color:p.sage,fontWeight:'700'}}>Review</Text>
       </Pressable>:null}
@@ -4186,7 +4192,7 @@ const styles = StyleSheet.create({
   librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
   librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
   librarySummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',gap:12,alignItems:'center'},
-  reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
+  reviewBanner: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingVertical:11,paddingHorizontal:0,flexDirection:'row',gap:12,alignItems:'center'},
   shelfSection: {gap:8},
   continueRow: {gap:12,paddingRight:6},
   continueCard: {width:132,gap:6},
@@ -4216,13 +4222,17 @@ const styles = StyleSheet.create({
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
   book: {flex: 1, maxWidth: '50%', padding: 8, gap: 7},
-  cover: {aspectRatio: 2 / 3, borderRadius: 10, justifyContent: 'space-between', padding: 12, overflow: 'hidden',shadowColor:'#000',shadowOpacity:.10,shadowRadius:10,shadowOffset:{width:0,height:5},elevation:2},
+  cover: {aspectRatio:2/3,borderRadius:10,overflow:'hidden',shadowColor:'#000',shadowOpacity:.08,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:2},
   coverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
   coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
   coverLargeSquare: {width: 230, height: 230},
-  coverFormat: {fontSize: 11, fontWeight: '900', letterSpacing: 1.6},
-  coverTitle: {fontFamily: 'serif', fontSize: 20},
+  coverFallback: {flex:1,padding:10,justifyContent:'space-between'},
+  coverFallbackMark: {fontFamily:'serif',fontSize:20,lineHeight:24,opacity:.5},
+  coverFallbackCopy: {gap:4},
+  coverFormat: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.4},
+  coverTitle: {fontFamily:'sans-serif-medium',fontSize:13,lineHeight:17,fontWeight:'500'},
+  coverTitleLarge: {fontSize:16,lineHeight:21},
   bookTitle: {fontSize: 14.5, lineHeight:19, fontWeight: '700'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
   editorCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
@@ -4482,11 +4492,13 @@ const styles = StyleSheet.create({
   sectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   sectionLink: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   curatedRow: {gap:18,paddingRight:24},
-  curatedCardWrap: {width:154},
-  shelfHero: {borderRadius:24,padding:18,flexDirection:'row',gap:20,alignItems:'center',overflow:'hidden',minHeight:220,shadowColor:'#000',shadowOpacity:.08,shadowRadius:18,shadowOffset:{width:0,height:9},elevation:3},
-  shelfHeroWide: {padding:28,gap:36,minHeight:326},
-  shelfHeroArtwork: {width:132,minWidth:132},
-  shelfHeroArtworkWide: {width:204,minWidth:204},
+  curatedCardWrap: {width:136},
+  shelfHero: {borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,paddingHorizontal:0,flexDirection:'row',gap:16,alignItems:'center',overflow:'hidden',minHeight:168},
+  shelfHeroFold: {paddingVertical:18,gap:20,minHeight:184},
+  shelfHeroWide: {paddingVertical:20,gap:24,minHeight:198},
+  shelfHeroArtwork: {width:104,minWidth:104},
+  shelfHeroArtworkFold: {width:120,minWidth:120},
+  shelfHeroArtworkWide: {width:132,minWidth:132},
   shelfHeroCopy: {flex:1,minWidth:0,gap:8,paddingVertical:4},
   shelfHeroEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.4},
   shelfHeroTitle: {fontFamily:'sans-serif-medium',fontSize:24,lineHeight:29,fontWeight:'500',letterSpacing:-.2},
@@ -4496,7 +4508,7 @@ const styles = StyleSheet.create({
   shelfHeroResume: {fontSize:12,lineHeight:17,fontWeight:'700',letterSpacing:.15},
   shelfHeroFooter: {marginTop:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   shelfHeroMeta: {fontSize:12,lineHeight:17},
-  shelfHeroAction: {minWidth:52,height:52,borderRadius:26,alignItems:'center',justifyContent:'center',paddingHorizontal:16},
+  shelfHeroAction: {minWidth:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center',paddingHorizontal:14},
   shelfHeroActionText: {color:'#FFFFFF',fontSize:13,fontWeight:'700'},
   smartShelfRow: {gap:24,paddingRight:24},
   smartShelfTile: {width:196,gap:6},
@@ -4512,10 +4524,10 @@ const styles = StyleSheet.create({
   collectionMiniCover: {position:'absolute',width:70,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.13,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:3},
   collectionEmptyMark: {width:92,height:108,borderRadius:12,alignItems:'center',justifyContent:'center'},
   collectionName: {fontSize:15,lineHeight:20,fontWeight:'600'},
-  seriesRow: {gap:24,paddingRight:24},
-  seriesTile: {width:188,borderWidth:0,gap:6},
-  seriesCoverStack: {height:136,position:'relative',marginBottom:8},
-  seriesCover: {position:'absolute',width:80,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:3},
+  seriesRow: {gap:20,paddingRight:20},
+  seriesTile: {width:152,borderWidth:0,gap:5},
+  seriesCoverStack: {height:108,position:'relative',marginBottom:6},
+  seriesCover: {position:'absolute',width:64,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.09,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
   seriesEmpty: {position:'absolute',left:0,top:0,width:104,height:108,borderWidth:StyleSheet.hairlineWidth,borderRadius:10},
   seriesName: {fontFamily:'sans-serif-medium',fontSize:15,lineHeight:20,fontWeight:'500'},
   shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,flexDirection:'row',flexWrap:'wrap',gap:10},
