@@ -78,6 +78,8 @@ jobs:
           node local-library.test.cjs
           node local-works.test.cjs
           node atlas.test.cjs
+          node library-organisation.test.cjs
+          node insights.test.cjs
           node duplicates.test.cjs
           node local-reader.test.cjs
           node profile-stats.test.cjs
