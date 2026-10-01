@@ -27,7 +27,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Re-run baseline mobile regression from the durable branch.
 - Create `dev-work/checkpoints/sprint-00.md`.
 
-**Status: ACTIVE / recovery foundation established, durable code reconciliation still required.**
+**Status: SPRINTS 1–7 DURABLE; Sprint 8 final release/device sweep active.**
 
 ---
 
@@ -60,7 +60,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Verify mixed-source queue persistence and source-aware progress after process restart.
 - Create durable Sprint-1 checkpoint.
 
-**Status: RECOVERABLE, not yet durably reconstituted.**
+**Status: COMPLETE / DURABLE. See dev-work/checkpoints/sprint-01.md.**
 
 ---
 
@@ -114,7 +114,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Perform visual review after the code is durable; visual validation must not block development.
 - Create durable Sprint-2 checkpoint.
 
-**Status: SUBSTANTIALLY RECOVERABLE; exact partial code preserved, remainder requires reconstruction.**
+**Status: COMPLETE / DURABLE. See dev-work/checkpoints/sprint-02.md.**
 
 ---
 
@@ -158,7 +158,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Native output-device routing remains a later native-platform item.
 - Create durable Sprint-3 checkpoint.
 
-**Status: FUNCTIONALLY RECONSTRUCTABLE, exact source not preserved.**
+**Status: COMPLETE / DURABLE. See dev-work/checkpoints/sprint-03.md.**
 
 ---
 
@@ -199,7 +199,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Verify Fold reader layouts.
 - Create durable Sprint-4 checkpoint.
 
-**Status: PARTIALLY COMPLETED BEFORE RESET; substantial implementation still outstanding.**
+**Status: COMPLETE / DURABLE IN SOURCE/CI. Physical reader/Fold acceptance remains a Sprint 8 device gate.**
 
 ---
 
@@ -306,7 +306,7 @@ Do not mark a sprint complete until its implementation is present on `dev/archiv
 - Screenshot/visual review on physical device.
 - Production Play signing/AAB remains a publication step, not required for the installable test APK.
 
-**Status: ACTIVE / FINAL RELEASE SWEEP.**
+**Status: ACTIVE / 0.9.0 RELEASE SWEEP. Native-control polish is green; versioned APK and physical acceptance remain.**
 
 ---
 

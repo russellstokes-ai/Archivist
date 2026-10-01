@@ -1,65 +1,61 @@
-# Mobile testing checkpoint
+# Archivist 0.9.0 — Mobile Device Acceptance
 
-This is source code, not an installable Android or iOS release. Native builds,
-signing and physical-device acceptance remain outstanding. Do not expose this
-development server to the public internet solely to test mobile access.
+Use the APK produced by the **Android APK** GitHub Actions workflow. Expo Go is not the acceptance target because Archivist includes native Android playback, sleep and reader behaviour.
 
 ## Connection
 
-Use the dedicated Archivist HTTPS origin with a certificate trusted by the phone.
-Do not paste the Home Assistant sidebar/ingress URL: its authentication, prefix and
-session routing differ from the native client API contract. Port 5056 is plain HTTP.
-An existing trusted TLS reverse proxy on the private network can forward to it.
-The app does not disable certificate validation or allow arbitrary cleartext LAN URLs.
-Development-only loopback/emulator HTTP is permitted by the source validator.
-Native platform transport policy still applies. Remote-access hardening is Pack 15.
+Archivist works locally without a server. To test the optional server, use the dedicated Archivist HTTPS origin with a certificate trusted by the phone.
 
-Use a profile key from the server, or its current owner key from the log. Secrets
-are stored with SecureStore. API requests time out, reject redirects, and identify
-non-API responses. Reader navigation is restricted to the selected server; a valid
-bearer on reader entry sets an HttpOnly cookie for reader subrequests. Automated
-server tests cover this flow and revocation; WebView cookie behaviour needs devices.
+Do not use the Home Assistant sidebar or ingress URL as the native app server address. Ingress authentication and path routing are different from the mobile API contract.
 
-## Implemented in Packs 3-9
+For remote testing:
+- trusted DuckDNS or reverse-proxy HTTPS is suitable;
+- Tailscale or private-network routing can be used as the fallback;
+- do not disable certificate validation merely to make a connection pass.
 
-- Grouped and standalone audio context, server resume, revision-checked saves,
-  seek/rewind, track advance, completion and progress-conflict protection.
-- Playback speed, native sleep source extension, selectable tracks/embedded chapters,
-  and a server-persisted per-profile book queue with reorder and conflict protection.
-- Lock-screen activation and audio background configuration, status-event handling,
-  lifecycle saves. No physical device pass is claimed.
-- Multiple-space filtering, owner folder add/scan and title correction.
-- Server reader improvements automatically serve the native WebView.
+Server and profile credentials are stored with SecureStore. API requests use timeouts and keep reader navigation scoped to the selected server.
 
-## Acceptance still needed
+## Fold acceptance
 
-1. Android and iOS: connect over trusted HTTPS; wrong host/key/certificate; timeout;
-   sign-out, restart, profile revocation and reader image/PDF subrequest authentication.
-2. Play grouped and single-file books; pause, kill/relaunch, resume and deliberate rewind.
-   Change position on a second client: conflict must not overwrite it silently.
-3. Background for 30 minutes, screen locked; headset/Bluetooth controls; incoming call;
-   unplug headphones; other audio app; OS media-service restart.
-4. Speed, embedded chapter seeks, track/queue changes and sleep expiry while locked.
-   Native sleep source is implemented but NOT yet compiled/device-certified.
-   Build after npm postinstall patches pinned expo-audio 57.0.5. Expo Go lacks this
-   extension and reports sleep unavailable; install an Archivist native build to test.
-5. Native layout/keyboard, safe-area bottom controls and both colour schemes.
+Test both the Galaxy Fold closed-phone layout and the open-tablet layout.
 
-Known gaps: native sleep timer acceptance, durable offline checkpoints/downloads,
-publisher-perfect EPUB CSS/layout, real compressed RAR corpus and performance tests.
-File move controls currently live in the server web UI, not native settings.
+### Shelf and Library
+- vertical Shelf scroll remains smooth;
+- source and Space filters remain usable;
+- Library grid density changes without clipped cards;
+- open layout uses the intended wider or two-pane treatment;
+- Smart Shelves, Collections and bulk actions remain reachable.
 
-## Cheap restart
+### Player
+- Local, Server and Downloaded audiobooks open the same polished player;
+- pause, resume, seek and deliberate rewind persist correctly;
+- Living Book animation follows playback state and reduced-motion;
+- queue, chapters, bookmarks, speed and sleep controls remain usable;
+- lock screen, Bluetooth or headset and background playback are accepted on-device;
+- kill and relaunch restores the intended position rather than a stale future point.
 
-Read TESTING-READINESS.md first. Tests:
+### Reader
+- EPUB, PDF, CBZ, CBR and CBT routes open from the correct source;
+- bookmarks, highlights, notes, search and appearance persist;
+- page turns never own reading progress;
+- double-tap Comic Focus Zoom identifies a useful local region and normal zoom remains immediately available;
+- orientation and Fold changes return to the same reading context.
 
-```sh
-cd mobile
-npm run typecheck
-node core.test.cjs
-node queue.test.cjs
-```
+### Offline
+- start a server download, background the app, return and resume it;
+- play or read the completed offline copy with the server unavailable;
+- remove a download without removing the server work;
+- cleanup removes broken or orphaned download state without touching valid media.
 
-Audio adapter: mobile/App.tsx. Pure player logic: mobile/playback.ts.
-Connection guards: mobile/connection.ts. API: listening.go and progress.go.
-Device checks are blocked by missing native binaries/hardware, not marked complete.
+## Server and profile acceptance
+
+- wrong key, revoked User and unavailable server fail clearly;
+- Admin and User keep separate ratings, progress and history;
+- a User cannot reach Admin-only file, metadata, household or backup operations;
+- reconnecting to a saved server does not hide or overwrite the local phone catalogue.
+
+## Completion record
+
+A device pass should record APK version and checksum, Android and device version, server or HA version, Fold closed and open result, playback and background result, reader and comic result, offline result, remote result and any defects.
+
+Automated CI and emulator launch are prerequisites, not substitutes for this physical pass.

@@ -1,65 +1,99 @@
 <p align="center">
-  <img src="web/assets/archivist-primary-logo.png" alt="Archivist logo" width="180">
+  <img src="web/assets/archivist-primary-logo.png" alt="Archivist logo" width="190">
 </p>
 
 # Archivist
 
-Archivist is a polished personal library app for books, comics, audiobooks and PDFs. It helps readers bring scattered folders into one calm library, read and listen anywhere, organise collections, and keep an optional private server in sync when they want a shared household library.
+**Your books. Your listening. Your library.**
 
-Archivist is local-first. The mobile app works on its own, and server connection is an optional setting that can be added later.
+Archivist is a local-first personal library for ebooks, audiobooks, comics and PDFs. It brings files from a phone, private server and offline downloads into one coherent Shelf without making a server mandatory.
 
-## Highlights
+Current internal build: **0.9.0**
 
-- Local-first Android app for books, comics, audiobooks and PDFs.
-- Add multiple folders and scan their content from the first launch.
-- Sort, rename and organise files with a clear preview before changes are applied.
-- Read EPUB, PDF and comics, and listen to audiobooks with saved progress.
-- Connect an optional private server from app settings.
-- Manage server folders, scans, devices and access from a simple web dashboard.
-- Create your own server access key during setup.
-- Keep family profiles, spaces and progress separate.
-- Explore the library visually with Atlas, including author, series, folder, tag and genre relationships.
+## The library experience
 
-## Mobile App
+Archivist is built around works rather than loose files. Shelf is the calm day-to-day view; Library is the deeper browse, search, filter and organisation surface.
 
-Archivist opens straight into the library experience. Add folders from the phone, scan their contents, and start reading, listening and organising immediately.
+- Local, Server and Downloaded sources coexist in one library.
+- Multiple folders and Spaces are supported from first setup.
+- Server and downloaded copies deduplicate in the combined view.
+- Smart Shelves support nested **ALL / ANY** rules.
+- Collections use stable work identity across local, online and offline copies.
+- Personal ratings, favourites, progress and history remain profile-scoped.
+- Metadata review and duplicate review are explicit rather than silently destructive.
 
-Server connection lives in Settings. When a server is added, the app validates the address and access key, explains connection issues clearly, and keeps the local library usable even when the server is unavailable.
+## Read and listen
 
-Archivist is designed for Google Play distribution.
+The mobile app includes an integrated reader and a Living Audiobook Player.
 
-## Server
+**Reader**
+- EPUB, PDF, CBZ, CBR and CBT support across the implemented platform paths.
+- Bookmarks, highlights, notes, search and reading appearance controls.
+- Deterministic Comic Focus Zoom using the original comic pixels.
+- Offline PDF and comic reading on Android.
+- Page-turn motion with reduced-motion support.
 
-The Archivist server is an optional private library hub for households and always-on storage. It provides a web dashboard for adding folders, scanning content, managing spaces, reviewing sort operations, and pairing devices.
+**Audiobooks**
+- Local, server and downloaded playback.
+- Durable progress, queue, bookmarks, chapter metadata and custom file ordering.
+- Playback speed and native sleep-timer integration.
+- Offline downloads with interrupted-download checkpoints and cleanup.
+- Background and lock-screen infrastructure for the native Android build.
 
-On first launch, the owner creates their own access key in the web interface. The key is saved securely and can be changed or reset by the owner.
+## Atlas and Insights
 
-The server can run anywhere Docker is supported.
+**Atlas** is a continuous, pannable and zoomable map of the collection. It connects works with genre hubs, authors, series, collections, notes and tags, while preserving a list alternative for accessibility.
 
-## Folder Setup
+**Insights** turns the reader's own activity into useful history: completed and in-progress works, listening time, active days, ratings, goals, achievements and a library-wide annotation hub. Archivist does not need cloud recommendation AI to do this.
 
-Archivist supports multiple folders from the start. Users can keep folders separate as spaces or combine them into one library view.
+## Safe organisation
 
-Folder setup uses guided browsing where available, clear permission messages, and readable source health states so users understand exactly what Archivist can see.
+Organisation is deliberately preview-first.
 
-## Sorting
+- Batch preview before file changes.
+- Collision detection and metadata-review gates.
+- Journaled safe moves with restart recovery.
+- Hard-link preference with verified copy fallback where links are unavailable.
+- SHA-256 verification before originals are removed.
+- Copy or disk failure leaves the original and catalogue path intact.
 
-Sorting is available locally in the app and on the server.
+## Optional private server
 
-Each sorting workflow shows a preview before files are changed, including the current location, proposed destination, conflicts and skipped files. Users can apply selected changes, exclude items, review history and recover interrupted operations.
+Archivist works without a server. The optional Go server adds household sharing, remote storage and an always-on catalogue.
 
-## Reader And Player
+The server provides:
+- Home Assistant add-on and standalone server packaging.
+- Library-first web dashboard with guided folder browsing.
+- Admin and User household roles with separate progress and preferences.
+- Restart-safe background scan jobs.
+- Optional watched folders with bounded scan intervals.
+- Database backup and restart-staged restore.
+- Profile-aware OPDS access.
+- HTTP range streaming and private reader endpoints.
+- Dashboard status that does **not** probe media drives simply to refresh the UI.
 
-Archivist includes an integrated reader and audiobook player with saved progress. The reader is designed for books, PDFs and comics, while the player keeps audiobook position across sessions and devices.
+For remote mobile access, use a trusted HTTPS endpoint such as an existing reverse proxy or DuckDNS setup. Tailscale can be used as a private-network alternative. Archivist does not automatically expose the server to the public internet.
 
-Comic speech bubble focus provides a practical non-generative comic reading flow: double-tap to focus likely speech areas, step through bubbles or panels, and keep manual zoom available at all times.
+## Android build
 
-## Atlas
+The repository Android APK workflow installs the pinned toolchain, runs the mobile regression suite and Android lint, builds a release-variant APK, verifies package, version, permissions, signature, alignment and ABIs, launches it in an Android emulator, and publishes a versioned APK plus SHA-256 checksum.
 
-Atlas is the visual map of a library. It connects books by genre, author, series, folder, tags, reading status and related editions so a large collection becomes easier to understand and rediscover.
+The **0.9.0** test APK uses the repository test signing configuration. Production Google Play signing and AAB publication are separate release operations.
 
-Atlas is designed to feel useful rather than decorative: genre clusters, series trails, unread areas, active authors and connected collections should all help users decide what to read next.
+## Home Assistant
 
-## Repository
+The Home Assistant package is versioned with the product at **0.9.0** and supports aarch64 and amd64. Server CI compiles the Go service for Linux ARM64 and smoke-tests the add-on container over HTTP and HTTPS.
 
-Archivist application source is proprietary. See `LICENSE.md`. Third-party dependencies retain their own licences.
+Physical Raspberry Pi installation and update, HDD standby behaviour and external-network routing remain device acceptance checks rather than CI claims.
+
+## Development and verification
+
+Durable sprint checkpoints live under dev-work/checkpoints. TESTING-READINESS.md is the current acceptance record and distinguishes automated validation from checks that require real hardware.
+
+The core product does not depend on optional third-party cloud connectors. Kobo, KOReader, Hardcover and OIDC-style integrations can be added later without blocking the private local-first library.
+
+## Licence
+
+Archivist application source is proprietary. See LICENSE.md.
+
+Third-party libraries and bundled assets retain their own licences. See the repository notices and dependency licence files before public distribution.
