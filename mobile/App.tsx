@@ -278,7 +278,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
 
 function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
   const stroke=Math.max(2,Math.round(size/8));
@@ -307,6 +307,15 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   </View>;
   if(name==='settings')return <View style={{width:size,height:size,position:'relative'}}>
     {[.24,.5,.76].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',top:size*(top-.09),left:size*([.28,.58,.40][index]),width:size*.18,height:size*.18,borderRadius:size*.09,borderWidth:Math.max(1,stroke*.55),borderColor:color,backgroundColor:'transparent'}}/></React.Fragment>)}
+  </View>;
+  if(name==='filter')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.2,.5,.8].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',top:size*(top-.08),left:size*([.24,.58,.38][index]),width:size*.16,height:size*.16,borderRadius:size*.08,borderWidth:Math.max(1,stroke*.55),borderColor:color,backgroundColor:'transparent'}}/></React.Fragment>)}
+  </View>;
+  if(name==='grid')return <View style={{width:size,height:size,position:'relative'}}>
+    {[0,1].flatMap(row=>[0,1].map(col=><View key={row+'-'+col} style={{position:'absolute',left:size*(.10+col*.46),top:size*(.10+row*.46),width:size*.34,height:size*.34,borderWidth:Math.max(1,stroke*.55),borderColor:color,borderRadius:2}}/>))}
+  </View>;
+  if(name==='list')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.18,.48,.78].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,top:size*(top-.02),width:size*.12,height:size*.12,borderRadius:2,backgroundColor:color}}/><View style={{position:'absolute',left:size*.30,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/></React.Fragment>)}
   </View>;
   if(name==='zoomIn'||name==='zoomOut')return <View style={{width:size,height:size,position:'relative'}}>
     <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:stroke,borderColor:color,borderRadius:size*.31,alignItems:'center',justifyContent:'center'}}>
@@ -2821,11 +2830,39 @@ function Client() {
     const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
     const ReviewList=()=>reviewOnly?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Metadata review</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} item{visibleBooks.length===1?'':'s'} need attention</Text></View><Button label="Done reviewing" tone="quiet" onPress={()=>setReviewOnly(false)}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>:null}</View>:null;
     const main=<View style={styles.libraryMain}>
-      <View style={styles.pageHeadingRow}><View style={{flex:1}}><Text style={[styles.title,{color:p.ink}]}>Library</Text><Text style={[styles.pageSubtitle,{color:p.muted}]}>{sortedUnifiedWorks.length} work{sortedUnifiedWorks.length===1?'':'s'} · {sourceLabel(sourceFilter==='all'?'local':sourceFilter as WorkSource).replace('On this device','All sources')}</Text></View>{selectedWorkKeys.length?<Text style={[styles.selectionCount,{color:p.sage}]}>{selectedWorkKeys.length} selected</Text>:null}</View>
+      <View style={styles.pageHeadingRow}>
+        <View style={{flex:1}}>
+          <Text style={[styles.title,{color:p.ink}]}>Library</Text>
+          <Text style={[styles.pageSubtitle,{color:p.muted}]}>{sortedUnifiedWorks.length} work{sortedUnifiedWorks.length===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
+        </View>
+      </View>
       {!wide?<><SourceSwitcher/>{availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}</>:null}
-      {selectedWorkKeys.length?<View style={[styles.selectionToolbar,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text><Button label="Add to collection" tone="quiet" onPress={()=>setOrganisationModal('add-to-collection')}/><Button label="Favourite" tone="quiet" onPress={favouriteSelected}/><Button label="Done" onPress={()=>setSelectedWorkKeys([])}/></View>:<>
-        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search title, author, series or genre" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink,borderColor:p.line,backgroundColor:p.card}]}/>
-        <View style={styles.libraryToolbar}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>{formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:formatFilter===format}} onPress={()=>setFormatFilter(formatFilter===format?'':format)} style={[styles.quickFilter,{backgroundColor:p.card}]}><Text style={{color:formatFilter===format?p.sage:p.muted,fontWeight:formatFilter===format?'700':'500'}}>{format}</Text></Pressable>)}</ScrollView><Pressable accessibilityRole="button" onPress={()=>setLibraryFiltersOpen(true)} style={[styles.toolbarButton,{borderColor:p.line,backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'800'}}>Filters{filtersActive?' · '+filtersActive:''}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={libraryView==='grid'?'Switch to list':'Switch to grid'} onPress={()=>setLibraryView(libraryView==='grid'?'list':'grid')} style={[styles.toolbarButton,{borderColor:p.line,backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'800'}}>{libraryView==='grid'?'List':'Grid'}</Text></Pressable></View>
+      {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
+        <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={favouriteSelected} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Favourite</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>setSelectedWorkKeys([])} style={styles.librarySelectionAction}><Text style={{color:p.sage,fontWeight:'700'}}>Done</Text></Pressable>
+      </View>:<>
+        <View style={styles.librarySearchRow}>
+          <TextInput accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search title, author, series or genre" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink,backgroundColor:p.card}]}/>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Filters'+(filtersActive?', '+filtersActive+' active':'')} onPress={()=>setLibraryFiltersOpen(true)} style={[styles.libraryUtilityButton,{backgroundColor:filtersActive?p.card:'transparent'}]}>
+            <UiIcon name="filter" color={filtersActive?p.sage:p.muted} size={21}/>
+            {filtersActive?<View style={[styles.libraryFilterCount,{backgroundColor:p.sage}]}><Text style={styles.libraryFilterCountText}>{filtersActive}</Text></View>:null}
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={libraryView==='grid'?'Switch to list':'Switch to grid'} onPress={()=>setLibraryView(libraryView==='grid'?'list':'grid')} style={styles.libraryUtilityButton}>
+            <UiIcon name={libraryView==='grid'?'list':'grid'} color={p.muted} size={21}/>
+          </Pressable>
+        </View>
+        {formatOptions.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryFormatTabs}>
+          <Pressable accessibilityRole="button" accessibilityState={{selected:!formatFilter}} onPress={()=>setFormatFilter('')} style={styles.libraryFormatTab}>
+            <Text style={[styles.libraryFormatText,{color:!formatFilter?p.ink:p.muted,fontWeight:!formatFilter?'700':'500'}]}>All</Text>
+            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:!formatFilter?1:0}]}/>
+          </Pressable>
+          {formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:formatFilter===format}} onPress={()=>setFormatFilter(formatFilter===format?'':format)} style={styles.libraryFormatTab}>
+            <Text style={[styles.libraryFormatText,{color:formatFilter===format?p.ink:p.muted,fontWeight:formatFilter===format?'700':'500'}]}>{format}</Text>
+            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:formatFilter===format?1:0}]}/>
+          </Pressable>)}
+        </ScrollView>:null}
       </>}
       <ReviewList/>
       {!reviewOnly?<FlatList
@@ -2847,17 +2884,17 @@ function Client() {
       />:null}
       <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/>
       {libraryFiltersOpen?<Modal transparent animationType="slide" visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={styles.sheetBackdrop}><ScrollView contentContainerStyle={styles.sheetScroll}><View accessibilityViewIsModal accessibilityLabel="Library filters" style={[styles.actionSheet,{backgroundColor:p.card,borderColor:p.line}]}><View style={styles.sheetHandle}/><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
-        <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.segment}>{(['title','author','rating'] as const).map(sort=><Pressable key={sort} accessibilityRole="button" accessibilityState={{selected:librarySort===sort}} onPress={()=>setLibrarySort(sort)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:librarySort===sort?p.sage:p.card}]}><Text style={{color:librarySort===sort?p.ivory:p.ink}}>{sort[0].toUpperCase()+sort.slice(1)}</Text></Pressable>)}</View>
-        <Text style={[styles.filterLabel,{color:p.muted}]}>READING STATE</Text><View style={styles.filterWrap}>{(['','not-started','in-progress','finished'] as const).map(state=><Pressable key={state||'any'} accessibilityRole="button" accessibilityState={{selected:readingFilter===state}} onPress={()=>setReadingFilter(state)} style={[styles.filterChip,{borderColor:readingFilter===state?p.sage:p.line,backgroundColor:readingFilter===state?p.sage:p.card}]}><Text style={{color:readingFilter===state?p.ivory:p.ink}}>{state?state.replace('-',' '):'Any'}</Text></Pressable>)}</View>
-        <Text style={[styles.filterLabel,{color:p.muted}]}>AVAILABILITY</Text><View style={styles.filterWrap}>{(['all','available','unavailable'] as const).map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:availabilityFilter===value}} onPress={()=>setAvailabilityFilter(value)} style={[styles.filterChip,{borderColor:availabilityFilter===value?p.sage:p.line,backgroundColor:availabilityFilter===value?p.sage:p.card}]}><Text style={{color:availabilityFilter===value?p.ivory:p.ink}}>{value[0].toUpperCase()+value.slice(1)}</Text></Pressable>)}</View>
-        <Text style={[styles.filterLabel,{color:p.muted}]}>PERSONAL</Text><View style={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:favouriteOnly}} onPress={()=>setFavouriteOnly(!favouriteOnly)} style={[styles.filterChip,{borderColor:favouriteOnly?p.sage:p.line,backgroundColor:favouriteOnly?p.sage:p.card}]}><Text style={{color:favouriteOnly?p.ivory:p.ink}}>Favourites</Text></Pressable>{[0,2,4,6,8,10].map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:ratingFilter===value}} onPress={()=>setRatingFilter(value)} style={[styles.filterChip,{borderColor:ratingFilter===value?p.sage:p.line,backgroundColor:ratingFilter===value?p.sage:p.card}]}><Text style={{color:ratingFilter===value?p.ivory:p.ink}}>{value?ratingLabel(value):'Any rating'}</Text></Pressable>)}</View>
-        <Text style={[styles.filterLabel,{color:p.muted}]}>AUTHOR</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!authorFilter}} onPress={()=>setAuthorFilter('')} style={[styles.filterChip,{borderColor:!authorFilter?p.sage:p.line}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{authorOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:authorFilter===value}} onPress={()=>setAuthorFilter(value)} style={[styles.filterChip,{borderColor:authorFilter===value?p.sage:p.line}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
-        <Text style={[styles.filterLabel,{color:p.muted}]}>SERIES</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!seriesFilter}} onPress={()=>setSeriesFilter('')} style={[styles.filterChip,{borderColor:!seriesFilter?p.sage:p.line}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{seriesOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:seriesFilter===value}} onPress={()=>setSeriesFilter(value)} style={[styles.filterChip,{borderColor:seriesFilter===value?p.sage:p.line}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
-        <Text style={[styles.filterLabel,{color:p.muted}]}>GENRE</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!genreFilter}} onPress={()=>setGenreFilter('')} style={[styles.filterChip,{borderColor:!genreFilter?p.sage:p.line}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{genreOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:genreFilter===value}} onPress={()=>setGenreFilter(value)} style={[styles.filterChip,{borderColor:genreFilter===value?p.sage:p.line}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.segment}>{(['title','author','rating'] as const).map(sort=><Pressable key={sort} accessibilityRole="button" accessibilityState={{selected:librarySort===sort}} onPress={()=>setLibrarySort(sort)} style={[styles.segmentItem,{backgroundColor:librarySort===sort?p.card:'transparent'}]}><Text style={{color:librarySort===sort?p.sage:p.muted,fontWeight:librarySort===sort?'700':'500'}}>{sort[0].toUpperCase()+sort.slice(1)}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>READING STATE</Text><View style={styles.filterWrap}>{(['','not-started','in-progress','finished'] as const).map(state=><Pressable key={state||'any'} accessibilityRole="button" accessibilityState={{selected:readingFilter===state}} onPress={()=>setReadingFilter(state)} style={[styles.filterChip,{backgroundColor:readingFilter===state?p.card:'transparent'}]}><Text style={{color:readingFilter===state?p.sage:p.muted,fontWeight:readingFilter===state?'700':'500'}}>{state?state.replace('-',' '):'Any'}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>AVAILABILITY</Text><View style={styles.filterWrap}>{(['all','available','unavailable'] as const).map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:availabilityFilter===value}} onPress={()=>setAvailabilityFilter(value)} style={[styles.filterChip,{backgroundColor:availabilityFilter===value?p.card:'transparent'}]}><Text style={{color:availabilityFilter===value?p.sage:p.muted,fontWeight:availabilityFilter===value?'700':'500'}}>{value[0].toUpperCase()+value.slice(1)}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>PERSONAL</Text><View style={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:favouriteOnly}} onPress={()=>setFavouriteOnly(!favouriteOnly)} style={[styles.filterChip,{backgroundColor:favouriteOnly?p.card:'transparent'}]}><Text style={{color:favouriteOnly?p.sage:p.muted,fontWeight:favouriteOnly?'700':'500'}}>Favourites</Text></Pressable>{[0,2,4,6,8,10].map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:ratingFilter===value}} onPress={()=>setRatingFilter(value)} style={[styles.filterChip,{backgroundColor:ratingFilter===value?p.card:'transparent'}]}><Text style={{color:ratingFilter===value?p.sage:p.muted,fontWeight:ratingFilter===value?'700':'500'}}>{value?ratingLabel(value):'Any rating'}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>AUTHOR</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!authorFilter}} onPress={()=>setAuthorFilter('')} style={[styles.filterChip,{backgroundColor:!authorFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{authorOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:authorFilter===value}} onPress={()=>setAuthorFilter(value)} style={[styles.filterChip,{backgroundColor:authorFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>SERIES</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!seriesFilter}} onPress={()=>setSeriesFilter('')} style={[styles.filterChip,{backgroundColor:!seriesFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{seriesOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:seriesFilter===value}} onPress={()=>setSeriesFilter(value)} style={[styles.filterChip,{backgroundColor:seriesFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>GENRE</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!genreFilter}} onPress={()=>setGenreFilter('')} style={[styles.filterChip,{backgroundColor:!genreFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{genreOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:genreFilter===value}} onPress={()=>setGenreFilter(value)} style={[styles.filterChip,{backgroundColor:genreFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,{backgroundColor:p.card,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.ink}]}>Sources</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.ink,marginTop:18}]}>Spaces</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'800'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
+    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:24}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
   function LivingBook({book}:{book:Book}){
@@ -3914,10 +3951,10 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width: 190, borderRightWidth: StyleSheet.hairlineWidth, padding: 14, gap: 10},
-  libraryRailTitle: {fontSize: 13, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4},
-  libraryRailList: {gap: 8},
-  libraryRailAdd: {paddingVertical: 12, paddingHorizontal: 8},
+  libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:24,paddingBottom:20,gap:8},
+  libraryRailTitle: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.5,marginBottom:3},
+  libraryRailList: {gap:2},
+  libraryRailAdd: {minHeight:44,paddingHorizontal:12,justifyContent:'center'},
   libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
   libraryChoiceVertical: {borderRadius: 10, minHeight: 44},
   libraryChips: {gap: 8, paddingBottom: 2},
@@ -4218,12 +4255,22 @@ const styles = StyleSheet.create({
   visibilityToggle: {width:44,height:28,borderRadius:14,alignItems:'center',justifyContent:'center'},
   orderButton: {width:38,height:38,alignItems:'center',justifyContent:'center'},
   libraryTwoPane: {flex:1,flexDirection:'row'},
-  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:22,gap:14},
-  librarySearch: {borderWidth:0,borderRadius:12,minHeight:46,paddingHorizontal:15,fontSize:16},
+  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:22,gap:16},
+  librarySearchRow: {flexDirection:'row',alignItems:'center',gap:6},
+  librarySearch: {flex:1,borderWidth:0,borderRadius:12,minHeight:46,paddingHorizontal:15,fontSize:16},
+  libraryUtilityButton: {width:44,height:44,borderRadius:12,alignItems:'center',justifyContent:'center',position:'relative'},
+  libraryFilterCount: {position:'absolute',right:3,top:2,minWidth:16,height:16,borderRadius:8,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
+  libraryFilterCountText: {color:'#FFFFFF',fontSize:9,fontWeight:'700'},
+  libraryFormatTabs: {gap:22,paddingRight:18,minHeight:42,alignItems:'stretch'},
+  libraryFormatTab: {minHeight:42,justifyContent:'center',position:'relative'},
+  libraryFormatText: {fontSize:13,lineHeight:18},
+  libraryFormatMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   libraryToolbar: {flexDirection:'row',alignItems:'center',gap:8},
   quickFilters: {gap:4,paddingRight:8},
   quickFilter: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
   toolbarButton: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
+  librarySelectionAction: {minHeight:40,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
   unifiedGrid: {paddingBottom:120,gap:22},
   unifiedGridRow: {gap:16},
   unifiedList: {paddingBottom:120,gap:4},
@@ -4232,7 +4279,7 @@ const styles = StyleSheet.create({
   reviewQueue: {gap:10,paddingBottom:10},
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
-  filterChip: {borderWidth:1,borderRadius:999,minHeight:36,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
+  filterChip: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
   duplicatePanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
   duplicateGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:7},
   duplicateExact: {borderWidth:0,borderLeftWidth:2,paddingLeft:10,paddingVertical:6,gap:4},
