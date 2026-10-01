@@ -199,13 +199,4 @@ jobs:
             adb kill-server || true
             adb start-server
             adb devices
-          script: |
-            set +e
-            bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
-            rc=$?
-            set -e
-            if [ "$rc" -eq 86 ]; then
-              echo "::warning::Android emulator/ADB infrastructure became unavailable after the verified APK was uploaded. Physical-device acceptance remains authoritative."
-              exit 0
-            fi
-            exit "$rc"
+          script: bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
