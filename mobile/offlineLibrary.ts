@@ -436,6 +436,9 @@ export async function cleanupOfflineStorage(
 export function offlineToLocalWork(work:OfflineServerWork):LocalWork{
   return {
     key:'offline:'+work.key,
+    source:'downloaded',
+    originServer:work.server,
+    originWorkId:work.workId,
     title:work.title,
     author:work.author,
     series:work.series,

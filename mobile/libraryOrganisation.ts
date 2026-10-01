@@ -9,7 +9,7 @@ export type SmartShelfDefinition = {
   series: string;
   genre: string;
   space: string;
-  readingState: string;
+  readingState: '' | 'not-started' | 'in-progress' | 'finished';
   minimumRating: number;
   favouriteOnly: boolean;
   availableOnly: boolean;
@@ -34,7 +34,7 @@ type OrganisableWork = {
   format: string;
   space: string;
   available: boolean;
-  readingState: string;
+  readingState: '' | 'not-started' | 'in-progress' | 'finished';
   rating: number;
   favourite: boolean;
 };
@@ -52,7 +52,7 @@ export function sanitizeSmartShelves(value: unknown): SmartShelfDefinition[] {
     return [{
       id: String(raw.id), name: String(raw.name).trim(), source,
       format: String(raw.format || ''), author: String(raw.author || ''), series: String(raw.series || ''),
-      genre: String(raw.genre || ''), space: String(raw.space || ''), readingState: String(raw.readingState || ''),
+      genre: String(raw.genre || ''), space: String(raw.space || ''), readingState: ['not-started','in-progress','finished'].includes(raw.readingState) ? raw.readingState : '',
       minimumRating: Math.max(0, Math.min(10, Number(raw.minimumRating) || 0)),
       favouriteOnly: !!raw.favouriteOnly, availableOnly: !!raw.availableOnly, sort,
       createdAt: String(raw.createdAt || new Date(0).toISOString()),
@@ -64,9 +64,10 @@ export function sanitizeCollections(value: unknown): LibraryCollection[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((raw: any) => {
     if (!raw || typeof raw !== 'object' || !String(raw.id || '').trim() || !String(raw.name || '').trim()) return [];
+    const canonicalKeys:string[] = Array.isArray(raw.canonicalKeys) ? raw.canonicalKeys.map((item:unknown)=>String(item)).filter((item:string)=>!!item) : [];
     return [{
       id: String(raw.id), name: String(raw.name).trim(),
-      canonicalKeys: [...new Set(Array.isArray(raw.canonicalKeys) ? raw.canonicalKeys.map(String).filter(Boolean) : [])],
+      canonicalKeys: [...new Set<string>(canonicalKeys)],
       createdAt: String(raw.createdAt || new Date(0).toISOString()),
     }];
   });

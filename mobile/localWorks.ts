@@ -3,6 +3,9 @@ import {LocalBook} from './localLibrary';
 
 export type LocalWork = {
   key: string;
+  source?: 'local' | 'downloaded';
+  originServer?: string;
+  originWorkId?: number;
   title: string;
   author: string;
   series: string;
@@ -43,6 +46,7 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
     const reviewItem = tracks.find(item => item.needsReview);
     return {
       key,
+      source: 'local' as const,
       title,
       author,
       series,

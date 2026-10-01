@@ -19,7 +19,7 @@ for (const match of source.matchAll(/<Pressable\b[\s\S]*?<\/Pressable>/g)) {
 }
 
 for (const route of [
-  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/preferences','/api/atlas-relationships','/api/duplicate-candidates','/api/sources',
+  '/api/me','/api/books','/api/works','/api/continue','/api/profile-stats','/api/preferences','/api/duplicate-candidates','/api/sources',
   '/api/file-moves','/api/assets/','/api/queue','/session','/logout','/setup/status'
 ]) {
   assert.ok(clientSource.includes(route), 'Expected wired mobile route missing from client: ' + route);
@@ -27,14 +27,14 @@ for (const route of [
 
 console.log('PASS: no placeholder UI markers and every visible mobile button/tab is wired');
 
-assert.ok(source.includes("{id: 'profile', label: 'Profile'}"), 'Profile tab is not wired');
+assert.ok(source.includes("{id: 'insights', label: 'Insights'}"), 'Insights tab is not wired');
+assert.ok(source.includes("{id: 'library', label: 'Library'}"), 'Library tab is not wired');
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 
 assert.ok(source.includes("function DuplicateReviewPanel()"), 'Duplicate review UI is not implemented');
 
-assert.ok(source.includes("serverSummary.genres || []"), 'Atlas must tolerate servers from before genre summaries were added');
 assert.ok(source.includes("relation.genres || []"), 'Atlas relationship view must tolerate servers from before genre links were added');
 assert.ok(source.includes("relation.availability || []"), 'Atlas relationship view must tolerate servers from before availability links were added');
 
@@ -68,8 +68,8 @@ assert.ok(source.includes('>Offline downloads</Text>'), 'Offline download manage
 assert.ok(source.includes('Resume download'), 'Interrupted downloads must expose a Resume action');
 assert.ok(source.includes('Clean up storage'), 'Offline storage cleanup action is missing');
 assert.ok(source.includes('pauseActiveOfflineDownload'), 'Active offline downloads must pause safely when the app backgrounds');
-assert.ok(source.includes('initialNumToRender={12}'), 'Shelf lists must bound initial rendering for large libraries');
-assert.ok(source.includes('maxToRenderPerBatch={12}'), 'Shelf lists must bound render batches');
+assert.ok(source.includes('initialNumToRender={18}'), 'Library list must bound initial rendering for large libraries');
+assert.ok(source.includes('maxToRenderPerBatch={18}'), 'Library list must bound render batches');
 assert.equal(source.includes("request(session, serverAssetsPath(0,500))"),false,'Normal Shelf refresh must not fetch 500 raw files');
 
 assert.ok(source.includes('accessibilityActions={[{name:\'increment\',label:\'Forward 30 seconds\'}'), 'Playback timeline must expose screen-reader seek actions');
@@ -83,7 +83,7 @@ assert.ok(source.includes('Modal transparent animationType="fade" visible onRequ
 assert.ok(source.includes("accessibilityViewIsModal accessibilityLabel={'Choose edition for '"), 'Edition picker must expose modal accessibility semantics');
 assert.ok(source.includes("KeyboardAvoidingView style={styles.modalKeyboard}"), 'Metadata editor must remain usable with the on-screen keyboard');
 assert.ok(source.includes("accessibilityLabel={'Open player for '+playing.title}"), 'Mini player must expose a separate open-player action');
-assert.ok(source.includes("accessibilityLabel={(session ? playback?.playing : audio.playing) ? 'Pause '+playing.title"), 'Mini player play/pause must be a separate labelled control');
+assert.ok(source.includes("accessibilityLabel={(playing.source==='server' ? playback?.playing : audio.playing) ? 'Pause '+playing.title"), 'Mini player play/pause must be source-aware and separately labelled');
 assert.equal(source.includes('<Pressable accessibilityRole="button" onPress={() => setActiveTab(\'player\')} style={[styles.miniPlayer'),false,'Mini player must not nest a button inside another button');
 assert.ok(source.includes('accessibilityLabel="Dismiss error"'), 'Global errors need a dismiss action');
 assert.ok(source.includes("label={'Remove download · '+formatBytes(downloaded.bytes)}"), 'Downloaded server work action must clearly say it removes the download');
