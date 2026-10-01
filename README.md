@@ -11,7 +11,7 @@ Archivist is a private, local-first library for books, audiobooks, comics and PD
 | Component | Current version |
 | --- | --- |
 | Home Assistant app | **0.1.21** |
-| Android app | **0.1.0** |
+| Android app | **0.1.1** |
 
 ## What Archivist does
 
