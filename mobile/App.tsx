@@ -2678,6 +2678,20 @@ function Client() {
     const continuing=base.filter((work:UnifiedWork)=>work.readingState==='in-progress').slice(0,12);
     const favourites=base.filter((work:UnifiedWork)=>work.favourite).slice(0,12);
     const primaryContinue=continuing[0];
+    const hour=new Date().getHours();
+    const shelfGreeting=hour<12?'Good morning.':hour<18?'Good afternoon.':'Good evening.';
+    const primaryResumeLabel=(()=>{
+      if(!primaryContinue?.localWork)return primaryContinue?'Ready when you are.':'';
+      if(primaryContinue.format==='Audio'){
+        const seconds=localWorkProgress[primaryContinue.localWork.key]?.seconds||0;
+        return seconds>0?'Resume at '+formatTime(seconds):'Continue listening';
+      }
+      const pages=primaryContinue.localWork.tracks
+        .map(track=>track.uri?(localReadingProgress[track.uri]||0):0)
+        .filter(value=>value>0);
+      return pages.length?'Resume at page '+(Math.max(...pages)+1):'Continue reading';
+    })();
+
     const seriesCounts=new Map<string,number>();for(const work of base)if(work.series)seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
     const seriesGroups=[...seriesCounts.entries()]
       .sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))
@@ -2699,6 +2713,7 @@ function Client() {
         <Text style={[styles.shelfHeroEyebrow,{color:p.sage}]}>{primaryContinue.format==='Audio'?'CONTINUE LISTENING':'CONTINUE READING'}</Text>
         <Text numberOfLines={3} style={[styles.shelfHeroTitle,{color:p.ink}]}>{primaryContinue.title}</Text>
         <Text numberOfLines={1} style={[styles.shelfHeroAuthor,{color:p.muted}]}>{primaryContinue.author||'Unknown author'}{primaryContinue.series?' · '+primaryContinue.series:''}</Text>
+        {primaryResumeLabel?<Text numberOfLines={1} style={[styles.shelfHeroResume,{color:p.sage}]}>{primaryResumeLabel}</Text>:null}
         <View style={styles.shelfHeroFooter}>
           <Text style={[styles.shelfHeroMeta,{color:p.muted}]}>{primaryContinue.format} · {sourceLabel(primaryContinue.source)}</Text>
           <View style={[styles.shelfHeroAction,{backgroundColor:p.sage}]}>
@@ -2808,7 +2823,7 @@ function Client() {
       <View style={styles.shelfEditorialHeader}>
         <View style={{flex:1,minWidth:0}}>
           <Text style={[styles.shelfKicker,{color:p.sage}]}>YOUR LIBRARY</Text>
-          <Text style={[styles.shelfGreeting,{color:p.ink}]}>Good evening.</Text>
+          <Text style={[styles.shelfGreeting,{color:p.ink}]}>{shelfGreeting}</Text>
           <Text style={[styles.shelfEditorialSubtitle,{color:p.muted}]}>Stories make a kinder world.</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
@@ -4433,8 +4448,8 @@ const styles = StyleSheet.create({
   shelfContent: {paddingHorizontal:18,paddingTop:24,paddingBottom:120,gap:38,maxWidth:1280,width:'100%',alignSelf:'center'},
   shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:4,paddingBottom:2},
   shelfKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.2,marginBottom:7},
-  shelfGreeting: {fontFamily:'serif',fontSize:38,lineHeight:42,fontWeight:'500',letterSpacing:-.7},
-  shelfEditorialSubtitle: {fontFamily:'serif',fontSize:16,lineHeight:23,fontStyle:'italic',marginTop:5},
+  shelfGreeting: {fontFamily:'serif',fontSize:40,lineHeight:44,fontWeight:'500',letterSpacing:-.8},
+  shelfEditorialSubtitle: {fontFamily:'serif',fontSize:16,lineHeight:23,fontStyle:'italic',marginTop:4,maxWidth:320},
   shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
@@ -4444,7 +4459,7 @@ const styles = StyleSheet.create({
   sectionLink: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   curatedRow: {gap:18,paddingRight:24},
   curatedCardWrap: {width:154},
-  shelfHero: {borderRadius:24,padding:18,flexDirection:'row',gap:20,alignItems:'center',overflow:'hidden',minHeight:220,shadowColor:'#000',shadowOpacity:.10,shadowRadius:20,shadowOffset:{width:0,height:10},elevation:4},
+  shelfHero: {borderRadius:24,padding:18,flexDirection:'row',gap:20,alignItems:'center',overflow:'hidden',minHeight:220,shadowColor:'#000',shadowOpacity:.08,shadowRadius:18,shadowOffset:{width:0,height:9},elevation:3},
   shelfHeroWide: {padding:28,gap:36,minHeight:326},
   shelfHeroArtwork: {width:132,minWidth:132},
   shelfHeroArtworkWide: {width:204,minWidth:204},
@@ -4452,6 +4467,7 @@ const styles = StyleSheet.create({
   shelfHeroEyebrow: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:1.4},
   shelfHeroTitle: {fontFamily:'serif',fontSize:30,lineHeight:35,fontWeight:'500',letterSpacing:-.45},
   shelfHeroAuthor: {fontSize:14,lineHeight:21},
+  shelfHeroResume: {fontSize:12,lineHeight:17,fontWeight:'700',letterSpacing:.15},
   shelfHeroFooter: {marginTop:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   shelfHeroMeta: {fontSize:12,lineHeight:17},
   shelfHeroAction: {minWidth:52,height:52,borderRadius:26,alignItems:'center',justifyContent:'center',paddingHorizontal:16},
