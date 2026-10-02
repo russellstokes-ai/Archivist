@@ -25,6 +25,7 @@ mkdir -p "$STAGE/archivist/app/web/vendor"
 cp "$ROOT"/web/*.html "$ROOT"/web/*.css "$ROOT"/web/*.js "$STAGE/archivist/app/web/"
 mkdir -p "$STAGE/archivist/app/web/assets"
 cp "$ROOT"/web/assets/*.png "$STAGE/archivist/app/web/assets/"
+cp "$ROOT"/web/assets/*.ttf "$ROOT"/web/assets/OFL.txt "$STAGE/archivist/app/web/assets/"
 cp "$ROOT"/web/vendor/LICENSE "$ROOT"/web/vendor/pdf.mjs "$ROOT"/web/vendor/pdf.worker.mjs "$ROOT"/web/vendor/pdfjs-assets.tar.gz "$STAGE/archivist/app/web/vendor/"
 
 (cd "$STAGE" && zip -qr addon.zip archivist)
