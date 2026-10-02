@@ -44,6 +44,7 @@ import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRul
 import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
+import {buildAndroidAutoCatalogue} from './androidAuto';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -788,6 +789,14 @@ function Client() {
     }) : [];
     return [...phone,...downloaded,...remote];
   },[downloadedPersonalWorks,phonePersonalWorks,serverPreferences,serverWorks,session]);
+
+  useEffect(()=>{
+    if(Platform.OS!=='android')return;
+    const auto=NativeModules.ArchivistAuto as {syncCatalogue?:(catalogueJson:string)=>Promise<boolean>};
+    if(typeof auto?.syncCatalogue!=='function')return;
+    const catalogue=buildAndroidAutoCatalogue(dedupeForAll(sourceWorks));
+    void auto.syncCatalogue(JSON.stringify(catalogue)).catch(()=>undefined);
+  },[sourceWorks]);
 
   const sourceCounts = useMemo(() => ({
     all: dedupeForAll(sourceWorks).length,
@@ -1890,7 +1899,7 @@ function Client() {
         setPlaying(book);
         setActiveTab('player');
         player.replace({uri: book.uri});
-        player.setActiveForLockScreen(true, {title: book.title, albumTitle: 'Archivist'});
+        player.setActiveForLockScreen(true, {title: book.title, albumTitle: 'Archivist'}, {showSeekBackward: true, showSeekForward: true});
         if (localProgress[book.uri]) await player.seekTo(localProgress[book.uri]);
         player.play();
       } catch (e) {
