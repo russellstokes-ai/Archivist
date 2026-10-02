@@ -114,3 +114,60 @@ Use `MOBILE-TESTING.md` and record results for:
 Do not call 0.9.2 a production store release until the physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
 
 Do not merge `dev/archivist-work` to `main` solely because CI is green; merge only after the user approves the physical testing candidate.
+
+## 2026-10-02 completion pass — burst 1
+
+IMPLEMENTED
+- All mobile CI workflows invoke `npm test`; the runner discovers every maintained root-level `*.test.cjs` suite and reports all failures.
+- Bundled SIL OFL Libre Caslon Text with expo-font for editorial headings across Shelf, Library, Player, Atlas, Insights, Profile, Settings and onboarding.
+- Finer shared icon strokes, 44dp targets for previously 38/42dp square controls, larger Library hierarchy and a rounded inset mini-player.
+- Work remains exclusively on dev/archivist-work.
+
+AUTOMATED TESTED
+- Clean dependency installation using a workspace-local cache.
+- `npm run typecheck` passed.
+- `npm test`: 20/20 maintained suites passed, including archive reader, library sources, player experience and reader experience.
+
+PHYSICAL TESTED
+- None in this burst. No mobile screenshots captured. These changes are not visually approved.
+
+BLOCKED / REMAINING
+- Java and adb were not found on PATH; native rendering, Android build and Fold acceptance remain unverified.
+- Full per-screen visual refinement, native sleep reliability, reader motion, canonical Atlas relationships, embedded audio metadata/artwork, durable local sorting and server redesign/onboarding remain outstanding.
+- No final APK or server release produced. Existing JS sleep tests do not establish native background sleep-timer reliability.
+- Font metrics, enlarged text, first viewport and Fold reflow require actual native screen review before the next visual sprint is accepted.
+
+## 2026-10-02 completion pass — burst 2
+
+IMPLEMENTED
+- Rebuilt the server presentation with the shared bundled editorial face, white/black canvases, Sage selection, desktop navigation rail, phone navigation and 2/4/5-column catalogue compositions.
+- Replaced prominent format statistic cards with quiet live filters; catalogue metadata now prioritises title and author.
+- Added deterministic neutral binding-style fallback covers, bounded long-title typography, skeleton loading, actionable empty state and inline retry for failed catalogue requests.
+- Reworked settings, source folders, household, organisation controls and dialogs into calm sections, dividers and responsive sheets; existing actions remain wired.
+- Synchronized changed source and font assets into both packaged server copies.
+- Added fixture-based real-browser checks to Core CI and corrected the pre-existing playback test URL expectation to verify Home Assistant ingress-relative routing.
+
+AUTOMATED TESTED
+- Real Edge/Chromium rendering at 390, 720 and 1440 CSS pixels, both themes; no horizontal overflow in tested catalogue and settings views.
+- Format filtering, search, empty search, request failure/retry, loading state, stable fallback covers, folder modal dismissal and server settings navigation passed.
+- Browser syntax, UI contract and playback resume/advance/pause/reopen tests passed.
+- Changed packaged files and bundled font assets match root files byte-for-byte.
+- Screenshots inspected; long fallback-title overlap discovered and corrected. Screenshots use fixture catalogue data, not a running Go server or a physical Fold.
+
+PHYSICAL TESTED
+- None. This burst does not approve the native app or physical device experience.
+
+BLOCKED / REMAINING
+- Server Atlas remains its existing directory view; continuous graph implementation is outstanding.
+- First-run owner-key generation, full server player composition and real-server end-to-end validation remain outstanding.
+- Native app visual acceptance and the other engineering work listed in burst 1 remain outstanding.
+- Explicit user gate: do not build any APK until both app and server UI are finished and verified. No APK built or workflow dispatched; no changes pushed or merged.
+
+### 2 October — award and preview burst
+Mobile award catalogue expanded from 7 to 69, with device-local daily ritual tracking and category filters. Reward overlay now follows theme and reduced-motion preference. Profile/streak boundary tests and all 20 mobile suites pass; TypeScript check passes. Browser adapter captures cover 13 mobile views in light/dark phone/Fold and server Library, Atlas and settings. Native timing, background activity, cross-device/server award parity and competitor count remain unverified. Overall UI is not complete and no APK was built.
+
+### 2 October — Living Book, Atlas and atmosphere
+Implemented three-page skip animations, ivory-page Living Book, restrained teal glow and gold reward fireworks. Browser motion checks passed for exactly three leaves, forward/reverse, seeks, rapid taps and reduced motion. Mobile 20-suite gate/typecheck passed. Server Atlas now uses a connected SVG graph and canonical relationship inspection; browser tests pass for zoom/search/selection. All three server web copies match. Browser previews use fixtures; native transforms, native playback and real-server acceptance remain outstanding. No APK built.
+
+### 2 October � authorised testing build 0.9.3
+User explicitly authorised APK build, download publication and GitHub server update. This supersedes the earlier no-APK instruction. Version 0.9.3 / Android code 93 includes the saved Living Book, Atlas ring, profile statistics and 143 award milestones. Mobile typecheck, all 20 suites and browser navigation passed before packaging. Native physical-device acceptance, server publication-year ingestion and server sorting parity remain open; this is a testing release, not a commercial-readiness assertion.

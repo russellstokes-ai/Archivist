@@ -10,6 +10,7 @@ export type LocalWork = {
   author: string;
   series: string;
   genre: string;
+  publishedYear?: number;
   format: string;
   space: string;
   available: boolean;
@@ -51,6 +52,7 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       author,
       series,
       genre,
+      publishedYear: tracks.find(item=>item.publishedYear)?.publishedYear,
       format: first.format,
       space: first.space,
       available: tracks.some(item => item.available),

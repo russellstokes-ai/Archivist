@@ -18,7 +18,7 @@ export type SmartShelfDefinition = {
   minimumRating: number;
   favouriteOnly: boolean;
   availableOnly: boolean;
-  sort: 'title' | 'author' | 'rating';
+  sort: 'title' | 'author' | 'series' | 'format' | 'progress' | 'rating';
   rules?: SmartShelfRuleGroup;
   createdAt: string;
 };
@@ -98,7 +98,7 @@ export function sanitizeSmartShelves(value: unknown): SmartShelfDefinition[] {
   return value.flatMap((raw: any) => {
     if (!raw || typeof raw !== 'object' || !String(raw.id || '').trim() || !String(raw.name || '').trim()) return [];
     const source: LibrarySource = ['all', 'local', 'server', 'downloaded'].includes(raw.source) ? raw.source : 'all';
-    const sort: SmartShelfDefinition['sort'] = ['title', 'author', 'rating'].includes(raw.sort) ? raw.sort : 'title';
+    const sort: SmartShelfDefinition['sort'] = ['title', 'author', 'series', 'format', 'progress', 'rating'].includes(raw.sort) ? raw.sort : 'title';
     return [{
       id: String(raw.id), name: String(raw.name).trim(), source,
       format: String(raw.format || ''), author: String(raw.author || ''), series: String(raw.series || ''),

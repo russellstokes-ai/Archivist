@@ -11,6 +11,9 @@ on:
       - '.github/workflows/android-apk.yml'
       - '.github/scripts/android-emulator-smoke.sh'
 
+permissions:
+  contents: write
+
 concurrency:
   group: android-apk-${{ github.ref }}
   cancel-in-progress: true
@@ -72,23 +75,7 @@ jobs:
 
       - name: Mobile JS tests
         working-directory: mobile
-        run: |
-          node core.test.cjs
-          node queue.test.cjs
-          node local-library.test.cjs
-          node local-works.test.cjs
-          node atlas.test.cjs
-          node library-organisation.test.cjs
-          node insights.test.cjs
-          node duplicates.test.cjs
-          node local-reader.test.cjs
-          node profile-stats.test.cjs
-          node server-compatibility.test.cjs
-          node state-store.test.cjs
-          node speech-focus.test.cjs
-          node offline-library.test.cjs
-          node native-patch.test.cjs
-          node ui-contract.test.cjs
+        run: npm test
 
       - name: Read app version
         id: app_version
@@ -200,3 +187,16 @@ jobs:
             adb start-server
             adb devices
           script: bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
+
+      - name: Publish tested APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.app_version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}-testing"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "Archivist $VERSION testing build" --notes "Android testing APK with verified signature, package checks and emulator launch. Uses the repository test signing key. Physical-device acceptance remains outstanding."
+          fi
+          gh release upload "$TAG" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test.apk" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test.apk.sha256" --clobber
