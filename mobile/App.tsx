@@ -1859,7 +1859,7 @@ function Client() {
           title: work.title,
           artist: work.author || undefined,
           albumTitle: work.series || 'Archivist',
-        });
+        }, {showSeekBackward: true, showSeekForward: true});
       } catch (e) {
         finish(e as Error);
       }
