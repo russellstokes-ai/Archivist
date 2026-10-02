@@ -81,7 +81,6 @@ class ArchivistAutoService : MediaLibraryService() {
         parentId == SERIES_ID -> all.map { it.series }.filter { it.isNotBlank() }.distinct()
           .sortedBy { it.lowercase() }.map { series -> folder(seriesId(series), series) }
         parentId.startsWith(SERIES_PREFIX) -> {
-          val requested = parentId.removePrefix(SERIES_PREFIX)
           all.filter { seriesId(it.series) == parentId && it.series.isNotBlank() }.map(::bookItem)
         }
         else -> emptyList()
@@ -235,18 +234,16 @@ class ArchivistAutoService : MediaLibraryService() {
 
   private fun bookItem(item: CatalogueItem): MediaItem {
     val subtitle = listOf(item.author, item.series).filter { it.isNotBlank() }.joinToString(" · ")
+    val metadata = MediaMetadata.Builder()
+      .setTitle(item.title)
+      .setSubtitle(subtitle.ifBlank { "Open Archivist on your phone to start" })
+      .setIsBrowsable(false)
+      .setIsPlayable(false)
+    if (item.author.isNotBlank()) metadata.setArtist(item.author)
+    if (item.series.isNotBlank()) metadata.setAlbumTitle(item.series)
     return MediaItem.Builder()
       .setMediaId(bookId(item))
-      .setMediaMetadata(
-        MediaMetadata.Builder()
-          .setTitle(item.title)
-          .setArtist(item.author.ifBlank { null })
-          .setAlbumTitle(item.series.ifBlank { null })
-          .setSubtitle(subtitle.ifBlank { "Open Archivist on your phone to start" })
-          .setIsBrowsable(false)
-          .setIsPlayable(false)
-          .build()
-      )
+      .setMediaMetadata(metadata.build())
       .build()
   }
 
