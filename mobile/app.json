@@ -32,7 +32,8 @@
           "microphonePermission": false
         }
       ],
-      "./plugins/withCleartextTraffic"
+      "./plugins/withCleartextTraffic",
+      "./plugins/withAndroidAuto"
     ],
     "updates": {
       "enabled": false
