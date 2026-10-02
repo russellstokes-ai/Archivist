@@ -9,6 +9,8 @@ on:
       - 'go.sum'
       - 'web/**'
       - 'scripts/ui-contract.cjs'
+      - 'scripts/package-ha*'
+      - 'repository.yaml'
       - 'archivist/**'
       - '.github/workflows/server-check.yml'
 
