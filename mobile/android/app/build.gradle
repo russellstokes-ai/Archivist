@@ -156,6 +156,9 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("com.github.junrar:junrar:8.1.1")
+    // Android Auto browse service. Keep aligned with the Media3 generation used by expo-audio.
+    implementation("androidx.media3:media3-session:1.9.1")
+    implementation("androidx.media3:media3-exoplayer:1.9.1")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
