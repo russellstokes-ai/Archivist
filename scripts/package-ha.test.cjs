@@ -19,7 +19,7 @@ try {
   for (const file of ['README.md', 'LICENSE.md', 'VALIDATION.md', 'TESTING-READINESS.md',
     'PRIVACY-AND-MONETISATION.md', 'COMIC-SPEECH-FOCUS.md', 'repository.yaml',
     'archivist/config.yaml', 'archivist/Dockerfile', 'archivist/run.sh',
-    'archivist/README.md', 'archivist/LICENSE.md', 'archivist/icon.png', 'archivist/logo.png']) {
+    'archivist/README.md', 'archivist/DOCS.md', 'archivist/CHANGELOG.md', 'archivist/LICENSE.md', 'archivist/icon.png', 'archivist/logo.png']) {
     assert(fs.statSync(path.join(extracted, file)).size > 0, file);
   }
   const same = (source, target) => assert.deepEqual(
@@ -41,9 +41,15 @@ try {
   assert.match(docker, /COPY app\/ \./);
   assert.match(docker, /COPY run\.sh \/run\.sh/);
   assert(!docker.includes('COPY home-assistant/'));
-  assert(!fs.readFileSync(path.join(extracted, 'repository.yaml'), 'utf8').includes('example.invalid'));
+  const repository = fs.readFileSync(path.join(extracted, 'repository.yaml'), 'utf8');
+  assert.match(repository, /^name: Archivist$/m);
+  assert(!repository.includes('example.invalid'));
+  const addonConfig = fs.readFileSync(path.join(extracted, 'archivist/config.yaml'), 'utf8');
+  assert.match(addonConfig, /^slug: archivist$/m);
+  assert.match(addonConfig, /^version: 0\.9\.3$/m);
   run('sh', ['-n', path.join(extracted, 'archivist/run.sh')]);
   console.log('PASS: clean rebuild, relative output, root docs, branding, complete source/web bytes and Docker context paths');
 } finally {
   fs.rmSync(temp, {recursive: true, force: true});
 }
+

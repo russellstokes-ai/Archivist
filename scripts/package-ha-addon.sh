@@ -8,10 +8,12 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
 mkdir -p "$STAGE/archivist/app"
-cp "$ROOT/home-assistant/archivist/config.yaml" "$STAGE/archivist/config.yaml"
-cp "$ROOT/home-assistant/archivist/Dockerfile" "$STAGE/archivist/Dockerfile"
-cp "$ROOT/home-assistant/archivist/run.sh" "$STAGE/archivist/run.sh"
-cp "$ROOT/home-assistant/archivist/README.md" "$STAGE/archivist/README.md"
+cp "$ROOT/archivist/config.yaml" "$STAGE/archivist/config.yaml"
+cp "$ROOT/archivist/Dockerfile" "$STAGE/archivist/Dockerfile"
+cp "$ROOT/archivist/run.sh" "$STAGE/archivist/run.sh"
+cp "$ROOT/archivist/README.md" "$STAGE/archivist/README.md"
+cp "$ROOT/archivist/DOCS.md" "$STAGE/archivist/DOCS.md"
+cp "$ROOT/archivist/CHANGELOG.md" "$STAGE/archivist/CHANGELOG.md"
 cp "$ROOT/LICENSE.md" "$STAGE/archivist/LICENSE.md"
 cp "$ROOT/THIRD-PARTY-NOTICES.md" "$STAGE/archivist/THIRD-PARTY-NOTICES.md"
 cp "$ROOT/web/assets/archivist-app-icon.png" "$STAGE/archivist/icon.png"
@@ -28,3 +30,4 @@ cp "$ROOT"/web/vendor/LICENSE "$ROOT"/web/vendor/pdf.mjs "$ROOT"/web/vendor/pdf.
 (cd "$STAGE" && zip -qr addon.zip archivist)
 mv "$STAGE/addon.zip" "$OUT"
 printf '%s\n' "$OUT"
+

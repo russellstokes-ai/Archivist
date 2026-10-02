@@ -153,7 +153,7 @@ func TestCSRFAndPersistence(t *testing.T) {
 	res := httptest.NewRecorder()
 	a.routes().ServeHTTP(res, req)
 	body, _ := io.ReadAll(res.Result().Body)
-	if !strings.Contains(string(body), "Archivist Shelf") {
+	if res.Code != 200 || !strings.Contains(string(body), "<title>Archivist</title>") || !strings.Contains(string(body), `src="./app.js"`) {
 		t.Fatal("UI not embedded")
 	}
 	req = httptest.NewRequest("GET", "/healthz", nil)
@@ -398,3 +398,4 @@ func TestMobileSessionCookieIsSecureBehindHTTPSProxy(t *testing.T) {
 		t.Fatalf("session cookie not hardened: %+v",found)
 	}
 }
+

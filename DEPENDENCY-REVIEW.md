@@ -45,3 +45,8 @@ Bundled PDF.js licence material remains under `web/vendor/LICENSE` and its packa
 No new proprietary third-party dependency was introduced by Sprints 5–8. The release candidate keeps its application code under `LICENSE.md` while third-party components retain their own terms.
 
 Before a public commercial/store release, generate a full transitive SBOM/notices bundle from the exact production build and have the final distribution terms reviewed. That publication step is separate from the 0.9.0 private testing gate.
+
+## 0.9.3 build tooling mitigation
+
+GitHub advisory GHSA-86w9-cpqp-85rv affects node-forge 1.4.0, used by Expo CLI certificate tooling. No upstream patched version was listed on 2 October 2026. `mobile/harden-forge.cjs` adds the missing nested DigestAlgorithm element-count validation and tests both a valid RSA signature and a malformed nested signature. CI applies it before Expo Doctor. The audit gate admits only this exact advisory after the regression passes; every other high/critical advisory still blocks. Moderate findings remain reported. The app has OTA updates disabled and Android APK signing uses Android apksigner, not node-forge. Remove this workaround once an upstream fix is available and verified.
+

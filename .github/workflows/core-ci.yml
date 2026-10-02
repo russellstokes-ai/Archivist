@@ -29,16 +29,14 @@ jobs:
           set -euo pipefail
           for file in *.go go.mod go.sum; do
             cmp -- "$file" "archivist/app/$file"
-            cmp -- "$file" "home-assistant/archivist/app/$file"
           done
           for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js reader.html reader.js reader.css speech-focus.js assets/LibreCaslonText.ttf assets/OFL.txt; do
             cmp -- "web/$file" "archivist/app/web/$file"
-            cmp -- "web/$file" "home-assistant/archivist/app/web/$file"
           done
-          cmp -- archivist/config.yaml home-assistant/archivist/config.yaml
-          cmp -- archivist/run.sh home-assistant/archivist/run.sh
-          cmp -- archivist/Dockerfile home-assistant/archivist/Dockerfile
-          echo "Root, packaged and Home Assistant server/browser/add-on sources are identical."
+          echo "Root and canonical Home Assistant package are aligned."
+
+      - name: Home Assistant package contract
+        run: node scripts/package-ha.test.cjs
 
       - name: Browser syntax and UI contract
         shell: bash
@@ -54,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for dir in "." "archivist/app" "home-assistant/archivist/app"; do
+          for dir in "." "archivist/app"; do
             echo "Testing $dir"
             (
               cd "$dir"
@@ -65,7 +63,7 @@ jobs:
 
       - name: Verify module files stay clean
         run: |
-          git diff --exit-code --             go.mod go.sum             archivist/app/go.mod archivist/app/go.sum             home-assistant/archivist/app/go.mod home-assistant/archivist/app/go.sum
+          git diff --exit-code --             go.mod go.sum             archivist/app/go.mod archivist/app/go.sum
 
   browser-ui:
     name: Browser UI with fixture library
@@ -104,7 +102,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: mobile
-        run: npm ci
+        run: |
+          npm ci
+          node harden-forge.cjs
 
       - name: Expo Doctor
         working-directory: mobile
@@ -112,7 +112,7 @@ jobs:
 
       - name: Runtime dependency audit
         working-directory: mobile
-        run: npm audit --omit=dev --audit-level=high
+        run: node audit-runtime.cjs
 
       - name: Typecheck
         working-directory: mobile
@@ -121,3 +121,4 @@ jobs:
       - name: Unit and contract tests
         working-directory: mobile
         run: npm test
+

@@ -6,7 +6,7 @@
 
 **Your library. Yours.**
 
-Archivist 0.9.0 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
+Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
 
 Local files remain useful without a server, and connecting a server later does not replace the phone library.
 
@@ -28,9 +28,9 @@ GitHub Actions includes **Android Test APK**. It builds an optimized release var
 
 Successful output:
 
-- artifact: `Archivist-0.9.2-Test-APK`
-- APK: `Archivist-0.9.2-test.apk`
-- checksum: `Archivist-0.9.2-test.apk.sha256`
+- artifact: `Archivist-0.9.3-Test-APK`
+- APK: `Archivist-0.9.3-test.apk`
+- checksum: `Archivist-0.9.3-test.apk.sha256`
 
 This is an installable testing APK, not a Google Play production build. Production publication still requires private production signing, an AAB, Play Console testing/review and store assets.
 
@@ -81,3 +81,10 @@ See `TESTING-READINESS.md` for current evidence.
 ## Licence
 
 Archivist application source is proprietary. See `LICENSE.md`. Third-party components retain their own licences; relevant notices are in `THIRD-PARTY-NOTICES.md` and vendor notice files.
+
+## Updating an existing Home Assistant installation
+
+Refresh the app/add-on store for this GitHub repository, open Archivist and install version 0.9.3. Keep the existing installation: its database and configured folders remain under `/data`. The canonical package is `archivist/`; the old duplicate package is not published.
+
+Android 0.9.3 is a testing release. Physical-device acceptance and remaining server metadata improvements are still in progress.
+

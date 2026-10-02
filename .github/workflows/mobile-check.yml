@@ -29,7 +29,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: mobile
-        run: npm ci
+        run: |
+          npm ci
+          node harden-forge.cjs
 
       - name: Expo Doctor
         working-directory: mobile
@@ -42,3 +44,4 @@ jobs:
       - name: Mobile tests
         working-directory: mobile
         run: npm test
+

@@ -7,8 +7,8 @@ OUT="$(realpath -m "$OUT")"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-cp "$ROOT/home-assistant/repository.yaml" "$STAGE/repository.yaml"
-cp "$ROOT/home-assistant/README.md" "$STAGE/README.md"
+cp "$ROOT/repository.yaml" "$STAGE/repository.yaml"
+cp "$ROOT/README.md" "$STAGE/README.md"
 for DOC in LICENSE.md VALIDATION.md TESTING-READINESS.md THIRD-PARTY-NOTICES.md PRIVACY-AND-MONETISATION.md COMIC-SPEECH-FOCUS.md MOBILE-TESTING.md; do
   cp "$ROOT/$DOC" "$STAGE/$DOC"
 done
@@ -17,3 +17,4 @@ done
 (cd "$STAGE" && zip -qr repository.zip repository.yaml *.md archivist)
 mv "$STAGE/repository.zip" "$OUT"
 printf '%s\n' "$OUT"
+

@@ -59,7 +59,9 @@ jobs:
 
       - name: Install mobile dependencies
         working-directory: mobile
-        run: npm ci
+        run: |
+          npm ci
+          node harden-forge.cjs
 
       - name: Expo doctor
         working-directory: mobile
@@ -67,7 +69,7 @@ jobs:
 
       - name: Runtime dependency audit
         working-directory: mobile
-        run: npm audit --omit=dev --audit-level=high
+        run: node audit-runtime.cjs
 
       - name: Mobile typecheck
         working-directory: mobile
@@ -200,3 +202,4 @@ jobs:
             gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "Archivist $VERSION testing build" --notes "Android testing APK with verified signature, package checks and emulator launch. Uses the repository test signing key. Physical-device acceptance remains outstanding."
           fi
           gh release upload "$TAG" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test.apk" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test.apk.sha256" --clobber
+
