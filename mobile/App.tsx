@@ -662,7 +662,7 @@ function Client() {
         loadCancel.current = () => finish(Error('Playback changed.'));
         try {
           player.replace({uri: current.server + '/api/assets/' + track.id, headers: {Authorization: 'Bearer ' + current.token}});
-          player.setActiveForLockScreen(true, {title: track.title, albumTitle: 'Archivist'});
+          player.setActiveForLockScreen(true, {title: track.title, albumTitle: 'Archivist'}, {showSeekBackward: true, showSeekForward: true});
         } catch (e) { finish(e as Error); }
       }),
       play: () => player.play(), pause: () => player.pause(),
