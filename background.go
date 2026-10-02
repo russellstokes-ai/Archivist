@@ -42,6 +42,35 @@ func (a *app) enqueue(id int64) (int64, error) {
 	}
 	return res.LastInsertId()
 }
+func (a *app) watcher(ctx context.Context) {
+	ticker:=time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	_ = a.scheduleWatched(time.Now().Unix())
+	for {
+		select {
+		case <-ctx.Done(): return
+		case now:=<-ticker.C: _ = a.scheduleWatched(now.Unix())
+		}
+	}
+}
+
+func (a *app) scheduleWatched(now int64) error {
+	rows,e:=a.db.Query(`SELECT id,watch_minutes,last_watch FROM sources WHERE watched=1 ORDER BY id`)
+	if e!=nil{return e}
+	type due struct{id int64;minutes int;last int64}
+	items:=[]due{}
+	for rows.Next(){var item due;if e=rows.Scan(&item.id,&item.minutes,&item.last);e!=nil{rows.Close();return e};items=append(items,item)}
+	if e=rows.Err();e!=nil{rows.Close();return e}
+	rows.Close()
+	for _,item:=range items{
+		minutes:=item.minutes;if minutes<15{minutes=15}
+		if item.last>0 && now-item.last<int64(minutes*60){continue}
+		if _,e=a.db.Exec("UPDATE sources SET last_watch=? WHERE id=?",now,item.id);e!=nil{return e}
+		if _,e=a.enqueue(item.id);e!=nil{return e}
+	}
+	return nil
+}
+
 func (a *app) worker(ctx context.Context) {
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()

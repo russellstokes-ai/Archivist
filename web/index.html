@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Archivist</title><link rel="stylesheet" href="./style.css"><script defer src="./app.js"></script><script defer src="./catalogue.js"></script><script defer src="./playback.js"></script><script defer src="./household.js"></script><script defer src="./accounts.js"></script><script defer src="./organise.js"></script><script defer src="./filemoves.js"></script></head><body>
-<header class="app-header"><img class="brand-logo" src="./assets/archivist-primary-logo.png" alt="Archivist"><div class="header-actions"><select id="theme" aria-label="Appearance"><option value="system">Follow system</option><option value="light">Light</option><option value="dark">Dark</option></select></div></header>
-<main>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="app-header"><span class="brand-wordmark">Archivist</span><div class="header-actions"><select id="theme" aria-label="Appearance"><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select></div></header>
+<main id="main" tabindex="-1">
 <div id="activity" class="activity-banner" hidden role="status" aria-live="polite"><div><strong id="activity-label">Working…</strong><span id="activity-detail"></span></div><progress id="activity-progress"></progress></div>
 
 <section id="setup" hidden class="auth-card"><span class="eyebrow">First run</span><h1>Create owner access</h1><p>Choose the access key you will use to manage this Archivist server.</p><form id="setup-form"><label>Owner access key<input id="setup-key" type="password" required minlength="8" autocomplete="new-password"></label><button class="primary">Create access</button></form></section>
@@ -9,31 +10,30 @@
 
 <section id="library" hidden>
   <div class="shelf-hero">
-    <div><span class="eyebrow">Archivist Shelf</span><h1>Your library</h1><p>Books, comics and audiobooks organised as works — not a wall of files.</p></div>
+    <div><span class="eyebrow">Your collection</span><h1>Library</h1><p>Every book. In its place.</p></div>
     <div id="library-total" class="hero-count">0<span>works</span></div>
   </div>
-  <div id="library-summary" class="library-summary"></div>
   <div class="shelf-toolbar">
     <input id="search" type="search" placeholder="Search title, author or series" aria-label="Search library">
     <select id="space" aria-label="Library space"><option value="">All spaces</option></select>
   </div>
+  <div id="library-summary" class="library-summary" role="group" aria-label="Filter by format"></div>
   <div id="active-filter" class="active-filter" hidden></div>
-  <div class="section-heading"><div><h2>Shelf</h2><p id="count"></p></div><button id="clear-library-filter" hidden>Clear filter</button></div>
-  <div id="books" class="shelf-grid"></div>
+  <div class="section-heading catalogue-count"><p id="count" role="status"></p><button id="clear-library-filter" hidden>Clear filters</button></div>
+  <div id="books" class="shelf-grid" aria-label="Library books"></div>
   <div class="load-more-wrap"><button id="load-more" hidden>Load more</button></div>
 </section>
 
 <section id="atlas" hidden>
-  <div class="page-heading"><div><span class="eyebrow">Explore</span><h1>Atlas</h1><p>Browse your collection by format, library space and author.</p></div></div>
-  <div class="atlas-grid">
-    <section class="panel-card"><h2>Formats</h2><div id="atlas-formats" class="atlas-list"></div></section>
-    <section class="panel-card"><h2>Spaces</h2><div id="atlas-spaces" class="atlas-list"></div></section>
-    <section class="panel-card"><h2>Authors</h2><div id="atlas-authors" class="atlas-list"></div></section>
-  </div>
+  <div class="page-heading"><div><span class="eyebrow">Everything is connected</span><h1>Atlas</h1><p>Follow the threads between your books, authors and series.</p></div></div>
+  <div class="atlas-toolbar"><input id="atlas-search" type="search" placeholder="Find a book, author or series" aria-label="Find in Atlas"><button id="atlas-fit">Fit map</button><button id="atlas-out" aria-label="Zoom out">−</button><button id="atlas-in" aria-label="Zoom in">+</button></div>
+  <div class="atlas-space"><svg id="atlas-graph" viewBox="0 0 1100 760" role="group" aria-label="Connected library universe"><g id="atlas-camera"></g></svg><aside id="atlas-inspector" aria-live="polite"><h2>Your reading universe</h2><p>Select a point to follow its connections.</p></aside></div>
+  <p id="atlas-map-status" class="note">Drag to explore · scroll or pinch to zoom · select a point for details.</p>
+  <details class="atlas-directory"><summary>Browse as a list</summary><div class="atlas-grid"><section><h2>Formats</h2><div id="atlas-formats"></div></section><section><h2>Spaces</h2><div id="atlas-spaces"></div></section><section><h2>Authors</h2><div id="atlas-authors"></div></section></div></details>
 </section>
 
 <section id="settings" hidden>
-  <div class="page-heading"><div><span class="eyebrow">Administration</span><h1>Settings</h1><p>Library sources, organisation, household access and server configuration.</p></div></div>
+  <div class="page-heading"><div><span class="eyebrow">Make yourself at home</span><h1>Settings</h1><p>Your library, your household, your preferences.</p></div></div>
   <div class="settings-tabs" role="tablist" aria-label="Settings sections">
     <button role="tab" data-settings="library" aria-selected="true" aria-controls="sources">Library & storage</button>
     <button role="tab" data-settings="organisation" aria-selected="false" aria-controls="organisation-settings" tabindex="-1">Organisation</button>
@@ -53,6 +53,16 @@
   <section id="config" role="tabpanel" data-settings-panel="server" hidden>
     <section class="panel-card"><div class="section-heading"><div><h2>Server</h2><p>Connection details, phone access and active sessions.</p></div></div><div id="config-summary" class="summary"></div></section>
     <section class="panel-card"><h2>Phone connection</h2><p>In the Archivist app, open Settings → Add server, then enter the server address and access key.</p><form id="owner-access-form"><label>Phone access key<input id="owner-access-key" type="password" minlength="8" maxlength="256" autocomplete="new-password" placeholder="At least 8 characters"></label><button id="owner-access-save">Set / replace access key</button></form><p class="note">This key is for connecting apps. Home Assistant ingress remains trusted owner access.</p></section>
+    <section class="panel-card">
+      <div class="section-heading"><div><h2>Backup & recovery</h2><p>Back up Archivist’s database without copying or waking your media drives.</p></div><a class="button-link primary" href="./api/backup" download="archivist-backup.db">Download backup</a></div>
+      <div class="restore-row"><label>Restore from an Archivist backup<input id="restore-file" type="file" accept=".db,application/vnd.sqlite3,application/octet-stream"></label><button id="restore-button">Verify & stage restore</button></div>
+      <p class="note">Restore is deliberately restart-safe: the upload is validated first, then applied on the next Archivist restart. The previous database is retained as <code>archivist.db.before-restore</code>.</p>
+    </section>
+    <section class="panel-card">
+      <h2>OPDS library access</h2>
+      <p>Compatible readers can browse your Archivist library at <code>/api/opds</code>. Use any username and your Archivist access key as the password. Each family user sees only their own authorised library.</p>
+      <p class="note">OPDS is read-only. It does not enable file management or server administration.</p>
+    </section>
     <section class="panel-card"><h2>Active sessions</h2><div id="session-list"></div></section>
   </section>
 </section>
@@ -63,5 +73,5 @@
 <p id="status" role="status" aria-live="polite"></p>
 </main>
 <aside id="player" hidden><div><strong id="playing-title"></strong><button id="close-player" aria-label="Close player">Close</button></div><audio id="audio" controls preload="metadata"></audio></aside>
-<nav hidden id="nav"><button data-page="library" aria-current="page">Shelf</button><button data-page="atlas">Atlas</button><button data-page="settings">Settings</button></nav>
+<nav hidden id="nav" aria-label="Main navigation"><button data-page="library" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l3-1 4 15-3 1z"/></svg><span>Library</span></button><button data-page="atlas"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="18" r="3"/><path d="m9 7 7-1M8 10l5 5m5-7-2 7"/></svg><span>Atlas</span></button><button data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg><span>Settings</span></button></nav>
 </body></html>

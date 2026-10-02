@@ -1,25 +1,38 @@
-# Build the Archivist Android APK in GitHub
+# Build the Archivist 0.9.2 Android testing APK
 
-This avoids building on Windows.
+Archivist builds Android in GitHub Actions, so a Windows Android SDK is not required for normal testing.
 
-## One-time setup
+## Run the build
 
-1. Upload this repository to `russellstokes-ai/Archivist`.
-2. Open the repository on GitHub.
-3. Go to **Actions**.
-4. Choose **Android APK**.
-5. Press **Run workflow**.
+1. Open `russellstokes-ai/Archivist` on GitHub.
+2. Open **Actions**.
+3. Select **Android Test APK**.
+4. Choose **Run workflow**.
+5. Select branch `dev/archivist-work`.
+6. Start the workflow.
 
-When it finishes, open the workflow run and download the artifact named:
+A successful run uploads `Archivist-0.9.2-Test-APK`, containing the APK and SHA-256 checksum.
 
-`archivist-debug-apk`
+## What the workflow proves
 
-Inside is the APK for Android testing.
+It:
 
-## What this proves
+- installs pinned Node, Java, Android SDK, NDK and CMake tooling;
+- restores dependencies with `npm ci`;
+- runs Expo Doctor and a high-severity runtime dependency audit;
+- runs TypeScript and the mobile behavioural suites;
+- runs Android release lint;
+- builds the optimized Android release variant for arm64-v8a and x86_64;
+- verifies application id, version and permissions;
+- verifies APK signature and 16-KiB alignment;
+- checks required ABIs and rejects legacy ABIs;
+- installs and launches the APK in an Android emulator;
+- publishes a checksum beside the APK.
 
-The workflow installs Node, Java 21, Android SDK 36, NDK 27.1, mobile dependencies, runs the mobile typecheck and JS tests, then builds a debug APK.
+## Signing
 
-## What this does not prove yet
+The 0.9.2 testing APK is deliberately signed with the repository **debug key** so authorised testers can install it without access to a production secret.
 
-This is not a Play Store release build. Before release, Archivist still needs a signed AAB, store listing, privacy policy, Play Console internal testing, real Android device acceptance, and Home Assistant server testing.
+Do not upload this artifact to Google Play. Production Play builds require a private production signing key and AAB workflow.
+
+After download, follow `MOBILE-TESTING.md`, especially the Galaxy Fold, background-audio, source-coexistence and remote-connection checks.

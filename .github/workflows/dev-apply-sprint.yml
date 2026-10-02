@@ -1,0 +1,116 @@
+name: Apply Archivist Sprint Checkpoint
+
+on:
+  push:
+    branches:
+      - dev/archivist-work
+    paths:
+      - 'dev-work/import/ACTIVE'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct sprint patch
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          NAME="$(tr -d '\r\n ' < dev-work/import/ACTIVE)"
+          test -n "$NAME"
+          DIR="dev-work/import/$NAME"
+          test -d "$DIR"
+          cat "$DIR"/part-* > /tmp/sprint.patch.gz.b64
+          base64 -d /tmp/sprint.patch.gz.b64 > /tmp/sprint.patch.gz
+          gzip -t /tmp/sprint.patch.gz
+          gunzip -c /tmp/sprint.patch.gz > /tmp/sprint.patch
+          echo "Patch bytes: $(wc -c < /tmp/sprint.patch)"
+          if grep -q '^diff --git a/App.tsx b/App.tsx' /tmp/sprint.patch; then
+            git apply --check --directory=mobile /tmp/sprint.patch
+            git apply --directory=mobile /tmp/sprint.patch
+          else
+            git apply --check /tmp/sprint.patch
+            git apply /tmp/sprint.patch
+          fi
+          if [[ -f "$DIR/fix.py" ]]; then
+            python "$DIR/fix.py"
+          elif [[ -f "$DIR/fix.patch" ]]; then
+            git apply --check "$DIR/fix.patch"
+            git apply "$DIR/fix.patch"
+          fi
+          CHANGED="$(git diff --name-only)"
+          printf '%s\n' "$CHANGED"
+          if printf '%s\n' "$CHANGED" | grep -qE '^(server/|archivist/|home-assistant/)'; then
+            echo "server_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "server_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload reconstructed sprint tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconstructed-${{ steps.patch.outputs.name }}
+          path: mobile
+          retention-days: 3
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck mobile
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Run mobile regression suite
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in *.test.cjs; do
+            echo "== $f =="
+            node "$f"
+          done
+
+      - name: Set up Go 1.25
+        if: steps.patch.outputs.server_changed == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.x'
+
+      - name: Test server
+        if: steps.patch.outputs.server_changed == 'true'
+        run: go test ./...
+
+      - name: Write sprint checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          NAME="${{ steps.patch.outputs.name }}"
+          NUM="${NAME#sprint}"
+          mkdir -p dev-work/checkpoints
+          cp "dev-work/import/$NAME/checkpoint.md" "dev-work/checkpoints/sprint-$NUM.md"
+
+      - name: Commit durable sprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          NAME="${{ steps.patch.outputs.name }}"
+          git config user.name "Archivist Dev"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Complete ${NAME} durable checkpoint"
+          git push

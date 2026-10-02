@@ -1,65 +1,86 @@
-# Mobile testing checkpoint
+# Archivist 0.9.2 mobile acceptance
 
-This is source code, not an installable Android or iOS release. Native builds,
-signing and physical-device acceptance remain outstanding. Do not expose this
-development server to the public internet solely to test mobile access.
+This is the hands-on checklist for the installable Android testing APK. Automated CI is necessary but does not replace real-device acceptance.
+
+## Testing APK
+
+Run **Actions → Android Test APK → Run workflow** on `dev/archivist-work`.
+
+Successful output:
+
+- artifact: `Archivist-0.9.2-Test-APK`
+- APK: `Archivist-0.9.2-test.apk`
+- checksum: `Archivist-0.9.2-test.apk.sha256`
+
+The APK is an optimized release variant signed with the repository debug key. It is for testing only.
 
 ## Connection
 
-Use the dedicated Archivist HTTPS origin with a certificate trusted by the phone.
-Do not paste the Home Assistant sidebar/ingress URL: its authentication, prefix and
-session routing differ from the native client API contract. Port 5056 is plain HTTP.
-An existing trusted TLS reverse proxy on the private network can forward to it.
-The app does not disable certificate validation or allow arbitrary cleartext LAN URLs.
-Development-only loopback/emulator HTTP is permitted by the source validator.
-Native platform transport policy still applies. Remote-access hardening is Pack 15.
+Archivist works locally without a server.
 
-Use a profile key from the server, or its current owner key from the log. Secrets
-are stored with SecureStore. API requests time out, reject redirects, and identify
-non-API responses. Reader navigation is restricted to the selected server; a valid
-bearer on reader entry sets an HttpOnly cookie for reader subrequests. Automated
-server tests cover this flow and revocation; WebView cookie behaviour needs devices.
+To add a server, use a dedicated trusted HTTPS origin. Do not use the Home Assistant sidebar/ingress URL. Port 5056 is plain HTTP unless placed behind a trusted TLS reverse proxy. The app stores server credentials in SecureStore, rejects redirects, times out failed API calls and preserves the local library if the server is unavailable.
 
-## Implemented in Packs 3-9
+## Galaxy Fold acceptance
 
-- Grouped and standalone audio context, server resume, revision-checked saves,
-  seek/rewind, track advance, completion and progress-conflict protection.
-- Playback speed, native sleep source extension, selectable tracks/embedded chapters,
-  and a server-persisted per-profile book queue with reorder and conflict protection.
-- Lock-screen activation and audio background configuration, status-event handling,
-  lifecycle saves. No physical device pass is claimed.
-- Multiple-space filtering, owner folder add/scan and title correction.
-- Server reader improvements automatically serve the native WebView.
+Test both closed and open states without restarting the app:
 
-## Acceptance still needed
+1. Shelf scrolls vertically and retains position after opening/closing the Fold.
+2. Library changes cleanly between compact and wide layouts with no clipped controls.
+3. Atlas can pan, pinch, focus and inspect nodes in both layouts.
+4. Living Player uses the wide layout when open and compact layout when closed.
+5. Reader toolbar/content/tool sheets remain usable.
+6. Bottom navigation, mini-player and modal sheets respect safe areas.
+7. The keyboard does not hide metadata, Smart Shelf or server fields.
+8. Light, dark and system themes retain readable contrast.
 
-1. Android and iOS: connect over trusted HTTPS; wrong host/key/certificate; timeout;
-   sign-out, restart, profile revocation and reader image/PDF subrequest authentication.
-2. Play grouped and single-file books; pause, kill/relaunch, resume and deliberate rewind.
-   Change position on a second client: conflict must not overwrite it silently.
-3. Background for 30 minutes, screen locked; headset/Bluetooth controls; incoming call;
-   unplug headphones; other audio app; OS media-service restart.
-4. Speed, embedded chapter seeks, track/queue changes and sleep expiry while locked.
-   Native sleep source is implemented but NOT yet compiled/device-certified.
-   Build after npm postinstall patches pinned expo-audio 57.0.5. Expo Go lacks this
-   extension and reports sleep unavailable; install an Archivist native build to test.
-5. Native layout/keyboard, safe-area bottom controls and both colour schemes.
+## Playback acceptance
 
-Known gaps: native sleep timer acceptance, durable offline checkpoints/downloads,
-publisher-perfect EPUB CSS/layout, real compressed RAR corpus and performance tests.
-File move controls currently live in the server web UI, not native settings.
+Use single-file and multi-file audiobooks:
 
-## Cheap restart
+- play/pause/seek and deliberate rewind;
+- background playback and lock-screen transport;
+- headset/Bluetooth controls and interruption handling;
+- speed, chapters, queue and bookmarks;
+- native sleep timer while locked;
+- force-stop/relaunch and durable resume;
+- switch family profile and confirm no progress leakage.
 
-Read TESTING-READINESS.md first. Tests:
+## Reader acceptance
 
-```sh
-cd mobile
-npm run typecheck
-node core.test.cjs
-node queue.test.cjs
-```
+Use representative ebook, PDF and comic material:
 
-Audio adapter: mobile/App.tsx. Pure player logic: mobile/playback.ts.
-Connection guards: mobile/connection.ts. API: listening.go and progress.go.
-Device checks are blocked by missing native binaries/hardware, not marked complete.
+- restore reading position after relaunch;
+- bookmarks, highlights, notes and search;
+- appearance settings;
+- comic manual zoom and Comic Focus Zoom fallback;
+- page-turn/reduced-motion behaviour;
+- offline copy while server is unavailable;
+- corrupt/unsupported material fails clearly rather than hanging.
+
+## Source coexistence
+
+With local folders, a connected server and downloaded server content:
+
+- All shows one logical work rather than online/offline duplicates.
+- Device / Server / Downloaded filters are accurate.
+- Local reading/playback continues if the server is lost.
+- Removing a download does not delete the server original.
+- Signing out does not delete the local catalogue.
+
+## Home Assistant / Pi acceptance
+
+On the intended Pi/Home Assistant system:
+
+- install/update Archivist 0.9.2 and restart it;
+- confirm database/catalogue persistence;
+- add multiple folders through the browser;
+- enable a watched source and verify scheduled refresh;
+- leave a media drive asleep and confirm opening the dashboard does not wake it;
+- download a backup, stage restore in a disposable instance, restart and confirm recovery;
+- create/revoke/rotate a family user;
+- connect externally over the intended DuckDNS/Tailscale HTTPS setup;
+- test OPDS with a compatible client.
+
+## Production publication remains separate
+
+A successful testing APK does not complete Google Play publication. Production release still requires private production signing, AAB generation, Play Console testing, policy/privacy/store assets and final device screenshots.

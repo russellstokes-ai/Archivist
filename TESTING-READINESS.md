@@ -1,118 +1,173 @@
-# Archivist: halfway checkpoint
+# Archivist 0.9.2 — Testing Readiness
 
-2026-09-23. User requested small packs, minimum token use and a halfway stop.
-Worked through Packs 3-9, then resumed Pack 5 on user request. The product is NOT release ready. Partial
-packs below must not be reported as finished. No changes pushed to GitHub.
+**Candidate branch:** `dev/archivist-work`  
+**Candidate mobile commit:** `77842e1f`  
+**Target:** Android-first local app + optional Home Assistant/Docker server.
 
-## Pack ledger
+This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
 
-| Pack | Status | Implemented | Remaining |
-| --- | --- | --- | --- |
-| 1 HA package | Code/test done | Root docs/licence/logo, correct Docker context, clean archive rebuilding, real repo URL | Actual upload/install |
-| 2 HA runtime | Code/test done | Ingress base/relative URLs, scoped cookies, frame policy, option validation, multiarch base, PDF assets | Real Supervisor/Pi install, sidebar/browser, updates/restarts |
-| 3 Mobile connection | Code/test done | HTTPS validation, API timeout/errors, redirect rejection, reader entry cookie flow and restricted navigation | Device TLS/WebView/cookie tests |
-| 4 Mobile progress | Code/test done | Grouped/single-file context, resume, rewind, ordered revision saves, track advance and conflicts | Device interruptions, kill/relaunch, durable offline checkpoints (Pack 11) |
-| 5 Player controls | Android source build checks partial; native acceptance pending | Speed; native sleep source extension; embedded chapter extraction/seek; server-persisted, reorderable profile queue with conflicts; Android Gradle configuration reaches SDK lookup | Android SDK environment, APK/AAB output, real Android playback/lock-screen/sleep acceptance; iOS later; real chapter-format corpus |
-| 6 Device audio | Android source build checks partial | Native background/lock-screen setup, status events, lifecycle saves; Android Hermes export and native project prebuild pass; Gradle wrapper/plugin phase passes until Android SDK lookup | Install/configure Android SDK, produce debug APK/release AAB, Android hardware acceptance; signing; OS timers/interruption/headset behaviour; iOS later |
-| 7 Organisation | Partial+ | Native space filtering, folder add/scan/remove, owner-only title/author/series edits in web/mobile; metadata survives rescan and search; existing web grouping | Richer automatic metadata extraction, remaining native grouping/source polish, UI/device QA |
-| 8 File sorting | Partial+++ | Web preview/apply/retry/undo-preview; owner web batch templates; native owner sorting controls for visible/all preview and apply pending; same-source verified hard-link move with verified copy fallback when hard links are unavailable; batch linked-journal recovery tests | Cross-source automatic sorting remains intentionally out of scope; browser/device UX acceptance and real power-loss hardware certification remain open |
-| 9 Readers | Partial | Semantic EPUB markup/images with sanitizer, CBR decoder, PDF/comic zoom controls | Publisher CSS/fixed layouts/SVG, compressed/encrypted/multivolume RAR corpus, gestures and full browser/device QA |
-| 10-16 | Not worked this batch | Existing foundations only | Comic bubble focus; offline; real Atlas; charts/goals; branding/animation polish; security/plugins/notices; signed builds/full acceptance |
+## Current crafted UI sweep
 
-## Exact continuation points
+The canonical mobile UI is on `dev/archivist-work`. This sweep was completed screen-by-screen after physical Galaxy Fold screenshots exposed scaling, typography, fallback-artwork and Fold breakpoint problems. It is **not visually accepted yet**; automated checks verify engineering only.
 
-- Mobile: connection.ts (HTTPS/API), playback.ts (testable state machine), App.tsx
-  (native adapter/UI), core.test.cjs. Nested screen render functions now called directly
-  to avoid remounting input/WebView on every audio status update.
-- Server audio: listening.go, listening_test.go; existing progress.go for grouped books.
-  Standalone audio has asset_progress; grouped editions use profile_progress.
-- Metadata: organise.go, web/organise.js and mobile/App.tsx now support owner-only title, author and series corrections. These fields are returned by /api/books, searched locally and preserved on rescan. Mobile owner source folders can be removed as well as added/scanned.
-- File moves: filemoves.go, filemoves_test.go, web/filemoves.js. No overwrite allowed.
-  Source and destination must stay inside the same selected source. Hard-link failure
-  retains original; cancel an unlinked attempt or resume a linked one, then undo.
-  Owner web UI can preview sorting templates: Author/Title, Author/Series/Title
-  and Format/Author/Title. Template output sanitizes unsafe path characters and still
-  passes through the existing same-source collision/hash preview. Batch template
-  preview can prepare the currently loaded books; duplicate generated destinations
-  are rejected before any conflicting move is previewed. Batch apply resumes/applies
-  every pending preview through the same journaled safe-move path and reports moved
-  versus skipped items.
-  Pending applying/linked journals block scans/source deletion until resolved.
-  This is NOT automatic cross-source organisation: generated destinations remain inside the asset source. Native owner controls now expose template selection, preview visible shelf, preview all library items and apply pending safe moves. Hard-link moves remain preferred; when a filesystem refuses hard links, Archivist uses an exclusive temporary copy in the destination folder, fsyncs it, verifies SHA-256, renames without overwrite, updates the catalogue, then removes the original only if it still matches the preview hash. Batch apply can resume linked journals. Real cross-drive organisation between different selected source roots is still not implemented because it changes ownership and rollback boundaries.
-- Readers: epub_content.go, cbr.go, reader.go, web/reader.js. New Go dependencies are
-  bluemonday v1.0.27 and rardecode/v2 v2.2.3; notices include their new transitives.
-  EPUB scripts/remote media are removed. Original publisher CSS is not rendered.
-  CBR decoded limits: 64 MiB dictionary, 24 MiB entry, 512 MiB total, 10,000 entries.
-  CBR reads sequentially; large/solid books need performance work. Passwords and
-  multipart archives are not configured.
-- Pack 5 follow-up: player_features.go adds per-profile revisioned queues and bounded
-  ffprobe chapter decoding from an already-open file (network protocols disabled).
-  HA installs ffmpeg; standalone deployments need ffprobe on PATH. Two concurrent
-  probes maximum, 15-second deadline, 1 MiB output and 5,000 chapter limits.
-  mobile/queue.ts serializes queue edits and reloads conflicts; App.tsx adds chapters
-  and reorder controls. Playback.sleep delegates to native setSleepTimer; Expo Go
-  reports unsupported instead of pretending a JS-only timer is reliable.
-- mobile/patch-audio.cjs adds native Android Handler / iOS DispatchWorkItem timers to
-  expo-audio 57.0.5. npm postinstall applies it; version/anchor drift fails the build.
-  Timers are cancelled on release; expired sleep does not restart at track advance.
-  Patch application/idempotence is tested, NOT a native compilation/device pass.
-- HA version 0.1.4-dev. Packaging includes mobile patch script in source checkpoint.
+Crafted commits:
 
-## Verification this batch
+- Shelf hierarchy from physical Fold review: `a24f19cb`
+- Library phone/open-Fold composition: `8b526c9d`
+- Responsive audiobook Player hierarchy: `55e792fc`
+- Immersive Reader UI + embedded reader palette/motion: `0c64237d`
+- Atlas continuous-universe responsive refinement: `d065b02c`
+- Insights reading-journal refinement: `5b3f3833`
+- Profile phone/Fold refinement: `2c5dcc8d`
+- Settings calm readable sections: `62d6d109`
+- Onboarding and optional server setup: `8516ed33`
+- Shared header/navigation/mini-player/Fold sheets: `ba3ee74c`
+- Secondary controls and typography normalization: `b00b1cc2`
+- Canonical responsive/Fold acceptance rules: `bb9e3cc0`
+- Reader timing/palette consistency correction: `611fc7fd`
+- Loading/error/Comic Focus state refinement: `638e61b8`
+- Drawn rating control / final interactive-icon cleanup: `77842e1f`
 
-Pack 7 follow-up PASS: metadata author/series save, local search and rescan preservation test; mobile typecheck/core/queue still pass.
+The physical review that triggered this sweep demonstrated these required rules:
+- open Fold is a first-class composition from 600dp, not a stretched phone;
+- normal UI hierarchy must not depend on Android's generic serif metrics;
+- long real titles, missing covers and unknown metadata are mandatory stress cases;
+- the Player must expose progress and transport in the first viewport;
+- Library controls must never clip or consume most of the catalogue viewport;
+- Reader suppresses global app chrome while reading;
+- CI/build success is not visual acceptance.
 
+Do not substitute a `main` APK or any pre-`77842e1f` runtime when reviewing this sweep.
 
+## Readiness summary
 
+| Area | Source / automated status | Physical acceptance |
+| --- | --- | --- |
+| Shelf & unified Library | Crafted responsive sweep; Mobile CI gate | Re-review Fold closed/open visuals, clipping and scroll |
+| Local folders | Implemented; scan/cache tests | Android Storage Access Framework with real folders |
+| Server connection | Implemented; HTTPS/session compatibility tests | Real DuckDNS/Tailscale HTTPS |
+| Audiobook player | Crafted responsive Player + existing playback tests | Re-review closed/open Fold first viewport, then background/lock screen/Bluetooth/calls |
+| Reader | Immersive chrome + 520ms turn timing + automated reader tests | Closed/open Fold, real EPUB/PDF/comic corpus and page-turn quality |
+| Comic Focus Zoom | Implemented foundations and regression tests | Real comic gesture/focus quality |
+| Atlas | Continuous universe retained; responsive inspector refinement | Phone/Fold visual, gesture and performance review |
+| Insights | Crafted journal hierarchy + existing tests | Phone/Fold UX review with real usage data |
+| Smart Shelves | Nested ALL/ANY engine implemented/tested | Touch/keyboard UX review |
+| Safe organisation | Preview/journal/hash/copy fallback tested | Real power-loss/storage scenarios |
+| Offline downloads | Implemented with checkpoints/storage cleanup | Long download/background/device test |
+| Family Admin/User | Isolation/revocation/session tests | Multi-device household smoke |
+| Watched server folders | Persisted/bounded scheduler tested | Actual HDD wake/standby behaviour |
+| Backup/restore | SQLite snapshot/staged restore tested | Disposable real HA restore |
+| OPDS | Feed/auth/profile filtering tested | Compatible reader smoke |
+| Home Assistant package | Server CI, ARM64 compile, Docker smoke | Pi 4B install/update/restart |
+| Android test APK | Workflow available; do not treat artifact as visual approval | Build only after final CI; install on Galaxy Fold for acceptance |
+| Google Play production | Not a 0.9 testing gate | Private signing + AAB + Play Console |
 
-Pack 11 Android Gradle attempt BLOCKED BY ENVIRONMENT: extracted Pack 10, restored mobile dependencies with `npm ci`, and postinstall re-applied the pinned expo-audio native sleep patch. PASS: `npm run typecheck`; `node core.test.cjs`; `node queue.test.cjs`; native audio patch idempotence/API test with child-process permission; full Go suite; server build. Android Gradle release assemble was rerun with `GRADLE_USER_HOME=/tmp/archivist-gradle-pack11 ./gradlew assembleRelease --no-daemon --console=plain`. Gradle wrapper downloaded, Expo/RN Gradle plugins compiled, project configured through SDK version reporting (buildTools 36, minSdk 24, compile/target 36, NDK 27.1, Kotlin 2.1.20). Build then failed because the container has no Android SDK: `SDK location not found. Define a valid SDK location with an ANDROID_HOME environment variable or by setting sdk.dir in mobile/android/local.properties.` Checked common SDK paths and `sdkmanager`; none were present. No APK/AAB produced, and no device/Google Play readiness is claimed. This is now an environment/tooling blocker rather than a TypeScript or React Native app error.
+## Automated evidence already green
 
-Pack 10 Android-first readiness PASS/PARTIAL: restored mobile dependencies with `npm ci`; postinstall applied the pinned expo-audio native sleep patch. Added `expo-system-ui` `~57.0.4` so Android prebuild no longer warns about automatic light/dark system UI. Mobile TypeScript typecheck passed. Mobile JS tests passed for connection/playback core and queue. Native audio patch idempotence/API test passed when child-process spawn was allowed. Android Hermes export passed with `npx expo export --platform android`. Android native project prebuild passed with `npx expo prebuild --platform android --no-install --clean`, generating `mobile/android`. Full Go suite and server build still pass. Android Gradle release assemble was attempted with `./gradlew assembleRelease`; Gradle wrapper downloaded and daemon started, but the build stayed silent for several minutes and was manually interrupted, so no APK/AAB output is claimed. Google Play gaps: final app id/name/versioning, production launcher artwork/screenshots/store listing/privacy policy, release keystore/signing, AAB generation, Play Console internal testing, target SDK/compliance review, Android real-device smoke, background audio/lock-screen/sleep acceptance, and server connectivity over real HTTPS/DuckDNS. iOS deliberately not worked except shared React Native code.
+- Sprint 5 Atlas Mobile checks: commit `f9067cf6`, run `36904010022`.
+- Sprint 6 Mobile checks: commit `6c611f83`, run `36905496035`.
+- Sprint 6 Server checks: commit `a695f5ff`, run `36905443788`.
+- Sprint 7 server hardening / ARM64 / HA smoke: commit `8e13649e`, run `36907874679`.
+- Sprint 7 package/UI follow-up: Server checks remained green, including run `36908976778`.
+- 0.9.0 version-aligned Mobile checks: commit `ffe9e545`, run `36908772223`.
+- Sprint 8 native-control polish: commit `c6e5776a`, run `36908101785`.
 
-Pack 8 larger sorting follow-up PASS: native mobile owner sorting controls added in Settings for template choice, visible-shelf preview, all-library preview and apply pending moves. Server safe move now falls back from hard-link to verified copy when hard links are unavailable, with no overwrite, temp-file cleanup, hash verification and original removal only after destination/catalogue safety checks. Added tests for copy fallback and batch recovery from a linked journal, plus existing batch preview/apply tests. PASS: full Go suite, server build, web filemoves syntax and playback_test.cjs. BLOCKED: mobile typecheck and mobile JS tests that require TypeScript because this checkpoint has no mobile/node_modules and `tsc`/`typescript` are not installed; no native Android/iOS build or device acceptance is claimed. Browser/device UX acceptance and real power-loss certification remain open.
+Current runtime candidate `77842e1f` is the crafted UI sweep head. Its Mobile checks are the engineering gate; physical screenshot/device review remains the visual gate.
 
-Pack 8 batch follow-up PASS: generated sort paths tested for unsafe-character cleanup and unknown-template rejection; batch template preview/apply tested for two successful moves and duplicate-destination rejection; full Go suite and server build passed with temp Go cache/config; web filemoves syntax check passed. Mobile typecheck was attempted but blocked because this extracted checkpoint has no mobile/node_modules and tsc is not installed, so no new mobile verification is claimed. No native sorting UI, browser visual pass, cross-drive/non-hardlink move path or recovery stress certification claimed.
+## Sprint status
 
-Pack 5 follow-up PASS: full Go suite; actual generated M4B chapter extraction via
-ffprobe (not skipped); queue isolation/conflict tests; mobile typecheck;
-core.test.cjs, queue.test.cjs, native-patch.test.cjs and HA package preservation.
-Native patch tests verify source installation/idempotence only. No new native
-binary or hardware validation; previous bundle exports predate this follow-up.
+- **Sprint 1–4:** durable foundations/player/reader/offline work complete in the recovered development branch.
+- **Sprint 5:** Atlas complete and CI-proven.
+- **Sprint 6:** Insights, family and organisation complete and CI-proven.
+- **Sprint 7:** core server/resilience/ecosystem scope complete and CI-proven.
+- **Sprint 8:** source/UI/release sweep complete; final candidate CI/APK plus physical acceptance remain.
 
-PASS: `go test ./...` including ingress/session/permissions, audio progress conflicts,
-file collision and interrupted-link recovery/undo, EPUB sanitization, stored-RAR4
-fixture/natural order and corrupt-RAR rejection.
+## 0.9.2 Android test artifact
 
-PASS: `node mobile/core.test.cjs`, `npm run typecheck` in mobile,
-`node playback_test.cjs`, `node scripts/ha-runtime.test.cjs`,
-`node scripts/package-ha.test.cjs`, all web JS syntax, server amd64 compile.
-PASS: `go test -race ./...`, Linux ARM64 cross-compile and Android/iOS Expo/Hermes
-JavaScript exports. Exported bundles are not APK/IPA files or native device passes.
+The `Android Test APK` workflow produces an optimized release variant signed with the repository debug key:
 
-Browser smoke script: scripts/reader-smoke.cjs. BLOCKED: no Chromium installed;
-browser download denied (403 domain allowlist). No screenshot/visual pass claimed.
-No Docker executable, native APK/IPA, signing or actual Pi/device tests.
-See MOBILE-TESTING.md for connection requirements and device acceptance checklist.
-Prior VALIDATION.md entries are historical, not new release certification.
+- artifact: `Archivist-0.9.2-Test-APK`
+- APK: `Archivist-0.9.2-test.apk`
+- checksum: `Archivist-0.9.2-test.apk.sha256`
 
-## Low-token restart
+The workflow runs dependency/Expo checks, TypeScript, behavioural tests, Android lint, release assembly, package/permission/signature/alignment/ABI verification and emulator launch.
 
-Read THIS file only, then the files for the selected unresolved row. Do not reread
-the chat, vendor bundles or package-lock. Next exact task: run this same project in an Android build environment with Android SDK installed/configured (`ANDROID_HOME` or `mobile/android/local.properties` with `sdk.dir`), then run `cd mobile/android && ./gradlew assembleDebug` first. If that passes, produce an unsigned/release APK or AAB, install on a real Android device, and test connection, shelf, sorting controls, reader WebView, background audio, lock-screen controls and native sleep timer. After Android smoke is clean, continue Pack 9 reader speech-bubble focus. Do not claim release readiness before device/Home Assistant tests. No need to redo settled source discovery.
-Record changed files and exact tests once per pack; never hide technical omissions.
-Preserve all functions and local-only accessible-library recommendations.
+This is for authorised testing, not Google Play publication.
 
-Source: /workspace/archivist-build. Remote: russellstokes-ai/Archivist (not pushed).
-Checkpoint package contains source plus a separate ready-structured HA upload ZIP;
-neither constitutes a mobile installer. Keep root licence proprietary. Full dependency
-and security reviews remain pending. Finish all acceptance gates before commercial release.
+## Required real-device pass
 
-## Pack 12 cloud Android build handoff
+Use `MOBILE-TESTING.md` and record results for:
 
-Added `.github/workflows/android-apk.yml` so GitHub Actions can build the Android debug APK without a local Windows Android toolchain. The workflow installs Node 24, Java 21, Android SDK platform/build-tools 36, NDK 27.1.12297006 and CMake 3.22.1; runs `npm ci`, mobile typecheck, mobile JS tests and `./gradlew assembleDebug`; then uploads the debug APK as the `archivist-debug-apk` artifact.
+1. Galaxy Fold closed/open Shelf, Library, Atlas, Player, Reader, sheets and keyboard.
+2. Local folder choose/rescan and persisted catalogue after process kill/reboot.
+3. Audiobook background/lock-screen/Bluetooth/interruption/sleep timer.
+4. Ebook/PDF/comic reading, page-turn behaviour and Comic Focus Zoom.
+5. Local + Server + Downloaded coexistence and offline failure/recovery.
+6. Real Home Assistant/Pi install, update, restart and multiple roots.
+7. HDD standby while dashboard is open; watched scan may wake only when explicitly enabled/due.
+8. Backup/restore in a disposable server instance.
+9. Family Admin/User isolation across two devices/sessions.
+10. Remote connection over the intended trusted DuckDNS/Tailscale HTTPS path.
 
-Added `GITHUB-ANDROID-BUILD.md` with click-by-click instructions for running the workflow from GitHub Actions.
+## Release boundary
 
-Local verification this pack: repository files inspected and workflow/docs written. No GitHub Actions run, APK, real Android install, Play Store readiness or Home Assistant acceptance is claimed until the workflow is uploaded and run successfully.
+Do not call 0.9.2 a production store release until the physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
 
-Exact next task: upload the updated repository to GitHub, run Actions → Android APK → Run workflow, download the `archivist-debug-apk` artifact, install it on an Android device, and test connection, shelf, sorting controls, reader WebView, background audio, lock-screen controls and native sleep timer. If GitHub Actions fails, copy the failing log into this chat and fix only that failure next.
+Do not merge `dev/archivist-work` to `main` solely because CI is green; merge only after the user approves the physical testing candidate.
+
+## 2026-10-02 completion pass — burst 1
+
+IMPLEMENTED
+- All mobile CI workflows invoke `npm test`; the runner discovers every maintained root-level `*.test.cjs` suite and reports all failures.
+- Bundled SIL OFL Libre Caslon Text with expo-font for editorial headings across Shelf, Library, Player, Atlas, Insights, Profile, Settings and onboarding.
+- Finer shared icon strokes, 44dp targets for previously 38/42dp square controls, larger Library hierarchy and a rounded inset mini-player.
+- Work remains exclusively on dev/archivist-work.
+
+AUTOMATED TESTED
+- Clean dependency installation using a workspace-local cache.
+- `npm run typecheck` passed.
+- `npm test`: 20/20 maintained suites passed, including archive reader, library sources, player experience and reader experience.
+
+PHYSICAL TESTED
+- None in this burst. No mobile screenshots captured. These changes are not visually approved.
+
+BLOCKED / REMAINING
+- Java and adb were not found on PATH; native rendering, Android build and Fold acceptance remain unverified.
+- Full per-screen visual refinement, native sleep reliability, reader motion, canonical Atlas relationships, embedded audio metadata/artwork, durable local sorting and server redesign/onboarding remain outstanding.
+- No final APK or server release produced. Existing JS sleep tests do not establish native background sleep-timer reliability.
+- Font metrics, enlarged text, first viewport and Fold reflow require actual native screen review before the next visual sprint is accepted.
+
+## 2026-10-02 completion pass — burst 2
+
+IMPLEMENTED
+- Rebuilt the server presentation with the shared bundled editorial face, white/black canvases, Sage selection, desktop navigation rail, phone navigation and 2/4/5-column catalogue compositions.
+- Replaced prominent format statistic cards with quiet live filters; catalogue metadata now prioritises title and author.
+- Added deterministic neutral binding-style fallback covers, bounded long-title typography, skeleton loading, actionable empty state and inline retry for failed catalogue requests.
+- Reworked settings, source folders, household, organisation controls and dialogs into calm sections, dividers and responsive sheets; existing actions remain wired.
+- Synchronized changed source and font assets into both packaged server copies.
+- Added fixture-based real-browser checks to Core CI and corrected the pre-existing playback test URL expectation to verify Home Assistant ingress-relative routing.
+
+AUTOMATED TESTED
+- Real Edge/Chromium rendering at 390, 720 and 1440 CSS pixels, both themes; no horizontal overflow in tested catalogue and settings views.
+- Format filtering, search, empty search, request failure/retry, loading state, stable fallback covers, folder modal dismissal and server settings navigation passed.
+- Browser syntax, UI contract and playback resume/advance/pause/reopen tests passed.
+- Changed packaged files and bundled font assets match root files byte-for-byte.
+- Screenshots inspected; long fallback-title overlap discovered and corrected. Screenshots use fixture catalogue data, not a running Go server or a physical Fold.
+
+PHYSICAL TESTED
+- None. This burst does not approve the native app or physical device experience.
+
+BLOCKED / REMAINING
+- Server Atlas remains its existing directory view; continuous graph implementation is outstanding.
+- First-run owner-key generation, full server player composition and real-server end-to-end validation remain outstanding.
+- Native app visual acceptance and the other engineering work listed in burst 1 remain outstanding.
+- Explicit user gate: do not build any APK until both app and server UI are finished and verified. No APK built or workflow dispatched; no changes pushed or merged.
+
+### 2 October — award and preview burst
+Mobile award catalogue expanded from 7 to 69, with device-local daily ritual tracking and category filters. Reward overlay now follows theme and reduced-motion preference. Profile/streak boundary tests and all 20 mobile suites pass; TypeScript check passes. Browser adapter captures cover 13 mobile views in light/dark phone/Fold and server Library, Atlas and settings. Native timing, background activity, cross-device/server award parity and competitor count remain unverified. Overall UI is not complete and no APK was built.
+
+### 2 October — Living Book, Atlas and atmosphere
+Implemented three-page skip animations, ivory-page Living Book, restrained teal glow and gold reward fireworks. Browser motion checks passed for exactly three leaves, forward/reverse, seeks, rapid taps and reduced motion. Mobile 20-suite gate/typecheck passed. Server Atlas now uses a connected SVG graph and canonical relationship inspection; browser tests pass for zoom/search/selection. All three server web copies match. Browser previews use fixtures; native transforms, native playback and real-server acceptance remain outstanding. No APK built.
+
+### 2 October � authorised testing build 0.9.3
+User explicitly authorised APK build, download publication and GitHub server update. This supersedes the earlier no-APK instruction. Version 0.9.3 / Android code 93 includes the saved Living Book, Atlas ring, profile statistics and 143 award milestones. Mobile typecheck, all 20 suites and browser navigation passed before packaging. Native physical-device acceptance, server publication-year ingestion and server sorting parity remain open; this is a testing release, not a commercial-readiness assertion.

@@ -15,12 +15,14 @@ import (
 
 func fixture(t *testing.T) *app {
 	t.Helper()
-	db, e := openDB(filepath.Join(t.TempDir(), "test.db"))
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	db, e := openDB(dbPath)
 	if e != nil {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { db.Close() })
-	a := &app{db: db, token: "test-key"}
+	a := &app{db: db, dbPath: dbPath, token: "test-key"}
 	if e := a.initHousehold(); e != nil {
 		t.Fatal(e)
 	}
@@ -151,7 +153,7 @@ func TestCSRFAndPersistence(t *testing.T) {
 	res := httptest.NewRecorder()
 	a.routes().ServeHTTP(res, req)
 	body, _ := io.ReadAll(res.Result().Body)
-	if !strings.Contains(string(body), "Archivist Shelf") {
+	if res.Code != 200 || !strings.Contains(string(body), "<title>Archivist</title>") || !strings.Contains(string(body), `src="./app.js"`) {
 		t.Fatal("UI not embedded")
 	}
 	req = httptest.NewRequest("GET", "/healthz", nil)
@@ -396,3 +398,4 @@ func TestMobileSessionCookieIsSecureBehindHTTPSProxy(t *testing.T) {
 		t.Fatalf("session cookie not hardened: %+v",found)
 	}
 }
+

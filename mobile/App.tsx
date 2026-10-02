@@ -1,5 +1,9 @@
+import {publicationYear} from './libraryIntelligence';
+import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
+import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
   AppState,
@@ -7,6 +11,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
+  NativeModules,
   Platform,
   Pressable,
   ScrollView,
@@ -19,19 +24,27 @@ import {
 } from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import {useFonts} from 'expo-font';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
-import {SavedQueue, reorder} from './queue';
+import {reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
-import {LocalReaderDocument, buildLocalReaderDocument} from './localReader';
+import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
-import {Achievement, achievementsFor, clampProgress, VerifiedProfileStats} from './profileStats';
+import {Achievement, achievementsFor, clampProgress, localDay, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
+import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {possibleLocalDuplicateGroups} from './duplicates';
-import {buildLegacyAtlasRelationship, normalizeAtlasRelationship, normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
+import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
+import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
+import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
+import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
+import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
+import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
   downloadOfflineWork,
@@ -53,6 +66,7 @@ type Book = {
   author: string;
   series: string;
   genre?: string;
+  publishedYear?: number;
   format: string;
   space: string;
   available: boolean;
@@ -65,6 +79,8 @@ type Book = {
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'legacy';
   localWorkKey?: string;
   serverWorkId?: number;
+  source?: WorkSource;
+  originServer?: string;
 };
 type RatingPrompt = {title:string;localWorkKey?:string;serverWorkId?:number};
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
@@ -74,6 +90,7 @@ type ServerWork = {
   author: string;
   series: string;
   genre?: string;
+  publishedYear?: number;
   format: string;
   space: string;
   editions: number;
@@ -102,21 +119,6 @@ type LibrarySummary = {
   ratings?: SummaryItem[];
   favourites?: SummaryItem[];
 };
-type ServerAtlasRelationship = {
-  kind: AtlasKind;
-  value: string;
-  workCount: number;
-  works: ServerWork[];
-  authors: SummaryItem[];
-  series: SummaryItem[];
-  genres?: SummaryItem[];
-  formats: SummaryItem[];
-  spaces: SummaryItem[];
-  availability?: SummaryItem[];
-  reading?: SummaryItem[];
-  ratings?: SummaryItem[];
-  favourites?: SummaryItem[];
-};
 type DuplicateCandidate = {
   id:number;
   title:string;
@@ -139,7 +141,34 @@ type DuplicateVerification = {
 };
 type LocalWorkProgress = {uri: string; seconds: number; complete?: boolean};
 type WorkPicker = {work: ServerWork; tracks: WorkTrack[]};
+type PersonalLocalWork = LocalWork & {readingState:ReadingState;rating:number;favourite:boolean};
+type UnifiedWork = {
+  source: WorkSource;
+  key: string;
+  canonicalKey: string;
+  title: string;
+  author: string;
+  series: string;
+  genre: string;
+  publishedYear?: number;
+  format: string;
+  space: string;
+  available: boolean;
+  files: number;
+  editions: number;
+  readingState: ReadingState;
+  rating: number;
+  favourite: boolean;
+  coverUri?: string;
+  localWork?: PersonalLocalWork;
+  serverWork?: ServerWork;
+  server?: string;
+  serverWorkId?: number;
+};
+type LibrarySort = 'title'|'author'|'series'|'format'|'progress'|'rating';
 type Tab = 'shelf' | 'library' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'settings';
+type ShelfSectionId = 'continue' | 'formats' | 'favourites' | 'smart' | 'collections' | 'series' | 'library';
+type ShelfSectionPref = {id:ShelfSectionId;title:string;visible:boolean};
 type ThemeMode = 'system' | 'light' | 'dark';
 type Palette = {
   ink: string;
@@ -151,6 +180,8 @@ type Palette = {
   sage: string;
   gold: string;
   ivory: string;
+  danger: string;
+  dangerSoft: string;
 };
 
 const storageKey = 'archivist.session';
@@ -171,6 +202,25 @@ const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
+const smartShelvesKey = 'archivist.smartShelves.v1';
+const collectionsKey = 'archivist.collections.v1';
+const shelfSectionsKey = 'archivist.shelfSections.v1';
+const playerBookmarksKey = 'archivist.playerBookmarks.v1';
+const trackOrdersKey = 'archivist.trackOrders.v1';
+const chapterOverridesKey = 'archivist.chapterOverrides.v1';
+const readerBookmarksKey = 'archivist.readerBookmarks.v1';
+const readerAnnotationsKey = 'archivist.readerAnnotations.v1';
+const readerAppearanceKey = 'archivist.readerAppearance.v1';
+const insightGoalKey = 'archivist.insightGoal.v1';
+const defaultShelfSections:ShelfSectionPref[] = [
+  {id:'continue',title:'Continue',visible:true},
+  {id:'formats',title:'Browse by format',visible:true},
+  {id:'favourites',title:'Favourites',visible:true},
+  {id:'smart',title:'Smart Shelves',visible:true},
+  {id:'collections',title:'Collections',visible:true},
+  {id:'series',title:'Series',visible:true},
+  {id:'library',title:'From your library',visible:true},
+];
 
 function validateServer(raw: string) {
   return checkServer(raw, __DEV__);
@@ -179,15 +229,17 @@ function validateServer(raw: string) {
 function palette(mode: ThemeMode, system: string | null | undefined): Palette {
   const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
   return {
-    ink: dark ? '#f8f7f2' : '#0f2a36',
-    paper: dark ? '#081318' : '#f8f7f2',
-    muted: dark ? '#9fb3b0' : '#627672',
-    line: dark ? '#203840' : '#d9dfdc',
-    card: dark ? '#0d2027' : '#fffdfa',
-    raised: dark ? '#132b34' : '#ffffff',
-    sage: '#397076',
-    gold: '#c6a374',
-    ivory: '#f8f7f2',
+    ink: dark ? '#F5F5F5' : '#111111',
+    paper: dark ? '#000000' : '#FFFFFF',
+    muted: dark ? '#A0A0A0' : '#6B6B6B',
+    line: dark ? '#252525' : '#E8E8E8',
+    card: dark ? '#111111' : '#F7F7F7',
+    raised: dark ? '#181818' : '#FFFFFF',
+    sage: '#47736F',
+    gold: '#B99A68',
+    ivory: '#FFFFFF',
+    danger: dark ? '#DE8585' : '#A94F4F',
+    dangerSoft: dark ? '#351F20' : '#F4E1DF',
   };
 }
 
@@ -215,7 +267,7 @@ function formatTime(seconds: number) {
   return `${mins}:${secs}`;
 }
 
-function Button({label, onPress, disabled, tone = 'primary'}: {label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'quiet' | 'gold'}) {
+function Button({label, onPress, disabled, tone = 'primary'}: {label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'quiet' | 'gold' | 'danger'}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -226,16 +278,130 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
         styles.button,
         tone === 'quiet' && styles.buttonQuiet,
         tone === 'gold' && styles.buttonGold,
-        (disabled || pressed) && {opacity: disabled ? 0.45 : 0.78},
+        tone === 'danger' && styles.buttonDanger,
+        (disabled || pressed) && {opacity: disabled ? 0.38 : 0.88, transform:[{scale:pressed&&!disabled?0.98:1}]},
       ]}
       onPress={onPress}>
-      <Text style={[styles.buttonText, tone === 'quiet' && styles.buttonQuietText]}>{label}</Text>
+      <Text style={[styles.buttonText, tone === 'quiet' && styles.buttonQuietText, tone === 'danger' && styles.buttonDangerText]}>{label}</Text>
     </Pressable>
   );
 }
 
-function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.'}: {active: boolean;title?: string;copy?: string}) {
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+
+function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
+  const k=size/20;
+  return <View pointerEvents="none" style={{width:size,height:size,opacity,position:'relative'}}>
+    <View style={{
+      position:'absolute',left:size/2,top:size*.33,width:0,height:0,
+      borderRightWidth:10*k,borderRightColor:'transparent',
+      borderBottomWidth:7*k,borderBottomColor:color,
+      borderLeftWidth:10*k,borderLeftColor:'transparent',
+      transform:[{rotate:'35deg'}],
+    }}>
+      <View style={{
+        position:'absolute',top:-4.5*k,left:-6.5*k,width:0,height:0,
+        borderLeftWidth:3*k,borderLeftColor:'transparent',
+        borderRightWidth:3*k,borderRightColor:'transparent',
+        borderBottomWidth:8*k,borderBottomColor:color,
+        transform:[{rotate:'-35deg'}],
+      }}/>
+      <View style={{
+        position:'absolute',top:.3*k,left:-10.5*k,width:0,height:0,
+        borderRightWidth:10*k,borderRightColor:'transparent',
+        borderBottomWidth:7*k,borderBottomColor:color,
+        borderLeftWidth:10*k,borderLeftColor:'transparent',
+        transform:[{rotate:'-70deg'}],
+      }}/>
+    </View>
+  </View>;
+}
+
+function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}) {
+  const stroke=size*1.75/24;
+  if(name==='play')return <View style={{width:0,height:0,borderTopWidth:size*.36,borderBottomWidth:size*.36,borderLeftWidth:size*.58,borderTopColor:'transparent',borderBottomColor:'transparent',borderLeftColor:color,marginLeft:size*.08}}/>;
+  if(name==='pause')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.18}}><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/></View>;
+  if(name==='more')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.12}}>{[0,1,2].map(index=><View key={index} style={{width:stroke*1.35,height:stroke*1.35,borderRadius:stroke,backgroundColor:color}}/>)}</View>;
+  if(name==='close')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'45deg'}]}}/><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'-45deg'}]}}/></View>;
+  if(name==='back')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,top:size*.31,transform:[{rotate:'-42deg'}]}}/>
+    <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,bottom:size*.31,transform:[{rotate:'42deg'}]}}/>
+  </View>;
+  if(name==='shelf')return <View style={{width:size,height:size,position:'relative'}}>
+    {[0,.26,.52].map((offset,index)=><View key={index} style={{position:'absolute',left:size*(.12+offset),bottom:size*.18,width:size*.18,height:size*(index===1?.56:.66),borderWidth:Math.max(1,stroke*.65),borderColor:color,borderRadius:2}}/>)}
+    <View style={{position:'absolute',left:size*.08,right:size*.08,bottom:size*.08,height:Math.max(1,stroke*.65),backgroundColor:color,borderRadius:2}}/>
+  </View>;
+  if(name==='library')return <View style={{width:size,height:size,position:'relative'}}>
+    {[0,1].flatMap(row=>[0,1].map(col=><View key={row+'-'+col} style={{position:'absolute',left:size*(.12+col*.43),top:size*(.12+row*.43),width:size*.32,height:size*.32,borderWidth:Math.max(1,stroke*.65),borderColor:color,borderRadius:3}}/>))}
+  </View>;
+  if(name==='atlas')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.22,top:size*.23,width:size*.48,height:Math.max(1,stroke*.55),backgroundColor:color,transform:[{rotate:'28deg'}]}}/>
+    <View style={{position:'absolute',left:size*.31,top:size*.49,width:size*.42,height:Math.max(1,stroke*.55),backgroundColor:color,transform:[{rotate:'-34deg'}]}}/>
+    {[{l:.12,t:.12},{l:.68,t:.33},{l:.26,t:.68}].map((n,index)=><View key={index} style={{position:'absolute',left:size*n.l,top:size*n.t,width:size*.22,height:size*.22,borderRadius:size*.11,borderWidth:Math.max(1,stroke*.65),borderColor:color,backgroundColor:'transparent'}}/>)}
+  </View>;
+  if(name==='insights')return <View style={{width:size,height:size,position:'relative',flexDirection:'row',alignItems:'flex-end',justifyContent:'center',gap:size*.10,paddingBottom:size*.12}}>
+    {[.38,.62,.82].map((h,index)=><View key={index} style={{width:size*.17,height:size*h,borderRadius:2,backgroundColor:color,opacity:index===2?1:.72}}/>)}
+  </View>;
+  if(name==='settings')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.24,.5,.76].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',top:size*(top-.09),left:size*([.28,.58,.40][index]),width:size*.18,height:size*.18,borderRadius:size*.09,borderWidth:Math.max(1,stroke*.55),borderColor:color,backgroundColor:'transparent'}}/></React.Fragment>)}
+  </View>;
+  if(name==='filter')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.2,.5,.8].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',top:size*(top-.08),left:size*([.24,.58,.38][index]),width:size*.16,height:size*.16,borderRadius:size*.08,borderWidth:Math.max(1,stroke*.55),borderColor:color,backgroundColor:'transparent'}}/></React.Fragment>)}
+  </View>;
+  if(name==='grid')return <View style={{width:size,height:size,position:'relative'}}>
+    {[0,1].flatMap(row=>[0,1].map(col=><View key={row+'-'+col} style={{position:'absolute',left:size*(.10+col*.46),top:size*(.10+row*.46),width:size*.34,height:size*.34,borderWidth:Math.max(1,stroke*.55),borderColor:color,borderRadius:2}}/>))}
+  </View>;
+  if(name==='list')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.18,.48,.78].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,top:size*(top-.02),width:size*.12,height:size*.12,borderRadius:2,backgroundColor:color}}/><View style={{position:'absolute',left:size*.30,right:size*.08,top:size*top,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/></React.Fragment>)}
+  </View>;
+  if(name==='skipBack'||name==='skipForward')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{position:'absolute',width:size*.72,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderRadius:size*.36,borderLeftColor:name==='skipBack'?color:'transparent',borderRightColor:name==='skipForward'?color:'transparent'}}/>
+    <View style={{position:'absolute',left:name==='skipBack'?size*.02:undefined,right:name==='skipForward'?size*.02:undefined,top:size*.12,width:0,height:0,borderTopWidth:size*.12,borderBottomWidth:size*.12,borderTopColor:'transparent',borderBottomColor:'transparent',borderRightWidth:name==='skipBack'?size*.18:0,borderRightColor:name==='skipBack'?color:'transparent',borderLeftWidth:name==='skipForward'?size*.18:0,borderLeftColor:name==='skipForward'?color:'transparent'}}/>
+  </View>;
+  if(name==='bookmark')return <View style={{width:size,height:size,position:'relative',alignItems:'center'}}>
+    <View style={{width:size*.52,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderBottomWidth:0,borderTopLeftRadius:3,borderTopRightRadius:3}}/>
+    <View style={{position:'absolute',bottom:size*.10,width:size*.36,height:size*.36,borderLeftWidth:Math.max(1,stroke*.58),borderBottomWidth:Math.max(1,stroke*.58),borderColor:color,transform:[{rotate:'-45deg'}]}}/>
+  </View>;
+  if(name==='moon')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.15,top:size*.10,width:size*.68,height:size*.68,borderRadius:size*.34,borderWidth:Math.max(1,stroke*.58),borderColor:color}}/>
+    <View style={{position:'absolute',left:size*.36,top:size*.02,width:size*.58,height:size*.58,borderRadius:size*.29,backgroundColor:'transparent',borderLeftWidth:Math.max(2,stroke*1.4),borderLeftColor:color,transform:[{rotate:'18deg'}]}}/>
+  </View>;
+  if(name==='queue')return <View style={{width:size,height:size,position:'relative'}}>
+    {[.18,.46,.74].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,top:size*top,width:size*.50,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',right:size*.08,top:size*(top-.09),width:size*.18,height:size*.18,borderRadius:size*.09,borderWidth:Math.max(1,stroke*.55),borderColor:color}}/></React.Fragment>)}
+  </View>;
+  if(name==='search')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:Math.max(1,stroke*.6),borderColor:color,borderRadius:size*.31}}/>
+    <View style={{position:'absolute',right:size*.03,bottom:size*.10,width:size*.38,height:Math.max(1,stroke*.6),backgroundColor:color,borderRadius:2,transform:[{rotate:'45deg'}]}}/>
+  </View>;
+  if(name==='minus'||name==='plus')return <View style={{width:size,height:size,alignItems:'center',justifyContent:'center'}}>
+    <View style={{position:'absolute',width:size*.62,height:Math.max(1,stroke*.6),backgroundColor:color,borderRadius:2}}/>
+    {name==='plus'?<View style={{position:'absolute',height:size*.62,width:Math.max(1,stroke*.6),backgroundColor:color,borderRadius:2}}/>:null}
+  </View>;
+  if(name==='fit')return <View style={{width:size,height:size,position:'relative'}}>
+    {[
+      {left:size*.08,top:size*.08,borderLeftWidth:Math.max(1,stroke*.55),borderTopWidth:Math.max(1,stroke*.55)},
+      {right:size*.08,top:size*.08,borderRightWidth:Math.max(1,stroke*.55),borderTopWidth:Math.max(1,stroke*.55)},
+      {left:size*.08,bottom:size*.08,borderLeftWidth:Math.max(1,stroke*.55),borderBottomWidth:Math.max(1,stroke*.55)},
+      {right:size*.08,bottom:size*.08,borderRightWidth:Math.max(1,stroke*.55),borderBottomWidth:Math.max(1,stroke*.55)},
+    ].map((corner,index)=><View key={index} style={{position:'absolute',width:size*.28,height:size*.28,borderColor:color,...corner}}/>)}
+  </View>;
+  if(name==='zoomIn'||name==='zoomOut')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:stroke,borderColor:color,borderRadius:size*.31,alignItems:'center',justifyContent:'center'}}>
+      <View style={{position:'absolute',width:size*.28,height:stroke,borderRadius:stroke,backgroundColor:color}}/>
+      {name==='zoomIn'?<View style={{position:'absolute',height:size*.28,width:stroke,borderRadius:stroke,backgroundColor:color}}/>:null}
+    </View>
+    <View style={{position:'absolute',right:size*.02,bottom:size*.09,width:size*.38,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'45deg'}]}}/>
+  </View>;
+  const up=name==='chevronUp';
+  return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',width:size*.58,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.08,top:size*.45,transform:[{rotate:up?'-42deg':'42deg'}]}}/>
+    <View style={{position:'absolute',width:size*.58,height:stroke,borderRadius:stroke,backgroundColor:color,right:size*.08,top:size*.45,transform:[{rotate:up?'42deg':'-42deg'}]}}/>
+  </View>;
+}
+
+function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {
   const burst = useRef(new Animated.Value(0)).current;
+  const sparks=useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!active) {
       burst.setValue(0);
@@ -247,14 +413,15 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
       Animated.delay(850),
       Animated.timing(burst, {toValue: 0, duration: 420, useNativeDriver: true}),
     ]).start();
-  }, [active, burst]);
+    return()=>{burst.stopAnimation();sparks.stopAnimation();};
+  }, [active, burst,sparks,reduceMotion,title]);
   if (!active) return null;
-  const particles = ['✦','•','✧','•','✦','✧','•','✦','•','✧','✦','•'];
+  const particles = reduceMotion?[]:Array.from({length:24},(_,i)=>i%3===0?'✦':'·');
   return (
-    <View pointerEvents="none" style={styles.celebration}>
+    <View pointerEvents="none" accessibilityLiveRegion="polite" style={styles.celebration}>
       {particles.map((mark, index) => {
         const angle = (index / particles.length) * Math.PI * 2;
-        const distance = 86 + (index % 3) * 22;
+        const distance = 138 + (index % 4) * 28;
         return (
           <Animated.Text
             key={index}
@@ -263,9 +430,9 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
               {
                 opacity: burst,
                 transform: [
-                  {translateX: burst.interpolate({inputRange: [0, 1], outputRange: [0, Math.cos(angle) * distance]})},
-                  {translateY: burst.interpolate({inputRange: [0, 1], outputRange: [0, Math.sin(angle) * distance]})},
-                  {scale: burst.interpolate({inputRange: [0, 0.25, 1], outputRange: [0.4, 1.15, 0.85]})},
+                  {translateX: sparks.interpolate({inputRange: [0, 1], outputRange: [0, Math.cos(angle) * distance]})},
+                  {translateY: sparks.interpolate({inputRange: [0, 1], outputRange: [0, Math.sin(angle) * distance]})},
+                  {scale: sparks.interpolate({inputRange: [0, 0.25, 1], outputRange: [0.4, 1.15, 0.85]})},
                 ],
               },
             ]}>
@@ -273,9 +440,12 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
           </Animated.Text>
         );
       })}
-      <Animated.View style={[styles.celebrationBadge, {opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:[0.75,1.04,1]})}]}]}>
-        <Text style={styles.celebrationTitle}>{title}</Text>
-        <Text style={styles.celebrationCopy}>{copy}</Text>
+      <Animated.View pointerEvents="none" style={{position:'absolute',width:440,height:440,opacity:burst}}><AmbientGlow color="#B99A68" size={440} strength={2}/></Animated.View>
+      <Animated.View style={[styles.celebrationBadge, {backgroundColor:paper,borderWidth:1,borderColor:'#B99A68',opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:reduceMotion?[1,1,1]:[0.96,1.01,1]})}]}]}>
+        <Text style={{color:'#B99A68',fontSize:11,letterSpacing:2,marginBottom:12}}>A MOMENT TO REMEMBER</Text>
+        <UiIcon name="bookmark" color="#B99A68" size={32}/>
+        <Text style={[styles.celebrationTitle,{color:ink,fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,textAlign:'center',marginTop:12}]}>{title}</Text>
+        <Text style={[styles.celebrationCopy,{color:muted,textAlign:'center'}]}>{copy}</Text>
       </Animated.View>
     </View>
   );
@@ -284,6 +454,8 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
 function Client() {
   const systemScheme = useColorScheme();
   const {width} = useWindowDimensions();
+  const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
+  const foldLayout = width >= 600;
   const [theme, setTheme] = useState<ThemeMode>('system');
   const p = useMemo(() => palette(theme, systemScheme), [theme, systemScheme]);
   const [session, setSession] = useState<Session | null>(null);
@@ -292,7 +464,8 @@ function Client() {
   const [key, setKey] = useState('');
   const [serverPanelOpen, setServerPanelOpen] = useState(false);
   const [serverNotice, setServerNotice] = useState('');
-  const [books, setBooks] = useState<Book[]>([]);
+  const [localBooks, setLocalBooks] = useState<Book[]>([]);
+  const [serverBooks, setServerBooks] = useState<Book[]>([]);
   const [serverWorks, setServerWorks] = useState<ServerWork[]>([]);
   const [continueWorks, setContinueWorks] = useState<ServerWork[]>([]);
   const [serverSummary, setServerSummary] = useState<LibrarySummary | null>(null);
@@ -300,11 +473,18 @@ function Client() {
   const [serverPreferences,setServerPreferences]=useState<Record<number,PersonalPreference>>({});
   const [localPreferences,setLocalPreferences]=useState<Record<string,PersonalPreference>>({});
   const [profileLoading, setProfileLoading] = useState(false);
+  const [serverActivity,setServerActivity]=useState<ProfileActivity[]>([]);
+  const [insightGoal,setInsightGoal]=useState(defaultInsightGoal);
+  const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
-  const [serverAtlasRelationship,setServerAtlasRelationship]=useState<ServerAtlasRelationship|null>(null);
-  const [atlasLoading,setAtlasLoading]=useState(false);
-  const [atlasCompatibility,setAtlasCompatibility]=useState(false);
+  const [atlasListMode,setAtlasListMode]=useState(false);
+  const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'>('Genre');
+  const [atlasSearch,setAtlasSearch]=useState('');
+  const [atlasNodeId,setAtlasNodeId]=useState('');
+  const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
+  const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number}|null>(null);
   const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
+  const [duplicateScope,setDuplicateScope]=useState<'local'|'server'>('local');
   const [duplicateLoading,setDuplicateLoading]=useState(false);
   const [serverDuplicateGroups,setServerDuplicateGroups]=useState<DuplicateCandidateGroup[]>([]);
   const [duplicateResults,setDuplicateResults]=useState<Record<string,DuplicateVerification>>({});
@@ -320,10 +500,36 @@ function Client() {
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
+  const [ritualDays,setRitualDays]=useState<Record<string,number>>({});
+  const [ritualReady,setRitualReady]=useState(false);
+  const [awardCategory,setAwardCategory]=useState('All');
+  const [ritualToday,setRitualToday]=useState(localDay());
+  const ritual=useMemo(()=>streakStats(ritualDays,ritualToday),[ritualDays,ritualToday]);
   const [achievementCelebration,setAchievementCelebration]=useState<Achievement|null>(null);
   const [ratingPrompt,setRatingPrompt]=useState<RatingPrompt|null>(null);
   const achievementBaseline=useRef<{key:string;ids:Set<string>}|null>(null);
   const [query, setQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<LibrarySource>('all');
+  const [librarySort,setLibrarySort]=useState<LibrarySort>('title');
+  const [libraryView,setLibraryView]=useState<'grid'|'list'>('grid');
+  const [workMenu,setWorkMenu]=useState<UnifiedWork|null>(null);
+  const [smartShelves,setSmartShelves]=useState<SmartShelfDefinition[]>([]);
+  const [collections,setCollections]=useState<LibraryCollection[]>([]);
+  const [organisationModal,setOrganisationModal]=useState<'smart-shelf'|'new-collection'|'manage'|'add-to-collection'|null>(null);
+  const [organisationName,setOrganisationName]=useState('');
+  const [smartShelfRules,setSmartShelfRules]=useState<SmartShelfRuleGroup>(emptySmartShelfRules());
+  const [smartShelfAdvanced,setSmartShelfAdvanced]=useState(false);
+  const [collectionTarget,setCollectionTarget]=useState<UnifiedWork|null>(null);
+  const [selectedWorkKeys,setSelectedWorkKeys]=useState<string[]>([]);
+  const [collectionFilter,setCollectionFilter]=useState('');
+  const [libraryFiltersOpen,setLibraryFiltersOpen]=useState(false);
+  const [shelfManageOpen,setShelfManageOpen]=useState(false);
+  const [shelfSections,setShelfSections]=useState<ShelfSectionPref[]>(defaultShelfSections);
+  const [renameTarget,setRenameTarget]=useState<{kind:'shelf'|'collection';id:string}|null>(null);
+  const shelfScrollRef=useRef<ScrollView|null>(null);
+  const libraryListRef=useRef<any>(null);
+  const shelfScrollOffset=useRef(0);
+  const libraryScrollOffset=useRef(0);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all'|'available'|'unavailable'>('all');
   const [formatFilter, setFormatFilter] = useState('');
   const [authorFilter, setAuthorFilter] = useState('');
@@ -341,16 +547,50 @@ function Client() {
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerLoadError,setReaderLoadError]=useState('');
   const [readerReloadKey,setReaderReloadKey]=useState(0);
+  const readerWebRef=useRef<WebView|null>(null);
+  const [readerBookmarks,setReaderBookmarks]=useState<ReaderBookmark[]>([]);
+  const [readerAnnotations,setReaderAnnotations]=useState<ReaderAnnotation[]>([]);
+  const [readerAppearance,setReaderAppearance]=useState<ReaderAppearance>(defaultReaderAppearance);
+  const [readerToolsOpen,setReaderToolsOpen]=useState(false);
+  const [readerChromeVisible,setReaderChromeVisible]=useState(true);
+  const [readerPage,setReaderPage]=useState(0);
+  const [readerCount,setReaderCount]=useState(0);
+  const [readerSelection,setReaderSelection]=useState('');
+  const [readerSearch,setReaderSearch]=useState('');
+  const [readerSearchCount,setReaderSearchCount]=useState<number|null>(null);
+  const [readerRequestedPage,setReaderRequestedPage]=useState<number|null>(null);
+  const [readerNote,setReaderNote]=useState('');
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
+  const tabTransition=useRef(new Animated.Value(1)).current;
   const player = useAudioPlayer(null);
   const audio = useAudioPlayerStatus(player);
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
-  const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|null>(null);
+  const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|'bookmarks'|'chapters'|'structure'|null>(null);
   const [playerProgressWidth,setPlayerProgressWidth]=useState(1);
   const [localSpeed, setLocalSpeed] = useState(1);
+  const [playerBookmarks,setPlayerBookmarks]=useState<PlayerBookmark[]>([]);
+  const [trackOrders,setTrackOrders]=useState<TrackOrderMap>({});
+  const [chapterOverrides,setChapterOverrides]=useState<ChapterOverrideMap>({});
+  const [chapterEditIndex,setChapterEditIndex]=useState<number|null>(null);
+  const [chapterEditTitle,setChapterEditTitle]=useState('');
+  const [reduceMotion,setReduceMotion]=useState(false);
+  const [appActive,setAppActive]=useState(AppState.currentState==='active');
+  const bookOpenAnim=useRef(new Animated.Value(0)).current;
+  const pageTurnAnim=useRef(new Animated.Value(0)).current;
+  const skipTurnAnim=useRef(new Animated.Value(0)).current;
+  const [skipDirection,setSkipDirection]=useState<1|-1>(1);
+  const [skipTurning,setSkipTurning]=useState(false);
+  const skipGeneration=useRef(0);
+  function turnThreePages(direction:1|-1){
+    if(reduceMotion||!playbackVisible)return;
+    const generation=++skipGeneration.current;
+    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipTurning(true);
+    Animated.timing(skipTurnAnim,{toValue:3,duration:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
+  }
+
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
   const [localWorkProgress, setLocalWorkProgress] = useState<Record<string, LocalWorkProgress>>({});
@@ -361,16 +601,10 @@ function Client() {
   const [localReadingComplete, setLocalReadingComplete] = useState<Record<string, boolean>>({});
   const [localReadingCurrentComplete, setLocalReadingCurrentComplete] = useState<Record<string, boolean>>({});
   const queueRef = useRef(queuedBooks); queueRef.current=queuedBooks;
-  const [queueReady,setQueueReady]=useState(false);
-  const [queueBusy,setQueueBusy]=useState(false);
+  const queueReady=true;
+  const queueBusy=false;
   const [chapters,setChapters]=useState<Chapter[]>([]);
   const [chapterError,setChapterError]=useState('');
-  const queueStore=useMemo(()=>{
-    if(!session)return null;
-    const store=new SavedQueue<Book>((path,method,data)=>request(session,path,method,data),()=>{setQueuedBooks([...store.items]);setQueueReady(store.ready);setQueueBusy(store.busy);},setError);
-    return store;
-  },[session]);
-  useEffect(()=>{setQueueReady(false);setQueueBusy(false);setQueuedBooks([]);void queueStore?.reload();return()=>queueStore?.dispose();},[queueStore]);
   const [space, setSpace] = useState('');
   const [spaces, setSpaces] = useState<string[]>([]);
   const [shelfLoading, setShelfLoading] = useState(false);
@@ -401,7 +635,6 @@ function Client() {
   const [offlineBusyId,setOfflineBusyId]=useState<number|null>(null);
   const [offlineProgress,setOfflineProgress]=useState('');
   const loadCancel = useRef<(() => void) | null>(null);
-  const shelfColumns = width >= 900 ? 5 : width >= 700 ? 4 : width >= 520 ? 3 : 2;
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
       const current = sessionRef.current;
@@ -445,16 +678,82 @@ function Client() {
     }, setPlayback,
   ), [player]);
   const audioProgress = playback?.duration ? Math.min(1, playback.seconds / playback.duration) : 0;
-  const localAudioProgress = !session && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
-  const displayedProgress = session ? audioProgress : localAudioProgress;
-  const localWorks = useMemo(() => {
-    if (session) return [] as LocalWork[];
-    const local = books.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
-    const downloaded=Object.values(offlineWorks).map(offlineToLocalWork);
-    return [...groupLocalWorks(local),...downloaded];
-  }, [books, offlineWorks, session]);
+  const serverPlaybackActive = playing?.source==='server';
+  const localAudioProgress = !serverPlaybackActive && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
+  const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
+  const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
+  const playbackVisible = activeTab==='player' && appActive && !!playing;
+  useEffect(()=>{if(!playbackVisible||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,reduceMotion]);
+  useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>('archivist.dailyRitual.v1').then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
+  useEffect(()=>{
+    if(!ritualReady)return;
+    setPersistedJSON('archivist.dailyRitual.v1',ritualDays).catch(()=>undefined);
+  },[ritualDays,ritualReady]);
+  const ritualAudioPosition=useRef(audio.currentTime);
+  const ritualAudioLatest=useRef(audio.currentTime);ritualAudioLatest.current=audio.currentTime;
+  useEffect(()=>{
+    if(!ritualReady)return;
+    ritualAudioPosition.current=ritualAudioLatest.current;
+    const timer=setInterval(()=>{
+      const day=localDay();setRitualToday(day);
+      const audioAdvanced=playbackIsPlaying&&ritualAudioLatest.current>ritualAudioPosition.current;
+      ritualAudioPosition.current=ritualAudioLatest.current;
+      const readingNow=appActive&&activeTab==='reader'&&!!reading&&!readerLoading&&!readerLoadError;
+      if(!audioAdvanced&&!readingNow)return;
+      setRitualDays(current=>current[day]>=60?current:{...current,[day]:Math.min(60,(current[day]||0)+15)});
+    },15000);
+    return()=>clearInterval(timer);
+  },[ritualReady,playbackIsPlaying,appActive,activeTab,reading,readerLoading,readerLoadError]);
 
-  const localPersonalWorks = useMemo(() => localWorks.map(work => {
+
+  useEffect(()=>{
+    const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduceMotion);
+    return()=>subscription.remove();
+  },[]);
+
+  useEffect(()=>{
+    tabTransition.stopAnimation();
+    if(reduceMotion){tabTransition.setValue(1);return;}
+    tabTransition.setValue(0);
+    Animated.timing(tabTransition,{toValue:1,duration:220,useNativeDriver:true}).start();
+  },[activeTab,reduceMotion,tabTransition]);
+
+  useEffect(()=>{
+    const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
+    bookOpenAnim.stopAnimation();
+    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:520,useNativeDriver:true}).start();
+
+    if(motion!=='turning'){
+      pageTurnAnim.stopAnimation(value=>{
+        if(reduceMotion || value<=0.01){pageTurnAnim.setValue(0);return;}
+        Animated.timing(pageTurnAnim,{
+          toValue:1,
+          duration:Math.max(120,Math.round((1-value)*620)),
+          useNativeDriver:true,
+        }).start(()=>pageTurnAnim.setValue(0));
+      });
+      return;
+    }
+
+    pageTurnAnim.stopAnimation();
+    pageTurnAnim.setValue(0);
+    const loop=Animated.loop(Animated.sequence([
+      Animated.delay(7200),
+      Animated.timing(pageTurnAnim,{toValue:1,duration:620,useNativeDriver:true}),
+      Animated.timing(pageTurnAnim,{toValue:0,duration:0,useNativeDriver:true}),
+      Animated.delay(900),
+    ]));
+    loop.start();
+    return()=>loop.stop();
+  },[activeTab,appActive,bookOpenAnim,pageTurnAnim,playbackIsPlaying,playbackVisible,reduceMotion]);
+  const phoneWorks = useMemo(() => {
+    const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
+    return groupLocalWorks(local);
+  }, [localBooks]);
+  const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
+  const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
+
+  const personaliseLocalWorks = (items: LocalWork[]): PersonalLocalWork[] => items.map(work => {
     let readingState:ReadingState='not-started';
     if(work.format==='Audio'){
       const point=localWorkProgress[work.key];
@@ -467,78 +766,92 @@ function Client() {
     }
     const pref=localPreferences[work.key] || {rating:0,favourite:false};
     return {...work,readingState,rating:pref.rating||0,favourite:!!pref.favourite};
-  }),[localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress,localWorks]);
+  });
+  const phonePersonalWorks = useMemo(() => personaliseLocalWorks(phoneWorks), [localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress,phoneWorks]);
+  const downloadedPersonalWorks = useMemo(() => personaliseLocalWorks(downloadedWorks), [downloadedWorks,localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress]);
+  const localPersonalWorks = useMemo(() => [...phonePersonalWorks,...downloadedPersonalWorks], [downloadedPersonalWorks,phonePersonalWorks]);
 
-  const localAtlasRelationship = useMemo(() =>
-    !session && atlasFocus ? buildAtlasRelationship(localPersonalWorks,atlasFocus.kind,atlasFocus.value) : null,
-    [atlasFocus,localPersonalWorks,session],
-  );
+  const sourceWorks = useMemo<UnifiedWork[]>(() => {
+    const phone:UnifiedWork[] = phonePersonalWorks.map(work => {
+      const identity=sourceIdentity({source:'local',localKey:work.key,space:work.space,title:work.title});
+      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work};
+    });
+    const downloaded:UnifiedWork[] = downloadedPersonalWorks.flatMap(work => {
+      if(!work.originServer || !work.originWorkId)return [];
+      const identity=sourceIdentity({source:'downloaded',server:work.originServer,serverWorkId:work.originWorkId,space:work.space,title:work.title});
+      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,format:work.format,space:work.space,available:true,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
+    });
+    const remote:UnifiedWork[] = session ? serverWorks.map(work => {
+      const identity=sourceIdentity({source:'server',server:session.server,serverWorkId:work.id,space:work.space,title:work.title});
+      const pref=serverPreferences[work.id] || {rating:work.rating||0,favourite:!!work.favourite,state:work.state||'not-started' as ReadingState};
+      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre||'',publishedYear:publicationYear(work.publishedYear),format:work.format,space:work.space,available:work.available,files:work.files,editions:work.editions,readingState:pref.state||'not-started',rating:pref.rating||0,favourite:!!pref.favourite,serverWork:work,server:session.server,serverWorkId:work.id};
+    }) : [];
+    return [...phone,...downloaded,...remote];
+  },[downloadedPersonalWorks,phonePersonalWorks,serverPreferences,serverWorks,session]);
+
+  const sourceCounts = useMemo(() => ({
+    all: dedupeForAll(sourceWorks).length,
+    local: sourceWorks.filter(item=>item.source==='local').length,
+    server: sourceWorks.filter(item=>item.source==='server').length,
+    downloaded: sourceWorks.filter(item=>item.source==='downloaded').length,
+  }),[sourceWorks]);
+
+  const availableSpaces = useMemo(() => spacesForSource(sourceWorks, sourceFilter), [sourceFilter,sourceWorks]);
+  useEffect(()=>{const next=normalizeSpaceSelection(sourceWorks,sourceFilter,space);if(next!==space)setSpace(next);},[sourceFilter,sourceWorks,space]);
+
+
+  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);
+  const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
+  const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
+  const atlasUniverse=useMemo(()=>buildAtlasUniverse(atlasUniverseWorks,collections,readerAnnotations),[atlasUniverseWorks,collections,readerAnnotations]);
+  useEffect(()=>{
+    if(activeTab!=='atlas')return;
+    const viewWidth=Math.min(width-48,480),viewHeight=viewWidth;
+    const scale=Math.max(.18,Math.min(1.08,Math.min(viewWidth/atlasUniverse.width,viewHeight/atlasUniverse.height)*.78));
+    setAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
+  },[activeTab,width,foldLayout,atlasUniverse.width,atlasUniverse.height]);
+  const atlasSelectedNode=useMemo(()=>atlasUniverse.nodes.find(node=>node.id===atlasNodeId)||null,[atlasNodeId,atlasUniverse]);
 
   const localDuplicateGroups = useMemo(() => {
-    if(session)return [];
-    const local=books.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    const local=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
     return possibleLocalDuplicateGroups(local);
-  },[books,session]);
+  },[localBooks]);
 
 
-  const localProfileStats = useMemo<VerifiedProfileStats>(() => {
-    const audioWorks = localWorks.filter(work => work.format === 'Audio');
-    const readingWorks = localWorks.filter(work => work.format !== 'Audio');
-
-    const startedAudio = audioWorks.filter(work => {
-      const point = localWorkProgress[work.key];
-      return !!point && (point.seconds > 0 || !!point.complete || !!localAudioCompleted[work.key]);
-    }).length;
-    const completedAudio = audioWorks.filter(work =>
-      !!localAudioCompleted[work.key] || !!localWorkProgress[work.key]?.complete
-    ).length;
-    const inProgressAudio = audioWorks.filter(work => {
-      const point=localWorkProgress[work.key];
-      return !!point && !point.complete && point.seconds>0;
-    }).length;
-
-    const startedReading = readingWorks.filter(work => work.tracks.some(track =>
-      !!track.uri && (
-        Object.prototype.hasOwnProperty.call(localReadingProgress, track.uri) ||
-        !!localReadingComplete[track.uri]
-      )
-    )).length;
-    const completedReading = readingWorks.filter(work => work.tracks.some(track =>
-      !!track.uri && !!localReadingComplete[track.uri]
-    )).length;
-    const inProgressReading = readingWorks.filter(work => work.tracks.some(track => {
-      if(!track.uri)return false;
-      const page=localReadingProgress[track.uri] || 0;
-      const currentComplete=localReadingCurrentComplete[track.uri] ?? !!localReadingComplete[track.uri];
-      return page>0 && !currentComplete;
-    })).length;
-
+  function statsFromUnified(items:UnifiedWork[],name:string):VerifiedProfileStats{
+    const completedAudio=items.filter(work=>work.format==='Audio'&&work.readingState==='finished').length;
+    const inProgressAudio=items.filter(work=>work.format==='Audio'&&work.readingState==='in-progress').length;
+    const startedAudio=completedAudio+inProgressAudio;
+    const completedReading=items.filter(work=>work.format!=='Audio'&&work.readingState==='finished').length;
+    const inProgressReading=items.filter(work=>work.format!=='Audio'&&work.readingState==='in-progress').length;
+    const startedReading=completedReading+inProgressReading;
+    const ratings=items.map(work=>work.rating||0).filter(Boolean);
     return {
-      name: 'On this device',
-      owner: false,
-      works: localWorks.length,
-      formats: new Set(localWorks.map(work => work.format).filter(Boolean)).size,
-      series: new Set(localWorks.map(work => work.series).filter(Boolean)).size,
-      startedAudio,
-      completedAudio,
-      inProgressAudio,
-      startedReading,
-      completedReading,
-      inProgressReading,
-      inProgress: inProgressAudio + inProgressReading,
-      completed: completedAudio + completedReading,
-      rated: localWorks.filter(work=>(localPreferences[work.key]?.rating||0)>0).length,
-      favourites: localWorks.filter(work=>!!localPreferences[work.key]?.favourite).length,
-      averageRating: (()=>{const values=localWorks.map(work=>localPreferences[work.key]?.rating||0).filter(Boolean);return values.length?values.reduce((a,b)=>a+b,0)/values.length:0;})(),
+      name,owner:false,works:items.length,
+      formats:new Set(items.map(work=>work.format).filter(Boolean)).size,
+      series:new Set(items.map(work=>work.series).filter(Boolean)).size,
+      startedAudio,completedAudio,inProgressAudio,startedReading,completedReading,inProgressReading,
+      inProgress:inProgressAudio+inProgressReading,completed:completedAudio+completedReading,
+      rated:ratings.length,favourites:items.filter(work=>work.favourite).length,
+      averageRating:ratings.length?ratings.reduce((a,b)=>a+b,0)/ratings.length:0,
     };
-  }, [localAudioCompleted, localPreferences, localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks]);
+  }
+  const allUnifiedWorks=useMemo(()=>dedupeForAll(sourceWorks),[sourceWorks]);
+  const localProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>work.source==='local'),'On this device'),[sourceWorks]);
+  const downloadedProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>work.source==='downloaded'),'Downloaded'),[sourceWorks]);
+  const combinedProfileStats=useMemo(()=>statsFromUnified(allUnifiedWorks,'All libraries'),[allUnifiedWorks]);
+  const profileStats = sourceFilter==='server' && session ? serverProfileStats
+    : sourceFilter==='local' ? localProfileStats
+    : sourceFilter==='downloaded' ? downloadedProfileStats
+    : combinedProfileStats;
 
-  const profileStats = session ? serverProfileStats : localProfileStats;
-  const profileAchievements = useMemo(() => profileStats ? achievementsFor(profileStats) : [], [profileStats]);
+  const profileAchievements = useMemo(() => profileStats ? achievementsFor({...profileStats,bestStreak:ritual.bestStreak,activeDays:ritual.activeDays}) : [], [profileStats,ritual.bestStreak,ritual.activeDays]);
+  const insightWorks=useMemo(()=>sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter(work=>matchesSource(work.source,sourceFilter)),[allUnifiedWorks,sourceFilter,sourceWorks]);
+  const insightSummary=useMemo(()=>buildInsights(insightWorks,readerAnnotations,sourceFilter==='local'||sourceFilter==='downloaded'?[]:serverActivity,insightGoal),[insightGoal,insightWorks,readerAnnotations,serverActivity,sourceFilter]);
 
   useEffect(()=>{
-    if(!profileStats)return;
-    const key=session ? session.server+'|'+profileStats.name : 'local';
+    if(!profileStats||!ritualReady)return;
+    const key=sourceFilter+'|'+(session?.server||'device')+'|'+profileStats.name;
     const unlocked=new Set(profileAchievements.filter(item=>item.unlocked).map(item=>item.id));
     const baseline=achievementBaseline.current;
     if(!baseline || baseline.key!==key){
@@ -551,14 +864,23 @@ function Client() {
     setAchievementCelebration(newly);
     const timer=setTimeout(()=>setAchievementCelebration(null),1900);
     return()=>clearTimeout(timer);
-  },[profileAchievements,profileStats,session]);
+  },[profileAchievements,profileStats,ritualReady,session,sourceFilter]);
+
+  useEffect(()=>{if(!achievementCelebration)return;const timer=setTimeout(()=>setAchievementCelebration(null),3200);return()=>clearTimeout(timer);},[achievementCelebration]);
 
   const availabilityMatches = (available: boolean) =>
     availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
 
+  const reviewAssetPool = useMemo(() => {
+    if(sourceFilter==='server')return serverBooks;
+    if(sourceFilter==='downloaded')return [] as Book[];
+    if(sourceFilter==='local')return localBooks;
+    return [...localBooks,...serverBooks];
+  },[localBooks,serverBooks,sourceFilter]);
+
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return books.filter(book => {
+    return reviewAssetPool.filter(book => {
       if (space && book.space !== space) return false;
       if (reviewOnly && !book.needsReview) return false;
       if (formatFilter && book.format !== formatFilter) return false;
@@ -570,7 +892,66 @@ function Client() {
       if (!q) return true;
       return [book.title, book.author, book.series, book.genre || '', book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
-  }, [authorFilter, availabilityFilter, books, formatFilter, genreFilter, query, reviewOnly, seriesFilter, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, formatFilter, genreFilter, query, reviewAssetPool, reviewOnly, seriesFilter, space, unknownAuthorOnly]);
+
+  const visibleUnifiedWorks = useMemo(() => {
+    const q=query.trim().toLowerCase();
+    const base=sourceFilter==='all' ? dedupeForAll(sourceWorks) : sourceWorks.filter(item=>matchesSource(item.source,sourceFilter));
+    const activeCollection=collectionFilter?collections.find(item=>item.id===collectionFilter):undefined;
+    const collectionKeys=activeCollection?new Set(activeCollection.canonicalKeys):null;
+    return base.filter(work=>{
+      if(collectionKeys && !collectionKeys.has(work.canonicalKey))return false;
+      if(space && work.space!==space)return false;
+      if(formatFilter && work.format!==formatFilter)return false;
+      if(authorFilter && work.author!==authorFilter)return false;
+      if(seriesFilter && work.series!==seriesFilter)return false;
+      if(genreFilter && work.genre!==genreFilter)return false;
+      if(unknownAuthorOnly && !!work.author)return false;
+      if(readingFilter && work.readingState!==readingFilter)return false;
+      if(ratingFilter>0 && work.rating!==ratingFilter)return false;
+      if(favouriteOnly && !work.favourite)return false;
+      if(!availabilityMatches(work.available))return false;
+      if(q && ![work.title,work.author,work.series,work.genre,work.format,work.space].some(value=>value.toLowerCase().includes(q)))return false;
+      return true;
+    });
+  },[authorFilter,availabilityFilter,collectionFilter,collections,favouriteOnly,formatFilter,genreFilter,query,ratingFilter,readingFilter,seriesFilter,sourceFilter,sourceWorks,space,unknownAuthorOnly]);
+
+
+  const sortedUnifiedWorks = useMemo(() => [...visibleUnifiedWorks].sort((a,b)=>{
+    if(librarySort==='rating')return b.rating-a.rating || a.title.localeCompare(b.title);
+    if(librarySort==='author')return (a.author||'').localeCompare(b.author||'') || a.title.localeCompare(b.title);
+    if(librarySort==='series')return (a.series||'').localeCompare(b.series||'') || a.title.localeCompare(b.title);
+    if(librarySort==='format')return a.format.localeCompare(b.format) || a.title.localeCompare(b.title);
+    if(librarySort==='progress'){
+      const rank=(work:UnifiedWork)=>work.readingState==='in-progress'?0:work.readingState==='not-started'?1:2;
+      return rank(a)-rank(b) || a.title.localeCompare(b.title);
+    }
+    return a.title.localeCompare(b.title);
+  }),[librarySort,visibleUnifiedWorks]);
+
+  const smartShelfRows=useMemo(()=>smartShelves.map(shelf=>({shelf,works:applySmartShelf(allUnifiedWorks,shelf).slice(0,12)})),[allUnifiedWorks,smartShelves]);
+  const collectionRows=useMemo(()=>collections.map(collection=>({collection,works:collectionWorks(allUnifiedWorks,collection).slice(0,12)})),[allUnifiedWorks,collections]);
+  const selectedWorks=useMemo(()=>{const wanted=new Set(selectedWorkKeys);return allUnifiedWorks.filter(work=>wanted.has(work.canonicalKey));},[allUnifiedWorks,selectedWorkKeys]);
+
+  async function persistSmartShelves(next:SmartShelfDefinition[]){setSmartShelves(next);await setPersistedJSON(smartShelvesKey,next);}
+  async function persistCollections(next:LibraryCollection[]){setCollections(next);await setPersistedJSON(collectionsKey,next);}
+  function clearLibraryFilters(){setQuery('');setSpace('');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setReadingFilter('');setRatingFilter(0);setFavouriteOnly(false);setUnknownAuthorOnly(false);setAvailabilityFilter('all');setCollectionFilter('');}
+  function openSmartShelf(shelf:SmartShelfDefinition){clearLibraryFilters();setSourceFilter(shelf.source);setSpace(shelf.space);setFormatFilter(shelf.format);setAuthorFilter(shelf.author);setSeriesFilter(shelf.series);setGenreFilter(shelf.genre);setReadingFilter(shelf.readingState);setRatingFilter(shelf.minimumRating);setFavouriteOnly(shelf.favouriteOnly);setAvailabilityFilter(shelf.availableOnly?'available':'all');setLibrarySort(shelf.sort);setActiveTab('library');}
+  function openCollection(collection:LibraryCollection){clearLibraryFilters();setSourceFilter('all');setCollectionFilter(collection.id);setActiveTab('library');}
+  async function createSmartShelf(){
+    const name=organisationName.trim();if(!name)return;
+    const base={id:newOrganisationId('shelf'),name,source:sourceFilter,format:formatFilter,author:authorFilter,series:seriesFilter,genre:genreFilter,space,readingState:readingFilter,minimumRating:ratingFilter,favouriteOnly,availableOnly:availabilityFilter==='available',sort:librarySort,createdAt:new Date().toISOString()};
+    const rules=smartShelfRules.children.length?smartShelfRules:legacyRules(base);
+    await persistSmartShelves([{...base,rules},...smartShelves]);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal(null);
+  }
+  async function createCollection(){const name=organisationName.trim();if(!name)return;const keys=collectionTarget?[collectionTarget.canonicalKey]:selectedWorks.map(work=>work.canonicalKey);const next=[{id:newOrganisationId('collection'),name,canonicalKeys:[...new Set(keys)],createdAt:new Date().toISOString()},...collections];await persistCollections(next);setOrganisationName('');setCollectionTarget(null);setSelectedWorkKeys([]);setOrganisationModal(null);}
+  async function toggleWorkInCollection(collection:LibraryCollection,work:UnifiedWork){await persistCollections(collections.map(item=>item.id===collection.id?toggleCollectionWork(item,work.canonicalKey):item));}
+  async function addSelectedToCollection(collection:LibraryCollection){const wanted=selectedWorks.map(work=>work.canonicalKey);const keys=[...new Set([...collection.canonicalKeys,...wanted])];await persistCollections(collections.map(item=>item.id===collection.id?{...item,canonicalKeys:keys}:item));setSelectedWorkKeys([]);setOrganisationModal(null);}
+  async function removeSmartShelf(id:string){await persistSmartShelves(smartShelves.filter(item=>item.id!==id));}
+  async function removeCollection(id:string){await persistCollections(collections.filter(item=>item.id!==id));}
+  function beginRename(kind:'shelf'|'collection',id:string,name:string){setRenameTarget({kind,id});setOrganisationName(name);setOrganisationModal('manage');}
+  async function applyRename(){const name=organisationName.trim();if(!renameTarget||!name)return;if(renameTarget.kind==='shelf')await persistSmartShelves(smartShelves.map(item=>item.id===renameTarget.id?{...item,name}:item));else await persistCollections(collections.map(item=>item.id===renameTarget.id?{...item,name}:item));setRenameTarget(null);setOrganisationName('');}
+
 
   const visibleLocalWorks = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -618,56 +999,27 @@ function Client() {
   }).slice(0, 12), [localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks, space]);
 
   const atlas = useMemo(() => {
-    const count = (values: string[]) => {
-      const totals = new Map<string, number>();
-      for (const value of values.map(v => v.trim()).filter(Boolean)) totals.set(value, (totals.get(value) || 0) + 1);
-      return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
-    };
-    if (session && serverSummary) {
-      const authors: Array<[string,number]> = serverSummary.authors.map(item => [item.name,item.count]);
-      if (serverSummary.unknownAuthors > 0) authors.push(['Unknown author',serverSummary.unknownAuthors]);
-      const prefs=Object.values(serverPreferences);
-      return {
-        formats: serverSummary.formats.map(item => [item.name,item.count] as [string,number]),
-        authors,
-        series: serverSummary.series.map(item => [item.name,item.count] as [string,number]),
-        genres: (serverSummary.genres || []).map(item => [item.name,item.count] as [string,number]),
-        spaces: serverSummary.spaces.map(item => [item.name,item.count] as [string,number]),
-        status: serverSummary.availability.map(item => [item.name,item.count] as [string,number]),
-        reading: serverSummary.reading?.length
-          ? serverSummary.reading.map(item=>[item.name,item.count] as [string,number])
-          : count(prefs.map(item=>item.state==='finished'?'Finished':item.state==='in-progress'?'In progress':'Not started')),
-        ratings: serverSummary.ratings?.length
-          ? serverSummary.ratings.map(item=>[item.name,item.count] as [string,number])
-          : count(prefs.map(item=>ratingLabel(item.rating||0))),
-        favourites: serverSummary.favourites?.length
-          ? serverSummary.favourites.map(item=>[item.name,item.count] as [string,number])
-          : prefs.some(item=>item.favourite)?[['Favourites',prefs.filter(item=>item.favourite).length] as [string,number]]:[],
-      };
-    }
-    const items = localPersonalWorks;
+    const count=(values:string[])=>{const totals=new Map<string,number>();for(const value of values.map(v=>v.trim()).filter(Boolean))totals.set(value,(totals.get(value)||0)+1);return [...totals.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,16);};
+    const items:UnifiedWork[]=sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter));
     return {
-      formats: count(items.map(item => item.format)),
-      authors: count(items.map(item => item.author || 'Unknown author')),
-      series: count(items.map(item => item.series).filter(Boolean)),
-      genres: count(items.map(item => item.genre).filter(Boolean)),
-      spaces: count(items.map(item => item.space)),
-      status: [
-        ['Available', items.filter(item => item.available).length] as [string, number],
-        ['Unavailable', items.filter(item => !item.available).length] as [string, number],
-      ].filter(([, total]) => total > 0),
-      reading: count(items.map(item=>item.readingState==='finished'?'Finished':item.readingState==='in-progress'?'In progress':'Not started')),
-      ratings: count(items.map(item=>ratingLabel(item.rating||0))),
-      favourites: items.some(item=>item.favourite)?[['Favourites',items.filter(item=>item.favourite).length] as [string,number]]:[],
+      formats:count(items.map(item=>item.format)),authors:count(items.map(item=>item.author||'Unknown author')),
+      series:count(items.map(item=>item.series).filter(Boolean)),genres:count(items.map(item=>item.genre).filter(Boolean)),
+      spaces:count(items.map(item=>item.space)),
+      status:[['Available',items.filter(item=>item.available).length] as [string,number],['Unavailable',items.filter(item=>!item.available).length] as [string,number]].filter(([,total])=>total>0),
+      reading:count(items.map(item=>item.readingState==='finished'?'Finished':item.readingState==='in-progress'?'In progress':'Not started')),
+      ratings:count(items.map(item=>ratingLabel(item.rating||0))),
+      favourites:items.some(item=>item.favourite)?[['Favourites',items.filter(item=>item.favourite).length] as [string,number]]:[],
     };
-  }, [localPersonalWorks, serverPreferences, serverSummary, session]);
+  },[allUnifiedWorks,sourceFilter,sourceWorks]);
+
 
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
     const lifecycle = AppState.addEventListener('change', state => {
+      setAppActive(state==='active');
       controller.tick();
       void controller.save();
-      if(state!=='active')void pauseActiveOfflineDownload();
+      if(state!=='active'){void pauseActiveOfflineDownload();void persistLocalPlaybackPosition();}
     });
     const timer = setInterval(() => controller.tick(),1000);
     return () => { subscription.remove(); lifecycle.remove(); clearInterval(timer); loadCancel.current?.(); void controller.stop(); };
@@ -681,13 +1033,12 @@ function Client() {
 
   useEffect(() => {
     if (!playback?.completed || !queueRef.current.length) return;
-    const next=queueRef.current[0];
-    setPlaying(next);
-    void controller.open(next.id).then(()=>{if(controller.state.playing)void queueStore?.edit(items=>items.filter(b=>b.id!==next.id));});
-  }, [playback?.completed, controller, queueStore]);
+    const [next,...rest]=queueRef.current;
+    void updateLocalQueue(rest).then(()=>playBook(next));
+  }, [playback?.completed]);
 
   useEffect(() => {
-    if (session || !audio.didJustFinish) return;
+    if (playing?.source==='server' || !audio.didJustFinish) return;
     if (activeLocalWork && localWorkIndex < activeLocalWork.tracks.length - 1) {
       void loadLocalWorkTrack(activeLocalWork, localWorkIndex + 1, 0);
       return;
@@ -713,14 +1064,21 @@ function Client() {
     const [next, ...rest] = queueRef.current;
     const nextWork = next.localWorkKey ? localWorks.find(work => work.key === next.localWorkKey) : undefined;
     void updateLocalQueue(rest).then(() => nextWork ? playLocalWork(nextWork) : playBook(next));
-  }, [audio.didJustFinish, session, activeLocalWork, localWorkIndex, localWorks]);
+  }, [audio.didJustFinish, playing?.source, activeLocalWork, localWorkIndex, localWorks]);
 
   const activeAsset=playback?.tracks[playback.index]?.id;
   useEffect(()=>{
     let cancelled=false;setChapters([]);setChapterError('');
-    if(session && activeAsset)request(session,'/api/assets/'+activeAsset+'/chapters').then(items=>{if(!cancelled)setChapters(items);}).catch(e=>{if(!cancelled)setChapterError(e.message);});
+    if(session && playing?.source==='server' && activeAsset){
+      request(session,'/api/assets/'+activeAsset+'/chapters').then(items=>{if(!cancelled)setChapters(items);}).catch(e=>{if(!cancelled)setChapterError(e.message);});
+    }else if(playing?.source==='downloaded'&&activeLocalWork){
+      const downloaded=Object.values(offlineWorks).find(item=>item.server===activeLocalWork.originServer&&item.workId===activeLocalWork.originWorkId);
+      const currentUri=activeLocalWork.tracks[localWorkIndex]?.uri;
+      const sourceTrack=downloaded?.tracks.find(track=>track.uri===currentUri);
+      if(sourceTrack&&!cancelled)setChapters(downloaded?.chaptersByTrackId?.[String(sourceTrack.id)]||[]);
+    }
     return()=>{cancelled=true;};
-  },[session,activeAsset]);
+  },[session,activeAsset,playing?.source,activeLocalWork,localWorkIndex,offlineWorks]);
 
   useEffect(() => {
     SecureStore.getItemAsync(themeKey).then(value => {
@@ -732,7 +1090,7 @@ function Client() {
     getPersistedJSON<Book[]>(localCatalogKey).then(saved => {
       if (!Array.isArray(saved)) return;
       const normalized=saved.map(book=>({...book,genre:book.genre || ''}));
-      setBooks(normalized);
+      setLocalBooks(normalized.map(book=>({...book,source:'local' as const})));
       setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
     }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
@@ -771,6 +1129,21 @@ function Client() {
     getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(value => {
       if (value && typeof value === 'object') setLocalMetadataOverrides(value);
     }).catch(() => undefined).finally(() => setLocalOverridesReady(true));
+    getPersistedJSON<SmartShelfDefinition[]>(smartShelvesKey).then(value => setSmartShelves(sanitizeSmartShelves(value))).catch(() => undefined);
+    getPersistedJSON<LibraryCollection[]>(collectionsKey).then(value => setCollections(sanitizeCollections(value))).catch(() => undefined);
+    getPersistedJSON<ShelfSectionPref[]>(shelfSectionsKey).then(value => {
+      if(!Array.isArray(value))return;
+      const byId=new Map(value.filter(item=>item&&defaultShelfSections.some(base=>base.id===item.id)).map(item=>[item.id,item]));
+      setShelfSections(defaultShelfSections.map(base=>({...base,...byId.get(base.id)})).sort((a,b)=>{const ai=value.findIndex(item=>item.id===a.id),bi=value.findIndex(item=>item.id===b.id);return (ai<0?999:ai)-(bi<0?999:bi);}));
+    }).catch(() => undefined);
+    getPersistedJSON<PlayerBookmark[]>(playerBookmarksKey).then(value=>setPlayerBookmarks(sanitizeBookmarks(value))).catch(()=>undefined);
+    getPersistedJSON<TrackOrderMap>(trackOrdersKey).then(value=>setTrackOrders(sanitizeTrackOrders(value))).catch(()=>undefined);
+    getPersistedJSON<ChapterOverrideMap>(chapterOverridesKey).then(value=>setChapterOverrides(sanitizeChapterOverrides(value))).catch(()=>undefined);
+    getPersistedJSON<ReaderBookmark[]>(readerBookmarksKey).then(value=>setReaderBookmarks(sanitizeReaderBookmarks(value))).catch(()=>undefined);
+    getPersistedJSON<ReaderAnnotation[]>(readerAnnotationsKey).then(value=>setReaderAnnotations(sanitizeReaderAnnotations(value))).catch(()=>undefined);
+    getPersistedJSON<ReaderAppearance>(readerAppearanceKey).then(value=>setReaderAppearance(sanitizeReaderAppearance(value))).catch(()=>undefined);
+    getPersistedJSON(insightGoalKey).then(value=>{const goal=sanitizeInsightGoal(value);setInsightGoal(goal);setGoalDraft({completed:String(goal.completedTarget),annotations:String(goal.annotationTarget)});}).catch(()=>undefined);
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
     }).catch(() => undefined);
@@ -882,7 +1255,7 @@ function Client() {
           if (cancelled) return;
           const normalizedWorks=(works as ServerWork[]).map(normalizeServerWork) as ServerWork[];
           const normalizedSummary=normalizeLibrarySummary(summary);
-          setBooks(assets as Book[]);
+          setServerBooks((assets as Book[]).map(book=>({...book,source:'server' as const})));
           setServerBooksHasMore(reviewOnly && (assets as Book[]).length === 200);
           setServerWorks(normalizedWorks);
           setServerHasMore(normalizedWorks.length === 100);
@@ -938,39 +1311,15 @@ function Client() {
       .then(stats=>{if(!cancelled)setServerProfileStats(stats);})
       .catch(e=>{if(!cancelled)setError(e.message);})
       .finally(()=>{if(!cancelled)setProfileLoading(false);});
+    if(activeTab==='insights')request(session,'/api/activity?limit=100')
+      .then(items=>{if(!cancelled)setServerActivity(items as ProfileActivity[]);})
+      .catch(e=>{if(!cancelled)setError(e.message);});
     return()=>{cancelled=true;};
   }, [activeTab, playback?.completed, session]);
 
-  useEffect(()=>{
-    if(!session || !atlasFocus){
-      setServerAtlasRelationship(null);
-      setAtlasLoading(false);
-      setAtlasCompatibility(false);
-      return;
-    }
-    let cancelled=false;
-    setAtlasLoading(true);
-    setAtlasCompatibility(false);
-    request(session,'/api/atlas-relationships?kind='+encodeURIComponent(atlasFocus.kind)+'&value='+encodeURIComponent(atlasFocus.value))
-      .then(data=>{
-        if(cancelled)return;
-        setServerAtlasRelationship(normalizeAtlasRelationship(data));
-      })
-      .catch(e=>{
-        if(cancelled)return;
-        if(e instanceof RequestError && e.status===400){
-          setServerAtlasRelationship(buildLegacyAtlasRelationship(serverWorks,atlasFocus.kind,atlasFocus.value));
-          setAtlasCompatibility(true);
-          return;
-        }
-        setError(e.message);
-      })
-      .finally(()=>{if(!cancelled)setAtlasLoading(false);});
-    return()=>{cancelled=true;};
-  },[atlasFocus,serverWorks,session]);
 
   useEffect(() => {
-    if (session || !playing?.uri || !audio.currentTime) return;
+    if (playing?.source==='server' || !playing?.uri || !audio.currentTime) return;
     const timer = setTimeout(() => {
       const seconds = audio.currentTime;
       setLocalProgress(current => {
@@ -990,7 +1339,7 @@ function Client() {
       }
     }, 750);
     return () => clearTimeout(timer);
-  }, [audio.currentTime, activeLocalWork, localWorkIndex, playing?.uri, session]);
+  }, [audio.currentTime, activeLocalWork, localWorkIndex, playing?.source, playing?.uri]);
 
   useEffect(() => {
     if (!session || activeTab !== 'shelf') return;
@@ -1015,9 +1364,9 @@ function Client() {
   },[localAudioCompleted,localWorkProgress]);
 
   useEffect(() => {
-    if (session || restoring || !localOverridesReady || !localCatalogReady || !localFolders.length || books.length || localScanning) return;
+    if (restoring || !localOverridesReady || !localCatalogReady || !localFolders.length || localBooks.length || localScanning) return;
     void rescanLocalFolders();
-  }, [books.length, localCatalogReady, localFolders, localOverridesReady, localScanning, restoring, session]);
+  }, [localBooks.length, localCatalogReady, localFolders, localOverridesReady, localScanning, restoring]);
 
   useEffect(()=>{
     if(activeTab!=='settings')return;
@@ -1042,7 +1391,7 @@ function Client() {
     const normalizedWorks=(works as ServerWork[]).map(normalizeServerWork) as ServerWork[];
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
-    setBooks(assets as Book[]);
+    setServerBooks((assets as Book[]).map(book=>({...book,source:'server' as const})));
     setServerBooksHasMore(reviewOnly && (assets as Book[]).length===200);
     setServerWorks(normalizedWorks);
     setServerHasMore(normalizedWorks.length===100);
@@ -1074,8 +1423,8 @@ function Client() {
     if (!session || !serverBooksHasMore || serverBooksLoadingMore || shelfLoading) return;
     setServerBooksLoadingMore(true);
     try {
-      const next = await request(session,serverAssetsPath(books.length,200)) as Book[];
-      setBooks(current => {
+      const next = await request(session,serverAssetsPath(serverBooks.length,200)) as Book[];
+      setServerBooks(current => {
         const seen=new Set(current.map(book=>book.id));
         return [...current,...next.filter(book=>!seen.has(book.id))];
       });
@@ -1270,9 +1619,11 @@ function Client() {
       setError('Local sign-out complete. Server session revocation could not be confirmed.');
     }
     await SecureStore.deleteItemAsync(storageKey);
+    const leavingServer=session.server;
+    await updateLocalQueue(queuedBooks.filter(book=>!(book.source==='server' && book.originServer===leavingServer)));
     setSession(null);
     setRecoverableSession(null);
-    setBooks([]);
+    setServerBooks([]);
     setServerWorks([]);
     setContinueWorks([]);
     setServerSummary(null);
@@ -1289,7 +1640,7 @@ function Client() {
     setHouseholdUsers([]);
     setServerPreferences({});
     setSources([]);
-    setQueuedBooks([]); setSpace('');
+    setSpace('');
   }
 
   async function saveServerPreference(work:ServerWork,next:PersonalPreference){
@@ -1357,7 +1708,7 @@ function Client() {
       setScanProgress({phase: 'discovering', currentFolder: picked.name, entriesVisited: 0, found: 0, review: 0});
       const result = await scanLocalFolders(folders, setScanProgress, localMetadataOverrides);
       setLocalFolders(result.folders);
-      setBooks(result.books);
+      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await Promise.all([
@@ -1388,7 +1739,7 @@ function Client() {
       setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
       const result = await scanLocalFolders(localFolders, setScanProgress, localMetadataOverrides);
       setLocalFolders(result.folders);
-      setBooks(result.books);
+      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
       setLocalMovePreviews([]);
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await Promise.all([
@@ -1402,6 +1753,46 @@ function Client() {
     } finally {
       setLocalScanning(false);
       setScanProgress(null);
+    }
+  }
+
+  function playbackWorkKey(book:Book|null){
+    if(!book)return '';
+    if((book.source==='server'||book.source==='downloaded')&&book.originServer&&book.serverWorkId){
+      return sourceIdentity({source:book.source,server:book.originServer,serverWorkId:book.serverWorkId,title:book.title,space:book.space}).canonicalKey;
+    }
+    if(book.localWorkKey)return sourceIdentity({source:'local',localKey:book.localWorkKey,title:book.title,space:book.space}).canonicalKey;
+    return book.uri?'asset:'+book.uri:'book:'+book.id+':'+book.title;
+  }
+
+  async function savePlayerBookmarks(next:PlayerBookmark[]){
+    setPlayerBookmarks(next);await setPersistedJSON(playerBookmarksKey,next);
+  }
+  async function addCurrentBookmark(seconds:number){
+    const workKey=playbackWorkKey(playing);if(!workKey)return;
+    await savePlayerBookmarks(addBookmark(playerBookmarks,{workKey,seconds,label:'Bookmark'}));
+  }
+  async function deletePlayerBookmark(id:string){await savePlayerBookmarks(removeBookmark(playerBookmarks,id));}
+  async function saveTrackOrder(workKey:string,order:string[]){const next={...trackOrders,[workKey]:order};setTrackOrders(next);await setPersistedJSON(trackOrdersKey,next);}
+  async function saveChapterOverride(workKey:string,nextChapters:Chapter[]|null){
+    const next={...chapterOverrides};if(nextChapters?.length)next[workKey]=nextChapters;else delete next[workKey];setChapterOverrides(next);await setPersistedJSON(chapterOverridesKey,next);
+  }
+  function orderedLocalWork(work:LocalWork){
+    const key=sourceIdentity({source:work.originServer?'downloaded':'local',localKey:work.key,server:work.originServer,serverWorkId:work.originWorkId,title:work.title,space:work.space}).canonicalKey;
+    return {...work,tracks:applyTrackOrder(work.tracks,trackOrders[key],track=>track.uri||String(track.id))};
+  }
+
+  async function persistLocalPlaybackPosition(seconds=audio.currentTime){
+    if(playing?.source==='server'||!playing?.uri)return;
+    const safe=Math.max(0,Number(seconds)||0);
+    const progress={...localProgress,[playing.uri]:safe};
+    setLocalProgress(progress);await setPersistedJSON(localProgressKey,progress);
+    if(activeLocalWork){
+      const track=activeLocalWork.tracks[localWorkIndex];
+      if(track?.uri){
+        const workProgress={...localWorkProgress,[activeLocalWork.key]:{uri:track.uri,seconds:safe,complete:!!localWorkProgress[activeLocalWork.key]?.complete}};
+        setLocalWorkProgress(workProgress);await setPersistedJSON(localWorkProgressKey,workProgress);
+      }
     }
   }
 
@@ -1427,6 +1818,9 @@ function Client() {
       coverUri: work.coverUri,
       coverShape: 'square',
       localWorkKey: work.key,
+      source: work.originServer ? 'downloaded' : 'local',
+      originServer: work.originServer,
+      serverWorkId: work.originWorkId,
     };
     setPlaying(display);
     setActiveTab('player');
@@ -1466,6 +1860,7 @@ function Client() {
   }
 
   async function playLocalWork(work: LocalWork) {
+    work=orderedLocalWork(work);
     if (!work.available || !work.tracks.length) {
       setError('This audiobook is currently unavailable.');
       return;
@@ -1482,7 +1877,7 @@ function Client() {
   }
 
   async function playBook(book: Book) {
-    if (!session) {
+    if (book.source!=='server') {
       if (book.localWorkKey) {
         const work = localWorks.find(item => item.key === book.localWorkKey);
         if (work) { await playLocalWork(work); return; }
@@ -1503,6 +1898,7 @@ function Client() {
       }
       return;
     }
+    if (!session || (book.originServer && book.originServer!==session.server)) { setError('This title belongs to a different or unavailable server. Use its downloaded copy or reconnect to that server in Settings.'); return; }
     if (!book.available) {
       setError('This file is currently unavailable.');
       return;
@@ -1512,13 +1908,15 @@ function Client() {
       setPlaying(book);
       setActiveTab('player');
       await controller.open(book.id);
+      const order=trackOrders[playbackWorkKey(book)]?.map(Number).filter(Number.isFinite);
+      if(order?.length)controller.setTrackOrder(order);
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
   function previewLocalSortBatch() {
-    const previews = previewLocalSort(visibleBooks.filter(book => book.uri) as LocalBook[], sortTemplate);
+    const previews = previewLocalSort(localBooks.filter(book => book.uri) as LocalBook[], sortTemplate);
     setLocalMovePreviews(previews);
     const ready = previews.filter(item => item.state === 'ready').length;
     const conflicts = previews.filter(item => item.state === 'conflict').length;
@@ -1569,6 +1967,40 @@ function Client() {
     }
   }
 
+  function readerWorkKey(book:Book|null){return playbackWorkKey(book);}
+  function sendReaderCommand(command:string,payload:Record<string,unknown>={}){readerWebRef.current?.postMessage(JSON.stringify({type:'reader-command',command,...payload}));}
+  async function persistReaderBookmarks(next:ReaderBookmark[]){setReaderBookmarks(next);await setPersistedJSON(readerBookmarksKey,next);}
+  async function persistReaderAnnotations(next:ReaderAnnotation[]){setReaderAnnotations(next);await setPersistedJSON(readerAnnotationsKey,next);}
+  async function persistReaderAppearance(next:ReaderAppearance){setReaderAppearance(next);await setPersistedJSON(readerAppearanceKey,next);sendReaderCommand('appearance',{value:next});}
+  async function toggleCurrentReaderBookmark(){const workKey=readerWorkKey(reading);if(!workKey)return;await persistReaderBookmarks(toggleReaderBookmark(readerBookmarks,workKey,readerPage));}
+  async function saveCurrentReaderAnnotation(kind:'highlight'|'note'){
+    const workKey=readerWorkKey(reading);const text=readerSelection.trim();if(!workKey||!text)return;
+    const next=addReaderAnnotation(readerAnnotations,{workKey,page:readerPage,kind,text,note:kind==='note'?readerNote:undefined});
+    await persistReaderAnnotations(next);setReaderNote('');
+  }
+  function handleReaderMessage(raw:string){
+    if(!reading)return;
+    try{
+      const message=JSON.parse(raw);
+      if(message?.type==='reader-position'||message?.type==='reader-ready'){
+        if(Number.isInteger(message.page)&&message.page>=0)setReaderPage(message.page);
+        if(Number.isInteger(message.count)&&message.count>=0)setReaderCount(message.count);
+      }
+      if(message?.type==='reader-selection')setReaderSelection(String(message.text||'').slice(0,4000));
+      if(message?.type==='reader-chrome-toggle')setReaderChromeVisible(value=>!value);
+      if(message?.type==='reader-search-results')setReaderSearchCount(Math.max(0,Number(message.count)||0));
+      if(message?.type==='archivist-reader-ready'){setReaderLoading(false);setReaderLoadError('');}
+      if((message?.type==='archivist-reader-complete'||message?.complete===true)&&reading.serverWorkId&&reading.source==='server')setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
+      if(message?.type==='reader-position'&&reading.uri){
+        const page=Number(message.page);if(Number.isInteger(page)&&page>=0){
+          setLocalReadingProgress(current=>{if(current[reading.uri!]===page)return current;const next={...current,[reading.uri!]:page};void setPersistedJSON(localReadingProgressKey,next);return next;});
+          if(typeof message.complete==='boolean')setLocalReadingCurrentComplete(current=>{if(current[reading.uri!]===message.complete)return current;const next={...current,[reading.uri!]:message.complete};void setPersistedJSON(localReadingCurrentCompleteKey,next);return next;});
+          if(message.complete===true){if(!localReadingComplete[reading.uri!]&&reading.localWorkKey)setRatingPrompt({title:reading.title,localWorkKey:reading.localWorkKey});setLocalReadingComplete(current=>{if(current[reading.uri!])return current;const next={...current,[reading.uri!]:true};void setPersistedJSON(localReadingCompleteKey,next);return next;});}
+        }
+      }
+    }catch{}
+  }
+
   function openBook(book: Book) {
     if (!book.available) {
       setError('This file is currently unavailable.');
@@ -1576,8 +2008,9 @@ function Client() {
     }
     setError('');
     setReaderLoadError('');
+    setReaderPage(book.uri ? (localReadingProgress[book.uri]||0) : 0);setReaderCount(0);setReaderSelection('');setReaderSearch('');setReaderSearchCount(null);setReaderRequestedPage(null);setReaderToolsOpen(false);setReaderChromeVisible(true);
     if (book.format === 'Audio') playBook(book);
-    else if (!session) {
+    else if (book.source!=='server') {
       if (!book.uri) return;
       setReading(book);
       setActiveTab('reader');
@@ -1589,6 +2022,7 @@ function Client() {
         .finally(() => setReaderLoading(false));
     }
     else {
+      if(!session){setError('Server is unavailable. Download this title for offline use or reconnect in Settings.');return;}
       setReading(book);
       setReaderLoading(true);
       setActiveTab('reader');
@@ -1606,6 +2040,9 @@ function Client() {
       coverUri: work.coverUri,
       coverShape: 'square',
       localWorkKey: work.key,
+      source: work.originServer ? 'downloaded' : 'local',
+      originServer: work.originServer,
+      serverWorkId: work.originWorkId,
     };
     const next = queuedBooks.some(existing => existing.localWorkKey === work.key)
       ? queuedBooks
@@ -1668,6 +2105,10 @@ function Client() {
     setOfflineProgress(offlineCheckpoints[checkpointKey]?'Resuming…':'Preparing download…');
     try{
       const tracks=await request(session,'/api/works/'+work.id+'/tracks') as WorkTrack[];
+      const chapterPairs=await Promise.all(tracks.filter(track=>track.available&&track.format==='Audio').map(async track=>{
+        try{return [String(track.id),await request(session,'/api/assets/'+track.id+'/chapters') as Chapter[]] as const;}catch{return [String(track.id),[] as Chapter[]] as const;}
+      }));
+      const chaptersByTrackId=Object.fromEntries(chapterPairs.filter(([,items])=>items.length));
       const downloaded=await downloadOfflineWork(
         session,
         work,
@@ -1676,6 +2117,7 @@ function Client() {
         {
           checkpoint:offlineCheckpoints[checkpointKey],
           onCheckpoint:checkpoint=>saveOfflineCheckpoint(checkpointKey,checkpoint),
+          chaptersByTrackId,
         },
       );
       setOfflineWorks(current=>{
@@ -1725,8 +2167,10 @@ function Client() {
       const item: Book = {
         id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
         format:'Audio',space:work.space,available:true,coverShape:'square',serverWorkId:work.id,
+        source:'server',originServer:session.server,
       };
-      await queueStore?.edit(old => old.some(book => book.id === item.id) ? old : [...old,item]);
+      const next=queuedBooks.some(book=>book.source==='server' && book.originServer===item.originServer && book.id===item.id) ? queuedBooks : [...queuedBooks,item];
+      await updateLocalQueue(next);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -1736,7 +2180,7 @@ function Client() {
     if (!work.available) { setError('This work is currently unavailable.'); return; }
     if (work.format === 'Audio') { void playLocalWork(work); return; }
     const first = work.tracks.find(track => track.available);
-    if (first) openBook({...first,localWorkKey:work.key});
+    if (first) openBook({...first,localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId});
   }
 
   function openServerWorkTrack(work: ServerWork, track: WorkTrack) {
@@ -1744,7 +2188,7 @@ function Client() {
     const item: Book = {
       id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
       format:track.format,space:work.space,available:track.available,serverWorkId:work.id,
-      coverShape:track.format==='Audio'?'square':'portrait',
+      coverShape:track.format==='Audio'?'square':'portrait',source:'server',originServer:session?.server,
     };
     if (track.format === 'Audio') void playBook(item);
     else openBook(item);
@@ -1762,13 +2206,13 @@ function Client() {
       if (!available.length) throw Error('No readable files are currently available for this work.');
       if (work.format === 'Audio' || available.every(track => track.format === 'Audio')) {
         const first = available.find(track => track.format === 'Audio')!;
-        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:'Audio',space:work.space,available:true,coverShape:'square',serverWorkId:work.id});
+        await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:'Audio',space:work.space,available:true,coverShape:'square',serverWorkId:work.id,source:'server',originServer:session.server});
         return;
       }
       const editions = new Set(available.map(track => track.edition));
       if (editions.size === 1) {
         const first = available[0];
-        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:first.format,space:work.space,available:true,serverWorkId:work.id,coverShape:first.format==='Audio'?'square':'portrait'});
+        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:first.format,space:work.space,available:true,serverWorkId:work.id,coverShape:first.format==='Audio'?'square':'portrait',source:'server',originServer:session.server});
         return;
       }
       setWorkPicker({work,tracks:available});
@@ -1794,19 +2238,25 @@ function Client() {
   }: {
     title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;
   }) {
-    const square = coverShape === 'square' || format === 'Audio';
+    const square = coverShape ? coverShape === 'square' : format === 'Audio';
     const imageSource = session && serverPath
       ? {uri: session.server + serverPath, headers: {Authorization: 'Bearer ' + session.token}}
       : coverUri ? {uri: coverUri} : null;
     const [coverFailed, setCoverFailed] = useState(false);
     useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
-      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor: p.ink}]}>
-        <Text numberOfLines={1} style={[styles.coverFormat, {color: p.gold}]}>{format.toUpperCase()}</Text>
-        <Text numberOfLines={large ? 4 : 3} style={[styles.coverTitle, {color: p.ivory}]}>{title}</Text>
+      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor:p.card}]}>
         {imageSource && !coverFailed ? (
           <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
-        ) : null}
+        ) : (
+          <View style={styles.coverFallback}>
+            <Text style={[styles.coverFallbackMark,{color:p.muted}]}>A</Text>
+            <View style={styles.coverFallbackCopy}>
+              <Text numberOfLines={1} style={[styles.coverFormat,{color:p.sage}]}>{format.toUpperCase()}</Text>
+              <Text maxFontSizeMultiplier={1.1} numberOfLines={large ? 3 : 2} style={[styles.coverTitle,{color:p.ink},large&&styles.coverTitleLarge]}>{title}</Text>
+            </View>
+          </View>
+        )}
       </View>
     );
   }
@@ -1817,19 +2267,19 @@ function Client() {
       format={book.format}
       coverShape={book.coverShape}
       coverUri={book.coverUri}
-      serverPath={session ? '/api/assets/' + book.id + '/cover' : undefined}
+      serverPath={session && book.source==='server' ? '/api/assets/' + book.id + '/cover' : undefined}
       large={large}
     />;
   }
 
   function MiniArtwork({book}: {book: Book}) {
-    const source = session
+    const source = session && book.source==='server'
       ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
       : book.coverUri ? {uri: book.coverUri} : null;
     const [failed,setFailed]=useState(false);
     useEffect(()=>setFailed(false),[source?.uri]);
     return (
-      <View style={[styles.miniCover,{backgroundColor:p.gold}]}>
+      <View style={[styles.miniCover,{backgroundColor:'#111111'}]}>
         <Text numberOfLines={1} style={styles.miniCoverLabel}>{book.format.toUpperCase()}</Text>
         {source && !failed ? <Image accessible={false} source={source} resizeMode="cover" style={styles.miniCoverImage} onError={()=>setFailed(true)} /> : null}
       </View>
@@ -1838,15 +2288,16 @@ function Client() {
 
   function ServerConnect() {
     return (
-      <View style={{gap: 12}}>
-          <Text style={[styles.sectionTitle, {color: p.ink}]}>Add Server</Text>
-          <Text style={[styles.loginCopy, {color: p.muted, textAlign: 'left'}]}>Connect a private Archivist server when you want a shared household library. Your phone library keeps working locally.</Text>
+      <View style={styles.serverConnect}>
+          <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>OPTIONAL SERVER</Text>
+          <Text style={[styles.serverConnectTitle,{color:p.ink}]}>Add a server</Text>
+          <Text style={[styles.serverConnectCopy,{color:p.muted}]}>Connect a private Archivist server for household sharing and remote storage. Your library on this device continues to work without it.</Text>
           <TextInput accessibilityLabel="Server address" autoCapitalize="none" autoCorrect={false} keyboardType="url" value={server} onChangeText={setServer} placeholder="https://books.example.com" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <TextInput accessibilityLabel="Profile access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={key} onChangeText={setKey} placeholder="Profile access key" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
           <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy} />
-          {serverNotice ? <Text style={[styles.meta, {color: p.gold}]}>{serverNotice}</Text> : null}
-          {error ? <Text accessibilityRole="alert" style={[styles.error, {color: p.gold}]}>{error}</Text> : null}
+          {serverNotice?<Text style={[styles.meta,{color:p.sage}]}>{serverNotice}</Text>:null}
+          {error ? <Text accessibilityRole="alert" style={[styles.error, {color:p.danger}]}>{error}</Text> : null}
       </View>
     );
   }
@@ -1857,56 +2308,62 @@ function Client() {
   }
 
   function LibrarySwitcher({vertical = false}: {vertical?: boolean}) {
-    const names = ['', ...spaces];
+    const names = ['', ...availableSpaces];
     return (
       <View style={vertical ? styles.libraryRailList : styles.libraryChipsRow}>
-        {names.map(name => (
-          <Pressable
+        {names.map(name => {
+          const selected=space===name;
+          return <Pressable
             key={name || 'all'}
             accessibilityRole="button"
-            accessibilityState={{selected: space === name}}
+            accessibilityState={{selected}}
             onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false);}}
-            style={[
-              styles.libraryChoice,
-              vertical && styles.libraryChoiceVertical,
-              {borderColor: p.line, backgroundColor: space === name ? p.sage : p.card},
+            style={({pressed})=>[
+              styles.librarySpaceTab,
+              vertical&&styles.librarySpaceTabVertical,
+              pressed&&{opacity:.62},
             ]}>
-            <Text numberOfLines={1} style={{color: space === name ? p.ivory : p.ink, fontWeight: '700'}}>
-              {name || 'All books'}
+            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.librarySpaceText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>
+              {name || 'All spaces'}
             </Text>
-          </Pressable>
-        ))}
+            <View pointerEvents="none" style={[
+              vertical?styles.librarySpaceMarkerVertical:styles.librarySpaceMarker,
+              {backgroundColor:p.sage,opacity:selected?1:0},
+            ]}/>
+          </Pressable>;
+        })}
       </View>
     );
   }
 
   function OnboardingGuide() {
     if (session || onboardingDone) return null;
-    const reviewCount = session ? (serverSummary?.needsReview ?? books.filter(book => book.needsReview).length) : books.filter(book => book.needsReview).length;
+    const reviewCount = localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
-    const hasBooks = books.length > 0;
+    const hasBooks = localBooks.length > 0;
     return (
-      <View style={[styles.onboardingCard, {backgroundColor: p.card, borderColor: p.line}]}>
-        <Text style={[styles.onboardingEyebrow, {color: p.gold}]}>START HERE</Text>
-        <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>Build your library in three simple steps</Text>
+      <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
+        <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your library</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Choose your folders once. Archivist will identify the library and only ask about uncertain matches.</Text>
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber, {backgroundColor: hasFolder ? p.sage : p.ink}]}>1</Text>
+          <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle, {color:p.ink}]}>Choose where your books live</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} folder${localFolders.length === 1 ? '' : 's'} added` : 'Pick a Books, Comics or Audiobooks folder. You can add more later.'}</Text>
           </View>
         </View>
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber, {backgroundColor: hasBooks ? p.sage : hasFolder ? p.ink : p.line}]}>2</Text>
+          <Text style={[styles.onboardingNumber,{color:hasBooks?p.sage:p.muted}]}>02</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist finds and identifies everything</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
-              {localScanning && scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${books.length} items found` : 'Scanning starts immediately after you choose a folder.'}
+              {localScanning && scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${localBooks.length} items found` : 'Scanning starts immediately after you choose a folder.'}
             </Text>
           </View>
         </View>
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber, {backgroundColor: hasBooks && reviewCount === 0 ? p.sage : hasBooks ? p.ink : p.line}]}>3</Text>
+          <Text style={[styles.onboardingNumber,{color:hasBooks&&reviewCount===0?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Archivist keeps confident matches out of your way.' : reviewCount ? `${reviewCount} item${reviewCount === 1 ? '' : 's'} need a quick check.` : 'Everything found so far looks good.'}</Text>
@@ -1934,10 +2391,10 @@ function Client() {
         <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
           <Cover book={item} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
-          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
+          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
           <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}{item.genre ? ' · '+item.genre : ''}</Text>
         </Pressable>
-        {(session ? owner : true) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
+        {(item.source!=='server' || owner) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
       </View>
     );
   }
@@ -1945,43 +2402,29 @@ function Client() {
   function PersonalControls({rating,favourite,onRating,onFavourite}:{
     rating:number;favourite:boolean;onRating:(rating:number)=>void;onFavourite:()=>void;
   }) {
-    return <View style={{gap:5,marginTop:7}}>
-      <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
-        <View accessibilityLabel={'Personal rating '+ratingLabel(rating)} style={{flexDirection:'row'}}>
+    return <View style={styles.personalControls}>
+      <Text style={[styles.personalControlLabel,{color:p.muted}]}>YOUR RATING</Text>
+      <View style={styles.personalControlRow}>
+        <View accessibilityLabel={'Personal rating '+ratingLabel(rating)} style={styles.ratingStars}>
           {[1,2,3,4,5].map(star=>{
             const full=rating>=star*2,half=rating===star*2-1;
             return <Pressable
               key={star}
               accessibilityRole="button"
               accessibilityLabel={'Rate '+(star-0.5)+' or '+star+' stars'}
-              onPress={event=>onRating((star-1)*2+(event.nativeEvent.locationX<13?1:2))}
-              style={{width:26,height:30,alignItems:'center',justifyContent:'center'}}>
-              <Text style={{fontSize:20,color:full||half?p.gold:p.muted,opacity:half?0.55:1}}>★</Text>
+              onPress={event=>onRating((star-1)*2+(event.nativeEvent.locationX<22?1:2))}
+              style={({pressed})=>[styles.ratingStarButton,pressed&&{opacity:.72,transform:[{scale:.96}]}]}>
+              <RatingStarMark color={full||half?p.sage:p.muted} opacity={half?.55:1} size={20}/>
             </Pressable>;
           })}
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={favourite?'Remove favourite':'Add favourite'} onPress={onFavourite} style={{padding:5}}>
-          <Text style={{fontSize:22,color:favourite?p.gold:p.muted}}>{favourite?'♥':'♡'}</Text>
+        <Pressable accessibilityRole="button" accessibilityState={{selected:favourite}} accessibilityLabel={favourite?'Remove favourite':'Add favourite'} onPress={onFavourite} style={styles.favouriteTextAction}>
+          <Text style={{color:favourite?p.sage:p.muted,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>{favourite?'Favourited':'Favourite'}</Text>
         </Pressable>
       </View>
-      {rating>0?<Text style={[styles.meta,{color:p.gold}]}>{ratingLabel(rating)}</Text>:null}
+      {rating>0?<Text style={[styles.meta,{color:p.sage}]}>{ratingLabel(rating)}</Text>:null}
     </View>;
   }
-
-  function WorkQuickAction({label,accessibilityLabel,onPress,disabled}:{
-    label:string;accessibilityLabel?:string;onPress:()=>void;disabled?:boolean;
-  }) {
-    return <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel || label}
-      accessibilityState={{disabled:!!disabled}}
-      disabled={disabled}
-      onPress={onPress}
-      style={({pressed})=>[styles.workQuickAction,{borderColor:p.line},(pressed||disabled)&&{opacity:disabled?.42:.62}]}>
-      <Text numberOfLines={1} style={[styles.workQuickActionText,{color:p.sage}]}>{label}</Text>
-    </Pressable>;
-  }
-
   function LocalWorkCard({work}: {work: LocalWork}) {
     const downloaded=Object.values(offlineWorks).find(item=>'offline:'+item.key===work.key);
     const personal=localPreferences[work.key] || {rating:0,favourite:false};
@@ -1990,7 +2433,7 @@ function Client() {
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
           <Artwork title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverUri} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
-          {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.gold}]}><Text style={{color:p.gold,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
+          {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
           <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
             {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.genre ? ' · '+work.genre : ''}{work.files>1 ? ' · '+work.files+' files' : ''}
           </Text>
@@ -1998,10 +2441,8 @@ function Client() {
         <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
           onRating={rating=>void saveLocalPreference(work,{...personal,rating:personal.rating===rating?0:rating})}
           onFavourite={()=>void saveLocalPreference(work,{...personal,favourite:!personal.favourite})} />
-        {(work.format==='Audio'||downloaded) ? <View style={styles.workQuickRow}>
-          {work.format==='Audio' ? <WorkQuickAction label="＋ Queue" accessibilityLabel={'Add '+work.title+' to queue'} onPress={()=>void addLocalWorkQueue(work)} /> : null}
-          {downloaded ? <WorkQuickAction label="✓ Offline" accessibilityLabel={'Remove offline download of '+work.title} disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
-        </View> : null}
+        {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
+        {downloaded ? <Button label="Remove download" tone="quiet" disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
       </View>
     );
   }
@@ -2023,12 +2464,10 @@ function Client() {
         <PersonalControls rating={personal.rating||0} favourite={!!personal.favourite}
           onRating={rating=>void saveServerPreference(work,{...personal,rating:personal.rating===rating?0:rating})}
           onFavourite={()=>void saveServerPreference(work,{...personal,favourite:!personal.favourite})} />
-        <View style={styles.workQuickRow}>
-          {work.format==='Audio' ? <WorkQuickAction label="＋ Queue" accessibilityLabel={'Add '+work.title+' to queue'} disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
-          {downloaded
-            ? <WorkQuickAction label={'✓ Offline · '+formatBytes(downloaded.bytes)} accessibilityLabel={'Remove download · '+formatBytes(downloaded.bytes)} disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
-            : <WorkQuickAction label={downloading ? '↓ '+offlineProgress : checkpoint ? '↻ Resume' : '↓ Offline'} accessibilityLabel={checkpoint?'Resume download of '+work.title:'Download '+work.title+' for offline use'} disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
-        </View>
+        {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
+        {downloaded
+          ? <Button label={'Remove download · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
+          : <Button label={downloading ? 'Downloading '+offlineProgress : checkpoint ? 'Resume download' : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
       </View>
     );
   }
@@ -2043,7 +2482,7 @@ function Client() {
     return <Modal transparent animationType="fade" visible onRequestClose={()=>setRatingPrompt(null)}>
       <View style={styles.ratingPromptBackdrop}>
       <View accessibilityViewIsModal accessibilityLabel={'Rate '+ratingPrompt.title} style={[styles.ratingPromptCard,{backgroundColor:p.card,borderColor:p.line}]}>
-        <Text style={[styles.playerEyebrow,{color:p.gold}]}>FINISHED</Text>
+        <Text style={[styles.playerEyebrow,{color:p.sage}]}>FINISHED</Text>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>How was it?</Text>
         <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{ratingPrompt.title}</Text>
         <PersonalControls
@@ -2089,13 +2528,19 @@ function Client() {
     );
   }
 
+  function openUnifiedWork(work: UnifiedWork) {
+    setWorkMenu(null);
+    if (work.localWork) { openLocalWork(work.localWork); return; }
+    if (work.serverWork) { void openServerWork(work.serverWork); }
+  }
+
   function ContinueCard({
-    title,author,format,coverUri,serverPath,onPress,action='Open',
+    title,author,format,coverUri,serverPath,onPress,
   }: {
-    title:string;author:string;format:string;coverUri?:string;serverPath?:string;onPress:()=>void;action?:string;
+    title:string;author:string;format:string;coverUri?:string;serverPath?:string;onPress:()=>void;
   }) {
     return (
-      <Pressable accessibilityRole="button" accessibilityLabel={action+' '+title+', '+(author||format)} onPress={onPress} style={({pressed})=>[styles.continueCard,pressed&&styles.cardPressed]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={'Continue '+title+', '+(author||format)} onPress={onPress} style={styles.continueCard}>
         <Artwork title={title} format={format} coverShape={format==='Audio'?'square':'portrait'} coverUri={coverUri} serverPath={serverPath} />
         <Text numberOfLines={2} style={[styles.continueTitle,{color:p.ink}]}>{title}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{author || format}</Text>
@@ -2103,254 +2548,615 @@ function Client() {
     );
   }
 
-  function Shelf() {
-    const wideLibraries = width >= 760 && spaces.length > 0;
-    const reviewCount = session ? (serverSummary?.needsReview ?? books.filter(book => book.needsReview).length) : books.filter(book => book.needsReview).length;
-    const continuing = session ? continueWorks : localContinueWorks;
-    const shelfWorks = session ? visibleServerWorks : visibleLocalWorks;
-    const seriesCounts = new Map<string,number>();
-    for (const work of shelfWorks) if (work.series) seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
-    const seriesOptions = [...seriesCounts.entries()].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,10);
-    const libraryMode = activeTab === 'library';
-    return (
-      <View style={styles.shelfShell}>
-        {wideLibraries ? <View style={[styles.libraryRail,{borderRightColor:p.line,backgroundColor:p.card}]}>
-          <Text style={[styles.libraryRailTitle,{color:p.ink}]}>Libraries</Text>
-          <LibrarySwitcher vertical />
-          {!session ? <Pressable accessibilityRole="button" onPress={() => void addLocalFolder()} style={styles.libraryRailAdd}><Text style={{color:p.sage,fontWeight:'800'}}>+ Add folder</Text></Pressable> : null}
-        </View> : null}
-        <View style={[styles.content, {flex: 1}]}>
-        <View style={styles.pageHeading}>
-          <View>
-            <Text style={[styles.pageEyebrow,{color:p.gold}]}>{libraryMode ? 'COLLECTION' : 'YOUR LIBRARY'}</Text>
-            <Text style={[styles.title, {color: p.ink}]}>{libraryMode ? 'Library' : 'Shelf'}</Text>
-          </View>
-          {libraryMode ? <Text style={[styles.headerMeta,{color:p.muted}]}>{session ? (serverSummary?.total ?? serverWorks.length) : localWorks.length} works</Text> : null}
-        </View>
-        {!libraryMode ? <OnboardingGuide /> : null}
-        {!libraryMode && !session && onboardingDone ? <View style={[styles.librarySummary,{backgroundColor:p.card,borderColor:p.line}]}>
-          <View style={{flex:1}}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your libraries</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder${localFolders.length === 1 ? '' : 's'} · ${books.length} items${reviewCount ? ` · ${reviewCount} need review` : ''}</Text>
-          </View>
-          <Button label={localScanning ? 'Scanning…' : 'Add folder'} disabled={localScanning} tone="quiet" onPress={() => void addLocalFolder()} />
-        </View> : null}
-        {!wideLibraries && spaces.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher /></ScrollView> : null}
-        {reviewCount>0 && !reviewOnly ? <View style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.gold}]}>
-          <Text style={[styles.meta,{color:p.ink,flex:1}]}>{reviewCount} file{reviewCount===1?'':'s'} need a quick metadata check before automatic organising.</Text>
-          <Button label={'Review '+reviewCount} tone="quiet" onPress={() => {setReviewOnly(true);setQuery('');}} />
-        </View> : null}
-        {reviewOnly ? <View style={[styles.reviewBanner,{backgroundColor:p.card,borderColor:p.gold}]}>
-          <Text style={[styles.meta,{color:p.ink,flex:1}]}>Reviewing uncertain files. Corrections are preserved on future scans.</Text>
-          <Button label="Back to Shelf" tone="quiet" onPress={() => setReviewOnly(false)} />
-        </View> : null}
-        {localScanning && scanProgress ? <View style={[styles.scanBanner,{backgroundColor:p.ink}]}>
-          <ActivityIndicator accessibilityLabel="Scanning local library" color={p.ivory} />
-          <View style={{flex:1}}>
-            <Text style={{color:p.ivory,fontWeight:'800'}}>Scanning {scanProgress.currentFolder || 'library'}…</Text>
-            <Text style={{color:'#c8d4d2'}}>{scanProgress.entriesVisited} checked · {scanProgress.found} books found · {scanProgress.review} need review</Text>
-          </View>
-        </View> : null}
-        {localFolderNotice ? <Text style={[styles.meta,{color:p.gold}]}>{localFolderNotice}</Text> : null}
-        {!libraryMode && !reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && continuing.length ? <View style={styles.shelfSection}>
-          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Continue</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
-            {session ? continueWorks.map(work => <ContinueCard
-              key={'continue-server-'+work.id}
-              title={work.title}
-              author={work.author}
-              format={work.format}
-              serverPath={'/api/works/'+work.id+'/cover'}
-              onPress={()=>void openServerWork(work)}
-            />) : localContinueWorks.map(work => <ContinueCard
-              key={'continue-local-'+work.key}
-              title={work.title}
-              author={work.author}
-              format={work.format}
-              coverUri={work.coverUri}
-              onPress={()=>openLocalWork(work)}
-            />)}
-          </ScrollView>
-        </View> : null}
-        {!libraryMode && !reviewOnly && !query.trim() && availabilityFilter==='all' && !formatFilter && !authorFilter && !seriesFilter && !genreFilter && !unknownAuthorOnly && seriesOptions.length ? <View style={styles.shelfSection}>
-          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Series</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
-            {seriesOptions.map(([name,total]) => <Pressable
-              key={name}
-              accessibilityRole="button"
-              onPress={()=>{setQuery('');setSeriesFilter(name);setAuthorFilter('');setGenreFilter('');setAvailabilityFilter('all');setFormatFilter('');setUnknownAuthorOnly(false)}}
-              style={[styles.seriesChip,{borderColor:p.line,backgroundColor:p.card}]}>
-              <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{name}</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{total}</Text>
-            </Pressable>)}
-          </ScrollView>
-        </View> : null}
-        {libraryMode ? <>
-        <TextInput accessibilityLabel="Search your library" value={query} onChangeText={value=>{setQuery(value);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false)}} placeholder="Search title, author, series or genre" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
-        {shelfLoading ? <ActivityIndicator accessibilityLabel="Loading library" /> : null}
-        {reviewOnly ? (
-          <FlatList
-            key={'review-'+shelfColumns}
-            data={visibleBooks}
-            initialNumToRender={12}
-            maxToRenderPerBatch={12}
-            windowSize={7}
-            removeClippedSubviews
-            keyExtractor={b => 'asset-'+b.id}
-            numColumns={shelfColumns}
-            contentContainerStyle={styles.grid}
-            ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>}
-            renderItem={({item}) => <RawAssetCard item={item} />}
-            onEndReachedThreshold={0.55}
-            onEndReached={()=>void loadMoreServerBooks()}
-            ListFooterComponent={session && serverBooksLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more review files" /> : null}
-          />
-        ) : session ? (
-          <FlatList
-            key={'server-works-'+shelfColumns}
-            data={visibleServerWorks}
-            initialNumToRender={12}
-            maxToRenderPerBatch={12}
-            windowSize={7}
-            removeClippedSubviews
-            keyExtractor={work => 'work-'+work.id}
-            numColumns={shelfColumns}
-            contentContainerStyle={styles.grid}
-            ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>No matching works. Add and scan folders in Settings.</Text> : null}
-            renderItem={({item}) => <ServerWorkCard work={item} />}
-            onEndReachedThreshold={0.55}
-            onEndReached={()=>void loadMoreServerWorks()}
-            ListFooterComponent={serverLoadingMore ? <ActivityIndicator accessibilityLabel="Loading more works" /> : null}
-          />
-        ) : (
-          <FlatList
-            key={'local-works-'+shelfColumns}
-            data={visibleLocalWorks}
-            initialNumToRender={12}
-            maxToRenderPerBatch={12}
-            windowSize={7}
-            removeClippedSubviews
-            keyExtractor={work => work.key}
-            numColumns={shelfColumns}
-            contentContainerStyle={styles.grid}
-            ListEmptyComponent={!shelfLoading ? <Text style={[styles.empty,{color:p.muted}]}>{localFolders.length?'No matching works.':'No books yet. Add folders to build your local library.'}</Text> : null}
-            renderItem={({item}) => <LocalWorkCard work={item} />}
-          />
-        )}
+  async function saveShelfSections(next:ShelfSectionPref[]){
+    setShelfSections(next);
+    await setPersistedJSON(shelfSectionsKey,next);
+  }
 
-        </> : <>
-          {shelfWorks.length ? <View style={styles.shelfSection}>
-            <View style={styles.sectionHeadingRow}>
-              <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your library</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Open full library" onPress={()=>setActiveTab('library')} hitSlop={8}>
-                <Text style={[styles.sectionLink,{color:p.sage}]}>See all</Text>
-              </Pressable>
+  function SourceSwitcher({vertical=false}:{vertical?:boolean}){
+    const options:Array<{id:LibrarySource;label:string;count:number;show:boolean}>=[
+      {id:'all',label:'All library',count:sourceCounts.all,show:true},
+      {id:'local',label:'On this device',count:sourceCounts.local,show:true},
+      {id:'server',label:'Server',count:sourceCounts.server,show:!!session},
+      {id:'downloaded',label:'Downloaded',count:sourceCounts.downloaded,show:sourceCounts.downloaded>0},
+    ];
+    const body=options.filter(item=>item.show).map(item=>{
+      const selected=sourceFilter===item.id;
+      return <Pressable
+        key={item.id}
+        accessibilityRole="button"
+        accessibilityState={{selected}}
+        onPress={()=>{setSourceFilter(item.id);setCollectionFilter('')}}
+        style={({pressed})=>[
+          styles.sourceTab,
+          vertical&&styles.sourceTabVertical,
+          pressed&&{opacity:.62},
+        ]}>
+        <View style={{flexDirection:'row',alignItems:'baseline',gap:7,minWidth:0}}>
+          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.sourceTabText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>{item.label}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.sourceTabCount,{color:selected?p.sage:p.muted}]}>{item.count}</Text>
+        </View>
+        <View
+          pointerEvents="none"
+          style={[
+            vertical?styles.sourceTabMarkerVertical:styles.sourceTabMarker,
+            {backgroundColor:p.sage,opacity:selected?1:0},
+          ]}
+        />
+      </Pressable>;
+    });
+    return vertical
+      ? <View style={styles.sourceSwitcherVertical}>{body}</View>
+      : <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sourceSwitcherScroll} contentContainerStyle={styles.sourceSwitcher}>{body}</ScrollView>;
+  }
+
+  function UnifiedWorkCard({work,list=false}:{work:UnifiedWork;list?:boolean}){
+    const serverPath=work.source==='server' && work.serverWork && session && (!work.server || work.server===session.server) ? '/api/works/'+work.serverWork.id+'/cover' : undefined;
+    const selected=selectedWorkKeys.includes(work.canonicalKey);
+    const selecting=selectedWorkKeys.length>0;
+    const toggleSelected=()=>setSelectedWorkKeys(current=>current.includes(work.canonicalKey)?current.filter(key=>key!==work.canonicalKey):[...current,work.canonicalKey]);
+    return <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={work.title+', '+sourceLabel(work.source)}
+      accessibilityState={{selected}}
+      accessibilityHint={selecting?'Toggle selection.':'Open. Long press to select.'}
+      onPress={()=>selecting?toggleSelected():openUnifiedWork(work)}
+      onLongPress={()=>{if(!selected)setSelectedWorkKeys(current=>[...current,work.canonicalKey]);}}
+      style={({pressed})=>[
+        styles.unifiedCard,
+        list&&styles.unifiedCardList,
+        selected&&[styles.unifiedCardSelected,{borderColor:p.sage,backgroundColor:p.card}],
+        pressed&&styles.cardPressed,
+      ]}>
+      <View style={[styles.unifiedCoverWrap,list&&styles.unifiedCoverWrapList]}>
+        <Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath}/>
+        {work.source==='downloaded'?<View style={[styles.offlineBadge,{backgroundColor:p.sage}]}><Text style={styles.offlineBadgeText}>SAVED</Text></View>:null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={'More actions for '+work.title}
+          hitSlop={8}
+          onPress={event=>{event.stopPropagation();setWorkMenu(work)}}
+          style={[styles.moreButton,{backgroundColor:'rgba(0,0,0,.48)'},list&&styles.moreButtonList]}>
+          <UiIcon name="more" color="#FFFFFF" size={16}/>
+        </Pressable>
+      </View>
+      <View style={[styles.unifiedCardCopy,list&&{flex:1}]}>
+        <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
+        <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
+        {list?<View style={styles.unifiedListMeta}>
+          <View style={[styles.workSourceDot,{backgroundColor:work.source==='downloaded'?p.sage:p.muted}]}/>
+          <Text numberOfLines={1} style={[styles.workSource,{color:p.muted}]}>{sourceLabel(work.source)} · {work.format}{work.series?' · '+work.series:''}</Text>
+          {work.rating>0?<Text style={[styles.workRating,{color:p.muted}]}>{ratingLabel(work.rating)}</Text>:null}
+        </View>:null}
+      </View>
+    </Pressable>;
+  }
+
+  function SheetAction({label,onPress,disabled=false,tone='default'}:{label:string;onPress:()=>void;disabled?:boolean;tone?:'default'|'destructive'}){
+    return <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{disabled}}
+      disabled={disabled}
+      onPress={onPress}
+      style={({pressed})=>[styles.sheetAction,{borderBottomColor:p.line},disabled&&{opacity:.38},pressed&&!disabled&&{opacity:.72}]}>
+      <Text style={[styles.sheetActionText,{color:tone==='destructive'?p.danger:p.ink}]}>{label}</Text>
+    </Pressable>;
+  }
+
+  function WorkActionSheet(){
+    if(!workMenu)return null;
+    const work=workMenu;
+    const local=work.localWork;
+    const remote=work.serverWork;
+    const personal=local ? (localPreferences[local.key]||{rating:local.rating||0,favourite:local.favourite||false}) : remote ? (serverPreferences[remote.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}) : {rating:0,favourite:false};
+    const downloaded=remote?downloadedServerWork(remote):undefined;
+    const close=()=>setWorkMenu(null);
+    const setFav=()=>{
+      if(local)void saveLocalPreference(local,{...personal,favourite:!personal.favourite});
+      else if(remote)void saveServerPreference(remote,{...personal,favourite:!personal.favourite});
+      close();
+    };
+    return <Modal transparent animationType="slide" visible onRequestClose={close}>
+      <Pressable style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
+        <Pressable accessibilityViewIsModal accessibilityLabel={'Actions for '+work.title} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
+          <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+          <View style={styles.sheetHeader}>
+            <View style={{flex:1,minWidth:0}}>
+              <Text maxFontSizeMultiplier={1.15} numberOfLines={2} style={[styles.sheetTitle,{color:p.ink}]}>{work.title}</Text>
+              <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'} · {sourceLabel(work.source)}</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.continueRow}>
-              {session ? visibleServerWorks.slice(0,10).map(work => <ContinueCard
-                key={'shelf-server-'+work.id}
-                action="Open"
-                title={work.title}
-                author={work.author}
-                format={work.format}
-                serverPath={'/api/works/'+work.id+'/cover'}
-                onPress={()=>void openServerWork(work)}
-              />) : visibleLocalWorks.slice(0,10).map(work => <ContinueCard
-                key={'shelf-local-'+work.key}
-                action="Open"
-                title={work.title}
-                author={work.author}
-                format={work.format}
-                coverUri={work.coverUri}
-                onPress={()=>openLocalWork(work)}
-              />)}
-            </ScrollView>
-          </View> : !shelfLoading && onboardingDone ? <View style={[styles.shelfEmpty,{borderColor:p.line}]}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>A quiet shelf, for now</Text>
-            <Text style={[styles.empty,{color:p.muted}]}>Add a library folder and Archivist will build your collection here.</Text>
-            {!session ? <Button label="Add your first folder" onPress={()=>void addLocalFolder()} /> : <Button label="Open Library settings" tone="quiet" onPress={()=>setActiveTab('settings')} />}
-          </View> : null}
-          {shelfWorks.length ? <Pressable accessibilityRole="button" accessibilityLabel="Browse full library" onPress={()=>setActiveTab('library')} style={({pressed})=>[styles.browseLibrary,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
-            <View style={{flex:1}}>
-              <Text style={[styles.browseLibraryTitle,{color:p.ink}]}>Browse the full library</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Search, filter and manage every title</Text>
-            </View>
-            <Text style={[styles.browseArrow,{color:p.sage}]}>›</Text>
-          </Pressable> : null}
-          <View style={styles.shelfSignature}>
-            <View style={[styles.shelfRule,{backgroundColor:p.gold}]} />
-            <Text style={[styles.shelfSignatureText,{color:p.muted}]}>Your library. Yours.</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close actions" onPress={close} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
           </View>
-        </>}
-        <WorkPickerPanel />
-        {editing ? <Modal transparent animationType="fade" visible onRequestClose={()=>!busy&&setEditing(null)}>
-          <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-            <View style={styles.modalBackdrop}>
-              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
-                <View accessibilityViewIsModal accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
-                  <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
-                  {editing.reviewReason ? <Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text> : null}
-                  <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-                  <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-                  <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-                  <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-                  <View style={styles.toolRow}>
-                    <Button label="Save details" disabled={busy || !editTitle.trim()} onPress={()=>{
-                      const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
-                      if(!title)return;
-                      setBusy(true);setError('');
-                      if(session){
-                        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
-                          .then(()=>{setBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
-                          .catch(e=>setError(e.message)).finally(()=>setBusy(false));
-                      }else if(editing.uri){
-                        const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
-                        setLocalMetadataOverrides(next);
-                        setPersistedJSON(localMetadataOverridesKey, next)
-                          .then(()=>{
-                            setBooks(old=>{
-                              const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
-                              void setPersistedJSON(localCatalogKey,updated);
-                              return updated;
-                            });
-                            setEditing(null);
-                          })
-                          .catch(e=>setError(e.message)).finally(()=>setBusy(false));
-                      }else{
-                        setBusy(false);
-                      }
-                    }}/>
-                    <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>setEditing(null)}/>
-                  </View>
-                </View>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>:null}
+          <Button label={work.format==='Audio'?'Listen':'Open'} onPress={()=>openUnifiedWork(work)}/>
+          <View style={styles.sheetActionList}>
+            <SheetAction label={personal.favourite?'Remove favourite':'Add favourite'} onPress={setFav}/>
+            {work.format==='Audio'&&local?<SheetAction label="Add to queue" onPress={()=>{close();void addLocalWorkQueue(local);}}/>:null}
+            {work.format==='Audio'&&remote?<SheetAction label="Add to queue" onPress={()=>{close();void queueServerWork(remote);}}/>:null}
+            {remote&&!downloaded?<SheetAction label="Download for offline" disabled={offlineBusyId!==null} onPress={()=>{close();void downloadServerWork(remote);}}/>:null}
+            {downloaded?<SheetAction label={'Remove download · '+formatBytes(downloaded.bytes)} disabled={offlineBusyId!==null} onPress={()=>{close();void removeServerDownload(downloaded);}}/>:null}
+            <SheetAction label="Add to collection" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}}/>
+            {local?.tracks[0]?<SheetAction label="Edit details" onPress={()=>{beginEdit({...local.tracks[0],source:work.source,originServer:local.originServer,serverWorkId:local.originWorkId});close();}}/>:null}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>;
+  }
+  function MetadataEditorPanel(){
+    if(!editing)return null;
+    const save=()=>{
+      const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
+      if(!title)return;
+      setBusy(true);setError('');
+      if(editing.source==='server'){
+        if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
+        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
+          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+          .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+      }else if(editing.uri){
+        const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
+        setLocalMetadataOverrides(next);
+        setPersistedJSON(localMetadataOverridesKey,next)
+          .then(()=>{
+            setLocalBooks(old=>{
+              const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
+              void setPersistedJSON(localCatalogKey,updated);
+              return updated;
+            });
+            setEditing(null);
+          })
+          .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+      }else setBusy(false);
+    };
+    return <Modal transparent animationType="slide" visible onRequestClose={()=>!busy&&setEditing(null)}>
+      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
+        <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+          <View accessibilityViewIsModal accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA REVIEW</Text>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
+            {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
+            <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <Button label="Save details" disabled={busy||!editTitle.trim()} onPress={save}/>
+            <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>setEditing(null)}/>
+          </View>
+        </ScrollView></View>
+      </KeyboardAvoidingView>
+    </Modal>;
+  }
+
+  const smartShelfFields:SmartShelfField[]=['source','format','author','series','genre','space','readingState','rating','favourite','available'];
+  const ruleOperators:SmartShelfOperator[]=['equals','not-equals','contains','at-least','is-true','is-false'];
+  function nextIn<T>(values:T[],value:T){const index=values.indexOf(value);return values[(index+1+values.length)%values.length];}
+  function editSmartRule(path:number[],rule:SmartShelfRule){setSmartShelfRules(current=>replaceRuleNode(current,path,rule));}
+  function SmartRuleGroupEditor({group,path=[]}:{group:SmartShelfRuleGroup;path?:number[]}){
+    return <View style={[styles.ruleGroup,{borderColor:p.line,backgroundColor:path.length?p.raised:'transparent'}]}>
+      <View style={styles.sectionHeader}><Text style={[styles.meta,{color:p.ink,fontWeight:'900'}]}>Match {group.mode==='all'?'ALL':'ANY'}</Text><Button label={group.mode==='all'?'ALL':'ANY'} tone="quiet" onPress={()=>setSmartShelfRules(current=>replaceRuleNode(current,path,{...group,mode:group.mode==='all'?'any':'all'}))}/></View>
+      {group.children.map((child,index)=>{
+        const childPath=[...path,index];
+        if(child.kind==='group')return <View key={childPath.join('.')}><SmartRuleGroupEditor group={child} path={childPath}/><Button label="Remove group" tone="quiet" onPress={()=>setSmartShelfRules(current=>removeRuleNode(current,childPath))}/></View>;
+        const boolOp=child.operator==='is-true'||child.operator==='is-false';
+        return <View key={childPath.join('.')} style={[styles.ruleRow,{borderColor:p.line}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Change rule field from '+child.field} onPress={()=>editSmartRule(childPath,{...child,field:nextIn(smartShelfFields,child.field)})} style={[styles.ruleToken,{borderColor:p.line}]}><Text style={{color:p.ink,fontWeight:'800'}}>{child.field}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Change rule operator from '+child.operator} onPress={()=>editSmartRule(childPath,{...child,operator:nextIn(ruleOperators,child.operator)})} style={[styles.ruleToken,{borderColor:p.line}]}><Text style={{color:p.ink,fontWeight:'800'}}>{child.operator}</Text></Pressable>
+          {!boolOp?<TextInput accessibilityLabel={'Rule value '+child.field} value={child.value} onChangeText={value=>editSmartRule(childPath,{...child,value})} placeholder="Value" placeholderTextColor={p.muted} style={[styles.ruleInput,{color:p.ink,borderColor:p.line}]}/>:null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Remove rule" onPress={()=>setSmartShelfRules(current=>removeRuleNode(current,childPath))} style={styles.ruleRemove}><UiIcon name="close" color={p.muted} size={16}/></Pressable>
+        </View>;
+      })}
+      <View style={styles.toolRow}><Button label="Add rule" tone="quiet" onPress={()=>setSmartShelfRules(current=>addRuleAtPath(current,path))}/>{path.length<3?<Button label="Add group" tone="quiet" onPress={()=>setSmartShelfRules(current=>addGroupAtPath(current,path))}/>:null}</View>
+    </View>;
+  }
+
+  function OrganisationPanel(){
+    if(!organisationModal)return null;
+    const close=()=>{setOrganisationModal(null);setOrganisationName('');setCollectionTarget(null);setRenameTarget(null)};
+    return <Modal transparent animationType="slide" visible onRequestClose={close}>
+      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled">
+        <View accessibilityViewIsModal style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
+          <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+          {organisationModal==='smart-shelf'?<>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Save Smart Shelf</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Start with the filters you are using now, or build nested ALL / ANY rules for a shelf that updates itself.</Text>
+            <TextInput accessibilityLabel="Smart Shelf name" value={organisationName} onChangeText={setOrganisationName} placeholder="Shelf name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
+            <View style={styles.toolRow}><Button label="Use current filters" tone="quiet" onPress={()=>setSmartShelfRules(legacyRules({source:sourceFilter,format:formatFilter,author:authorFilter,series:seriesFilter,genre:genreFilter,space,readingState:readingFilter,minimumRating:ratingFilter,favouriteOnly,availableOnly:availabilityFilter==='available'}))}/><Button label={smartShelfAdvanced?'Simple':'Advanced rules'} tone="quiet" onPress={()=>setSmartShelfAdvanced(value=>!value)}/></View>
+            {smartShelfAdvanced?<SmartRuleGroupEditor group={smartShelfRules}/>:<Text style={[styles.meta,{color:p.muted}]}>{smartShelfRules.children.length?smartShelfRules.children.length+' rule'+(smartShelfRules.children.length===1?'':'s')+' configured.':'No advanced rules yet; current filters will be used.'}</Text>}
+            <Button label="Save Smart Shelf" disabled={!organisationName.trim()} onPress={()=>void createSmartShelf()}/>
+          </>:null}
+          {organisationModal==='new-collection'?<>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>New collection</Text>
+            <TextInput accessibilityLabel="Collection name" value={organisationName} onChangeText={setOrganisationName} placeholder="Collection name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
+            <Button label="Create collection" disabled={!organisationName.trim()} onPress={()=>void createCollection()}/>
+          </>:null}
+          {organisationModal==='add-to-collection'?<>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Add to collection</Text>
+            {!collections.length?<Text style={[styles.meta,{color:p.muted}]}>Create your first collection.</Text>:collections.map(collection=><Button key={collection.id} label={collection.name} tone="quiet" onPress={()=>collectionTarget?void toggleWorkInCollection(collection,collectionTarget).then(close):void addSelectedToCollection(collection)}/>) }
+            <Button label="New collection" tone="quiet" onPress={()=>{setOrganisationModal('new-collection');setOrganisationName('')}}/>
+          </>:null}
+          {organisationModal==='manage'?<>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Manage shelves & collections</Text>
+            {renameTarget?<>
+              <TextInput accessibilityLabel="New name" value={organisationName} onChangeText={setOrganisationName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
+              <Button label="Save name" disabled={!organisationName.trim()} onPress={()=>void applyRename()}/>
+            </>:<>
+              {smartShelves.map(item=><View key={item.id} style={[styles.manageRow,{borderColor:p.line}]}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink,flex:1}]}>{item.name}</Text><Button label="Rename" tone="quiet" onPress={()=>beginRename('shelf',item.id,item.name)}/><Button label="Delete" tone="quiet" onPress={()=>void removeSmartShelf(item.id)}/></View>)}
+              {collections.map(item=><View key={item.id} style={[styles.manageRow,{borderColor:p.line}]}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink,flex:1}]}>{item.name}</Text><Button label="Rename" tone="quiet" onPress={()=>beginRename('collection',item.id,item.name)}/><Button label="Delete" tone="quiet" onPress={()=>void removeCollection(item.id)}/></View>)}
+              {!smartShelves.length&&!collections.length?<Text style={[styles.meta,{color:p.muted}]}>Nothing to manage yet.</Text>:null}
+            </>}
+          </>:null}
+          <Button label="Close" tone="quiet" onPress={close}/>
+        </View>
+      </ScrollView></View>
+    </Modal>;
+  }
+
+  function ShelfManagePanel(){
+    if(!shelfManageOpen)return null;
+    const move=(index:number,direction:-1|1)=>{const target=index+direction;if(target<0||target>=shelfSections.length)return;const next=[...shelfSections];[next[index],next[target]]=[next[target],next[index]];void saveShelfSections(next)};
+    const toggle=(id:ShelfSectionId)=>void saveShelfSections(shelfSections.map(item=>item.id===id?{...item,visible:!item.visible}:item));
+    return <Modal transparent animationType="slide" visible onRequestClose={()=>setShelfManageOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
+      <View accessibilityViewIsModal accessibilityLabel="Customise Shelf" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
+        <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Customise Shelf</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Choose what appears and arrange it around the way you use your library.</Text>
+        {shelfSections.map((item,index)=><View key={item.id} style={[styles.manageRow,{borderColor:p.line}]}>
+          <Pressable accessibilityRole="switch" accessibilityState={{checked:item.visible}} accessibilityLabel={(item.visible?'Hide ':'Show ')+item.title} onPress={()=>toggle(item.id)} style={[styles.visibilityToggle,{backgroundColor:item.visible?p.sage:p.line}]}><View pointerEvents="none" style={[styles.visibilityThumb,{backgroundColor:p.ivory,transform:[{translateX:item.visible?16:0}]}]}/></Pressable>
+          <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{item.title}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' up'} disabled={index===0} onPress={()=>move(index,-1)} style={styles.orderButton}><UiIcon name="chevronUp" color={index===0?p.muted:p.ink} size={17}/></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' down'} disabled={index===shelfSections.length-1} onPress={()=>move(index,1)} style={styles.orderButton}><UiIcon name="chevronDown" color={index===shelfSections.length-1?p.muted:p.ink} size={17}/></Pressable>
+        </View>)}
+        <Button label="Done" onPress={()=>setShelfManageOpen(false)}/>
+      </View>
+    </View></Modal>;
+  }
+
+  function Shelf(){
+    const base:UnifiedWork[]=(sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter))).filter((work:UnifiedWork)=>!space||work.space===space);
+    const continuing=base.filter((work:UnifiedWork)=>work.readingState==='in-progress').slice(0,12);
+    const favourites=base.filter((work:UnifiedWork)=>work.favourite).slice(0,12);
+    const primaryContinue=continuing[0];
+    const hour=new Date().getHours();
+    const shelfGreeting=hour<12?'Good morning.':hour<18?'Good afternoon.':'Good evening.';
+    const primaryResumeLabel=(()=>{
+      if(!primaryContinue?.localWork)return primaryContinue?'Ready when you are.':'';
+      if(primaryContinue.format==='Audio'){
+        const seconds=localWorkProgress[primaryContinue.localWork.key]?.seconds||0;
+        return seconds>0?'Resume at '+formatTime(seconds):'Continue listening';
+      }
+      const pages=primaryContinue.localWork.tracks
+        .map(track=>track.uri?(localReadingProgress[track.uri]||0):0)
+        .filter(value=>value>0);
+      return pages.length?'Resume at page '+(Math.max(...pages)+1):'Continue reading';
+    })();
+
+    const seriesCounts=new Map<string,number>();for(const work of base)if(work.series)seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
+    const seriesGroups=[...seriesCounts.entries()]
+      .sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))
+      .slice(0,10)
+      .map(([name,total])=>({name,total,works:base.filter(work=>work.series===name).slice(0,4)}));
+    const formatGroups=[...new Set(base.map(work=>work.format).filter(Boolean))]
+      .sort((a,b)=>{
+        const order=(value:string)=>value==='Audio'?0:value==='Ebook'?1:value==='Comic'?2:value==='PDF'?3:4;
+        return order(a)-order(b)||a.localeCompare(b);
+      })
+      .map(name=>({name,total:base.filter(work=>work.format===name).length,works:base.filter(work=>work.format===name).slice(0,4)}));
+    const localReview=localBooks.filter(book=>book.needsReview).length;
+    const serverReview=session?(serverSummary?.needsReview||0):0;
+    const reviewCount=sourceFilter==='local'?localReview:sourceFilter==='server'?serverReview:sourceFilter==='downloaded'?0:localReview+serverReview;
+    const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
+    const workArtwork=(work:UnifiedWork)=><Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPathFor(work)}/>;
+    const renderWorks=(works:UnifiedWork[])=>works.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedRow}>{works.map(work=><View key={work.key} style={styles.curatedCardWrap}><UnifiedWorkCard work={work}/></View>)}</ScrollView>:null;
+    const continueHero=primaryContinue?<Pressable
+      accessibilityRole="button"
+      accessibilityLabel={'Continue '+primaryContinue.title}
+      onPress={()=>openUnifiedWork(primaryContinue)}
+      style={({pressed})=>[styles.shelfHero,foldLayout&&styles.shelfHeroFold,width>=900&&styles.shelfHeroWide,{borderTopColor:p.line,borderBottomColor:p.line},pressed&&styles.cardPressed]}>
+      <View style={[styles.shelfHeroArtwork,foldLayout&&styles.shelfHeroArtworkFold,width>=900&&styles.shelfHeroArtworkWide]}>{workArtwork(primaryContinue)}</View>
+      <View style={styles.shelfHeroCopy}>
+        <Text style={[styles.shelfHeroEyebrow,{color:p.sage}]}>{primaryContinue.format==='Audio'?'CONTINUE LISTENING':'CONTINUE READING'}</Text>
+        <Text maxFontSizeMultiplier={1.12} numberOfLines={3} style={[styles.shelfHeroTitle,{color:p.ink},layoutTier==='compact'&&styles.shelfHeroTitleCompact,layoutTier==='fold'&&styles.shelfHeroTitleFold]}>{primaryContinue.title}</Text>
+        <Text numberOfLines={1} style={[styles.shelfHeroAuthor,{color:p.muted}]}>{primaryContinue.author||'Unknown author'}{primaryContinue.series?' · '+primaryContinue.series:''}</Text>
+        {primaryResumeLabel?<Text numberOfLines={1} style={[styles.shelfHeroResume,{color:p.sage}]}>{primaryResumeLabel}</Text>:null}
+        <View style={styles.shelfHeroFooter}>
+          <Text style={[styles.shelfHeroMeta,{color:p.muted}]}>{primaryContinue.format} · {sourceLabel(primaryContinue.source)}</Text>
+          <View style={[styles.shelfHeroAction,{backgroundColor:p.sage}]}>
+            {primaryContinue.format==='Audio'?<UiIcon name="play" color="#FFFFFF" size={18}/>:<Text style={styles.shelfHeroActionText}>Open</Text>}
+          </View>
         </View>
       </View>
-    );
+    </Pressable>:null;
+
+    const section=(item:ShelfSectionPref)=>{
+      if(!item.visible)return null;
+      if(item.id==='continue'&&!continuing.length)return null;
+      if(item.id==='formats'&&!formatGroups.length)return null;
+      if(item.id==='favourites'&&!favourites.length)return null;
+      if(item.id==='smart'&&!smartShelfRows.length)return null;
+      if(item.id==='collections'&&!collectionRows.length)return null;
+      if(item.id==='series'&&!seriesGroups.length)return null;
+      if(item.id==='library'&&!base.length)return null;
+      return <View key={item.id} style={styles.shelfSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{item.title}</Text>
+          {item.id==='library'?<Pressable accessibilityRole="button" onPress={()=>setActiveTab('library')} style={styles.sectionLink}><Text style={{color:p.sage,fontWeight:'600'}}>See all</Text></Pressable>:null}
+        </View>
+
+        {item.id==='continue'?<>{continueHero}{continuing.length>1?renderWorks(continuing.slice(1)):null}</>:null}
+        {item.id==='formats'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionRow}>
+          {formatGroups.map(({name,total,works})=><Pressable
+            key={name}
+            accessibilityRole="button"
+            accessibilityLabel={'Browse '+name+', '+total+' work'+(total===1?'':'s')}
+            onPress={()=>{clearLibraryFilters();setFormatFilter(name);setLibrarySort(name==='Audio'?'progress':'title');setActiveTab('library')}}
+            style={({pressed})=>[styles.collectionTile,pressed&&styles.cardPressed]}>
+            <View style={styles.collectionCollage}>
+              {works.slice(0,3).map((work,index)=><View key={work.key} style={[styles.collectionMiniCover,{left:index*24,top:index===1?2:index===2?5:7,zIndex:3-index,transform:[{rotate:index===0?'-5deg':index===2?'5deg':'0deg'}]}]}>{workArtwork(work)}</View>)}
+              {!works.length?<View style={[styles.collectionEmptyMark,{backgroundColor:p.card}]}><Text style={[styles.emptyMark,{color:p.muted}]}>{name.slice(0,1)}</Text></View>:null}
+            </View>
+            <Text numberOfLines={2} style={[styles.collectionName,{color:p.ink}]}>{name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
+          </Pressable>)}
+        </ScrollView>:null}
+        {item.id==='favourites'?renderWorks(favourites):null}
+
+        {item.id==='smart'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartShelfRow}>
+          {smartShelfRows.map(({shelf,works})=><Pressable
+            key={shelf.id}
+            accessibilityRole="button"
+            accessibilityLabel={shelf.name+', '+works.length+(works.length===12?'+':'')+' matches'}
+            onPress={()=>openSmartShelf(shelf)}
+            onLongPress={()=>beginRename('shelf',shelf.id,shelf.name)}
+            style={({pressed})=>[styles.smartShelfTile,pressed&&styles.cardPressed]}>
+            <View style={styles.smartShelfPreview}>
+              {works.slice(0,4).map((work,index)=><View
+                key={work.key}
+                style={[styles.smartShelfCover,{
+                  left:index*30,
+                  zIndex:10-index,
+                  transform:[{rotate:index===0?'-4deg':index===3?'4deg':'0deg'}],
+                }]}>
+                {workArtwork(work)}
+              </View>)}
+              {!works.length?<View style={[styles.smartShelfEmpty,{borderColor:p.line}]}>
+                <View style={[styles.smartShelfEmptySpine,{backgroundColor:p.sage}]}/>
+                <View style={[styles.smartShelfEmptySpine,{backgroundColor:p.line,height:50}]}/>
+                <View style={[styles.smartShelfEmptySpine,{backgroundColor:p.line,height:42}]}/>
+              </View>:null}
+              <View style={[styles.smartShelfBase,{backgroundColor:p.ink}]}/>
+            </View>
+            <Text numberOfLines={2} style={[styles.smartShelfName,{color:p.ink}]}>{shelf.name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{works.length}{works.length===12?'+':''} matches</Text>
+          </Pressable>)}
+        </ScrollView>:null}
+
+        {item.id==='collections'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionRow}>
+          {collectionRows.map(({collection,works})=><Pressable
+            key={collection.id}
+            accessibilityRole="button"
+            onPress={()=>openCollection(collection)}
+            onLongPress={()=>beginRename('collection',collection.id,collection.name)}
+            style={({pressed})=>[styles.collectionTile,pressed&&styles.cardPressed]}>
+            <View style={styles.collectionCollage}>
+              {works.slice(0,3).map((work,index)=><View key={work.key} style={[styles.collectionMiniCover,{left:index*24,top:index===1?2:index===2?5:7,zIndex:3-index,transform:[{rotate:index===0?'-5deg':index===2?'5deg':'0deg'}]}]}>{workArtwork(work)}</View>)}
+              {!works.length?<View style={[styles.collectionEmptyMark,{backgroundColor:p.card}]}><Text style={[styles.emptyMark,{color:p.muted}]}>A</Text></View>:null}
+            </View>
+            <Text numberOfLines={2} style={[styles.collectionName,{color:p.ink}]}>{collection.name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{works.length} work{works.length===1?'':'s'}</Text>
+          </Pressable>)}
+        </ScrollView>:null}
+
+        {item.id==='series'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
+          {seriesGroups.map(({name,total,works})=><Pressable
+            key={name}
+            accessibilityRole="button"
+            accessibilityLabel={name+', '+total+' work'+(total===1?'':'s')}
+            onPress={()=>{clearLibraryFilters();setSeriesFilter(name);setActiveTab('library')}}
+            style={({pressed})=>[styles.seriesTile,pressed&&styles.cardPressed]}>
+            <View style={styles.seriesCoverStack}>
+              {works.slice(0,3).map((work,index)=><View
+                key={work.key}
+                style={[styles.seriesCover,{
+                  left:index*34,
+                  top:index===1?3:index===2?6:0,
+                  zIndex:10-index,
+                }]}>
+                {workArtwork(work)}
+              </View>)}
+              {!works.length?<View style={[styles.seriesEmpty,{borderColor:p.line}]}/>:null}
+            </View>
+            <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
+          </Pressable>)}
+        </ScrollView>:null}
+
+        {item.id==='library'?renderWorks(base.slice(0,12)):null}
+      </View>;
+    };
+
+    return <ScrollView
+      ref={shelfScrollRef}
+      onScroll={e=>{shelfScrollOffset.current=e.nativeEvent.contentOffset.y}}
+      scrollEventThrottle={120}
+      onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
+      contentContainerStyle={[styles.shelfContent,foldLayout&&styles.shelfContentFold]}>
+      <View style={[styles.shelfEditorialHeader,foldLayout&&styles.shelfEditorialHeaderFold]}>
+        <View style={{flex:1,minWidth:0}}>
+          <Text style={[styles.shelfKicker,{color:p.sage}]}>YOUR LIBRARY</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.shelfGreeting,{color:p.ink},layoutTier==='compact'&&styles.shelfGreetingCompact,layoutTier==='fold'&&styles.shelfGreetingFold]}>{shelfGreeting}</Text>
+          <Text style={[styles.shelfEditorialSubtitle,{color:p.muted}]}>Stories make a kinder world.</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
+          <Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text>
+        </Pressable>
+      </View>
+
+      <OnboardingGuide/>
+
+      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <View style={styles.reviewBannerCopy}>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerTitle,{color:p.ink}]}>Metadata review</Text>
+          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} item{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
+        </View>
+        <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
+      </Pressable>:null}
+
+      {localScanning&&scanProgress?<View style={[styles.scanBanner,{backgroundColor:p.card}]}>
+        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+        <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found</Text></View>
+      </View>:null}
+
+      {!base.length&&!shelfLoading?<View style={styles.designedEmpty}>
+        <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Shelf is waiting</Text>
+        <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{localFolders.length||session?'No works match this source or Space.':'Choose a folder and Archivist will begin building your library.'}</Text>
+        {!localFolders.length?<Button label="Choose a folder" onPress={()=>void addLocalFolder()}/>:null}
+      </View>:null}
+
+      {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><View key={i} style={[styles.skeletonCard,{backgroundColor:p.card}]}/>)}</View>:null}
+      {shelfSections.map(section)}
+
+      <View style={[styles.shelfBrowseBand,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <Text style={[styles.shelfBrowseLabel,{color:p.muted}]}>BROWSE</Text>
+        <SourceSwitcher/>
+        {availableSpaces.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.libraryChipsScroll} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
+      </View>
+
+      <View style={[styles.shelfUtilityRow,{borderTopColor:p.line}]}>
+        <Pressable accessibilityRole="button" onPress={()=>setActiveTab('library')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Browse library</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>{setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>New Smart Shelf</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('manage')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Manage collections</Text></Pressable>
+      </View>
+
+      <WorkActionSheet/><OrganisationPanel/><ShelfManagePanel/><MetadataEditorPanel/>
+    </ScrollView>;
+  }
+
+  function Library(){
+    const wide=width>=600;
+    const columns=libraryView==='list'?1:(width>=1180?6:width>=940?5:width>=600?4:2);
+    const filtersActive=[space,formatFilter,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
+    const formatOptions=[...new Set(allUnifiedWorks.map(work=>work.format).filter(Boolean))].sort();
+    const authorOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.author).filter((value:string)=>!!value))).sort().slice(0,20);
+    const seriesOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.series).filter((value:string)=>!!value))).sort().slice(0,20);
+    const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
+    const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
+    const ReviewList=()=>reviewOnly?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Metadata review</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} item{visibleBooks.length===1?'':'s'} need attention</Text></View><Button label="Done reviewing" tone="quiet" onPress={()=>setReviewOnly(false)}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>:null}</View>:null;
+    const main=<View style={[styles.libraryMain,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
+      <View style={styles.libraryCatalogueHeader}>
+        <Text style={[styles.libraryKicker,{color:p.sage}]}>COLLECTION</Text>
+        <View style={styles.pageHeadingRow}>
+          <View style={{flex:1}}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryTitle,{color:p.ink},layoutTier==='compact'&&styles.libraryTitleCompact,layoutTier==='fold'&&styles.libraryTitleFold]}>Library</Text>
+            <Text style={[styles.pageSubtitle,{color:p.muted}]}>{sortedUnifiedWorks.length} work{sortedUnifiedWorks.length===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
+          </View>
+        </View>
+      </View>
+      {!wide?<><SourceSwitcher/>{availableSpaces.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.libraryChipsScroll} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}</>:null}
+      {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
+        <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={favouriteSelected} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Favourite</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>setSelectedWorkKeys([])} style={styles.librarySelectionAction}><Text style={{color:p.sage,fontWeight:'700'}}>Done</Text></Pressable>
+      </View>:<>
+        <View style={styles.librarySearchRow}>
+          <View style={[styles.librarySearchShell,{backgroundColor:p.card}]}>
+            <UiIcon name="search" color={p.muted} size={19}/>
+            <TextInput maxFontSizeMultiplier={1.15} accessibilityLabel="Search your library" value={query} onChangeText={setQuery} placeholder="Search books, authors, series or genres" placeholderTextColor={p.muted} style={[styles.librarySearch,{color:p.ink}]}/>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Filters'+(filtersActive?', '+filtersActive+' active':'')} onPress={()=>setLibraryFiltersOpen(true)} style={[styles.libraryUtilityButton,{backgroundColor:filtersActive?p.card:'transparent'}]}>
+            <UiIcon name="filter" color={filtersActive?p.sage:p.muted} size={21}/>
+            {filtersActive?<View style={[styles.libraryFilterCount,{backgroundColor:p.sage}]}><Text style={styles.libraryFilterCountText}>{filtersActive}</Text></View>:null}
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={libraryView==='grid'?'Switch to list':'Switch to grid'} onPress={()=>setLibraryView(libraryView==='grid'?'list':'grid')} style={styles.libraryUtilityButton}>
+            <UiIcon name={libraryView==='grid'?'list':'grid'} color={p.muted} size={21}/>
+          </Pressable>
+        </View>
+        {formatOptions.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryFormatTabs}>
+          <Pressable accessibilityRole="button" accessibilityState={{selected:!formatFilter}} onPress={()=>setFormatFilter('')} style={styles.libraryFormatTab}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:!formatFilter?p.ink:p.muted,fontWeight:!formatFilter?'700':'500'}]}>All</Text>
+            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:!formatFilter?1:0}]}/>
+          </Pressable>
+          {formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:formatFilter===format}} onPress={()=>setFormatFilter(formatFilter===format?'':format)} style={styles.libraryFormatTab}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:formatFilter===format?p.ink:p.muted,fontWeight:formatFilter===format?'700':'500'}]}>{format}</Text>
+            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:formatFilter===format?1:0}]}/>
+          </Pressable>)}
+        </ScrollView>:null}
+      </>}
+      <ReviewList/>
+      {!reviewOnly?<FlatList
+        ref={libraryListRef}
+        key={'unified-'+libraryView+'-'+columns}
+        data={sortedUnifiedWorks}
+        keyExtractor={work=>work.key}
+        numColumns={columns}
+        initialNumToRender={18}
+        maxToRenderPerBatch={18}
+        windowSize={7}
+        contentContainerStyle={libraryView==='grid'?styles.unifiedGrid:styles.unifiedList}
+        columnWrapperStyle={columns>1?styles.unifiedGridRow:undefined}
+        renderItem={({item})=><UnifiedWorkCard work={item} list={libraryView==='list'}/>} 
+        ListEmptyComponent={!shelfLoading?<View style={styles.designedEmpty}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>No matching works</Text><Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>Clear filters or choose another source or Space.</Text><Button label="Clear filters" tone="quiet" onPress={clearLibraryFilters}/></View>:null}
+        onScroll={e=>{libraryScrollOffset.current=e.nativeEvent.contentOffset.y}}
+        scrollEventThrottle={120}
+        onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
+      />:null}
+      <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/>
+      {libraryFiltersOpen?<Modal transparent animationType="slide" visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll}><View accessibilityViewIsModal accessibilityLabel="Library filters" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.filterWrap}>{([
+          ['title','Title'],
+          ['author','Author'],
+          ['series','Series'],
+          ['format','Format'],
+          ['progress','Progress'],
+          ['rating','Rating'],
+        ] as const).map(([sort,label])=><Pressable key={sort} accessibilityRole="button" accessibilityState={{selected:librarySort===sort}} onPress={()=>setLibrarySort(sort)} style={[styles.filterChip,{backgroundColor:librarySort===sort?p.card:'transparent'}]}><Text style={{color:librarySort===sort?p.sage:p.muted,fontWeight:librarySort===sort?'700':'500'}}>{label}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>READING STATE</Text><View style={styles.filterWrap}>{(['','not-started','in-progress','finished'] as const).map(state=><Pressable key={state||'any'} accessibilityRole="button" accessibilityState={{selected:readingFilter===state}} onPress={()=>setReadingFilter(state)} style={[styles.filterChip,{backgroundColor:readingFilter===state?p.card:'transparent'}]}><Text style={{color:readingFilter===state?p.sage:p.muted,fontWeight:readingFilter===state?'700':'500'}}>{state?state.replace('-',' '):'Any'}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>AVAILABILITY</Text><View style={styles.filterWrap}>{(['all','available','unavailable'] as const).map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:availabilityFilter===value}} onPress={()=>setAvailabilityFilter(value)} style={[styles.filterChip,{backgroundColor:availabilityFilter===value?p.card:'transparent'}]}><Text style={{color:availabilityFilter===value?p.sage:p.muted,fontWeight:availabilityFilter===value?'700':'500'}}>{value[0].toUpperCase()+value.slice(1)}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>PERSONAL</Text><View style={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:favouriteOnly}} onPress={()=>setFavouriteOnly(!favouriteOnly)} style={[styles.filterChip,{backgroundColor:favouriteOnly?p.card:'transparent'}]}><Text style={{color:favouriteOnly?p.sage:p.muted,fontWeight:favouriteOnly?'700':'500'}}>Favourites</Text></Pressable>{[0,2,4,6,8,10].map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:ratingFilter===value}} onPress={()=>setRatingFilter(value)} style={[styles.filterChip,{backgroundColor:ratingFilter===value?p.card:'transparent'}]}><Text style={{color:ratingFilter===value?p.sage:p.muted,fontWeight:ratingFilter===value?'700':'500'}}>{value?ratingLabel(value):'Any rating'}</Text></Pressable>)}</View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>AUTHOR</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!authorFilter}} onPress={()=>setAuthorFilter('')} style={[styles.filterChip,{backgroundColor:!authorFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{authorOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:authorFilter===value}} onPress={()=>setAuthorFilter(value)} style={[styles.filterChip,{backgroundColor:authorFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>SERIES</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!seriesFilter}} onPress={()=>setSeriesFilter('')} style={[styles.filterChip,{backgroundColor:!seriesFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{seriesOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:seriesFilter===value}} onPress={()=>setSeriesFilter(value)} style={[styles.filterChip,{backgroundColor:seriesFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>GENRE</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!genreFilter}} onPress={()=>setGenreFilter('')} style={[styles.filterChip,{backgroundColor:!genreFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{genreOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:genreFilter===value}} onPress={()=>setGenreFilter(value)} style={[styles.filterChip,{backgroundColor:genreFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
+        <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
+      </View></ScrollView></View></Modal>:null}
+    </View>;
+    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
   function Player() {
     const current = playing;
-    const position = session ? playback?.seconds || 0 : audio.currentTime || 0;
-    const duration = session ? playback?.duration || 0 : audio.duration || 0;
-    const isPlaying = session ? !!playback?.playing : !!audio.playing;
-    const speed = session ? playback?.speed || 1 : localSpeed;
-    const currentChapterIndex = chapters.findIndex(chapter => position >= chapter.start && (chapter.end <= chapter.start || position < chapter.end));
-    const currentChapter = currentChapterIndex >= 0 ? chapters[currentChapterIndex] : null;
+    const serverPlayer = current?.source==='server';
+    const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
+    const duration = serverPlayer ? playback?.duration || 0 : audio.duration || 0;
+    const isPlaying = serverPlayer ? !!playback?.playing : !!audio.playing;
+    const speed = serverPlayer ? playback?.speed || 1 : localSpeed;
+    const workKey=playbackWorkKey(current);
+    const effectiveChapters=chapterOverrides[workKey]?.length?chapterOverrides[workKey]:chapters;
+    const currentChapterIndex = effectiveChapters.findIndex(chapter => position >= chapter.start && (chapter.end <= chapter.start || position < chapter.end));
+    const currentChapter = currentChapterIndex >= 0 ? effectiveChapters[currentChapterIndex] : null;
+    const currentBookmarks=playerBookmarks.filter(item=>item.workKey===workKey);
     const remaining = Math.max(0, duration - position);
     const nativeSleepSupported = typeof (player as typeof player & {setSleepTimer?: (seconds:number)=>void}).setSleepTimer === 'function';
+    const currentServerWork=current?.serverWorkId?serverWorks.find(work=>work.id===current.serverWorkId):undefined;
+    const offlineCopy=currentServerWork?downloadedServerWork(currentServerWork):current?.source==='downloaded'?Object.values(offlineWorks).find(item=>item.server===current.originServer&&item.workId===current.serverWorkId):undefined;
+
+    async function togglePlayback(){
+      if(serverPlayer){controller.toggle();return;}
+      if(isPlaying){player.pause();await persistLocalPlaybackPosition(position);}else player.play();
+    }
+    async function moveCurrentTrack(index:number,direction:-1|1){
+      if(!workKey)return;
+      if(serverPlayer&&playback?.tracks){const order=moveTrackOrder(playback.tracks,index,direction,track=>String(track.id));controller.setTrackOrder(order.map(Number));await saveTrackOrder(workKey,order);return;}
+      if(activeLocalWork){const order=moveTrackOrder(activeLocalWork.tracks,index,direction,track=>track.uri||String(track.id));const currentUri=activeLocalWork.tracks[localWorkIndex]?.uri;const next={...activeLocalWork,tracks:applyTrackOrder(activeLocalWork.tracks,order,track=>track.uri||String(track.id))};setActiveLocalWork(next);setLocalWorkIndex(Math.max(0,next.tracks.findIndex(track=>track.uri===currentUri)));await saveTrackOrder(workKey,order);}
+    }
 
     function seekTo(seconds: number) {
       const target = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, seconds));
-      if (session) void controller.seek(target);
+      if (serverPlayer) void controller.seek(target);
       else void player.seekTo(target);
     }
 
     function setPlayerSpeed(rate: number) {
-      if (session) controller.setSpeed(rate);
+      if (serverPlayer) controller.setSpeed(rate);
       else {
         try {
           player.setPlaybackRate(rate);
@@ -2362,28 +3168,32 @@ function Client() {
     }
 
     return (
-      <ScrollView contentContainerStyle={styles.playerScreen}>
+      <ScrollView contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold]}>
         <View style={styles.playerHeading}>
-          <View>
-            <Text style={[styles.playerEyebrow, {color:p.gold}]}>NOW PLAYING</Text>
-            <Text style={[styles.title, {color: p.ink}]}>Listen</Text>
-          </View>
-          {current ? <Text style={[styles.meta,{color:p.muted}]}>{speed}×</Text> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text>
+          {current ? <Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>{speed}×</Text> : null}
         </View>
         {current ? (
-          <>
-            <View style={[styles.playerArtworkFrame,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Cover book={{...current, coverShape:'square'}} large />
-            </View>
+          <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
+            <View style={styles.playerHeroColumn}>
+            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} direction={skipDirection} skipping={skipTurning} cover={current.coverUri||current.source==='server'?<Cover book={current}/>:null}/>
             <View style={styles.playerIdentity}>
-              <Text numberOfLines={2} style={[styles.nowTitle, {color: p.ink}]}>{current.title}</Text>
+              <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
                 {[current.author, current.series, current.space].filter(Boolean).join(' · ')}
               </Text>
               {currentChapter ? <Text numberOfLines={1} style={[styles.playerChapter,{color:p.sage}]}>
-                Chapter {currentChapterIndex + 1} of {chapters.length} · {currentChapter.title}
+                Chapter {currentChapterIndex + 1} of {effectiveChapters.length} · {currentChapter.title}
               </Text> : null}
             </View>
+            <View style={styles.playerStatusRow}>
+              <Text style={[styles.playerStatusText,{color:p.muted}]}>{current.source==='server'?'Server':current.source==='downloaded'?'Downloaded':'On this device'}</Text>
+              {offlineCopy?<Text style={[styles.playerStatusText,{color:p.sage}]}>Available offline</Text>:null}
+              {current.source==='server'&&currentServerWork&&!offlineCopy?<Pressable accessibilityRole="button" disabled={offlineBusyId===currentServerWork.id} onPress={()=>void downloadServerWork(currentServerWork)} style={styles.playerStatusAction}><Text style={[styles.playerStatusText,{color:p.sage,fontWeight:'600'}]}>{offlineBusyId===currentServerWork.id?'Downloading…':'Download'}</Text></Pressable>:null}
+            </View>
+            </View>
+            <View style={styles.playerControlColumn}>
+            <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><Text style={{color:p.muted,fontSize:13}}>{Math.round(displayedProgress*100)}%</Text></View>
 
             <Pressable
               accessibilityRole="adjustable"
@@ -2392,8 +3202,8 @@ function Client() {
               accessibilityValue={{min:0,max:Math.max(1,Math.round(duration)),now:Math.round(position),text:formatTime(position)+' of '+formatTime(duration)}}
               accessibilityActions={[{name:'increment',label:'Forward 30 seconds'},{name:'decrement',label:'Back 30 seconds'}]}
               onAccessibilityAction={event=>{
-                if(event.nativeEvent.actionName==='increment')seekTo(position+30);
-                if(event.nativeEvent.actionName==='decrement')seekTo(position-30);
+                if(event.nativeEvent.actionName==='increment'){seekTo(position+30);turnThreePages(1);}
+                if(event.nativeEvent.actionName==='decrement'){seekTo(position-30);turnThreePages(-1);}
               }}
               onLayout={event=>setPlayerProgressWidth(Math.max(1,event.nativeEvent.layout.width))}
               onPress={event => {
@@ -2402,237 +3212,185 @@ function Client() {
                 seekTo((location / Math.max(1,playerProgressWidth)) * duration);
               }}
               style={[styles.progressHitArea,{maxWidth:560,alignSelf:'center',width:'100%'}]}>
-              <View style={[styles.progressTrack, {backgroundColor: p.line}]}>
-                <View style={[styles.progressFill, {backgroundColor: p.gold, width: `${displayedProgress * 100}%`}]} />
+              <View style={[styles.progressTrack, {backgroundColor:p.card,height:24,borderRadius:14,overflow:'visible'}]}>
+                <View style={[styles.progressFill, {backgroundColor:'rgba(71,115,111,.20)',borderRadius:14,width: `${displayedProgress * 100}%`}]} /><View pointerEvents="none" style={{position:'absolute',left:`${displayedProgress*100}%`,marginLeft:-12,top:0,width:24,height:24,borderRadius:12,backgroundColor:p.ink}}/>
               </View>
             </Pressable>
             <View style={styles.timeRow}>
-              <Text style={[styles.playerTime, {color: p.ink}]}>{formatTime(position)}</Text>
-              <Text style={[styles.meta, {color: p.muted}]}>−{formatTime(remaining)}</Text>
-              <Text style={[styles.playerTime, {color: p.ink}]}>{formatTime(duration)}</Text>
+              <Text style={[styles.playerTime,{color:p.muted}]}>{formatTime(position)}</Text>
+              <Text style={[styles.playerTime,{color:p.muted}]}>−{formatTime(remaining)}</Text>
             </View>
 
             <View style={styles.transport}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={() => seekTo(position - 15)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
-                <Text style={[styles.skipMain,{color:p.ink}]}>15</Text>
-                <Text style={[styles.skipMeta,{color:p.muted}]}>back</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={()=>{seekTo(position-15);turnThreePages(-1);}} style={[styles.skipButton,{backgroundColor:p.card,borderRadius:48}]}>
+                <UiIcon name="skipBack" color={p.ink} size={32}/>
+                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-                disabled={session ? playback?.loading : false}
-                style={({pressed})=>[styles.playButton,{backgroundColor:p.sage,transform:[{scale:pressed?0.97:1}]}]}
-                onPress={() => session ? controller.toggle() : isPlaying ? player.pause() : player.play()}>
-                <Text style={styles.playButtonGlyph}>{session && playback?.loading ? '…' : isPlaying ? 'Ⅱ' : '▶'}</Text>
-                <Text style={styles.playButtonCaption}>{session && playback?.loading ? 'Loading' : isPlaying ? 'Pause' : 'Play'}</Text>
+                disabled={serverPlayer ? playback?.loading : false}
+                style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
+                onPress={()=>void togglePlayback()}>
+                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={27}/>}
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={() => seekTo(position + 30)} style={[styles.skipButton,{borderColor:p.line,backgroundColor:p.card}]}>
-                <Text style={[styles.skipMain,{color:p.ink}]}>30</Text>
-                <Text style={[styles.skipMeta,{color:p.muted}]}>forward</Text>
-              </Pressable>
-            </View>
-
-            <View style={[styles.playerTools,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Pressable accessibilityRole="button" accessibilityLabel={'Playback speed '+speed+' times'} accessibilityState={{expanded:playerPanel==='speed'}} onPress={() => setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{speed}×</Text>
-                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
-              </Pressable>
-              {session && nativeSleepSupported ? <Pressable accessibilityRole="button" accessibilityLabel="Sleep timer" accessibilityState={{expanded:playerPanel==='sleep'}} onPress={() => setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{playback?.sleepAt ? 'On' : '—'}</Text>
-                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
-              </Pressable> : null}
-              <Pressable accessibilityRole="button" accessibilityLabel={'Queue, '+queuedBooks.length+' item'+(queuedBooks.length===1?'':'s')} accessibilityState={{expanded:playerPanel==='queue'}} onPress={() => setPlayerPanel(playerPanel==='queue'?null:'queue')} style={[styles.playerTool,styles.playerToolBorder,{borderColor:p.line}]}>
-                <Text style={[styles.playerToolValue,{color:p.ink}]}>{queuedBooks.length}</Text>
-                <Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>{seekTo(position+30);turnThreePages(1);}} style={styles.skipButton}>
+                <UiIcon name="skipForward" color={p.ink} size={32}/>
+                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
               </Pressable>
             </View>
 
-            {playback?.error ? <Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.gold,borderColor:p.gold}]}>{playback.error}</Text> : null}
+            <View style={[styles.playerTools,{borderTopColor:p.line}]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Playback speed '+speed+' times'} accessibilityState={{expanded:playerPanel==='speed'}} onPress={()=>setPlayerPanel(playerPanel==='speed'?null:'speed')} style={styles.playerTool}>
+                <Text style={[styles.playerSpeedGlyph,{color:playerPanel==='speed'?p.sage:p.ink}]}>{speed}×</Text><Text style={[styles.playerToolLabel,{color:p.muted}]}>Speed</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Bookmarks, '+currentBookmarks.length} accessibilityState={{expanded:playerPanel==='bookmarks'}} onPress={()=>setPlayerPanel(playerPanel==='bookmarks'?null:'bookmarks')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="bookmark" color={playerPanel==='bookmarks'?p.sage:p.ink} size={21}/>{currentBookmarks.length?<Text style={[styles.playerToolBadge,{color:p.muted}]}>{currentBookmarks.length}</Text>:null}</View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Bookmark</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Chapters, '+effectiveChapters.length} accessibilityState={{expanded:playerPanel==='chapters'}} onPress={()=>setPlayerPanel(playerPanel==='chapters'?null:'chapters')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="list" color={playerPanel==='chapters'?p.sage:p.ink} size={21}/></View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Chapters</Text>
+              </Pressable>
+              {serverPlayer&&nativeSleepSupported?<Pressable accessibilityRole="button" accessibilityLabel="Sleep timer" accessibilityState={{expanded:playerPanel==='sleep'}} onPress={()=>setPlayerPanel(playerPanel==='sleep'?null:'sleep')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="moon" color={playerPanel==='sleep'?p.sage:p.ink} size={21}/></View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Sleep</Text>
+              </Pressable>:null}
+              <Pressable accessibilityRole="button" accessibilityLabel={'Queue, '+queuedBooks.length+' item'+(queuedBooks.length===1?'':'s')} accessibilityState={{expanded:playerPanel==='queue'}} onPress={()=>setPlayerPanel(playerPanel==='queue'?null:'queue')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="queue" color={playerPanel==='queue'?p.sage:p.ink} size={21}/>{queuedBooks.length?<Text style={[styles.playerToolBadge,{color:p.muted}]}>{queuedBooks.length}</Text>:null}</View><Text style={[styles.playerToolLabel,{color:p.muted}]}>Queue</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Edit audiobook structure" accessibilityState={{expanded:playerPanel==='structure'}} onPress={()=>setPlayerPanel(playerPanel==='structure'?null:'structure')} style={styles.playerTool}>
+                <View style={styles.playerToolIconWrap}><UiIcon name="more" color={playerPanel==='structure'?p.sage:p.ink} size={21}/></View><Text style={[styles.playerToolLabel,{color:p.muted}]}>More</Text>
+              </Pressable>
+            </View>
+
+            {playback?.error?<Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.danger,backgroundColor:p.dangerSoft}]}>{playback.error}</Text>:null}
 
             {playerPanel==='speed' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Playback speed</Text>
               <View style={styles.toolRow}>{[0.75,1,1.25,1.5,1.75,2].map(rate=><Button key={rate} label={rate+'×'} tone={rate===speed?'primary':'quiet'} onPress={()=>setPlayerSpeed(rate)} />)}</View>
             </View> : null}
 
-            {playerPanel==='sleep' && session && nativeSleepSupported ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+            {playerPanel==='sleep' && serverPlayer && nativeSleepSupported ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Sleep timer</Text>
               <View style={styles.toolRow}>{[0,15,30,45,60].map(minutes=><Button key={minutes} label={minutes?minutes+' min':'Off'} tone="quiet" onPress={()=>controller.sleep(minutes)} />)}</View>
             </View> : null}
 
+            {playerPanel==='bookmarks' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <View style={styles.queueHeader}><Text style={[styles.playerPanelTitle,{color:p.ink}]}>Bookmarks</Text><Button label="Add here" onPress={()=>void addCurrentBookmark(position)}/></View>
+              {!currentBookmarks.length?<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet. Add one at any point you want to return to.</Text>:currentBookmarks.map(mark=><View key={mark.id} style={[styles.chapterRow,{borderBottomWidth:1,borderBottomColor:p.line}]}><Pressable style={{flex:1}} onPress={()=>seekTo(mark.seconds)}><Text style={{color:p.ink,fontWeight:'800'}}>{mark.label}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(mark.seconds)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Delete bookmark at '+formatTime(mark.seconds)} onPress={()=>void deletePlayerBookmark(mark.id)}><Text style={{color:p.sage,fontWeight:'800'}}>Delete</Text></Pressable></View>)}
+            </View> : null}
+
+            {playerPanel==='chapters' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <View style={styles.queueHeader}><Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text><Text style={[styles.meta,{color:p.muted}]}>{effectiveChapters.length}</Text></View>
+              {chapterError?<Text accessibilityRole="alert" style={{color:p.sage}}>{chapterError}</Text>:!effectiveChapters.length?<Text style={{color:p.muted}}>No chapters are available for this file.</Text>:null}
+              {effectiveChapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index&&{backgroundColor:p.raised}]}><Text style={[styles.chapterIndex,{color:p.sage}]}>{index+1}</Text><View style={{flex:1}}><Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}{chapter.end>chapter.start?' – '+formatTime(chapter.end):''}</Text></View></Pressable>)}
+            </View> : null}
+
+            {playerPanel==='structure' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+              <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Audiobook structure</Text><Text style={[styles.meta,{color:p.muted}]}>Corrections are stored by Archivist. Your original audio files are never rewritten.</Text>
+              {((serverPlayer?playback?.tracks:activeLocalWork?.tracks)?.length||0)>1?<><Text style={[styles.filterLabel,{color:p.muted}]}>FILE ORDER</Text>{(serverPlayer?playback?.tracks||[]:activeLocalWork?.tracks||[]).map((track:any,index:number)=><View key={String(track.id||track.uri)} style={[styles.structureRow,{borderColor:p.line}]}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Pressable disabled={index===0} onPress={()=>void moveCurrentTrack(index,-1)}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900',padding:8}}>Up</Text></Pressable><Pressable disabled={index===(serverPlayer?playback?.tracks?.length||0:activeLocalWork?.tracks?.length||0)-1} onPress={()=>void moveCurrentTrack(index,1)}><Text style={{color:p.sage,fontWeight:'900',padding:8}}>Down</Text></Pressable></View>)}</>:null}
+              {effectiveChapters.length?<><View style={styles.queueHeader}><Text style={[styles.filterLabel,{color:p.muted}]}>CHAPTER EDITOR</Text>{chapterOverrides[workKey]?<Pressable onPress={()=>void saveChapterOverride(workKey,null)}><Text style={{color:p.sage,fontWeight:'800'}}>Reset embedded</Text></Pressable>:null}</View>{effectiveChapters.map((chapter,index)=><View key={index} style={[styles.structureChapter,{borderColor:p.line}]}><View style={{flex:1}}>{chapterEditIndex===index?<TextInput value={chapterEditTitle} onChangeText={setChapterEditTitle} autoFocus style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:<><Text style={[styles.bookTitle,{color:p.ink}]}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)} – {formatTime(chapter.end)}</Text></>}</View>{chapterEditIndex===index?<Pressable onPress={()=>{void saveChapterOverride(workKey,renameChapter(effectiveChapters,index,chapterEditTitle));setChapterEditIndex(null)}}><Text style={{color:p.sage,fontWeight:'800'}}>Save</Text></Pressable>:<Pressable onPress={()=>{setChapterEditIndex(index);setChapterEditTitle(chapter.title)}}><Text style={{color:p.sage,fontWeight:'800'}}>Rename</Text></Pressable>}<Pressable disabled={index!==currentChapterIndex} onPress={()=>void saveChapterOverride(workKey,splitChapter(effectiveChapters,index,position))}><Text style={{color:index===currentChapterIndex?p.sage:p.muted,fontWeight:'800'}}>Split here</Text></Pressable>{index<effectiveChapters.length-1?<Pressable onPress={()=>void saveChapterOverride(workKey,mergeChapter(effectiveChapters,index))}><Text style={{color:p.sage,fontWeight:'800'}}>Merge next</Text></Pressable>:null}{index>0?<View style={styles.boundaryRow}><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start-5))}><Text style={{color:p.muted,fontWeight:'800'}}>−5s start</Text></Pressable><Pressable onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start+5))}><Text style={{color:p.muted,fontWeight:'800'}}>+5s start</Text></Pressable></View>:null}</View>)}</>:null}
+            </View> : null}
+
             {playerPanel==='queue' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
-              {session ? <>
-                <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text>
-                {chapterError?<Text accessibilityRole="alert" style={{color:p.gold}}>{chapterError}</Text>:chapters.length===0?<Text style={{color:p.muted}}>No embedded chapters</Text>:null}
-                {chapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>seekTo(chapter.start)} style={[styles.chapterRow,currentChapterIndex===index && {backgroundColor:p.raised}]}>
-                  <Text style={[styles.chapterIndex,{color:p.gold}]}>{index+1}</Text>
-                  <View style={{flex:1}}>
-                    <Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text>
-                    <Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}</Text>
-                  </View>
-                </Pressable>)}
-                {playback?.tracks && playback.tracks.length > 1 ? <>
-                  <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Files</Text>
-                  {playback.tracks.map((track,index)=><Button key={track.id} label={(index+1)+'. '+track.title} disabled={!track.available || playback.loading} tone={index===playback.index?'primary':'quiet'} onPress={()=>void controller.select(index)} />)}
-                </> : null}
-              </> : null}
-              {!session && activeLocalWork && activeLocalWork.tracks.length > 1 ? <>
-                <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Files</Text>
-                {activeLocalWork.tracks.map((track,index)=><Button
-                  key={track.uri}
-                  label={(index+1)+'. '+track.title}
-                  disabled={!track.available}
-                  tone={index===localWorkIndex?'primary':'quiet'}
-                  onPress={()=>void loadLocalWorkTrack(activeLocalWork,index,0)}
-                />)}
-              </> : null}
               <View style={styles.queueHeader}>
                 <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Up next</Text>
-                {session ? <Button label="Refresh" disabled={queueBusy} tone="quiet" onPress={()=>void queueStore?.reload()}/> : null}
+                <Text style={[styles.meta,{color:p.muted}]}>{queuedBooks.length} queued</Text>
               </View>
               {!queuedBooks.length ? <Text style={[styles.meta,{color:p.muted}]}>Nothing queued. Add audiobooks from Shelf.</Text> : null}
-              {queuedBooks.map((book,index)=><View key={(book.localWorkKey || book.uri || '') + book.id} style={[styles.queueBook,{borderColor:p.line}]}>
-                <Pressable accessibilityRole="button" style={{flex:1}} onPress={()=>{void playBook(book).then(()=>{if(session && controller.state.playing)void queueStore?.edit(items=>items.filter(b=>b.id!==book.id));});}}>
+              {queuedBooks.map((book,index)=><View key={(book.originServer||'device')+'|'+(book.serverWorkId||book.localWorkKey||book.uri||book.id)} style={[styles.queueBook,{borderColor:p.line}]}>
+                <Pressable accessibilityRole="button" style={{flex:1}} onPress={()=>{void updateLocalQueue(queuedBooks.filter((_,itemIndex)=>itemIndex!==index)).then(()=>playBook(book));}}>
                   <Text numberOfLines={1} style={{color:p.ink,fontWeight:'800'}}>{book.title}</Text>
-                  <Text style={[styles.meta,{color:p.muted}]}>#{index+1}{book.author ? ' · '+book.author : ''}</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>#{index+1}{book.author ? ' · '+book.author : ''} · {book.source==='server'?'Server':book.source==='downloaded'?'Downloaded':'Device'}</Text>
                 </Pressable>
                 <View style={styles.queueActions}>
-                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' up in queue'} disabled={queueBusy || index===0} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),-1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), -1))}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900'}}>↑</Text></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' down in queue'} disabled={queueBusy || index===queuedBooks.length-1} onPress={()=>session ? void queueStore?.edit(items=>reorder(items,items.findIndex(b=>b.id===book.id),1)) : void updateLocalQueue(reorder(queuedBooks, queuedBooks.findIndex(b=>b.uri===book.uri), 1))}><Text style={{color:index===queuedBooks.length-1?p.muted:p.sage,fontWeight:'900'}}>↓</Text></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove '+book.title+' from queue'} disabled={queueBusy} onPress={()=>session ? void queueStore?.edit(items=>items.filter(b=>b.id!==book.id)) : void updateLocalQueue(queuedBooks.filter(b=>b.uri!==book.uri))}><Text style={{color:p.gold,fontWeight:'800'}}>Remove</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' up in queue'} disabled={index===0} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,-1))} style={styles.queueIconButton}><UiIcon name="chevronUp" color={index===0?p.muted:p.sage} size={17}/></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Move '+book.title+' down in queue'} disabled={index===queuedBooks.length-1} onPress={()=>void updateLocalQueue(reorder(queuedBooks,index,1))} style={styles.queueIconButton}><UiIcon name="chevronDown" color={index===queuedBooks.length-1?p.muted:p.sage} size={17}/></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove '+book.title+' from queue'} onPress={()=>void updateLocalQueue(queuedBooks.filter((_,itemIndex)=>itemIndex!==index))}><Text style={{color:p.sage,fontWeight:'800'}}>Remove</Text></Pressable>
                 </View>
               </View>)}
             </View> : null}
-          </>
+            </View>
+          </View>
         ) : (
-          <View style={[styles.playerEmpty,{backgroundColor:p.card,borderColor:p.line}]}>
+          <View style={styles.playerEmpty}>
+            <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Nothing playing</Text>
-            <Text style={[styles.empty, {color: p.muted}]}>Choose an audiobook from Shelf. Archivist will remember where you stopped.</Text>
-            <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')} />
+            <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Choose an audiobook from Shelf. Archivist will remember where you stopped.</Text>
+            <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/>
           </View>
         )}
       </ScrollView>
     );
   }
 
-  function Reader() {
-    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar, {borderBottomColor: p.line, backgroundColor: p.paper}]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}>
-        <Text style={[styles.readerAction, {color: p.sage}]}>Shelf</Text>
-      </Pressable>
-      <View style={styles.readerHeading}>
-        <Text numberOfLines={1} style={[styles.readerTitle, {color: p.ink}]}>{reading?.title || 'Reader'}</Text>
-        {reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}
+  function ReaderTools(){
+    if(!reading)return null;const workKey=readerWorkKey(reading);const bookmarks=workReaderBookmarks(readerBookmarks,workKey);const annotations=workReaderAnnotations(readerAnnotations,workKey);
+    const updateScale=(delta:number)=>void persistReaderAppearance({...readerAppearance,scale:Math.max(.78,Math.min(1.5,readerAppearance.scale+delta))});
+    return <Modal transparent animationType="slide" visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled"><View accessibilityViewIsModal accessibilityLabel="Reader tools" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+      <View style={styles.readerSheetHeader}>
+        <View style={{flex:1}}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{readerCount?`Page ${readerPage+1} of ${readerCount}`:`Page ${readerPage+1}`}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close Reader tools" onPress={()=>setReaderToolsOpen(false)} style={styles.readerSheetClose}><UiIcon name="close" color={p.muted} size={19}/></Pressable>
       </View>
-    </View>;
-    if (!reading) {
-      return (
-        <View style={styles.content}>
-          <Text style={[styles.title, {color: p.ink}]}>Reader</Text>
-          <Text style={[styles.empty, {color: p.muted}]}>{session ? 'Open an EPUB, PDF or comic from Shelf.' : 'Open an EPUB, PDF or comic from Shelf.'}</Text>
+      <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>SEARCH</Text>
+        <View style={styles.searchRow}>
+          <TextInput value={readerSearch} onChangeText={setReaderSearch} placeholder="Find in this book" placeholderTextColor={p.muted} returnKeyType="search" onSubmitEditing={()=>{setReaderSearchCount(null);sendReaderCommand('search',{query:readerSearch})}} style={[styles.readerSearchInput,{color:p.ink,backgroundColor:p.raised}]}/>
+          <Pressable accessibilityRole="button" accessibilityLabel="Find in book" onPress={()=>{setReaderSearchCount(null);sendReaderCommand('search',{query:readerSearch})}} style={styles.readerSearchButton}><UiIcon name="search" color={p.ink} size={20}/></Pressable>
         </View>
-      );
-    }
-    if (!session) {
-      return (
-        <View style={styles.readerScreen}>
-          {readerBar}
-          {readerLoading ? <View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader" /><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View> : readerLoadError ? (
-            <View style={[styles.readerFailure,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>
-              <Button label="Back to Shelf" tone="quiet" onPress={closeReader} />
-            </View>
-          ) : localReader?.html ? (
-            <WebView
-              originWhitelist={['*']}
-              source={{html: localReader.html}}
-              onMessage={event => {
-                if (!reading?.uri) return;
-                try {
-                  const message = JSON.parse(event.nativeEvent.data);
-                  if (message?.type !== 'reader-position' || !Number.isInteger(message.page) || message.page < 0) return;
-                  setLocalReadingProgress(current => {
-                    if (current[reading.uri!] === message.page) return current;
-                    const next = {...current, [reading.uri!]: message.page};
-                    setPersistedJSON(localReadingProgressKey, next).catch(() => undefined);
-                    return next;
-                  });
-                  if (typeof message.complete === 'boolean') {
-                    setLocalReadingCurrentComplete(current => {
-                      if (current[reading.uri!] === message.complete) return current;
-                      const next={...current,[reading.uri!]:message.complete};
-                      setPersistedJSON(localReadingCurrentCompleteKey, next).catch(()=>undefined);
-                      return next;
-                    });
-                  }
-                  if (message.complete === true) {
-                    if(!localReadingComplete[reading.uri!] && reading.localWorkKey){
-                      setRatingPrompt({title:reading.title,localWorkKey:reading.localWorkKey});
-                    }
-                    setLocalReadingComplete(current => {
-                      if (current[reading.uri!]) return current;
-                      const next = {...current, [reading.uri!]: true};
-                      setPersistedJSON(localReadingCompleteKey, next).catch(() => undefined);
-                      return next;
-                    });
-                  }
-                } catch {}
-              }}
-            />
-          ) : localReader?.uri ? (
-            <WebView originWhitelist={['content://*', 'file://*']} source={{uri: localReader.uri}} allowFileAccess />
-          ) : <Text style={[styles.empty, {color: p.muted, padding: 16}]}>Unable to open this file.</Text>}
-        </View>
-      );
-    }
-    return (
-      <View style={styles.readerScreen}>
-        {readerBar}
-        <WebView
-          key={session.token + reading.id + ':' + readerReloadKey}
-          source={{uri: session.server + '/reader.html?asset=' + reading.id, headers: {Authorization: 'Bearer ' + session.token}}}
-          incognito
-          originWhitelist={[session.server]}
-          onShouldStartLoadWithRequest={r => readerNavigationAllowed(r.url, session.server)}
-          mixedContentMode="never"
-          onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('');}}
-          onLoadEnd={()=>setReaderLoading(false)}
-          onMessage={event=>{
-            try{
-              const message=JSON.parse(event.nativeEvent.data);
-              if(message?.type==='archivist-reader-ready'){
-                setReaderLoading(false);
-                setReaderLoadError('');
-              }
-              if(message?.type==='archivist-reader-complete' && reading.serverWorkId){
-                setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
-              }
-            }catch{}
-          }}
-          onHttpError={e => {
-            const message='Reader request failed: '+e.nativeEvent.statusCode;
-            setReaderLoadError(message);setReaderLoading(false);setError(message);
-          }}
-          onError={e => {
-            const message=e.nativeEvent.description || 'Reader failed to load.';
-            setReaderLoadError(message);setReaderLoading(false);setError(message);
-          }}
-          allowFileAccess={false}
-          javaScriptCanOpenWindowsAutomatically={false}
-          setSupportMultipleWindows={false}
-        />
-        {readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader" /><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}
-        {readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.card,borderColor:p.line}]}>
-          <Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>
-          <View style={styles.toolRow}>
-            <Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1);}} />
-            <Button label="Back to Shelf" tone="quiet" onPress={closeReader} />
+        {readerSearchCount!==null?<Text style={[styles.meta,{color:p.muted}]}>{readerSearchCount} match{readerSearchCount===1?'':'es'}</Text>:null}
+      </View>
+      <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}>
+        <View style={styles.readerAppearanceHeader}>
+          <Text style={[styles.filterLabel,{color:p.muted,marginTop:0}]}>TEXT SIZE</Text>
+          <View style={styles.readerScaleControl}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Smaller text" onPress={()=>updateScale(-.08)} style={styles.readerScaleButton}><UiIcon name="minus" color={p.ink} size={17}/></Pressable>
+            <Text style={[styles.readerScaleValue,{color:p.ink}]}>{Math.round(readerAppearance.scale*100)}%</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Larger text" onPress={()=>updateScale(.08)} style={styles.readerScaleButton}><UiIcon name="plus" color={p.ink} size={17}/></Pressable>
           </View>
-        </View>:null}
+        </View>
+        <Text style={[styles.filterLabel,{color:p.muted}]}>PAGE</Text>
+        <View style={styles.readerThemeTabs}>
+          {(['system','paper','sepia','dark'] as ReaderAppearance['theme'][]).map(theme=>{
+            const selected=readerAppearance.theme===theme;
+            return <Pressable key={theme} accessibilityRole="button" accessibilityState={{selected}} onPress={()=>void persistReaderAppearance({...readerAppearance,theme})} style={[styles.readerThemeTab,{backgroundColor:selected?p.raised:'transparent'}]}>
+              <Text style={{color:selected?p.sage:p.muted,fontWeight:selected?'700':'500',textTransform:'capitalize'}}>{theme}</Text>
+              <View pointerEvents="none" style={[styles.readerThemeMarker,{backgroundColor:p.sage,opacity:selected?1:0}]}/>
+            </Pressable>;
+          })}
+        </View>
       </View>
-    );
+      <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}>
+        <View style={styles.readerToolSectionHeader}>
+          <Text style={[styles.filterLabel,{color:p.muted,marginTop:0}]}>BOOKMARKS</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={bookmarks.some(item=>item.page===readerPage)?'Remove current bookmark':'Bookmark current page'} onPress={()=>void toggleCurrentReaderBookmark()} style={styles.readerBookmarkAction}>
+            <UiIcon name="bookmark" color={bookmarks.some(item=>item.page===readerPage)?p.sage:p.ink} size={20}/>
+            <Text style={{color:bookmarks.some(item=>item.page===readerPage)?p.sage:p.ink,fontWeight:'600'}}>{bookmarks.some(item=>item.page===readerPage)?'Remove':'Add page'}</Text>
+          </Pressable>
+        </View>
+        {bookmarks.length?bookmarks.map(item=><View key={item.id} style={[styles.readerSavedRow,{borderColor:p.line}]}>
+          <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>Page {item.page+1}</Text>
+          <Pressable accessibilityRole="button" onPress={()=>{setReaderRequestedPage(item.page);sendReaderCommand('goto',{page:item.page})}} style={styles.readerSavedAction}><Text style={{color:p.sage,fontWeight:'600'}}>Go</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={()=>void persistReaderBookmarks(readerBookmarks.filter(saved=>saved.id!==item.id))} style={styles.readerSavedAction}><Text style={{color:p.muted,fontWeight:'600'}}>Remove</Text></Pressable>
+        </View>):<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet.</Text>}
+      </View>
+      <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}><Text style={[styles.filterLabel,{color:p.muted,marginTop:0}]}>HIGHLIGHTS & NOTES</Text>{readerSelection?<><Text numberOfLines={4} style={[styles.readerQuote,{color:p.ink,borderColor:p.line}]}>{readerSelection}</Text><View style={styles.toolRow}><Button label="Highlight" tone="quiet" onPress={()=>void saveCurrentReaderAnnotation('highlight')}/></View><TextInput value={readerNote} onChangeText={setReaderNote} placeholder="Add a note to this selection" placeholderTextColor={p.muted} multiline style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:72}]}/><Button label="Save note" disabled={!readerNote.trim()} onPress={()=>void saveCurrentReaderAnnotation('note')}/></>:<Text style={[styles.meta,{color:p.muted}]}>Select text in the book to highlight it or attach a note.</Text>}{annotations.map(item=><View key={item.id} style={[styles.readerSavedRow,{borderColor:p.line}]}><View style={{flex:1}}><Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.text}</Text><Text style={[styles.meta,{color:p.muted}]}>Page {item.page+1} · {item.kind}{item.note?` · ${item.note}`:''}</Text></View><Pressable onPress={()=>void persistReaderAnnotations(readerAnnotations.filter(saved=>saved.id!==item.id))}><Text style={{color:p.muted,fontWeight:'800'}}>Remove</Text></Pressable></View>)}</View>
+    </View></ScrollView></View></Modal>;
+  }
+
+  function Reader() {
+    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
+    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}><Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
+    if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Open an EPUB, PDF or comic from Shelf.</Text></View>;
+    const localReaderMode=reading.source!=='server';
+    if(localReaderMode){
+      const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
+      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView ref={readerWebRef} originWhitelist={['*']} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)}/>:localReader?.uri?<WebView ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}<ReaderTools/></View>;
+    }
+    if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View><ReaderTools/></View>;
+    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}<ReaderTools/></View>;
   }
 
   function atlasSelect(kind: AtlasKind, value: string) {
@@ -2669,13 +3427,13 @@ function Client() {
     } else if (kind === 'favourite') {
       setFavouriteOnly(true);
     }
-    setActiveTab('shelf');
+    setActiveTab('library');
   }
 
   function AtlasGroup({title, items, kind}: {title: string; items: Array<[string, number]>; kind: AtlasKind}) {
     const max = Math.max(1, ...items.map(([, total]) => total));
     return (
-      <View style={[styles.atlasGroup, {borderColor: p.line, backgroundColor: p.card}]}>
+      <View style={[styles.atlasGroup,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle, {color: p.ink, marginTop: 0}]}>{title}</Text>
         {items.length ? items.map(([name, total]) => (
           <Pressable key={title + name} accessibilityRole="button" onPress={() => setAtlasFocus({kind,value:name})} style={styles.atlasRow}>
@@ -2707,19 +3465,15 @@ function Client() {
 
   function AtlasRelationshipView() {
     if(!atlasFocus)return null;
-    const relation=session?serverAtlasRelationship:localAtlasRelationship;
+    const relation=unifiedAtlasRelationship;
     return (
       <ScrollView contentContainerStyle={styles.content}>
         <Button label="Back to Atlas" tone="quiet" onPress={()=>setAtlasFocus(null)} />
         <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
-          <Text style={[styles.playerEyebrow,{color:p.gold}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
-          <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>{atlasFocus.value}</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>
-            {relation ? relation.workCount+' work'+(relation.workCount===1?'':'s') : 'Loading relationships…'}
-          </Text>
+          <Text style={[styles.playerEyebrow,{color:p.sage}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.atlasFocusTitle,{color:p.ink}]}>{atlasFocus.value}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{relation ? relation.workCount+' work'+(relation.workCount===1?'':'s') : 'No matching works'}</Text>
         </View>
-        {atlasLoading ? <ActivityIndicator accessibilityLabel="Loading Atlas relationships" /> : null}
-        {atlasCompatibility ? <Text style={[styles.meta,{color:p.gold}]}>Your server is an older Archivist version, so this relationship is calculated from the works currently loaded on your phone. Update the server for complete Atlas links.</Text> : null}
         {relation ? <>
           <AtlasConnectionGroup title="Authors" kind="author" items={relation.authors} />
           <AtlasConnectionGroup title="Series" kind="series" items={relation.series} />
@@ -2732,206 +3486,427 @@ function Client() {
           <AtlasConnectionGroup title="Favourites" kind="favourite" items={relation.favourites || []} />
           <Text style={[styles.sectionTitle,{color:p.ink}]}>Works</Text>
           <View style={{gap:8}}>
-            {session ? serverAtlasRelationship?.works.map(work=><Pressable key={work.id} accessibilityRole="button" onPress={()=>void openServerWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
+            {relation.works.map(work=><Pressable key={work.key} accessibilityRole="button" onPress={()=>openUnifiedWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
               <View style={{flex:1}}>
                 <Text style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.genre || work.format} · {work.format}</Text>
-              </View>
-              <Text style={{color:p.sage,fontWeight:'900'}}>Open</Text>
-            </Pressable>) : localAtlasRelationship?.works.map(work=><Pressable key={work.key} accessibilityRole="button" onPress={()=>openLocalWork(work)} style={[styles.atlasWorkRow,{borderColor:p.line,backgroundColor:p.card}]}>
-              <View style={{flex:1}}>
-                <Text style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.genre || work.format} · {work.format}</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>{work.series || work.author || work.genre || work.format} · {work.format} · {sourceLabel(work.source)}</Text>
               </View>
               <Text style={{color:p.sage,fontWeight:'900'}}>Open</Text>
             </Pressable>)}
           </View>
-          {relation.workCount>relation.works.length ? <Text style={[styles.meta,{color:p.muted}]}>Showing {relation.works.length} of {relation.workCount} works here. Shelf can show the full set.</Text>:null}
-          <Button label="View all on Shelf" onPress={()=>atlasSelect(atlasFocus.kind,atlasFocus.value)} />
+          <Button label="View all in Library" onPress={()=>atlasSelect(atlasFocus.kind,atlasFocus.value)} />
         </>:null}
       </ScrollView>
     );
   }
 
-  function AtlasUniverse() {
-    const nodes:Array<{kind:AtlasKind;value:string;count:number}>=[];
-    const add=(kind:AtlasKind,item?:[string,number])=>{if(item?.[0]&&item[1]>0)nodes.push({kind,value:item[0],count:item[1]});};
-    add('author',atlas.authors[0]);
-    add('series',atlas.series[0]);
-    add('genre',atlas.genres[0]);
-    add('reading',atlas.reading[0]);
-    add('format',atlas.formats[0]);
-    add('rating',atlas.ratings.find(([,count])=>count>0));
-    add('favourite',atlas.favourites[0]);
-    add('space',atlas.spaces[0]);
-    const visible=nodes.slice(0,8);
-    const graphW=Math.max(300,Math.min(width-40,720));
-    const graphH=width>=700?470:390;
-    const center={x:graphW/2,y:graphH/2};
-    const nodeW=width>=700?122:94;
-    const nodeH=width>=700?62:54;
-    const positions=[
-      {x:.13,y:.22},{x:.50,y:.11},{x:.86,y:.22},{x:.91,y:.55},
-      {x:.70,y:.84},{x:.36,y:.87},{x:.09,y:.62},{x:.24,y:.43},
-    ];
-    return (
-      <View accessibilityLabel="Atlas connected library graph" style={[styles.atlasUniverse,{width:graphW,height:graphH,backgroundColor:p.card,borderColor:p.line}]}>
-        {visible.map((node,index)=>{
-          const pt={x:graphW*positions[index].x,y:graphH*positions[index].y};
-          const dx=pt.x-center.x,dy=pt.y-center.y;
-          const distance=Math.sqrt(dx*dx+dy*dy);
-          const angle=Math.atan2(dy,dx);
-          return <View key={'line-'+node.kind+'-'+node.value} pointerEvents="none" style={[styles.atlasLine,{left:center.x,top:center.y,width:distance,backgroundColor:p.line,transformOrigin:'left center',transform:[{rotate:angle+'rad'}]}]} />;
-        })}
-        <View style={[styles.atlasCenterNode,{left:center.x-52,top:center.y-52,backgroundColor:p.ink,borderColor:p.gold}]}>
-          <Text style={[styles.atlasCenterMark,{color:p.gold}]}>A</Text>
-          <Text style={[styles.atlasCenterTitle,{color:p.ivory}]}>Library</Text>
-          <Text style={[styles.atlasCenterCount,{color:'#c8d4d2'}]}>{session ? (serverSummary?.total ?? serverWorks.length) : localWorks.length} works</Text>
-        </View>
-        {visible.map((node,index)=>{
-          const pt={x:graphW*positions[index].x,y:graphH*positions[index].y};
-          const label=node.kind==='space'?'Folder':node.kind.charAt(0).toUpperCase()+node.kind.slice(1);
-          return <Pressable
-            key={node.kind+'-'+node.value}
-            accessibilityRole="button"
-            accessibilityLabel={label+' '+node.value+', '+node.count+' works'}
-            onPress={()=>setAtlasFocus({kind:node.kind,value:node.value})}
-            style={({pressed})=>[
-              styles.atlasUniverseNode,
-              {left:pt.x-nodeW/2,top:pt.y-nodeH/2,width:nodeW,minHeight:nodeH,backgroundColor:p.raised,borderColor:node.kind==='genre'||node.kind==='series'?p.gold:p.line},
-              pressed&&styles.cardPressed,
-            ]}>
-            <View style={[styles.atlasNodeAccent,{backgroundColor:node.kind==='genre'||node.kind==='series'?p.gold:p.sage}]} />
-            <Text numberOfLines={1} style={[styles.atlasNodeKind,{color:p.muted}]}>{label}</Text>
-            <Text numberOfLines={1} style={[styles.atlasNodeValue,{color:p.ink}]}>{node.value}</Text>
-            <Text style={[styles.atlasNodeCount,{color:p.muted}]}>{node.count}</Text>
-          </Pressable>;
-        })}
-        {!visible.length ? <View style={styles.atlasEmptyUniverse}>
-          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Atlas will grow here</Text>
-          <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Add books and Archivist will connect authors, series, genres and reading history automatically.</Text>
-        </View> : null}
-      </View>
-    );
+  function animateAtlasTransform(target:{x:number;y:number;scale:number},duration=420){
+    if(reduceMotion){setAtlasTransform(target);return;}
+    const start={...atlasTransform};
+    const started=Date.now();
+    const frame=()=>{
+      const raw=Math.min(1,(Date.now()-started)/duration);
+      const t=1-Math.pow(1-raw,3);
+      setAtlasTransform({
+        x:start.x+(target.x-start.x)*t,
+        y:start.y+(target.y-start.y)*t,
+        scale:start.scale+(target.scale-start.scale)*t,
+      });
+      if(raw<1)requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
   }
 
-  function AtlasChipSection({title,kind,items}: {title:string;kind:AtlasKind;items:Array<[string,number]>}) {
-    if(!items.length)return null;
-    return <View style={styles.atlasChipSection}>
-      <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{title}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.atlasExploreRow}>
-        {items.slice(0,12).map(([name,count])=><Pressable
-          key={kind+'-'+name}
-          accessibilityRole="button"
-          accessibilityLabel={title+' '+name+', '+count}
-          onPress={()=>setAtlasFocus({kind,value:name})}
-          style={({pressed})=>[styles.atlasExploreChip,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
-          <Text numberOfLines={1} style={[styles.atlasExploreName,{color:p.ink}]}>{name}</Text>
-          <Text style={[styles.atlasExploreCount,{color:p.muted}]}>{count}</Text>
-        </Pressable>)}
-      </ScrollView>
+  function atlasResetView(){
+    const viewWidth=Math.min(width-48,480);
+    const viewHeight=viewWidth;
+    const scale=Math.max(.18,Math.min(1.08,Math.min(viewWidth/atlasUniverse.width,viewHeight/atlasUniverse.height)*.78));
+    animateAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
+  }
+
+  function atlasGestureStart(event:any){
+    const touches=event.nativeEvent.touches||[];
+    if(touches.length>=2){
+      const [a,b]=touches;
+      const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
+      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:Math.max(1,Math.hypot(dx,dy)),focusX:(a.locationX+b.locationX)/2,focusY:(a.locationY+b.locationY)/2};
+      return;
+    }
+    const point=touches[0]||event.nativeEvent;
+    atlasGesture.current={mode:'pan',startX:point.locationX||0,startY:point.locationY||0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:0,focusX:0,focusY:0};
+  }
+
+  function atlasGestureMove(event:any){
+    const gesture=atlasGesture.current;if(!gesture)return;
+    const touches=event.nativeEvent.touches||[];
+    if(touches.length>=2){
+      const [a,b]=touches;
+      const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
+      const distance=Math.max(1,Math.hypot(dx,dy));
+      if(gesture.mode!=='pinch'){atlasGestureStart(event);return;}
+      const nextScale=Math.max(.18,Math.min(2.25,gesture.baseScale*(distance/gesture.distance)));
+      const ratio=nextScale/gesture.baseScale;
+      setAtlasTransform({x:gesture.focusX-(gesture.focusX-gesture.baseX)*ratio,y:gesture.focusY-(gesture.focusY-gesture.baseY)*ratio,scale:nextScale});
+      return;
+    }
+    if(gesture.mode==='pinch')return;
+    const point=touches[0]||event.nativeEvent;
+    setAtlasTransform(current=>({...current,x:gesture.baseX+(point.locationX-gesture.startX),y:gesture.baseY+(point.locationY-gesture.startY)}));
+  }
+
+  function atlasNodeColor(node:AtlasUniverseNode){
+    if(node.kind==='genre')return genreColour(node.label);
+    const linked=atlasUniverse.edges.find(edge=>edge.to===node.id&&edge.kind==='genre');
+    const hub=linked&&atlasUniverse.nodes.find(item=>item.id===linked.from);
+    if(hub)return genreColour(hub.label);
+    if(node.kind==='author')return p.ink;
+    if(node.kind==='note')return p.raised;
+    if(node.kind==='series'||node.kind==='collection')return p.card;
+    return p.paper;
+  }
+
+  function atlasNodeVisible(node:AtlasUniverseNode){return true;}
+
+  function atlasSearchGo(){
+    const q=atlasSearch.trim().toLowerCase();if(!q)return;
+    const node=atlasUniverse.nodes.find(item=>item.label.toLowerCase().includes(q)||item.subtitle?.toLowerCase().includes(q));
+    if(!node)return;
+    setAtlasNodeId(node.id);
+    const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=900?620:foldLayout?580:500;
+    const scale=Math.max(.82,atlasTransform.scale);
+    animateAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
+  }
+
+  function AtlasEdgeView({from,to,kind}:{from:AtlasUniverseNode;to:AtlasUniverseNode;kind:string}){
+    const dx=to.x-from.x,dy=to.y-from.y,length=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI;
+    return <View pointerEvents="none" style={[styles.atlasUniverseEdge,{left:from.x,top:from.y,width:length,height:1/atlasTransform.scale,opacity:atlasNodeId?(from.id===atlasNodeId||to.id===atlasNodeId?.65:.08):.3,backgroundColor:atlasNodeColor(from),transformOrigin:'left center',transform:[{rotateZ:angle+'deg'}]}]}/>;
+  }
+
+  function AtlasUniverseNodeView({node}:{node:AtlasUniverseNode}){
+    if(!atlasNodeVisible(node))return null;
+    const selected=node.id===atlasNodeId;
+    const connected=!atlasNodeId||selected||atlasUniverse.edges.some(edge=>(edge.from===atlasNodeId&&edge.to===node.id)||(edge.to===atlasNodeId&&edge.from===node.id));
+    const zoom=atlasTransform.scale,hit=44/zoom;
+    const dot=(node.kind==='genre'?8:node.kind==='author'?6:node.kind==='work'?4:5)/zoom;
+    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>setAtlasNodeId(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.22}}>
+      {selected?<View pointerEvents="none" style={{position:'absolute',width:70,height:70,borderRadius:35,backgroundColor:p.sage,opacity:.16}}/>:null}
+      <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:atlasNodeColor(node),boxShadow:selected?'0px 0px 18px rgba(71,115,111,.7)':'none'}}/>
+      {(selected||node.kind==='genre'||zoom>.55)?<Text numberOfLines={2} style={{position:'absolute',top:hit/2+10/zoom,left:(hit-144/zoom)/2,width:144/zoom,minWidth:144/zoom,flexShrink:0,textAlign:'center',fontSize:12/zoom,lineHeight:16/zoom,color:selected?p.ink:p.muted,fontWeight:selected?'700':'400'}}>{node.label}</Text>:null}
+    </Pressable>;
+  }
+
+  function AtlasInspector(){
+    const node=atlasSelectedNode;if(!node)return null;
+    const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
+    const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
+    const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
+    return <View style={[styles.atlasInspector,{backgroundColor:foldLayout?p.paper:p.raised},foldLayout?styles.atlasInspectorWide:styles.atlasInspectorMobile,foldLayout&&{borderLeftColor:p.line}]}>
+      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
+      {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
+      <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
+      <View style={styles.toolRow}>
+        {work?<Button label="Open" onPress={()=>openUnifiedWork(work)}/>:null}
+        {node.relationKind&&node.relationValue?<Button label="Explore" onPress={()=>setAtlasFocus({kind:node.relationKind as AtlasKind,value:node.relationValue!})}/>:null}
+        {collection?<Button label="Open collection" onPress={()=>openCollection(collection)}/>:null}
+      </View>
     </View>;
   }
 
   function Atlas() {
     if(atlasFocus)return <AtlasRelationshipView />;
+    const renderedNodes=atlasUniverse.nodes.filter(atlasNodeVisible);
+    const renderedIds=new Set(renderedNodes.map(node=>node.id));
+    const renderedEdges=atlasUniverse.edges.filter(edge=>renderedIds.has(edge.from)&&renderedIds.has(edge.to));
+    const nodeMap=new Map(atlasUniverse.nodes.map(node=>[node.id,node]));
+    const ringSize=Math.min(width-48,480);
+    const viewHeight=ringSize;
+    const breakdownCounts=new Map<string,number>();
+    for(const work of atlasUniverseWorks){const label=atlasBreakdown==='Genre'?(work.genre||'Unclassified'):atlasBreakdown==='Format'?work.format:work.publishedYear?String(work.publishedYear):'Not recorded';breakdownCounts.set(label,(breakdownCounts.get(label)||0)+1);}
+    const breakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:atlasBreakdown==='Genre'?genreColour(label):genreColours[index%genreColours.length]}));
     return (
-      <ScrollView contentContainerStyle={[styles.content,styles.atlasScreen]}>
-        <View style={styles.pageHeading}>
-          <View>
-            <Text style={[styles.pageEyebrow,{color:p.gold}]}>CONNECTED LIBRARY</Text>
-            <Text style={[styles.title,{color:p.ink}]}>Atlas</Text>
+      <ScrollView contentContainerStyle={styles.atlasScreen} keyboardShouldPersistTaps="handled">
+        <View style={styles.pageHeadingRow}>
+          <View style={{flex:1}}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.atlasTitle,{color:p.ink}]}>Atlas</Text>
+            <Text style={[styles.pageSubtitle,{color:p.muted}]}>A living map of the books, people, series and ideas in your library.</Text>
           </View>
-          <Text style={[styles.headerMeta,{color:p.muted}]}>Tap a node</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}>
+            <UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/>
+          </Pressable>
         </View>
-        <Text style={[styles.atlasIntro,{color:p.muted}]}>Follow the threads through your authors, series, genres and reading life.</Text>
-        <AtlasUniverse />
-        <AtlasChipSection title="Authors" kind="author" items={atlas.authors} />
-        <AtlasChipSection title="Series" kind="series" items={atlas.series} />
-        <AtlasChipSection title="Genres" kind="genre" items={atlas.genres} />
-        <AtlasChipSection title="Reading" kind="reading" items={atlas.reading} />
-        <AtlasChipSection title="Ratings" kind="rating" items={atlas.ratings} />
+
+        {atlasListMode?<SourceSwitcher/>:null}
+        {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
+
+        {atlasListMode?<View style={styles.atlasListAlternative}>
+          <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
+          <AtlasGroup title="Ratings" kind="rating" items={atlas.ratings} />
+          <AtlasGroup title="Favourites" kind="favourite" items={atlas.favourites} />
+          <AtlasGroup title="Formats" kind="format" items={atlas.formats} />
+          <AtlasGroup title="Authors" kind="author" items={atlas.authors} />
+          <AtlasGroup title="Series" kind="series" items={atlas.series} />
+          <AtlasGroup title="Genres" kind="genre" items={atlas.genres} />
+          <AtlasGroup title="Folders" kind="space" items={atlas.spaces} />
+          <AtlasGroup title="Availability" kind="status" items={atlas.status} />
+        </View>:<>
+          <View style={styles.atlasSearchRow}>
+            <TextInput maxFontSizeMultiplier={1.15} value={atlasSearch} onChangeText={setAtlasSearch} onSubmitEditing={atlasSearchGo} returnKeyType="search" placeholder="Find a title, person, series, collection or tag" placeholderTextColor={p.muted} style={[styles.atlasSearchInput,{color:p.ink}]}/>
+            <Pressable accessibilityRole="button" accessibilityLabel="Find in Atlas" onPress={atlasSearchGo} style={styles.atlasSearchButton}><UiIcon name="search" color={p.ink} size={20}/></Pressable>
+          </View>
+
+          <View style={[styles.atlasUniverseLayout]}>
+            <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:p.paper}]}
+              onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
+              onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
+              onResponderRelease={()=>{atlasGesture.current=null}} onResponderTerminate={()=>{atlasGesture.current=null}}>
+              <AmbientGlow size={600} strength={.55}/><View pointerEvents="none" style={{position:'absolute',left:'50%',top:0,marginLeft:-ringSize/2,zIndex:2}}><DataRing size={ringSize} items={[{label:'Genre',count:1,color:'#bc8880'},{label:'Format',count:1,color:'#6ca8b2'},{label:'Published year',count:1,color:'#9ba5b2'}]} ink={p.ink} muted={p.muted} track={p.line} thickness={14}/></View><View style={styles.atlasViewportTools}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><UiIcon name="fit" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.max(.18,atlasTransform.scale-.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.min(2.25,atlasTransform.scale+.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
+              </View>
+
+              <View style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
+                {renderedEdges.map(edge=>{const from=nodeMap.get(edge.from),to=nodeMap.get(edge.to);return from&&to?<AtlasEdgeView key={edge.id} from={from} to={to} kind={edge.kind}/>:null})}
+                {renderedNodes.map(node=><AtlasUniverseNodeView key={node.id} node={node}/>)}
+              </View>
+
+              
+              {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
+            </View>
+            <AtlasInspector/>
+          </View>
+
+          <View style={{flexDirection:'row',gap:8,justifyContent:'center',marginTop:12}}>{(['Genre','Format','Published year'] as const).map(label=><Pressable key={label} accessibilityRole="button" accessibilityState={{selected:atlasBreakdown===label}} onPress={()=>setAtlasBreakdown(label)} style={{minHeight:44,paddingHorizontal:14,justifyContent:'center',borderRadius:24,borderWidth:1,borderColor:atlasBreakdown===label?p.sage:p.line,backgroundColor:atlasBreakdown===label?p.card:'transparent'}}><Text style={{color:atlasBreakdown===label?p.ink:p.muted}}>{label}</Text></Pressable>)}</View>
+          <View style={{padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:14,marginTop:16}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{atlasBreakdown}</Text><Text style={[styles.meta,{color:p.muted}]}>Your library, in perspective</Text>
+            {breakdown.map(item=><View key={item.label} style={{gap:7}}><View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:p.ink}}>{item.label}</Text><Text style={{color:p.muted}}>{item.count} · {Math.round(item.count/Math.max(1,atlasUniverseWorks.length)*100)}%</Text></View><View style={{height:5,borderRadius:3,backgroundColor:p.line}}><View style={{height:5,borderRadius:3,width:`${item.count/Math.max(1,atlasUniverseWorks.length)*100}%`,backgroundColor:item.color}}/></View></View>)}
+            {!breakdown.length?<Text style={{color:p.muted}}>Add books to reveal your library’s patterns.</Text>:null}
+            {atlasBreakdown==='Published year'?<Text style={[styles.meta,{color:p.muted}]}>Dates come from recorded metadata. Books without a verified publication date are grouped as not recorded.</Text>:null}
+          </View><Text style={[styles.atlasHint,{color:p.muted}]}>Pinch, pan and explore</Text>
+        </>}
       </ScrollView>
     );
+  }
+
+  async function saveInsightGoals(){
+    const next=sanitizeInsightGoal({completedTarget:Number(goalDraft.completed),annotationTarget:Number(goalDraft.annotations)});
+    setInsightGoal(next);setGoalDraft({completed:String(next.completedTarget),annotations:String(next.annotationTarget)});
+    await setPersistedJSON(insightGoalKey,next);
+  }
+
+  function InsightGoalCard({title,value,target,progress,draft,onDraft}:{title:string;value:number;target:number;progress:number;draft:string;onDraft:(value:string)=>void}){
+    return <View style={[styles.insightGoalCard,{borderBottomColor:p.line}]}>
+      <View style={styles.profileBreakdownRow}>
+        <View style={{flex:1}}>
+          <Text style={[styles.bookTitle,{color:p.ink}]}>{title}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{value} of {target}</Text>
+        </View>
+        <TextInput maxFontSizeMultiplier={1.15} accessibilityLabel={title+' target'} keyboardType="number-pad" value={draft} onChangeText={onDraft} style={[styles.insightGoalInput,{color:p.ink,borderBottomColor:p.line}]}/>
+      </View>
+      <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:p.sage,width:`${Math.round(progress*100)}%`}]} /></View>
+    </View>;
+  }
+
+  function Insights(){
+    const summary=insightSummary;
+    const listeningHours=summary.listeningSeconds/3600;
+    const listeningLabel=listeningHours<10?listeningHours.toFixed(1)+'h':Math.round(listeningHours)+'h';
+    const lead=summary.completed
+      ? `${summary.completed} finished · ${summary.activeDays} active day${summary.activeDays===1?'':'s'} · ${summary.annotationCount} saved idea${summary.annotationCount===1?'':'s'}`
+      : 'Your reading and listening history will build here as you use Archivist.';
+    const metrics:Array<[string,string|number]>=[
+      ['Finished',summary.completed],
+      ['In progress',summary.inProgress],
+      ['Listening',listeningLabel],
+      ['Active days',summary.activeDays],
+      ['Notes',summary.annotationCount],
+      ['Average rating',summary.rated?ratingLabel(summary.averageRating):'—'],
+    ];
+    const today=new Date();today.setHours(0,0,0,0);
+    const activityWeek=Array.from({length:7},(_,index)=>{
+      const date=new Date(today);date.setDate(today.getDate()-(6-index));
+      const next=new Date(date);next.setDate(date.getDate()+1);
+      const from=date.getTime()/1000,to=next.getTime()/1000;
+      const items=summary.recentActivity.filter(item=>item.updatedAt>=from&&item.updatedAt<to);
+      const seconds=items.reduce((total,item)=>total+Math.max(0,item.activeSeconds||0),0);
+      return {key:date.toISOString().slice(0,10),label:date.toLocaleDateString(undefined,{weekday:'short'}).slice(0,1),seconds,events:items.reduce((total,item)=>total+item.events,0)};
+    });
+    const maxDaySeconds=Math.max(1,...activityWeek.map(day=>day.seconds));
+    return <ScrollView contentContainerStyle={styles.insightsScreen}>
+      <View style={styles.pageHeadingRow}>
+        <View style={{flex:1}}>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.insightsTitle,{color:p.ink}]}>Insights</Text>
+          <Text style={[styles.pageSubtitle,{color:p.muted}]}>A private record of how your library is becoming part of your life.</Text>
+        </View>
+      </View>
+
+      <SourceSwitcher/>
+
+      <View style={styles.insightEditorialHero}>
+        <Text style={[styles.insightEditorialKicker,{color:p.sage}]}>YOUR READING LIFE</Text>
+        <Text style={[styles.insightEditorialTitle,{color:p.ink}]}>{lead}</Text>
+      </View>
+
+      <View style={[styles.insightStatStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        {metrics.map(([label,value])=><View key={label} style={[styles.insightStat,foldLayout&&styles.insightStatFold,width>=900&&styles.insightStatWide]}>
+          <Text style={[styles.insightStatValue,{color:p.ink}]}>{value}</Text>
+          <Text style={[styles.insightStatLabel,{color:p.muted}]}>{label}</Text>
+        </View>)}
+      </View>
+
+      <View style={styles.insightRhythmSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Last 7 days</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{activityWeek.reduce((total,day)=>total+day.events,0)} update{activityWeek.reduce((total,day)=>total+day.events,0)===1?'':'s'}</Text>
+        </View>
+        <View style={styles.insightRhythmChart}>
+          {activityWeek.map(day=>{
+            const active=day.seconds>0;
+            const barHeight=active?Math.max(10,Math.round((day.seconds/maxDaySeconds)*72)):3;
+            return <View key={day.key} style={styles.insightRhythmDay}>
+              <View style={styles.insightRhythmBarArea}>
+                <View style={[styles.insightRhythmBar,{height:barHeight,backgroundColor:active?p.sage:p.line,opacity:active?1:.7}]}/>
+              </View>
+              <Text style={[styles.insightRhythmLabel,{color:p.muted}]}>{day.label}</Text>
+            </View>;
+          })}
+        </View>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Goals</Text>
+        <Pressable accessibilityRole="button" onPress={()=>void saveInsightGoals()} style={styles.sectionLink}><Text style={{color:p.sage,fontWeight:'600'}}>Save</Text></Pressable>
+      </View>
+      <View style={styles.insightGoalGrid}>
+        <InsightGoalCard title="Finish works" value={summary.completedGoal.value} target={summary.completedGoal.target} progress={summary.completedGoal.progress} draft={goalDraft.completed} onDraft={value=>setGoalDraft(current=>({...current,completed:value}))}/>
+        <InsightGoalCard title="Capture ideas" value={summary.annotationGoal.value} target={summary.annotationGoal.target} progress={summary.annotationGoal.progress} draft={goalDraft.annotations} onDraft={value=>setGoalDraft(current=>({...current,annotations:value}))}/>
+      </View>
+
+      <Text style={[styles.sectionTitle,{color:p.ink,marginTop:4}]}>Recent activity</Text>
+      <View>
+        {summary.recentActivity.length?summary.recentActivity.slice(0,12).map(item=><View key={item.id} style={[styles.insightActivityRow,{borderColor:p.line}]}>
+          <View style={[styles.activityMarker,{backgroundColor:p.sage}]}/>
+          <View style={{flex:1,minWidth:0}}>
+            <Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{item.kind} · {new Date(item.updatedAt*1000).toLocaleDateString()} · {item.events} update{item.events===1?'':'s'}</Text>
+          </View>
+          {item.kind==='Listening'&&item.activeSeconds>0?<Text style={[styles.meta,{color:p.sage,fontWeight:'600'}]}>{Math.max(1,Math.round(item.activeSeconds/60))}m</Text>:null}
+        </View>):<Text style={[styles.empty,{color:p.muted}]}>{session&&sourceFilter!=='local'&&sourceFilter!=='downloaded'?'Activity will appear as you read and listen.':'Local history stays private on this device; current progress and notes are shown below.'}</Text>}
+      </View>
+
+      <Text style={[styles.sectionTitle,{color:p.ink}]}>Annotation hub</Text>
+      <View>
+        {summary.recentAnnotations.length?summary.recentAnnotations.slice(0,12).map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>item.work&&openUnifiedWork(item.work as UnifiedWork)} style={[styles.annotationHubCard,{borderBottomColor:p.line}]}>
+          <View style={styles.profileBreakdownRow}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{item.kind.toUpperCase()} · PAGE {item.page+1}</Text><Text style={[styles.meta,{color:p.muted}]}>{new Date(item.createdAt).toLocaleDateString()}</Text></View>
+          <Text numberOfLines={3} style={[styles.readerQuote,{color:p.ink,borderColor:p.sage}]}>{item.text}</Text>
+          {item.note?<Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.note}</Text>:null}
+          <Text numberOfLines={1} style={[styles.meta,{color:p.sage,fontWeight:'600'}]}>{item.work?.title||'Saved annotation'}</Text>
+        </Pressable>):<Text style={[styles.empty,{color:p.muted}]}>Highlights and notes from the Reader will collect here automatically.</Text>}
+      </View>
+
+      <Text style={[styles.sectionTitle,{color:p.ink}]}>Awards</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightAchievementStrip}>
+        {profileAchievements.slice(0,8).map(item=><View key={item.id} style={styles.insightAchievementEditorial}>
+          <View style={[styles.insightAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:'transparent'}]}>
+            <Text style={[styles.insightAchievementMonogram,{color:item.unlocked?p.gold:p.muted}]}>{item.title.trim().charAt(0).toUpperCase()}</Text>
+          </View>
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink,textAlign:'center'}]}>{item.title}</Text>
+          <Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted,textAlign:'center'}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+        </View>)}
+      </ScrollView>
+    </ScrollView>;
   }
 
   function Profile() {
     const stats=profileStats;
     const unlocked=profileAchievements.filter(item=>item.unlocked).length;
+    const metrics=stats?[
+      ['Works',stats.works],
+      ['In progress',stats.inProgress],
+      ['Completed',stats.completed],
+      ['Favourites',stats.favourites||0],
+      ['Rated',stats.rated||0],
+      ['Awards',unlocked],
+    ]:[];
     return (
-      <ScrollView contentContainerStyle={[styles.content,styles.insightsScreen]}>
-        <View style={styles.pageHeading}>
-          <View>
-            <Text style={[styles.pageEyebrow,{color:p.gold}]}>YOUR READING LIFE</Text>
-            <Text style={[styles.title,{color:p.ink,marginBottom:0}]}>Insights</Text>
-          </View>
+      <ScrollView contentContainerStyle={styles.profileScreen}>
+        <View style={styles.profileHero}>
           <View style={[styles.profileMonogram,{backgroundColor:p.ink}]}>
-            <Text style={[styles.profileMonogramText,{color:p.gold}]}>{(stats?.name || 'A').trim().charAt(0).toUpperCase() || 'A'}</Text>
+            <Text style={[styles.profileMonogramText,{color:p.paper}]}>{(stats?.name||'A').trim().charAt(0).toUpperCase()||'A'}</Text>
+          </View>
+          <View style={{flex:1,gap:3}}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.profileTitle,{color:p.ink}]}>Reader stats</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{stats?.name||'Your reading journey'} · All time</Text>
           </View>
         </View>
-        <Text style={[styles.atlasIntro,{color:p.muted}]}>
-          {stats ? `${stats.completed} completed · ${stats.inProgress} in progress · ${stats.favourites || 0} favourites` : 'Your reading and listening history, in one calm view.'}
-        </Text>
 
-        {profileLoading && session ? <ActivityIndicator accessibilityLabel="Loading profile statistics" /> : null}
-        {!stats && !profileLoading ? <Text style={[styles.empty,{color:p.muted}]}>Profile statistics are unavailable.</Text> : null}
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:10,marginBottom:20}}><Button label="Server & library settings" onPress={()=>setActiveTab('settings')}/><Button label="Activity & goals" onPress={()=>setActiveTab('insights')}/></View>
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:12,marginBottom:22}}>
+          {([{title:'Reading progress',value:String(insightSummary.completed),label:'works finished',items:[{label:'Finished',count:insightSummary.completed,color:p.sage},{label:'Remaining',count:Math.max(0,insightSummary.completedGoal.target-insightSummary.completed),color:p.line}]},{title:'Format breakdown',value:String(profileStats?.works||0),label:'works collected',items:atlas.formats.map(([label,count],index)=>({label,count,color:genreColours[index%genreColours.length]}))}] as const).map(chart=><View key={chart.title} style={{flexGrow:1,flexBasis:260,padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:16}}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{chart.title}</Text><View style={{flexDirection:'row',alignItems:'center',gap:18}}><DataRing size={132} value={chart.value} label={chart.label} items={[...chart.items]} ink={p.ink} muted={p.muted} track={p.line}/><View style={{flex:1,gap:10}}>{chart.items.map(item=><Text key={item.label} style={{color:p.muted,fontSize:12}}><Text style={{color:item.color}}>● </Text>{item.label} · {item.count}</Text>)}</View></View></View>)}
+          <View style={{flexGrow:1,flexBasis:260,padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:14}}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your daily ritual</Text><Text style={{color:p.sage,fontSize:32}}>{ritual.currentStreak} days</Text><Text style={{color:p.muted}}>Current streak · {ritual.bestStreak} personal best</Text><Text style={{color:p.muted}}>{ritual.activeDays} active days · {Math.round(insightSummary.listeningSeconds/60).toLocaleString()} listening minutes</Text><Text style={{color:p.muted,fontSize:12}}>A minute of reading or listening keeps your ritual growing.</Text></View>
+        </View>
+        <View style={{padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:14,marginBottom:24}}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reading rhythm</Text><Text style={[styles.meta,{color:p.muted}]}>Your last 28 days · a minute makes a day</Text>
+          <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{Array.from({length:28},(_,index)=>{const date=new Date();date.setDate(date.getDate()-27+index);const day=localDay(date),active=(ritualDays[day]||0)>=60;return <View key={day} accessible accessibilityLabel={date.toLocaleDateString()+': '+(active?'daily ritual complete':'no completed ritual')} style={{width:'12%',aspectRatio:1,borderRadius:8,backgroundColor:active?p.sage:p.card,borderWidth:1,borderColor:active?p.sage:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:active?p.paper:p.muted,fontSize:11}}>{date.getDate()}</Text></View>})}</View>
+        </View>
+        {profileLoading&&session?<ActivityIndicator accessibilityLabel="Loading profile statistics" color={p.sage}/>:null}
+        {!stats&&!profileLoading?<Text style={[styles.empty,{color:p.muted}]}>Profile statistics are unavailable.</Text>:null}
 
-        {stats ? <>
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Your library</Text>
-          <View style={styles.profileStatsGrid}>
-            {[
-              ['Works',stats.works],
-              ['In progress',stats.inProgress],
-              ['Completed',stats.completed],
-              ['Formats',stats.formats],
-              ['Series',stats.series],
-              ['Favourites',stats.favourites || 0],
-              ['Rated',stats.rated || 0],
-              ['Achievements',unlocked],
-            ].map(([label,value])=><View key={String(label)} style={[styles.profileStatCard,{backgroundColor:p.card,borderColor:p.line}]}>
-              <Text style={[styles.profileStatValue,{color:p.ink}]}>{value}</Text>
-              <Text style={[styles.profileStatLabel,{color:p.muted}]}>{label}</Text>
+        {stats?<>
+          <View style={[styles.profileMetricStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+            {metrics.map(([label,value])=><View key={String(label)} style={[styles.profileMetric,foldLayout&&styles.profileMetricFold,width>=900&&styles.profileMetricWide]}>
+              <Text style={[styles.profileMetricValue,{color:p.ink}]}>{value}</Text>
+              <Text style={[styles.profileMetricLabel,{color:p.muted}]}>{label}</Text>
             </View>)}
           </View>
 
-          {(stats.rated || 0)>0 ? <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
-            <View style={styles.profileBreakdownRow}>
-              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Your ratings</Text>
-              <Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{ratingLabel(stats.averageRating || 0)} average · {stats.favourites || 0} favourite{(stats.favourites||0)===1?'':'s'}</Text>
-            </View>
-          </View> : null}
-          <View style={[styles.profileBreakdown,{backgroundColor:p.card,borderColor:p.line}]}>
-            <View style={styles.profileBreakdownRow}>
-              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Listening</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {stats.inProgressAudio} in progress</Text>
-            </View>
-            <View style={[styles.profileDivider,{backgroundColor:p.line}]} />
-            <View style={styles.profileBreakdownRow}>
-              <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Reading</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {stats.inProgressReading} in progress</Text>
-            </View>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>Your library</Text>
+          {(stats.rated||0)>0?<View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Ratings</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{ratingLabel(stats.averageRating||0)} average · {stats.favourites||0} favourite{(stats.favourites||0)===1?'':'s'}</Text>
+          </View>:null}
+          <View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Listening</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {stats.inProgressAudio} in progress</Text>
+          </View>
+          <View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Reading</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {stats.inProgressReading} in progress</Text>
           </View>
 
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Achievements</Text>
-          <Text style={[styles.empty,{color:p.muted}]}>{unlocked} of {profileAchievements.length} earned. Only verified library and progress data counts.</Text>
-          <View style={{gap:10}}>
-            {profileAchievements.map(item=>{
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Awards</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{unlocked} of {profileAchievements.length}</Text>
+          </View>
+          <View style={{paddingVertical:20,gap:8}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{ritual.currentStreak} day{ritual.currentStreak===1?'':'s'} in a row</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Your daily ritual · best {ritual.bestStreak} days</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Spend a minute reading or listening in Archivist to mark today. Tracked on this device.</Text>
+            <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:ritual.todaySeconds>=60?p.gold:p.sage,width:(ritual.todaySeconds/60*100+'%') as any}]}/></View>
+            <Text style={[styles.meta,{color:ritual.todaySeconds>=60?p.gold:p.muted}]}>{ritual.todaySeconds>=60?'Today is yours':'Today · '+ritual.todaySeconds+' / 60 seconds'}</Text>
+          </View>
+          <View style={styles.filterWrap}>{['All','Daily ritual','Reading','Listening','Library'].map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.filterChip,{minHeight:44,justifyContent:'center',backgroundColor:awardCategory===category?p.card:'transparent'}]}><Text style={{color:awardCategory===category?p.ink:p.muted}}>{category}</Text></Pressable>)}</View>
+          <View style={styles.profileAchievementList}>
+            {profileAchievements.filter(item=>awardCategory==='All'||(item.category||'Library')===awardCategory).map(item=>{
               const ratio=clampProgress(item.progress,item.target);
-              return <View key={item.id} style={[styles.achievementCard,{backgroundColor:p.card,borderColor:item.unlocked?p.gold:p.line}]}>
-                <View style={styles.achievementHeader}>
-                  <View style={{flex:1,gap:2}}>
-                    <Text style={[styles.achievementTitle,{color:p.ink}]}>{item.title}</Text>
-                    <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
-                  </View>
-                  <Text style={[styles.achievementState,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+              return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
+                <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line}]}>
+                  <UiIcon name={item.unlocked?'bookmark':'library'} color={item.unlocked?p.gold:p.muted} size={22}/>
                 </View>
-                <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
-                  <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:`${Math.round(ratio*100)}%`}]} />
+                <View style={{flex:1,gap:3}}>
+                  <View style={styles.profileBreakdownRow}>
+                    <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{item.title}</Text>
+                    <Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
+                  </View>
+                  <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
+                  <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
+                    <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(Math.round(ratio*100)+'%') as any}]} />
+                  </View>
                 </View>
               </View>;
             })}
           </View>
-        </> : null}
+        </>:null}
       </ScrollView>
     );
   }
@@ -2968,7 +3943,7 @@ function Client() {
   function DuplicateReviewPanel() {
     if(!duplicatePanelOpen)return null;
     return (
-      <View style={[styles.duplicatePanel,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.duplicatePanel,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.queueHeader}>
           <View style={{flex:1}}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Duplicate review</Text>
@@ -2992,13 +3967,13 @@ function Client() {
               {group.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.title} — {item.path}</Text>)}
               {!result?<Button label="Verify exact duplicates" tone="quiet" disabled={duplicateLoading} onPress={()=>void verifyDuplicateGroup(group)} />:null}
               {result?<>
-                <Text style={[styles.meta,{color:p.gold,fontWeight:'900'}]}>{result.exact.reduce((n,set)=>n+set.items.length,0)} files confirmed in exact duplicate sets</Text>
-                {result.exact.map(set=><View key={set.sha256} style={[styles.duplicateExact,{borderColor:p.gold}]}>
+                <Text style={[styles.meta,{color:p.sage,fontWeight:'700'}]}>{result.exact.reduce((n,set)=>n+set.items.length,0)} files confirmed in exact duplicate sets</Text>
+                {result.exact.map(set=><View key={set.sha256} style={[styles.duplicateExact,{borderColor:p.sage}]}>
                   <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Exact SHA-256 match · {set.items.length} files</Text>
                   {set.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.muted}]}>• {item.path}</Text>)}
                 </View>)}
                 {result.unique.length?<Text style={[styles.meta,{color:p.muted}]}>{result.unique.length} candidate file{result.unique.length===1?'':'s'} proved unique.</Text>:null}
-                {result.errors.map(item=><Text key={'err-'+item.id} style={[styles.meta,{color:p.gold}]}>File {item.id}: {item.error}</Text>)}
+                {result.errors.map(item=><Text key={'err-'+item.id} style={[styles.meta,{color:p.danger}]}>File {item.id}: {item.error}</Text>)}
               </>:null}
             </View>;
           })}
@@ -3015,9 +3990,9 @@ function Client() {
   }
 
   function LocalSortingPanel() {
-    if(session || !books.length)return null;
+    if(!localBooks.length)return null;
     return (
-      <View style={[styles.setupPanel,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
         <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist copies into the organised layout and leaves originals untouched until you choose to clean up the copy history.</Text>
         <View style={styles.segment}>
@@ -3025,16 +4000,16 @@ function Client() {
             ['author-title','Author / Title'],
             ['author-series-title','Author / Series / Title'],
             ['format-author-title','Format / Author / Title'],
-          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
-        <Button label="Preview visible local items" disabled={visibleBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+        <Button label="Preview visible local items" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
         <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
-        {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
+        {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
         {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
           <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
           <Text style={{color:p.muted}}>From: {item.from}</Text>
-          <Text style={{color:item.state==='conflict'||item.state==='review'?p.gold:p.muted}}>To: {item.to}</Text>
-          <Text style={{color:item.state==='review'?p.gold:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
+          <Text style={{color:item.state==='conflict'?p.danger:item.state==='review'?p.sage:p.muted}}>To: {item.to}</Text>
+          <Text style={{color:item.state==='review'?p.sage:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
         </View>)}
         {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text>:null}
         {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
@@ -3055,21 +4030,21 @@ function Client() {
     const free=offlineStorage?.freeBytes || 0;
     return <View style={{gap:10}}>
       <Text style={[styles.sectionTitle,{color:p.ink}]}>Offline downloads</Text>
-      <View style={[styles.offlineSummary,{backgroundColor:p.card,borderColor:p.line}]}>
+      <View style={[styles.offlineSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={{flex:1}}>
           <Text style={{color:p.ink,fontWeight:'900'}}>{completed.length} downloaded · {formatBytes(used)}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>
             {capacity>0 ? formatBytes(free)+' free of '+formatBytes(capacity) : 'Stored in Archivist app storage'}
           </Text>
-          {partial.length?<Text style={[styles.meta,{color:p.gold}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} · {formatBytes(offlineStorage?.partialBytes||0)} partial data</Text>:null}
-          {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.gold}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
+          {partial.length?<Text style={[styles.meta,{color:p.sage}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} · {formatBytes(offlineStorage?.partialBytes||0)} partial data</Text>:null}
+          {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.danger}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
         </View>
       </View>
       <View style={styles.toolRow}>
         <Button label={offlineStorageBusy?'Checking…':'Refresh storage'} disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void refreshOfflineStorage()} />
         <Button label="Clean up storage" disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void cleanupDownloads()} />
       </View>
-      {offlineProgress?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.gold}]}>{offlineProgress}</Text>:null}
+      {offlineProgress?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{offlineProgress}</Text>:null}
       {partial.map(checkpoint=>{
         const connectedWork=session && checkpoint.server===session.server ? serverWorks.find(work=>work.id===checkpoint.workId) : undefined;
         return <View key={'partial-'+checkpoint.key} style={[styles.sourceRow,{borderColor:p.line}]}>
@@ -3093,377 +4068,759 @@ function Client() {
   }
 
   function Settings() {
+    const connected=!!session;
     return (
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, {color: p.ink}]}>Settings</Text>
-        <Text style={[styles.sectionTitle, {color: p.ink}]}>Appearance</Text>
-        <View style={styles.segment}>
-          {(['system', 'light', 'dark'] as ThemeMode[]).map(mode => (
-            <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={() => void chooseTheme(mode)} style={[styles.segmentItem, {borderColor: p.line, backgroundColor: theme === mode ? p.sage : p.card}]}>
-              <Text style={{color: theme === mode ? p.ivory : p.ink}}>{mode[0].toUpperCase() + mode.slice(1)}</Text>
-            </Pressable>
-          ))}
+      <ScrollView contentContainerStyle={styles.settingsScreen}>
+        <View style={styles.pageHeadingRow}>
+          <View style={{flex:1}}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.settingsTitle,{color:p.ink}]}>Settings</Text>
+            <Text style={[styles.pageSubtitle,{color:p.muted}]}>Your app, library and optional server.</Text>
+          </View>
         </View>
-        <Text style={[styles.sectionTitle,{color:p.ink}]}>Library health</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Review possible duplicate files without making destructive changes.</Text>
-        {(!session || owner)?<Button label="Review duplicates" tone="quiet" onPress={()=>void openDuplicateReview()} />:null}
-        <DuplicateReviewPanel />
-        <LocalSortingPanel />
-        <OfflineDownloadsPanel />
-        <Text style={[styles.sectionTitle, {color: p.ink}]}>Server</Text>
-        {session ? <Text style={[styles.meta, {color: p.muted}]}>{session.server}</Text> : recoverableSession ? (
-          <View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.line}]}>
-            <Text style={{color:p.ink,fontWeight:'800'}}>Saved server offline</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{recoverableSession.server}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Your local library remains available. Retry without re-entering your access key.</Text>
-            <View style={styles.toolRow}>
-              <Button label={busy?'Retrying…':'Retry server'} disabled={busy} onPress={()=>void retrySavedServer()} />
-              <Button label="Forget saved server" disabled={busy} tone="quiet" onPress={()=>void forgetSavedServer()} />
+
+        <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
+          <View style={styles.settingsColumn}>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>APPEARANCE</Text>
+              <View style={styles.settingsRow}>
+                <View style={{flex:1}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>Theme</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>Follow the device or choose a fixed appearance.</Text>
+                </View>
+              </View>
+              <View style={styles.segment}>
+                {(['system','light','dark'] as ThemeMode[]).map(mode=>(
+                  <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}>
+                    <Text style={{color:theme===mode?p.sage:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text>
+                    <View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.sage,opacity:theme===mode?1:0}]}/>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-          </View>
-        ) : <Text style={[styles.meta, {color: p.muted}]}>No server connected. Your phone library works locally.</Text>}
-        {!session && !recoverableSession ? (serverPanelOpen ? <ServerConnect /> : <Button label="Add server" tone="quiet" onPress={() => setServerPanelOpen(true)} />) : null}
-        {owner ? <View style={{gap:10}}>
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Family users</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
-          <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]} />
-          <Button label={busy?'Creating…':'Add user'} disabled={busy||!newUserName.trim()} tone="quiet" onPress={()=>void createFamilyUser()} />
-          {newUserKey?<View style={[styles.serverRecovery,{backgroundColor:p.card,borderColor:p.gold}]}>
-            <Text style={{color:p.ink,fontWeight:'800'}}>User access key — shown once</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Give this key to the family member when they connect the Archivist server.</Text>
-            <Text selectable style={{color:p.gold,fontWeight:'800'}}>{newUserKey}</Text>
-            <Button label="Hide key" tone="quiet" onPress={()=>setNewUserKey('')} />
-          </View>:null}
-          {householdUsers.map(user=><View key={user.id} style={[styles.sourceRow,{borderColor:p.line}]}>
-            <View style={{flex:1}}>
-              <Text style={{color:p.ink,fontWeight:'800'}}>{user.name}</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text>
+
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY HEALTH</Text>
+              <View style={styles.settingsRow}>
+                <View style={{flex:1}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>Duplicate review</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>Find possible copies without deleting or changing files.</Text>
+                </View>
+                {(!session||owner)?<Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Review</Text></Pressable>:null}
+              </View>
+              <DuplicateReviewPanel/>
             </View>
-            {!user.revoked?<Button label="Revoke" tone="quiet" disabled={busy} onPress={()=>void revokeFamilyUser(user.id)} />:null}
-          </View>)}
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Source folders</Text>
-          {sources.map(s=><View key={s.id} style={{gap:6}}><Text style={{color:p.ink}}>{s.space}</Text><Text style={{color:p.muted}}>{s.path}</Text><Text style={{color:p.muted}}>{s.status}</Text><Button label="Scan folder" disabled={busy} tone="quiet" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')}/><Button label="Remove folder" disabled={busy} tone="quiet" onPress={()=>void removeSource(s.id)}/></View>)}
-          <TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
-          <TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
-          <Button label="Add folder" disabled={busy || !folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/>
-          <Text style={[styles.sectionTitle,{color:p.ink}]}>Safe file sorting</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist verifies data before removing originals; unresolved moves block scans until applied or reviewed.</Text>
-          <View style={styles.segment}>
-            {[
-              ['author-title','Author / Title'],
-              ['author-series-title','Author / Series / Title'],
-              ['format-author-title','Format / Author / Title'],
-            ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{borderColor:p.line,backgroundColor:sortTemplate===id?p.sage:p.card}]}><Text style={{color:sortTemplate===id?p.ivory:p.ink,textAlign:'center'}}>{label}</Text></Pressable>)}
+
+            <LocalSortingPanel/>
+            <OfflineDownloadsPanel/>
           </View>
-          <Button label="Preview matching files" disabled={busy || shelfLoading} tone="quiet" onPress={()=>void previewLibrary(false)}/>
-          <Button label="Preview entire library" disabled={busy} tone="quiet" onPress={()=>void previewLibrary(true)}/>
-          <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
-          {moveStatus?<Text style={[styles.meta,{color:p.gold}]}>{moveStatus}</Text>:null}
-        </View>:null}
-        {session ? <Button label="Sign out" tone="gold" onPress={() => void signOut()} /> : null}
+
+          <View style={styles.settingsColumn}>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SERVER</Text>
+              <View style={styles.settingsRow}>
+                <View style={[styles.settingsStatusDot,{backgroundColor:connected?p.sage:recoverableSession?p.danger:p.line}]}/>
+                <View style={{flex:1,minWidth:0}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>{connected?'Connected':recoverableSession?'Server offline':'No server connected'}</Text>
+                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{connected?session?.server:recoverableSession?.server||'Archivist works fully with the library on this device.'}</Text>
+                </View>
+              </View>
+
+              {recoverableSession&&!session?<View style={styles.settingsInlineActions}>
+                <Pressable accessibilityRole="button" onPress={()=>void retrySavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Retrying…':'Retry server'}</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={()=>void forgetSavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Forget</Text></Pressable>
+              </View>:null}
+
+              {!session&&!recoverableSession?(serverPanelOpen?<ServerConnect/>:<Pressable accessibilityRole="button" onPress={()=>setServerPanelOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Add server</Text></Pressable>):null}
+            </View>
+
+            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FAMILY USERS</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
+              <View style={styles.settingsAddRow}>
+                <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                <Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?.38:1}]}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Creating…':'Add user'}</Text></Pressable>
+              </View>
+
+              {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}>
+                <Text style={[styles.bookTitle,{color:p.ink}]}>User access key — shown once</Text>
+                <Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text>
+                <Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Hide key</Text></Pressable>
+              </View>:null}
+
+              {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                <View style={{flex:1}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>{user.name}</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text>
+                </View>
+                {!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Revoke</Text></Pressable>:null}
+              </View>)}
+            </View>:null}
+
+            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SOURCE FOLDERS</Text>
+              {sources.map(s=><View key={s.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                <View style={{flex:1,minWidth:0}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>{s.space}</Text>
+                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{s.path}</Text>
+                  <Text style={[styles.meta,{color:s.status==='ok'?p.sage:p.muted}]}>{s.status}</Text>
+                </View>
+                <View style={styles.settingsRowActions}>
+                  <Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Scan</Text></Pressable>
+                  <Pressable accessibilityRole="button" onPress={()=>void removeSource(s.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Remove</Text></Pressable>
+                </View>
+              </View>)}
+              <View style={styles.settingsAddFolder}>
+                <TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                <TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                <Button label="Add folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/>
+              </View>
+            </View>:null}
+
+            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SAFE FILE SORTING</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist verifies data before removing originals; unresolved moves block scans until applied or reviewed.</Text>
+              <View style={styles.segment}>
+                {[
+                  ['author-title','Author / Title'],
+                  ['author-series-title','Author / Series / Title'],
+                  ['format-author-title','Format / Author / Title'],
+                ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
+              </View>
+              <View style={styles.settingsInlineActions}>
+                <Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Preview matching</Text></Pressable>
+                <Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Preview all</Text></Pressable>
+              </View>
+              <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
+              {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+            </View>:null}
+
+            {session?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Pressable accessibilityRole="button" onPress={()=>void signOut()} style={styles.settingsDangerRow}><Text style={{color:p.danger,fontWeight:'600'}}>Sign out</Text></Pressable>
+            </View>:null}
+          </View>
+        </View>
       </ScrollView>
     );
   }
 
   function CurrentTab() {
-    if (activeTab === 'shelf' || activeTab === 'library') return Shelf();
+    if (activeTab === 'shelf') return Shelf();
+    if (activeTab === 'library') return Library();
     if (activeTab === 'player') return Player();
     if (activeTab === 'reader') return Reader();
     if (activeTab === 'atlas') return Atlas();
-    if (activeTab === 'insights' || activeTab === 'profile') return Profile();
+    if (activeTab === 'insights') return Insights();
+    if (activeTab === 'profile') return Profile();
     return Settings();
   }
 
   if (restoring) {
     return (
-      <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
-        <ActivityIndicator accessibilityLabel="Restoring session" />
+      <SafeAreaView style={[styles.screen,{backgroundColor:p.paper}]}>
+        <View style={styles.restoreScreen}>
+          <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Your reader stats and profile" onPress={()=>setActiveTab('profile')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
+          <View style={styles.restoreBody}>
+            <View style={[styles.restoreKicker,{backgroundColor:p.line}]}/>
+            <View style={[styles.restoreTitle,{backgroundColor:p.card}]}/>
+            <View style={[styles.restoreHero,{backgroundColor:p.card}]}>
+              <View style={[styles.restoreCover,{backgroundColor:p.raised}]}/>
+              <View style={styles.restoreCopy}>
+                <View style={[styles.restoreLine,{backgroundColor:p.line,width:'72%'}]}/>
+                <View style={[styles.restoreLine,{backgroundColor:p.line,width:'54%'}]}/>
+                <View style={[styles.restoreLine,{backgroundColor:p.line,width:'40%'}]}/>
+              </View>
+            </View>
+            <View style={styles.restoreFooter}>
+              <ActivityIndicator accessibilityLabel="Opening Archivist library" color={p.sage}/>
+              <Text style={[styles.meta,{color:p.muted}]}>Opening your library…</Text>
+            </View>
+          </View>
+        </View>
       </SafeAreaView>
     );
   }
 
-  const tabs: Array<{id: Tab; label: string; icon: string}> = [
-    {id: 'shelf', label: 'Shelf', icon: '⌂'},
-    {id: 'library', label: 'Library', icon: '▦'},
-    {id: 'atlas', label: 'Atlas', icon: '✦'},
-    {id: 'insights', label: 'Insights', icon: '◌'},
+  const tabs: Array<{id: Tab; label: string; icon: UiIconName}> = [
+    {id:'shelf',label:'Shelf',icon:'shelf'},
+    {id:'library',label:'Library',icon:'library'},
+    {id:'atlas',label:'Atlas',icon:'atlas'},
+    {id:'insights',label:'Insights',icon:'insights'},
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}>
-      <View style={[styles.appHeader, {borderBottomColor: p.line,backgroundColor:p.paper}]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Open Shelf" onPress={()=>setActiveTab('shelf')} style={styles.brandLockup}>
-          <Text style={[styles.logoSmall, {color: p.ink}]}>Archivist</Text>
-          <Text style={[styles.brandTagline,{color:p.muted}]}>YOUR LIBRARY. YOURS.</Text>
+    <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}><AmbientGlow size={Math.max(480,width)} strength={p.paper==='#000000'?.6:.22}/>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={styles.appHeader}>
+        <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Your reader stats and profile" onPress={()=>setActiveTab('profile')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
+        <Pressable accessibilityRole="button" accessibilityLabel={activeTab==='settings'?'Close Settings':'Settings'} onPress={()=>setActiveTab(activeTab==='settings'?'shelf':'settings')} style={styles.settingsButton}>
+          <UiIcon name={activeTab==='settings'?'close':'settings'} color={p.muted} size={21}/>
         </Pressable>
-        <View style={styles.headerActions}>
-          <View accessibilityLabel={session?'Server connected':'Local library'} style={[styles.connectionDot,{backgroundColor:session?p.sage:p.gold}]} />
-          <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={()=>setActiveTab('settings')} style={({pressed})=>[styles.headerButton,{borderColor:p.line,backgroundColor:p.card},pressed&&styles.cardPressed]}>
-            <Text style={[styles.headerButtonText,{color:p.ink}]}>⚙</Text>
-          </Pressable>
-        </View>
-      </View>
-      {error ? <View style={[styles.errorBanner,{borderColor:p.gold,backgroundColor:p.card}]}>
-        <Text accessibilityRole="alert" style={[styles.error, {color: p.gold,flex:1}]}>{error}</Text>
+      </View>:null}
+      {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger}]}>
+        <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
-          <Text style={{color:p.gold,fontSize:20,fontWeight:'900'}}>×</Text>
+          <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
-      <View style={styles.tabBody}>
+      <Animated.View style={[styles.tabBody,{
+        opacity:tabTransition,
+        transform:[{translateY:tabTransition.interpolate({inputRange:[0,1],outputRange:[reduceMotion?0:6,0]})}],
+      }]}>
         {CurrentTab()}
-      </View>
+      </Animated.View>
       <CelebrationOverlay
+        reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}
         active={celebrating || !!achievementCelebration}
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
       <RatingPromptPanel />
-      {playing ? (
-        <View style={[styles.miniPlayer, {backgroundColor: p.ink}]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={'Open player for '+playing.title}
-            onPress={() => setActiveTab('player')}
-            style={styles.miniPlayerMain}>
-            <MiniArtwork book={playing} />
-            <View style={{flex: 1}}>
-              <Text numberOfLines={1} style={[styles.miniTitle, {color: p.ivory}]}>{playing.title}</Text>
-              <Text style={[styles.miniMeta, {color: '#c8d4d2'}]}>{formatTime(session ? playback?.seconds || 0 : audio.currentTime || 0)} · {(session ? playback?.playing : audio.playing) ? 'Playing' : 'Paused'}</Text>
+      {playing && activeTab!=='player' && activeTab!=='reader' ? (
+        <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>setActiveTab('player')} style={styles.miniPlayerMain}>
+            <MiniArtwork book={playing}/>
+            <View style={{flex:1,minWidth:0}}>
+              <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
+              <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>
             </View>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={(session ? playback?.playing : audio.playing) ? 'Pause '+playing.title : 'Play '+playing.title}
-            hitSlop={6}
-            onPress={() => session ? controller.toggle() : audio.playing ? player.pause() : player.play()}
-            style={styles.miniButton}>
-            <Text style={styles.miniButtonText}>{(session ? playback?.playing : audio.playing) ? 'Pause' : 'Play'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={(playing.source==='server'?playback?.playing:audio.playing)?'Pause '+playing.title:'Play '+playing.title} hitSlop={6} onPress={()=>playing.source==='server'?controller.toggle():audio.playing?player.pause():player.play()} style={[styles.miniButton,{backgroundColor:p.raised}]}>
+            <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
           </Pressable>
         </View>
-      ) : null}
-      <View style={[styles.tabBar, {backgroundColor: p.card, borderTopColor: p.line}]}>
-        {tabs.map(tab => (
-          <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected: activeTab === tab.id}} onPress={() => setActiveTab(tab.id)} style={({pressed})=>[styles.tab,pressed&&{opacity:.68}]}>
-            <View style={[styles.tabIconWrap,activeTab===tab.id&&{backgroundColor:p.raised}]}>
-              <Text style={[styles.tabIcon,{color:activeTab===tab.id?p.sage:p.muted}]}>{tab.icon}</Text>
-            </View>
-            <Text style={[styles.tabText, {color: activeTab === tab.id ? p.ink : p.muted}]}>{tab.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      ):null}
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
+        {tabs.map(tab=>{
+          const selected=activeTab===tab.id;
+          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
+            <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:p.sage,opacity:selected?1:0}]}/>
+            <UiIcon name={tab.icon} color={selected?p.sage:p.muted} size={22}/>
+            <Text style={[styles.tabText,{color:selected?p.sage:p.muted}]}>{tab.label}</Text>
+          </Pressable>;
+        })}
+      </View>:null}
     </SafeAreaView>
   );
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({ArchivistEditorial: require('./assets/fonts/LibreCaslonText.ttf')});
+  const system = useColorScheme();
+  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:system==='dark'?'#000000':'#FFFFFF'}}><ActivityIndicator color="#47736F" /></View>;
   return <SafeAreaProvider><Client /></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
+  restoreScreen: {flex:1,paddingHorizontal:18,paddingTop:8},
+  restoreBody: {flex:1,paddingTop:28,gap:18,maxWidth:760,width:'100%',alignSelf:'center'},
+  restoreKicker: {width:68,height:8,borderRadius:4,opacity:.6},
+  restoreTitle: {width:'42%',maxWidth:280,height:34,borderRadius:8,opacity:.72},
+  restoreHero: {minHeight:180,borderRadius:18,padding:18,flexDirection:'row',alignItems:'center',gap:18,opacity:.8},
+  restoreCover: {width:104,aspectRatio:1,borderRadius:8},
+  restoreCopy: {flex:1,gap:12},
+  restoreLine: {height:8,borderRadius:4,opacity:.72},
+  restoreFooter: {flexDirection:'row',alignItems:'center',gap:10,marginTop:4},
+
   login: {flexGrow: 1, justifyContent: 'center', padding: 24, gap: 14},
-  logo: {fontFamily: 'serif', fontSize: 46, textAlign: 'center'},
-  logoSmall: {fontFamily: 'serif', fontSize: 26},
+  logo: {fontFamily: 'ArchivistEditorial', fontSize: 46, textAlign: 'center'},
+  logoSmall: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,fontWeight:'500'},
   tagline: {fontSize: 12, letterSpacing: 4, textAlign: 'center', fontWeight: '700'},
   loginCopy: {fontSize: 16, lineHeight: 23, textAlign: 'center', marginBottom: 8},
-  appHeader: {minHeight: 68, paddingHorizontal: 20, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
-  brandLockup: {gap:1},
-  brandTagline: {fontSize:8,fontWeight:'800',letterSpacing:2.2},
-  headerActions: {flexDirection:'row',alignItems:'center',gap:10},
-  connectionDot: {width:7,height:7,borderRadius:4},
-  headerButton: {width:40,height:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center'},
-  headerButtonText: {fontSize:17,fontWeight:'600'},
-  pageHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:16},
-  pageEyebrow: {fontSize:10,fontWeight:'900',letterSpacing:2.4,marginBottom:3},
-  sectionHeadingRow: {flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
-  sectionLink: {fontSize:13,fontWeight:'800'},
-  cardPressed: {opacity:.72,transform:[{scale:.985}]},
-  shelfEmpty: {borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:18,gap:10},
-  browseLibrary: {borderWidth:StyleSheet.hairlineWidth,borderRadius:14,paddingHorizontal:16,paddingVertical:14,flexDirection:'row',alignItems:'center',gap:14},
-  browseLibraryTitle: {fontSize:15,fontWeight:'800'},
-  browseArrow: {fontSize:30,fontWeight:'300',lineHeight:30},
-  shelfSignature: {alignItems:'center',gap:9,paddingVertical:10},
-  shelfRule: {width:26,height:1},
-  shelfSignatureText: {fontFamily:'serif',fontSize:13,fontStyle:'italic'},
-  headerMeta: {fontSize: 13},
-  content: {padding: 20, gap: 18},
-  setupPanel: {borderWidth: 1, borderRadius: 8, padding: 14, gap: 12},
+  serverConnect: {gap:10,paddingVertical:2},
+  serverConnectTitle: {fontFamily:'sans-serif-medium',fontSize:20,lineHeight:25,fontWeight:'500'},
+  serverConnectCopy: {fontSize:13,lineHeight:19,maxWidth:560},
+  appHeader: {height:52,paddingHorizontal:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  headerMeta: {fontSize:12,fontWeight:'500'},
+  headerSettings: {borderWidth:0},
+  settingsButton: {width:44,height:44,alignItems:'center',justifyContent:'center',borderRadius:10},
+  content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
+  setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width: 190, borderRightWidth: StyleSheet.hairlineWidth, padding: 14, gap: 10},
-  libraryRailTitle: {fontSize: 13, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4},
-  libraryRailList: {gap: 8},
-  libraryRailAdd: {paddingVertical: 12, paddingHorizontal: 8},
-  libraryChoice: {borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
-  libraryChoiceVertical: {borderRadius: 8, minHeight: 44},
-  libraryChips: {gap: 8, paddingBottom: 2},
-  libraryChipsRow: {flexDirection: 'row', gap: 8},
-  librarySummary: {borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center'},
-  reviewBanner: {borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', gap: 10, alignItems: 'center'},
-  shelfSection: {gap:8},
-  continueRow: {gap:14,paddingRight:20},
-  continueCard: {width:142,gap:7},
+  libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:24,paddingBottom:20,gap:6},
+  libraryRailFold: {width:164,paddingHorizontal:12,paddingTop:20},
+  libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
+  libraryRailList: {gap:2},
+  libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
+  libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
+  libraryChoiceVertical: {borderRadius: 10, minHeight: 44},
+  libraryChipsScroll: {flexGrow:0,minHeight:46,maxHeight:50},
+  libraryChips: {gap:8,paddingVertical:2,minHeight:46},
+  libraryChipsRow: {flexDirection: 'row', gap: 20},
+  librarySpaceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
+  librarySpaceTabVertical: {minHeight:42,paddingHorizontal:10},
+  librarySpaceText: {fontSize:13},
+  librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
+  librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
+  librarySummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',gap:12,alignItems:'center'},
+  reviewBanner: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,minHeight:48,paddingVertical:8,paddingHorizontal:0,flexDirection:'row',gap:12,alignItems:'center'},
+  reviewBannerCopy: {flex:1,minWidth:0,flexDirection:'row',alignItems:'baseline',gap:10},
+  reviewBannerTitle: {fontSize:12.5,lineHeight:18,fontWeight:'600'},
+  reviewBannerMeta: {fontSize:12,lineHeight:17,flexShrink:1},
+  reviewBannerAction: {fontSize:12.5,lineHeight:18,fontWeight:'600'},
+  shelfSection: {gap:10},
+  continueRow: {gap:12,paddingRight:6},
+  continueCard: {width:132,gap:6},
   continueTitle: {fontSize:14,fontWeight:'800'},
-  seriesRow: {gap:8,paddingRight:6},
-  seriesChip: {minWidth:140,maxWidth:220,borderWidth:1,borderRadius:12,paddingHorizontal:12,paddingVertical:10,gap:2},
+  seriesChip: {minWidth:140,maxWidth:220,borderWidth:0,borderRadius:12,paddingHorizontal:14,paddingVertical:12,gap:2},
   scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
-  onboardingCard: {borderWidth: 1, borderRadius: 16, padding: 16, gap: 14},
-  onboardingEyebrow: {fontSize: 11, fontWeight: '900', letterSpacing: 2},
-  onboardingStep: {flexDirection: 'row', gap: 12, alignItems: 'flex-start'},
-  onboardingNumber: {width: 28, height: 28, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', color: '#f8f7f2', fontWeight: '900', overflow: 'hidden'},
-  onboardingStepTitle: {fontSize: 15, fontWeight: '800', marginBottom: 2},
-  sourceRow: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 4},
+  onboardingCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
+  onboardingEyebrow: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.5},
+  onboardingTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:25,fontWeight:'500',letterSpacing:-.15},
+  onboardingIntro: {fontSize:13,lineHeight:19,maxWidth:560},
+  onboardingStep: {flexDirection:'row',gap:12,alignItems:'flex-start',paddingVertical:2},
+  onboardingNumber: {width:24,fontSize:11,lineHeight:18,fontWeight:'700',letterSpacing:.7,textAlign:'left'},
+  onboardingStepTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600',marginBottom:2},
+  sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:4},
   tabBody: {flex: 1},
-  title: {fontFamily: 'serif', fontSize: 38, lineHeight:44, letterSpacing:-0.6, marginBottom: 2},
-  sectionTitle: {fontFamily:'serif',fontSize: 20, fontWeight: '700', marginTop: 10},
-  input: {padding: 14, borderWidth: 1, borderRadius: 8, fontSize: 16},
-  button: {backgroundColor: '#397076', borderRadius: 8, paddingHorizontal: 14, minHeight: 46, justifyContent: 'center', alignItems: 'center'},
-  buttonGold: {backgroundColor: '#c6a374'},
-  buttonQuiet: {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#397076'},
-  buttonText: {color: '#f8f7f2', fontSize: 15, fontWeight: '700'},
-  buttonQuietText: {color: '#397076'},
+  title: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',marginBottom:2,letterSpacing:-.4},
+  sectionTitle: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:23,fontWeight:'500',marginTop:8,letterSpacing:-0.1},
+  input: {paddingHorizontal:14,paddingVertical:12,borderWidth:0,borderRadius:12,fontSize:16},
+  button: {backgroundColor: '#47736F', borderRadius: 12, paddingHorizontal: 18, minHeight: 48, justifyContent: 'center', alignItems: 'center'},
+  buttonGold: {backgroundColor:'#B99A68'},
+  buttonQuiet: {backgroundColor:'transparent',borderWidth:0},
+  buttonDanger: {backgroundColor:'transparent',borderWidth:0},
+  buttonText: {color:'#FFFFFF',fontSize:15,lineHeight:20,fontWeight:'600'},
+  buttonQuietText: {color:'#47736F'},
+  buttonDangerText: {color:'#A94F4F'},
+  personalControls: {gap:5,marginTop:7},
+  personalControlLabel: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.2},
+  personalControlRow: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},
+  ratingStars: {flexDirection:'row',marginLeft:-6},
+  ratingStarButton: {width:44,height:44,alignItems:'center',justifyContent:'center'},
+  favouriteTextAction: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
+
   error: {paddingHorizontal: 16, paddingVertical: 8},
-  errorBanner: {marginHorizontal:12,marginTop:8,borderWidth:1,borderRadius:10,flexDirection:'row',alignItems:'center'},
+  errorBanner: {marginHorizontal:18,marginTop:4,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,flexDirection:'row',alignItems:'center'},
   errorDismiss: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
-  book: {flex: 1, maxWidth: '50%', paddingHorizontal: 7, paddingVertical: 10, gap: 7},
-  workQuickRow: {flexDirection:'row',flexWrap:'wrap',gap:6,marginTop:1},
-  workQuickAction: {borderWidth:StyleSheet.hairlineWidth,borderRadius:999,paddingHorizontal:9,minHeight:30,justifyContent:'center',maxWidth:'100%'},
-  workQuickActionText: {fontSize:11,fontWeight:'800'},
-  cover: {aspectRatio: 2 / 3, borderRadius: 10, justifyContent: 'space-between', padding: 12, overflow: 'hidden'},
+  book: {flex: 1, maxWidth: '50%', padding: 8, gap: 7},
+  cover: {aspectRatio:2/3,borderRadius:10,overflow:'hidden',shadowColor:'#000',shadowOpacity:.08,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:2},
   coverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
   coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
   coverLargeSquare: {width: 230, height: 230},
-  coverFormat: {fontSize: 11, fontWeight: '900', letterSpacing: 1.6},
-  coverTitle: {fontFamily: 'serif', fontSize: 20},
-  bookTitle: {fontSize: 15, fontWeight: '700'},
+  coverFallback: {flex:1,padding:10,justifyContent:'space-between'},
+  coverFallbackMark: {fontFamily:'serif',fontSize:20,lineHeight:24,opacity:.5},
+  coverFallbackCopy: {gap:4},
+  coverFormat: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.4},
+  coverTitle: {fontFamily:'sans-serif-medium',fontSize:13,lineHeight:17,fontWeight:'500'},
+  coverTitleLarge: {fontSize:16,lineHeight:21},
+  bookTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600'},
   reviewPill: {alignSelf:'flex-start', borderWidth:1, borderRadius:999, paddingHorizontal:8, paddingVertical:3},
-  editorCard: {borderWidth:1,borderRadius:14,padding:14,gap:10},
-  serverRecovery: {borderWidth:1,borderRadius:14,padding:14,gap:10},
-  offlineSummary: {borderWidth:1,borderRadius:14,padding:14,flexDirection:'row',gap:12,alignItems:'center'},
-  ratingPromptBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:24},
-  ratingPromptCard: {width:'100%',maxWidth:420,borderWidth:1,borderRadius:18,padding:18,gap:10},
+  editorCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
+  serverRecovery: {borderWidth:0,borderRadius:14,padding:16,gap:10},
+  offlineSummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',gap:12,alignItems:'center'},
+  ratingPromptBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',alignItems:'center',justifyContent:'center',padding:24},
+  ratingPromptCard: {width:'100%',maxWidth:400,borderWidth:0,borderRadius:18,padding:18,gap:9},
   modalKeyboard: {flex:1},
-  modalBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.48)',alignItems:'center',justifyContent:'center',padding:20},
+  modalBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',alignItems:'center',justifyContent:'center',padding:20},
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
-  modalCard: {width:'100%',maxWidth:520,borderWidth:1,borderRadius:18,padding:18,gap:10},
+  modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:18,gap:9},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {padding: 18, gap: 16, paddingBottom: 120, maxWidth: 680, width:'100%', alignSelf:'center'},
-  playerHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between'},
-  playerEyebrow: {fontSize:11,fontWeight:'900',letterSpacing:2},
-  playerArtworkFrame: {alignSelf:'center',borderWidth:1,borderRadius:24,padding:10,shadowColor:'#000',shadowOpacity:0.12,shadowRadius:18,elevation:5},
-  playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:10},
-  nowTitle: {fontFamily: 'serif', fontSize: 30, textAlign: 'center', marginTop: 4},
-  playerByline: {fontSize:14,lineHeight:20,textAlign:'center'},
-  playerChapter: {fontSize:13,fontWeight:'800',textAlign:'center',marginTop:3},
+  playerScreen: {paddingHorizontal:18,paddingTop:12,gap:14,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
+  livingBookStage: {height:220,width:276,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
+  livingBookShadow: {position:'absolute',width:202,height:28,borderRadius:101,top:178,transform:[{scaleY:.3}],shadowColor:'#000',shadowOpacity:.16,shadowRadius:18,elevation:4},
+  livingBookSpread: {width:216,height:168,position:'relative'},
+  livingBookStaticPage: {position:'absolute',top:2,width:106,height:162,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,paddingTop:14,gap:7,overflow:'hidden'},
+  livingBookLeftPage: {left:2,borderTopLeftRadius:10,borderBottomLeftRadius:10,borderTopRightRadius:3,borderBottomRightRadius:3,alignItems:'center'},
+  livingBookRightPage: {left:108,borderTopRightRadius:10,borderBottomRightRadius:10,borderTopLeftRadius:3,borderBottomLeftRadius:3},
+  livingBookInnerSpine: {position:'absolute',right:0,top:8,bottom:8,width:3,borderRadius:2},
+  livingBookPageLine: {height:3,borderRadius:3,opacity:.8},
+  livingBookTurningPage: {position:'absolute',left:108,top:2,width:106,height:162,borderWidth:StyleSheet.hairlineWidth,borderTopRightRadius:10,borderBottomRightRadius:10,paddingHorizontal:12,paddingTop:24,gap:10,zIndex:4,backfaceVisibility:'hidden'},
+  livingBookFrontCover: {position:'absolute',left:108,top:0,width:106,zIndex:7,shadowColor:'#000',shadowOpacity:.20,shadowRadius:14,shadowOffset:{width:0,height:7},elevation:7,backfaceVisibility:'hidden'},
+  livingBookCoverArt: {width:106,overflow:'hidden',borderRadius:8},
+  livingBookCentreLine: {position:'absolute',left:106,top:7,bottom:7,width:2,zIndex:8,opacity:.5},
+  livingBookInsetArt: {width:76,marginTop:2,shadowColor:'#000',shadowOpacity:.10,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  livingBookPageCaption: {fontSize:7,lineHeight:9,fontWeight:'700',letterSpacing:.9,marginTop:1},
+  livingBookPageKicker: {fontSize:6,lineHeight:8,fontWeight:'700',letterSpacing:1.0,marginTop:6},
+  livingBookPageTitle: {fontFamily:'sans-serif-medium',fontSize:10,lineHeight:13,fontWeight:'500',textAlign:'center',marginTop:2},
+  livingBookPageRule: {height:1,width:42,alignSelf:'center',marginVertical:2},
+  livingBookPageAuthor: {fontSize:7,lineHeight:10,textAlign:'center'},
+  livingBookPageQuote: {fontFamily:'serif',fontSize:8,lineHeight:11,fontStyle:'italic',textAlign:'center',marginTop:3},
+  livingBookPageNumber: {position:'absolute',bottom:6,alignSelf:'center',fontSize:6,lineHeight:8,fontWeight:'600',letterSpacing:.6},
+  playerHeading: {minHeight:28,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  playerAdaptive: {gap:16},
+  playerAdaptiveWide: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:32,paddingVertical:2},
+  playerHeroColumn: {gap:8,alignItems:'center',flexShrink:1,maxWidth:360},
+  playerControlColumn: {flex:1,minWidth:250,maxWidth:500,gap:12,justifyContent:'center'},
+  playerEyebrow: {fontSize:11,lineHeight:14,fontWeight:'700',letterSpacing:1.6},
+  playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},
+  playerIdentity: {alignItems:'center',gap:4,paddingHorizontal:8,maxWidth:620},
+  playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:8,minHeight:20},
+  playerSourcePill: {borderWidth:0,minHeight:28,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
+  playerStatusText: {fontSize:11,lineHeight:16},
+  playerStatusAction: {minHeight:36,justifyContent:'center',paddingHorizontal:2},
+  nowTitle: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500',textAlign:'center',marginTop:0,letterSpacing:-.2,maxWidth:620},
+  nowTitleCompact: {fontSize:22,lineHeight:27},
+  nowTitleFold: {fontSize:24,lineHeight:29},
+  playerByline: {fontSize:13,lineHeight:18,textAlign:'center'},
+  playerChapter: {fontSize:12,lineHeight:17,fontWeight:'600',textAlign:'center',marginTop:2},
   progressHitArea: {paddingVertical:10},
-  progressTrack: {height: 7, borderRadius: 999, overflow: 'hidden'},
-  progressFill: {height: 7, borderRadius: 999},
-  timeRow: {flexDirection: 'row', justifyContent: 'space-between',alignItems:'center',marginTop:-8},
-  playerTime: {fontSize:13,fontVariant:['tabular-nums'],fontWeight:'700'},
-  transport: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22,marginVertical:4},
-  skipButton: {width:64,height:64,borderRadius:32,borderWidth:1,alignItems:'center',justifyContent:'center'},
+  progressTrack: {height:4,borderRadius:999,overflow:'hidden'},
+  progressFill: {height:4,borderRadius:999},
+  timeRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:-6},
+  playerTime: {fontSize:12,fontVariant:['tabular-nums'],fontWeight:'500'},
+  transport: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:28,marginVertical:6},
+  skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center',position:'relative'},
+  skipNumber: {position:'absolute',fontSize:9,lineHeight:11,fontWeight:'700',fontVariant:['tabular-nums']},
   skipMain: {fontSize:17,fontWeight:'900',lineHeight:19},
   skipMeta: {fontSize:10,fontWeight:'700',textTransform:'uppercase'},
-  playButton: {width: 82, height: 82, borderRadius: 41, alignItems: 'center', justifyContent: 'center',shadowColor:'#000',shadowOpacity:0.18,shadowRadius:12,elevation:5},
+  playButton: {width:80,height:80,borderRadius:40,alignItems:'center',justifyContent:'center',shadowColor:'#000',shadowOpacity:.17,shadowRadius:16,shadowOffset:{width:0,height:8},elevation:5},
   playButtonGlyph: {color:'#f8f7f2',fontSize:24,fontWeight:'900',lineHeight:28},
   playButtonCaption: {color:'#f8f7f2',fontSize:10,fontWeight:'800',textTransform:'uppercase',letterSpacing:0.6},
   playButtonText: {color: '#f8f7f2', fontSize: 17, fontWeight: '800'},
-  playerTools: {borderWidth:1,borderRadius:14,flexDirection:'row',overflow:'hidden'},
-  playerTool: {flex:1,minHeight:68,alignItems:'center',justifyContent:'center',padding:8},
-  playerToolBorder: {borderLeftWidth:StyleSheet.hairlineWidth},
-  playerToolValue: {fontSize:16,fontWeight:'900'},
-  playerToolLabel: {fontSize:11,fontWeight:'700',marginTop:2},
-  playerPanel: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  playerTools: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row',justifyContent:'space-between',gap:2,paddingTop:7},
+  playerTool: {flex:1,minHeight:56,alignItems:'center',justifyContent:'center',paddingHorizontal:2,paddingVertical:5,gap:3},
+  playerToolBorder: {borderLeftWidth:0},
+  playerToolIconWrap: {minHeight:24,alignItems:'center',justifyContent:'center',position:'relative'},
+  playerToolBadge: {position:'absolute',right:-12,top:-5,fontSize:9,fontWeight:'600'},
+  playerSpeedGlyph: {fontSize:16,lineHeight:22,fontWeight:'700',fontVariant:['tabular-nums']},
+  playerToolValue: {fontSize:16,fontWeight:'700'},
+  playerToolLabel: {fontSize:10,lineHeight:13,fontWeight:'500',marginTop:0},
+  playerPanel: {borderWidth:0,borderRadius:16,padding:16,gap:12},
   playerPanelTitle: {fontSize:16,fontWeight:'900'},
-  playerNotice: {borderWidth:1,borderRadius:10,padding:12},
+  playerNotice: {borderWidth:0,borderRadius:12,padding:12},
   chapterRow: {flexDirection:'row',alignItems:'center',gap:10,padding:10,borderRadius:10},
   chapterIndex: {width:24,textAlign:'center',fontWeight:'900'},
   queueHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   queueBook: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',gap:10,alignItems:'center'},
   queueActions: {flexDirection:'row',gap:14,alignItems:'center'},
-  playerEmpty: {borderWidth:1,borderRadius:16,padding:18,gap:12},
+  queueIconButton: {width:44,height:44,alignItems:'center',justifyContent:'center'},
+  iconButton: {width:44,height:44,alignItems:'center',justifyContent:'center',borderRadius:19},
+  structureRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:50,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
+  structureChapter: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,gap:8},
+  boundaryRow: {flexDirection:'row',gap:12,flexWrap:'wrap'},
+  playerEmpty: {borderWidth:0,padding:32,gap:10,alignItems:'center',justifyContent:'center',minHeight:260,maxWidth:420,alignSelf:'center'},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
-  readerScreen: {flex: 1,position:'relative'},
-  readerBar: {minHeight: 54, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center',paddingRight:72},
-  readerBack: {width: 72, minHeight:54, alignItems: 'center', justifyContent: 'center'},
-  readerAction: {fontWeight: '700'},
+  readerScreen: {flex:1,position:'relative'},
+  readerBar: {position:'absolute',left:0,right:0,top:0,zIndex:25,minHeight:44,flexDirection:'row',alignItems:'center',paddingHorizontal:2,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.16)'},
+  readerToolsButton: {width:44,minHeight:44,alignItems:'center',justifyContent:'center'},
+  searchRow:{flexDirection:'row',alignItems:'center',gap:6},
+  filterPill:{borderWidth:0,borderRadius:10,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  readerSheetHeader: {flexDirection:'row',alignItems:'center',gap:12,paddingBottom:8},
+  readerSheetClose: {width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center'},
+  readerSearchInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:14,fontSize:15},
+  readerSearchButton: {width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center'},
+  readerToolBlock: {gap:10,paddingVertical:14,borderTopWidth:StyleSheet.hairlineWidth},
+  readerAppearanceHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  readerScaleControl: {flexDirection:'row',alignItems:'center',gap:6},
+  readerScaleButton: {width:44,height:44,borderRadius:19,alignItems:'center',justifyContent:'center'},
+  readerScaleValue: {minWidth:48,textAlign:'center',fontSize:13,fontVariant:['tabular-nums'],fontWeight:'600'},
+  readerThemeTabs: {flexDirection:'row',gap:4},
+  readerThemeTab: {flex:1,minHeight:40,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
+  readerThemeMarker: {position:'absolute',left:14,right:14,bottom:3,height:2,borderRadius:2},
+  readerToolSectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  readerBookmarkAction: {minHeight:40,flexDirection:'row',alignItems:'center',gap:7,paddingHorizontal:4},
+  readerSavedAction: {minHeight:38,paddingHorizontal:5,alignItems:'center',justifyContent:'center'},
+  readerSavedRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:12},
+  readerQuote: {borderLeftWidth:3,paddingLeft:10,fontStyle:'italic',lineHeight:20},
+  readerBack: {width:44,minHeight:44,alignItems:'center',justifyContent:'center'},
+  readerAction: {fontWeight:'600'},
+  readerToolGlyph: {fontFamily:'sans-serif-medium',fontSize:16,fontWeight:'500'},
   readerHeading: {flex:1,alignItems:'center',justifyContent:'center',minWidth:0},
-  readerTitle: {width:'100%', textAlign: 'center', fontWeight: '700'},
-  readerFormat: {fontSize:10,fontWeight:'800',letterSpacing:1.1,textTransform:'uppercase',marginTop:1},
-  readerLoading: {flex:1,alignItems:'center',justifyContent:'center',gap:10,padding:24},
-  readerFailure: {margin:18,borderWidth:1,borderRadius:16,padding:18,gap:12},
-  readerOverlay: {position:'absolute',top:54,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:0.94},
-  readerErrorOverlay: {position:'absolute',left:18,right:18,top:82,zIndex:30,borderWidth:1,borderRadius:16,padding:18,gap:12},
-  atlasScreen: {paddingBottom:120},
-  atlasIntro: {fontFamily:'serif',fontSize:17,lineHeight:25,maxWidth:620},
-  atlasUniverse: {alignSelf:'center',borderWidth:StyleSheet.hairlineWidth,borderRadius:28,overflow:'hidden',position:'relative',marginVertical:4},
-  atlasLine: {position:'absolute',height:StyleSheet.hairlineWidth,opacity:.75},
-  atlasCenterNode: {position:'absolute',width:104,height:104,borderRadius:52,borderWidth:1.5,alignItems:'center',justifyContent:'center',zIndex:4},
-  atlasCenterMark: {fontFamily:'serif',fontSize:27,fontWeight:'800',lineHeight:29},
-  atlasCenterTitle: {fontFamily:'serif',fontSize:16,fontWeight:'700'},
-  atlasCenterCount: {fontSize:10,fontWeight:'700',marginTop:2},
-  atlasUniverseNode: {position:'absolute',borderWidth:StyleSheet.hairlineWidth,borderRadius:18,paddingHorizontal:10,paddingVertical:8,justifyContent:'center',zIndex:5,shadowColor:'#000',shadowOpacity:.06,shadowRadius:8,elevation:2},
-  atlasNodeAccent: {position:'absolute',left:9,top:9,width:5,height:5,borderRadius:3},
-  atlasNodeKind: {fontSize:8,fontWeight:'900',letterSpacing:1,textTransform:'uppercase',paddingLeft:9},
-  atlasNodeValue: {fontFamily:'serif',fontSize:13,fontWeight:'700',marginTop:1},
-  atlasNodeCount: {fontSize:9,fontWeight:'700',marginTop:1},
-  atlasEmptyUniverse: {position:'absolute',left:32,right:32,top:'35%',alignItems:'center',gap:7},
-  atlasChipSection: {gap:9},
-  atlasExploreRow: {gap:8,paddingRight:20},
-  atlasExploreChip: {minWidth:110,maxWidth:190,borderWidth:StyleSheet.hairlineWidth,borderRadius:999,paddingHorizontal:13,paddingVertical:9,flexDirection:'row',alignItems:'center',gap:8},
-  atlasExploreName: {fontSize:13,fontWeight:'800',flexShrink:1},
-  atlasExploreCount: {fontSize:11,fontWeight:'800'},
-  atlasGroup: {borderWidth: 1, borderRadius: 8, padding: 12, gap: 10},
+  readerTitle: {width:'100%',textAlign:'center',fontSize:12.5,lineHeight:17,fontWeight:'600'},
+  readerFormat: {fontSize:8.5,lineHeight:11,fontWeight:'600',letterSpacing:1.1,textTransform:'uppercase',marginTop:0},
+  readerLoading: {flex:1,alignItems:'center',justifyContent:'center',gap:18,padding:24},
+  readerLoadingPage: {width:'72%',maxWidth:360,aspectRatio:.72,borderWidth:StyleSheet.hairlineWidth,borderRadius:8,paddingHorizontal:24,paddingTop:34,gap:14},
+  readerLoadingLine: {height:3,borderRadius:2},
+  readerLoadingStatus: {flexDirection:'row',alignItems:'center',gap:10},
+  readerEmpty: {flex:1,alignItems:'center',justifyContent:'center',gap:10,padding:32,maxWidth:420,width:'100%',alignSelf:'center'},
+  readerFailure: {margin:28,borderWidth:0,padding:22,gap:12,maxWidth:520,alignSelf:'center'},
+  readerOverlay: {position:'absolute',top:0,left:0,right:0,bottom:0,zIndex:20,alignItems:'center',justifyContent:'center',gap:10,opacity:.96},
+  readerErrorOverlay: {position:'absolute',left:24,right:24,top:64,zIndex:30,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
+  atlasGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingVertical:16,gap:10},
   atlasRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36},
   atlasText: {fontWeight: '700'},
-  atlasBarTrack: {flex: 1, height: 8, borderRadius: 999, overflow: 'hidden'},
-  atlasBarFill: {height: 8, borderRadius: 999},
-  segment: {flexDirection: 'row', gap: 8},
-  segmentItem: {flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center'},
-  miniPlayer: {minHeight: 66, marginHorizontal: 12, marginBottom: 8, borderRadius: 8, padding: 8, flexDirection: 'row', alignItems: 'center', gap: 8},
-  miniPlayerMain: {flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:10,padding:2},
-  miniCover: {width: 42, height: 42, borderRadius: 5, alignItems: 'center', justifyContent: 'center'},
+  atlasBarTrack: {flex:1,height:4,borderRadius:2,overflow:'hidden'},
+  atlasBarFill: {height:4,borderRadius:2},
+  segment: {flexDirection:'row',gap:4},
+  segmentItem: {flex:1,borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center',position:'relative'},
+  segmentMarker: {position:'absolute',left:12,right:12,bottom:3,height:2,borderRadius:2},
+  miniPlayer: {minHeight:64,marginHorizontal:12,marginBottom:8,borderRadius:18,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingVertical:5,flexDirection:'row',alignItems:'center',gap:8},
+  miniPlayerMain: {flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:9,padding:0},
+  miniCover: {width:34,height:34,borderRadius:5,alignItems:'center',justifyContent:'center',overflow:'hidden'},
   miniCoverImage: {position:'absolute',top:0,right:0,bottom:0,left:0,width:'100%',height:'100%'},
-  miniCoverLabel: {color:'#0f2a36',fontSize:8,fontWeight:'900',letterSpacing:0.6},
-  miniTitle: {fontWeight: '800'},
-  miniMeta: {fontSize: 12},
-  miniButton: {minWidth:64,minHeight:44,paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: '#f8f7f2',alignItems:'center',justifyContent:'center'},
-  miniButtonText: {color: '#f8f7f2', fontWeight: '700'},
-  tabBar: {minHeight: 70, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row',paddingHorizontal:8,paddingTop:5},
-  tab: {flex: 1, alignItems: 'center', justifyContent: 'center',gap:1},
-  tabIconWrap: {width:34,height:26,borderRadius:13,alignItems:'center',justifyContent:'center'},
-  tabIcon: {fontSize:16,fontWeight:'700'},
-  tabText: {fontSize: 10, fontWeight: '800',letterSpacing:.2},
+  miniCoverLabel: {color:'#FFFFFF',fontSize:8,fontWeight:'700',letterSpacing:.7},
+  miniTitle: {fontSize:12.5,lineHeight:17,fontWeight:'600'},
+  miniMeta: {fontSize:10.5,lineHeight:14},
+  miniButton: {width:40,height:40,borderRadius:10,borderWidth:0,alignItems:'center',justifyContent:'center'},
+  miniButtonText: {fontWeight:'600'},
+  tabBar: {height:60,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
+  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:2,position:'relative'},
+  tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
+  tabText: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
-  celebrationParticle: {position:'absolute', fontSize:28, color:'#c6a374', fontWeight:'900'},
-  celebrationBadge: {backgroundColor:'#0f2a36', borderRadius:18, paddingHorizontal:20, paddingVertical:16, alignItems:'center', shadowColor:'#000', shadowOpacity:0.22, shadowRadius:14, elevation:10},
-  celebrationTitle: {color:'#f8f7f2', fontSize:20, fontWeight:'900'},
-  celebrationCopy: {color:'#c8d4d2', fontSize:13, marginTop:3},
-  insightsScreen: {paddingBottom:120},
-  profileHero: {borderWidth:0,borderRadius:0,padding:0,flexDirection:'row',alignItems:'center',gap:14},
+  celebrationParticle: {position:'absolute',fontSize:28,color:'#B99A68',fontWeight:'700'},
+  celebrationBadge: {backgroundColor:'#111111',borderRadius:18,width:'86%',maxWidth:400,paddingHorizontal:24,paddingVertical:28,alignItems:'center',shadowColor:'#000',shadowOpacity:.18,shadowRadius:14,elevation:8},
+  celebrationTitle: {color:'#F5F5F5',fontSize:18,lineHeight:23,fontWeight:'600'},
+  celebrationCopy: {color:'#A0A0A0',fontSize:12.5,lineHeight:18,marginTop:3},
+  profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
+  settingsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:1060,width:'100%',alignSelf:'center'},
+  settingsTitle: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  settingsColumns: {gap:22},
+  settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:36},
+  settingsColumn: {flex:1,minWidth:0,gap:22},
+  settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,gap:10},
+  settingsSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
+  settingsRow: {minHeight:46,flexDirection:'row',alignItems:'center',gap:12},
+  settingsStatusDot: {width:8,height:8,borderRadius:4},
+  settingsTextAction: {minHeight:38,paddingHorizontal:2,alignItems:'center',justifyContent:'center'},
+  settingsInlineActions: {flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
+  settingsAddRow: {flexDirection:'row',alignItems:'center',gap:8},
+  settingsInlineInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:13,fontSize:15},
+  settingsAddButton: {minHeight:44,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
+  settingsKeyReveal: {borderRadius:12,padding:14,gap:8},
+  settingsKeyText: {fontSize:13,lineHeight:18,fontWeight:'600'},
+  settingsListRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:54,paddingVertical:9,flexDirection:'row',alignItems:'center',gap:12},
+  settingsRowActions: {flexDirection:'row',alignItems:'center',gap:10},
+  settingsAddFolder: {gap:8},
+  settingsDangerRow: {minHeight:44,alignItems:'flex-start',justifyContent:'center'},
+  profileHero: {borderWidth:0,paddingVertical:4,flexDirection:'row',alignItems:'center',gap:14},
+  profileTitle: {fontFamily:'ArchivistEditorial',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
   profileMonogram: {width:50,height:50,borderRadius:25,alignItems:'center',justifyContent:'center'},
-  profileMonogramText: {fontFamily:'serif',fontSize:28,fontWeight:'800'},
-  profileStatsGrid: {flexDirection:'row',flexWrap:'wrap',gap:8},
-  profileStatCard: {width:'31%',minWidth:96,borderWidth:0,borderRadius:12,padding:12,gap:3},
-  profileStatValue: {fontFamily:'serif',fontSize:26,fontWeight:'700'},
-  profileStatLabel: {fontSize:12,fontWeight:'700'},
-  profileBreakdown: {borderWidth:0,borderRadius:12,padding:14,gap:10},
+  profileMonogramText: {fontFamily:'sans-serif-medium',fontSize:20,fontWeight:'500'},
+  profileMetricStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:16,rowGap:16},
+  profileMetric: {width:'50%',minWidth:130,gap:2},
+  profileMetricFold: {width:'33.333%',minWidth:105},
+  profileMetricWide: {width:'16.666%',minWidth:90},
+  profileMetricValue: {fontFamily:'sans-serif-medium',fontSize:23,lineHeight:28,fontWeight:'500'},
+  profileMetricLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
+  profileDetailRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:16},
   profileBreakdownRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:12},
   profileDivider: {height:StyleSheet.hairlineWidth},
-  achievementCard: {borderWidth:StyleSheet.hairlineWidth,borderRadius:12,padding:14,gap:10},
+  profileAchievementList: {gap:0},
+  profileAchievementRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',alignItems:'center',gap:12},
+  profileAchievementBadge: {width:44,height:44,borderRadius:22,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
+  profileAchievementInitial: {fontFamily:'sans-serif-medium',fontSize:17,fontWeight:'500'},
+  achievementCard: {borderWidth:0,paddingVertical:14,gap:10},
   achievementHeader: {flexDirection:'row',alignItems:'flex-start',gap:12},
-  achievementTitle: {fontSize:15,fontWeight:'900'},
-  achievementState: {fontSize:12,fontWeight:'900'},
+  achievementTitle: {fontSize:15,fontWeight:'600'},
+  achievementState: {fontSize:12,fontWeight:'600'},
   achievementTrack: {height:6,borderRadius:999,overflow:'hidden'},
   achievementFill: {height:'100%',borderRadius:999},
-  atlasFocusHero: {borderWidth:1,borderRadius:18,padding:16,gap:5},
-  atlasRelationGroup: {borderWidth:1,borderRadius:14,padding:14,gap:10},
+  atlasFocusHero: {borderWidth:0,paddingVertical:10,gap:5},
+  atlasRelationGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:10},
   atlasChipWrap: {flexDirection:'row',flexWrap:'wrap',gap:8},
-  atlasRelationChip: {borderWidth:1,borderRadius:999,paddingHorizontal:11,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
-  atlasWorkRow: {borderWidth:1,borderRadius:12,padding:12,flexDirection:'row',alignItems:'center',gap:10},
-  duplicatePanel: {borderWidth:1,borderRadius:16,padding:14,gap:12},
-  duplicateGroup: {borderWidth:1,borderRadius:12,padding:12,gap:7},
-  duplicateExact: {borderWidth:1,borderRadius:10,padding:10,gap:4},
+  atlasRelationChip: {borderWidth:0,borderRadius:10,paddingHorizontal:10,paddingVertical:8,flexDirection:'row',gap:7,alignItems:'center'},
+  atlasWorkRow: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',alignItems:'center',gap:10},
+  atlasSearchRow: {flexDirection:'row',alignItems:'center',gap:6,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.24)'},
+  atlasSearchInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:0,paddingHorizontal:2,fontSize:14},
+  atlasSearchButton: {width:44,height:44,borderRadius:0,alignItems:'center',justifyContent:'center'},
+  atlasUniverseLayout: {position:'relative',gap:0},
+  atlasUniverseLayoutWide: {flexDirection:'row',alignItems:'stretch'},
+  atlasViewport: {flex:1,borderWidth:0,borderRadius:0,overflow:'hidden',position:'relative',minWidth:0},
+  atlasUniverseCanvas: {position:'absolute'},
+  atlasUniverseEdge: {position:'absolute',height:1},
+  atlasUniverseNode: {position:'absolute',borderWidth:0,borderRadius:14,padding:5,alignItems:'center',justifyContent:'center',overflow:'visible',shadowColor:'#000',shadowOpacity:.06,shadowRadius:4,elevation:2},
+  atlasUniverseNodeSelected: {borderWidth:2,shadowOpacity:.16,shadowRadius:9,elevation:5},
+  atlasGenreNode: {borderRadius:48,padding:10,borderWidth:StyleSheet.hairlineWidth,shadowOpacity:.04,shadowRadius:12},
+  atlasAuthorNode: {borderRadius:29,overflow:'hidden'},
+  atlasSeriesNode: {borderRadius:10,paddingHorizontal:4,paddingTop:3,paddingBottom:12},
+  atlasWorkNode: {borderRadius:7,padding:3,overflow:'hidden'},
+  atlasCollectionNode: {borderRadius:14,paddingHorizontal:5,paddingTop:4,paddingBottom:12},
+  atlasSeriesGlyph: {height:42,flexDirection:'row',alignItems:'flex-end',gap:3},
+  atlasSeriesSpine: {width:7,borderRadius:2},
+  atlasCollectionGlyph: {width:42,height:34,position:'relative'},
+  atlasCollectionSheet: {position:'absolute',width:28,height:30,borderWidth:StyleSheet.hairlineWidth,borderRadius:4,backgroundColor:'transparent'},
+  atlasNoteGlyph: {width:32,height:38,borderWidth:StyleSheet.hairlineWidth,borderRadius:4,paddingHorizontal:5,paddingTop:9,gap:5},
+  atlasNoteLine: {height:2,borderRadius:2},
+  atlasNodeCaption: {position:'absolute',top:'100%',marginTop:3,minWidth:72,maxWidth:92},
+  atlasNodeCover: {position:'absolute',left:0,top:0,right:0,bottom:0,width:'100%',height:'100%'},
+  atlasNodeLabel: {fontSize:9,fontWeight:'900',textAlign:'center',lineHeight:11},
+  atlasNodeMonogram: {fontFamily:'sans-serif-medium',fontSize:15,fontWeight:'700'},
+  atlasNodeCount: {fontSize:10,fontWeight:'900',marginTop:2},
+  atlasNodeSourceDot: {position:'absolute',right:4,bottom:4,width:8,height:8,borderRadius:4,borderWidth:1,borderColor:'#f8f7f2'},
+  atlasViewportTools: {position:'absolute',right:8,top:8,zIndex:20,flexDirection:'row',gap:4},
+  atlasZoomButton: {borderWidth:0},
+  atlasToolButton: {minHeight:38,paddingHorizontal:10,borderRadius:8,alignItems:'center',justifyContent:'center'},
+  atlasFindButton: {height:46,paddingHorizontal:16,borderRadius:12,alignItems:'center',justifyContent:'center'},
+  atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
+  atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:0,borderRadius:0,paddingHorizontal:6,paddingVertical:4,opacity:.88},
+  atlasInspector: {borderWidth:0,padding:14,gap:8,zIndex:25},
+  atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12,borderTopLeftRadius:20,borderTopRightRadius:20,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
+  atlasInspectorWide: {width:236,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
+
+  atlasScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
+  atlasTitle: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  atlasFocusTitle: {fontFamily:'ArchivistEditorial',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
+  atlasListAlternative: {gap:0},
+  atlasHint: {fontSize:10.5,lineHeight:15,textAlign:'center',letterSpacing:.2},
+  insightsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:24,maxWidth:1120,width:'100%',alignSelf:'center'},
+  insightsTitle: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  sourceSwitcherScroll: {flexGrow:0,minHeight:48,maxHeight:52},
+  sourceSwitcher: {flexDirection:'row',gap:20,paddingRight:14,paddingVertical:2,minHeight:48,alignItems:'stretch'},
+  sourceSwitcherVertical: {gap:0},
+  sourceTab: {minHeight:46,justifyContent:'center',position:'relative',paddingHorizontal:1},
+  sourceTabVertical: {paddingHorizontal:10,minHeight:42},
+  sourceTabText: {fontSize:13},
+  sourceTabCount: {fontSize:11,fontWeight:'600'},
+  sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
+  sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
+  shelfContent: {paddingHorizontal:18,paddingTop:20,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
+  shelfContentFold: {paddingHorizontal:24,paddingTop:22,gap:34},
+  shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:2,paddingBottom:0},
+  shelfEditorialHeaderFold: {paddingTop:0},
+  shelfKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.2,marginBottom:7},
+  shelfGreeting: {fontFamily:'ArchivistEditorial',fontSize:34,lineHeight:40,fontWeight:'500',letterSpacing:-.55},
+  shelfGreetingCompact: {fontSize:30,lineHeight:36},
+  shelfGreetingFold: {fontSize:36,lineHeight:42},
+  shelfEditorialSubtitle: {fontFamily:'sans-serif',fontSize:14,lineHeight:20,fontStyle:'italic',marginTop:3,maxWidth:320},
+  shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8},
+  shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
+  pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
+  pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
+  headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:8,alignItems:'center',justifyContent:'center'},
+  sectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  sectionLink: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
+  curatedRow: {gap:18,paddingRight:24},
+  curatedCardWrap: {width:136},
+  shelfHero: {borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,paddingHorizontal:0,flexDirection:'row',gap:16,alignItems:'center',overflow:'hidden',minHeight:156},
+  shelfHeroFold: {paddingVertical:16,gap:20,minHeight:168},
+  shelfHeroWide: {paddingVertical:18,gap:24,minHeight:180},
+  shelfHeroArtwork: {width:104,minWidth:104},
+  shelfHeroArtworkFold: {width:120,minWidth:120},
+  shelfHeroArtworkWide: {width:132,minWidth:132},
+  shelfHeroCopy: {flex:1,minWidth:0,gap:6,paddingVertical:2},
+  shelfHeroEyebrow: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.35},
+  shelfHeroTitle: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:29,fontWeight:'500',letterSpacing:-.2},
+  shelfHeroTitleCompact: {fontSize:21,lineHeight:26},
+  shelfHeroTitleFold: {fontSize:25,lineHeight:30},
+  shelfHeroAuthor: {fontSize:14,lineHeight:21},
+  shelfHeroResume: {fontSize:12,lineHeight:17,fontWeight:'700',letterSpacing:.15},
+  shelfHeroFooter: {marginTop:4,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  shelfHeroMeta: {fontSize:12,lineHeight:17},
+  shelfHeroAction: {minWidth:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center',paddingHorizontal:14},
+  shelfHeroActionText: {color:'#FFFFFF',fontSize:13,fontWeight:'700'},
+  smartShelfRow: {gap:24,paddingRight:24},
+  smartShelfTile: {width:196,gap:6},
+  smartShelfPreview: {height:136,position:'relative',marginBottom:8},
+  smartShelfCover: {position:'absolute',top:4,width:78,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.14,shadowRadius:9,shadowOffset:{width:0,height:5},elevation:3},
+  smartShelfBase: {position:'absolute',left:0,right:2,bottom:3,height:3,borderRadius:2,opacity:.9},
+  smartShelfEmpty: {position:'absolute',left:8,right:18,bottom:8,height:82,borderBottomWidth:1,flexDirection:'row',alignItems:'flex-end',gap:7,paddingHorizontal:8},
+  smartShelfEmptySpine: {width:18,height:60,borderRadius:3},
+  smartShelfName: {fontFamily:'sans-serif-medium',fontSize:15,lineHeight:20,fontWeight:'500'},
+  collectionRow: {gap:22,paddingRight:24},
+  collectionTile: {width:166,gap:6},
+  collectionCollage: {height:126,position:'relative',marginBottom:7},
+  collectionMiniCover: {position:'absolute',width:70,overflow:'hidden',borderRadius:8,shadowColor:'#000',shadowOpacity:.13,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:3},
+  collectionEmptyMark: {width:92,height:108,borderRadius:12,alignItems:'center',justifyContent:'center'},
+  collectionName: {fontSize:15,lineHeight:20,fontWeight:'600'},
+  seriesRow: {gap:20,paddingRight:20},
+  seriesTile: {width:152,borderWidth:0,gap:5},
+  seriesCoverStack: {height:108,position:'relative',marginBottom:6},
+  seriesCover: {position:'absolute',width:64,overflow:'hidden',borderRadius:7,shadowColor:'#000',shadowOpacity:.09,shadowRadius:6,shadowOffset:{width:0,height:3},elevation:2},
+  seriesEmpty: {position:'absolute',left:0,top:0,width:104,height:108,borderWidth:StyleSheet.hairlineWidth,borderRadius:10},
+  seriesName: {fontFamily:'sans-serif-medium',fontSize:15,lineHeight:20,fontWeight:'500'},
+  shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,flexDirection:'row',flexWrap:'wrap',gap:16},
+  shelfUtilityAction: {minHeight:40,paddingHorizontal:0,paddingRight:8,justifyContent:'center'},
+  brandSignature: {fontSize:10,fontWeight:'700',letterSpacing:3,textAlign:'center',marginTop:8},
+  designedEmpty: {borderWidth:0,padding:28,gap:10,alignItems:'center',justifyContent:'center',minHeight:180},
+  emptyMark: {fontFamily:'serif',fontSize:34,fontWeight:'800'},
+  skeletonRow: {flexDirection:'row',gap:12,overflow:'hidden'},
+  skeletonCard: {width:132,height:198,borderRadius:12,opacity:0.45},
+  unifiedCard: {flex:1,minWidth:0,gap:6,position:'relative'},
+  unifiedCardList: {flexDirection:'row',alignItems:'center',gap:14,paddingVertical:10},
+  unifiedCardSelected: {borderWidth:1,borderRadius:12,padding:4},
+  unifiedCoverWrap: {position:'relative'},
+  unifiedCoverWrapList: {width:68},
+  unifiedCardCopy: {gap:2,minWidth:0,paddingHorizontal:1},
+  unifiedListMeta: {flexDirection:'row',alignItems:'center',gap:6,marginTop:2},
+  workSourceDot: {width:5,height:5,borderRadius:3},
+  workSource: {fontSize:11,fontWeight:'500',flexShrink:1},
+  workRating: {fontSize:11,fontWeight:'600',marginLeft:'auto'},
+  moreButton: {position:'absolute',right:4,top:4,width:32,height:32,borderRadius:16,alignItems:'center',justifyContent:'center',opacity:.9},
+  moreButtonList: {right:4,top:4},
+  offlineBadge: {position:'absolute',left:7,bottom:7,borderRadius:999,paddingHorizontal:7,paddingVertical:4},
+  offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
+  cardPressed: {opacity:0.72},
+  actionSheet: {width:'100%',maxWidth:620,borderWidth:0,borderTopLeftRadius:24,borderTopRightRadius:24,padding:18,gap:9,alignSelf:'center'},
+  actionSheetFold: {width:420,maxWidth:420,height:'100%',borderTopLeftRadius:24,borderBottomLeftRadius:24,borderTopRightRadius:0,paddingHorizontal:22,paddingVertical:24,alignSelf:'flex-end'},
+  sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',justifyContent:'flex-end',padding:12},
+  sheetBackdropFold: {justifyContent:'center',alignItems:'flex-end',padding:0},
+  sheetScroll: {flexGrow:1,justifyContent:'flex-end'},
+  sheetHandle: {width:36,height:3,borderRadius:2,backgroundColor:'#9aa9a6',alignSelf:'center',marginBottom:6,opacity:.5},
+  sheetHandleFold: {display:'none'},
+  sheetHeader: {flexDirection:'row',alignItems:'flex-start',gap:12,marginBottom:4},
+  sheetTitle: {fontFamily:'sans-serif-medium',fontSize:18,lineHeight:23,fontWeight:'500'},
+  sheetCloseButton: {width:40,height:40,borderRadius:10,alignItems:'center',justifyContent:'center',marginTop:-5,marginRight:-5},
+  sheetActionList: {marginTop:2},
+  sheetAction: {minHeight:46,borderBottomWidth:StyleSheet.hairlineWidth,justifyContent:'center',paddingVertical:10},
+  sheetActionText: {fontSize:13.5,lineHeight:19,fontWeight:'500'},
+
+  manageRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:8},
+  visibilityToggle: {width:40,height:24,borderRadius:12,padding:3,alignItems:'flex-start',justifyContent:'center'},
+  visibilityThumb: {width:18,height:18,borderRadius:9,shadowColor:'#000',shadowOpacity:.14,shadowRadius:2,shadowOffset:{width:0,height:1},elevation:2},
+  orderButton: {width:44,height:44,alignItems:'center',justifyContent:'center'},
+  libraryTwoPane: {flex:1,flexDirection:'row'},
+  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:18,gap:14},
+  libraryMainFold: {paddingHorizontal:24,paddingTop:20,gap:16},
+  libraryMainWide: {paddingHorizontal:28,paddingTop:24,gap:18},
+  libraryCatalogueHeader: {gap:2,paddingBottom:2},
+  libraryKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.0},
+  libraryTitle: {fontFamily:'ArchivistEditorial',fontSize:36,lineHeight:44,fontWeight:'500',letterSpacing:-.4},
+  libraryTitleCompact: {fontSize:32,lineHeight:40},
+  libraryTitleFold: {fontSize:40,lineHeight:48},
+  librarySearchRow: {flexDirection:'row',alignItems:'center',gap:6},
+  librarySearchShell: {flex:1,minHeight:44,borderRadius:10,flexDirection:'row',alignItems:'center',gap:9,paddingHorizontal:12},
+  librarySearch: {flex:1,borderWidth:0,minHeight:44,paddingHorizontal:0,fontSize:14},
+  libraryUtilityButton: {width:44,height:44,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
+  libraryFilterCount: {position:'absolute',right:3,top:2,minWidth:16,height:16,borderRadius:8,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
+  libraryFilterCountText: {color:'#FFFFFF',fontSize:9,fontWeight:'700'},
+  libraryFormatTabs: {gap:22,paddingRight:18,minHeight:42,paddingVertical:1,alignItems:'stretch'},
+  libraryFormatTab: {minHeight:40,justifyContent:'center',position:'relative'},
+  libraryFormatText: {fontSize:13,lineHeight:18},
+  libraryFormatMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
+  libraryToolbar: {flexDirection:'row',alignItems:'center',gap:8},
+  quickFilters: {gap:4,paddingRight:8},
+  quickFilter: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
+  toolbarButton: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
+  librarySelectionAction: {minHeight:40,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
+  unifiedGrid: {paddingBottom:120,gap:16,paddingTop:2},
+  unifiedGridRow: {gap:10},
+  unifiedList: {paddingBottom:120,gap:4},
+  selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
+  selectionCount: {fontSize:13,fontWeight:'900'},
+  reviewQueue: {gap:10,paddingBottom:10},
+  filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
+  filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
+  filterChip: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
+  duplicatePanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:10},
+  duplicateGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:7},
+  duplicateExact: {borderWidth:0,borderLeftWidth:2,paddingLeft:10,paddingVertical:6,gap:4},
+  ruleGroup: {borderWidth:0,borderLeftWidth:2,paddingLeft:12,paddingVertical:8,gap:8},
+  ruleRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:8,flexDirection:'row',flexWrap:'wrap',gap:6,alignItems:'center'},
+  ruleToken: {borderWidth:0,borderRadius:8,minHeight:36,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
+  ruleInput: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:10,flexGrow:1,minWidth:92},
+  ruleRemove: {width:34,height:34,alignItems:'center',justifyContent:'center'},
+  insightEditorialHero: {paddingVertical:4,gap:6,maxWidth:760},
+  insightEditorialKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
+  insightEditorialTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:28,fontWeight:'400',letterSpacing:-.1},
+  insightStatStrip: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:16,rowGap:16},
+  insightStat: {width:'50%',minWidth:130,gap:2},
+  insightStatFold: {width:'33.333%',minWidth:110},
+  insightStatWide: {width:'16.666%',minWidth:96},
+  insightStatValue: {fontFamily:'sans-serif-medium',fontSize:24,lineHeight:29,fontWeight:'500'},
+  insightStatLabel: {fontSize:12,lineHeight:17,fontWeight:'500'},
+  insightRhythmSection: {gap:12},
+  insightRhythmChart: {height:96,flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:8,paddingHorizontal:2},
+  insightRhythmDay: {flex:1,height:'100%',alignItems:'center',justifyContent:'flex-end',gap:7},
+  insightRhythmBarArea: {height:66,width:'100%',alignItems:'center',justifyContent:'flex-end'},
+  insightRhythmBar: {width:8,maxWidth:12,borderRadius:4},
+  insightRhythmLabel: {fontSize:10,lineHeight:13,fontWeight:'600'},
+  insightGoalGrid: {gap:0},
+  insightGoalCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:10},
+  insightGoalEdit: {flexDirection:'row',alignItems:'center',justifyContent:'flex-end',gap:8},
+  insightGoalInput: {width:54,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,minHeight:36,paddingHorizontal:4,textAlign:'center',fontSize:13,fontWeight:'600',fontVariant:['tabular-nums']},
+  insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',gap:10,alignItems:'center'},
+  activityMarker: {width:7,height:7,borderRadius:4},
+  annotationHubCard: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:7},
+  insightAchievementStrip: {flexDirection:'row',gap:18,paddingRight:18},
+  insightAchievementEditorial: {width:108,alignItems:'center',gap:6},
+  insightAchievementBadge: {width:56,height:56,borderRadius:28,borderWidth:1.5,alignItems:'center',justifyContent:'center'},
+  insightAchievementMonogram: {fontFamily:'sans-serif-medium',fontSize:20,fontWeight:'500'},
+  insightAchievement: {borderWidth:0,padding:11,minWidth:140,flexGrow:1},
+
 });

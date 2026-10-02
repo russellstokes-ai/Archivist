@@ -4,7 +4,7 @@
 
 # Archivist for Home Assistant
 
-**Version 0.1.21**
+**Version 0.9.3**
 
 Archivist turns Home Assistant into a private library server for books, audiobooks, comics and PDFs. It provides a polished web library, household profiles, safe organisation tools and an optional server connection for the Archivist Android app.
 
@@ -66,3 +66,4 @@ For remote mobile access, use HTTPS or a private network such as Tailscale. Plai
 See [DOCS.md](DOCS.md) for configuration, storage, access and troubleshooting information.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
+

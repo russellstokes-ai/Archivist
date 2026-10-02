@@ -9,6 +9,7 @@ export type LocalBook = {
   author: string;
   series: string;
   genre: string;
+  publishedYear?: number;
   format: string;
   space: string;
   available: boolean;
@@ -66,6 +67,7 @@ export type LocalMetadataOverride = {
   author: string;
   series: string;
   genre: string;
+  publishedYear?: number;
 };
 
 export type LocalScanResult = {
@@ -240,6 +242,7 @@ export async function scanLocalFolders(
           author: identity.author,
           series: identity.series,
           genre: identity.genre,
+          publishedYear: identity.publishedYear,
           format,
           space,
           available: true,

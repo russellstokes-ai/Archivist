@@ -250,3 +250,6 @@ assert.equal(previews[0].state, 'review');
   assert.equal(saf.deleted[0], result.copied[0].uri);
   console.log('PASS: local scanner handles messy names, CBZ-only local comics, deep folders, huge files, bounded sidecars, metadata caching, sort previews and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
+
+assert.equal(parseLocalSidecar('<metadata><dc:date>1998-06-01</dc:date></metadata>','opf').publishedYear,1998);
+assert.equal(parseLocalSidecar('<metadata><year>unknown</year></metadata>','nfo').publishedYear,undefined);

@@ -26,3 +26,17 @@ assert.equal(clampProgress(20,10),1);
 assert.equal(clampProgress(-1,10),0);
 
 console.log('PASS: Profile achievements derive only from verified statistics');
+const {streakStats,localDay}=require('./profileStats.ts');
+assert.equal(new Set(achievementsFor(base).map(a=>a.id)).size,achievementsFor(base).length);
+assert.equal(achievementsFor(base).length,143);
+assert.equal(achievementsFor({...base,bestStreak:7}).find(a=>a.id==='streak-7').unlocked,true);
+assert.deepEqual(streakStats({'2026-03-28':60,'2026-03-29':60,'2026-03-30':60},'2026-03-30'),{bestStreak:3,currentStreak:3,activeDays:3,todaySeconds:60});
+assert.equal(streakStats({'2026-12-31':60,'2027-01-01':60},'2027-01-02').currentStreak,2);
+assert.equal(streakStats({'2026-01-01':60,'2026-01-02':60},'2026-01-04').currentStreak,0);
+assert.equal(streakStats({'2026-01-01':59,'2026-01-02':60,'2026-01-03':60},'2026-01-02').activeDays,1);
+assert.equal(streakStats({'2026-01-01':60,'2026-01-03':60},'2026-01-03').bestStreak,1);
+assert.equal(localDay(new Date(2026,0,2,23,59)),'2026-01-02');
+console.log('PASS: Daily ritual calendar boundaries, minimum activity, gaps and award identities');
+
+assert.equal(achievementsFor({...base,formats:4,completedAudio:1,completedReading:1}).find(a=>a.id==='balance-2').unlocked,true);
+assert.equal(achievementsFor({...base,formats:4,completedAudio:1}).find(a=>a.id==='balance-2').unlocked,false);

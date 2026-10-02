@@ -46,9 +46,10 @@ try {
   assert(!repository.includes('example.invalid'));
   const addonConfig = fs.readFileSync(path.join(extracted, 'archivist/config.yaml'), 'utf8');
   assert.match(addonConfig, /^slug: archivist$/m);
-  assert.match(addonConfig, /^version: 0\.1\.21$/m);
+  assert.match(addonConfig, /^version: 0\.9\.3$/m);
   run('sh', ['-n', path.join(extracted, 'archivist/run.sh')]);
   console.log('PASS: clean rebuild, relative output, root docs, branding, complete source/web bytes and Docker context paths');
 } finally {
   fs.rmSync(temp, {recursive: true, force: true});
 }
+

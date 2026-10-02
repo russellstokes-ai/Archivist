@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
 import {speechFocusBrowserSource} from './speechFocus';
+import {readCbrImages, readCbtImages, ArchiveImage} from './archiveReader';
 
 export type LocalReaderDocument = {
   html?: string;
@@ -14,8 +15,8 @@ export async function buildLocalReaderDocument(uri: string, format: string, titl
   if (format === 'PDF') return {uri};
   if (format === 'Comic') {
     const ext=(uri.split('?')[0].match(/\.([a-z0-9]+)$/i)?.[1]||'').toLowerCase();
-    if(ext==='cbr')throw Error('CBR/RAR comics are not supported. Convert this comic to CBZ/ZIP first.');
-    if(ext==='cbt')throw Error('CBT comics are supported by the Archivist server, but local/offline reading currently requires CBZ/ZIP.');
+    if(ext==='cbr')return {html: await comicArchiveHtml(await readCbrImages(uri), title, initialPage)};
+    if(ext==='cbt')return {html: await comicArchiveHtml(await readCbtImages(uri), title, initialPage)};
     return {html: await comicHtml(uri, title, initialPage)};
   }
   if (format === 'EPUB') return {html: await epubHtml(uri, title, initialPage)};
@@ -32,6 +33,11 @@ async function comicHtml(uri: string, title: string, initialPage: number) {
     return `<img class="comic-page${index === 0 ? ' active' : ''}" data-page="${index}" src="data:${mime(page.name)};base64,${base64}" alt="Page ${index + 1}">`;
   }));
   return shell(title, images.join('\n') || '<p>No readable comic pages found.</p>', 'comic', initialPage);
+}
+
+async function comicArchiveHtml(images: ArchiveImage[], title: string, initialPage: number) {
+  const pages=images.slice(0,500).map((page,index)=>`<img class="comic-page${index===0?' active':''}" data-page="${index}" src="data:${page.mime};base64,${page.base64}" alt="Page ${index+1}">`);
+  return shell(title,pages.join('\n')||'<p>No readable comic pages found.</p>','comic',initialPage);
 }
 
 async function epubHtml(uri: string, title: string, initialPage: number) {
@@ -59,50 +65,50 @@ function shell(title: string, body: string, mode: 'comic' | 'epub', initialPage:
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(title)}</title>
 <style>
-:root{--paper:#f8f7f2;--ink:#0f2a36;--muted:#667778;--line:#d9dfdc;--sage:#397076;--gold:#c6a374;--reader-scale:1}
+:root{--paper:#FAF8F2;--ink:#111111;--muted:#6B6B6B;--line:#E8E8E8;--sage:#47736F;--gold:#B99A68;--reader-scale:1}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overscroll-behavior:none}
-body{background:var(--paper);color:var(--ink);font:calc(18px * var(--reader-scale))/1.7 Georgia,serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{background:var(--paper);color:var(--ink);font:calc(18px * var(--reader-scale))/1.68 ui-serif,Georgia,serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
 main{width:100%;height:100%;margin:0;position:relative}
 .reader-hud{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--line) 80%,transparent);border-radius:999px;background:color-mix(in srgb,var(--paper) 90%,transparent);backdrop-filter:blur(16px);box-shadow:0 8px 28px #0002;transition:opacity .2s ease}
-.reader-hud.dim{opacity:.32}
+.reader-hud.dim{opacity:0;pointer-events:none}
 .reader-hud button{appearance:none;border:0;background:transparent;color:var(--ink);font:700 12px system-ui,-apple-system,sans-serif;min-width:36px;height:32px;border-radius:999px;padding:0 9px}
 .reader-hud button:active{background:color-mix(in srgb,var(--sage) 14%,transparent)}
 .reader-position{font:700 12px system-ui,-apple-system,sans-serif;color:var(--muted);min-width:58px;text-align:center;font-variant-numeric:tabular-nums}
 .turn-surface{position:absolute;inset:0;perspective:1400px;transform-style:preserve-3d}
-.turn-surface.turn-next{animation:turnNext .24s cubic-bezier(.2,.72,.2,1)}
-.turn-surface.turn-prev{animation:turnPrev .24s cubic-bezier(.2,.72,.2,1)}
-@keyframes turnNext{0%{opacity:1;transform:translateX(0) rotateY(0)}48%{opacity:.55;transform:translateX(-3%) rotateY(-7deg)}52%{opacity:.55;transform:translateX(3%) rotateY(7deg)}100%{opacity:1;transform:translateX(0) rotateY(0)}}
-@keyframes turnPrev{0%{opacity:1;transform:translateX(0) rotateY(0)}48%{opacity:.55;transform:translateX(3%) rotateY(7deg)}52%{opacity:.55;transform:translateX(-3%) rotateY(-7deg)}100%{opacity:1;transform:translateX(0) rotateY(0)}}
+.turn-surface.turn-next{animation:turnNext .52s cubic-bezier(.2,.72,.2,1)}
+.turn-surface.turn-prev{animation:turnPrev .52s cubic-bezier(.2,.72,.2,1)}
+@keyframes turnNext{0%{opacity:1;transform:translateX(0) rotateY(0) scale(1)}45%{opacity:.9;transform:translateX(-5%) rotateY(-16deg) scale(.99)}50%{opacity:.68;transform:translateX(-2%) rotateY(-26deg) scale(.985)}55%{opacity:.74;transform:translateX(4%) rotateY(21deg) scale(.99)}100%{opacity:1;transform:translateX(0) rotateY(0) scale(1)}}
+@keyframes turnPrev{0%{opacity:1;transform:translateX(0) rotateY(0) scale(1)}45%{opacity:.9;transform:translateX(5%) rotateY(16deg) scale(.99)}50%{opacity:.68;transform:translateX(2%) rotateY(26deg) scale(.985)}55%{opacity:.74;transform:translateX(-4%) rotateY(-21deg) scale(.99)}100%{opacity:1;transform:translateX(0) rotateY(0) scale(1)}}
 
-.comic main{display:flex;align-items:center;justify-content:center;background:#101314;padding:0;overflow:hidden;touch-action:none}
+.comic main{display:flex;align-items:center;justify-content:center;background:#000000;padding:0;overflow:hidden;touch-action:none}
 .comic .comic-page{display:none;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;transform-origin:center center;will-change:transform,opacity;user-select:none;-webkit-user-drag:none}
 .comic .comic-page.active{display:block}
 .comic .comic-page.focused{cursor:zoom-out}
-.speech-focus-overlay{position:fixed;z-index:80;margin:0;padding:0;border:0;background:transparent;outline:none;opacity:.82;transform:scale(1);transform-origin:center center;transition:left .24s cubic-bezier(.2,.72,.2,1),top .24s cubic-bezier(.2,.72,.2,1),width .24s cubic-bezier(.2,.72,.2,1),height .24s cubic-bezier(.2,.72,.2,1),opacity .18s ease,filter .18s ease;filter:drop-shadow(0 12px 22px #0008);cursor:zoom-out}
+.speech-focus-overlay{position:fixed;z-index:80;margin:0;padding:0;border:0;background:transparent;outline:none;opacity:.82;transform:scale(1);transform-origin:center center;transition:left .34s cubic-bezier(.2,.72,.2,1),top .34s cubic-bezier(.2,.72,.2,1),width .34s cubic-bezier(.2,.72,.2,1),height .34s cubic-bezier(.2,.72,.2,1),opacity .22s ease,filter .22s ease;filter:drop-shadow(0 12px 22px #0008);cursor:zoom-out}
 .speech-focus-overlay.open{opacity:1;filter:drop-shadow(0 18px 34px #000a)}
 .speech-focus-overlay:focus-visible{outline:2px solid var(--gold);outline-offset:5px}
 .speech-focus-overlay canvas{display:block;width:100%;height:100%}
-.comic .reader-hud{--paper:#11181b;--ink:#f8f7f2;--muted:#b4c0c1;--line:#415052}
+.comic .reader-hud{--paper:#111111;--ink:#F5F5F5;--muted:#A0A0A0;--line:#252525}
 
 .epub main{padding:26px 32px 72px;column-width:calc(100vw - 64px);column-gap:64px;column-fill:auto;overflow:hidden;height:100vh;scroll-behavior:auto}
-.epub section{break-after:column;margin:0}
+.epub section{break-after:column;margin:0 auto;max-width:680px}
 .epub img{max-width:100%;height:auto}
 .epub h1,.epub h2,.epub h3{line-height:1.22;break-after:avoid}
 .epub p{margin:0 0 1.05em}
 .epub p,.epub li,.epub blockquote,.epub h1,.epub h2,.epub h3{transition:transform .18s ease,background .18s ease,padding .18s ease,border-radius .18s ease}
 .epub .text-focused{transform:scale(1.16);transform-origin:center center;background:color-mix(in srgb,var(--gold) 12%,transparent);padding:.25em .4em;border-radius:.35em;position:relative;z-index:3}
-@media (prefers-color-scheme:dark){:root{--paper:#10191d;--ink:#edf2ef;--muted:#a8b6b5;--line:#314247;--sage:#6f9da1;--gold:#d4b988}}
+html[data-reader-theme='paper']{--paper:#FAF8F2;--ink:#111111;--muted:#6B6B6B;--line:#E8E8E8;--sage:#47736F;--gold:#B99A68}\nhtml[data-reader-theme='sepia']{--paper:#F3EAD8;--ink:#352C22;--muted:#776B5C;--line:#DACDB6;--sage:#526F69;--gold:#B99A68}\nhtml[data-reader-theme='dark']{--paper:#111111;--ink:#F5F5F5;--muted:#A0A0A0;--line:#252525;--sage:#47736F;--gold:#B99A68}\n@media (prefers-color-scheme:dark){html:not([data-reader-theme]),html[data-reader-theme='system']{--paper:#111111;--ink:#F5F5F5;--muted:#A0A0A0;--line:#252525;--sage:#47736F;--gold:#B99A68}}
 @media (prefers-reduced-motion:reduce){.turn-surface,.comic-page,.speech-focus-overlay,.epub p,.epub li,.epub blockquote,.epub h1,.epub h2,.epub h3{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body class="${mode}">
 <main id="reader" class="turn-surface">${body}</main>
 <div id="readerHud" class="reader-hud" aria-label="Reader controls">
-  <button id="readerPrev" aria-label="Previous page">‹</button>
+  <button id="readerPrev" aria-label="Previous page">Prev</button>
   <span id="readerPosition" class="reader-position"></span>
   <button id="readerSound" aria-label="Toggle page turn sound">Sound</button>
-  <button id="readerNext" aria-label="Next page">›</button>
+  <button id="readerNext" aria-label="Next page">Next</button>
 </div>
 <script>${speechFocusBrowserSource()}</script>
 ${readerInteractionScript(mode, initialPage)}
@@ -192,8 +198,8 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
       if(mode==='comic'){resetComicZoom();showComic(page);}
       else reader.scrollLeft=page*innerWidth;
       refreshHud();reportPosition();
-    },115);
-    setTimeout(()=>{reader.classList.remove(cls);turning=false;},260);
+    },260);
+    setTimeout(()=>{reader.classList.remove(cls);turning=false;},540);
   }
   function focusAt(target,x,y){
     if(mode==='comic'){
@@ -222,7 +228,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
     const x=event.clientX;
     if(x<innerWidth*.18){move(-1);return;}
     if(x>innerWidth*.82){move(1);return;}
-    if(mode!=='comic')focusAt(event.target,event.clientX,event.clientY);
+    if(event.detail===1)post({type:'reader-chrome-toggle'});
     refreshHud();
   });
 
@@ -278,11 +284,37 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
   addEventListener('resize',()=>{if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();});
   document.addEventListener('keydown',event=>{if(event.key==='ArrowLeft')move(-1);if(event.key==='ArrowRight')move(1);});
 
+  function post(payload){try{window.ReactNativeWebView?.postMessage(JSON.stringify(payload));}catch{}}
+  function currentSelection(){const selection=window.getSelection?.();const text=selection?String(selection).trim():'';if(text)post({type:'reader-selection',page,text:text.slice(0,4000)});}
+  document.addEventListener('selectionchange',()=>{clearTimeout(window.__archivistSelectionTimer);window.__archivistSelectionTimer=setTimeout(currentSelection,180);});
+  function clearSearch(){document.querySelectorAll('[data-archivist-search]').forEach(node=>{const parent=node.parentNode;if(parent){parent.replaceChild(document.createTextNode(node.textContent||''),node);parent.normalize();}});}
+  function searchText(term){
+    clearSearch();term=String(term||'').trim();if(!term){post({type:'reader-search-results',count:0});return;}
+    const needle=term.toLowerCase();let count=0,first=null;
+    document.querySelectorAll('p,li,blockquote,h1,h2,h3').forEach(el=>{if(mode!=='epub')return;const value=el.textContent||'';const index=value.toLowerCase().indexOf(needle);if(index<0)return;count++;if(!first)first=el;});
+    if(first){first.classList.add('text-focused');first.scrollIntoView({block:'center',inline:'center'});}
+    post({type:'reader-search-results',count});
+  }
+  function applyAppearance(value){
+    const scale=clamp(Number(value?.scale)||1,.78,1.5);document.documentElement.style.setProperty('--reader-scale',String(scale));
+    const theme=['system','paper','sepia','dark'].includes(value?.theme)?value.theme:'system';document.documentElement.dataset.readerTheme=theme;
+    localStorage.setItem('archivist-reader-text-scale',String(scale));
+    if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();
+  }
+  function handleCommand(event){
+    let message=event?.data;try{if(typeof message==='string')message=JSON.parse(message);}catch{return;}
+    if(!message||message.type!=='reader-command')return;
+    if(message.command==='appearance')applyAppearance(message.value||{});
+    if(message.command==='search')searchText(message.query||'');
+    if(message.command==='goto'&&Number.isInteger(message.page)){const target=clamp(message.page,0,pageCount()-1);if(target!==page){page=target;if(mode==='comic'){resetComicZoom();showComic(page);}else reader.scrollLeft=page*innerWidth;refreshHud();reportPosition();}}
+  }
+  window.addEventListener('message',handleCommand);document.addEventListener('message',handleCommand);
+
   requestAnimationFrame(()=>{
     page=clamp(page,0,pageCount()-1);
     if(mode==='comic')showComic(page);
     else reader.scrollLeft=page*innerWidth;
-    refreshHud();reportPosition();
+    refreshHud();reportPosition();post({type:'reader-ready',page,count:pageCount()});
   });
 })();
 </script>`;
@@ -316,4 +348,19 @@ function mime(name: string) {
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]!));
+}
+
+export function readerHostBridgeSource(){
+  return `(function(){
+    if(window.__archivistHostBridgeInstalled)return true;
+    window.__archivistHostBridgeInstalled=true;
+    const post=(payload)=>{try{window.ReactNativeWebView?.postMessage(JSON.stringify(payload));}catch{}};
+    const applyAppearance=(value)=>{const scale=Math.max(.78,Math.min(1.5,Number(value?.scale)||1));document.documentElement.style.fontSize=(scale*100)+'%';const theme=value?.theme||'system';document.documentElement.dataset.archivistTheme=theme;if(theme==='paper'){document.documentElement.style.background='#FAF8F2';document.documentElement.style.color='#111111';}else if(theme==='sepia'){document.documentElement.style.background='#F3EAD8';document.documentElement.style.color='#352C22';}else if(theme==='dark'){document.documentElement.style.background='#111111';document.documentElement.style.color='#F5F5F5';}else{document.documentElement.style.background='';document.documentElement.style.color='';}};
+    const search=(query)=>{const needle=String(query||'').trim().toLowerCase();let count=0,first=null;if(needle)document.querySelectorAll('p,li,blockquote,h1,h2,h3').forEach(el=>{if((el.textContent||'').toLowerCase().includes(needle)){count++;if(!first)first=el;}});if(first)first.scrollIntoView({block:'center'});post({type:'reader-search-results',count});};
+    const handle=(event)=>{let m=event?.data;try{if(typeof m==='string')m=JSON.parse(m);}catch{return;}if(!m||m.type!=='reader-command')return;if(m.command==='appearance')applyAppearance(m.value||{});if(m.command==='search')search(m.query||'');if(m.command==='goto'&&Number.isInteger(m.page))post({type:'reader-goto-unsupported',page:m.page});};
+    window.addEventListener('message',handle);document.addEventListener('message',handle);
+    document.addEventListener('selectionchange',()=>{clearTimeout(window.__archivistHostSelection);window.__archivistHostSelection=setTimeout(()=>{const text=String(window.getSelection?.()||'').trim();if(text)post({type:'reader-selection',page:0,text:text.slice(0,4000)});},180);});
+    const ready=()=>post({type:'reader-ready',page:0,count:0});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else setTimeout(ready,0);
+    return true;
+  })();true;`;
 }

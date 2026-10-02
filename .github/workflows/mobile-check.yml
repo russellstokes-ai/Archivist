@@ -29,7 +29,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: mobile
-        run: npm ci
+        run: |
+          npm ci
+          node harden-forge.cjs
 
       - name: Expo Doctor
         working-directory: mobile
@@ -41,18 +43,5 @@ jobs:
 
       - name: Mobile tests
         working-directory: mobile
-        run: |
-          node core.test.cjs
-          node queue.test.cjs
-          node local-library.test.cjs
-          node local-works.test.cjs
-          node atlas.test.cjs
-          node duplicates.test.cjs
-          node local-reader.test.cjs
-          node profile-stats.test.cjs
-          node server-compatibility.test.cjs
-          node state-store.test.cjs
-          node speech-focus.test.cjs
-          node offline-library.test.cjs
-          node native-patch.test.cjs
-          node ui-contract.test.cjs
+        run: npm test
+

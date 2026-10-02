@@ -9,11 +9,8 @@ on:
       - 'go.sum'
       - 'web/**'
       - 'scripts/ui-contract.cjs'
-      - 'scripts/package-ha-addon.sh'
-      - 'scripts/package-ha-repository.sh'
-      - 'scripts/package-ha.test.cjs'
+      - 'scripts/package-ha*'
       - 'repository.yaml'
-      - 'README.md'
       - 'archivist/**'
       - '.github/workflows/server-check.yml'
 
@@ -43,6 +40,12 @@ jobs:
         run: |
           (cd archivist/app && go mod tidy && go test ./...)
 
+      - name: Raspberry Pi ARM64 compile
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/archivist-root-arm64 .
+          (cd archivist/app && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/archivist-package-arm64 .)
+          grep -q -- '- aarch64' archivist/config.yaml
+
       - name: Web JavaScript syntax
         run: |
           for dir in web archivist/app/web; do
@@ -58,7 +61,8 @@ jobs:
         run: node scripts/package-ha.test.cjs
 
       - name: Add-on launcher syntax
-        run: sh -n archivist/run.sh
+        run: |
+          sh -n archivist/run.sh
 
       - name: Verify packaged source parity
         run: |
@@ -109,3 +113,6 @@ jobs:
 
 
 # Final verification trigger 2026-09-28
+
+# Recovery validation trigger 2026-09-30
+

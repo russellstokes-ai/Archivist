@@ -17,3 +17,4 @@ done
 (cd "$STAGE" && zip -qr repository.zip repository.yaml *.md archivist)
 mv "$STAGE/repository.zip" "$OUT"
 printf '%s\n' "$OUT"
+

@@ -5,6 +5,7 @@ export type LocalIdentity = {
   author: string;
   series: string;
   genre: string;
+  publishedYear?: number;
   confidence: IdentificationConfidence;
   needsReview: boolean;
   reviewReason: string;
@@ -17,6 +18,7 @@ export type LocalMetadataFields = {
   author?: string;
   series?: string;
   genre?: string;
+  publishedYear?: number;
 };
 
 export function inferLocalBookMetadata(uri: string, format: string): LocalIdentity {
@@ -125,6 +127,7 @@ export function applyLocalMetadata(
     author,
     series,
     genre,
+    publishedYear: fields.publishedYear || base.publishedYear,
     confidence: 'high',
     needsReview: !completeEnough,
     reviewReason: completeEnough ? '' : 'Metadata was found, but the author still needs review.',
@@ -156,6 +159,7 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     author: cleanLabel(author || '') || undefined,
     series: cleanLabel(series || '') || undefined,
     genre: cleanLabel(genre || '') || undefined,
+    ...(publicationYear(xmlValue(text,['dc:date','date','year','Year']))?{publishedYear:publicationYear(xmlValue(text,['dc:date','date','year','Year']))}:{}),
   };
 }
 
@@ -221,4 +225,10 @@ function looksAuthorLike(value: string) {
   if (!value || /\d/.test(value)) return false;
   const words = value.split(/\s+/).filter(Boolean);
   return words.length >= 2 || value.includes(',');
+}
+
+export function publicationYear(raw:unknown):number|undefined {
+  const match=String(raw??'').trim().match(/^(\d{4})(?:$|[-/])/);
+  const year=match?Number(match[1]):0;
+  return year>=1000&&year<=new Date().getFullYear()+2?year:undefined;
 }

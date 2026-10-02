@@ -30,11 +30,13 @@ jobs:
           for file in *.go go.mod go.sum; do
             cmp -- "$file" "archivist/app/$file"
           done
-          for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js reader.html reader.js reader.css speech-focus.js; do
+          for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js reader.html reader.js reader.css speech-focus.js assets/LibreCaslonText.ttf assets/OFL.txt; do
             cmp -- "web/$file" "archivist/app/web/$file"
           done
-          node scripts/package-ha.test.cjs
-          echo "Root server, web UI and canonical Home Assistant package are aligned."
+          echo "Root and canonical Home Assistant package are aligned."
+
+      - name: Home Assistant package contract
+        run: node scripts/package-ha.test.cjs
 
       - name: Browser syntax and UI contract
         shell: bash
@@ -44,6 +46,7 @@ jobs:
             node --check "$file"
           done
           node scripts/ui-contract.cjs
+          node playback_test.cjs
 
       - name: Test all server packages
         shell: bash
@@ -60,7 +63,30 @@ jobs:
 
       - name: Verify module files stay clean
         run: |
-          git diff --exit-code -- go.mod go.sum archivist/app/go.mod archivist/app/go.sum
+          git diff --exit-code --             go.mod go.sum             archivist/app/go.mod archivist/app/go.sum
+
+  browser-ui:
+    name: Browser UI with fixture library
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/archivist-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/archivist-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Exercise responsive browsing and recovery
+        run: |
+          NODE_PATH="$RUNNER_TEMP/archivist-browser/node_modules" ARCHIVIST_SCREENSHOTS="$RUNNER_TEMP/archivist-screenshots" node scripts/browser-ui.test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-ui-screenshots
+          path: ${{ runner.temp }}/archivist-screenshots
+          if-no-files-found: ignore
 
   mobile:
     name: Mobile tests
@@ -76,7 +102,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: mobile
-        run: npm ci
+        run: |
+          npm ci
+          node harden-forge.cjs
 
       - name: Expo Doctor
         working-directory: mobile
@@ -84,7 +112,7 @@ jobs:
 
       - name: Runtime dependency audit
         working-directory: mobile
-        run: npm audit --omit=dev --audit-level=high
+        run: node audit-runtime.cjs
 
       - name: Typecheck
         working-directory: mobile
@@ -92,18 +120,5 @@ jobs:
 
       - name: Unit and contract tests
         working-directory: mobile
-        run: |
-          node core.test.cjs
-          node queue.test.cjs
-          node local-library.test.cjs
-          node local-works.test.cjs
-          node atlas.test.cjs
-          node duplicates.test.cjs
-          node local-reader.test.cjs
-          node profile-stats.test.cjs
-          node server-compatibility.test.cjs
-          node state-store.test.cjs
-          node speech-focus.test.cjs
-          node offline-library.test.cjs
-          node native-patch.test.cjs
-          node ui-contract.test.cjs
+        run: npm test
+

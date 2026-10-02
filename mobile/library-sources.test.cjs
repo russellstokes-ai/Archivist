@@ -1,0 +1,17 @@
+const fs=require('fs');
+const vm=require('vm');
+const ts=require('typescript');
+function load(path){const src=fs.readFileSync(path,'utf8');const out=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;const mod={exports:{}};vm.runInNewContext(`(function(require,module,exports){${out}\n})(require,module,module.exports)`,{require,module:mod,exports:mod.exports});return mod.exports;}
+const x=load(__dirname+'/librarySources.ts');
+const assert=(v,m)=>{if(!v)throw Error(m)};
+const online=x.sourceIdentity({source:'server',server:'https://home.example/',serverWorkId:42,space:'Main',title:'Book'});
+const downloaded=x.sourceIdentity({source:'downloaded',server:'https://home.example',serverWorkId:42,space:'Main',title:'Book'});
+const local=x.sourceIdentity({source:'local',localKey:'asset:file:///book.epub',space:'Main',title:'Book'});
+assert(online.canonicalKey===downloaded.canonicalKey,'online/downloaded canonical identity must match');
+assert(local.canonicalKey!==online.canonicalKey,'local copy must not be merged by title');
+const all=x.dedupeForAll([{...downloaded,space:'Main'},{...online,space:'Main'},{...local,space:'Device'}]);
+assert(all.length===2,'All must suppress downloaded duplicate while online server copy exists');
+assert(all.some(i=>i.source==='server'),'All must prefer server copy when connected');
+assert(x.spacesForSource([{...downloaded,space:'Offline'},{...local,space:'Device'}],'downloaded').join(',')==='Offline','source spaces');
+assert(x.normalizeSpaceSelection([{...local,space:'Device'}],'local','Missing')==='','invalid space must reset');
+console.log('library-sources.test.cjs passed');

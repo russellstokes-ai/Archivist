@@ -1,103 +1,90 @@
 <p align="center">
-  <img src="web/assets/archivist-primary-logo.png" alt="Archivist" width="190">
+  <img src="web/assets/archivist-primary-logo.png" alt="Archivist" width="220">
 </p>
 
 # Archivist
 
-**Your library, yours.**
+**Your library. Yours.**
 
-Archivist is a private, local-first library for books, audiobooks, comics and PDFs. It combines a polished Android reading and listening experience with an optional self-hosted server for household libraries, shared storage and remote access.
+Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
 
-| Component | Current version |
-| --- | --- |
-| Home Assistant app | **0.1.21** |
-| Android app | **0.1.0** |
+Local files remain useful without a server, and connecting a server later does not replace the phone library.
 
-## What Archivist does
+## Highlights
 
-- Brings books, audiobooks, comics and PDFs into one library.
-- Works locally on Android without requiring a server.
-- Connects to an optional private Archivist server for shared household libraries.
-- Supports multiple library folders and spaces.
-- Scans, groups and organises media while preserving the original files unless you explicitly apply a move.
-- Provides preview-first sorting with collision checks and recovery safeguards.
-- Includes EPUB, PDF and comic reading plus audiobook playback and saved progress.
-- Includes comic speech focus for fast double-tap navigation around likely speech areas.
-- Tracks reading/listening progress, completion, ratings, favourites and personal statistics.
-- Maps library relationships through Atlas using authors, series, genres, formats, reading state and ratings.
-- Supports administrator and household user profiles with separate progress and permissions.
-- Keeps recommendations private and based on the library you already own.
+- **One library, multiple sources** — Local, Server and Downloaded content coexist without duplicate online/offline copies.
+- **Shelf & Library** — cover-first browsing, search, filters, grid/list views, Smart Shelves, Collections, favourites, ratings and metadata review.
+- **Audiobooks** — background playback, durable progress, mixed-source queue, chapters, bookmarks, speed, native sleep-timer support and offline server downloads.
+- **Reader** — ebooks, PDFs and comics with saved position, bookmarks, highlights, notes, appearance controls and Comic Focus Zoom foundations.
+- **Atlas** — a pannable, zoomable visual universe of genres, works, authors, series, collections, notes and tags.
+- **Insights** — personal history, goals, ratings, achievements and a library-wide annotation hub.
+- **Organisation** — preview-first safe sorting, metadata corrections, duplicate review and restart-safe recovery.
+- **Family server** — simple Admin/User roles with separate progress, ratings, favourites, sessions and statistics.
+- **Server resilience** — watched folders, persistent scan jobs, disconnected-drive retention, database backup/restore and OPDS.
+
+## Android testing build
+
+GitHub Actions includes **Android Test APK**. It builds an optimized release variant for device acceptance, signs it with the repository debug key, verifies package metadata/signature/alignment, and launches it in an Android emulator.
+
+Successful output:
+
+- artifact: `Archivist-0.9.3-Test-APK`
+- APK: `Archivist-0.9.3-test.apk`
+- checksum: `Archivist-0.9.3-test.apk.sha256`
+
+This is an installable testing APK, not a Google Play production build. Production publication still requires private production signing, an AAB, Play Console testing/review and store assets.
+
+See `GITHUB-ANDROID-BUILD.md` and `MOBILE-TESTING.md`.
+
+## Optional server
+
+Archivist Server is not required to use the mobile app. When connected it provides multiple source folders, private streaming/downloads, family users, guided folder browsing, background and watched scans, safe file organisation, backup/restore, OPDS and a library-first web interface.
+
+The same server source is packaged for standalone Docker and Home Assistant.
 
 ## Home Assistant
 
-Archivist can be installed directly from this repository as a Home Assistant app.
-
-### Add the repository
-
-In Home Assistant:
-
-1. Open **Settings → Apps → App store**.
-2. Open the repository menu.
-3. Add:
+Add this repository to the Home Assistant app/add-on store:
 
 `https://github.com/russellstokes-ai/Archivist`
 
-4. Refresh the store.
-5. Open **Archivist** and install it.
-6. Start Archivist and select **Open Web UI**.
+Archivist declares `aarch64` and `amd64`. CI cross-compiles the complete server for Linux ARM64 and smoke-tests the Home Assistant container. The intended home-server target includes Raspberry Pi 4-class hardware.
 
-The Home Assistant package supports **aarch64** and **amd64**, including Raspberry Pi 4 installations running HAOS.
+First run:
 
-### First start
+1. Start Archivist and open its Home Assistant panel or local web UI.
+2. Create the Admin access key.
+3. Add one or more mapped folders such as `/media/books`.
+4. Scan them to build the Shelf.
+5. Optionally enable watched scanning, create family users, download a backup or connect the mobile app.
 
-When opened through Home Assistant ingress, Archivist uses the authenticated Home Assistant session for administrator access.
+## Remote access
 
-From **Settings → Server** you can set the owner access key used by the Android app and direct network sessions. Then add one or more library folders, scan them, and your Shelf is ready.
+The native app expects a stable **trusted HTTPS** address for remote use. Archivist does not disable certificate validation.
 
-Home Assistant exposes these folders to Archivist:
+A correctly configured reverse proxy/DuckDNS address or Tailscale-accessible HTTPS origin can be used. The Home Assistant ingress/sidebar URL is **not** the native mobile API address.
 
-- `/media`
-- `/share`
-- `/backup`
-
-Archivist keeps its persistent database under `/data`.
-
-For full configuration and network guidance, see [archivist/DOCS.md](archivist/DOCS.md).
-
-## Android
-
-Archivist 0.1.0 introduces the redesigned mobile shell: four fixed destinations — **Shelf, Library, Atlas and Insights** — with Player, Reader and Settings treated as contextual experiences rather than permanent navigation tabs. Shelf is the calm, curated home; Library contains the complete searchable collection; Atlas leads with the connected visual graph; and Insights brings reading history, achievements and statistics together.
-
-The Android app is local-first. You can add folders, scan and organise your library, read or listen without a server, then add an Archivist server later from Settings.
-
-A connected server adds shared household libraries, remote storage, server-side organisation, account separation and cross-device progress.
-
-## Reader and player
-
-Archivist is designed around reading and listening rather than file management.
-
-The reader supports books, PDFs and comics with saved progress, zoom controls and comic speech focus. The audiobook player includes chapters, speed control, queues, background playback, lock-screen integration and sleep-timer support.
-
-## Atlas
-
-Atlas is the visual map of your library. It connects works through author, series, genre, format, space, reading state, ratings and favourites while keeping the approved rounded graph presentation.
-
-Atlas is intended to make a large personal collection easier to rediscover, not to send your reading history to an external recommendation service.
+Remote networking belongs to the host environment; Archivist does not silently create public exposure or a cloud account.
 
 ## Privacy
 
-Archivist is self-hosted and privacy-first. Your catalogue, progress and household data stay with your installation. External metadata lookups are optional rather than required for normal library use.
+Archivist is designed to keep the catalogue, reading history, ratings and recommendations private to the user's device/server. Recommendations are based on media already accessible to the active profile. There is no sponsored recommendation feed and no requirement to upload reading behaviour to an external service.
 
-For remote access, prefer HTTPS or a private network such as Tailscale. Do not expose the plain HTTP port directly to the public internet.
+## Validation status
 
-## Repository layout
+Automated mobile and server checks cover TypeScript, behavioural tests, Go tests, package parity, browser contracts, ARM64 compilation, Home Assistant container startup and health checks. The Android workflow additionally builds and emulator-launches the testing APK.
 
-- `archivist/` — Home Assistant app package.
-- `mobile/` — Android/React Native application.
-- `web/` — server web interface.
-- Root Go sources — Archivist server.
-- `repository.yaml` — Home Assistant repository metadata.
+Physical-device acceptance remains a separate gate: Galaxy Fold closed/open layouts, real background audio, real Home Assistant/Pi installation and real remote networking must be exercised on the intended hardware before production release.
+
+See `TESTING-READINESS.md` for current evidence.
 
 ## Licence
 
-Archivist application source is proprietary. See [LICENSE.md](LICENSE.md). Third-party components retain their respective licences; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Archivist application source is proprietary. See `LICENSE.md`. Third-party components retain their own licences; relevant notices are in `THIRD-PARTY-NOTICES.md` and vendor notice files.
+
+## Updating an existing Home Assistant installation
+
+Refresh the app/add-on store for this GitHub repository, open Archivist and install version 0.9.3. Keep the existing installation: its database and configured folders remain under `/data`. The canonical package is `archivist/`; the old duplicate package is not published.
+
+Android 0.9.3 is a testing release. Physical-device acceptance and remaining server metadata improvements are still in progress.
+

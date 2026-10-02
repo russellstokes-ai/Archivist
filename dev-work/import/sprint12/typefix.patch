@@ -1,0 +1,93 @@
+diff --git a/mobile/App.tsx b/mobile/App.tsx
+index a1f00ef..5dd7efc 100644
+--- a/mobile/App.tsx
++++ b/mobile/App.tsx
+@@ -541,8 +541,8 @@ function Client() {
+   useEffect(()=>{const next=normalizeSpaceSelection(sourceWorks,sourceFilter,space);if(next!==space)setSpace(next);},[sourceFilter,sourceWorks,space]);
+ 
+ 
+-  const atlasRelationshipWorks=useMemo(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter(item=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);
+-  const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
++  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);
++  const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
+ 
+   const localDuplicateGroups = useMemo(() => {
+     const local=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+@@ -717,7 +717,7 @@ function Client() {
+ 
+   const atlas = useMemo(() => {
+     const count=(values:string[])=>{const totals=new Map<string,number>();for(const value of values.map(v=>v.trim()).filter(Boolean))totals.set(value,(totals.get(value)||0)+1);return [...totals.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,16);};
+-    const items=sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter(item=>matchesSource(item.source,sourceFilter));
++    const items:UnifiedWork[]=sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter));
+     return {
+       formats:count(items.map(item=>item.format)),authors:count(items.map(item=>item.author||'Unknown author')),
+       series:count(items.map(item=>item.series).filter(Boolean)),genres:count(items.map(item=>item.genre).filter(Boolean)),
+@@ -2342,9 +2342,9 @@ function Client() {
+   }
+ 
+   function Shelf(){
+-    const base=(sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter(item=>matchesSource(item.source,sourceFilter))).filter(work=>!space||work.space===space);
+-    const continuing=base.filter(work=>work.readingState==='in-progress').slice(0,12);
+-    const favourites=base.filter(work=>work.favourite).slice(0,12);
++    const base:UnifiedWork[]=(sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter))).filter((work:UnifiedWork)=>!space||work.space===space);
++    const continuing=base.filter((work:UnifiedWork)=>work.readingState==='in-progress').slice(0,12);
++    const favourites=base.filter((work:UnifiedWork)=>work.favourite).slice(0,12);
+     const seriesCounts=new Map<string,number>();for(const work of base)if(work.series)seriesCounts.set(work.series,(seriesCounts.get(work.series)||0)+1);
+     const seriesOptions=[...seriesCounts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,10);
+     const localReview=localBooks.filter(book=>book.needsReview).length;
+@@ -2390,9 +2390,9 @@ function Client() {
+     const columns=libraryView==='list'?1:(width>=1180?6:width>=900?5:width>=700?4:width>=520?3:2);
+     const filtersActive=[space,formatFilter,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
+     const formatOptions=[...new Set(allUnifiedWorks.map(work=>work.format).filter(Boolean))].sort();
+-    const authorOptions=[...new Set(allUnifiedWorks.map(work=>work.author).filter(Boolean))].sort().slice(0,20);
+-    const seriesOptions=[...new Set(allUnifiedWorks.map(work=>work.series).filter(Boolean))].sort().slice(0,20);
+-    const genreOptions=[...new Set(allUnifiedWorks.map(work=>work.genre).filter(Boolean))].sort().slice(0,20);
++    const authorOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.author).filter((value:string)=>!!value))).sort().slice(0,20);
++    const seriesOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.series).filter((value:string)=>!!value))).sort().slice(0,20);
++    const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
+     const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
+     const ReviewList=()=>reviewOnly?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Metadata review</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} item{visibleBooks.length===1?'':'s'} need attention</Text></View><Button label="Done reviewing" tone="quiet" onPress={()=>setReviewOnly(false)}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>:null}</View>:null;
+     const main=<View style={styles.libraryMain}>
+diff --git a/mobile/libraryOrganisation.ts b/mobile/libraryOrganisation.ts
+index 6abaa1f..269085d 100644
+--- a/mobile/libraryOrganisation.ts
++++ b/mobile/libraryOrganisation.ts
+@@ -9,7 +9,7 @@ export type SmartShelfDefinition = {
+   series: string;
+   genre: string;
+   space: string;
+-  readingState: string;
++  readingState: '' | 'not-started' | 'in-progress' | 'finished';
+   minimumRating: number;
+   favouriteOnly: boolean;
+   availableOnly: boolean;
+@@ -34,7 +34,7 @@ type OrganisableWork = {
+   format: string;
+   space: string;
+   available: boolean;
+-  readingState: string;
++  readingState: '' | 'not-started' | 'in-progress' | 'finished';
+   rating: number;
+   favourite: boolean;
+ };
+@@ -52,7 +52,7 @@ export function sanitizeSmartShelves(value: unknown): SmartShelfDefinition[] {
+     return [{
+       id: String(raw.id), name: String(raw.name).trim(), source,
+       format: String(raw.format || ''), author: String(raw.author || ''), series: String(raw.series || ''),
+-      genre: String(raw.genre || ''), space: String(raw.space || ''), readingState: String(raw.readingState || ''),
++      genre: String(raw.genre || ''), space: String(raw.space || ''), readingState: ['not-started','in-progress','finished'].includes(raw.readingState) ? raw.readingState : '',
+       minimumRating: Math.max(0, Math.min(10, Number(raw.minimumRating) || 0)),
+       favouriteOnly: !!raw.favouriteOnly, availableOnly: !!raw.availableOnly, sort,
+       createdAt: String(raw.createdAt || new Date(0).toISOString()),
+@@ -64,9 +64,10 @@ export function sanitizeCollections(value: unknown): LibraryCollection[] {
+   if (!Array.isArray(value)) return [];
+   return value.flatMap((raw: any) => {
+     if (!raw || typeof raw !== 'object' || !String(raw.id || '').trim() || !String(raw.name || '').trim()) return [];
++    const canonicalKeys:string[] = Array.isArray(raw.canonicalKeys) ? raw.canonicalKeys.map((item:unknown)=>String(item)).filter((item:string)=>!!item) : [];
+     return [{
+       id: String(raw.id), name: String(raw.name).trim(),
+-      canonicalKeys: [...new Set(Array.isArray(raw.canonicalKeys) ? raw.canonicalKeys.map(String).filter(Boolean) : [])],
++      canonicalKeys: [...new Set<string>(canonicalKeys)],
+       createdAt: String(raw.createdAt || new Date(0).toISOString()),
+     }];
+   });

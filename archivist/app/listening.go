@@ -99,7 +99,8 @@ func (a *app) listeningRoutes(mux *http.ServeMux) {
 		}
 		defer tx.Rollback()
 		var revision int64
-		err = tx.QueryRow("SELECT revision FROM asset_progress WHERE profile_id=? AND asset_id=?", who(r).ID, id).Scan(&revision)
+		var previousSeconds float64
+		err = tx.QueryRow("SELECT revision,seconds FROM asset_progress WHERE profile_id=? AND asset_id=?", who(r).ID, id).Scan(&revision,&previousSeconds)
 		if err != nil && err != sql.ErrNoRows {
 			fail(w, 500, err)
 			return
@@ -117,6 +118,9 @@ func (a *app) listeningRoutes(mux *http.ServeMux) {
 			fail(w, 500, err)
 			return
 		}
+		delta:=p.Seconds
+		if p.Revision>0 && p.Seconds>=previousSeconds { delta=p.Seconds-previousSeconds }
+		if workID,workErr:=a.workForAsset(id);workErr==nil { _=a.recordActivity(who(r).ID,workID,"Listening",delta) }
 		p.Revision++
 		reply(w, p)
 	})

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -275,4 +276,26 @@ func TestPendingMovePaginationAndCrossBatchCollision(t *testing.T) {
 	if e=json.Unmarshal(res.Body.Bytes(),&page);e!=nil{t.Fatal(e)}
 	if len(page)!=10{t.Fatalf("pending second page=%d want 10",len(page))}
 	_ = first
+}
+
+
+func TestCopyFailureRetainsOriginalAndCatalogue(t *testing.T) {
+	a:=fixture(t)
+	if e:=a.initMoves();e!=nil{t.Fatal(e)}
+	root:=t.TempDir()
+	original:=filepath.Join(root,"Book.mp3")
+	if e:=os.WriteFile(original,[]byte("retain me"),0600);e!=nil{t.Fatal(e)}
+	if e:=a.addSource("Audio",root);e!=nil{t.Fatal(e)}
+	if e:=a.scan(1);e!=nil{t.Fatal(e)}
+	m,e:=a.previewMove(1,"Sorted/Book.mp3");if e!=nil{t.Fatal(e)}
+	oldLink,oldCopy:=moveLinkFile,moveCopyFile
+	moveLinkFile=func(root *os.Root,from,to string)error{return errors.New("cross-device link")}
+	moveCopyFile=func(root *os.Root,from,to,wantHash string)error{return errors.New("no space left on device")}
+	defer func(){moveLinkFile=oldLink;moveCopyFile=oldCopy}()
+	if _,e=a.applyMove(m.ID);e==nil{t.Fatal("copy failure unexpectedly succeeded")}
+	if b,e:=os.ReadFile(original);e!=nil||string(b)!="retain me"{t.Fatalf("original lost after copy failure: %q %v",string(b),e)}
+	if _,e:=os.Stat(filepath.Join(root,"Sorted/Book.mp3"));!os.IsNotExist(e){t.Fatal("partial destination survived failed copy")}
+	var rel string
+	if e:=a.db.QueryRow("SELECT relative_path FROM assets WHERE id=1").Scan(&rel);e!=nil{t.Fatal(e)}
+	if rel!="Book.mp3"{t.Fatalf("catalogue moved despite failed copy: %q",rel)}
 }

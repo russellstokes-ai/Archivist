@@ -2,7 +2,7 @@
   "expo": {
     "name": "Archivist",
     "slug": "archivist",
-    "version": "0.1.0",
+    "version": "0.9.3",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -17,7 +17,7 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#072632"
       },
-      "versionCode": 11,
+      "versionCode": 93,
       "permissions": [
         "android.permission.POST_NOTIFICATIONS"
       ]

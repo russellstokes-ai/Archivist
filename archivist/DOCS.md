@@ -4,7 +4,7 @@
 
 Archivist is a self-hosted personal library server for books, audiobooks, comics and PDFs. The Home Assistant package provides the Archivist web interface and API, persistent catalogue storage, household profiles and access for the Archivist Android app.
 
-Current Home Assistant version: **0.1.21**
+Current Home Assistant version: **0.9.3**
 
 ## Installation
 
@@ -153,3 +153,4 @@ Check that `remote_https` is enabled and the configured certificate/key files ex
 ## Licence
 
 Archivist application source is proprietary. Third-party components retain their own licences. See the repository `LICENSE.md` and `THIRD-PARTY-NOTICES.md`.
+

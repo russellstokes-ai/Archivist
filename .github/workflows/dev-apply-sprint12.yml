@@ -1,0 +1,129 @@
+name: Apply Sprint 1-2 Reconstruction
+
+on:
+  push:
+    branches:
+      - dev/archivist-work
+    paths:
+      - 'dev-work/import/sprint12/**'
+      - '.github/workflows/dev-apply-sprint12.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify patch
+        id: reconstruct
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f mobile/librarySources.ts && -f mobile/libraryOrganisation.ts ]] && grep -q "function Library()" mobile/App.tsx; then
+            echo "already_applied=true" >> "$GITHUB_OUTPUT"
+            echo "Sprint 1-2 reconstruction is already present."
+            exit 0
+          fi
+          cat dev-work/import/sprint12/part-* > /tmp/sprint12.patch.gz.b64
+          test "$(wc -c < /tmp/sprint12.patch.gz.b64)" -eq 37464
+          base64 -d /tmp/sprint12.patch.gz.b64 > /tmp/sprint12.patch.gz
+          gzip -t /tmp/sprint12.patch.gz
+          gunzip -c /tmp/sprint12.patch.gz > /tmp/sprint12.patch
+          echo "Patch bytes: $(wc -c < /tmp/sprint12.patch)"
+          git apply --check /tmp/sprint12.patch
+          git apply /tmp/sprint12.patch
+          git apply --check dev-work/import/sprint12/typefix.patch
+          git apply dev-work/import/sprint12/typefix.patch
+          echo "already_applied=false" >> "$GITHUB_OUTPUT"
+
+      - name: Upload reconstructed mobile tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint12-reconstructed-mobile
+          path: mobile
+          retention-days: 7
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Run all mobile tests
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in *.test.cjs; do
+            echo "== $f =="
+            node "$f"
+          done
+
+      - name: Write durable Sprint 1 and 2 checkpoints
+        if: steps.reconstruct.outputs.already_applied == 'false'
+        shell: bash
+        run: |
+          mkdir -p dev-work/checkpoints
+          cat > dev-work/checkpoints/sprint-01.md <<'EOF'
+          # Sprint 1 — One Library, Multiple Sources
+          
+          Durable reconstruction checkpoint.
+          
+          Implemented:
+          - Local, Server and Downloaded coexist in one catalogue model.
+          - Stable source-aware identity and downloaded/server deduplication.
+          - Source-aware covers, open/read/play routes and progress.
+          - Mixed-source persistent queue.
+          - Source-aware Space filtering.
+          - Local organisation remains available while connected.
+          - Server sign-out preserves local/downloaded content.
+          
+          Validation:
+          - TypeScript typecheck passed in GitHub Actions.
+          - Full mobile behavioural/contract suite passed in GitHub Actions.
+          
+          Status: durable on dev/archivist-work.
+          EOF
+          cat > dev-work/checkpoints/sprint-02.md <<'EOF'
+          # Sprint 2 — Shelf & Library UX
+          
+          Durable reconstruction checkpoint.
+          
+          Implemented:
+          - Four-tab shell: Shelf / Library / Atlas / Insights.
+          - Editorial vertically scrolling Shelf.
+          - Dedicated Library browse/search/filter/manage experience.
+          - Cover-first cards and secondary-action sheet.
+          - Source/Space filtering, grid/list and sort/filter controls.
+          - Smart Shelves, Collections and bulk selection.
+          - Shelf section ordering/visibility.
+          - Metadata review queue and designed empty/loading states.
+          - Fold-open Library two-pane layout.
+          - Multiple local folders can be added, rescanned and safely forgotten.
+          
+          Validation:
+          - TypeScript typecheck passed in GitHub Actions.
+          - Full mobile behavioural/contract suite passed in GitHub Actions.
+          
+          Visual/device review remains a release validation item and does not block subsequent sprint implementation.
+          
+          Status: durable on dev/archivist-work.
+          EOF
+
+      - name: Commit reconstructed Sprint 1-2
+        if: steps.reconstruct.outputs.already_applied == 'false'
+        shell: bash
+        run: |
+          git config user.name "Archivist Dev"
+          git config user.email "actions@users.noreply.github.com"
+          git add mobile dev-work/checkpoints/sprint-01.md dev-work/checkpoints/sprint-02.md
+          git commit -m "Reconstruct Sprint 1 and Sprint 2 mobile foundation"
+          git push

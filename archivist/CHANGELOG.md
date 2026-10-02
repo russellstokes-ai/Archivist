@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.3 — UI testing release
+
+- Updated library and connected Atlas presentation with shared typography and teal atmosphere.
+- Matched Android testing release 0.9.3.
+- Keeps existing source folders and database under /data.
+- Native-device acceptance and remaining metadata enhancements are still in progress.
+
+
 ## 0.1.21 — Home Assistant product packaging
 
 - Presents Archivist as a first-class Home Assistant app repository.
@@ -15,3 +23,4 @@
 - aarch64 and amd64 package metadata.
 - Home Assistant ingress, watchdog and persistent storage configuration.
 - Optional HTTPS listener and mapped media/share/backup storage.
+
