@@ -115,6 +115,23 @@ class ArchivistAutoService : MediaLibraryService() {
       }
     }
 
+    override fun onSearch(
+      session: MediaLibrarySession,
+      browser: MediaSession.ControllerInfo,
+      query: String,
+      params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<Void>> {
+      val needle = query.trim().lowercase()
+      val count = if (needle.isBlank()) 0 else readCatalogue().count {
+        it.title.lowercase().contains(needle) ||
+          it.author.lowercase().contains(needle) ||
+          it.series.lowercase().contains(needle) ||
+          it.genre.lowercase().contains(needle)
+      }
+      session.notifySearchResultChanged(browser, query, count, params)
+      return Futures.immediateFuture(LibraryResult.ofVoid())
+    }
+
     override fun onGetSearchResult(
       session: MediaLibrarySession,
       browser: MediaSession.ControllerInfo,
