@@ -233,15 +233,15 @@ function validateServer(raw: string) {
 function palette(mode: ThemeMode, system: string | null | undefined): Palette {
   const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
   return {
-    ink: dark ? '#F5F5F5' : '#111111',
-    paper: dark ? '#000000' : '#FFFFFF',
-    muted: dark ? '#A0A0A0' : '#6B6B6B',
-    line: dark ? '#252525' : '#E8E8E8',
-    card: dark ? '#111111' : '#F7F7F7',
-    raised: dark ? '#181818' : '#FFFFFF',
-    sage: '#47736F',
-    gold: '#B99A68',
-    ivory: '#FFFFFF',
+    ink: dark ? '#F5F5F5' : '#171410',
+    paper: dark ? '#000000' : '#FBFAF7',
+    muted: dark ? '#A0A0A0' : '#6D675E',
+    line: dark ? '#252525' : '#E3DDD2',
+    card: dark ? '#111111' : '#F4F0E8',
+    raised: dark ? '#181818' : '#FFFDF9',
+    sage: dark ? '#47736F' : '#557B76',
+    gold: dark ? '#B99A68' : '#A67A2F',
+    ivory: dark ? '#FFFFFF' : '#FFFDF7',
     danger: dark ? '#DE8585' : '#A94F4F',
     dangerSoft: dark ? '#351F20' : '#F4E1DF',
   };
@@ -502,6 +502,10 @@ function Client() {
   const foldLayout = width >= 600;
   const [theme, setTheme] = useState<ThemeMode>('system');
   const p = useMemo(() => palette(theme, systemScheme), [theme, systemScheme]);
+  const darkMode=p.paper==='#000000';
+  const ambientHaloColor=darkMode?'#2F8B86':'#C99A43';
+  const ambientHaloStrength=darkMode?.95:.48;
+  const interfaceHaloColor=darkMode?null:p.gold;
   const [session, setSession] = useState<Session | null>(null);
   const [recoverableSession, setRecoverableSession] = useState<Session | null>(null);
   const [server, setServer] = useState('');
@@ -2945,7 +2949,7 @@ function Client() {
   function ProfileAvatarButton({size=42}:{size?:number}={}){
     const avatarColor=profileAvatar.color||'#47736F';
     return <View style={[styles.profileAvatarButtonWrap,{width:size,height:size}]}>
-      {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:size/2,backgroundColor:avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[.36,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.42]})}]}]}/>:null}
+      {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:size/2,backgroundColor:interfaceHaloColor||avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.36:.28,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.42]})}]}]}/>:null}
       <Pressable accessibilityRole="button" accessibilityLabel={profileMenuOpen?'Close profile menu':'Open profile menu'} accessibilityState={{expanded:profileMenuOpen}} onPress={profileMenuOpen?()=>closeProfileMenu():openProfileMenu} style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:avatarColor}]}>
         <Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>
       </Pressable>
@@ -3369,7 +3373,7 @@ function Client() {
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
+            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               {current.author?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>By {current.author}</Text>:null}
@@ -4027,7 +4031,7 @@ function Client() {
               onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
               onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
               onResponderRelease={atlasGestureEnd} onResponderTerminate={()=>{atlasGesture.current=null}}>
-              <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color="#2F8B86" size={Math.max(680,ringSize*1.35)} strength={.72}/></View>
+              <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color={ambientHaloColor} size={Math.max(680,ringSize*1.35)} strength={darkMode?.72:.52}/></View>
               <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
                 <DataRing size={ringSize} items={atlasRingItems} ink={p.ink} muted={p.muted} track={p.line} thickness={22}/>
                 {atlasBreakdown?<Animated.View style={[styles.atlasSelectedRingPulse,{width:ringSize-8,height:ringSize-8,borderRadius:(ringSize-8)/2,borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.22,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.035]})}]}]}/>:null}
@@ -5092,7 +5096,7 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen,{backgroundColor:p.paper==='#000000'?'#07151C':'#F5F8F7'}]}><AmbientGlow color={p.paper==='#000000'?'#2F8B86':'#9BCFCB'} size={Math.max(1500,width*2.2)} strength={p.paper==='#000000'?.95:.34}/>
+    <SafeAreaView style={[styles.screen,{backgroundColor:darkMode?'#07151C':'#FBFAF7'}]}><AmbientGlow color={ambientHaloColor} size={Math.max(1500,width*2.2)} strength={ambientHaloStrength}/>
       {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger,backgroundColor:p.paper==='#000000'?'#241416':'#FFF5F5'}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
@@ -5143,7 +5147,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:p.paper==='#000000'?'#07111D':'#F7F7F5',borderTopColor:p.paper==='#000000'?'#26364A':'#D9D7D0'}]}>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:darkMode?'#07111D':'#FBF8F1',borderTopColor:darkMode?'#26364A':'#DDD3C1'}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
