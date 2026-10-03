@@ -213,3 +213,33 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Current server work records expose space but not source-folder ID/path. If multiple server source folders share the same space name, selecting either row currently filters that shared space. Advanced Library management should add source-folder identity to the server work payload in the later scan/organisation sprint.
 - Recently Added remains deferred until a reliable cross-source added timestamp exists.
 - Runtime visual proof is still required on phone and Fold layouts; no CI pass is claimed unless GitHub attaches one to the final commit.
+
+## 2026-10-03 — Shelf / Library Sprint 4: scan, metadata & organisation
+
+### Implemented and source-verified
+- Library now has a dedicated **Manage** workspace rather than hiding the core content-management workflow in Settings.
+- **Scan & Repair** provides beginner-friendly device-folder rescan/add actions, live scan progress and direct maintenance queues.
+- Added explicit maintenance views for uncertain metadata plus blank author, series, genre and device-cover fields.
+- Local and server maintenance views use editable raw-file rows, so metadata fixes act on the underlying asset rather than merely filtering grouped works.
+- Server raw assets are loaded only when an explicit metadata-review/gap workflow needs them; normal Shelf/Library browsing remains work-level and bounded.
+- **Advanced Organisation** reuses the existing safe local organiser: choose a layout, preview proposed copies, apply only ready items, preserve originals, and retain recovery/copy history.
+- Duplicate review is available from Library and retains exact server SHA-256 verification plus non-destructive local candidate review.
+- Connected Admin users can scan individual Archivist Server source folders and use the existing preview/apply safe-sort workflow from Library.
+- Added `libraryMaintenance.ts` metadata-gap classification helpers and `library-maintenance.test.cjs`.
+- Restored duplicate-review request handlers that were referenced but missing on the Draftbit branch.
+- Fixed the progression callback type and stale UI-contract assertions uncovered by the Sprint 4 CI pass; these were pre-existing branch gate failures, not new product-scope additions.
+
+### Automated evidence
+- Mobile Checks run `37134732350` on commit `596b4d2141722f48c2af2ba0fd00c213c4eeab82`: **passed**.
+- Dependency install: passed.
+- Expo Doctor: passed.
+- TypeScript: passed.
+- Full discovered mobile test suite, including the new Library maintenance test and updated UI contract: passed.
+
+### Acceptance still outstanding
+- Draftbit **Sync → Preview** visual review on phone-width and Fold/open-width layouts.
+- Light/dark visual review of the Manage sheet and maintenance queues.
+- Real Android Storage Access Framework rescan against representative folders.
+- Real server-folder scan / duplicate verification / safe-sort smoke against the user's Archivist Server.
+- No destructive automatic metadata fill or duplicate deletion was introduced; uncertain values remain reviewable by design.
+
