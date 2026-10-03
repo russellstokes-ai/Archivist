@@ -4418,7 +4418,7 @@ function Client() {
       {timeRhythm}
     </View>;
 
-    const readingProgressCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
+    const readingProgressCard=<View style={[styles.statsDashboardCard,{borderTopColor:statsPalette.line}]}>
       <CardHeader title="Reading Progress" subtitle="Annual reading goal" icon="target"/>
       <View style={styles.statsCardBody}>
         <DataRing size={110} value={String(completed)} label={'of '+completedGoal+' books'} items={[{label:'Read',count:completed,color:statsPalette.gold},{label:'Remaining',count:progressRemaining,color:statsPalette.blueDeep}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
@@ -4473,7 +4473,7 @@ function Client() {
     </View>;
 
     const paceTarget=Math.max(60,paceMinutes);
-    const paceCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
+    const paceCard=<View style={[styles.statsDashboardCard,{borderTopColor:statsPalette.line}]}>
       <CardHeader title="Reading Pace" subtitle="Average on active reading days" icon="gauge"/>
       <View style={styles.statsCardBody}>
         <DataRing size={110} value={paceMinutes?String(paceMinutes):'—'} label="min / day" items={[{label:'Daily pace',count:paceMinutes,color:statsPalette.gold},{label:'Scale',count:Math.max(0,paceTarget-paceMinutes),color:statsPalette.blueDeep}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
@@ -4533,7 +4533,7 @@ function Client() {
       </View>
     </View>;
 
-    const primaryReadingCards=<View style={styles.statsDonutGrid}>
+    const primaryReadingCards=<View style={styles.statsPrimaryReadingStack}>
       {readingProgressCard}
       {paceCard}
     </View>;
@@ -5726,6 +5726,7 @@ const styles = StyleSheet.create({
   statsSectionHeading: {gap:3,paddingTop:2,paddingBottom:6},
   statsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.16},
   statsSectionCopy: {fontSize:10.5,lineHeight:15,fontWeight:'400'},
+  statsPrimaryReadingStack: {gap:22,alignItems:'stretch'},
   statsDonutGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22,alignItems:'stretch'},
   statsSupportingGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22,alignItems:'stretch'},
   statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22},

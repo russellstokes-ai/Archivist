@@ -101,7 +101,7 @@ const rhythmIndex=statsSource.indexOf('{rhythmCard}');
 const breakdownIndex=statsSource.indexOf('>Reading Breakdown</Text>');
 const moreInsightsIndex=statsSource.indexOf('>More Insights</Text>');
 assert.ok(rhythmIndex>=0 && breakdownIndex>rhythmIndex && moreInsightsIndex>breakdownIndex, 'Reader Stats chart hierarchy must place doughnut sections below Reading Rhythm and supporting insights below them');
-assert.ok(statsSource.includes('const primaryReadingCards=') && statsSource.indexOf('{readingProgressCard}')<statsSource.indexOf('{paceCard}'), 'Reading Progress and Reading Pace must share the primary aligned row');
+assert.ok(statsSource.includes('const primaryReadingCards=<View style={styles.statsPrimaryReadingStack}>') && statsSource.indexOf('{readingProgressCard}')<statsSource.indexOf('{paceCard}') && source.includes("statsPrimaryReadingStack: {gap:22,alignItems:'stretch'}"), 'Reading Pace must stack directly below Reading Progress with the same left alignment');
 assert.ok(statsSource.includes('const breakdownCards=') && statsSource.includes('{formatCard}') && statsSource.includes('{genreCard}') && statsSource.includes('{placesCard}'), 'Reader Stats breakdown grouping is incomplete');
 assert.ok(statsSource.includes('const supportingCards=') && statsSource.includes('{streakCard}') && statsSource.includes('{tasteCard}'), 'Reader Stats non-doughnut insight grouping is incomplete');
 
