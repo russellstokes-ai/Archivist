@@ -1,5 +1,16 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## Android Auto — current release gap
+
+Archivist currently exposes Android media playback through Expo Audio's MediaSessionService, which supports system/lock-screen media controls.
+
+That is **not** equivalent to a full browseable Android Auto integration.
+
+Current source audit found no Archivist MediaLibraryService / MediaBrowserService / CarAppService or car browse tree. Therefore Android Auto library browsing must remain **not complete** until a dedicated native integration is implemented and tested in an Android Auto host/emulator and on compatible hardware.
+
+Do not mark Android Auto complete merely because Bluetooth, lock-screen or system media controls work.
+
+
 ## 2026-10-03 — Final polish Sprint 6: family account recovery and revocation
 
 ### Implemented and source-verified
