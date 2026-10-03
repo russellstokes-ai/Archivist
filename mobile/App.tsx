@@ -2902,15 +2902,17 @@ function Client() {
     </Pressable>;
   }
 
-  function PageHeader({title,subtitle,action}:{title:string;subtitle:string;action?:React.ReactNode}){
+  function PageHeader({title,subtitle}:{title:string;subtitle:string}){
     return <View style={styles.standardPageHeader}>
       <View style={styles.standardPageHeaderCopy}>
         <Text maxFontSizeMultiplier={1.15} style={[styles.standardPageTitle,{color:p.ink}]}>{title}</Text>
         <Text maxFontSizeMultiplier={1.2} style={[styles.standardPageSubtitle,{color:p.muted}]}>{subtitle}</Text>
       </View>
-      {action?<View style={styles.standardPageHeaderAction}>{action}</View>:null}
-      <ProfileAvatarButton/>
     </View>;
+  }
+
+  function PageToolbar({children,align='end'}:{children:React.ReactNode;align?:'start'|'end'|'center'}){
+    return <View style={[styles.pageHeaderToolbar,align==='start'&&styles.pageHeaderToolbarStart,align==='center'&&styles.pageHeaderToolbarCenter]}>{children}</View>;
   }
 
   function ProfileMenu(){
@@ -3108,12 +3110,14 @@ function Client() {
       onScroll={e=>{shelfScrollOffset.current=e.nativeEvent.contentOffset.y}}
       scrollEventThrottle={120}
       onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
-      contentContainerStyle={[styles.shelfContent,foldLayout&&styles.shelfContentFold]}>
+      contentContainerStyle={[styles.shelfContent,width>=600&&styles.shelfContentFold,width>=940&&styles.shelfContentWide]}>
       <PageHeader
         title="Shelf"
         subtitle={shelfGreeting+' Pick up where you left off.'}
-        action={<Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}><Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text></Pressable>}
       />
+      <PageToolbar>
+        <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}><Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text></Pressable>
+      </PageToolbar>
 
       <OnboardingGuide/>
 
@@ -3311,7 +3315,6 @@ function Client() {
           <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable>
           <Text style={[styles.playerEyebrow,{color:p.ink,flex:1}]}>NOW PLAYING</Text>
           {current ? <Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>{speed}×</Text> : null}
-          <ProfileAvatarButton size={38}/>
         </View>:null}
         {current ? (
           <>
@@ -3528,7 +3531,7 @@ function Client() {
 
   function Reader({embedded=false}:{embedded?:boolean}={}) {
     const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View>{!embedded?<ProfileAvatarButton size={38}/>:null}<Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
+    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
     if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastReading?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.'}</Text>{lastReading?<Button label={'Resume '+lastReading.title} onPress={()=>openBook(lastReading)}/>:null}<Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/></View>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
@@ -3561,7 +3564,6 @@ function Client() {
             </Pressable>;
           })}
         </View>
-        <ProfileAvatarButton size={42}/>
       </View>
       <View style={styles.liveHubBody}>
         {liveMode==='player'?<Player embedded/>:<Reader embedded/>}
@@ -3644,7 +3646,10 @@ function Client() {
     const relation=unifiedAtlasRelationship;
     return (
       <ScrollView contentContainerStyle={styles.content}>
-        <PageHeader title={atlasFocus.value} subtitle={(atlasFocus.kind==='space'?'Folder':atlasFocus.kind)+' · Atlas relationship'} action={<Pressable accessibilityRole="button" accessibilityLabel="Back to Atlas" onPress={()=>setAtlasFocus(null)} style={styles.headerAction}><UiIcon name="back" color={p.muted} size={20}/></Pressable>}/>
+        <PageHeader title={atlasFocus.value} subtitle={(atlasFocus.kind==='space'?'Folder':atlasFocus.kind)+' · Atlas relationship'}/>
+        <PageToolbar align="start">
+          <Pressable accessibilityRole="button" accessibilityLabel="Back to Atlas" onPress={()=>setAtlasFocus(null)} style={styles.headerAction}><UiIcon name="back" color={p.muted} size={20}/></Pressable>
+        </PageToolbar>
         <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
           <Text style={[styles.playerEyebrow,{color:p.sage}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
           <Text maxFontSizeMultiplier={1.15} style={[styles.atlasFocusTitle,{color:p.ink}]}>{atlasFocus.value}</Text>
@@ -3800,12 +3805,14 @@ function Client() {
     for(const work of atlasUniverseWorks){const label=atlasBreakdown==='Genre'?(work.genre||'Unclassified'):atlasBreakdown==='Format'?work.format:work.publishedYear?String(work.publishedYear):'Not recorded';breakdownCounts.set(label,(breakdownCounts.get(label)||0)+1);}
     const breakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:atlasBreakdown==='Genre'?genreColour(label):genreColours[index%genreColours.length]}));
     return (
-      <ScrollView contentContainerStyle={styles.atlasScreen} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.atlasScreen,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled">
         <PageHeader
           title="Atlas"
           subtitle="Characters, stories and ideas — your reading universe."
-          action={<Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}><UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/></Pressable>}
         />
+        <PageToolbar>
+          <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}><UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/></Pressable>
+        </PageToolbar>
 
         {atlasListMode?<SourceSwitcher/>:null}
         {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
@@ -4330,8 +4337,10 @@ function Client() {
       <PageHeader
         title="Reader Stats"
         subtitle="Your reading journey."
-        action={<Pressable accessibilityRole="button" accessibilityLabel={'Statistics period '+periodLabel} accessibilityHint={periodOptions.length>1?'Double tap to change period':undefined} disabled={periodOptions.length<=1} onPress={cycleStatsPeriod} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel,opacity:periodOptions.length>1?1:.7}]}><Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{periodLabel}</Text>{periodOptions.length>1?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}</Pressable>}
       />
+      <PageToolbar>
+        <Pressable accessibilityRole="button" accessibilityLabel={'Statistics period '+periodLabel} accessibilityHint={periodOptions.length>1?'Double tap to change period':undefined} disabled={periodOptions.length<=1} onPress={cycleStatsPeriod} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel,opacity:periodOptions.length>1?1:.7}]}><Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{periodLabel}</Text>{periodOptions.length>1?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}</Pressable>
+      </PageToolbar>
 
       <View style={[styles.statsMetricRow,{borderTopColor:statsPalette.line,borderBottomColor:statsPalette.line}]}>
         {metricCards.map(card=><View key={card.label} style={[styles.statsMetricCard,width>=700?styles.statsMetricCardWide:styles.statsMetricCardPhone]}>
@@ -4352,7 +4361,7 @@ function Client() {
 
   function Profile() {
     const stats=profileStats;
-    return <ScrollView contentContainerStyle={styles.profileHubScreen}>
+    return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Profile" subtitle="Your identity and reading life."/>
       <View style={styles.profileIdentityHero}>
         <View style={[styles.profileIdentityAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text></View>
@@ -4396,7 +4405,7 @@ function Client() {
       .filter(item=>awardCategory==='All'||(item.category||'Other')===awardCategory)
       .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
     const unlocked=profileAchievements.filter(item=>item.unlocked).length;
-    return <ScrollView contentContainerStyle={styles.profileHubScreen}>
+    return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Rewards" subtitle="Milestones from your reading life."/>
       <View style={[styles.rewardsSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.rewardsSummaryValue,{color:p.gold}]}>{unlocked}</Text>
@@ -4580,7 +4589,7 @@ function Client() {
   function Settings() {
     const connected=!!session;
     return (
-      <ScrollView contentContainerStyle={styles.settingsScreen}>
+      <ScrollView contentContainerStyle={[styles.settingsScreen,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]}>
         <PageHeader title="Settings" subtitle="Your app, library and account."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
@@ -4756,13 +4765,16 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07151C':'#F5F8F7'):p.paper}]}><AmbientGlow color={(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={(activeTab==='insights'||activeTab==='now')?Math.max(1500,width*2.2):Math.max(480,width)} strength={activeTab==='insights'?(p.paper==='#000000'?.95:.34):activeTab==='now'?(p.paper==='#000000'?.72:.26):(p.paper==='#000000'?.6:.22)}/>
+    <SafeAreaView style={[styles.screen,{backgroundColor:p.paper==='#000000'?'#07151C':'#F5F8F7'}]}><AmbientGlow color={p.paper==='#000000'?'#2F8B86':'#9BCFCB'} size={Math.max(1500,width*2.2)} strength={p.paper==='#000000'?.95:.34}/>
       {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
+      <View pointerEvents="box-none" style={[styles.globalProfileCorner,{right:width>=940?28:width>=600?24:18}]}>
+        <ProfileAvatarButton size={42}/>
+      </View>
       <Animated.View style={[styles.tabBody,{
         opacity:tabTransition,
         transform:[{translateY:tabTransition.interpolate({inputRange:[0,1],outputRange:[reduceMotion?0:6,0]})}],
@@ -4804,7 +4816,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:p.paper==='#000000'?'#07111D':'#F7F7F5',borderTopColor:p.paper==='#000000'?'#26364A':'#D9D7D0'}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
@@ -5016,7 +5028,7 @@ const styles = StyleSheet.create({
   playerEmpty: {borderWidth:0,padding:32,gap:10,alignItems:'center',justifyContent:'center',minHeight:260,maxWidth:420,alignSelf:'center'},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex:1,position:'relative'},
-  readerBar: {position:'absolute',left:0,right:0,top:0,zIndex:25,minHeight:44,flexDirection:'row',alignItems:'center',paddingHorizontal:2,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.16)'},
+  readerBar: {position:'absolute',left:0,right:0,top:0,zIndex:25,minHeight:44,flexDirection:'row',alignItems:'center',paddingLeft:2,paddingRight:66,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.16)'},
   readerToolsButton: {width:44,minHeight:44,alignItems:'center',justifyContent:'center'},
   searchRow:{flexDirection:'row',alignItems:'center',gap:6},
   filterPill:{borderWidth:0,borderRadius:10,minHeight:38,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
@@ -5074,7 +5086,7 @@ const styles = StyleSheet.create({
   tabCenterOrb: {width:46,height:46,borderRadius:23,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',marginTop:-10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:4},
   tabCenterText: {marginTop:-2},
   liveHub: {flex:1,width:'100%'},
-  liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:8,paddingBottom:6,flexDirection:'row',alignItems:'center',gap:12},
+  liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:10,paddingBottom:8,paddingRight:76,flexDirection:'row',alignItems:'center',justifyContent:'center'},
   liveHubSegment: {flex:1,maxWidth:320,height:44,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,padding:3,flexDirection:'row',alignItems:'center'},
   liveHubSegmentItem: {flex:1,height:36,borderRadius:18,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,position:'relative'},
   liveHubSegmentText: {fontSize:12,lineHeight:16,fontWeight:'600'},
@@ -5092,7 +5104,9 @@ const styles = StyleSheet.create({
   celebrationTitle: {color:'#F5F5F5',fontSize:18,lineHeight:23,fontWeight:'600'},
   celebrationCopy: {color:'#A0A0A0',fontSize:12.5,lineHeight:18,marginTop:3},
   profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
-  settingsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:1060,width:'100%',alignSelf:'center'},
+  settingsScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:22,maxWidth:1060,width:'100%',alignSelf:'center'},
+  settingsScreenFold: {paddingHorizontal:24,paddingTop:10},
+  settingsScreenWide: {paddingHorizontal:28,paddingTop:10},
   settingsTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   settingsColumns: {gap:22},
   settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:36},
@@ -5177,7 +5191,9 @@ const styles = StyleSheet.create({
   atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12,borderTopLeftRadius:20,borderTopRightRadius:20,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
   atlasInspectorWide: {width:236,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
 
-  atlasScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
+  atlasScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
+  atlasScreenFold: {paddingHorizontal:24,paddingTop:10},
+  atlasScreenWide: {paddingHorizontal:28,paddingTop:10},
   atlasTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   atlasFocusTitle: {fontFamily:'ArchivistEditorial',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
   atlasListAlternative: {gap:0},
@@ -5193,8 +5209,9 @@ const styles = StyleSheet.create({
   sourceTabCount: {fontSize:11,fontWeight:'600'},
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
-  shelfContent: {paddingHorizontal:18,paddingTop:20,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
-  shelfContentFold: {paddingHorizontal:24,paddingTop:22,gap:34},
+  shelfContent: {paddingHorizontal:18,paddingTop:10,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
+  shelfContentFold: {paddingHorizontal:24,paddingTop:10,gap:34},
+  shelfContentWide: {paddingHorizontal:28,paddingTop:10,gap:34},
   shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:2,paddingBottom:0},
   shelfEditorialHeaderFold: {paddingTop:0},
   shelfKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.2,marginBottom:7},
@@ -5204,13 +5221,16 @@ const styles = StyleSheet.create({
   shelfEditorialSubtitle: {fontFamily:'sans-serif',fontSize:14,lineHeight:20,fontStyle:'italic',marginTop:3,maxWidth:320},
   shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8},
   shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
-  standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',gap:10},
+  standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',paddingRight:58},
   standardPageHeaderCopy: {flex:1,minWidth:0},
   standardPageTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
-  standardPageHeaderAction: {alignItems:'center',justifyContent:'center',flexShrink:0},
+  pageHeaderToolbar: {minHeight:42,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end',paddingRight:58},
+  pageHeaderToolbarStart: {justifyContent:'flex-start'},
+  pageHeaderToolbarCenter: {justifyContent:'center'},
   pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},
-  profileAvatarButton: {alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:StyleSheet.hairlineWidth,borderColor:'rgba(255,255,255,.16)'},
+  globalProfileCorner: {position:'absolute',top:10,zIndex:80,elevation:12},
+  profileAvatarButton: {alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:StyleSheet.hairlineWidth,borderColor:'rgba(255,255,255,.16)',shadowColor:'#000',shadowOpacity:.08,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:5},
   profileAvatarInitials: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontWeight:'600',letterSpacing:.2},
   profileMenuLayer: {flex:1,position:'relative'},
   profileMenuBackdrop: {position:'absolute',left:0,right:0,top:0,bottom:0,backgroundColor:'rgba(0,0,0,.28)'},
@@ -5225,6 +5245,8 @@ const styles = StyleSheet.create({
   profileMenuItemTitle: {fontSize:13,lineHeight:18,fontWeight:'600'},
   profileMenuItemCopy: {fontSize:9.5,lineHeight:13,marginTop:1},
   profileHubScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,width:'100%',maxWidth:980,alignSelf:'center'},
+  profileHubScreenFold: {paddingHorizontal:24,paddingTop:10},
+  profileHubScreenWide: {paddingHorizontal:28,paddingTop:10},
   profileIdentityHero: {flexDirection:'row',alignItems:'center',gap:16,paddingVertical:8},
   profileIdentityAvatar: {width:82,height:82,borderRadius:41,alignItems:'center',justifyContent:'center'},
   profileIdentityAvatarText: {color:'#FFFFFF',fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500'},
@@ -5328,9 +5350,9 @@ const styles = StyleSheet.create({
   visibilityThumb: {width:18,height:18,borderRadius:9,shadowColor:'#000',shadowOpacity:.14,shadowRadius:2,shadowOffset:{width:0,height:1},elevation:2},
   orderButton: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   libraryTwoPane: {flex:1,flexDirection:'row'},
-  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:18,gap:14},
-  libraryMainFold: {paddingHorizontal:24,paddingTop:20,gap:16},
-  libraryMainWide: {paddingHorizontal:28,paddingTop:24,gap:18},
+  libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10,gap:14},
+  libraryMainFold: {paddingHorizontal:24,paddingTop:10,gap:16},
+  libraryMainWide: {paddingHorizontal:28,paddingTop:10,gap:18},
   libraryCatalogueHeader: {gap:2,paddingBottom:2},
   libraryKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.0},
   libraryTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},

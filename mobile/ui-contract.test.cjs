@@ -48,7 +48,7 @@ assert.ok(source.includes('turnPages(3,-1)') && source.includes('turnPages(3,1)'
 assert.ok(source.includes('title={current.title}') && source.includes('cover={(current.coverUri||current.source===\'server\')?<Cover book={current} fill/>:null}'), 'Living book must use the current title and metadata cover');
 assert.ok(livingBookSource.includes('skipPages=3') && livingBookSource.includes('leafCount') && livingBookSource.includes('closedCover'), 'Living book must support smooth closed-cover and multi-page skip animation');
 assert.ok(livingBookSource.includes('opacity:open.interpolate') && livingBookSource.includes("rotateY:open.interpolate"), 'Living book open/close transition is missing');
-assert.ok(source.includes("(activeTab==='insights'||activeTab==='now')") && source.includes("activeTab==='now'?(p.paper==='#000000'?.72:.26)"), 'Now must use the uniform teal halo surface');
+assert.ok(source.includes("backgroundColor:p.paper==='#000000'?'#07151C':'#F5F8F7'") && source.includes("color={p.paper==='#000000'?'#2F8B86':'#9BCFCB'}") && source.includes("size={Math.max(1500,width*2.2)}") && source.includes("strength={p.paper==='#000000'?.95:.34}"), 'Every app page must use the Reader Stats teal halo standard');
 
 assert.ok(source.includes("(activeTab==='player'||(activeTab==='now'&&liveMode==='player'))"), 'Player motion visibility must include the live hub');
 assert.ok(source.includes("(activeTab==='reader'||(activeTab==='now'&&liveMode==='reader'))"), 'Reader activity tracking must include the live hub');
@@ -58,6 +58,13 @@ assert.ok(source.includes('function Rewards()'), 'Rewards screen is not implemen
 assert.ok(source.includes('function ProfileAvatarButton(') && source.includes('function ProfileMenu()'), 'Persistent profile avatar/menu is missing');
 assert.ok(source.includes("const profileAvatarKey = 'archivist.profileAvatar.v1'"), 'Custom avatar persistence is missing');
 assert.ok(source.includes('function PageHeader('), 'Shared standard page header is missing');
+assert.ok(source.includes('styles.globalProfileCorner') && source.includes('<ProfileAvatarButton size={42}/>'), 'A single global top-right avatar must persist across app pages');
+assert.equal(source.includes('function PageHeader({title,subtitle,action}'),false,'PageHeader must not place page actions beside the profile avatar');
+assert.equal(source.includes('action={<Pressable'),false,'Primary page actions must not sit beside the profile avatar');
+assert.ok(source.includes('function PageToolbar('), 'Secondary page controls must move into the standard toolbar below the header');
+assert.ok(source.includes('title="Reader Stats"') && source.includes('<PageToolbar>') && source.includes('Statistics period '), 'Stats period control must sit below the title, away from the avatar');
+assert.ok(source.includes('title="Atlas"') && source.includes("accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'}"), 'Atlas view control must remain available below the title');
+
 for (const title of ['Shelf','Library','Atlas','Reader Stats','Profile','Rewards','Settings']) {
   assert.ok(source.includes('title="'+title+'"'), 'Standard page title missing: '+title);
 }
@@ -83,6 +90,8 @@ assert.ok(statsSource.includes('Completion by format') && statsSource.includes('
 assert.ok(statsSource.includes('Avg finished rating') && statsSource.includes('Favourites') && statsSource.includes('Annotations') && statsSource.includes('Highlights'), 'Reader Stats taste and notes metrics are incomplete');
 assert.ok(statsSource.includes('Reading consistency'), 'Reader Stats consistency metric is missing');
 assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includes('statsScreenFold') && source.includes('statsScreenWide'), 'Reader Stats spacing must align with the app responsive gutters');
+assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"), 'Primary page gutters must match the Reader Stats header standard');
+
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 

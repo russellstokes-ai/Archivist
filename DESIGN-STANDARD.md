@@ -299,3 +299,17 @@ The canonical Player reference image remains the visual acceptance target for No
 - The Now page itself does not add a redundant page title above the Player / Reader switch.
 - Reader remains the full Archivist reader. Comics support pinch zoom and robust touch double-tap. Double-tap first attempts local speech-bubble focus; if no bubble is detected it falls back to focused image zoom.
 - These behaviors are functional requirements, not decorative mock states, and must remain covered by mobile tests.
+
+
+## Global halo and header alignment
+
+Reader Stats defines the global ambient-light standard for the entire app.
+
+- Every navigable page uses the same teal halo hue, saturation, brightness, scale and vertical position as Reader Stats: dark canvas `#07151C`, dark halo `#2F8B86` at the approved Stats strength; corresponding light values `#F5F8F7` and `#9BCFCB`.
+- Do not create page-specific halo brightness, hue, radius or vertical offsets. Player, Reader, Shelf, Library, Atlas, Stats, Profile, Rewards and Settings all inherit the same root halo.
+- Primary page content starts on the same grid: 18dp phone gutter, 24dp fold gutter, 28dp wide gutter; primary title area starts at the same top offset as Reader Stats.
+- Major page titles use the shared `PageHeader` component and therefore share the same 32/39 ArchivistEditorial title, subtitle spacing and baseline.
+- The profile avatar is a single persistent global control fixed at the top-right. It must be visually alone in that corner.
+- No period selector, overflow menu, view toggle, Arrange action, back button or other page action may sit beside the avatar.
+- Page-specific controls belong in a secondary toolbar below the title/subtitle or in the content area. Reader Stats “All time”, Atlas view/list toggle and Shelf Arrange follow this rule.
+- Now remains titleless by design. Its Player / Reader segmented control sits below the reserved avatar corner; the avatar remains the same global top-right control.
