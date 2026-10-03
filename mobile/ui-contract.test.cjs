@@ -245,7 +245,7 @@ assert.ok(source.includes('readerReloadKey'), 'Server reader retry must reload t
 assert.ok(source.includes("message?.type==='archivist-reader-ready'"), 'Server reader ready bridge is missing');
 assert.ok(source.includes("reading.format"), 'Reader header must expose the active format');
 
-assert.ok(source.includes('Modal transparent animationType="fade" visible onRequestClose={()=>setRatingPrompt(null)}'), 'Completion rating prompt must be a dismissible native modal');
+assert.ok(source.includes("Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRatingPrompt(null)}"), 'Completion rating prompt must be dismissible and respect Reduced Motion');
 assert.ok(source.includes("accessibilityViewIsModal accessibilityLabel={'Choose edition for '"), 'Edition picker must expose modal accessibility semantics');
 assert.ok(source.includes("KeyboardAvoidingView style={styles.modalKeyboard}"), 'Metadata editor must remain usable with the on-screen keyboard');
 assert.ok(source.includes("accessibilityLabel={'Open player for '+playing.title}"), 'Mini player must expose a separate open-player action');
@@ -257,3 +257,24 @@ assert.ok(source.includes('accessibilityState={{selected:theme===mode}}'), 'Them
 assert.ok(source.includes('accessibilityState={{selected:sortTemplate===id}}'), 'Sort layout choices must expose selected state');
 
 assert.ok(source.includes('name="zoomIn"') && source.includes('name="zoomOut"'), 'Atlas zoom must use drawn native controls');
+
+/* Locked-appearance polish contract: behaviour may improve, approved default geometry/style may not drift. */
+assert.equal(source.includes('Android-first'),false,'Production UI must not describe Archivist as Android-first');
+assert.equal(source.includes('Expo Go'),false,'Production UI must not expose Expo Go implementation wording');
+assert.ok(source.includes('Private media library · iOS and Android'),'About Archivist must present the universal iOS/Android product');
+assert.equal(source.includes('animationType="slide"'),false,'Native slide modals must not bypass Reduced Motion');
+assert.equal(source.includes('animationType="fade"'),false,'Native fade modals must not bypass Reduced Motion');
+assert.ok(source.includes("animationType={reduceMotion?'none':foldLayout?'fade':'slide'}"),'Sheet transitions must respect Reduced Motion and avoid bottom-slide motion on Fold');
+assert.ok(source.includes("animationType={reduceMotion?'none':'fade'}"),'Fade overlays must respect Reduced Motion');
+assert.ok(source.includes('const liveModeTransition=useRef(new Animated.Value(1)).current') && source.includes('opacity:liveModeTransition'),'Player/Reader switching must use the approved in-place transition');
+assert.ok(source.includes('const shelfSkeletonPulse=useRef(new Animated.Value(.45)).current') && source.includes('reduceMotion ? .45 : shelfSkeletonPulse'),'Shelf loading motion must respect Reduced Motion');
+assert.ok(source.includes('atlasTransformGeneration') && source.includes('scheduleAtlasTransform('),'Atlas gestures must coalesce updates and cancel superseded transform animations');
+assert.ok(source.includes("line:accessibilityPrefs.highContrast?") && source.includes("muted:accessibilityPrefs.highContrast?"),'Reader Stats must respect Increased Contrast without changing the default palette');
+assert.ok(source.includes('hitSlop={4} onPress={dismissAtlasNode}') && source.includes("accessibilityLabel={'Resume '+(reading||lastReading)!.title} hitSlop={4}"),'Small visible controls must retain enlarged invisible touch targets');
+for(const match of source.matchAll(/<Pressable\b[\s\S]*?>/g)){
+  const tag=match[0];
+  assert.ok(/accessibilityRole=/.test(tag)||/accessible=\{false\}/.test(tag),'Pressable missing accessibility semantics: '+tag.replace(/\s+/g,' ').slice(0,220));
+}
+assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?112:132"),'Locked Library folder rail dimensions changed');
+assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"),'Locked primary-page geometry changed');
+
