@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {documentDirectory, makeDirectoryAsync, writeAsStringAsync} from 'expo-file-system/legacy';
-import {LocalWork} from './localWorks';
+import type {LocalWork} from './localWorks';
 
 export type AndroidAutoTrack={
   id:string;
