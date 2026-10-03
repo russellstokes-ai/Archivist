@@ -586,6 +586,8 @@ function Client() {
   const [selectedWorkKeys,setSelectedWorkKeys]=useState<string[]>([]);
   const [collectionFilter,setCollectionFilter]=useState('');
   const [libraryFiltersOpen,setLibraryFiltersOpen]=useState(false);
+  const [librarySourcesOpen,setLibrarySourcesOpen]=useState(false);
+  const [libraryFolderExact,setLibraryFolderExact]=useState(false);
   const [shelfManageOpen,setShelfManageOpen]=useState(false);
   const [shelfSections,setShelfSections]=useState<ShelfSectionPref[]>(defaultShelfSections);
   const [renameTarget,setRenameTarget]=useState<{kind:'shelf'|'collection';id:string}|null>(null);
@@ -1011,7 +1013,7 @@ function Client() {
 
   const visibleUnifiedWorks = useMemo(() => {
     const q=query.trim().toLowerCase();
-    const base=sourceFilter==='all' ? dedupeForAll(sourceWorks) : sourceWorks.filter(item=>matchesSource(item.source,sourceFilter));
+    const base=sourceFilter==='all' ? dedupeForAll(sourceWorks) : sourceWorks.filter(item=>libraryFolderExact?item.source===sourceFilter:matchesSource(item.source,sourceFilter));
     const activeCollection=collectionFilter?collections.find(item=>item.id===collectionFilter):undefined;
     const collectionKeys=activeCollection?new Set(activeCollection.canonicalKeys):null;
     return base.filter(work=>{
@@ -1030,7 +1032,7 @@ function Client() {
       if(q && ![work.title,work.author,work.series,work.genre,work.format,work.space].some(value=>value.toLowerCase().includes(q)))return false;
       return true;
     });
-  },[authorFilter,availabilityFilter,collectionFilter,collections,favouriteOnly,formatFilter,genreFilter,libraryFormatFamily,query,ratingFilter,readingFilter,seriesFilter,sourceFilter,sourceWorks,space,unknownAuthorOnly]);
+  },[authorFilter,availabilityFilter,collectionFilter,collections,favouriteOnly,formatFilter,genreFilter,libraryFolderExact,libraryFormatFamily,query,ratingFilter,readingFilter,seriesFilter,sourceFilter,sourceWorks,space,unknownAuthorOnly]);
 
 
   const sortedUnifiedWorks = useMemo(() => [...visibleUnifiedWorks].sort((a,b)=>{
@@ -1051,7 +1053,7 @@ function Client() {
 
   async function persistSmartShelves(next:SmartShelfDefinition[]){setSmartShelves(next);await setPersistedJSON(smartShelvesKey,next);}
   async function persistCollections(next:LibraryCollection[]){setCollections(next);await setPersistedJSON(collectionsKey,next);}
-  function clearLibraryFilters(){setQuery('');setSpace('');setFormatFilter('');setLibraryFormatFamily('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setReadingFilter('');setRatingFilter(0);setFavouriteOnly(false);setUnknownAuthorOnly(false);setAvailabilityFilter('all');setCollectionFilter('');}
+  function clearLibraryFilters(){setQuery('');setSpace('');setLibraryFolderExact(false);setFormatFilter('');setLibraryFormatFamily('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setReadingFilter('');setRatingFilter(0);setFavouriteOnly(false);setUnknownAuthorOnly(false);setAvailabilityFilter('all');setCollectionFilter('');}
   function openSmartShelf(shelf:SmartShelfDefinition){clearLibraryFilters();setSourceFilter(shelf.source);setSpace(shelf.space);setFormatFilter(shelf.format);setAuthorFilter(shelf.author);setSeriesFilter(shelf.series);setGenreFilter(shelf.genre);setReadingFilter(shelf.readingState);setRatingFilter(shelf.minimumRating);setFavouriteOnly(shelf.favouriteOnly);setAvailabilityFilter(shelf.availableOnly?'available':'all');setLibrarySort(shelf.sort);setActiveTab('library');}
   function openCollection(collection:LibraryCollection){clearLibraryFilters();setSourceFilter('all');setCollectionFilter(collection.id);setActiveTab('library');}
   async function createSmartShelf(){
