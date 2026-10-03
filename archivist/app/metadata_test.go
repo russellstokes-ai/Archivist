@@ -136,10 +136,65 @@ func TestGenericSidecarsAreCachedAcrossMultiTrackScan(t *testing.T) {
 			t.Fatalf("cached sidecar metadata=%+v", meta)
 		}
 	}
-	if cache.statChecks != 4 {
-		t.Fatalf("generic sidecars stat'd %d times; want one check for each of four generic candidates", cache.statChecks)
+	if cache.statChecks != 7 {
+		t.Fatalf("generic sidecars stat'd %d times; want one check for each of seven generic candidates", cache.statChecks)
 	}
 	if cache.parseReads != 1 {
 		t.Fatalf("generic sidecar parsed %d times; want once per scan", cache.parseReads)
+	}
+}
+
+
+func TestRichMetadataFieldsAndJSONSidecar(t *testing.T) {
+	root := t.TempDir()
+	book := filepath.Join(root, "Dune.epub")
+	if err := os.WriteFile(book, []byte("not an epub"), 0600); err != nil { t.Fatal(err) }
+	body := "{\"metadata\":{\"title\":\"Dune\",\"author\":\"Herbert, Frank\",\"series\":\"Dune\",\"seriesNumber\":1,\"genre\":\"Science Fiction\",\"publishedYear\":1965,\"narrator\":\"Simon Vance\",\"publisher\":\"Chilton\",\"isbn\":\"978-0-441-17271-9\",\"asin\":\"B000000001\",\"language\":\"en\",\"description\":\"Arrakis.\"}}"
+	if err := os.WriteFile(filepath.Join(root, "Dune.json"), []byte(body), 0600); err != nil { t.Fatal(err) }
+	meta := metadataFor(book, "Dune.epub", "Ebook")
+	if meta.Title != "Dune" || meta.Author != "Frank Herbert" || meta.Series != "Dune" || meta.SeriesNumber != 1 {
+		t.Fatalf("identity=%+v", meta)
+	}
+	if meta.PublishedYear != 1965 || meta.Narrator != "Simon Vance" || meta.Publisher != "Chilton" {
+		t.Fatalf("publication/audio=%+v", meta)
+	}
+	if meta.ISBN != "9780441172719" || meta.ASIN != "B000000001" || meta.Language != "en" || meta.Description != "Arrakis." {
+		t.Fatalf("identifiers/details=%+v", meta)
+	}
+	if !strings.Contains(meta.Source, "sidecar") || meta.Confidence < 90 || meta.NeedsReview {
+		t.Fatalf("provenance=%+v", meta)
+	}
+}
+
+func TestEmbeddedSeriesPositionPublisherLanguageAndDescription(t *testing.T) {
+	root := t.TempDir()
+	book := filepath.Join(root, "book.epub")
+	writeZipFixture(t, book, map[string]string{
+		"META-INF/container.xml": "<container><rootfiles><rootfile full-path=\"OPS/content.opf\"/></rootfiles></container>",
+		"OPS/content.opf": "<package><metadata><title>Dune Messiah</title><creator>Herbert, Frank</creator><subject>Science Fiction</subject><publisher>Putnam</publisher><language>en</language><description>Second Dune novel.</description><date>1969-01-01</date><identifier>ISBN 9780441172696</identifier><meta name=\"calibre:series\" content=\"Dune\"/><meta name=\"calibre:series_index\" content=\"2\"/></metadata></package>",
+	})
+	meta := metadataFor(book, "Herbert/Dune/Dune Messiah.epub", "Ebook")
+	if meta.Author != "Frank Herbert" || meta.Series != "Dune" || meta.SeriesNumber != 2 {
+		t.Fatalf("series metadata=%+v", meta)
+	}
+	if meta.Publisher != "Putnam" || meta.Language != "en" || meta.Description != "Second Dune novel." || meta.PublishedYear != 1969 {
+		t.Fatalf("details=%+v", meta)
+	}
+	if meta.ISBN != "9780441172696" { t.Fatalf("isbn=%q", meta.ISBN) }
+}
+
+func TestComicInfoRichFields(t *testing.T) {
+	root := t.TempDir()
+	comic := filepath.Join(root, "Sandman.cbz")
+	writeZipFixture(t, comic, map[string]string{
+		"ComicInfo.xml": "<ComicInfo><Title>Preludes &amp; Nocturnes</Title><Series>Sandman</Series><Number>1</Number><Writer>Neil Gaiman</Writer><Genre>Fantasy</Genre><Publisher>DC</Publisher><LanguageISO>en</LanguageISO><Summary>Dream returns.</Summary><Year>1989</Year></ComicInfo>",
+		"001.jpg": "image",
+	})
+	meta := metadataFor(comic, "Gaiman/Sandman/Sandman 01.cbz", "Comic")
+	if meta.Title != "Preludes & Nocturnes" || meta.Author != "Neil Gaiman" || meta.Series != "Sandman" || meta.SeriesNumber != 1 {
+		t.Fatalf("comic identity=%+v", meta)
+	}
+	if meta.Publisher != "DC" || meta.Language != "en" || meta.Description != "Dream returns." || meta.PublishedYear != 1989 {
+		t.Fatalf("comic details=%+v", meta)
 	}
 }
