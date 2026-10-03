@@ -47,6 +47,8 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   assert(comic.html.includes('reader-page-sound') || comic.html.includes('archivist-reader-sound'));
   assert(comic.html.includes('pinchStartDistance'));
   assert(comic.html.includes('focusAt'));
+  assert(comic.html.includes('lastTapAt') && comic.html.includes('distanceFromLast<=30') && comic.html.includes('suppressClickUntil'),'double-tap touch focus must work reliably in mobile WebViews');
+  assert(comic.html.includes("speechFocus?.focus?.(img,x,y,'page-'+page)"),'comic double tap must attempt speech-bubble focus before generic zoom');
   assert(comic.html.includes('turn-next'));
   assert(comic.html.includes('Sound on'));
 
