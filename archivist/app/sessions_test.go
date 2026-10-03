@@ -42,6 +42,10 @@ func TestSessionRotationLogoutAndExpiry(t *testing.T) {
 	if _, ok := a.sessionIdentity(token); ok {
 		t.Fatal("rotation retained old session")
 	}
+	var rotatedSessionRows int
+	if err:=a.db.QueryRow("SELECT count(*) FROM sessions WHERE profile_id=1").Scan(&rotatedSessionRows);err!=nil{t.Fatal(err)}
+	if rotatedSessionRows!=0{t.Fatalf("rotation left %d stale session row(s)",rotatedSessionRows)}
+
 	var result map[string]string
 	json.Unmarshal(w.Body.Bytes(), &result)
 	if _, ok := a.identify("member-key"); ok {
