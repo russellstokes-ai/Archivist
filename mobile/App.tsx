@@ -802,6 +802,7 @@ function Client() {
   const [householdUsers,setHouseholdUsers]=useState<HouseholdUser[]>([]);
   const [newUserName,setNewUserName]=useState('');
   const [newUserKey,setNewUserKey]=useState('');
+  const [newUserKeyOwner,setNewUserKeyOwner]=useState('');
   const [sources,setSources]=useState<Array<{id:number;space:string;path:string;status:string}>>([]);
   const [folderPath,setFolderPath]=useState('');
   const [folderSpace,setFolderSpace]=useState('My library');
@@ -1990,20 +1991,57 @@ function Client() {
 
   async function createFamilyUser(){
     if(!session||!owner||!newUserName.trim())return;
-    setBusy(true);setError('');setNewUserKey('');
+    const name=newUserName.trim();
+    setBusy(true);setError('');setNewUserKey('');setNewUserKeyOwner('');
     try{
-      const result=await request(session,'/api/profiles','POST',{name:newUserName.trim()});
+      const result=await request(session,'/api/profiles','POST',{name});
       setNewUserName('');
       setNewUserKey(String(result.key||''));
+      setNewUserKeyOwner(name);
       await refreshUsers();
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
 
-  async function revokeFamilyUser(id:number){
+  async function rotateFamilyUserKey(user:HouseholdUser){
+    if(!session||!owner||user.revoked)return;
+    setBusy(true);setError('');setNewUserKey('');setNewUserKeyOwner('');
+    try{
+      const result=await request(session,'/api/profiles/'+user.id+'/rotate-key','POST');
+      setNewUserKey(String(result.key||''));
+      setNewUserKeyOwner(user.name);
+    }catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+
+  function confirmRotateFamilyUserKey(user:HouseholdUser){
+    Alert.alert(
+      'Reissue access key for '+user.name+'?',
+      'Their current access key and signed-in sessions will stop working immediately. Archivist will show the new key once.',
+      [
+        {text:'Cancel',style:'cancel'},
+        {text:'Reissue key',onPress:()=>void rotateFamilyUserKey(user)},
+      ],
+    );
+  }
+
+  async function revokeFamilyUser(user:HouseholdUser){
     if(!session||!owner)return;
     setBusy(true);setError('');
-    try{await request(session,'/api/profiles/'+id,'DELETE');await refreshUsers();}
-    catch(e){setError((e as Error).message);}finally{setBusy(false);}
+    try{
+      await request(session,'/api/profiles/'+user.id,'DELETE');
+      if(newUserKeyOwner===user.name){setNewUserKey('');setNewUserKeyOwner('');}
+      await refreshUsers();
+    }catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+
+  function confirmRevokeFamilyUser(user:HouseholdUser){
+    Alert.alert(
+      'Revoke '+user.name+'?',
+      'They will lose access to Archivist immediately. Their reading history and profile data remain on the server.',
+      [
+        {text:'Cancel',style:'cancel'},
+        {text:'Revoke',style:'destructive',onPress:()=>void revokeFamilyUser(user)},
+      ],
+    );
   }
 
   const scanFrame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
@@ -6462,8 +6500,8 @@ function Client() {
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Family users</Text>
                 <Text style={[styles.meta,{color:p.muted}]}>Family users can browse, read, listen, rate, favourite and download. Only Admin manages files, metadata, users and server settings.</Text>
                 <View style={styles.settingsAddRow}><TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?0.38:1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{busy?'Creating…':'Add user'}</Text></Pressable></View>
-                {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>User access key — shown once</Text><Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text><Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide key</Text></Pressable></View>:null}
-                {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{user.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text></View>{!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Revoke</Text></Pressable>:null}</View>)}
+                {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{newUserKeyOwner?'Access key for '+newUserKeyOwner+' — shown once':'User access key — shown once'}</Text><Text selectable accessibilityLabel={newUserKeyOwner?'Access key for '+newUserKeyOwner:'User access key'} style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text><Pressable accessibilityRole="button" onPress={()=>{setNewUserKey('');setNewUserKeyOwner('')}} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide key</Text></Pressable></View>:null}
+                {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{user.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text></View>{!user.revoked?<View style={styles.settingsRowActions}><Pressable accessibilityRole="button" accessibilityLabel={'Reissue access key for '+user.name} onPress={()=>confirmRotateFamilyUserKey(user)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Reissue key</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Revoke '+user.name} onPress={()=>confirmRevokeFamilyUser(user)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Revoke</Text></Pressable></View>:null}</View>)}
               </View>:null}
 
               {session?<Pressable accessibilityRole="button" onPress={()=>void signOut()} style={styles.settingsDangerRow}><Text style={{color:p.danger,fontWeight:'700'}}>Sign out</Text></Pressable>:null}
