@@ -3645,7 +3645,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    const libraryFolderRailWidth=layoutTier==='fold'?96:110;
+    const libraryFolderRailWidth=layoutTier==='fold'?102:118;
     return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{width:libraryFolderRailWidth,minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0,backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={[styles.libraryRailContent,{width:'100%'}]} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
@@ -5870,8 +5870,8 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:110,minWidth:110,maxWidth:110,flexBasis:110,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
-  libraryRailFold: {width:96,minWidth:96,maxWidth:96,flexBasis:96,paddingHorizontal:3,paddingTop:8},
+  libraryRail: {width:118,minWidth:118,maxWidth:118,flexBasis:118,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
+  libraryRailFold: {width:102,minWidth:102,maxWidth:102,flexBasis:102,paddingHorizontal:3,paddingTop:8},
   libraryRailContent: {paddingBottom:28,width:'100%'},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
