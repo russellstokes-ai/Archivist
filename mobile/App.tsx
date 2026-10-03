@@ -5908,7 +5908,7 @@ function Client() {
                 <View style={{flex:1,gap:6}}>
                   <Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(scanProgress.phase)}</Text>
                   <Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found · {scanProgress.review} review{scanProgress.currentFolder?' · '+scanProgress.currentFolder:''}</Text>
-                  <View style={{height:2,backgroundColor:p.line,overflow:'hidden'}}><View style={{height:2,width:(scanPhaseStep(scanProgress.phase)/5*100)+'%',backgroundColor:p.sage}}/></View>
+                  <View style={{height:2,backgroundColor:p.line,overflow:'hidden'}}><View style={{height:2,width:`${scanPhaseStep(scanProgress.phase)*20}%` as `${number}%`,backgroundColor:p.sage}}/></View>
                 </View>
               </View>:null}
               {!localScanning&&scanResultSummary?<View accessibilityLiveRegion="polite" style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
