@@ -1,5 +1,5 @@
 import {Platform} from 'react-native';
-import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
+import {copyAsync, deleteAsync, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
@@ -28,6 +28,7 @@ export type LocalBook = {
   embeddedMetadata?: LocalMetadataFields;
   fileSize?: number;
   modificationTime?: number;
+  rootUri?: string;
   format: string;
   space: string;
   available: boolean;
@@ -145,18 +146,95 @@ export function localFolderName(uri: string) {
 }
 
 export async function pickLocalFolder(): Promise<LocalFolder | null> {
-  if (Platform.OS !== 'android') {
-    throw Error('Folder access is available in the Android app.');
+  if (Platform.OS === 'android') {
+    const result = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!result.granted || !result.directoryUri) return null;
+    return {
+      id: result.directoryUri,
+      uri: result.directoryUri,
+      name: localFolderName(result.directoryUri),
+      status: 'Ready to scan',
+      itemCount: 0,
+    };
   }
-  const result = await StorageAccessFramework.requestDirectoryPermissionsAsync();
-  if (!result.granted || !result.directoryUri) return null;
-  return {
-    id: result.directoryUri,
-    uri: result.directoryUri,
-    name: localFolderName(result.directoryUri),
-    status: 'Ready to scan',
-    itemCount: 0,
+  if (Platform.OS === 'ios') return importIOSFolder();
+  throw Error('Local folder access is available in the iOS and Android apps.');
+}
+
+const importableExtensions = new Set([
+  ...supported.keys(),
+  'opf','nfo','json','xml','jpg','jpeg','png','webp',
+]);
+
+async function importIOSFolder(): Promise<LocalFolder | null> {
+  const {Directory, File, Paths}=await import('expo-file-system');
+  let selected: InstanceType<typeof Directory>;
+  try {
+    selected=await Directory.pickDirectoryAsync();
+  } catch (error) {
+    const message=String((error as Error)?.message||error||'');
+    if (/cancel/i.test(message)) return null;
+    throw error;
+  }
+
+  const libraryRoot=new Directory(Paths.document,'local-libraries');
+  if(!libraryRoot.exists)libraryRoot.create({intermediates:true,idempotent:true});
+  const sourceName=(selected.name||'Library').trim()||'Library';
+  const safeName=sourceName.replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()||'Library';
+  const destination=new Directory(libraryRoot,String(Date.now())+'-'+safeName);
+  destination.create({intermediates:true});
+
+  let mediaCopied=0;
+  const maxImportDepth=64;
+  const copyTree=(source:InstanceType<typeof Directory>,target:InstanceType<typeof Directory>,depth:number)=>{
+    if(depth>maxImportDepth)throw Error('This folder is nested too deeply to import safely.');
+    for(const item of source.list()){
+      if(item instanceof Directory){
+        const child=target.createDirectory(item.name);
+        copyTree(item,child,depth+1);
+      }else if(item instanceof File){
+        const ext=extension(item.name);
+        if(!importableExtensions.has(ext))continue;
+        item.copy(new File(target,item.name));
+        if(supported.has(ext))mediaCopied+=1;
+      }
+    }
   };
+
+  try {
+    copyTree(selected,destination,0);
+    if(!mediaCopied)throw Error('No supported books, audiobooks, comics or PDFs were found in that folder.');
+  } catch (error) {
+    try{destination.delete();}catch{}
+    throw error;
+  }
+
+  return {
+    id: destination.uri,
+    uri: destination.uri,
+    name: sourceName,
+    status: `Imported ${mediaCopied} media file${mediaCopied===1?'':'s'}`,
+    itemCount: mediaCopied,
+  };
+}
+
+function isSAFUri(uri:string){return uri.startsWith('content://');}
+
+async function listDirectoryEntries(uri:string):Promise<string[]>{
+  if(isSAFUri(uri))return StorageAccessFramework.readDirectoryAsync(uri);
+  const entries=await readDirectoryAsync(uri);
+  const base=uri.replace(/\/$/,'');
+  return entries.map(entry=>entry.includes('://')?entry:base+'/'+encodeURIComponent(entry));
+}
+
+async function copyLocalUri(from:string,to:string){
+  if(isSAFUri(from)||isSAFUri(to))return StorageAccessFramework.copyAsync({from,to});
+  return copyAsync({from,to});
+}
+
+async function deleteLocalUri(uri:string){
+  if(isSAFUri(uri))return StorageAccessFramework.deleteAsync(uri);
+  return deleteAsync(uri,{idempotent:true});
 }
 
 export async function scanLocalFolders(
@@ -198,12 +276,12 @@ export async function scanLocalFolders(
     onProgress?.({phase, currentFolder, entriesVisited, found: books.length, review});
   };
 
-  async function scanDir(uri: string, space: string, depth: number, countUnreadable = true) {
+  async function scanDir(uri: string, space: string, depth: number, folderRoot: string, countUnreadable = true) {
     if (truncated || visitedDirectories.has(uri)) return;
     visitedDirectories.add(uri);
     let children: string[];
     try {
-      children = await StorageAccessFramework.readDirectoryAsync(uri);
+      children = await listDirectoryEntries(uri);
     } catch {
       if (countUnreadable) skipped += 1;
       return;
@@ -336,6 +414,7 @@ export async function scanLocalFolders(
           embeddedMetadata: Object.keys(embeddedFields).length ? embeddedFields : undefined,
           fileSize,
           modificationTime,
+          rootUri: folderRoot,
           format,
           space,
           available: true,
@@ -350,12 +429,12 @@ export async function scanLocalFolders(
         if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
       } else {
         if (!ext) {
-          await scanDir(child, space, depth + 1);
+          await scanDir(child, space, depth + 1, folderRoot);
         } else if (!knownNonDirectoryExtensions.has(ext)) {
           // SAF does not tell us whether a child is a file or directory.
           // Unknown extensions may be dotted folder names (for example "J.R.R. Tolkien"),
           // so probe them as directories without reporting ordinary unsupported files as errors.
-          await scanDir(child, space, depth + 1, false);
+          await scanDir(child, space, depth + 1, folderRoot, false);
         }
       }
     }
@@ -365,7 +444,7 @@ export async function scanLocalFolders(
   for (const folder of folders) {
     const before = books.length;
     report('discovering', folder.name);
-    await scanDir(folder.uri, folder.name, 0);
+    await scanDir(folder.uri, folder.name, 0, folder.uri);
     const count = books.length - before;
     nextFolders.push({
       ...folder,
@@ -406,7 +485,7 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
       asset: book.id,
       title: book.title,
       sourceUri: book.uri,
-      rootUri: destinationRootUri || rootUriFromFileUri(book.uri),
+      rootUri: destinationRootUri || book.rootUri || rootUriFromFileUri(book.uri),
       relativePath: target,
       from,
       to: target,
@@ -432,7 +511,7 @@ export async function applyLocalSortCopies(
     try {
       const target = await createTargetFile(preview.rootUri, preview.relativePath);
       const sourceInfo = await getInfoAsync(preview.sourceUri).catch(() => null);
-      await StorageAccessFramework.copyAsync({from: preview.sourceUri, to: target});
+      await copyLocalUri(preview.sourceUri,target);
       const verification = await getInfoAsync(target);
       if (!verification.exists) throw Error('Destination verification failed after copy');
       if (sourceInfo?.exists && typeof sourceInfo.size === 'number' && sourceInfo.size > 0
@@ -455,7 +534,7 @@ export async function removeLocalSortCopies(history: LocalSortHistory): Promise<
   const failed: LocalSortApplyResult['failed'] = [];
   for (const item of history.copied) {
     try {
-      await StorageAccessFramework.deleteAsync(item.uri);
+      await deleteLocalUri(item.uri);
       removed.push(item);
     } catch (e) {
       failed.push({id: item.id, title: item.title, error: (e as Error).message});
@@ -510,10 +589,8 @@ async function createTargetFile(rootUri: string, relativePath: string) {
   if (!parts.length) throw Error('Missing destination file name');
   const filename = parts.pop()!;
   let dir = rootUri;
-  for (const part of parts) {
-    dir = await ensureDirectory(dir, part);
-  }
-  const children = await StorageAccessFramework.readDirectoryAsync(dir);
+  for (const part of parts) dir = await ensureDirectory(dir, part);
+  const children = await listDirectoryEntries(dir);
   const wantedStem = filename.replace(/\.[^.]+$/, '');
   const collision = children.some(child => {
     const childName = lastPathPart(child);
@@ -524,17 +601,25 @@ async function createTargetFile(rootUri: string, relativePath: string) {
   const dot = filename.lastIndexOf('.');
   const name = dot > 0 ? filename.slice(0, dot) : filename;
   const ext = dot > 0 ? filename.slice(dot + 1).toLowerCase() : '';
-  return StorageAccessFramework.createFileAsync(dir, name, mimeType(ext));
+  if(isSAFUri(dir))return StorageAccessFramework.createFileAsync(dir, name, mimeType(ext));
+  return dir.replace(/\/$/,'')+'/'+encodeURIComponent(filename);
 }
 
 async function ensureDirectory(parent: string, name: string) {
-  const children = await StorageAccessFramework.readDirectoryAsync(parent);
-  const existing = children.find(child => lastPathPart(child) === name && !extension(child));
+  const children = await listDirectoryEntries(parent);
+  const existing = children.find(child => lastPathPart(child) === name);
   if (existing) return existing;
-  return StorageAccessFramework.makeDirectoryAsync(parent, name);
+  if(isSAFUri(parent))return StorageAccessFramework.makeDirectoryAsync(parent, name);
+  const target=parent.replace(/\/$/,'')+'/'+encodeURIComponent(name);
+  await makeDirectoryAsync(target,{intermediates:true});
+  return target;
 }
 
 function rootUriFromFileUri(uri: string) {
+  if(uri.startsWith('file://')){
+    const clean=uri.split('?')[0].replace(/\/$/,'');
+    return clean.slice(0,Math.max(0,clean.lastIndexOf('/'))) || clean;
+  }
   const marker = '/document/';
   if (!uri.includes(marker)) return uri;
   const prefix = uri.split(marker)[0];
