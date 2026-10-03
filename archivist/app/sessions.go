@@ -134,17 +134,16 @@ func (a *app) accountRoutes(mux *http.ServeMux) {
 			return
 		}
 		key := hex.EncodeToString(raw)
-		res, e := a.db.Exec("UPDATE profiles SET key_hash=? WHERE id=? AND revoked=0", keyHash(key), r.PathValue("id"))
-		if e != nil {
-			fail(w, 500, e)
-			return
-		}
-		n, _ := res.RowsAffected()
-		if n != 1 {
-			fail(w, 404, errors.New("active profile not found"))
-			return
-		}
-		reply(w, map[string]string{"key": key})
+		tx,e:=a.db.Begin()
+		if e!=nil{fail(w,500,e);return}
+		defer tx.Rollback()
+		res,e:=tx.Exec("UPDATE profiles SET key_hash=? WHERE id=? AND revoked=0",keyHash(key),r.PathValue("id"))
+		if e!=nil{fail(w,500,e);return}
+		n,_:=res.RowsAffected()
+		if n!=1{fail(w,404,errors.New("active profile not found"));return}
+		if _,e=tx.Exec("DELETE FROM sessions WHERE profile_id=?",r.PathValue("id"));e!=nil{fail(w,500,e);return}
+		if e=tx.Commit();e!=nil{fail(w,500,e);return}
+		reply(w,map[string]string{"key":key})
 	})
 }
 func sessionRoute(r *http.Request) bool {
