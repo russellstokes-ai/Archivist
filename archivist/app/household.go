@@ -137,12 +137,16 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 		reply(w, map[string]any{"id": id, "name": p.Name, "role": "user", "key": key})
 	})
 	mux.HandleFunc("DELETE /api/profiles/{id}", func(w http.ResponseWriter, r *http.Request) {
-		_, e := a.db.Exec("UPDATE profiles SET revoked=1 WHERE id=?", r.PathValue("id"))
-		if e != nil {
-			fail(w, 500, e)
-			return
-		}
-		reply(w, map[string]bool{"ok": true})
+		tx,e:=a.db.Begin()
+		if e!=nil{fail(w,500,e);return}
+		defer tx.Rollback()
+		res,e:=tx.Exec("UPDATE profiles SET revoked=1 WHERE id=? AND revoked=0",r.PathValue("id"))
+		if e!=nil{fail(w,500,e);return}
+		n,_:=res.RowsAffected()
+		if n!=1{fail(w,404,errors.New("active profile not found"));return}
+		if _,e=tx.Exec("DELETE FROM sessions WHERE profile_id=?",r.PathValue("id"));e!=nil{fail(w,500,e);return}
+		if e=tx.Commit();e!=nil{fail(w,500,e);return}
+		reply(w,map[string]bool{"ok":true})
 	})
 }
 
