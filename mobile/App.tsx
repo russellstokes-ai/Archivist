@@ -2574,6 +2574,28 @@ function Client() {
     }
   }
 
+  function confirmRemoveServerDownload(downloaded:OfflineServerWork){
+    Alert.alert(
+      'Remove offline download?',
+      'Archivist will remove only the copy stored on this device. The original files on your Archivist Server are not changed.',
+      [
+        {text:'Cancel',style:'cancel'},
+        {text:'Remove',style:'destructive',onPress:()=>void removeServerDownload(downloaded)},
+      ],
+    );
+  }
+
+  function confirmDiscardPartialDownload(checkpoint:OfflineDownloadCheckpoint){
+    Alert.alert(
+      'Discard partial download?',
+      'Archivist will remove only the incomplete data stored on this device. You can download the work again from the server later.',
+      [
+        {text:'Cancel',style:'cancel'},
+        {text:'Discard',style:'destructive',onPress:()=>void discardPartialDownload(checkpoint)},
+      ],
+    );
+  }
+
   async function queueServerWork(work: ServerWork) {
     if (!session || work.format !== 'Audio') return;
     try {
@@ -2957,7 +2979,7 @@ function Client() {
           onRating={rating=>void saveLocalPreference(work,{...personal,rating:personal.rating===rating?0:rating})}
           onFavourite={()=>void saveLocalPreference(work,{...personal,favourite:!personal.favourite})} />
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" onPress={()=>void addLocalWorkQueue(work)} /> : null}
-        {downloaded ? <Button label="Remove download" tone="quiet" disabled={offlineBusyId===downloaded.workId} onPress={()=>void removeServerDownload(downloaded)} /> : null}
+        {downloaded ? <Button label="Remove download" tone="quiet" disabled={offlineBusyId===downloaded.workId} onPress={()=>confirmRemoveServerDownload(downloaded)} /> : null}
       </View>
     );
   }
@@ -2981,7 +3003,7 @@ function Client() {
           onFavourite={()=>void saveServerPreference(work,{...personal,favourite:!personal.favourite})} />
         {work.format==='Audio' ? <Button label="Add to queue" tone="quiet" disabled={!queueReady||queueBusy} onPress={()=>void queueServerWork(work)} /> : null}
         {downloaded
-          ? <Button label={'Remove download · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>void removeServerDownload(downloaded)} />
+          ? <Button label={'Remove download · '+formatBytes(downloaded.bytes)} tone="quiet" disabled={downloading} onPress={()=>confirmRemoveServerDownload(downloaded)} />
           : <Button label={downloading ? 'Downloading '+offlineProgress : checkpoint ? 'Resume download' : 'Download for offline'} tone="quiet" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(work)} />}
       </View>
     );
@@ -3243,7 +3265,7 @@ function Client() {
             {work.format==='Audio'&&local?<SheetAction label="Add to queue" onPress={()=>{close();void addLocalWorkQueue(local);}}/>:null}
             {work.format==='Audio'&&remote?<SheetAction label="Add to queue" onPress={()=>{close();void queueServerWork(remote);}}/>:null}
             {remote&&!downloaded?<SheetAction label="Download for offline" disabled={offlineBusyId!==null} onPress={()=>{close();void downloadServerWork(remote);}}/>:null}
-            {downloaded?<SheetAction label={'Remove download · '+formatBytes(downloaded.bytes)} disabled={offlineBusyId!==null} onPress={()=>{close();void removeServerDownload(downloaded);}}/>:null}
+            {downloaded?<SheetAction label={'Remove download · '+formatBytes(downloaded.bytes)} disabled={offlineBusyId!==null} onPress={()=>{close();confirmRemoveServerDownload(downloaded);}}/>:null}
             <SheetAction label="Add to collection" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}}/>
             {local?.tracks[0]?<SheetAction label="Edit details & cover" onPress={()=>{beginEdit({...local.tracks[0],title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,coverUri:work.coverUri,source:work.source,originServer:local.originServer,serverWorkId:local.originWorkId},local.tracks.map(track=>track.uri));close();}}/>:null}
           </View>
@@ -3347,7 +3369,7 @@ function Client() {
                 :remote&&owner?<Pressable accessibilityRole="button" onPress={openServerManagement} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="edit" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Manage metadata</Text></Pressable>:null}
               <Pressable accessibilityRole="button" onPress={refreshMetadata} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="refresh" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Refresh metadata & cover</Text></Pressable>
               {remote&&!downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{void downloadServerWork(remote);close();}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null ? .45 : 1}]}><UiIcon name="download" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Download</Text></Pressable>:null}
-              {downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{void removeServerDownload(downloaded);close();}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null ? .45 : 1}]}><UiIcon name="close" color={p.danger} size={18}/><Text style={[styles.workDetailsActionText,{color:p.danger}]}>Remove download</Text></Pressable>:null}
+              {downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{close();confirmRemoveServerDownload(downloaded);}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null ? .45 : 1}]}><UiIcon name="close" color={p.danger} size={18}/><Text style={[styles.workDetailsActionText,{color:p.danger}]}>Remove download</Text></Pressable>:null}
             </View>
             {local&&local.tracks.length>1?<View style={[styles.workDetailsTrackSummary,{borderTopColor:p.line}]}><Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FILES IN THIS WORK</Text>{local.tracks.slice(0,8).map((track,index)=><View key={track.uri} style={styles.workDetailsTrackRow}><Text numberOfLines={1} style={[styles.meta,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{track.format}</Text></View>)}{local.tracks.length>8?<Text style={[styles.meta,{color:p.muted}]}>+ {local.tracks.length-8} more files</Text>:null}</View>:null}
           </View>
@@ -6212,7 +6234,7 @@ function Client() {
           <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{checkpoint.server}</Text>
           <View style={styles.toolRow}>
             {connectedWork?<Button label="Resume" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(connectedWork)} />:null}
-            <Button label="Discard partial" disabled={offlineBusyId!==null||offlineStorageBusy} tone="quiet" onPress={()=>void discardPartialDownload(checkpoint)} />
+            <Button label="Discard partial" disabled={offlineBusyId!==null||offlineStorageBusy} tone="quiet" onPress={()=>confirmDiscardPartialDownload(checkpoint)} />
           </View>
         </View>;
       })}
@@ -6220,7 +6242,7 @@ function Client() {
         <Text style={{color:p.ink,fontWeight:'800'}}>{item.title}</Text>
         <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {formatBytes(item.bytes)} · {new Date(item.downloadedAt).toLocaleDateString()}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{item.server}</Text>
-        <Button label="Remove download" disabled={offlineBusyId!==null} tone="quiet" onPress={()=>void removeServerDownload(item)} />
+        <Button label="Remove download" disabled={offlineBusyId!==null} tone="quiet" onPress={()=>confirmRemoveServerDownload(item)} />
       </View>)}
       {!completed.length&&!partial.length?<Text style={[styles.meta,{color:p.muted}]}>Nothing stored offline yet. Use Download for offline on any server work.</Text>:null}
     </View>;
