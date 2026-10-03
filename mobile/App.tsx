@@ -170,7 +170,8 @@ type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insigh
 type ShelfSectionId = 'continue' | 'formats' | 'favourites' | 'smart' | 'collections' | 'series' | 'library';
 type ShelfSectionPref = {id:ShelfSectionId;title:string;visible:boolean};
 type ThemeMode = 'system' | 'light' | 'dark';
-type ProfileAvatarConfig = {initials:string;color:string};
+type AccessibilityPreferences = {reduceMotion:boolean;highContrast:boolean;largeText:boolean};
+type ProfileAvatarConfig = {initials:string;color:string;photoUri?:string};
 type Palette = {
   ink: string;
   paper: string;
@@ -187,6 +188,7 @@ type Palette = {
 
 const storageKey = 'archivist.session';
 const themeKey = 'archivist.theme';
+const accessibilityPreferencesKey = 'archivist.accessibility.v1';
 const localFoldersKey = 'archivist.localFolders';
 const localProgressKey = 'archivist.localProgress';
 const localReadingProgressKey = 'archivist.localReadingProgress';
@@ -230,13 +232,13 @@ function validateServer(raw: string) {
   return checkServer(raw, __DEV__);
 }
 
-function palette(mode: ThemeMode, system: string | null | undefined): Palette {
+function palette(mode: ThemeMode, system: string | null | undefined, highContrast=false): Palette {
   const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
   return {
     ink: dark ? '#F5F5F5' : '#171410',
     paper: dark ? '#000000' : '#FBFAF7',
-    muted: dark ? '#A0A0A0' : '#6D675E',
-    line: dark ? '#252525' : '#E3DDD2',
+    muted: dark ? (highContrast?'#C7C7C7':'#A0A0A0') : (highContrast?'#4D463D':'#6D675E'),
+    line: dark ? (highContrast?'#4A4A4A':'#252525') : (highContrast?'#C6B9A5':'#E3DDD2'),
     card: dark ? '#111111' : '#F4F0E8',
     raised: dark ? '#181818' : '#FFFDF9',
     sage: dark ? '#47736F' : '#557B76',
@@ -501,7 +503,8 @@ function Client() {
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const [theme, setTheme] = useState<ThemeMode>('system');
-  const p = useMemo(() => palette(theme, systemScheme), [theme, systemScheme]);
+  const [accessibilityPrefs,setAccessibilityPrefs]=useState<AccessibilityPreferences>({reduceMotion:false,highContrast:false,largeText:false});
+  const p = useMemo(() => palette(theme, systemScheme,accessibilityPrefs.highContrast), [theme, systemScheme,accessibilityPrefs.highContrast]);
   const darkMode=p.paper==='#000000';
   const ambientHaloColor=darkMode?'#2F8B86':'#C99A43';
   const ambientHaloStrength=darkMode?.95:.48;
@@ -637,7 +640,8 @@ function Client() {
   const [chapterOverrides,setChapterOverrides]=useState<ChapterOverrideMap>({});
   const [chapterEditIndex,setChapterEditIndex]=useState<number|null>(null);
   const [chapterEditTitle,setChapterEditTitle]=useState('');
-  const [reduceMotion,setReduceMotion]=useState(false);
+  const [systemReduceMotion,setSystemReduceMotion]=useState(false);
+  const reduceMotion=systemReduceMotion||accessibilityPrefs.reduceMotion;
   const [appActive,setAppActive]=useState(AppState.currentState==='active');
   useEffect(()=>{
     interfacePulse.stopAnimation();interfacePulse.setValue(0);
@@ -777,7 +781,7 @@ function Client() {
 
 
   useEffect(()=>{
-    const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduceMotion);
+    const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setSystemReduceMotion);
     return()=>subscription.remove();
   },[]);
 
@@ -1180,6 +1184,9 @@ function Client() {
     SecureStore.getItemAsync(themeKey).then(value => {
       if (value === 'system' || value === 'light' || value === 'dark') setTheme(value);
     }).catch(() => undefined);
+    getPersistedJSON<AccessibilityPreferences>(accessibilityPreferencesKey).then(value => {
+      if(value&&typeof value==='object')setAccessibilityPrefs({reduceMotion:!!value.reduceMotion,highContrast:!!value.highContrast,largeText:!!value.largeText});
+    }).catch(()=>undefined);
     getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
     }).catch(() => undefined);
@@ -1242,7 +1249,7 @@ function Client() {
     getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F')});}).catch(()=>undefined);
     getPersistedJSON<Book>(lastReadingKey).then(value=>{if(value&&typeof value==='object')setLastReading(value);}).catch(()=>undefined);
     getPersistedJSON<Book>(lastPlayingKey).then(value=>{if(value&&typeof value==='object')setLastPlaying(value);}).catch(()=>undefined);
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
+    AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
     }).catch(() => undefined);
@@ -1475,6 +1482,11 @@ function Client() {
   async function chooseTheme(next: ThemeMode) {
     setTheme(next);
     await SecureStore.setItemAsync(themeKey, next);
+  }
+
+  async function saveAccessibilityPreferences(next:AccessibilityPreferences){
+    setAccessibilityPrefs(next);
+    await setPersistedJSON(accessibilityPreferencesKey,next);
   }
 
   async function refreshSourcesAndShelf() {
