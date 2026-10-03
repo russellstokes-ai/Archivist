@@ -8,8 +8,17 @@ export type LocalBook = {
   title: string;
   author: string;
   series: string;
+  seriesNumber?: number;
   genre: string;
   publishedYear?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
+  workKey?: string;
+  editionKey?: string;
   format: string;
   space: string;
   available: boolean;
@@ -66,8 +75,15 @@ export type LocalMetadataOverride = {
   title: string;
   author: string;
   series: string;
+  seriesNumber?: number;
   genre: string;
   publishedYear?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
   coverUri?: string;
 };
 
@@ -227,7 +243,7 @@ export async function scanLocalFolders(
         const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
         if (sidecarUri) {
           const fields = await cachedSidecarFields(sidecarUri);
-          if (fields.title || fields.author || fields.series || fields.genre) {
+          if (Object.keys(fields).length) {
             identity = applyLocalMetadata(identity, fields, 'sidecar');
           }
         }
@@ -244,8 +260,15 @@ export async function scanLocalFolders(
           title: identity.title || titleFromUri(child),
           author: identity.author,
           series: identity.series,
+          seriesNumber: identity.seriesNumber,
           genre: identity.genre,
           publishedYear: identity.publishedYear,
+          narrator: identity.narrator,
+          publisher: identity.publisher,
+          isbn: identity.isbn,
+          asin: identity.asin,
+          language: identity.language,
+          description: identity.description,
           format,
           space,
           available: true,
@@ -328,6 +351,8 @@ export async function applyLocalSortCopies(previews: LocalSortPreview[]): Promis
     try {
       const target = await createTargetFile(preview.rootUri, preview.relativePath);
       await StorageAccessFramework.copyAsync({from: preview.sourceUri, to: target});
+      const verification = await getInfoAsync(target);
+      if (!verification.exists) throw Error('Destination verification failed after copy');
       copied.push({id: preview.id, title: preview.title, uri: target});
     } catch (e) {
       failed.push({id: preview.id, title: preview.title, error: (e as Error).message});
@@ -369,10 +394,17 @@ function targetPath(book: LocalBook, filename: string, template: string) {
   const author = cleanPart(book.author || 'Unknown author');
   const series = cleanPart(book.series || 'Standalone');
   const title = cleanPart(book.title || filename.replace(/\.[^.]+$/, ''));
+  const orderedTitle = book.series && book.seriesNumber !== undefined ? cleanPart(seriesNumberLabel(book.seriesNumber) + ' - ' + title) : title;
   const format = cleanPart(book.format || 'Books');
-  if (template === 'author-series-title') return `${author}/${series}/${title}/${filename}`;
+  if (template === 'author-series-title') return `${author}/${series}/${orderedTitle}/${filename}`;
   if (template === 'format-author-title') return `${format}/${author}/${title}/${filename}`;
   return `${author}/${title}/${filename}`;
+}
+
+function seriesNumberLabel(value: number) {
+  if (!Number.isFinite(value)) return '';
+  if (!Number.isInteger(value)) return String(value);
+  return value < 10 ? '0' + value : String(value);
 }
 
 function fileNameFromUri(uri: string) {
