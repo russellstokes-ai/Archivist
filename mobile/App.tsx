@@ -286,6 +286,7 @@ const readerAnnotationsKey = 'archivist.readerAnnotations.v1';
 const readerAppearanceKey = 'archivist.readerAppearance.v1';
 const insightGoalKey = 'archivist.insightGoal.v1';
 const profileAvatarKey = 'archivist.profileAvatar.v1';
+const ritualDaysKey = 'archivist.dailyRitual.v1';
 const lastReadingKey = 'archivist.lastReading.v1';
 const lastPlayingKey = 'archivist.lastPlaying.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
@@ -898,10 +899,10 @@ function Client() {
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
   const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
   useEffect(()=>{if(!playbackVisible||!playbackIsPlaying||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,playbackIsPlaying,reduceMotion]);
-  useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>('archivist.dailyRitual.v1').then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
+  useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>(ritualDaysKey).then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
     if(!ritualReady)return;
-    setPersistedJSON('archivist.dailyRitual.v1',ritualDays).catch(()=>undefined);
+    setPersistedJSON(ritualDaysKey,ritualDays).catch(()=>undefined);
   },[ritualDays,ritualReady]);
   const ritualAudioPosition=useRef(audio.currentTime);
   const ritualAudioLatest=useRef(audio.currentTime);ritualAudioLatest.current=audio.currentTime;
