@@ -1,5 +1,32 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-03 — Final polish Sprint 3: persistent iOS local libraries
+
+### Implemented and source-verified
+- Removed the Android-only local-folder gate.
+- Android retains Storage Access Framework folder linking and recursive scanning.
+- iOS now uses Expo FileSystem's native directory picker, then copies supported media plus useful sidecars/artwork into Archivist app-private Documents storage while the temporary Files permission is active.
+- The imported hierarchy is preserved and rescans use the persistent Archivist copy, so the catalogue does not depend on an external iOS security-scoped directory URI surviving an app restart.
+- Imported originals in Files/iCloud are never reorganised or deleted by Archivist; organisation acts on Archivist's private imported copy.
+- The scanner now supports both Android SAF `content://` trees and app-private `file://` directory trees.
+- Safe organisation preview/apply/recovery now supports app-private `file://` libraries as well as SAF roots.
+- Scanned local assets retain their source root so organisation targets the correct imported/linked library root.
+- Added regression coverage for app-private iOS-style scanning, organisation copy and recovery deletion.
+- UI wording is platform-aware without changing layout: iOS uses **Import folder** / **Rescan imported folders**; Android keeps **Add device folder** / **Rescan device folders**.
+
+### Platform rationale
+- Expo FileSystem provides an iOS directory picker, but external selected-directory access is session-scoped. Archivist therefore imports supported content into persistent app-private storage instead of persisting an external URI that can become unreadable after relaunch.
+- This is deliberately copy-first and non-destructive.
+
+### Runtime proof still required
+- Real iPhone/iPad Files/iCloud folder selection and cancellation.
+- Large-library import duration and UI responsiveness.
+- Process-kill/relaunch persistence of the imported catalogue.
+- Sidecar/cover preservation from real folder trees.
+- Available-storage failure handling and partial-import cleanup.
+- iOS safe organisation preview/apply/recovery on real files.
+
+
 ## 2026-10-03 — Final polish Sprint 2: profile identity and server connection
 
 ### Implemented and source-verified
