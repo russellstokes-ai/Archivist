@@ -5145,131 +5145,140 @@ function Client() {
 
   function Settings() {
     const connected=!!session;
+    const settingsTitleStyle=accessibilityPrefs.largeText?{fontSize:16.5,lineHeight:22}:undefined;
+    const Toggle=({value,onPress,label}:{value:boolean;onPress:()=>void;label:string})=><Pressable accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{checked:value}} onPress={onPress} style={[styles.settingsToggle,{backgroundColor:value?p.gold:p.line,justifyContent:value?'flex-end':'flex-start'}]}><View style={[styles.settingsToggleKnob,{backgroundColor:darkMode?'#FFFFFF':'#FFFDF9'}]}/></Pressable>;
+    const localStorageText=offlineStorage?formatBytes(offlineStorage.actualBytes||offlineStorage.trackedBytes):'Not measured';
     return (
       <ScrollView contentContainerStyle={[styles.settingsScreen,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]}>
-        <PageHeader title="Settings" subtitle="Your app, library and account."/>
+        <PageHeader title="Settings" subtitle="Your library, privacy, accessibility and server."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
           <View style={styles.settingsColumn}>
-            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>APP & LIBRARY</Text>
+            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>LIBRARY & DATA</Text>
+
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>APPEARANCE</Text>
-              <View style={styles.settingsRow}>
-                <View style={{flex:1}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>Theme</Text>
-                  <Text style={[styles.meta,{color:p.muted}]}>Follow the device or choose a fixed appearance.</Text>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
+              <View style={styles.settingsStatusPanel}>
+                <View style={[styles.settingsStatusIcon,{backgroundColor:p.card}]}><UiIcon name="library" color={p.sage} size={18}/></View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Local-first metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist reads embedded, sidecar, folder and connected-server metadata. No background internet metadata lookup is enabled.</Text></View>
+              </View>
+
+              <View style={styles.settingsSubgroup}>
+                <View style={styles.settingsSubgroupHeading}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Local folders</Text><Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder{localFolders.length===1?'':'s'} · {localBooks.length} files</Text></View>
+                {localFolders.map(folder=><View key={folder.uri} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{folder.name}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{folder.uri}</Text></View>
+                </View>)}
+                <View style={styles.settingsInlineActions}>
+                  <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
+                  {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
                 </View>
+                {localFolderNotice?<Text style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
-              <View style={styles.segment}>
-                {(['system','light','dark'] as ThemeMode[]).map(mode=>(
-                  <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}>
-                    <Text style={{color:theme===mode?p.sage:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text>
-                    <View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.sage,opacity:theme===mode?1:0}]}/>
-                  </Pressable>
-                ))}
+
+              <View style={styles.settingsSubgroup}>
+                <View style={styles.settingsRow}>
+                  <View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Duplicate review</Text><Text style={[styles.meta,{color:p.muted}]}>Find possible copies without deleting or changing files.</Text></View>
+                  {(!session||owner)?<Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Review</Text></Pressable>:null}
+                </View>
+                <DuplicateReviewPanel/>
               </View>
+
+              <LocalSortingPanel/>
+
+              {owner?<View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server source folders</Text>
+                {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View>
+                  <View style={styles.settingsRowActions}><Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void removeSource(source.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable></View>
+                </View>)}
+                <View style={styles.settingsAddFolder}><TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Button label="Add server folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/></View>
+              </View>:null}
+
+              {owner?<View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server safe sorting</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>Preview moves before Archivist applies them. Unresolved moves remain blocked for review.</Text>
+                <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
+                <View style={styles.settingsInlineActions}><Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Preview matching</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Preview all</Text></Pressable></View>
+                <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
+                {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+              </View>:null}
             </View>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY HEALTH</Text>
-              <View style={styles.settingsRow}>
-                <View style={{flex:1}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>Duplicate review</Text>
-                  <Text style={[styles.meta,{color:p.muted}]}>Find possible copies without deleting or changing files.</Text>
-                </View>
-                {(!session||owner)?<Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Review</Text></Pressable>:null}
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>OFFLINE & STORAGE</Text>
+              <View style={styles.settingsStatusPanel}>
+                <View style={[styles.settingsStatusIcon,{backgroundColor:p.card}]}><UiIcon name="layers" color={p.gold} size={18}/></View>
+                <View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{localStorageText} stored offline</Text><Text style={[styles.meta,{color:p.muted}]}>{offlineStorage?.items||0} complete download{offlineStorage?.items===1?'':'s'} · {offlineStorage?.incompleteWorks||0} incomplete</Text></View>
               </View>
-              <DuplicateReviewPanel/>
+              <OfflineDownloadsPanel/>
             </View>
 
-            <LocalSortingPanel/>
-            <OfflineDownloadsPanel/>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>PRIVACY & DATA</Text>
+              <View style={[styles.settingsPrivacyHero,{backgroundColor:p.card,borderColor:p.line}]}>
+                <View style={[styles.settingsPrivacyMark,{borderColor:p.gold}]}><UiIcon name="bookmark" color={p.gold} size={20}/></View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Local-first · private by default</Text><Text style={[styles.meta,{color:p.muted}]}>Reading history, profile settings and local library state stay on this device unless you explicitly connect an Archivist server. Backup snapshots never include server credentials.</Text></View>
+              </View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>External metadata network access</Text><Text style={[styles.meta,{color:p.muted}]}>Off in this build. Scanning uses local/embedded metadata and connected Archivist server data.</Text></View><Text style={[styles.settingsStateLabel,{color:p.sage}]}>OFF</Text></View>
+              <View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Backup & restore</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>Create a portable JSON snapshot of reading history and non-sensitive app settings, or paste one back to restore it.</Text>
+                <View style={styles.settingsInlineActions}><Button label="Create backup snapshot" tone="quiet" onPress={createPrivacyBackup}/>{privacyBackupText?<Pressable accessibilityRole="button" onPress={()=>setPrivacyBackupText('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide</Text></Pressable>:null}</View>
+                {privacyBackupText?<Text selectable style={[styles.settingsBackupText,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}>{privacyBackupText}</Text>:null}
+                <TextInput accessibilityLabel="Paste Archivist backup snapshot" multiline value={privacyRestoreText} onChangeText={setPrivacyRestoreText} placeholder="Paste backup JSON here" placeholderTextColor={p.muted} style={[styles.settingsRestoreInput,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}/>
+                <Button label="Restore backup snapshot" disabled={!privacyRestoreText.trim()} onPress={()=>void restorePrivacyBackup()}/>
+                {privacyDataNotice?<Text style={[styles.meta,{color:privacyDataNotice.includes('could not')||privacyDataNotice.includes('not an')?p.danger:p.sage}]}>{privacyDataNotice}</Text>:null}
+              </View>
+            </View>
           </View>
 
           <View style={styles.settingsColumn}>
-            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>SERVER & FAMILY</Text>
+            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>SERVER & ACCESS</Text>
+
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SERVER</Text>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SERVER & FAMILY</Text>
               <View style={styles.settingsRow}>
                 <View style={[styles.settingsStatusDot,{backgroundColor:connected?p.sage:recoverableSession?p.danger:p.line}]}/>
-                <View style={{flex:1,minWidth:0}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>{connected?'Connected':recoverableSession?'Server offline':'No server connected'}</Text>
-                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{connected?session?.server:recoverableSession?.server||'Archivist works fully with the library on this device.'}</Text>
-                </View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{connected?'Connected':recoverableSession?'Server offline':'No server connected'}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{connected?session?.server:recoverableSession?.server||'Archivist works fully with the library on this device.'}</Text></View>
               </View>
+              {recoverableSession&&!session?<View style={styles.settingsInlineActions}><Pressable accessibilityRole="button" onPress={()=>void retrySavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{busy?'Retrying…':'Retry server'}</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void forgetSavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Forget</Text></Pressable></View>:null}
+              {!session&&!recoverableSession?(serverPanelOpen?<ServerConnect/>:<Pressable accessibilityRole="button" onPress={()=>setServerPanelOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Add server</Text></Pressable>):null}
 
-              {recoverableSession&&!session?<View style={styles.settingsInlineActions}>
-                <Pressable accessibilityRole="button" onPress={()=>void retrySavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Retrying…':'Retry server'}</Text></Pressable>
-                <Pressable accessibilityRole="button" onPress={()=>void forgetSavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Forget</Text></Pressable>
+              {owner?<View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Family users</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>Family users can browse, read, listen, rate, favourite and download. Only Admin manages files, metadata, users and server settings.</Text>
+                <View style={styles.settingsAddRow}><TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?0.38:1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{busy?'Creating…':'Add user'}</Text></Pressable></View>
+                {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>User access key — shown once</Text><Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text><Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide key</Text></Pressable></View>:null}
+                {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{user.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text></View>{!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Revoke</Text></Pressable>:null}</View>)}
               </View>:null}
 
-              {!session&&!recoverableSession?(serverPanelOpen?<ServerConnect/>:<Pressable accessibilityRole="button" onPress={()=>setServerPanelOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Add server</Text></Pressable>):null}
+              {session?<Pressable accessibilityRole="button" onPress={()=>void signOut()} style={styles.settingsDangerRow}><Text style={{color:p.danger,fontWeight:'700'}}>Sign out</Text></Pressable>:null}
             </View>
 
-            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FAMILY USERS</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
-              <View style={styles.settingsAddRow}>
-                <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
-                <Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?.38:1}]}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Creating…':'Add user'}</Text></Pressable>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ACCESSIBILITY</Text>
+              <View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Colour theme</Text>
+                <View style={styles.segment}>{(['system','light','dark'] as ThemeMode[]).map(mode=><Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}><Text style={{color:theme===mode?p.gold:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text><View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.gold,opacity:theme===mode?1:0}]}/></Pressable>)}</View>
               </View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Reduced motion</Text><Text style={[styles.meta,{color:p.muted}]}>Disables decorative pulses, page motion and overlay transitions. Device Reduce Motion is always respected.</Text></View><Toggle label="Reduced motion" value={accessibilityPrefs.reduceMotion} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,reduceMotion:!accessibilityPrefs.reduceMotion})}/></View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Increased contrast</Text><Text style={[styles.meta,{color:p.muted}]}>Strengthens secondary text and interface dividers in both themes.</Text></View><Toggle label="Increased contrast" value={accessibilityPrefs.highContrast} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,highContrast:!accessibilityPrefs.highContrast})}/></View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Larger interface text</Text><Text style={[styles.meta,{color:p.muted}]}>Increases shared headings and Settings/Profile labels while continuing to respect device font scaling.</Text></View><Toggle label="Larger interface text" value={accessibilityPrefs.largeText} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,largeText:!accessibilityPrefs.largeText})}/></View>
+            </View>
 
-              {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}>
-                <Text style={[styles.bookTitle,{color:p.ink}]}>User access key — shown once</Text>
-                <Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text>
-                <Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Hide key</Text></Pressable>
-              </View>:null}
-
-              {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
-                <View style={{flex:1}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>{user.name}</Text>
-                  <Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text>
-                </View>
-                {!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Revoke</Text></Pressable>:null}
-              </View>)}
-            </View>:null}
-
-            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SOURCE FOLDERS</Text>
-              {sources.map(s=><View key={s.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
-                <View style={{flex:1,minWidth:0}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>{s.space}</Text>
-                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{s.path}</Text>
-                  <Text style={[styles.meta,{color:s.status==='ok'?p.sage:p.muted}]}>{s.status}</Text>
-                </View>
-                <View style={styles.settingsRowActions}>
-                  <Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Scan</Text></Pressable>
-                  <Pressable accessibilityRole="button" onPress={()=>void removeSource(s.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Remove</Text></Pressable>
-                </View>
-              </View>)}
-              <View style={styles.settingsAddFolder}>
-                <TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
-                <TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
-                <Button label="Add folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ABOUT ARCHIVIST</Text>
+              <View style={styles.settingsAboutHero}><View style={[styles.settingsAboutMark,{borderColor:p.gold,backgroundColor:p.card}]}><Text style={[styles.settingsAboutMarkText,{color:p.gold}]}>A</Text></View><View style={{flex:1}}><Text style={[styles.settingsAboutTitle,{color:p.ink}]}>Archivist</Text><Text style={[styles.meta,{color:p.muted}]}>Private media library · Android-first</Text></View></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>App version</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>0.9.3</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Platform</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>{Platform.OS}</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server</Text><Text numberOfLines={1} style={[styles.settingsInfoValue,{color:connected?p.sage:p.muted,maxWidth:'62%'}]}>{connected?session?.server:'Not connected'}</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server version</Text><Text style={[styles.settingsInfoValue,{color:p.muted}]}>{connected?'Not reported by server':'—'}</Text></View>
+              <View style={[styles.settingsDiagnostics,{backgroundColor:p.card,borderColor:p.line}]}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Diagnostics</Text>
+                <Text selectable style={[styles.settingsDiagnosticText,{color:p.muted}]}>Local folders: {localFolders.length}\nLocal files: {localBooks.length}\nServer works: {serverWorks.length}\nOffline stored: {localStorageText}\nTheme: {theme}\nReduce motion: {reduceMotion?'on':'off'}\nHigh contrast: {accessibilityPrefs.highContrast?'on':'off'}\nLarge text: {accessibilityPrefs.largeText?'on':'off'}</Text>
               </View>
-            </View>:null}
-
-            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SAFE FILE SORTING</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist verifies data before removing originals; unresolved moves block scans until applied or reviewed.</Text>
-              <View style={styles.segment}>
-                {[
-                  ['author-title','Author / Title'],
-                  ['author-series-title','Author / Series / Title'],
-                  ['format-author-title','Format / Author / Title'],
-                ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
-              </View>
-              <View style={styles.settingsInlineActions}>
-                <Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Preview matching</Text></Pressable>
-                <Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Preview all</Text></Pressable>
-              </View>
-              <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
-              {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
-            </View>:null}
-
-            {session?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Pressable accessibilityRole="button" onPress={()=>void signOut()} style={styles.settingsDangerRow}><Text style={{color:p.danger,fontWeight:'600'}}>Sign out</Text></Pressable>
-            </View>:null}
+              <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
