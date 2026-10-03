@@ -2800,7 +2800,7 @@ function Client() {
         <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Customise Shelf</Text>
         <Text style={[styles.meta,{color:p.muted}]}>Choose what appears and arrange it around the way you use your library.</Text>
         {shelfSections.map((item,index)=><View key={item.id} style={[styles.manageRow,{borderColor:p.line}]}>
-          <Pressable accessibilityRole="switch" accessibilityState={{checked:item.visible}} accessibilityLabel={(item.visible?'Hide ':'Show ')+item.title} onPress={()=>toggle(item.id)} style={[styles.visibilityToggle,{backgroundColor:item.visible?p.sage:p.line}]}><View pointerEvents="none" style={[styles.visibilityThumb,{backgroundColor:p.ivory,transform:[{translateX:item.visible?16:0}]}]}/></Pressable>
+          <Pressable accessibilityRole="switch" accessibilityState={{checked:item.visible}} accessibilityLabel={(item.visible?'Hide ':'Show ')+item.title} hitSlop={10} onPress={()=>toggle(item.id)} style={[styles.visibilityToggle,{backgroundColor:item.visible?p.sage:p.line}]}><View pointerEvents="none" style={[styles.visibilityThumb,{backgroundColor:p.ivory,transform:[{translateX:item.visible?16:0}]}]}/></Pressable>
           <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{item.title}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' up'} disabled={index===0} onPress={()=>move(index,-1)} style={styles.orderButton}><UiIcon name="chevronUp" color={index===0?p.muted:p.ink} size={17}/></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' down'} disabled={index===shelfSections.length-1} onPress={()=>move(index,1)} style={styles.orderButton}><UiIcon name="chevronDown" color={index===shelfSections.length-1?p.muted:p.ink} size={17}/></Pressable>
@@ -2992,6 +2992,8 @@ function Client() {
 
       <OnboardingGuide/>
 
+      {shelfSections.find(item=>item.id==='continue') ? section(shelfSections.find(item=>item.id==='continue') as ShelfSectionPref) : null}
+
       {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.reviewBannerCopy}>
           <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerTitle,{color:p.ink}]}>Metadata review</Text>
@@ -3000,7 +3002,7 @@ function Client() {
         <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
       </Pressable>:null}
 
-      {localScanning&&scanProgress?<View style={[styles.scanBanner,{backgroundColor:p.card}]}>
+      {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
         <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found</Text></View>
       </View>:null}
@@ -3013,7 +3015,7 @@ function Client() {
       </View>:null}
 
       {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><View key={i} style={[styles.skeletonCard,{backgroundColor:p.card}]}/>)}</View>:null}
-      {shelfSections.map(section)}
+      {shelfSections.filter(item=>item.id!=='continue').map(section)}
 
       <View style={[styles.shelfBrowseBand,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.shelfBrowseLabel,{color:p.muted}]}>BROWSE</Text>
@@ -4341,13 +4343,13 @@ const styles = StyleSheet.create({
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
-  libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
+  libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 44, justifyContent: 'center'},
   libraryChoiceVertical: {borderRadius: 10, minHeight: 44},
   libraryChipsScroll: {flexGrow:0,minHeight:46,maxHeight:50},
   libraryChips: {gap:8,paddingVertical:2,minHeight:46},
   libraryChipsRow: {flexDirection: 'row', gap: 20},
   librarySpaceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
-  librarySpaceTabVertical: {minHeight:42,paddingHorizontal:10},
+  librarySpaceTabVertical: {minHeight:44,paddingHorizontal:10},
   librarySpaceText: {fontSize:13},
   librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
   librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
@@ -4362,7 +4364,7 @@ const styles = StyleSheet.create({
   continueCard: {width:132,gap:6},
   continueTitle: {fontSize:14,fontWeight:'800'},
   seriesChip: {minWidth:140,maxWidth:220,borderWidth:0,borderRadius:12,paddingHorizontal:14,paddingVertical:12,gap:2},
-  scanBanner: {borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12},
+  scanBanner: {borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:10,paddingHorizontal:0,flexDirection:'row',alignItems:'center',gap:12},
   onboardingCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
   onboardingEyebrow: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.5},
   onboardingTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:25,fontWeight:'500',letterSpacing:-.15},
@@ -4566,7 +4568,7 @@ const styles = StyleSheet.create({
   settingsSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
   settingsRow: {minHeight:46,flexDirection:'row',alignItems:'center',gap:12},
   settingsStatusDot: {width:8,height:8,borderRadius:4},
-  settingsTextAction: {minHeight:38,paddingHorizontal:2,alignItems:'center',justifyContent:'center'},
+  settingsTextAction: {minHeight:44,paddingHorizontal:2,alignItems:'center',justifyContent:'center'},
   settingsInlineActions: {flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
   settingsAddRow: {flexDirection:'row',alignItems:'center',gap:8},
   settingsInlineInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:11,paddingHorizontal:13,fontSize:15},
@@ -4634,7 +4636,7 @@ const styles = StyleSheet.create({
   atlasNodeSourceDot: {position:'absolute',right:4,bottom:4,width:8,height:8,borderRadius:4,borderWidth:1,borderColor:'#f8f7f2'},
   atlasViewportTools: {position:'absolute',right:8,top:8,zIndex:20,flexDirection:'row',gap:4},
   atlasZoomButton: {borderWidth:0},
-  atlasToolButton: {minHeight:38,paddingHorizontal:10,borderRadius:8,alignItems:'center',justifyContent:'center'},
+  atlasToolButton: {minHeight:44,paddingHorizontal:10,borderRadius:8,alignItems:'center',justifyContent:'center'},
   atlasFindButton: {height:46,paddingHorizontal:16,borderRadius:12,alignItems:'center',justifyContent:'center'},
   atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
   atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:0,borderRadius:0,paddingHorizontal:6,paddingVertical:4,opacity:.88},
@@ -4653,7 +4655,7 @@ const styles = StyleSheet.create({
   sourceSwitcher: {flexDirection:'row',gap:20,paddingRight:14,paddingVertical:2,minHeight:48,alignItems:'stretch'},
   sourceSwitcherVertical: {gap:0},
   sourceTab: {minHeight:46,justifyContent:'center',position:'relative',paddingHorizontal:1},
-  sourceTabVertical: {paddingHorizontal:10,minHeight:42},
+  sourceTabVertical: {paddingHorizontal:10,minHeight:44},
   sourceTabText: {fontSize:13},
   sourceTabCount: {fontSize:11,fontWeight:'600'},
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
@@ -4714,7 +4716,7 @@ const styles = StyleSheet.create({
   seriesEmpty: {position:'absolute',left:0,top:0,width:104,height:108,borderWidth:StyleSheet.hairlineWidth,borderRadius:10},
   seriesName: {fontFamily:'sans-serif-medium',fontSize:15,lineHeight:20,fontWeight:'500'},
   shelfUtilityRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,flexDirection:'row',flexWrap:'wrap',gap:16},
-  shelfUtilityAction: {minHeight:40,paddingHorizontal:0,paddingRight:8,justifyContent:'center'},
+  shelfUtilityAction: {minHeight:44,paddingHorizontal:0,paddingRight:8,justifyContent:'center'},
   brandSignature: {fontSize:10,fontWeight:'700',letterSpacing:3,textAlign:'center',marginTop:8},
   designedEmpty: {borderWidth:0,padding:28,gap:10,alignItems:'center',justifyContent:'center',minHeight:180},
   emptyMark: {fontFamily:'serif',fontSize:34,fontWeight:'800'},
@@ -4734,7 +4736,7 @@ const styles = StyleSheet.create({
   moreButtonList: {right:4,top:4},
   offlineBadge: {position:'absolute',left:7,bottom:7,borderRadius:999,paddingHorizontal:7,paddingVertical:4},
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
-  cardPressed: {opacity:0.72},
+  cardPressed: {opacity:0.88},
   actionSheet: {width:'100%',maxWidth:620,borderWidth:0,borderTopLeftRadius:24,borderTopRightRadius:24,padding:18,gap:9,alignSelf:'center'},
   actionSheetFold: {width:420,maxWidth:420,height:'100%',borderTopLeftRadius:24,borderBottomLeftRadius:24,borderTopRightRadius:0,paddingHorizontal:22,paddingVertical:24,alignSelf:'flex-end'},
   sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',justifyContent:'flex-end',padding:12},
@@ -4744,7 +4746,7 @@ const styles = StyleSheet.create({
   sheetHandleFold: {display:'none'},
   sheetHeader: {flexDirection:'row',alignItems:'flex-start',gap:12,marginBottom:4},
   sheetTitle: {fontFamily:'sans-serif-medium',fontSize:18,lineHeight:23,fontWeight:'500'},
-  sheetCloseButton: {width:40,height:40,borderRadius:10,alignItems:'center',justifyContent:'center',marginTop:-5,marginRight:-5},
+  sheetCloseButton: {width:44,height:44,borderRadius:10,alignItems:'center',justifyContent:'center',marginTop:-5,marginRight:-5},
   sheetActionList: {marginTop:2},
   sheetAction: {minHeight:46,borderBottomWidth:StyleSheet.hairlineWidth,justifyContent:'center',paddingVertical:10},
   sheetActionText: {fontSize:13.5,lineHeight:19,fontWeight:'500'},
@@ -4769,15 +4771,15 @@ const styles = StyleSheet.create({
   libraryFilterCount: {position:'absolute',right:3,top:2,minWidth:16,height:16,borderRadius:8,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
   libraryFilterCountText: {color:'#FFFFFF',fontSize:9,fontWeight:'700'},
   libraryFormatTabs: {gap:22,paddingRight:18,minHeight:42,paddingVertical:1,alignItems:'stretch'},
-  libraryFormatTab: {minHeight:40,justifyContent:'center',position:'relative'},
+  libraryFormatTab: {minHeight:44,justifyContent:'center',position:'relative'},
   libraryFormatText: {fontSize:13,lineHeight:18},
   libraryFormatMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   libraryToolbar: {flexDirection:'row',alignItems:'center',gap:8},
   quickFilters: {gap:4,paddingRight:8},
-  quickFilter: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
-  toolbarButton: {borderWidth:0,borderRadius:10,minHeight:40,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  quickFilter: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
+  toolbarButton: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
   librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
-  librarySelectionAction: {minHeight:40,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
+  librarySelectionAction: {minHeight:44,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
   unifiedGrid: {paddingBottom:120,gap:16,paddingTop:2},
   unifiedGridRow: {gap:10},
   unifiedList: {paddingBottom:120,gap:4},
@@ -4786,15 +4788,15 @@ const styles = StyleSheet.create({
   reviewQueue: {gap:10,paddingBottom:10},
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
-  filterChip: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
+  filterChip: {borderWidth:0,borderRadius:9,minHeight:44,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
   duplicatePanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:10},
   duplicateGroup: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:7},
   duplicateExact: {borderWidth:0,borderLeftWidth:2,paddingLeft:10,paddingVertical:6,gap:4},
   ruleGroup: {borderWidth:0,borderLeftWidth:2,paddingLeft:12,paddingVertical:8,gap:8},
   ruleRow: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:8,flexDirection:'row',flexWrap:'wrap',gap:6,alignItems:'center'},
-  ruleToken: {borderWidth:0,borderRadius:8,minHeight:36,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
-  ruleInput: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:10,flexGrow:1,minWidth:92},
-  ruleRemove: {width:34,height:34,alignItems:'center',justifyContent:'center'},
+  ruleToken: {borderWidth:0,borderRadius:8,minHeight:44,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
+  ruleInput: {borderWidth:0,borderRadius:9,minHeight:44,paddingHorizontal:10,flexGrow:1,minWidth:92},
+  ruleRemove: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   insightEditorialHero: {paddingVertical:4,gap:6,maxWidth:760},
   insightEditorialKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
   insightEditorialTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:28,fontWeight:'400',letterSpacing:-.1},
@@ -4813,7 +4815,7 @@ const styles = StyleSheet.create({
   insightGoalGrid: {gap:0},
   insightGoalCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:10},
   insightGoalEdit: {flexDirection:'row',alignItems:'center',justifyContent:'flex-end',gap:8},
-  insightGoalInput: {width:54,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,minHeight:36,paddingHorizontal:4,textAlign:'center',fontSize:13,fontWeight:'600',fontVariant:['tabular-nums']},
+  insightGoalInput: {width:58,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,minHeight:44,paddingHorizontal:4,textAlign:'center',fontSize:13,fontWeight:'600',fontVariant:['tabular-nums']},
   insightActivityRow: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,flexDirection:'row',gap:10,alignItems:'center'},
   activityMarker: {width:7,height:7,borderRadius:4},
   annotationHubCard: {borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,gap:7},
