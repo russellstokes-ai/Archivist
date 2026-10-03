@@ -3517,7 +3517,7 @@ function Client() {
         {!session&&!recoverableSession&&!shelfServerPromptHidden?<Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/>:null}
       </View>:null}
 
-      {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><Animated.View key={i} style={[styles.skeletonCard,{backgroundColor:p.card,opacity:reduceMotion?.45:shelfSkeletonPulse}]}/>)}</View>:null}
+      {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><Animated.View key={i} style={[styles.skeletonCard,{backgroundColor:p.card,opacity:reduceMotion ? .45 : shelfSkeletonPulse}]}/>)}</View>:null}
       {shelfSections.filter(item=>item.id!=='continue').map(section)}
 
       <View style={[styles.shelfBrowseBand,{borderTopColor:p.line,borderBottomColor:p.line}]}>
