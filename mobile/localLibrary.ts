@@ -221,7 +221,7 @@ export async function scanLocalFolders(
       }
       if (['jpg','jpeg','png','webp'].includes(ext)) {
         artworkByStem.set(stem, child);
-        const rank = stem === 'cover' ? 0 : stem === 'folder' ? 1 : 99;
+        const rank = stem === 'cover' ? 0 : stem === 'front' ? 1 : stem === 'folder' ? 2 : stem === 'coverart' ? 3 : 99;
         if (genericBookLevelFilesAllowed && rank < genericCoverRank) {
           genericCover = child;
           genericCoverRank = rank;
