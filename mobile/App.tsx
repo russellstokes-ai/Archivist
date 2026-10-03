@@ -4668,17 +4668,54 @@ function Client() {
 
   function Profile() {
     const stats=profileStats;
+    const overall=profileProgression?.overall||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:'Reader'};
+    const identityRing:ChartItem[]=[
+      {label:'Level progress',count:Math.max(.001,overall.progress),color:p.gold},
+      {label:'Remaining',count:Math.max(.001,1-overall.progress),color:darkMode?'#29303A':'#D8CDBA'},
+    ];
+    const traits:string[]=[];
+    const readDone=stats?.completedReading||0,listenDone=stats?.completedAudio||0;
+    if(listenDone>readDone*1.35&&listenDone>=3)traits.push('Audio-first');
+    else if(readDone>listenDone*1.35&&readDone>=3)traits.push('Page-led');
+    else if(readDone>0&&listenDone>0)traits.push('Mixed-format reader');
+    if((stats?.series||0)>=10)traits.push('Series keeper');
+    if(ritual.bestStreak>=14)traits.push('Ritual reader');
+    if((stats?.favourites||0)>=10)traits.push('Selective curator');
+    if((stats?.formats||0)>=3)traits.push('Format explorer');
+    if(!traits.length)traits.push('Building your archive');
+    const profileTraits=traits.slice(0,4);
+    const personalBests=[
+      {label:'Best streak',value:ritual.bestStreak+' days',icon:'flame' as UiIconName},
+      {label:'Active days',value:String(ritual.activeDays),icon:'calendar' as UiIconName},
+      {label:'Listening',value:Math.round(insightSummary.listeningSeconds/3600)+' hr',icon:'play' as UiIconName},
+      {label:'Avg rating',value:(stats?.averageRating||0)>0?(stats?.averageRating||0).toFixed(1)+'/10':'—',icon:'insights' as UiIconName},
+    ];
+    const goals=[
+      {label:'Works completed',value:insightSummary.completedGoal.value,target:insightSummary.completedGoal.target,progress:insightSummary.completedGoal.progress,icon:'bookOpen' as UiIconName,tone:p.sage},
+      {label:'Annotations',value:insightSummary.annotationGoal.value,target:insightSummary.annotationGoal.target,progress:insightSummary.annotationGoal.progress,icon:'bookmark' as UiIconName,tone:p.gold},
+    ];
+    const highlightedAchievements=[
+      ...(recentAchievementId?profileAchievements.filter(item=>item.id===recentAchievementId):[]),
+      ...profileAchievements.filter(item=>item.unlocked&&item.id!==recentAchievementId).sort((a,b)=>b.target-a.target),
+    ].slice(0,3);
     const profileLinks=[
-      {id:'rewards' as Tab,label:'Rewards',copy:profileAchievements.filter(item=>item.unlocked).length+' unlocked',icon:'target' as UiIconName,tone:'#E3BC67'},
-      {id:'settings' as Tab,label:'Settings',copy:'App, library and server',icon:'settings' as UiIconName,tone:'#7AA7E8'},
+      {id:'rewards' as Tab,label:'Rewards',copy:'Level '+overall.level+' · '+(profileProgression?.unlockedAchievements||0)+' unlocked',icon:'target' as UiIconName,tone:'#E3BC67'},
+      {id:'settings' as Tab,label:'Settings',copy:'Library, privacy and server',icon:'settings' as UiIconName,tone:'#7AA7E8'},
     ];
     return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Profile" subtitle="Your identity and reading life."/>
-      <View style={[styles.profileIdentityHero,{borderBottomColor:p.line}]}>
-        <View style={[styles.profileIdentityAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text></View>
-        <View style={{flex:1,minWidth:0}}>
+
+      <View style={[styles.profileIdentityHero,styles.profileIdentityHeroRich,{borderBottomColor:p.line}]}>
+        <View style={styles.profileIdentityRing}>
+          <DataRing size={112} items={identityRing} ink={p.ink} muted={p.muted} track={p.line} thickness={6} opacity={1}/>
+          <View style={[styles.profileIdentityAvatar,styles.profileIdentityAvatarRing,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text></View>
+          <View style={[styles.profileIdentityLevelBadge,{backgroundColor:darkMode?'#0B1725':'#FFF8E9',borderColor:p.gold}]}><Text style={[styles.profileIdentityLevelText,{color:p.gold}]}>L{overall.level}</Text></View>
+        </View>
+        <View style={styles.profileIdentityCopy}>
+          <Text style={[styles.profileIdentityKicker,{color:p.gold}]}>{overall.title.toUpperCase()}</Text>
           <Text style={[styles.profileIdentityName,{color:p.ink}]}>{stats?.name||'Reader'}</Text>
           <Text style={[styles.pageSubtitle,{color:p.muted}]}>{stats?.works||0} works · {stats?.completed||0} completed · {ritual.currentStreak} day streak</Text>
+          <View style={styles.profileTraitRow}>{profileTraits.map(trait=><View key={trait} style={[styles.profileTraitChip,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.profileTraitText,{color:p.ink}]}>{trait}</Text></View>)}</View>
         </View>
       </View>
 
@@ -4695,8 +4732,34 @@ function Client() {
       </View>
 
       <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>PERSONAL BESTS</Text>
+        <View style={styles.profileBestGrid}>{personalBests.map(item=><View key={item.label} style={[styles.profileBestCard,{borderColor:p.line}]}>
+          <View style={[styles.profileBestIcon,{backgroundColor:p.card}]}><UiIcon name={item.icon} color={p.gold} size={17}/></View>
+          <Text style={[styles.profileBestValue,{color:p.ink}]}>{item.value}</Text>
+          <Text style={[styles.profileBestLabel,{color:p.muted}]}>{item.label}</Text>
+        </View>)}</View>
+      </View>
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>CURRENT GOALS</Text>
+        <View style={styles.profileGoalGrid}>{goals.map(goal=><View key={goal.label} style={[styles.profileGoalCard,{borderColor:p.line}]}>
+          <View style={styles.profileGoalTop}><View style={[styles.profileBestIcon,{backgroundColor:p.card}]}><UiIcon name={goal.icon} color={goal.tone} size={17}/></View><Text style={[styles.profileGoalValue,{color:p.ink}]}>{goal.value} / {goal.target}</Text></View>
+          <Text style={[styles.profileGoalLabel,{color:p.muted}]}>{goal.label}</Text>
+          <View style={[styles.profileGoalTrack,{backgroundColor:p.line}]}><View style={[styles.profileGoalFill,{backgroundColor:goal.tone,width:(Math.round(goal.progress*100)+'%') as any}]}/></View>
+        </View>)}</View>
+      </View>
+
+      {highlightedAchievements.length?<View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <View style={styles.profileSectionHeadingRow}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>{recentAchievementId?'RECENT MILESTONES':'MILESTONE HIGHLIGHTS'}</Text><Pressable accessibilityRole="button" onPress={()=>setActiveTab('rewards')}><Text style={[styles.meta,{color:p.gold,fontWeight:'700'}]}>View all</Text></Pressable></View>
+        <View style={styles.profileMilestoneList}>{highlightedAchievements.map(item=><View key={item.id} style={[styles.profileMilestoneRow,{borderBottomColor:p.line}]}>
+          <View style={[styles.profileMilestoneMedal,{borderColor:p.gold,backgroundColor:p.card}]}><UiIcon name={item.id.includes('streak')?'flame':item.id.includes('audio')||item.id.includes('listener')?'play':item.id.includes('series')?'layers':'target'} color={p.gold} size={18}/></View>
+          <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{item.description}</Text></View>
+        </View>)}</View>
+      </View>:null}
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
         <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>AVATAR</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. This stays on this device.</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. Profile-photo support is prepared for the native picker pass; initials remain the reliable local fallback.</Text>
         <View style={styles.profileAvatarEditor}>
           <TextInput accessibilityLabel="Avatar initials" value={profileAvatar.initials} maxLength={2} autoCapitalize="characters" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>
           <View style={styles.profileAvatarPalette}>
