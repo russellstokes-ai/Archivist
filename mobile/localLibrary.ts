@@ -1,5 +1,5 @@
 import {Platform} from 'react-native';
-import {copyAsync, deleteAsync, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
+import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
@@ -235,6 +235,15 @@ async function copyLocalUri(from:string,to:string){
 async function deleteLocalUri(uri:string){
   if(isSAFUri(uri))return StorageAccessFramework.deleteAsync(uri);
   return deleteAsync(uri,{idempotent:true});
+}
+
+export async function removeLocalFolderSource(folder:LocalFolder):Promise<void>{
+  if(Platform.OS!=='ios')return;
+  if(!documentDirectory)throw Error('Archivist storage is unavailable.');
+  const importedRoot=documentDirectory.replace(/\/$/,'')+'/local-libraries/';
+  const uri=String(folder.uri||'');
+  if(!uri.startsWith(importedRoot))throw Error('Archivist will not delete a folder outside its private imported library.');
+  await deleteAsync(uri,{idempotent:true});
 }
 
 export async function scanLocalFolders(
