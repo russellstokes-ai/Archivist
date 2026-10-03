@@ -1,5 +1,27 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-03 — Final polish Sprint 5: native backup and restore
+
+### Implemented and source-verified
+- Backup & Restore now uses normal mobile file workflows as the primary experience.
+- **Save backup file** writes the existing portable non-sensitive JSON snapshot into Archivist app storage and opens the native iOS/Android share/save sheet.
+- **Restore from file** uses the native document picker, enforces a 5 MB safety limit, reads the selected JSON file and feeds it through the same sanitised restore path.
+- The established portable backup contract is unchanged: server credentials/access keys and device-local profile-photo paths are not included.
+- Raw JSON copy/paste remains available as a quiet **Manual JSON backup** disclosure for recovery/debugging instead of occupying the Settings section by default.
+- Restore status is announced through an accessibility live region.
+- Added Expo SDK 55-compatible `expo-sharing` and `expo-document-picker` dependencies and strengthened the UI contract around the native file flow.
+
+### UI boundary
+- The existing Backup & Restore subgroup and visual language are retained.
+- The change replaces developer-like always-visible JSON controls with the approved progressive-disclosure pattern; no Settings page restructuring occurred.
+
+### Runtime proof still required
+- Save/share to Files on iOS and Android.
+- Restore from local Files, iCloud/Drive-backed providers and cancellation.
+- Invalid/oversized backup files.
+- Restore after app relaunch and across installations.
+
+
 ## 2026-10-03 — Final polish Sprint 4: source and offline removal safety
 
 ### Implemented and source-verified
