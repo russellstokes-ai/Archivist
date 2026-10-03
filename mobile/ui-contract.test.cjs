@@ -69,7 +69,7 @@ assert.ok(source.includes('styles.globalProfileCorner') && source.includes('<Pro
 const stateStoreSource = fs.readFileSync('stateStore.ts','utf8');
 assert.ok(stateStoreSource.includes('browserStorageAvailable') && stateStoreSource.includes('writeBrowserValue'), 'Draftbit persistence fallback must avoid unavailable native SecureStore bridges');
 assert.ok(source.includes("backgroundColor:'transparent',borderRightColor:p.line") && source.includes("libraryTwoPane: {flex:1,flexDirection:'row',backgroundColor:'transparent'}"), 'Library wide layout must not paint an opaque margin over the global halo');
-assert.ok(source.includes("libraryRail: {width:148") && source.includes("libraryRailFold: {width:126") && source.includes("libraryTreeRow: {minHeight:38"), 'Library source rail must remain compact on Fold and wider layouts');
+assert.ok(source.includes("libraryRail: {width:132") && source.includes("libraryRailFold: {width:112") && source.includes("libraryMainFold: {paddingLeft:10,paddingRight:24") && source.includes("libraryMainWide: {paddingLeft:12,paddingRight:28") && source.includes("libraryTreeRow: {minHeight:38"), 'Library left footprint must stay compact without reducing right-side spacing');
 
 assert.ok(source.includes("errorBanner: {position:'absolute'") && source.includes('globalProfileCorner'), 'Error banners must overlay without moving the persistent profile avatar');
 
