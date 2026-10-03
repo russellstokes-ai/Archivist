@@ -137,14 +137,14 @@ Signature Living Book Player. Current phase is locked as complete unless a regre
 - realistic motion with Reduced Motion fallback.
 
 ### Comic Focus
-Headline feature owned by the separate Astra/Work stream while active:
+Headline feature complete/locked for the current finishing phase. Release QA may verify it, but do not redesign or continue feature work unless Russell explicitly reopens it:
 - deterministic local focus;
 - original pixels only;
 - no generative redraw;
 - double-tap focus with graceful fallback.
 
 ### Atlas
-Headline feature owned by the separate Astra/Work stream while active:
+Headline feature and the **only** area still owned by the separate Astra/Work stream while active:
 - connected visual universe;
 - works/authors/series/collections/genres/notes/tags;
 - stable spatial relationships;
