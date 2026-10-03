@@ -35,7 +35,8 @@
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
     "react-native-webview": "13.16.0",
-    "react-native-unarchive": "^1.1.0"
+    "react-native-unarchive": "^1.1.0",
+    "expo-build-properties": "~55.0.18"
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
