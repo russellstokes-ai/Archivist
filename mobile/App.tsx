@@ -287,7 +287,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
 
 function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
   const k=size/20;
@@ -368,6 +368,42 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   </View>;
   if(name==='queue')return <View style={{width:size,height:size,position:'relative'}}>
     {[.18,.46,.74].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,top:size*top,width:size*.50,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',right:size*.08,top:size*(top-.09),width:size*.18,height:size*.18,borderRadius:size*.09,borderWidth:Math.max(1,stroke*.55),borderColor:color}}/></React.Fragment>)}
+  </View>;
+  if(name==='bookOpen')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.10,top:size*.18,width:size*.36,height:size*.62,borderWidth:Math.max(1,stroke*.55),borderColor:color,borderTopLeftRadius:5,borderBottomLeftRadius:5,borderTopRightRadius:2,borderBottomRightRadius:2}}/>
+    <View style={{position:'absolute',right:size*.10,top:size*.18,width:size*.36,height:size*.62,borderWidth:Math.max(1,stroke*.55),borderColor:color,borderTopRightRadius:5,borderBottomRightRadius:5,borderTopLeftRadius:2,borderBottomLeftRadius:2}}/>
+    <View style={{position:'absolute',left:size*.49,top:size*.22,bottom:size*.16,width:Math.max(1,stroke*.55),backgroundColor:color,opacity:.85}}/>
+  </View>;
+  if(name==='clock')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.72,height:size*.72,borderRadius:size*.36,borderWidth:Math.max(1,stroke*.6),borderColor:color}}/>
+    <View style={{position:'absolute',width:Math.max(1,stroke*.75),height:size*.20,backgroundColor:color,top:size*.28,borderRadius:2}}/>
+    <View style={{position:'absolute',width:size*.18,height:Math.max(1,stroke*.75),backgroundColor:color,left:size*.49,top:size*.47,borderRadius:2,transform:[{rotate:'24deg'}]}}/>
+  </View>;
+  if(name==='calendar')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.72,height:size*.66,borderRadius:4,borderWidth:Math.max(1,stroke*.58),borderColor:color,marginTop:size*.08}}/>
+    <View style={{position:'absolute',left:size*.22,right:size*.22,top:size*.37,height:Math.max(1,stroke*.5),backgroundColor:color}}/>
+    <View style={{position:'absolute',left:size*.30,top:size*.12,width:Math.max(1,stroke*.7),height:size*.18,borderRadius:2,backgroundColor:color}}/>
+    <View style={{position:'absolute',right:size*.30,top:size*.12,width:Math.max(1,stroke*.7),height:size*.18,borderRadius:2,backgroundColor:color}}/>
+  </View>;
+  if(name==='flame')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.52,height:size*.68,borderRadius:size*.28,borderWidth:Math.max(1,stroke*.6),borderColor:color,transform:[{rotate:'8deg'}]}}/>
+    <View style={{position:'absolute',top:size*.06,width:size*.18,height:size*.34,borderLeftWidth:Math.max(1,stroke*.6),borderLeftColor:color,transform:[{rotate:'24deg'}]}}/>
+  </View>;
+  if(name==='target')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.76,height:size*.76,borderRadius:size*.38,borderWidth:Math.max(1,stroke*.52),borderColor:color}}/>
+    <View style={{position:'absolute',width:size*.44,height:size*.44,borderRadius:size*.22,borderWidth:Math.max(1,stroke*.52),borderColor:color}}/>
+    <View style={{position:'absolute',width:size*.14,height:size*.14,borderRadius:size*.07,backgroundColor:color}}/>
+  </View>;
+  if(name==='layers')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    {[0,1,2].map(index=><View key={index} style={{position:'absolute',width:size*.58,height:size*.32,borderWidth:Math.max(1,stroke*.52),borderColor:color,transform:[{rotate:'45deg'},{translateY:(index-1)*size*.16}]}}/>)}
+  </View>;
+  if(name==='gauge')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.76,height:size*.38,borderTopLeftRadius:size*.38,borderTopRightRadius:size*.38,borderWidth:Math.max(1,stroke*.58),borderBottomWidth:0,borderColor:color,marginTop:size*.22}}/>
+    <View style={{position:'absolute',width:size*.30,height:Math.max(1,stroke*.75),backgroundColor:color,left:size*.48,top:size*.48,borderRadius:2,transform:[{rotate:'-48deg'}]}}/>
+  </View>;
+  if(name==='pin')return <View style={{width:size,height:size,position:'relative',alignItems:'center'}}>
+    <View style={{width:size*.54,height:size*.68,borderTopLeftRadius:size*.27,borderTopRightRadius:size*.27,borderBottomLeftRadius:size*.28,borderBottomRightRadius:size*.28,borderWidth:Math.max(1,stroke*.58),borderColor:color,transform:[{rotate:'45deg'}],marginTop:size*.08}}/>
+    <View style={{position:'absolute',top:size*.25,width:size*.16,height:size*.16,borderRadius:size*.08,borderWidth:Math.max(1,stroke*.5),borderColor:color}}/>
   </View>;
   if(name==='search')return <View style={{width:size,height:size,position:'relative'}}>
     <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:Math.max(1,stroke*.6),borderColor:color,borderRadius:size*.31}}/>
@@ -476,6 +512,7 @@ function Client() {
   const [serverActivity,setServerActivity]=useState<ProfileActivity[]>([]);
   const [insightGoal,setInsightGoal]=useState(defaultInsightGoal);
   const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
+  const [readerStatsSection,setReaderStatsSection]=useState<'Overview'|'Time'|'Books'|'Genres'|'Formats'|'Places'>('Overview');
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
   const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'>('Genre');
@@ -3711,206 +3748,294 @@ function Client() {
 
   function Insights(){
     const summary=insightSummary;
-    const listeningHours=summary.listeningSeconds/3600;
-    const listeningLabel=listeningHours<10?listeningHours.toFixed(1)+'h':Math.round(listeningHours)+'h';
-    const lead=summary.completed
-      ? `${summary.completed} finished · ${summary.activeDays} active day${summary.activeDays===1?'':'s'} · ${summary.annotationCount} saved idea${summary.annotationCount===1?'':'s'}`
-      : 'Your reading and listening history will build here as you use Archivist.';
-    const metrics:Array<[string,string|number]>=[
-      ['Finished',summary.completed],
-      ['In progress',summary.inProgress],
-      ['Listening',listeningLabel],
-      ['Active days',summary.activeDays],
-      ['Notes',summary.annotationCount],
-      ['Average rating',summary.rated?ratingLabel(summary.averageRating):'—'],
+    const stats=profileStats;
+    const darkStats=p.paper==='#000000';
+    const statsPalette={
+      canvas:darkStats?'#07111D':'#F7F7F5',
+      panel:darkStats?'#0B1725':'#FFFFFF',
+      panelRaised:darkStats?'#0E1C2C':'#FAFAF8',
+      line:darkStats?'#26364A':'#D9D7D0',
+      ink:darkStats?'#F3F0E8':'#111316',
+      muted:darkStats?'#A9B4C5':'#68717D',
+      gold:darkStats?'#E3BC67':'#A67C2E',
+      goldSoft:darkStats?'#7F6841':'#EADDBF',
+      blue:darkStats?'#8FB5D1':'#6C8EA8',
+      blueDeep:darkStats?'#435B78':'#98AABD',
+      teal:darkStats?'#89C7CB':'#6EA3A5',
+      mint:darkStats?'#73DDB0':'#4FA97F',
+    };
+    const currentYear=new Date().getFullYear();
+    const completed=summary.completed;
+    const completedGoal=Math.max(1,summary.completedGoal.target);
+    const progressRemaining=Math.max(0,completedGoal-completed);
+    const progressPercent=Math.min(100,Math.round(completed/completedGoal*100));
+    const totalActivitySeconds=summary.recentActivity.reduce((sum,item)=>sum+Math.max(0,item.activeSeconds||0),0);
+    const minutesRead=Math.round(totalActivitySeconds/60);
+    const activeDays=Math.max(summary.activeDays,ritual.activeDays);
+    const metricCards=[
+      {label:'Books read',value:completed,icon:'bookOpen' as UiIconName},
+      {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'clock' as UiIconName},
+      {label:'Reading days',value:activeDays,icon:'calendar' as UiIconName},
+      {label:'Day streak',value:ritual.currentStreak,icon:'flame' as UiIconName},
     ];
-    const today=new Date();today.setHours(0,0,0,0);
-    const activityWeek=Array.from({length:7},(_,index)=>{
-      const date=new Date(today);date.setDate(today.getDate()-(6-index));
-      const next=new Date(date);next.setDate(date.getDate()+1);
-      const from=date.getTime()/1000,to=next.getTime()/1000;
-      const items=summary.recentActivity.filter(item=>item.updatedAt>=from&&item.updatedAt<to);
-      const seconds=items.reduce((total,item)=>total+Math.max(0,item.activeSeconds||0),0);
-      return {key:date.toISOString().slice(0,10),label:date.toLocaleDateString(undefined,{weekday:'short'}).slice(0,1),seconds,events:items.reduce((total,item)=>total+item.events,0)};
+
+    const hourTotals=Array.from({length:24},()=>0);
+    for(const item of summary.recentActivity){
+      const date=new Date(item.updatedAt*1000);
+      hourTotals[date.getHours()]+=Math.max(0,item.activeSeconds||0);
+    }
+    const peakHour=hourTotals.reduce((best,value,index)=>value>hourTotals[best]?index:best,0);
+    const peakValue=hourTotals[peakHour]||0;
+    const peakEnd=(peakHour+3)%24;
+    const displayHour=(hour:number)=>hour===0?'12':hour>12?String(hour-12):String(hour);
+    const peakRange=peakValue?(displayHour(peakHour)+'–'+displayHour(peakEnd)+' '+(peakHour>=12?'PM':'AM')):'—';
+    const peakShare=totalActivitySeconds?Math.round(peakValue/totalActivitySeconds*100):0;
+    const maxHour=Math.max(1,...hourTotals);
+
+    const recentDays=Array.from({length:7},(_,index)=>{
+      const date=new Date();date.setHours(0,0,0,0);date.setDate(date.getDate()-6+index);
+      return {date,key:localDay(date),label:date.toLocaleDateString(undefined,{weekday:'short'}).slice(0,3)};
     });
-    const maxDaySeconds=Math.max(1,...activityWeek.map(day=>day.seconds));
-    return <ScrollView contentContainerStyle={styles.insightsScreen}>
-      <View style={styles.pageHeadingRow}>
-        <View style={{flex:1}}>
-          <Text maxFontSizeMultiplier={1.15} style={[styles.insightsTitle,{color:p.ink}]}>Insights</Text>
-          <Text style={[styles.pageSubtitle,{color:p.muted}]}>A private record of how your library is becoming part of your life.</Text>
+    const heatRows=Array.from({length:12},(_,row)=>recentDays.map(day=>{
+      let seconds=0;
+      for(const item of summary.recentActivity){
+        const date=new Date(item.updatedAt*1000);
+        if(localDay(date)!==day.key)continue;
+        const hour=date.getHours();
+        if(hour>=row*2&&hour<row*2+2)seconds+=Math.max(0,item.activeSeconds||0);
+      }
+      return seconds;
+    }));
+    const heatMax=Math.max(1,...heatRows.flat());
+
+    const chartColours=[statsPalette.gold,statsPalette.blue,statsPalette.goldSoft,statsPalette.blueDeep,statsPalette.teal,'#5D718D'];
+    const formatItems:ChartItem[]=atlas.formats.slice(0,6).map(([label,count],index)=>({label,count,color:chartColours[index%chartColours.length]}));
+    const genreCounts:ChartItem[]=atlas.genres.slice(0,6).map(([label,count],index)=>({label,count,color:chartColours[index%chartColours.length]}));
+    const workById=new Map(serverWorks.map(work=>[work.id,work]));
+    const genreTime=new Map<string,number>();
+    for(const item of summary.recentActivity){
+      const genre=workById.get(item.workId)?.genre||'Other';
+      genreTime.set(genre,(genreTime.get(genre)||0)+Math.max(0,item.activeSeconds||0));
+    }
+    const genreTimeItems:ChartItem[]=[...genreTime].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,seconds],index)=>({label,count:Math.max(1,Math.round(seconds/60)),color:chartColours[index%chartColours.length]}));
+    const genreItems=genreTimeItems.length?genreTimeItems:genreCounts;
+    const genreTotal=genreItems.reduce((sum,item)=>sum+item.count,0);
+    const formatsTotal=formatItems.reduce((sum,item)=>sum+item.count,0);
+    const statTabs=['Overview','Time','Books','Genres','Formats','Places'] as const;
+    const selectedReaderStatsSection=readerStatsSection as string;
+
+    const Legend=({items,total}:{items:ChartItem[];total:number})=><View style={styles.statsLegend}>
+      {items.slice(0,6).map(item=><View key={item.label} style={styles.statsLegendRow}>
+        <View style={[styles.statsLegendDot,{backgroundColor:item.color}]}/>
+        <Text numberOfLines={1} style={[styles.statsLegendName,{color:statsPalette.muted}]}>{item.label}</Text>
+        <Text style={[styles.statsLegendCount,{color:statsPalette.ink}]}>{item.count}</Text>
+        <Text style={[styles.statsLegendPercent,{color:statsPalette.muted}]}>{Math.round(item.count/Math.max(1,total)*100)}%</Text>
+      </View>)}
+    </View>;
+
+    const CardHeader=({title,subtitle,icon}:{title:string;subtitle:string;icon:UiIconName})=><View style={styles.statsCardHeader}>
+      <View style={[styles.statsIconOrb,{borderColor:statsPalette.line,backgroundColor:statsPalette.panelRaised}]}><UiIcon name={icon} color={statsPalette.gold} size={19}/></View>
+      <View style={{flex:1,minWidth:0}}>
+        <Text style={[styles.statsCardTitle,{color:statsPalette.ink}]}>{title}</Text>
+        <Text style={[styles.statsCardSubtitle,{color:statsPalette.muted}]}>{subtitle}</Text>
+      </View>
+      <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={statsPalette.muted} size={16}/></View>
+    </View>;
+
+    const rhythmCard=<View style={[styles.statsHeroCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+      <View style={styles.statsRhythmTop}>
+        <CardHeader title="Reading Rhythm" subtitle="When and how you read" icon="clock"/>
+        <View style={[styles.statsMiniSegment,{borderColor:statsPalette.line,backgroundColor:statsPalette.canvas}]}>
+          {['Time','Day','Month'].map((label,index)=><View key={label} style={[styles.statsMiniSegmentItem,index===0&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panelRaised}]}>
+            <Text style={{color:index===0?statsPalette.ink:statsPalette.muted,fontSize:10.5,fontWeight:index===0?'600':'500'}}>{label}</Text>
+          </View>)}
         </View>
       </View>
-
-      <SourceSwitcher/>
-
-      <View style={styles.insightEditorialHero}>
-        <Text style={[styles.insightEditorialKicker,{color:p.sage}]}>YOUR READING LIFE</Text>
-        <Text style={[styles.insightEditorialTitle,{color:p.ink}]}>{lead}</Text>
-      </View>
-
-      <View style={[styles.insightStatStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        {metrics.map(([label,value])=><View key={label} style={[styles.insightStat,foldLayout&&styles.insightStatFold,width>=900&&styles.insightStatWide]}>
-          <Text style={[styles.insightStatValue,{color:p.ink}]}>{value}</Text>
-          <Text style={[styles.insightStatLabel,{color:p.muted}]}>{label}</Text>
-        </View>)}
-      </View>
-
-      <View style={styles.insightRhythmSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Last 7 days</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>{activityWeek.reduce((total,day)=>total+day.events,0)} update{activityWeek.reduce((total,day)=>total+day.events,0)===1?'':'s'}</Text>
-        </View>
-        <View style={styles.insightRhythmChart}>
-          {activityWeek.map(day=>{
-            const active=day.seconds>0;
-            const barHeight=active?Math.max(10,Math.round((day.seconds/maxDaySeconds)*72)):3;
-            return <View key={day.key} style={styles.insightRhythmDay}>
-              <View style={styles.insightRhythmBarArea}>
-                <View style={[styles.insightRhythmBar,{height:barHeight,backgroundColor:active?p.sage:p.line,opacity:active?1:.7}]}/>
-              </View>
-              <Text style={[styles.insightRhythmLabel,{color:p.muted}]}>{day.label}</Text>
-            </View>;
+      <View style={[styles.statsRhythmBody,width>=600&&styles.statsRhythmBodyWide]}>
+        <View style={[styles.statsRhythmDial,{width:width>=600?250:176,height:width>=600?250:176}]}>
+          {hourTotals.map((value,index)=>{
+            const size=width>=600?250:176;
+            const ring=index%2===0?size/2-15:size/2-26;
+            const angle=index/24*Math.PI*2-Math.PI/2;
+            const intensity=value/maxHour;
+            return <View key={'outer-'+index} style={{
+              position:'absolute',
+              left:size/2+Math.cos(angle)*ring-5,
+              top:size/2+Math.sin(angle)*ring-12,
+              width:10,
+              height:24,
+              borderRadius:3,
+              backgroundColor:value?statsPalette.gold:statsPalette.blueDeep,
+              opacity:value?0.30+intensity*.70:.35,
+              transform:[{rotate:(index/24*360)+'deg'}],
+            }}/>;
           })}
+          {hourTotals.map((value,index)=>{
+            const size=width>=600?250:176;
+            const ring=size/2-47;
+            const angle=index/24*Math.PI*2-Math.PI/2;
+            const intensity=value/maxHour;
+            return <View key={'inner-'+index} style={{
+              position:'absolute',
+              left:size/2+Math.cos(angle)*ring-3,
+              top:size/2+Math.sin(angle)*ring-9,
+              width:6,
+              height:18,
+              borderRadius:2,
+              backgroundColor:value?statsPalette.goldSoft:statsPalette.blueDeep,
+              opacity:value?0.24+intensity*.60:.26,
+              transform:[{rotate:(index/24*360)+'deg'}],
+            }}/>;
+          })}
+          <Text style={[styles.statsClockTop,{color:statsPalette.ink}]}>24</Text>
+          <Text style={[styles.statsClockRight,{color:statsPalette.ink}]}>6</Text>
+          <Text style={[styles.statsClockBottom,{color:statsPalette.ink}]}>12</Text>
+          <Text style={[styles.statsClockLeft,{color:statsPalette.ink}]}>18</Text>
+          <View style={[styles.statsRhythmDialInner,{borderColor:statsPalette.line,backgroundColor:statsPalette.canvas}]}>
+            <Text style={[styles.statsDialKicker,{color:statsPalette.muted}]}>Peak</Text>
+            <Text style={[styles.statsDialKicker,{color:statsPalette.muted}]}>Reading Hours</Text>
+            <Text style={[styles.statsDialValue,{color:statsPalette.ink}]}>{peakRange}</Text>
+            <Text style={[styles.statsDialMeta,{color:statsPalette.muted}]}>{peakShare}% of</Text>
+            <Text style={[styles.statsDialMeta,{color:statsPalette.muted}]}>your reading</Text>
+          </View>
+        </View>
+        <View style={styles.statsHeatmapWrap}>
+          <View style={styles.statsHeatHeader}>
+            <View style={{width:34}}/>
+            {recentDays.map(day=><Text key={day.key} style={[styles.statsHeatDay,{color:statsPalette.muted}]}>{day.label}</Text>)}
+          </View>
+          {heatRows.map((row,rowIndex)=><View key={rowIndex} style={styles.statsHeatRow}>
+            <Text style={[styles.statsHeatTime,{color:statsPalette.muted}]}>{rowIndex===0?'12 AM':rowIndex===3?'6 AM':rowIndex===6?'12 PM':rowIndex===9?'6 PM':''}</Text>
+            {row.map((value,index)=>{
+              const ratio=value/heatMax;
+              const bg=value?statsPalette.gold:statsPalette.panelRaised;
+              return <View key={index} style={[styles.statsHeatCell,{backgroundColor:bg,borderColor:statsPalette.line,opacity:value?0.28+ratio*.72:1}]}/>;
+            })}
+          </View>)}
+          <View style={styles.statsHeatLegend}>
+            <View style={[styles.statsHeatLegendDot,{backgroundColor:statsPalette.blueDeep,opacity:.6}]}/><View style={[styles.statsHeatLegendDot,{backgroundColor:statsPalette.blueDeep}]}/>
+            <Text style={[styles.statsHeatLegendText,{color:statsPalette.muted}]}>Less reading</Text>
+            <View style={{flex:1}}/>
+            <View style={[styles.statsHeatLegendDot,{backgroundColor:statsPalette.gold,opacity:.45}]}/><View style={[styles.statsHeatLegendDot,{backgroundColor:statsPalette.gold,opacity:.72}]}/><View style={[styles.statsHeatLegendDot,{backgroundColor:statsPalette.gold}]}/>
+            <Text style={[styles.statsHeatLegendText,{color:statsPalette.muted}]}>More reading</Text>
+          </View>
+        </View>
+      </View>
+    </View>;
+
+    const readingProgressCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+      <CardHeader title="Reading Progress" subtitle="Annual reading goal" icon="target"/>
+      <View style={styles.statsCardBody}>
+        <DataRing size={116} value={String(completed)} label={'of '+completedGoal+' books'} items={[{label:'Read',count:completed,color:statsPalette.gold},{label:'Remaining',count:progressRemaining,color:statsPalette.blueDeep}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
+        <View style={styles.statsCardSide}>
+          <Text style={[styles.statsPercent,{color:statsPalette.gold}]}>{progressPercent}%</Text>
+          <View style={[styles.statsProgressTrack,{backgroundColor:statsPalette.blueDeep}]}><View style={[styles.statsProgressFill,{backgroundColor:statsPalette.gold,width:(progressPercent+'%') as any}]}/></View>
+          <View style={styles.statsStatusLine}><View style={[styles.statsSmallDot,{backgroundColor:statsPalette.blue}]}/><Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>{progressRemaining} books to go</Text></View>
+          <View style={styles.statsStatusLine}><View style={[styles.statsSmallDot,{backgroundColor:statsPalette.mint}]}/><Text style={[styles.statsStatusText,{color:statsPalette.mint}]}>{progressPercent>=75?'On track':'Keep going'}</Text></View>
+        </View>
+      </View>
+    </View>;
+
+    const formatCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+      <CardHeader title="Format Breakdown" subtitle="How you read" icon="bookOpen"/>
+      <View style={styles.statsCardBody}>
+        <DataRing size={116} value={String(stats?.works||formatsTotal)} label="books" items={formatItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
+        {formatItems.length?<Legend items={formatItems} total={formatsTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Add format metadata to reveal your mix.</Text>}
+      </View>
+    </View>;
+
+    const genreCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+      <CardHeader title="Genre Reading Time" subtitle="Time spent in each genre" icon="layers"/>
+      <View style={styles.statsCardBody}>
+        <DataRing size={116} value={genreTimeItems.length?minutesRead.toLocaleString():String(genreTotal)} label={genreTimeItems.length?'minutes':'books'} items={genreItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
+        {genreItems.length?<Legend items={genreItems} total={genreTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Genre activity will appear as you read.</Text>}
+      </View>
+    </View>;
+
+    const paceCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+      <CardHeader title="Reading Pace" subtitle="Your reading speed" icon="gauge"/>
+      <View style={styles.statsCardBody}>
+        <DataRing size={116} value="—" label="wpm" items={[{label:'Pace',count:1,color:statsPalette.gold},{label:'Track',count:1,color:statsPalette.blue}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
+        <View style={styles.statsCardSide}>
+          <Text style={[styles.statsPaceDelta,{color:statsPalette.gold}]}>Not tracked</Text>
+          <Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Archivist does not infer words-per-minute without reliable timing.</Text>
+        </View>
+      </View>
+    </View>;
+
+    const placesCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+      <CardHeader title="Where You Read" subtitle="Your favourite reading spots" icon="pin"/>
+      <View style={styles.statsCardBody}>
+        <DataRing size={116} value="Private" label="places" items={[{label:'Private',count:1,color:statsPalette.goldSoft},{label:'Untracked',count:1,color:statsPalette.blueDeep}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
+        <View style={styles.statsCardSide}><Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Location is not collected. Place tracking remains private and opt-in.</Text></View>
+      </View>
+    </View>;
+
+    const streakCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+      <CardHeader title="Reading Streaks" subtitle="Your consistency" icon="flame"/>
+      <View style={styles.statsStreakTop}>
+        <View style={{flex:1}}><Text style={[styles.statsStreakValue,{color:statsPalette.ink}]}>{ritual.currentStreak} days</Text><Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Current streak</Text></View>
+        <View style={[styles.statsVerticalRule,{backgroundColor:statsPalette.goldSoft}]}/>
+        <View style={{flex:1}}><Text style={[styles.statsStreakValue,{color:statsPalette.ink}]}>{ritual.bestStreak} days</Text><Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Longest streak</Text></View>
+      </View>
+      <View style={styles.statsWeekDots}>
+        {recentDays.map(day=>{
+          const active=(ritualDays[day.key]||0)>=60;
+          return <View key={day.key} style={styles.statsWeekDay}><View style={[styles.statsWeekDot,{backgroundColor:active?statsPalette.gold:statsPalette.blueDeep,borderColor:active?statsPalette.gold:statsPalette.line}]}/><Text style={[styles.statsWeekLabel,{color:statsPalette.muted}]}>{day.label.slice(0,1)}</Text></View>;
+        })}
+      </View>
+    </View>;
+
+    const overviewCards=<View style={styles.statsCardsGrid}>{readingProgressCard}{formatCard}{genreCard}{paceCard}{placesCard}{streakCard}</View>;
+
+    return <ScrollView style={{backgroundColor:statsPalette.canvas}} contentContainerStyle={styles.statsScreen}>
+      <View style={styles.statsTopRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" hitSlop={8} onPress={()=>setActiveTab('shelf')} style={[styles.statsBackButton,{borderColor:statsPalette.line,backgroundColor:statsPalette.panel}]}>
+          <UiIcon name="back" color={statsPalette.ink} size={20}/>
+        </Pressable>
+        <View style={{flex:1,minWidth:0}}>
+          <Text maxFontSizeMultiplier={1.2} style={[styles.statsTitle,{color:statsPalette.ink}]}>Reader Stats</Text>
+          <Text style={[styles.statsSubtitle,{color:statsPalette.muted}]}>Your reading journey</Text>
+        </View>
+        <View accessibilityLabel={'Statistics year '+currentYear} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel}]}>
+          <Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{currentYear}</Text>
+          <UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>
         </View>
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Goals</Text>
-        <Pressable accessibilityRole="button" onPress={()=>void saveInsightGoals()} style={styles.sectionLink}><Text style={{color:p.sage,fontWeight:'600'}}>Save</Text></Pressable>
-      </View>
-      <View style={styles.insightGoalGrid}>
-        <InsightGoalCard title="Finish works" value={summary.completedGoal.value} target={summary.completedGoal.target} progress={summary.completedGoal.progress} draft={goalDraft.completed} onDraft={value=>setGoalDraft(current=>({...current,completed:value}))}/>
-        <InsightGoalCard title="Capture ideas" value={summary.annotationGoal.value} target={summary.annotationGoal.target} progress={summary.annotationGoal.progress} draft={goalDraft.annotations} onDraft={value=>setGoalDraft(current=>({...current,annotations:value}))}/>
-      </View>
-
-      <Text style={[styles.sectionTitle,{color:p.ink,marginTop:4}]}>Recent activity</Text>
-      <View>
-        {summary.recentActivity.length?summary.recentActivity.slice(0,12).map(item=><View key={item.id} style={[styles.insightActivityRow,{borderColor:p.line}]}>
-          <View style={[styles.activityMarker,{backgroundColor:p.sage}]}/>
-          <View style={{flex:1,minWidth:0}}>
-            <Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{item.kind} · {new Date(item.updatedAt*1000).toLocaleDateString()} · {item.events} update{item.events===1?'':'s'}</Text>
-          </View>
-          {item.kind==='Listening'&&item.activeSeconds>0?<Text style={[styles.meta,{color:p.sage,fontWeight:'600'}]}>{Math.max(1,Math.round(item.activeSeconds/60))}m</Text>:null}
-        </View>):<Text style={[styles.empty,{color:p.muted}]}>{session&&sourceFilter!=='local'&&sourceFilter!=='downloaded'?'Activity will appear as you read and listen.':'Local history stays private on this device; current progress and notes are shown below.'}</Text>}
-      </View>
-
-      <Text style={[styles.sectionTitle,{color:p.ink}]}>Annotation hub</Text>
-      <View>
-        {summary.recentAnnotations.length?summary.recentAnnotations.slice(0,12).map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>item.work&&openUnifiedWork(item.work as UnifiedWork)} style={[styles.annotationHubCard,{borderBottomColor:p.line}]}>
-          <View style={styles.profileBreakdownRow}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{item.kind.toUpperCase()} · PAGE {item.page+1}</Text><Text style={[styles.meta,{color:p.muted}]}>{new Date(item.createdAt).toLocaleDateString()}</Text></View>
-          <Text numberOfLines={3} style={[styles.readerQuote,{color:p.ink,borderColor:p.sage}]}>{item.text}</Text>
-          {item.note?<Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.note}</Text>:null}
-          <Text numberOfLines={1} style={[styles.meta,{color:p.sage,fontWeight:'600'}]}>{item.work?.title||'Saved annotation'}</Text>
-        </Pressable>):<Text style={[styles.empty,{color:p.muted}]}>Highlights and notes from the Reader will collect here automatically.</Text>}
-      </View>
-
-      <Text style={[styles.sectionTitle,{color:p.ink}]}>Awards</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightAchievementStrip}>
-        {profileAchievements.slice(0,8).map(item=><View key={item.id} style={styles.insightAchievementEditorial}>
-          <View style={[styles.insightAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:'transparent'}]}>
-            <Text style={[styles.insightAchievementMonogram,{color:item.unlocked?p.gold:p.muted}]}>{item.title.trim().charAt(0).toUpperCase()}</Text>
-          </View>
-          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink,textAlign:'center'}]}>{item.title}</Text>
-          <Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted,textAlign:'center'}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
-        </View>)}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.statsTabs}>
+        {statTabs.map(tab=>{
+          const selected=selectedReaderStatsSection===tab;
+          return <Pressable key={tab} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>setReaderStatsSection(tab)} style={[styles.statsTab,selected&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panel}]}>
+            <Text style={[styles.statsTabText,{color:selected?statsPalette.ink:statsPalette.muted}]}>{tab}</Text>
+          </Pressable>;
+        })}
       </ScrollView>
+
+      <View style={styles.statsMetricRow}>
+        {metricCards.map(card=><View key={card.label} style={[styles.statsMetricCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
+          <View style={[styles.statsMetricIcon,{borderColor:statsPalette.line,backgroundColor:statsPalette.panelRaised}]}><UiIcon name={card.icon} color={statsPalette.gold} size={18}/></View>
+          <View style={{flex:1,minWidth:0}}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.72} style={[styles.statsMetricValue,{color:statsPalette.ink}]}>{card.value}</Text>
+            <Text numberOfLines={2} style={[styles.statsMetricLabel,{color:statsPalette.muted}]}>{card.label}</Text>
+          </View>
+          {card.label==='Day streak'?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}
+        </View>)}
+      </View>
+
+      {readerStatsSection==='Overview'?<>{rhythmCard}{overviewCards}</>:null}
+      {readerStatsSection==='Time'?rhythmCard:null}
+      {readerStatsSection==='Books'?<View style={styles.statsCardsGrid}>{readingProgressCard}{paceCard}{streakCard}</View>:null}
+      {readerStatsSection==='Genres'?<View style={styles.statsCardsGrid}>{genreCard}</View>:null}
+      {readerStatsSection==='Formats'?<View style={styles.statsCardsGrid}>{formatCard}</View>:null}
+      {readerStatsSection==='Places'?<View style={styles.statsCardsGrid}>{placesCard}</View>:null}
+
+      {profileLoading&&session?<ActivityIndicator accessibilityLabel="Loading reader statistics" color={statsPalette.gold}/>:null}
     </ScrollView>;
   }
 
   function Profile() {
-    const stats=profileStats;
-    const unlocked=profileAchievements.filter(item=>item.unlocked).length;
-    const metrics=stats?[
-      ['Works',stats.works],
-      ['In progress',stats.inProgress],
-      ['Completed',stats.completed],
-      ['Favourites',stats.favourites||0],
-      ['Rated',stats.rated||0],
-      ['Awards',unlocked],
-    ]:[];
-    return (
-      <ScrollView contentContainerStyle={styles.profileScreen}>
-        <View style={styles.profileHero}>
-          <View style={[styles.profileMonogram,{backgroundColor:p.ink}]}>
-            <Text style={[styles.profileMonogramText,{color:p.paper}]}>{(stats?.name||'A').trim().charAt(0).toUpperCase()||'A'}</Text>
-          </View>
-          <View style={{flex:1,gap:3}}>
-            <Text maxFontSizeMultiplier={1.15} style={[styles.profileTitle,{color:p.ink}]}>Reader stats</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{stats?.name||'Your reading journey'} · All time</Text>
-          </View>
-        </View>
-
-        <View style={{flexDirection:'row',flexWrap:'wrap',gap:10,marginBottom:20}}><Button label="Server & library settings" onPress={()=>setActiveTab('settings')}/><Button label="Activity & goals" onPress={()=>setActiveTab('insights')}/></View>
-        <View style={{flexDirection:'row',flexWrap:'wrap',gap:12,marginBottom:22}}>
-          {([{title:'Reading progress',value:String(insightSummary.completed),label:'works finished',items:[{label:'Finished',count:insightSummary.completed,color:p.sage},{label:'Remaining',count:Math.max(0,insightSummary.completedGoal.target-insightSummary.completed),color:p.line}]},{title:'Format breakdown',value:String(profileStats?.works||0),label:'works collected',items:atlas.formats.map(([label,count],index)=>({label,count,color:genreColours[index%genreColours.length]}))}] as const).map(chart=><View key={chart.title} style={{flexGrow:1,flexBasis:260,padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:16}}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{chart.title}</Text><View style={{flexDirection:'row',alignItems:'center',gap:18}}><DataRing size={132} value={chart.value} label={chart.label} items={[...chart.items]} ink={p.ink} muted={p.muted} track={p.line}/><View style={{flex:1,gap:10}}>{chart.items.map(item=><Text key={item.label} style={{color:p.muted,fontSize:12}}><Text style={{color:item.color}}>● </Text>{item.label} · {item.count}</Text>)}</View></View></View>)}
-          <View style={{flexGrow:1,flexBasis:260,padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:14}}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your daily ritual</Text><Text style={{color:p.sage,fontSize:32}}>{ritual.currentStreak} days</Text><Text style={{color:p.muted}}>Current streak · {ritual.bestStreak} personal best</Text><Text style={{color:p.muted}}>{ritual.activeDays} active days · {Math.round(insightSummary.listeningSeconds/60).toLocaleString()} listening minutes</Text><Text style={{color:p.muted,fontSize:12}}>A minute of reading or listening keeps your ritual growing.</Text></View>
-        </View>
-        <View style={{padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:14,marginBottom:24}}>
-          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reading rhythm</Text><Text style={[styles.meta,{color:p.muted}]}>Your last 28 days · a minute makes a day</Text>
-          <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{Array.from({length:28},(_,index)=>{const date=new Date();date.setDate(date.getDate()-27+index);const day=localDay(date),active=(ritualDays[day]||0)>=60;return <View key={day} accessible accessibilityLabel={date.toLocaleDateString()+': '+(active?'daily ritual complete':'no completed ritual')} style={{width:'12%',aspectRatio:1,borderRadius:8,backgroundColor:active?p.sage:p.card,borderWidth:1,borderColor:active?p.sage:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:active?p.paper:p.muted,fontSize:11}}>{date.getDate()}</Text></View>})}</View>
-        </View>
-        {profileLoading&&session?<ActivityIndicator accessibilityLabel="Loading profile statistics" color={p.sage}/>:null}
-        {!stats&&!profileLoading?<Text style={[styles.empty,{color:p.muted}]}>Profile statistics are unavailable.</Text>:null}
-
-        {stats?<>
-          <View style={[styles.profileMetricStrip,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-            {metrics.map(([label,value])=><View key={String(label)} style={[styles.profileMetric,foldLayout&&styles.profileMetricFold,width>=900&&styles.profileMetricWide]}>
-              <Text style={[styles.profileMetricValue,{color:p.ink}]}>{value}</Text>
-              <Text style={[styles.profileMetricLabel,{color:p.muted}]}>{label}</Text>
-            </View>)}
-          </View>
-
-          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>Your library</Text>
-          {(stats.rated||0)>0?<View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
-            <Text style={[styles.bookTitle,{color:p.ink}]}>Ratings</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{ratingLabel(stats.averageRating||0)} average · {stats.favourites||0} favourite{(stats.favourites||0)===1?'':'s'}</Text>
-          </View>:null}
-          <View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
-            <Text style={[styles.bookTitle,{color:p.ink}]}>Listening</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{stats.completedAudio} finished · {stats.inProgressAudio} in progress</Text>
-          </View>
-          <View style={[styles.profileDetailRow,{borderBottomColor:p.line}]}>
-            <Text style={[styles.bookTitle,{color:p.ink}]}>Reading</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{stats.completedReading} finished · {stats.inProgressReading} in progress</Text>
-          </View>
-
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Awards</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{unlocked} of {profileAchievements.length}</Text>
-          </View>
-          <View style={{paddingVertical:20,gap:8}}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{ritual.currentStreak} day{ritual.currentStreak===1?'':'s'} in a row</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Your daily ritual · best {ritual.bestStreak} days</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Spend a minute reading or listening in Archivist to mark today. Tracked on this device.</Text>
-            <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:ritual.todaySeconds>=60?p.gold:p.sage,width:(ritual.todaySeconds/60*100+'%') as any}]}/></View>
-            <Text style={[styles.meta,{color:ritual.todaySeconds>=60?p.gold:p.muted}]}>{ritual.todaySeconds>=60?'Today is yours':'Today · '+ritual.todaySeconds+' / 60 seconds'}</Text>
-          </View>
-          <View style={styles.filterWrap}>{['All','Daily ritual','Reading','Listening','Library'].map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.filterChip,{minHeight:44,justifyContent:'center',backgroundColor:awardCategory===category?p.card:'transparent'}]}><Text style={{color:awardCategory===category?p.ink:p.muted}}>{category}</Text></Pressable>)}</View>
-          <View style={styles.profileAchievementList}>
-            {profileAchievements.filter(item=>awardCategory==='All'||(item.category||'Library')===awardCategory).map(item=>{
-              const ratio=clampProgress(item.progress,item.target);
-              return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
-                <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line}]}>
-                  <UiIcon name={item.unlocked?'bookmark':'library'} color={item.unlocked?p.gold:p.muted} size={22}/>
-                </View>
-                <View style={{flex:1,gap:3}}>
-                  <View style={styles.profileBreakdownRow}>
-                    <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{item.title}</Text>
-                    <Text style={[styles.meta,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Earned':item.progress+' / '+item.target}</Text>
-                  </View>
-                  <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
-                  <View style={[styles.achievementTrack,{backgroundColor:p.line}]}>
-                    <View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(Math.round(ratio*100)+'%') as any}]} />
-                  </View>
-                </View>
-              </View>;
-            })}
-          </View>
-        </>:null}
-      </ScrollView>
-    );
+    return <Insights/>;
   }
 
   async function refreshDuplicateCandidates() {
@@ -4220,7 +4345,7 @@ function Client() {
     return (
       <SafeAreaView style={[styles.screen,{backgroundColor:p.paper}]}>
         <View style={styles.restoreScreen}>
-          <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Your reader stats and profile" onPress={()=>setActiveTab('profile')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
+          <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
           <View style={styles.restoreBody}>
             <View style={[styles.restoreKicker,{backgroundColor:p.line}]}/>
             <View style={[styles.restoreTitle,{backgroundColor:p.card}]}/>
@@ -4246,13 +4371,13 @@ function Client() {
     {id:'shelf',label:'Shelf',icon:'shelf'},
     {id:'library',label:'Library',icon:'library'},
     {id:'atlas',label:'Atlas',icon:'atlas'},
-    {id:'insights',label:'Insights',icon:'insights'},
+    {id:'insights',label:'Stats',icon:'insights'},
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}><AmbientGlow size={Math.max(480,width)} strength={p.paper==='#000000'?.6:.22}/>
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={styles.appHeader}>
-        <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Your reader stats and profile" onPress={()=>setActiveTab('profile')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
+    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper}]}><AmbientGlow size={Math.max(480,width)} strength={p.paper==='#000000'?.6:.22}/>
+      {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={styles.appHeader}>
+        <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel={activeTab==='settings'?'Close Settings':'Settings'} onPress={()=>setActiveTab(activeTab==='settings'?'shelf':'settings')} style={styles.settingsButton}>
           <UiIcon name={activeTab==='settings'?'close':'settings'} color={p.muted} size={21}/>
         </Pressable>
@@ -4290,7 +4415,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
+      {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
@@ -4797,6 +4922,73 @@ const styles = StyleSheet.create({
   ruleToken: {borderWidth:0,borderRadius:8,minHeight:44,paddingHorizontal:9,alignItems:'center',justifyContent:'center'},
   ruleInput: {borderWidth:0,borderRadius:9,minHeight:44,paddingHorizontal:10,flexGrow:1,minWidth:92},
   ruleRemove: {width:44,height:44,alignItems:'center',justifyContent:'center'},
+  statsScreen: {paddingHorizontal:16,paddingTop:10,paddingBottom:112,gap:12,maxWidth:980,width:'100%',alignSelf:'center'},
+  statsTopRow: {minHeight:64,flexDirection:'row',alignItems:'center',gap:12},
+  statsBackButton: {width:44,height:44,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center'},
+  statsTitle: {fontFamily:'ArchivistEditorial',fontSize:29,lineHeight:35,fontWeight:'500',letterSpacing:-.25},
+  statsSubtitle: {fontSize:11.5,lineHeight:16,fontWeight:'500',marginTop:1},
+  statsYearPill: {minWidth:78,height:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7},
+  statsYearText: {fontSize:12.5,lineHeight:18,fontWeight:'500',fontVariant:['tabular-nums']},
+  statsTabs: {gap:2,paddingBottom:1,minWidth:'100%',justifyContent:'space-between'},
+  statsTab: {minHeight:44,minWidth:66,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
+  statsTabText: {fontFamily:'ArchivistEditorial',fontSize:12,lineHeight:17,fontWeight:'500'},
+  statsMetricRow: {flexDirection:'row',gap:6},
+  statsMetricCard: {flex:1,minWidth:0,minHeight:74,borderRadius:15,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:9,paddingVertical:10,flexDirection:'row',alignItems:'center',gap:7},
+  statsMetricIcon: {width:34,height:34,borderRadius:17,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',flexShrink:0},
+  statsMetricValue: {fontFamily:'ArchivistEditorial',fontSize:17,lineHeight:21,fontWeight:'500',fontVariant:['tabular-nums']},
+  statsMetricLabel: {fontSize:9.5,lineHeight:12.5,fontWeight:'500',marginTop:1},
+  statsHeroCard: {borderRadius:20,borderWidth:StyleSheet.hairlineWidth,padding:14,gap:12},
+  statsRhythmTop: {flexDirection:'row',alignItems:'flex-start',gap:10},
+  statsCardHeader: {flex:1,flexDirection:'row',alignItems:'center',gap:9,minWidth:0},
+  statsIconOrb: {width:38,height:38,borderRadius:19,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',flexShrink:0},
+  statsCardTitle: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:20,fontWeight:'500',letterSpacing:-.05},
+  statsCardSubtitle: {fontSize:9.8,lineHeight:13.5,fontWeight:'500',marginTop:1},
+  statsMiniSegment: {height:38,borderRadius:19,borderWidth:StyleSheet.hairlineWidth,flexDirection:'row',padding:2,alignItems:'center'},
+  statsMiniSegmentItem: {height:32,minWidth:48,borderRadius:16,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',paddingHorizontal:8,alignItems:'center',justifyContent:'center'},
+  statsRhythmBody: {flexDirection:'row',alignItems:'center',gap:12},
+  statsRhythmBodyWide: {gap:28},
+  statsRhythmDial: {position:'relative',alignItems:'center',justifyContent:'center',flexShrink:0},
+  statsRhythmDialInner: {width:'57%',height:'57%',borderRadius:999,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',padding:8},
+  statsDialKicker: {fontSize:9,lineHeight:11.5,fontWeight:'500',textAlign:'center'},
+  statsDialValue: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:22,fontWeight:'500',marginVertical:2},
+  statsDialMeta: {fontSize:8.5,lineHeight:11,textAlign:'center'},
+  statsClockTop: {position:'absolute',top:2,fontFamily:'ArchivistEditorial',fontSize:10.5},
+  statsClockRight: {position:'absolute',right:2,fontFamily:'ArchivistEditorial',fontSize:10.5},
+  statsClockBottom: {position:'absolute',bottom:2,fontFamily:'ArchivistEditorial',fontSize:10.5},
+  statsClockLeft: {position:'absolute',left:2,fontFamily:'ArchivistEditorial',fontSize:10.5},
+  statsHeatmapWrap: {flex:1,minWidth:0,gap:2},
+  statsHeatHeader: {flexDirection:'row',alignItems:'center',gap:3,marginBottom:2},
+  statsHeatDay: {flex:1,textAlign:'center',fontSize:8,lineHeight:10,fontWeight:'600'},
+  statsHeatRow: {flexDirection:'row',alignItems:'center',gap:3},
+  statsHeatTime: {width:34,fontSize:7.5,lineHeight:9.5,fontWeight:'500'},
+  statsHeatCell: {flex:1,height:10,borderRadius:3,borderWidth:StyleSheet.hairlineWidth},
+  statsHeatLegend: {flexDirection:'row',alignItems:'center',gap:4,marginTop:6},
+  statsHeatLegendDot: {width:8,height:8,borderRadius:4},
+  statsHeatLegendText: {fontSize:7.8,lineHeight:10.5},
+  statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',gap:10},
+  statsDashboardCard: {width:'48.5%',minWidth:154,borderRadius:18,borderWidth:StyleSheet.hairlineWidth,padding:13,gap:12,flexGrow:1,flexBasis:180},
+  statsCardBody: {flexDirection:'row',alignItems:'center',gap:10},
+  statsCardSide: {flex:1,minWidth:0,gap:7},
+  statsLegend: {flex:1,minWidth:0,gap:5},
+  statsLegendRow: {flexDirection:'row',alignItems:'center',gap:5,minWidth:0},
+  statsLegendDot: {width:7,height:7,borderRadius:4,flexShrink:0},
+  statsLegendName: {flex:1,minWidth:0,fontSize:8.5,lineHeight:11},
+  statsLegendCount: {fontSize:8.5,lineHeight:11,fontWeight:'600',fontVariant:['tabular-nums']},
+  statsLegendPercent: {width:25,textAlign:'right',fontSize:8.3,lineHeight:11,fontVariant:['tabular-nums']},
+  statsPercent: {fontFamily:'ArchivistEditorial',fontSize:19,lineHeight:23,fontWeight:'500'},
+  statsProgressTrack: {height:10,borderRadius:5,overflow:'hidden'},
+  statsProgressFill: {height:'100%',borderRadius:5},
+  statsStatusLine: {flexDirection:'row',alignItems:'center',gap:6},
+  statsSmallDot: {width:9,height:9,borderRadius:5},
+  statsStatusText: {fontSize:9.5,lineHeight:13,fontWeight:'500'},
+  statsPaceDelta: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:20,fontWeight:'500'},
+  statsStreakTop: {flexDirection:'row',alignItems:'stretch',gap:12},
+  statsStreakValue: {fontFamily:'ArchivistEditorial',fontSize:17,lineHeight:22,fontWeight:'500'},
+  statsVerticalRule: {width:StyleSheet.hairlineWidth},
+  statsWeekDots: {flexDirection:'row',justifyContent:'space-between',gap:5,paddingTop:4},
+  statsWeekDay: {flex:1,alignItems:'center',gap:5},
+  statsWeekDot: {width:17,height:17,borderRadius:9,borderWidth:StyleSheet.hairlineWidth},
+  statsWeekLabel: {fontSize:8.5,lineHeight:11,fontWeight:'600'},
   insightEditorialHero: {paddingVertical:4,gap:6,maxWidth:760},
   insightEditorialKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
   insightEditorialTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:28,fontWeight:'400',letterSpacing:-.1},
