@@ -602,6 +602,8 @@ func metadataForWithCache(filename, relative, format string, cache *sidecarScanC
 
 	var embedded embeddedMetadata
 	switch format {
+	case "Audio":
+		embedded = audioMetadata(filename)
 	case "Ebook":
 		embedded = epubMetadata(filename)
 	case "Comic":
