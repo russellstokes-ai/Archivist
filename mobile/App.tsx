@@ -2480,42 +2480,49 @@ function Client() {
   }
 
   function OnboardingGuide() {
-    if (session || onboardingDone) return null;
+    if (session || recoverableSession || onboardingDone) return null;
     const reviewCount = localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
     const hasBooks = localBooks.length > 0;
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
-        <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your library</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Choose your folders once. Archivist will identify the library and only ask about uncertain matches.</Text>
+        <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your Shelf</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Add media from this device, connect your private Archivist Server, or use both. Archivist keeps the Shelf focused on what you want to read or listen to next.</Text>
+
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle, {color:p.ink}]}>Choose where your books live</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} folder${localFolders.length === 1 ? '' : 's'} added` : 'Pick a Books, Comics or Audiobooks folder. You can add more later.'}</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Choose where your media lives</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} device folder${localFolders.length===1?'':'s'} added` : shelfServerPromptHidden ? 'Add a Books, Comics or Audiobooks folder. Server prompts are hidden on Shelf.' : 'Add a device folder or connect an Archivist Server. You can add the other later.'}</Text>
           </View>
         </View>
+
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasBooks?p.sage:p.muted}]}>02</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist finds and identifies everything</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>
-              {localScanning && scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${localBooks.length} items found` : 'Scanning starts immediately after you choose a folder.'}
-            </Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist scans and identifies it</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{localScanning&&scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${localBooks.length} items found` : 'Scanning starts immediately after you add a folder.'}</Text>
           </View>
         </View>
+
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasBooks&&reviewCount===0?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Archivist keeps confident matches out of your way.' : reviewCount ? `${reviewCount} item${reviewCount === 1 ? '' : 's'} need a quick check.` : 'Everything found so far looks good.'}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Confident matches stay out of your way.' : reviewCount ? `${reviewCount} item${reviewCount===1?'':'s'} need a quick check.` : 'Everything found so far looks good.'}</Text>
           </View>
         </View>
-        {!hasFolder ? <Button label={localScanning ? 'Scanning…' : 'Choose a folder'} disabled={localScanning} onPress={() => void addLocalFolder()} /> : null}
-        {hasFolder && !hasBooks ? <Button label={localScanning ? 'Scanning…' : 'Scan again'} disabled={localScanning} onPress={() => void rescanLocalFolders()} /> : null}
-        {hasBooks && reviewCount > 0 ? <Button label={`Review ${reviewCount} uncertain item${reviewCount === 1 ? '' : 's'}`} tone="quiet" onPress={() => {setReviewOnly(true); setQuery('');}} /> : null}
-        {hasBooks ? <Button label="Enter my library" onPress={() => void finishOnboarding()} /> : null}
+
+        {!hasFolder?<View style={styles.shelfSetupActions}>
+          <View style={styles.shelfSetupAction}><Button label={localScanning?'Scanning…':'Add a folder'} disabled={localScanning} onPress={()=>void addLocalFolder()}/></View>
+          {!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
+        </View>:null}
+        {!hasFolder&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
+
+        {hasFolder&&!hasBooks?<Button label={localScanning?'Scanning…':'Scan again'} disabled={localScanning} onPress={()=>void rescanLocalFolders()}/>:null}
+        {hasBooks&&reviewCount>0?<Button label={`Review ${reviewCount} uncertain item${reviewCount===1?'':'s'}`} tone="quiet" onPress={()=>{setReviewOnly(true);setQuery('');setActiveTab('library')}}/>:null}
+        {hasBooks?<Button label="Finish setup" onPress={()=>void finishOnboarding()}/>:null}
       </View>
     );
   }
