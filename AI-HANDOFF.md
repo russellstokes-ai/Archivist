@@ -41,7 +41,8 @@ Canonical width classes and phone/Fold ownership are documented in `CURRENT-UI-H
 
 - **Fold/open UI:** locked on `design/hig-refresh`; no 600dp+ redesign without Russell's explicit approval.
 - **Live Player / Now:** considered complete/locked for the current polish phase. Touch only for proven regressions or explicit new approval.
-- **Atlas + comic double-tap focus:** owned by a separate Astra/Work stream while active. Do not independently redesign or implement those areas in the normal chat stream.
+- **Comic Focus:** complete/locked for the current finishing phase; touch only for proven regressions or explicit new approval.
+- **Atlas:** the only area still owned by the separate Astra/Work stream. Do not independently redesign or implement Atlas in the normal chat stream.
 - **Remaining product polish:** handled piecemeal in chat in small sprints because of usage limits.
 
 ## Design memory
