@@ -461,6 +461,10 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   </View>;
 }
 
+function ArchivistLogo({size=44,opacity=1}:{size?:number;opacity?:number}={}) {
+  return <Image accessible={false} source={require('./assets/icon.png')} resizeMode="contain" style={{width:size,height:size,borderRadius:Math.max(8,size*.22),opacity}}/>;
+}
+
 function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {
   const burst = useRef(new Animated.Value(0)).current;
   const sparks=useRef(new Animated.Value(0)).current;
@@ -2420,7 +2424,7 @@ function Client() {
           <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
         ) : (
           <View style={styles.coverFallback}>
-            <Text style={[styles.coverFallbackMark,{color:p.muted}]}>A</Text>
+            <ArchivistLogo size={22} opacity={.50}/>
             <View style={styles.coverFallbackCopy}>
               <Text numberOfLines={1} style={[styles.coverFormat,{color:p.sage}]}>{format.toUpperCase()}</Text>
               <Text maxFontSizeMultiplier={1.1} numberOfLines={large ? 3 : 2} style={[styles.coverTitle,{color:p.ink},large&&styles.coverTitleLarge]}>{title}</Text>
@@ -3480,7 +3484,7 @@ function Client() {
       </View>:null}
 
       {showStandaloneEmpty?<View style={styles.designedEmpty}>
-        <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
+        <ArchivistLogo size={46}/>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Shelf is waiting</Text>
         <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{emptyCopy}</Text>
         {!localFolders.length?<Button label="Add a folder" onPress={()=>void addLocalFolder()}/>:null}
@@ -3856,7 +3860,7 @@ function Client() {
           </>
         ) : (
           <View style={styles.playerEmpty}>
-            <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
+            <ArchivistLogo size={46}/>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Nothing playing</Text>
             <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastPlaying?'Resume your most recent audiobook, or choose another from Shelf.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.'}</Text>
             {lastPlaying?<Button label={'Resume '+lastPlaying.title} onPress={()=>void playBook(lastPlaying)}/>:null}
@@ -3928,7 +3932,7 @@ function Client() {
   function Reader({embedded=false}:{embedded?:boolean}={}) {
     const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
     const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
-    if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastReading?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.'}</Text>{lastReading?<Button label={'Resume '+lastReading.title} onPress={()=>openBook(lastReading)}/>:null}<Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/></View>;
+    if(!reading)return <View style={styles.readerEmpty}><ArchivistLogo size={46}/><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastReading?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.'}</Text>{lastReading?<Button label={'Resume '+lastReading.title} onPress={()=>openBook(lastReading)}/>:null}<Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/></View>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
@@ -5682,7 +5686,7 @@ function Client() {
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ABOUT ARCHIVIST</Text>
-              <View style={styles.settingsAboutHero}><View style={[styles.settingsAboutMark,{borderColor:p.gold,backgroundColor:p.card}]}><Text style={[styles.settingsAboutMarkText,{color:p.gold}]}>A</Text></View><View style={{flex:1}}><Text style={[styles.settingsAboutTitle,{color:p.ink}]}>Archivist</Text><Text style={[styles.meta,{color:p.muted}]}>Private media library · Android-first</Text></View></View>
+              <View style={styles.settingsAboutHero}><View style={[styles.settingsAboutMark,{borderColor:p.gold,backgroundColor:p.card}]}><ArchivistLogo size={40}/></View><View style={{flex:1}}><Text style={[styles.settingsAboutTitle,{color:p.ink}]}>Archivist</Text><Text style={[styles.meta,{color:p.muted}]}>Private media library · Android-first</Text></View></View>
               <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>App version</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>0.9.3</Text></View>
               <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Platform</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>{Platform.OS}</Text></View>
               <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server</Text><Text numberOfLines={1} style={[styles.settingsInfoValue,{color:connected?p.sage:p.muted,maxWidth:'62%'}]}>{connected?session?.server:'Not connected'}</Text></View>
@@ -5716,7 +5720,7 @@ function Client() {
     return (
       <SafeAreaView style={[styles.screen,{backgroundColor:p.paper}]}>
         <View style={styles.restoreScreen}>
-          <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
+          <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center',overflow:'hidden'}}>{profileStats?.name?<Text style={{color:p.ink,fontSize:17}}>{profileStats.name.trim().charAt(0).toUpperCase()}</Text>:<ArchivistLogo size={32}/>}</Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
           <View style={styles.restoreBody}>
             <View style={[styles.restoreKicker,{backgroundColor:p.line}]}/>
             <View style={[styles.restoreTitle,{backgroundColor:p.card}]}/>
@@ -5818,12 +5822,14 @@ function Client() {
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ArchivistEditorial: require('./assets/fonts/LibreCaslonText.ttf')});
   const system = useColorScheme();
-  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:system==='dark'?'#000000':'#FFFFFF'}}><ActivityIndicator color="#47736F" /></View>;
+  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={[styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7'}]}><ArchivistLogo size={88}/><Text style={[styles.brandLaunchWordmark,{color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text><ActivityIndicator color={system==='dark'?'#B99A68':'#47736F'} /></View>;
   return <SafeAreaProvider><Client /></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
+  brandLaunch: {flex:1,alignItems:'center',justifyContent:'center',gap:16},
+  brandLaunchWordmark: {fontFamily:'serif',fontSize:30,lineHeight:38,fontWeight:'600',letterSpacing:.2},
   restoreScreen: {flex:1,paddingHorizontal:18,paddingTop:8},
   restoreBody: {flex:1,paddingTop:28,gap:18,maxWidth:760,width:'100%',alignSelf:'center'},
   restoreKicker: {width:68,height:8,borderRadius:4,opacity:.6},
