@@ -1,5 +1,22 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-03 — iOS CBR parity — source complete, native compile pending
+
+### Implemented and source-tested
+- Android continues to use Archivist's existing native Junrar bridge for CBR.
+- iOS now has a native RAR/CBR extraction fallback through `react-native-unarchive`.
+- iOS extraction is confined to a temporary Archivist cache directory and is deleted in a `finally` path.
+- Archivist re-applies its own reader limits after extraction: maximum 500 image pages, 64 MB per image entry and 256 MB total expanded image data.
+- The shared archive test covers the Android native path, iOS native-unarchive path, natural image ordering, base64 loading, cleanup and oversize rejection.
+- Mobile checks run `37159642916` passed install, Expo Doctor, TypeScript, all mobile suites, version consistency and web export with `react-native-unarchive` installed.
+- The iOS dependency requires iOS 15.5 through SSZipArchive; Archivist now declares iOS deployment target 15.5 through Expo SDK 55 `expo-build-properties`.
+
+### Acceptance boundary
+- CocoaPods installation with the new target has passed in the current iOS workflow.
+- The full unsigned iOS Simulator compile is still running at this checkpoint and is **not yet claimed complete**.
+- Physical-device acceptance must still open representative real CBR archives on iPhone/iPad, including malformed and near-limit archives.
+
+
 ## Android Auto — current release gap
 
 Archivist currently exposes Android media playback through Expo Audio's MediaSessionService, which supports system/lock-screen media controls.
