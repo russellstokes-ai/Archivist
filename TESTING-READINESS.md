@@ -190,3 +190,26 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Native typecheck/test execution for these latest commits has **not** been observed from GitHub Actions on this branch; do not mark CI passed.
 - Native photo picking is not implemented until an image-picker dependency is added and verified without breaking the Draftbit/mobile dependency lock.
 \n\n## 2026-10-03 — Shelf / Library Sprint 1\n\n### Implemented and source-verified\n- Shelf is now independent of the current Library source/folder filters and uses the full unified personal catalogue.\n- Removed the catalogue-style Browse by format and From your library Shelf sections.\n- Retained Continue, Favourites, Smart Shelves, Collections and relevance-ranked Series. Smart Shelves now explain that they update automatically from user rules.\n- Shelf Browse is now a navigation gateway into Library for Books, Comics, Audiobooks and PDFs rather than a Shelf filter.\n- When an Archivist Server is connected, Shelf adds On this device and On Archivist Server shortcuts. On this device includes local files plus offline server downloads.\n- Fresh-install setup now offers Add a folder and Connect to Archivist Server, plus a persisted Use Archivist locally only choice that suppresses future Shelf server prompts without removing server setup from Settings.\n- Added a Library-only content-family filter so the Books shortcut can include EPUB/Ebook representations without changing stored metadata or Smart Shelf rules.\n- Existing stored Shelf section preferences migrate through the new defaults, so removed catalogue sections do not reappear.\n\n### Deferred / runtime proof\n- Recently Added is intentionally not shown yet because the unified local/server work model does not expose a reliable per-work added timestamp. Do not infer recency from title order or scan order.\n- Shelf recommendation rows (Books for you / Comics for you / Audiobooks for you) belong to Sprint 2 and are not claimed complete here.\n- Draftbit/device visual confirmation is still required on phone and Fold layouts.\n- No GitHub Actions pass is claimed unless a workflow/status is attached to the final Sprint 1 commit.\n
+
+## 2026-10-03 — Shelf / Library Sprints 2–3
+
+### Sprint 2 — Shelf recommendations
+- Added an owned-content-only recommendation engine for Books, Comics and Audiobooks.
+- Recommendation candidates are available, not-started works already present in the user's unified catalogue; finished/in-progress works are excluded from recommendation rows because Continue owns active content.
+- Ranking uses existing local signals only: reading/listening state, favourites, ratings, genre, author and series affinity. No generative AI or external recommendation service is used.
+- Cold-start ranking remains deterministic and labels itself as learning the user's taste rather than pretending to be personalised.
+- Rows are capped at 3 works on phone and 5 on Fold/wide.
+- Added shelf-recommendations.test.cjs; mobile test discovery picks it up automatically.
+
+### Sprint 3 — Library source/folder architecture
+- Replaced Library's horizontal source/space chips with a shared Sources & folders navigator.
+- Fold/wide uses a persistent left rail: All Library; On this device with configured local folders and Offline downloads; Archivist Server with configured server folders.
+- Phone uses the same navigator in a dedicated Sources & folders sheet.
+- Specific folder selection uses exact source filtering, while the broad On this device bucket includes both local files and offline server downloads.
+- Storage labels now use physical-language semantics: local/downloaded = On this device; remote-only = Archivist Server. Downloaded server works retain the SAVED badge to show origin/state.
+- Local folder rows are driven by the actual configured LocalFolder records. Server rows are driven by /api/sources records.
+
+### Known limitation / next work
+- Current server work records expose space but not source-folder ID/path. If multiple server source folders share the same space name, selecting either row currently filters that shared space. Advanced Library management should add source-folder identity to the server work payload in the later scan/organisation sprint.
+- Recently Added remains deferred until a reliable cross-source added timestamp exists.
+- Runtime visual proof is still required on phone and Fold layouts; no CI pass is claimed unless GitHub attaches one to the final commit.
