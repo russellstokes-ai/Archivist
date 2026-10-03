@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -10,22 +11,39 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const metadataXMLLimit = 2 << 20
 
 type embeddedMetadata struct {
-	Title  string
-	Author string
-	Series string
-	Genre  string
+	Title         string
+	Author        string
+	Series        string
+	SeriesNumber  float64
+	Genre         string
+	PublishedYear int
+	Narrator      string
+	Publisher     string
+	ISBN          string
+	ASIN          string
+	Language      string
+	Description   string
 }
 
 type identifiedMetadata struct {
-	Title        string
-	Author       string
-	Series       string
-	Genre        string
+	Title         string
+	Author        string
+	Series        string
+	SeriesNumber  float64
+	Genre         string
+	PublishedYear int
+	Narrator      string
+	Publisher     string
+	ISBN          string
+	ASIN          string
+	Language      string
+	Description   string
 	Source       string
 	Confidence   int
 	NeedsReview  bool
@@ -59,7 +77,7 @@ func newSidecarScanCache() *sidecarScanCache {
 
 func isGenericSidecar(filename string) bool {
 	switch strings.ToLower(filepath.Base(filename)) {
-	case "metadata.opf", "book.opf", "metadata.nfo", "book.nfo":
+	case "metadata.opf", "book.opf", "metadata.nfo", "book.nfo", "metadata.json", "book.json", "comicinfo.xml":
 		return true
 	default:
 		return false
@@ -95,20 +113,68 @@ func parseSidecarFile(filename string) embeddedMetadata {
 	switch strings.ToLower(filepath.Ext(filename)) {
 	case ".opf":
 		return opfMetadataFromReader(func(dst any) bool { return readXMLFile(filename, dst) })
-	case ".nfo":
-		var nfo struct {
-			Title  string `xml:"title"`
-			Author string `xml:"author"`
-			Writer string `xml:"writer"`
-			Series string `xml:"series"`
-			Genre  string `xml:"genre"`
+	case ".json":
+		info, err := os.Stat(filename)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > metadataXMLLimit {
+			return embeddedMetadata{}
 		}
-		if readXMLFile(filename, &nfo) {
-			author := cleanMetadata(nfo.Author)
-			if author == "" {
-				author = cleanMetadata(nfo.Writer)
+		f, err := os.Open(filename)
+		if err != nil {
+			return embeddedMetadata{}
+		}
+		defer f.Close()
+		var raw map[string]any
+		if json.NewDecoder(io.LimitReader(f, metadataXMLLimit)).Decode(&raw) != nil {
+			return embeddedMetadata{}
+		}
+		if nested, ok := raw["metadata"].(map[string]any); ok {
+			raw = nested
+		}
+		return metadataFromMap(raw)
+	case ".nfo", ".xml":
+		var x struct {
+			Title         string  `xml:"title"`
+			TitleComic    string  `xml:"Title"`
+			Author        string  `xml:"author"`
+			Writer        string  `xml:"writer"`
+			WriterComic   string  `xml:"Writer"`
+			Series        string  `xml:"series"`
+			SeriesComic   string  `xml:"Series"`
+			Number        float64 `xml:"number"`
+			NumberComic   float64 `xml:"Number"`
+			Genre         string  `xml:"genre"`
+			GenreComic    string  `xml:"Genre"`
+			Narrator      string  `xml:"narrator"`
+			Publisher     string  `xml:"publisher"`
+			PublisherComic string `xml:"Publisher"`
+			ISBN          string  `xml:"isbn"`
+			ASIN          string  `xml:"asin"`
+			Language      string  `xml:"language"`
+			LanguageComic string  `xml:"LanguageISO"`
+			Description   string  `xml:"description"`
+			Summary       string  `xml:"Summary"`
+			Year          int     `xml:"year"`
+			YearComic     int     `xml:"Year"`
+		}
+		if readXMLFile(filename, &x) {
+			first := func(values ...string) string {
+				for _, value := range values {
+					if clean := cleanMetadata(value); clean != "" { return clean }
+				}
+				return ""
 			}
-			return embeddedMetadata{Title: cleanMetadata(nfo.Title), Author: author, Series: cleanMetadata(nfo.Series), Genre: cleanMetadata(nfo.Genre)}
+			number := x.Number
+			if number == 0 { number = x.NumberComic }
+			year := x.Year
+			if year == 0 { year = x.YearComic }
+			return embeddedMetadata{
+				Title:first(x.Title,x.TitleComic), Author:first(x.Author,x.Writer,x.WriterComic),
+				Series:first(x.Series,x.SeriesComic), SeriesNumber:number,
+				Genre:first(x.Genre,x.GenreComic), Narrator:cleanMetadata(x.Narrator),
+				Publisher:first(x.Publisher,x.PublisherComic), ISBN:normalizeIdentifier(x.ISBN),
+				ASIN:normalizeIdentifier(x.ASIN), Language:first(x.Language,x.LanguageComic),
+				Description:first(x.Description,x.Summary), PublishedYear:year,
+			}
 		}
 	}
 	return embeddedMetadata{}
@@ -169,10 +235,15 @@ func readXMLFile(filename string, dst any) bool {
 
 func opfMetadataFromReader(decode func(any) bool) embeddedMetadata {
 	var p struct {
-		Title   string   `xml:"metadata>title"`
-		Creator []string `xml:"metadata>creator"`
-		Subject []string `xml:"metadata>subject"`
-		Meta    []struct {
+		Title       string   `xml:"metadata>title"`
+		Creator     []string `xml:"metadata>creator"`
+		Subject     []string `xml:"metadata>subject"`
+		Publisher   string   `xml:"metadata>publisher"`
+		Language    string   `xml:"metadata>language"`
+		Description string   `xml:"metadata>description"`
+		Date        string   `xml:"metadata>date"`
+		Identifier  []string `xml:"metadata>identifier"`
+		Meta        []struct {
 			Name     string `xml:"name,attr"`
 			Content  string `xml:"content,attr"`
 			Property string `xml:"property,attr"`
@@ -182,30 +253,51 @@ func opfMetadataFromReader(decode func(any) bool) embeddedMetadata {
 	if !decode(&p) {
 		return embeddedMetadata{}
 	}
-	m := embeddedMetadata{Title: cleanMetadata(p.Title)}
+	m := embeddedMetadata{
+		Title:cleanMetadata(p.Title), Publisher:cleanMetadata(p.Publisher),
+		Language:cleanMetadata(p.Language), Description:cleanMetadata(p.Description),
+		PublishedYear:yearFromText(p.Date),
+	}
 	if len(p.Creator) > 0 {
 		clean := make([]string, 0, len(p.Creator))
 		for _, creator := range p.Creator {
-			if v := cleanMetadata(creator); v != "" {
-				clean = append(clean, v)
-			}
+			if v := cleanMetadata(creator); v != "" { clean = append(clean, normalizeAuthor(v)) }
 		}
 		m.Author = cleanMetadata(strings.Join(clean, ", "))
 	}
 	for _, subject := range p.Subject {
-		if value := cleanMetadata(subject); value != "" {
-			m.Genre = value
-			break
+		if value := cleanMetadata(subject); value != "" { m.Genre = value; break }
+	}
+	for _, identifier := range p.Identifier {
+		value := normalizeIdentifier(identifier)
+		if value == "" { continue }
+		upper := strings.ToUpper(value)
+		switch {
+		case strings.HasPrefix(upper,"ISBN"):
+			if m.ISBN=="" { m.ISBN=normalizeIdentifier(strings.TrimPrefix(upper,"ISBN")) }
+		case strings.HasPrefix(upper,"ASIN"):
+			if m.ASIN=="" { m.ASIN=normalizeIdentifier(strings.TrimPrefix(upper,"ASIN")) }
+		case looksISBN(value) && m.ISBN=="":
+			m.ISBN=value
 		}
 	}
 	for _, meta := range p.Meta {
 		key := strings.ToLower(strings.TrimSpace(meta.Name + " " + meta.Property))
 		value := cleanMetadata(meta.Content)
-		if value == "" {
-			value = cleanMetadata(meta.Value)
-		}
-		if m.Series == "" && (strings.Contains(key, "calibre:series") || strings.Contains(key, "belongs-to-collection")) {
+		if value == "" { value = cleanMetadata(meta.Value) }
+		switch {
+		case m.Series == "" && (strings.Contains(key, "calibre:series") || strings.Contains(key, "belongs-to-collection")) && !strings.Contains(key,"index"):
 			m.Series = value
+		case m.SeriesNumber == 0 && (strings.Contains(key,"series_index") || strings.Contains(key,"series-number") || strings.Contains(key,"group-position")):
+			m.SeriesNumber = numberFromText(value)
+		case m.Narrator == "" && (strings.Contains(key,"narrator") || strings.Contains(key,"read by")):
+			m.Narrator = value
+		case m.ASIN == "" && strings.Contains(key,"asin"):
+			m.ASIN = normalizeIdentifier(value)
+		case m.ISBN == "" && strings.Contains(key,"isbn"):
+			m.ISBN = normalizeIdentifier(value)
+		case m.Publisher == "" && strings.Contains(key,"publisher"):
+			m.Publisher = value
 		}
 	}
 	return m
@@ -234,20 +326,26 @@ func epubMetadata(filename string) embeddedMetadata {
 
 func comicMetadata(filename string) embeddedMetadata {
 	z, e := zip.OpenReader(filename)
-	if e != nil {
-		return embeddedMetadata{}
-	}
+	if e != nil { return embeddedMetadata{} }
 	defer z.Close()
 	var info struct {
-		Title  string `xml:"Title"`
-		Series string `xml:"Series"`
-		Writer string `xml:"Writer"`
-		Genre  string `xml:"Genre"`
+		Title       string  `xml:"Title"`
+		Series      string  `xml:"Series"`
+		Number      float64 `xml:"Number"`
+		Writer      string  `xml:"Writer"`
+		Genre       string  `xml:"Genre"`
+		Publisher   string  `xml:"Publisher"`
+		Language    string  `xml:"LanguageISO"`
+		Summary     string  `xml:"Summary"`
+		Year        int     `xml:"Year"`
 	}
-	if !readZipXML(&z.Reader, "ComicInfo.xml", &info) {
-		return embeddedMetadata{}
+	if !readZipXML(&z.Reader, "ComicInfo.xml", &info) { return embeddedMetadata{} }
+	return embeddedMetadata{
+		Title:cleanMetadata(info.Title), Author:normalizeAuthor(info.Writer),
+		Series:cleanMetadata(info.Series), SeriesNumber:info.Number, Genre:cleanMetadata(info.Genre),
+		Publisher:cleanMetadata(info.Publisher), Language:cleanMetadata(info.Language),
+		Description:cleanMetadata(info.Summary), PublishedYear:info.Year,
 	}
-	return embeddedMetadata{Title: cleanMetadata(info.Title), Author: cleanMetadata(info.Writer), Series: cleanMetadata(info.Series), Genre: cleanMetadata(info.Genre)}
 }
 
 func sidecarCandidates(filename string) []string {
@@ -260,6 +358,10 @@ func sidecarCandidates(filename string) []string {
 		filepath.Join(dir, base+".nfo"),
 		filepath.Join(dir, "metadata.nfo"),
 		filepath.Join(dir, "book.nfo"),
+		filepath.Join(dir, base+".json"),
+		filepath.Join(dir, "metadata.json"),
+		filepath.Join(dir, "book.json"),
+		filepath.Join(dir, "ComicInfo.xml"),
 	}
 	seen := map[string]bool{}
 	out := make([]string, 0, len(candidates))
@@ -275,7 +377,7 @@ func sidecarCandidates(filename string) []string {
 func sidecarMetadataWithCache(filename string, cache *sidecarScanCache) embeddedMetadata {
 	for _, candidate := range sidecarCandidates(filename) {
 		meta := cache.metadata(candidate)
-		if meta.Title != "" || meta.Author != "" || meta.Series != "" {
+		if metadataPresent(meta) {
 			return meta
 		}
 	}
@@ -336,54 +438,118 @@ func pathMetadata(relative, format string) metadataCandidate {
 
 func mergeMetadata(candidates ...metadataCandidate) identifiedMetadata {
 	result := identifiedMetadata{}
-	bestTitle, bestAuthor, bestSeries, bestGenre := -1, -1, -1, -1
+	best := map[string]int{}
 	sources := []string{}
 	maxConfidence := 0
-
+	setString := func(field string, value string, confidence int, dst *string) {
+		if value != "" && confidence > best[field] { *dst, best[field] = cleanMetadata(value), confidence }
+	}
+	setNumber := func(field string, value float64, confidence int, dst *float64) {
+		if value != 0 && confidence > best[field] { *dst, best[field] = value, confidence }
+	}
+	setYear := func(value int, confidence int) {
+		if value > 0 && confidence > best["year"] { result.PublishedYear, best["year"] = value, confidence }
+	}
 	for _, candidate := range candidates {
-		if candidate.confidence <= 0 {
-			continue
-		}
-		if candidate.Title != "" && candidate.confidence > bestTitle {
-			result.Title, bestTitle = cleanMetadata(candidate.Title), candidate.confidence
-		}
-		if candidate.Author != "" && candidate.confidence > bestAuthor {
-			result.Author, bestAuthor = cleanMetadata(candidate.Author), candidate.confidence
-		}
-		if candidate.Series != "" && candidate.confidence > bestSeries {
-			result.Series, bestSeries = cleanMetadata(candidate.Series), candidate.confidence
-		}
-		if candidate.Genre != "" && candidate.confidence > bestGenre {
-			result.Genre, bestGenre = cleanMetadata(candidate.Genre), candidate.confidence
-		}
-		if candidate.Title != "" || candidate.Author != "" || candidate.Series != "" || candidate.Genre != "" {
+		if candidate.confidence <= 0 { continue }
+		setString("title", candidate.Title, candidate.confidence, &result.Title)
+		setString("author", candidate.Author, candidate.confidence, &result.Author)
+		setString("series", candidate.Series, candidate.confidence, &result.Series)
+		setNumber("seriesNumber", candidate.SeriesNumber, candidate.confidence, &result.SeriesNumber)
+		setString("genre", candidate.Genre, candidate.confidence, &result.Genre)
+		setYear(candidate.PublishedYear,candidate.confidence)
+		setString("narrator", candidate.Narrator, candidate.confidence, &result.Narrator)
+		setString("publisher", candidate.Publisher, candidate.confidence, &result.Publisher)
+		setString("isbn", candidate.ISBN, candidate.confidence, &result.ISBN)
+		setString("asin", candidate.ASIN, candidate.confidence, &result.ASIN)
+		setString("language", candidate.Language, candidate.confidence, &result.Language)
+		setString("description", candidate.Description, candidate.confidence, &result.Description)
+		if metadataPresent(candidate.embeddedMetadata) {
 			sources = append(sources, candidate.source)
-			if candidate.confidence > maxConfidence {
-				maxConfidence = candidate.confidence
-			}
+			if candidate.confidence > maxConfidence { maxConfidence = candidate.confidence }
 		}
 	}
-	if result.Title == "" {
-		result.Title = "Untitled"
-	}
+	if result.Title == "" { result.Title = "Untitled" }
+	result.Author = normalizeAuthor(result.Author)
 	result.Confidence = maxConfidence
 	result.Source = strings.Join(uniqueStrings(sources), "+")
-	if result.Source == "" {
-		result.Source = "path"
-	}
-
+	if result.Source == "" { result.Source = "path" }
 	switch {
 	case result.Title == "Untitled":
-		result.NeedsReview = true
-		result.ReviewReason = "Archivist could not determine a title."
+		result.NeedsReview = true; result.ReviewReason = "Archivist could not determine a title."
 	case result.Confidence < 60:
-		result.NeedsReview = true
-		result.ReviewReason = "Only weak filename or folder evidence was available."
+		result.NeedsReview = true; result.ReviewReason = "Only weak filename or folder evidence was available."
 	case result.Author == "" && result.Confidence < 85:
-		result.NeedsReview = true
-		result.ReviewReason = "The title looks plausible, but the author could not be identified confidently."
+		result.NeedsReview = true; result.ReviewReason = "The title looks plausible, but the author could not be identified confidently."
 	}
 	return result
+}
+
+func metadataPresent(m embeddedMetadata) bool {
+	return m.Title!="" || m.Author!="" || m.Series!="" || m.SeriesNumber!=0 || m.Genre!="" ||
+		m.PublishedYear!=0 || m.Narrator!="" || m.Publisher!="" || m.ISBN!="" || m.ASIN!="" ||
+		m.Language!="" || m.Description!=""
+}
+
+func normalizeAuthor(value string) string {
+	value=cleanMetadata(value)
+	if value=="" { return "" }
+	parts:=strings.Split(value,",")
+	if len(parts)==2 && cleanMetadata(parts[0])!="" && cleanMetadata(parts[1])!="" {
+		return cleanMetadata(parts[1]+" "+parts[0])
+	}
+	return value
+}
+
+func normalizeIdentifier(value string) string {
+	value=strings.TrimSpace(value)
+	value=strings.TrimPrefix(strings.TrimPrefix(strings.ToUpper(value),"URN:ISBN:"),"URN:ASIN:")
+	value=strings.NewReplacer(" ","","-","").Replace(value)
+	return value
+}
+
+func looksISBN(value string) bool {
+	value=normalizeIdentifier(value)
+	if len(value)!=10 && len(value)!=13 { return false }
+	for i,r:=range value {
+		if r>='0'&&r<='9' { continue }
+		if i==len(value)-1 && len(value)==10 && r=='X' { continue }
+		return false
+	}
+	return true
+}
+
+func yearFromText(value string) int {
+	var year int
+	fmt.Sscanf(strings.TrimSpace(value),"%d",&year)
+	if year>=1000 && year<=time.Now().Year()+2 { return year }
+	return 0
+}
+
+func numberFromText(value string) float64 {
+	var number float64
+	fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(value,"#")),"%f",&number)
+	if number<0 { return 0 }
+	return number
+}
+
+func metadataFromMap(raw map[string]any) embeddedMetadata {
+	pick:=func(keys ...string) string {
+		for _,key:=range keys {
+			if value,ok:=raw[key];ok {
+				if text:=cleanMetadata(fmt.Sprint(value));text!="" && text!="<nil>" { return text }
+			}
+		}
+		return ""
+	}
+	return embeddedMetadata{
+		Title:pick("title","name"), Author:normalizeAuthor(pick("author","creator","writer")),
+		Series:pick("series","collection"), SeriesNumber:numberFromText(pick("seriesNumber","series_index","seriesIndex","number","volume")),
+		Genre:pick("genre","subject"), PublishedYear:yearFromText(pick("publishedYear","year","date","published")),
+		Narrator:pick("narrator"), Publisher:pick("publisher"), ISBN:normalizeIdentifier(pick("isbn","ISBN")),
+		ASIN:normalizeIdentifier(pick("asin","ASIN")), Language:pick("language"),
+		Description:pick("description","summary","comments"),
+	}
 }
 
 func uniqueStrings(items []string) []string {
@@ -403,7 +569,7 @@ func metadataForWithCache(filename, relative, format string, cache *sidecarScanC
 	pathCandidate := pathMetadata(relative, format)
 	candidates := []metadataCandidate{pathCandidate}
 
-	if sidecar := sidecarMetadataWithCache(filename, cache); sidecar.Title != "" || sidecar.Author != "" || sidecar.Series != "" || sidecar.Genre != "" {
+	if sidecar := sidecarMetadataWithCache(filename, cache); metadataPresent(sidecar) {
 		candidates = append(candidates, metadataCandidate{embeddedMetadata: sidecar, source: "sidecar", confidence: 96})
 	}
 
@@ -414,7 +580,7 @@ func metadataForWithCache(filename, relative, format string, cache *sidecarScanC
 	case "Comic":
 		embedded = comicMetadata(filename)
 	}
-	if embedded.Title != "" || embedded.Author != "" || embedded.Series != "" || embedded.Genre != "" {
+	if metadataPresent(embedded) {
 		candidates = append(candidates, metadataCandidate{embeddedMetadata: embedded, source: "embedded", confidence: 92})
 	}
 
