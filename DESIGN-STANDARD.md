@@ -313,3 +313,21 @@ Reader Stats defines the global ambient-light standard for the entire app.
 - No period selector, overflow menu, view toggle, Arrange action, back button or other page action may sit beside the avatar.
 - Page-specific controls belong in a secondary toolbar below the title/subtitle or in the content area. Reader Stats “All time”, Atlas view/list toggle and Shelf Arrange follow this rule.
 - Now remains titleless by design. Its Player / Reader segmented control sits below the reserved avatar corner; the avatar remains the same global top-right control.
+
+
+## Approved Atlas constellation
+
+The canonical Atlas reference image is the visual acceptance target for the Atlas universe.
+
+- Atlas uses the shared Archivist page header, global teal halo, standard title/subtitle spacing and isolated top-right profile avatar.
+- The primary Atlas view is a large circular constellation, not a generic graph panel. The constellation should dominate the screen and feel immersive.
+- Genre hubs are the visual anchors inside the constellation: larger luminous nodes, fine coloured relationship lines, readable rounded labels and smaller connected work/author/series nodes.
+- Genre colours use an extended complementary Archivist palette. Additional genre colours may be added, but must remain muted-luminous and harmonious with teal, gold, navy, ivory and the existing Atlas colours; avoid neon/random rainbow colour.
+- The outer Atlas ring is a three-way interactive chart/control divided into **Genre**, **Format** and **Year**. Its three sectors are visually distinct but complementary.
+- Genre sits on the left side of the ring, Format on the right, and Year at the bottom, following the approved concept composition.
+- Pressing a ring control updates the lower breakdown panel. The panel transitions with a short fade/slide rather than appearing abruptly.
+- The breakdown panel overlaps/follows the constellation like a refined bottom sheet and contains a title, subtitle, coloured markers, horizontal bars, counts and percentages.
+- Genre breakdown bars use the same colours as the corresponding constellation clusters. Format and Year use their own small complementary colour families.
+- The lower breakdown should show the strongest categories cleanly; long tails may be consolidated into an honest **Other** row rather than producing an unreadable list.
+- Search, fit, zoom and graph exploration remain functional. Selecting a constellation node still exposes its connected content and relationship actions.
+- Atlas retains pinch/pan/zoom and relationship exploration; visual redesign must never replace these with a static illustration.
