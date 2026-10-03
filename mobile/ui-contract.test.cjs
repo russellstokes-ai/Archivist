@@ -317,4 +317,15 @@ const styleEntry=(text,name)=>{
 for(const name of lockedFoldStyleNames){
   assert.equal(styleEntry(source,name),styleEntry(lockedFoldStyles,name),'Universal-phone work changed locked Fold style '+name);
 }
+assert.ok(source.includes("const phoneLayout = width < 600") && source.includes("const narrowPhone = width < 360"),'Universal-phone breakpoints are missing');
+for(const styleName of [
+  'shelfContentPhone','shelfHeroPhone','libraryMainPhone','playerScreenPhone','atlasScreenPhone',
+  'statsScreenPhone','profileHubScreenPhone','settingsScreenPhone','tabBarPhone','standardPageHeaderPhone'
+]){
+  assert.ok(source.includes(styleName+': {'),'Universal-phone responsive style missing: '+styleName);
+}
+assert.ok(source.includes('phoneLayout&&styles.shelfContentPhone') && source.includes('phoneLayout&&styles.libraryMainPhone'),'Shelf and Library phone composition must use the universal-phone overrides');
+assert.ok(source.includes('phoneLayout&&styles.playerScreenPhone') && source.includes('phoneLayout&&styles.atlasScreenPhone') && source.includes('phoneLayout&&styles.statsScreenPhone'),'Player, Atlas and Stats must use phone overrides');
+assert.ok(source.includes('phoneLayout&&styles.profileHubScreenPhone') && source.includes('phoneLayout&&styles.settingsScreenPhone'),'Profile/Rewards and Settings must use phone overrides');
+assert.ok(source.includes('phoneLayout&&styles.tabBarPhone') && source.includes('phoneLayout&&styles.standardPageHeaderPhone'),'Global navigation and headers must adapt below 600dp');
 
