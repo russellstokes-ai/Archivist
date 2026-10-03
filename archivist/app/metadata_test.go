@@ -198,3 +198,15 @@ func TestComicInfoRichFields(t *testing.T) {
 		t.Fatalf("comic details=%+v", meta)
 	}
 }
+
+
+func TestPathMetadataInfersSeriesPositions(t *testing.T) {
+	meta := metadataFor("/missing/02 - Dune Messiah.epub", filepath.Join("Frank Herbert", "Dune", "02 - Dune Messiah.epub"), "Ebook")
+	if meta.Author != "Frank Herbert" || meta.Series != "Dune" || meta.SeriesNumber != 2 || meta.Title != "Dune Messiah" {
+		t.Fatalf("numbered ebook path=%+v", meta)
+	}
+	audio := metadataFor("/missing/01 - Opening.mp3", filepath.Join("Frank Herbert", "Dune", "02 - Dune Messiah", "01 - Opening.mp3"), "Audio")
+	if audio.Author != "Frank Herbert" || audio.Series != "Dune" || audio.SeriesNumber != 2 {
+		t.Fatalf("numbered audiobook folder=%+v", audio)
+	}
+}
