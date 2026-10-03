@@ -1,5 +1,27 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-03 — Final polish Sprint 6: family account recovery and revocation
+
+### Implemented and source-verified
+- Family users now expose a **Reissue key** action in mobile Settings.
+- Reissue is confirmed before execution and clearly states that the old access key and existing sessions will stop working immediately.
+- The newly issued key is shown once and names the family user it belongs to.
+- **Revoke** now requires confirmation and explicitly states that access is removed immediately while the user's reading history/profile data remains on the server.
+- The server already had a tested `POST /api/profiles/{id}/rotate-key` route; mobile now exposes it instead of forcing Admin to revoke/recreate a user when a key is lost.
+- Server-side key rotation and user revocation now also delete outstanding session rows immediately rather than leaving unusable session records until expiry.
+- Added/updated regression coverage for session cleanup and the mobile family-account interaction contract.
+
+### UI boundary
+- The existing Settings → Family users structure is retained.
+- Actions use the existing wrapped Settings action treatment, so phone/Fold layout is not redesigned.
+- Atlas, comic focus and Live Player design were not changed.
+
+### Runtime proof still required
+- Reissue a real family user's key and confirm the previous key/session immediately fails.
+- Reconnect with the new one-time key.
+- Revoke a real family user and verify retained history/profile data after later server-side recovery/recreation scenarios as designed.
+
+
 ## 2026-10-03 — Final polish Sprint 5: native backup and restore
 
 ### Implemented and source-verified
