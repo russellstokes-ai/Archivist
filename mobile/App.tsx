@@ -520,8 +520,7 @@ function Client() {
   const [serverActivity,setServerActivity]=useState<ProfileActivity[]>([]);
   const [insightGoal,setInsightGoal]=useState(defaultInsightGoal);
   const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
-  const [readerStatsRhythmMode,setReaderStatsRhythmMode]=useState<'Time'|'Day'|'Month'>('Time');
-  const [readerStatsYear,setReaderStatsYear]=useState<number|'all'>(new Date().getFullYear());
+  const [readerStatsPeriod,setReaderStatsPeriod]=useState<'Day'|'Week'|'Month'>('Week');
   const [profileMenuOpen,setProfileMenuOpen]=useState(false);
   const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
@@ -4119,41 +4118,43 @@ function Client() {
       mint:darkStats?'#73DDB0':'#4FA97F',
     };
 
-    const currentYear=new Date().getFullYear();
     const activitySource=(sourceFilter==='local'||sourceFilter==='downloaded')?[]:serverActivity;
-    const activityYears=Array.from(new Set(activitySource.map(item=>new Date(item.updatedAt*1000).getFullYear()).filter(year=>Number.isFinite(year))));
-    if(!activityYears.includes(currentYear))activityYears.push(currentYear);
-    activityYears.sort((a,b)=>b-a);
-    const periodOptions:Array<number|'all'>=activitySource.length?[...activityYears,'all']:['all'];
-    const effectivePeriod: number|'all'=activitySource.length?readerStatsYear:'all';
-    const periodActivity=[...activitySource].filter(item=>effectivePeriod==='all'||new Date(item.updatedAt*1000).getFullYear()===effectivePeriod).sort((a,b)=>b.updatedAt-a.updatedAt);
-    const cycleStatsPeriod=()=>{
-      const currentIndex=Math.max(0,periodOptions.findIndex(option=>option===effectivePeriod));
-      setReaderStatsYear(periodOptions[(currentIndex+1)%periodOptions.length]);
+    const statsNow=new Date();
+    const statsPeriodStart=new Date(statsNow);
+    statsPeriodStart.setHours(0,0,0,0);
+    if(readerStatsPeriod==='Week'){
+      const mondayOffset=(statsPeriodStart.getDay()+6)%7;
+      statsPeriodStart.setDate(statsPeriodStart.getDate()-mondayOffset);
+    }else if(readerStatsPeriod==='Month'){
+      statsPeriodStart.setDate(1);
+    }
+    const periodStartMs=statsPeriodStart.getTime();
+    const periodEndMs=statsNow.getTime();
+    const inStatsPeriod=(date:Date)=>{
+      const value=date.getTime();
+      return Number.isFinite(value)&&value>=periodStartMs&&value<=periodEndMs;
     };
-    const periodLabel=effectivePeriod==='all'?'All time':String(effectivePeriod);
+    const periodActivity=[...activitySource].filter(item=>inStatsPeriod(new Date(item.updatedAt*1000))).sort((a,b)=>b.updatedAt-a.updatedAt);
+    const periodLabel=readerStatsPeriod==='Day'?'Today':readerStatsPeriod==='Week'?'This week':'This month';
 
     const completedGoal=Math.max(1,summary.completedGoal.target);
-    const completed=effectivePeriod==='all'
-      ? summary.completed
-      : new Set(periodActivity.filter(item=>item.completed).map(item=>item.workId)).size;
+    const completed=new Set(periodActivity.filter(item=>item.completed).map(item=>item.workId)).size;
     const progressRemaining=Math.max(0,completedGoal-completed);
     const progressPercent=Math.min(100,Math.round(completed/completedGoal*100));
     const totalActivitySeconds=periodActivity.reduce((sum,item)=>sum+Math.max(0,item.activeSeconds||0),0);
     const minutesRead=Math.round(totalActivitySeconds/60);
-    const ritualScopeDays=Object.entries(ritualDays).filter(([day,seconds])=>{
-      if(seconds<60)return false;
-      if(effectivePeriod==='all')return true;
-      return day.startsWith(String(effectivePeriod)+'-');
-    }).length;
+    const ritualScopeDays=Object.entries(ritualDays).filter(([day,seconds])=>seconds>=60&&inStatsPeriod(new Date(day+'T12:00:00'))).length;
     const activeDays=periodActivity.length
-      ? new Set(periodActivity.map(item=>new Date(item.updatedAt*1000).toISOString().slice(0,10))).size
+      ? new Set(periodActivity.map(item=>localDay(new Date(item.updatedAt*1000)))).size
       : ritualScopeDays;
     const paceMinutes=activeDays?Math.round(minutesRead/activeDays):0;
+    const sessionSeconds=periodActivity.map(item=>Math.max(0,item.activeSeconds||0)).filter(Boolean);
+    const longestSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(Math.max(...sessionSeconds)/60)):0;
 
     const metricCards=[
       {label:'Books read',value:completed,icon:'bookOpen' as UiIconName},
       {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'clock' as UiIconName},
+      {label:'Longest read',value:longestSessionMinutes?longestSessionMinutes+' min':'—',icon:'gauge' as UiIconName},
       {label:'Reading days',value:activeDays,icon:'calendar' as UiIconName},
       {label:'Day streak',value:ritual.currentStreak,icon:'flame' as UiIconName},
     ];
@@ -4177,9 +4178,7 @@ function Client() {
     const maxHour=Math.max(1,...hourTotals);
     const maxDay=Math.max(1,...dayTotals);
     const maxMonth=Math.max(1,...monthTotals);
-    const sessionSeconds=periodActivity.map(item=>Math.max(0,item.activeSeconds||0)).filter(Boolean);
     const averageSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(sessionSeconds.reduce((sum,value)=>sum+value,0)/sessionSeconds.length/60)):0;
-    const longestSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(Math.max(...sessionSeconds)/60)):0;
     const weekdayLabels=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     const peakDayIndex=dayTotals.reduce((best,value,index)=>value>dayTotals[best]?index:best,0);
     const mostActiveDay=dayTotals[peakDayIndex]?weekdayLabels[peakDayIndex]:'—';
@@ -4205,11 +4204,7 @@ function Client() {
     const completedSeries=trackedSeries.filter(items=>items.every(work=>work.readingState==='finished')).length;
     const seriesCompletionRate=trackedSeries.length?Math.round(completedSeries/trackedSeries.length*100):0;
 
-    const periodAnnotations=readerAnnotations.filter(item=>{
-      if(effectivePeriod==='all')return true;
-      const date=new Date(item.createdAt);
-      return Number.isFinite(date.getTime())&&date.getFullYear()===effectivePeriod;
-    });
+    const periodAnnotations=readerAnnotations.filter(item=>inStatsPeriod(new Date(item.createdAt)));
     const highlightCount=periodAnnotations.filter(item=>item.kind==='highlight').length;
     const noteCount=periodAnnotations.filter(item=>item.kind==='note').length;
 
@@ -4224,14 +4219,11 @@ function Client() {
     const activeDateKeys=new Set<string>();
     for(const item of periodActivity)activeDateKeys.add(new Date(item.updatedAt*1000).toISOString().slice(0,10));
     for(const [day,seconds] of Object.entries(ritualDays)){
-      if(seconds<60)continue;
-      if(effectivePeriod!=='all'&&!day.startsWith(String(effectivePeriod)+'-'))continue;
+      if(seconds<60||!inStatsPeriod(new Date(day+'T12:00:00')))continue;
       activeDateKeys.add(day);
     }
-    const consistencyEnd=effectivePeriod==='all'||effectivePeriod===currentYear?new Date():new Date(effectivePeriod,11,31);
-    const consistencyStart=effectivePeriod==='all'
-      ? (()=>{const keys=[...activeDateKeys].sort();return keys.length?new Date(keys[0]+'T00:00:00'):new Date();})()
-      : new Date(effectivePeriod,0,1);
+    const consistencyEnd=new Date(statsNow);
+    const consistencyStart=new Date(statsPeriodStart);
     consistencyStart.setHours(0,0,0,0);
     consistencyEnd.setHours(0,0,0,0);
     const trackedCalendarDays=Math.max(1,Math.floor((consistencyEnd.getTime()-consistencyStart.getTime())/86400000)+1);
@@ -4253,11 +4245,7 @@ function Client() {
     const formatCompletionRows=completionRows('format');
     const genreCompletionRows=completionRows('genre');
 
-    const anchorDate=periodActivity.length
-      ? new Date(periodActivity[0].updatedAt*1000)
-      : effectivePeriod==='all'||effectivePeriod===currentYear
-        ? new Date()
-        : new Date(effectivePeriod,11,31);
+    const anchorDate=new Date(statsNow);
     anchorDate.setHours(0,0,0,0);
     const recentDays=Array.from({length:7},(_,index)=>{
       const date=new Date(anchorDate);date.setDate(date.getDate()-6+index);
@@ -4419,15 +4407,15 @@ function Client() {
       <View style={[styles.statsRhythmTop,width<520&&styles.statsRhythmTopCompact]}>
         <CardHeader title="Reading Rhythm" subtitle={'When and how you read · '+periodLabel} icon="clock"/>
         <View style={[styles.statsMiniSegment,{borderColor:statsPalette.line,backgroundColor:statsPalette.canvas}]}>
-          {(['Time','Day','Month'] as const).map(label=>{
-            const selected=readerStatsRhythmMode===label;
-            return <Pressable key={label} accessibilityRole="button" accessibilityState={{selected}} onPress={()=>setReaderStatsRhythmMode(label)} style={[styles.statsMiniSegmentItem,selected&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panelRaised}]}>
+          {(['Day','Week','Month'] as const).map(label=>{
+            const selected=readerStatsPeriod===label;
+            return <Pressable key={label} accessibilityRole="button" accessibilityLabel={'Show '+label.toLowerCase()+' reading data'} accessibilityState={{selected}} onPress={()=>setReaderStatsPeriod(label)} style={[styles.statsMiniSegmentItem,selected&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panelRaised}]}>
               <Text style={{color:selected?statsPalette.ink:statsPalette.muted,fontSize:10.5,fontWeight:selected?'600':'500'}}>{label}</Text>
             </Pressable>;
           })}
         </View>
       </View>
-      {readerStatsRhythmMode==='Time'?timeRhythm:readerStatsRhythmMode==='Day'?dayRhythm:monthRhythm}
+      {timeRhythm}
     </View>;
 
     const readingProgressCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
@@ -4545,11 +4533,14 @@ function Client() {
       </View>
     </View>;
 
-    const donutCards=<View style={styles.statsDonutGrid}>
+    const primaryReadingCards=<View style={styles.statsDonutGrid}>
       {readingProgressCard}
+      {paceCard}
+    </View>;
+
+    const breakdownCards=<View style={styles.statsDonutGrid}>
       {formatCard}
       {genreCard}
-      {paceCard}
       {placesCard}
     </View>;
 
@@ -4563,12 +4554,6 @@ function Client() {
         title="Reader Stats"
         subtitle="Your reading journey."
       />
-      {periodOptions.length>1?<PageToolbar>
-        <Pressable accessibilityRole="button" accessibilityLabel={'Change statistics period. Current '+periodLabel} onPress={cycleStatsPeriod} style={[styles.statsPeriodIconButton,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel}]}>
-          <UiIcon name="calendar" color={statsPalette.gold} size={18}/>
-        </Pressable>
-      </PageToolbar>:null}
-
       <View style={[styles.statsMetricRow,{borderTopColor:statsPalette.line,borderBottomColor:statsPalette.line}]}>
         {metricCards.map(card=><View key={card.label} style={[styles.statsMetricCard,width>=700?styles.statsMetricCardWide:styles.statsMetricCardPhone]}>
           <View style={[styles.statsMetricIcon,{backgroundColor:statsPalette.panelRaised}]}><UiIcon name={card.icon} color={statsPalette.gold} size={18}/></View>
@@ -4586,7 +4571,8 @@ function Client() {
           <Text style={[styles.statsSectionTitle,{color:statsPalette.ink}]}>Reading Breakdown</Text>
           <Text style={[styles.statsSectionCopy,{color:statsPalette.muted}]}>Progress, formats, genres, pace and reading context.</Text>
         </View>
-        {donutCards}
+        {primaryReadingCards}
+        {breakdownCards}
       </View>
 
       <View style={styles.statsSectionGroup}>
@@ -5691,7 +5677,7 @@ const styles = StyleSheet.create({
   statsMetricRow: {flexDirection:'row',flexWrap:'wrap',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:8,columnGap:8,rowGap:0},
   statsMetricCard: {minHeight:72,paddingHorizontal:2,paddingVertical:9,flexDirection:'row',alignItems:'center',gap:9},
   statsMetricCardPhone: {width:'48.5%',flexGrow:1},
-  statsMetricCardWide: {width:'23.8%',flexGrow:1},
+  statsMetricCardWide: {width:'19%',flexGrow:1},
   statsMetricIcon: {width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center',flexShrink:0},
   statsMetricValue: {fontFamily:'ArchivistEditorial',fontSize:19,lineHeight:23,fontWeight:'500',fontVariant:['tabular-nums']},
   statsMetricLabel: {fontSize:10,lineHeight:13.5,fontWeight:'500',marginTop:1},
@@ -5736,16 +5722,16 @@ const styles = StyleSheet.create({
   statsMonthBarFill: {width:'100%',borderRadius:9},
   statsMonthLabel: {fontSize:9,lineHeight:12,fontWeight:'600'},
   statsMonthValue: {fontSize:8.5,lineHeight:11,fontWeight:'500',fontVariant:['tabular-nums']},
-  statsSectionGroup: {gap:10},
-  statsSectionHeading: {gap:2,paddingTop:2,paddingBottom:2},
+  statsSectionGroup: {gap:16,paddingTop:4},
+  statsSectionHeading: {gap:3,paddingTop:2,paddingBottom:6},
   statsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.16},
   statsSectionCopy: {fontSize:10.5,lineHeight:15,fontWeight:'400'},
-  statsDonutGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
-  statsSupportingGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
-  statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0},
-  statsDashboardCard: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:20,paddingHorizontal:0,gap:14,flexGrow:1},
+  statsDonutGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22,alignItems:'stretch'},
+  statsSupportingGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22,alignItems:'stretch'},
+  statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22},
+  statsDashboardCard: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,paddingHorizontal:0,gap:16,flexGrow:1,alignSelf:'stretch'},
   statsDashboardCardWide: {width:'48%',flexBasis:300},
-  statsCardBody: {flexDirection:'row',alignItems:'center',gap:14},
+  statsCardBody: {flexDirection:'row',alignItems:'center',gap:14,minHeight:118},
   statsCardSide: {flex:1,minWidth:0,gap:8},
   statsLegend: {flex:1,minWidth:0,gap:6},
   statsLegendRow: {flexDirection:'row',alignItems:'center',gap:5,minWidth:0},
@@ -5767,13 +5753,13 @@ const styles = StyleSheet.create({
   statsWeekDay: {flex:1,alignItems:'center',gap:5},
   statsWeekDot: {width:18,height:18,borderRadius:9,borderWidth:StyleSheet.hairlineWidth},
   statsWeekLabel: {fontSize:8.5,lineHeight:11,fontWeight:'600'},
-  statsDetailGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:14,rowGap:12,paddingTop:2},
+  statsDetailGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:14,rowGap:14,paddingTop:4,alignItems:'flex-start'},
   statsDetailMetric: {width:'47%',minWidth:118,flexGrow:1,paddingVertical:2},
   statsDetailValue: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:24,fontWeight:'500'},
   statsDetailLabel: {fontSize:9.5,lineHeight:13,fontWeight:'600',marginTop:2},
   statsDetailMeta: {fontSize:8.5,lineHeight:12,marginTop:1},
   statsMinorHeading: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:.55,textTransform:'uppercase'},
-  statsFinishSection: {gap:9,paddingTop:2},
+  statsFinishSection: {gap:10,paddingTop:4},
   statsFinishMonths: {height:92,flexDirection:'row',alignItems:'flex-end',gap:5},
   statsFinishMonth: {flex:1,height:'100%',alignItems:'center',justifyContent:'flex-end',gap:3},
   statsFinishTrack: {width:'72%',maxWidth:16,height:56,borderRadius:8,overflow:'hidden',justifyContent:'flex-end'},
