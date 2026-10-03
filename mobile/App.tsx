@@ -2795,7 +2795,7 @@ function Client() {
           <TextInput accessibilityLabel="Profile access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={key} onChangeText={setKey} placeholder="Profile access key" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
           <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy || !server.trim() || !key.trim()} />
-          {serverNotice?<Text style={[styles.meta,{color:p.sage}]}>{serverNotice}</Text>:null}
+          {serverNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{serverNotice}</Text>:null}
           {error ? <Text accessibilityRole="alert" style={[styles.error, {color:p.danger}]}>{error}</Text> : null}
       </View>
     );
@@ -2904,7 +2904,7 @@ function Client() {
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
         <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your Shelf</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Add media from this device, connect your private Archivist Server, or use both. Archivist keeps the Shelf focused on what you want to read or listen to next.</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>{Platform.OS==='ios'?'Import media from Files, connect your private Archivist Server, or use both.':'Add media from this device, connect your private Archivist Server, or use both.'} Archivist keeps the Shelf focused on what you want to read or listen to next.</Text>
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
@@ -4553,7 +4553,7 @@ function Client() {
       <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SEARCH</Text>
         <View style={styles.searchRow}>
-          <TextInput value={readerSearch} onChangeText={setReaderSearch} placeholder="Find in this book" placeholderTextColor={p.muted} returnKeyType="search" onSubmitEditing={()=>{setReaderSearchCount(null);sendReaderCommand('search',{query:readerSearch})}} style={[styles.readerSearchInput,{color:p.ink,backgroundColor:p.raised}]}/>
+          <TextInput accessibilityLabel="Search this book" value={readerSearch} onChangeText={setReaderSearch} placeholder="Find in this book" placeholderTextColor={p.muted} returnKeyType="search" onSubmitEditing={()=>{setReaderSearchCount(null);sendReaderCommand('search',{query:readerSearch})}} style={[styles.readerSearchInput,{color:p.ink,backgroundColor:p.raised}]}/>
           <Pressable accessibilityRole="button" accessibilityLabel="Find in book" onPress={()=>{setReaderSearchCount(null);sendReaderCommand('search',{query:readerSearch})}} style={styles.readerSearchButton}><UiIcon name="search" color={p.ink} size={20}/></Pressable>
         </View>
         {readerSearchCount!==null?<Text style={[styles.meta,{color:p.muted}]}>{readerSearchCount} match{readerSearchCount===1?'':'es'}</Text>:null}
@@ -4592,7 +4592,7 @@ function Client() {
           <Pressable accessibilityRole="button" accessibilityLabel={'Remove bookmark for page '+(item.page+1)} hitSlop={3} onPress={()=>void persistReaderBookmarks(readerBookmarks.filter(saved=>saved.id!==item.id))} style={styles.readerSavedAction}><Text style={{color:p.muted,fontWeight:'600'}}>Remove</Text></Pressable>
         </View>):<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet.</Text>}
       </View>
-      <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}><Text style={[styles.filterLabel,{color:p.muted,marginTop:0}]}>HIGHLIGHTS & NOTES</Text>{readerSelection?<><Text numberOfLines={4} style={[styles.readerQuote,{color:p.ink,borderColor:p.line}]}>{readerSelection}</Text><View style={styles.toolRow}><Button label="Highlight" tone="quiet" onPress={()=>void saveCurrentReaderAnnotation('highlight')}/></View><TextInput value={readerNote} onChangeText={setReaderNote} placeholder="Add a note to this selection" placeholderTextColor={p.muted} multiline style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:72}]}/><Button label="Save note" disabled={!readerNote.trim()} onPress={()=>void saveCurrentReaderAnnotation('note')}/></>:<Text style={[styles.meta,{color:p.muted}]}>Select text in the book to highlight it or attach a note.</Text>}{annotations.map(item=><View key={item.id} style={[styles.readerSavedRow,{borderColor:p.line}]}><View style={{flex:1}}><Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.text}</Text><Text style={[styles.meta,{color:p.muted}]}>Page {item.page+1} · {item.kind}{item.note?` · ${item.note}`:''}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={'Remove '+item.kind+' on page '+(item.page+1)} hitSlop={6} onPress={()=>void persistReaderAnnotations(readerAnnotations.filter(saved=>saved.id!==item.id))}><Text style={{color:p.muted,fontWeight:'800'}}>Remove</Text></Pressable></View>)}</View>
+      <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}><Text style={[styles.filterLabel,{color:p.muted,marginTop:0}]}>HIGHLIGHTS & NOTES</Text>{readerSelection?<><Text numberOfLines={4} style={[styles.readerQuote,{color:p.ink,borderColor:p.line}]}>{readerSelection}</Text><View style={styles.toolRow}><Button label="Highlight" tone="quiet" onPress={()=>void saveCurrentReaderAnnotation('highlight')}/></View><TextInput accessibilityLabel="Note for selected text" value={readerNote} onChangeText={setReaderNote} placeholder="Add a note to this selection" placeholderTextColor={p.muted} multiline style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:72}]}/><Button label="Save note" disabled={!readerNote.trim()} onPress={()=>void saveCurrentReaderAnnotation('note')}/></>:<Text style={[styles.meta,{color:p.muted}]}>Select text in the book to highlight it or attach a note.</Text>}{annotations.map(item=><View key={item.id} style={[styles.readerSavedRow,{borderColor:p.line}]}><View style={{flex:1}}><Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.text}</Text><Text style={[styles.meta,{color:p.muted}]}>Page {item.page+1} · {item.kind}{item.note?` · ${item.note}`:''}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={'Remove '+item.kind+' on page '+(item.page+1)} hitSlop={6} onPress={()=>void persistReaderAnnotations(readerAnnotations.filter(saved=>saved.id!==item.id))}><Text style={{color:p.muted,fontWeight:'800'}}>Remove</Text></Pressable></View>)}</View>
     </View></ScrollView></View></Modal>;
   }
 
@@ -6213,7 +6213,7 @@ function Client() {
                 <Button label="Select all Ready" tone="quiet" onPress={()=>setServerMoveSelection(serverMovePreviews.flatMap(item=>item.move?.id?[item.move.id]:[]))}/>
                 <Button label="Clear selection" tone="quiet" onPress={()=>setServerMoveSelection([])}/>
               </View>:null}
-              {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+              {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
               {serverMovePreviews.slice(0,20).map((item,index)=>{
                 const move=item.move;
                 const asset=serverBooks.find(book=>book.id===item.asset);
@@ -6418,7 +6418,7 @@ function Client() {
                   <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
                   {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
                 </View>
-                {localFolderNotice?<Text style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
+                {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
 
               <View style={styles.settingsSubgroup}>
@@ -6446,7 +6446,7 @@ function Client() {
                 <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
                 <View style={styles.settingsInlineActions}><Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Preview matching</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Preview all</Text></Pressable></View>
                 <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
-                {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+                {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
               </View>:null}
             </View>
 
