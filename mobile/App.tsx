@@ -4172,7 +4172,7 @@ function Client() {
     }
 
     return (
-      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold,!current&&styles.playerScreenEmpty,embedded&&styles.playerScreenEmbedded]}>
+      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,phoneLayout&&styles.playerScreenPhone,narrowPhone&&styles.playerScreenNarrow,foldLayout&&styles.playerScreenFold,!current&&styles.playerScreenEmpty,embedded&&styles.playerScreenEmbedded]}>
         {!embedded?<View style={styles.playerHeading}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable>
           <Text style={[styles.playerEyebrow,{color:p.ink,flex:1}]}>NOW PLAYING</Text>
@@ -4826,7 +4826,7 @@ function Client() {
       {label:'Genres',value:new Set(atlasUniverseWorks.map(work=>String(work.genre||'').trim()).filter(Boolean)).size,copy:'recorded genres'},
     ];
     return (
-      <ScrollView contentContainerStyle={[styles.atlasScreen,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
+      <ScrollView contentContainerStyle={[styles.atlasScreen,phoneLayout&&styles.atlasScreenPhone,narrowPhone&&styles.atlasScreenNarrow,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
         <PageHeader
           title="Atlas"
           subtitle="Characters, stories and ideas — your reading universe."
@@ -5444,7 +5444,7 @@ function Client() {
       {tasteCard}
     </View>;
 
-    return <ScrollView style={{backgroundColor:'transparent'}} contentContainerStyle={[styles.statsScreen,width>=600&&styles.statsScreenFold,width>=940&&styles.statsScreenWide]}>
+    return <ScrollView style={{backgroundColor:'transparent'}} contentContainerStyle={[styles.statsScreen,phoneLayout&&styles.statsScreenPhone,narrowPhone&&styles.statsScreenNarrow,width>=600&&styles.statsScreenFold,width>=940&&styles.statsScreenWide]}>
       <PageHeader
         title="Reader Stats"
         subtitle="Your reading journey."
@@ -5518,10 +5518,10 @@ function Client() {
       {id:'rewards' as Tab,label:'Rewards',copy:'Level '+overall.level+' · '+(profileProgression?.unlockedAchievements||0)+' unlocked',icon:'target' as UiIconName,tone:'#E3BC67'},
       {id:'settings' as Tab,label:'Settings',copy:'Library, privacy and server',icon:'settings' as UiIconName,tone:'#7AA7E8'},
     ];
-    return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
+    return <ScrollView contentContainerStyle={[styles.profileHubScreen,phoneLayout&&styles.profileHubScreenPhone,narrowPhone&&styles.profileHubScreenNarrow,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Profile" subtitle="Your identity and reading life."/>
 
-      <View style={[styles.profileIdentityHero,styles.profileIdentityHeroRich,{borderBottomColor:p.line}]}>
+      <View style={[styles.profileIdentityHero,styles.profileIdentityHeroRich,narrowPhone&&styles.profileIdentityHeroNarrow,{borderBottomColor:p.line}]}>
         <View style={styles.profileIdentityRing}>
           <DataRing size={112} items={identityRing} ink={p.ink} muted={p.muted} track={p.line} thickness={6} opacity={1}/>
           <View style={[styles.profileIdentityAvatar,styles.profileIdentityAvatarRing,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileIdentityAvatarImage}/>:<Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text>}</View>
@@ -5673,7 +5673,7 @@ function Client() {
       {label:'Remaining',count:Math.max(.001,1-overall.progress),color:darkMode?'#29303A':'#D8CDBA'},
     ];
 
-    return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
+    return <ScrollView contentContainerStyle={[styles.profileHubScreen,phoneLayout&&styles.profileHubScreenPhone,narrowPhone&&styles.profileHubScreenNarrow,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Rewards" subtitle="Build your archive. Keep your reading life moving."/>
 
       <View style={[styles.rewardsLevelHero,{borderTopColor:p.line,borderBottomColor:p.line}]}>
@@ -6143,7 +6143,7 @@ function Client() {
     const Toggle=({value,onPress,label}:{value:boolean;onPress:()=>void;label:string})=><Pressable accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{checked:value}} hitSlop={{top:9,bottom:9,left:0,right:0}} onPress={onPress} style={[styles.settingsToggle,{backgroundColor:value?p.gold:p.line,justifyContent:value?'flex-end':'flex-start'}]}><View style={[styles.settingsToggleKnob,{backgroundColor:darkMode?'#FFFFFF':'#FFFDF9'}]}/></Pressable>;
     const localStorageText=offlineStorage?formatBytes(offlineStorage.actualBytes||offlineStorage.trackedBytes):'Not measured';
     return (
-      <ScrollView contentContainerStyle={[styles.settingsScreen,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
+      <ScrollView contentContainerStyle={[styles.settingsScreen,phoneLayout&&styles.settingsScreenPhone,narrowPhone&&styles.settingsScreenNarrow,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
         <PageHeader title="Settings" subtitle="Your library, privacy, accessibility and server."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
@@ -6589,6 +6589,8 @@ const styles = StyleSheet.create({
   modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:18,gap:9},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {paddingHorizontal:18,paddingTop:8,gap:15,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreenPhone: {paddingHorizontal:16,paddingTop:6,gap:13,paddingBottom:92},
+  playerScreenNarrow: {paddingHorizontal:14,gap:11},
   playerScreenEmpty: {flexGrow:1},
   playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
   livingBookStage: {height:220,width:276,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
@@ -6753,6 +6755,8 @@ const styles = StyleSheet.create({
   celebrationCopy: {color:'#A0A0A0',fontSize:12.5,lineHeight:18,marginTop:3},
   profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
   settingsScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,maxWidth:980,width:'100%',alignSelf:'center'},
+  settingsScreenPhone: {paddingHorizontal:16,paddingTop:8,paddingBottom:112,gap:18},
+  settingsScreenNarrow: {paddingHorizontal:14,gap:16},
   settingsScreenFold: {paddingHorizontal:24,paddingTop:10},
   settingsScreenWide: {paddingHorizontal:28,paddingTop:10},
   settingsTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
@@ -6901,6 +6905,8 @@ const styles = StyleSheet.create({
   atlasInspectorActions: {flexDirection:'row',flexWrap:'wrap',gap:8,paddingTop:2},
 
   atlasScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
+  atlasScreenPhone: {paddingHorizontal:16,paddingTop:8,paddingBottom:112,gap:14},
+  atlasScreenNarrow: {paddingHorizontal:14,gap:12},
   atlasScreenFold: {paddingHorizontal:24,paddingTop:10},
   atlasScreenWide: {paddingHorizontal:28,paddingTop:10},
   atlasTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
@@ -6999,10 +7005,13 @@ const styles = StyleSheet.create({
   profileMenuItemTitle: {fontSize:13,lineHeight:18,fontWeight:'600'},
   profileMenuItemCopy: {fontSize:9.5,lineHeight:13,marginTop:1},
   profileHubScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,width:'100%',maxWidth:980,alignSelf:'center'},
+  profileHubScreenPhone: {paddingHorizontal:16,paddingTop:8,paddingBottom:112,gap:18},
+  profileHubScreenNarrow: {paddingHorizontal:14,gap:16},
   profileHubScreenFold: {paddingHorizontal:24,paddingTop:10},
   profileHubScreenWide: {paddingHorizontal:28,paddingTop:10},
   profileIdentityHero: {flexDirection:'row',alignItems:'center',gap:16,paddingTop:8,paddingBottom:18,borderBottomWidth:StyleSheet.hairlineWidth},
   profileIdentityHeroRich: {alignItems:'center',gap:18},
+  profileIdentityHeroNarrow: {flexDirection:'column',alignItems:'flex-start',gap:12},
   profileIdentityRing: {width:112,height:112,position:'relative',alignItems:'center',justifyContent:'center',flexShrink:0},
   profileIdentityAvatar: {width:82,height:82,borderRadius:41,alignItems:'center',justifyContent:'center'},
   profileIdentityAvatarRing: {position:'absolute',width:78,height:78,borderRadius:39},
@@ -7232,6 +7241,8 @@ const styles = StyleSheet.create({
   ruleInput: {borderWidth:0,borderRadius:9,minHeight:44,paddingHorizontal:10,flexGrow:1,minWidth:92},
   ruleRemove: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   statsScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:18,width:'100%'},
+  statsScreenPhone: {paddingHorizontal:16,paddingTop:8,paddingBottom:112,gap:16},
+  statsScreenNarrow: {paddingHorizontal:14,gap:14},
   statsScreenFold: {paddingHorizontal:24,gap:20},
   statsScreenWide: {paddingHorizontal:28,gap:22},
   statsTopRow: {minHeight:64,flexDirection:'row',alignItems:'center',gap:12},
