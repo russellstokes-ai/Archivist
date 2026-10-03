@@ -129,7 +129,7 @@ function pathTitle(path:ProgressionPathId,level:number){
   return titles[path][bands];
 }
 
-export function levelFromXp(rawXp:number,title=(level:number)=>overallTitle(level)):ProgressionLevel{
+export function levelFromXp(rawXp:number,title:(level:number)=>string=overallTitle):ProgressionLevel{
   const xp=Math.max(0,Math.round(Number.isFinite(rawXp)?rawXp:0));
   let level=1;
   while(level<999&&xp>=progressionFloor(level+1))level++;
