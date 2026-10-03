@@ -204,7 +204,7 @@ assert.ok(source.includes("relation.availability || []"), 'Atlas relationship vi
 
 assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'"), 'Local catalogue cache key is missing');
 assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold start must restore the cached local catalogue');
-assert.ok(source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
+assert.ok(source.includes("setPersistedJSON(localCatalogKey,result.books)") || source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
 assert.ok(source.includes('function LibraryManagementPanel()'), 'Library management workspace is missing');
@@ -223,7 +223,12 @@ assert.ok(source.includes('not a deletion candidate') && source.includes('Kept a
 assert.ok(source.includes('(reviewOnly||!!metadataGapFilter) ? request(session, serverAssetsPath(0,200))'), 'Server raw assets must load only for explicit maintenance views');
 assert.ok(source.includes('<MaintenanceList/>') && source.includes('maintenanceMode=reviewOnly||!!metadataGapFilter'), 'Library maintenance results must use editable raw-file rows');
 assert.ok(source.includes('Rescan device folders') && source.includes('Add device folder'), 'Library scan controls are missing');
-assert.ok(source.includes('Preview matching server items') && source.includes('Apply pending safe moves'), 'Library server organisation controls are missing');
+assert.ok(source.includes("scanPhaseLabel(scanProgress.phase)") && source.includes("scanPhaseStep(scanProgress.phase)") && source.includes('>Library updated</Text>'), 'Scan UI must expose phased progress and a compact rescan result summary');
+assert.ok(source.includes('Library may be out of date') && source.includes('Some files changed while Archivist was organising your library.') && source.includes('label="Rescan"') && source.includes('label="Not now"'), 'Interrupted local organisation must use the approved simple rescan prompt');
+assert.ok(source.includes("setLocalMoveSelection(readyIds)") && source.includes("item.state==='ready'&&selected.has(item.id)") && source.includes('Metadata used · {item.metadataSummary}'), 'Local organisation preview must default-select only Ready items and show current/proposed metadata context');
+assert.ok(source.includes("setServerMoveSelection(result.items.flatMap") && source.includes("const ids=serverMoveSelection.slice()"), 'Server organisation Apply must operate only on the explicit preview selection');
+assert.ok(source.includes("status=item.state==='ready'?'Ready':item.state==='review'?'Review recommended':item.state==='conflict'?'Conflict':'Already organised'"), 'Organisation preview must use user-facing Ready, Review recommended and Conflict states');
+assert.ok(source.includes("label=\"Preview\"") && source.includes("label={'Apply selected'") && source.includes('serverMoveSelection'), 'Library server organisation preview/apply controls are missing');
 assert.ok(source.includes('Archivist never removes duplicate candidates automatically.'), 'Duplicate-management safety copy is missing');
 assert.ok(source.includes('function LocalSortingPanel()'), 'Local organisation controls should live in a dedicated Settings panel');
 assert.match(source,/<LocalSortingPanel\s*\/>/, 'Settings must render the local organisation panel');
