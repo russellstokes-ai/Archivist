@@ -59,10 +59,15 @@ assert.ok(source.includes('function ProfileAvatarButton(') && source.includes('f
 assert.ok(source.includes("const profileAvatarKey = 'archivist.profileAvatar.v1'"), 'Custom avatar persistence is missing');
 assert.ok(source.includes('function PageHeader('), 'Shared standard page header is missing');
 assert.ok(source.includes('styles.globalProfileCorner') && source.includes('<ProfileAvatarButton size={42}/>'), 'A single global top-right avatar must persist across app pages');
+const stateStoreSource = fs.readFileSync('stateStore.ts','utf8');
+assert.ok(stateStoreSource.includes('browserStorageAvailable') && stateStoreSource.includes('writeBrowserValue'), 'Draftbit persistence fallback must avoid unavailable native SecureStore bridges');
+assert.ok(source.includes("backgroundColor:'transparent',borderRightColor:p.line") && source.includes("libraryTwoPane: {flex:1,flexDirection:'row',backgroundColor:'transparent'}"), 'Library wide layout must not paint an opaque margin over the global halo');
+assert.ok(source.includes("errorBanner: {position:'absolute'") && source.includes('globalProfileCorner'), 'Error banners must overlay without moving the persistent profile avatar');
+
 assert.equal(source.includes('function PageHeader({title,subtitle,action}'),false,'PageHeader must not place page actions beside the profile avatar');
 assert.equal(source.includes('action={<Pressable'),false,'Primary page actions must not sit beside the profile avatar');
 assert.ok(source.includes('function PageToolbar('), 'Secondary page controls must move into the standard toolbar below the header');
-assert.ok(source.includes('title="Reader Stats"') && source.includes('<PageToolbar>') && source.includes('Statistics period '), 'Stats period control must sit below the title, away from the avatar');
+assert.ok(source.includes('title="Reader Stats"') && source.includes('statsPeriodIconButton') && source.includes("Change statistics period. Current "), 'Stats period control must remain compact and separate from the avatar');
 assert.ok(source.includes('title="Atlas"') && source.includes("accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'}"), 'Atlas view control must remain available below the title');
 
 for (const title of ['Shelf','Library','Atlas','Reader Stats','Profile','Rewards','Settings']) {
@@ -79,6 +84,7 @@ assert.ok(statsSource.includes('title="Reader Stats"') && statsSource.includes('
 assert.equal(statsSource.includes("['Overview','Time','Books','Genres','Formats','Places']"),false,'Reader Stats should not expose redundant top section filters');
 assert.ok(statsSource.includes('readerStatsRhythmMode') && statsSource.includes("['Time','Day','Month']"), 'Reader Stats rhythm modes are not wired');
 assert.ok(statsSource.includes('cycleStatsPeriod') && statsSource.includes('readerStatsYear'), 'Reader Stats period selector is not functional');
+assert.equal(statsSource.includes('>{periodLabel}</Text>'),false,'Stats should not display a redundant All time label');
 assert.ok(statsSource.includes('statsRhythmDial') && statsSource.includes('statsHeatCell'), 'Reader Stats rhythm ring or heatmap is missing');
 assert.ok(statsSource.includes('Reading Progress') && statsSource.includes('Format Breakdown') && statsSource.includes('Genre Reading Time') && statsSource.includes('Reading Pace') && statsSource.includes('Where You Read') && statsSource.includes('Reading Streaks'), 'Reader Stats content is incomplete');
 assert.ok(source.includes("activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar"), 'Reader Stats must retain the standard bottom navigation');
