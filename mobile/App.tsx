@@ -5122,6 +5122,35 @@ function Client() {
     </ScrollView>;
   }
 
+  async function refreshDuplicateCandidates() {
+    if(!session || !owner)return;
+    setDuplicateLoading(true);setError('');
+    try{
+      const groups=await request(session,'/api/duplicate-candidates') as DuplicateCandidateGroup[];
+      setServerDuplicateGroups(groups);
+      setDuplicateResults({});
+    }catch(e){setError((e as Error).message);}
+    finally{setDuplicateLoading(false);}
+  }
+
+  async function openDuplicateReview() {
+    setDuplicatePanelOpen(true);
+    if(session && owner)await refreshDuplicateCandidates();
+  }
+
+  async function verifyDuplicateGroup(group:DuplicateCandidateGroup) {
+    if(!session || !owner || group.items.length<2)return;
+    setDuplicateLoading(true);setError('');
+    try{
+      const result=await request(
+        session,'/api/duplicate-candidates/verify','POST',
+        {ids:group.items.map(item=>item.id)},300000,
+      ) as DuplicateVerification;
+      setDuplicateResults(current=>({...current,[String(group.size)]:result}));
+    }catch(e){setError((e as Error).message);}
+    finally{setDuplicateLoading(false);}
+  }
+
   function DuplicateReviewPanel() {
     if(!duplicatePanelOpen)return null;
     return (
