@@ -37,7 +37,7 @@ assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
 assert.match(source,/\{id:\s*['"]now['"],\s*label:\s*['"]Now['"]/, 'Center Player/Reader live tab is not wired');
 assert.ok(source.includes('function LiveHub()'), 'Player/Reader live hub is missing');
-assert.ok(source.includes("!current&&styles.playerScreenEmpty") && source.includes("playerScreenEmpty: {flexGrow:1}") && source.includes("playerEmpty: {flex:1"), 'Player empty state must fill and centre like the Reader empty state');
+assert.ok(source.includes('function LiveMediaEmpty(') && source.includes('if(embedded&&!current)return <LiveMediaEmpty mode="player"') && source.includes('if(!reading)return <LiveMediaEmpty mode="reader"') && source.includes("liveMediaEmpty: {flex:1"), 'Embedded Player and Reader empty states must use the identical shared layout');
 assert.ok(source.includes("(['player','reader'] as const)") && source.includes("setLiveMode(mode)"), 'Player/Reader live toggle is not functional');
 assert.ok(source.includes("setActiveTab('now')") && source.includes("setLiveMode('player')") && source.includes("setLiveMode('reader')"), 'Player and Reader launches must route through the live hub');
 assert.ok(source.includes("const lastReadingKey = 'archivist.lastReading.v1'") && source.includes("const lastPlayingKey = 'archivist.lastPlaying.v1'"), 'Recent Player/Reader targets must persist for fast resume');
@@ -69,6 +69,8 @@ assert.ok(source.includes('styles.globalProfileCorner') && source.includes('<Pro
 const stateStoreSource = fs.readFileSync('stateStore.ts','utf8');
 assert.ok(stateStoreSource.includes('browserStorageAvailable') && stateStoreSource.includes('writeBrowserValue'), 'Draftbit persistence fallback must avoid unavailable native SecureStore bridges');
 assert.ok(source.includes("backgroundColor:'transparent',borderRightColor:p.line") && source.includes("libraryTwoPane: {flex:1,flexDirection:'row',backgroundColor:'transparent'}"), 'Library wide layout must not paint an opaque margin over the global halo');
+assert.ok(source.includes("libraryRail: {width:184") && source.includes("libraryRailFold: {width:156") && source.includes("libraryTreeRow: {minHeight:42"), 'Library source rail must remain slim on Fold and wider layouts');
+
 assert.ok(source.includes("errorBanner: {position:'absolute'") && source.includes('globalProfileCorner'), 'Error banners must overlay without moving the persistent profile avatar');
 
 assert.equal(source.includes('function PageHeader({title,subtitle,action}'),false,'PageHeader must not place page actions beside the profile avatar');
