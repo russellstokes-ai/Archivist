@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -86,8 +87,16 @@ func TestHouseholdPermissionsAndProgress(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(),&member)
 	if member.Seconds!=20{t.Fatal("User progress not isolated")}
 
-	a.db.Exec("UPDATE profiles SET revoked=1 WHERE id=?",created.ID)
+	revokeReq:=httptest.NewRequest("DELETE",fmt.Sprintf("/api/profiles/%d",created.ID),nil)
+	revokeReq.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+	revokeReq.Header.Set("X-Archivist-Action","1")
+	revokeRes:=httptest.NewRecorder()
+	a.routes().ServeHTTP(revokeRes,revokeReq)
+	if revokeRes.Code!=200{t.Fatalf("revoke user=%d %s",revokeRes.Code,revokeRes.Body.String())}
 	if w:=call("GET","/api/assets/2","");w.Code!=401{t.Fatalf("revoked User accepted: %d",w.Code)}
+	var sessionRows int
+	if err:=a.db.QueryRow("SELECT count(*) FROM sessions WHERE profile_id=?",created.ID).Scan(&sessionRows);err!=nil{t.Fatal(err)}
+	if sessionRows!=0{t.Fatalf("revocation left %d stale session row(s)",sessionRows)}
 }
 
 func TestLegacyProgressMigration(t *testing.T) {
