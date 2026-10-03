@@ -44,6 +44,7 @@ import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRul
 import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
+import {shelfRecommendations} from './shelfRecommendations';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -3058,6 +3059,13 @@ function Client() {
     const base:UnifiedWork[]=allUnifiedWorks;
     const continuing=base.filter(work=>work.readingState==='in-progress').slice(0,12);
     const favourites=base.filter(work=>work.favourite).slice(0,12);
+    const recommendationLimit=foldLayout?5:3;
+    const recommendations=shelfRecommendations(base,recommendationLimit);
+    const recommendationRows=[
+      {id:'books',title:'Books for you',result:recommendations.books,icon:'bookOpen' as UiIconName},
+      {id:'comics',title:'Comics for you',result:recommendations.comics,icon:'layers' as UiIconName},
+      {id:'audio',title:'Audiobooks for you',result:recommendations.audio,icon:'play' as UiIconName},
+    ];
     const primaryContinue=continuing[0];
     const hour=new Date().getHours();
     const shelfGreeting=hour<12?'Good morning.':hour<18?'Good afternoon.':'Good evening.';
@@ -3233,6 +3241,17 @@ function Client() {
       <OnboardingGuide/>
 
       {shelfSections.find(item=>item.id==='continue')?section(shelfSections.find(item=>item.id==='continue') as ShelfSectionPref):null}
+
+      {recommendationRows.map(row=>row.result.works.length?<View key={row.id} style={styles.shelfRecommendationSection}>
+        <View style={styles.shelfRecommendationHeader}>
+          <View style={[styles.shelfRecommendationIcon,{backgroundColor:p.card}]}><UiIcon name={row.icon} color={p.gold} size={17}/></View>
+          <View style={{flex:1,minWidth:0}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{row.title}</Text>
+            <Text numberOfLines={1} style={[styles.shelfSectionHint,{color:p.muted}]}>{row.result.personalised?'Based on your reading, ratings and favourites.':'From your collection while Archivist learns your taste.'}</Text>
+          </View>
+        </View>
+        {renderWorks(row.result.works)}
+      </View>:null)}
 
       {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{clearLibraryFilters();setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.reviewBannerCopy}>
@@ -5511,6 +5530,9 @@ const styles = StyleSheet.create({
   reviewBannerAction: {fontSize:12.5,lineHeight:18,fontWeight:'600'},
   shelfSection: {gap:10},
   shelfSectionHint: {fontSize:10.5,lineHeight:15,marginTop:2},
+  shelfRecommendationSection: {gap:9},
+  shelfRecommendationHeader: {minHeight:42,flexDirection:'row',alignItems:'center',gap:10},
+  shelfRecommendationIcon: {width:36,height:36,borderRadius:18,alignItems:'center',justifyContent:'center',flexShrink:0},
   continueRow: {gap:12,paddingRight:6},
   continueCard: {width:132,gap:6},
   continueTitle: {fontSize:14,fontWeight:'800'},
