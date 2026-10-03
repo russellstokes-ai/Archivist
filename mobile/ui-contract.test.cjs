@@ -202,6 +202,15 @@ assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold st
 assert.ok(source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
+assert.ok(source.includes('function LibraryManagementPanel()'), 'Library management workspace is missing');
+assert.ok(source.includes('Manage Library') && source.includes('SCAN & REPAIR') && source.includes('ADVANCED ORGANISATION'), 'Library management hierarchy is incomplete');
+assert.ok(source.includes("const [metadataGapFilter,setMetadataGapFilter]=useState<MetadataGapFilter>('')"), 'Library metadata-gap state is missing');
+assert.ok(source.includes('METADATA GAPS') && source.includes('Missing author') && source.includes('Missing series') && source.includes('Missing genre'), 'Library blank-field filters are missing');
+assert.ok(source.includes('(reviewOnly||!!metadataGapFilter) ? request(session, serverAssetsPath(0,200))'), 'Server raw assets must load only for explicit maintenance views');
+assert.ok(source.includes('<MaintenanceList/>') && source.includes('maintenanceMode=reviewOnly||!!metadataGapFilter'), 'Library maintenance results must use editable raw-file rows');
+assert.ok(source.includes('Rescan device folders') && source.includes('Add device folder'), 'Library scan controls are missing');
+assert.ok(source.includes('Preview matching server items') && source.includes('Apply pending safe moves'), 'Library server organisation controls are missing');
+assert.ok(source.includes('Archivist never removes duplicate candidates automatically.'), 'Duplicate-management safety copy is missing');
 assert.ok(source.includes('function LocalSortingPanel()'), 'Local organisation controls should live in a dedicated Settings panel');
 assert.match(source,/<LocalSortingPanel\s*\/>/, 'Settings must render the local organisation panel');
 const shelfStart=source.indexOf('function Shelf()');
