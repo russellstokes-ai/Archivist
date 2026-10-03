@@ -2137,9 +2137,19 @@ function Client() {
     setError('');
     setMoveStatus('Copying organised files...');
     try {
-      const result = await applyLocalSortCopies(ready);
-      const entry: LocalSortHistory = {id: String(Date.now()), createdAt: new Date().toISOString(), copied: result.copied, failed: result.failed};
-      const history = [entry, ...localSortHistory].slice(0, 20);
+      const transactionId = String(Date.now());
+      const started: LocalSortHistory = {id: transactionId, createdAt: new Date().toISOString(), copied: [], failed: []};
+      let history = [started, ...localSortHistory].slice(0, 20);
+      setLocalSortHistory(history);
+      await setPersistedJSON(localSortHistoryKey, history);
+      const checkpoint = async (partial: {copied: LocalSortHistory['copied']; failed: LocalSortHistory['failed']}) => {
+        history = history.map(item => item.id === transactionId ? {...item, copied: partial.copied, failed: partial.failed} : item);
+        setLocalSortHistory(history);
+        await setPersistedJSON(localSortHistoryKey, history);
+      };
+      const result = await applyLocalSortCopies(ready, checkpoint);
+      const entry: LocalSortHistory = {id: transactionId, createdAt: started.createdAt, copied: result.copied, failed: result.failed};
+      history = history.map(item => item.id === transactionId ? entry : item);
       setLocalSortHistory(history);
       await setPersistedJSON(localSortHistoryKey, history);
       setMoveStatus(`${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
