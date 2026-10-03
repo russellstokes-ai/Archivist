@@ -287,7 +287,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
 
 function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
   const k=size/20;
@@ -368,6 +368,42 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   </View>;
   if(name==='queue')return <View style={{width:size,height:size,position:'relative'}}>
     {[.18,.46,.74].map((top,index)=><React.Fragment key={index}><View style={{position:'absolute',left:size*.08,top:size*top,width:size*.50,height:Math.max(1,stroke*.55),backgroundColor:color,borderRadius:2}}/><View style={{position:'absolute',right:size*.08,top:size*(top-.09),width:size*.18,height:size*.18,borderRadius:size*.09,borderWidth:Math.max(1,stroke*.55),borderColor:color}}/></React.Fragment>)}
+  </View>;
+  if(name==='bookOpen')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.10,top:size*.18,width:size*.36,height:size*.62,borderWidth:Math.max(1,stroke*.55),borderColor:color,borderTopLeftRadius:5,borderBottomLeftRadius:5,borderTopRightRadius:2,borderBottomRightRadius:2}}/>
+    <View style={{position:'absolute',right:size*.10,top:size*.18,width:size*.36,height:size*.62,borderWidth:Math.max(1,stroke*.55),borderColor:color,borderTopRightRadius:5,borderBottomRightRadius:5,borderTopLeftRadius:2,borderBottomLeftRadius:2}}/>
+    <View style={{position:'absolute',left:size*.49,top:size*.22,bottom:size*.16,width:Math.max(1,stroke*.55),backgroundColor:color,opacity:.85}}/>
+  </View>;
+  if(name==='clock')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.72,height:size*.72,borderRadius:size*.36,borderWidth:Math.max(1,stroke*.6),borderColor:color}}/>
+    <View style={{position:'absolute',width:Math.max(1,stroke*.75),height:size*.20,backgroundColor:color,top:size*.28,borderRadius:2}}/>
+    <View style={{position:'absolute',width:size*.18,height:Math.max(1,stroke*.75),backgroundColor:color,left:size*.49,top:size*.47,borderRadius:2,transform:[{rotate:'24deg'}]}}/>
+  </View>;
+  if(name==='calendar')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.72,height:size*.66,borderRadius:4,borderWidth:Math.max(1,stroke*.58),borderColor:color,marginTop:size*.08}}/>
+    <View style={{position:'absolute',left:size*.22,right:size*.22,top:size*.37,height:Math.max(1,stroke*.5),backgroundColor:color}}/>
+    <View style={{position:'absolute',left:size*.30,top:size*.12,width:Math.max(1,stroke*.7),height:size*.18,borderRadius:2,backgroundColor:color}}/>
+    <View style={{position:'absolute',right:size*.30,top:size*.12,width:Math.max(1,stroke*.7),height:size*.18,borderRadius:2,backgroundColor:color}}/>
+  </View>;
+  if(name==='flame')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.52,height:size*.68,borderRadius:size*.28,borderWidth:Math.max(1,stroke*.6),borderColor:color,transform:[{rotate:'8deg'}]}}/>
+    <View style={{position:'absolute',top:size*.06,width:size*.18,height:size*.34,borderLeftWidth:Math.max(1,stroke*.6),borderLeftColor:color,transform:[{rotate:'24deg'}]}}/>
+  </View>;
+  if(name==='target')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.76,height:size*.76,borderRadius:size*.38,borderWidth:Math.max(1,stroke*.52),borderColor:color}}/>
+    <View style={{position:'absolute',width:size*.44,height:size*.44,borderRadius:size*.22,borderWidth:Math.max(1,stroke*.52),borderColor:color}}/>
+    <View style={{position:'absolute',width:size*.14,height:size*.14,borderRadius:size*.07,backgroundColor:color}}/>
+  </View>;
+  if(name==='layers')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    {[0,1,2].map(index=><View key={index} style={{position:'absolute',width:size*.58,height:size*.32,borderWidth:Math.max(1,stroke*.52),borderColor:color,transform:[{rotate:'45deg'},{translateY:(index-1)*size*.16}]}}/>)}
+  </View>;
+  if(name==='gauge')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.76,height:size*.38,borderTopLeftRadius:size*.38,borderTopRightRadius:size*.38,borderWidth:Math.max(1,stroke*.58),borderBottomWidth:0,borderColor:color,marginTop:size*.22}}/>
+    <View style={{position:'absolute',width:size*.30,height:Math.max(1,stroke*.75),backgroundColor:color,left:size*.48,top:size*.48,borderRadius:2,transform:[{rotate:'-48deg'}]}}/>
+  </View>;
+  if(name==='pin')return <View style={{width:size,height:size,position:'relative',alignItems:'center'}}>
+    <View style={{width:size*.54,height:size*.68,borderTopLeftRadius:size*.27,borderTopRightRadius:size*.27,borderBottomLeftRadius:size*.28,borderBottomRightRadius:size*.28,borderWidth:Math.max(1,stroke*.58),borderColor:color,transform:[{rotate:'45deg'}],marginTop:size*.08}}/>
+    <View style={{position:'absolute',top:size*.25,width:size*.16,height:size*.16,borderRadius:size*.08,borderWidth:Math.max(1,stroke*.5),borderColor:color}}/>
   </View>;
   if(name==='search')return <View style={{width:size,height:size,position:'relative'}}>
     <View style={{position:'absolute',left:size*.08,top:size*.06,width:size*.62,height:size*.62,borderWidth:Math.max(1,stroke*.6),borderColor:color,borderRadius:size*.31}}/>
@@ -476,7 +512,7 @@ function Client() {
   const [serverActivity,setServerActivity]=useState<ProfileActivity[]>([]);
   const [insightGoal,setInsightGoal]=useState(defaultInsightGoal);
   const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
-  const [readerStatsSection,setReaderStatsSection]=useState<'Overview'|'Time'|'Books'|'Genres'|'Formats'>('Overview');
+  const [readerStatsSection,setReaderStatsSection]=useState<'Overview'|'Time'|'Books'|'Genres'|'Formats'|'Places'>('Overview');
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
   const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'>('Genre');
@@ -3735,10 +3771,10 @@ function Client() {
     const minutesRead=Math.round(totalActivitySeconds/60);
     const activeDays=Math.max(summary.activeDays,ritual.activeDays);
     const metricCards=[
-      {label:'Books read',value:completed,icon:'library' as UiIconName},
-      {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'insights' as UiIconName},
-      {label:'Reading days',value:activeDays,icon:'bookmark' as UiIconName},
-      {label:'Day streak',value:ritual.currentStreak,icon:'moon' as UiIconName},
+      {label:'Books read',value:completed,icon:'bookOpen' as UiIconName},
+      {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'clock' as UiIconName},
+      {label:'Reading days',value:activeDays,icon:'calendar' as UiIconName},
+      {label:'Day streak',value:ritual.currentStreak,icon:'flame' as UiIconName},
     ];
 
     const hourTotals=Array.from({length:24},()=>0);
@@ -3801,12 +3837,12 @@ function Client() {
         <Text style={[styles.statsCardTitle,{color:statsPalette.ink}]}>{title}</Text>
         <Text style={[styles.statsCardSubtitle,{color:statsPalette.muted}]}>{subtitle}</Text>
       </View>
-      <UiIcon name="chevronDown" color={statsPalette.muted} size={16}/>
+      <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={statsPalette.muted} size={16}/></View>
     </View>;
 
     const rhythmCard=<View style={[styles.statsHeroCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
       <View style={styles.statsRhythmTop}>
-        <CardHeader title="Reading Rhythm" subtitle="When and how you read" icon="search"/>
+        <CardHeader title="Reading Rhythm" subtitle="When and how you read" icon="clock"/>
         <View style={[styles.statsMiniSegment,{borderColor:statsPalette.line,backgroundColor:statsPalette.canvas}]}>
           {['Time','Day','Month'].map((label,index)=><View key={label} style={[styles.statsMiniSegmentItem,index===0&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panelRaised}]}>
             <Text style={{color:index===0?statsPalette.ink:statsPalette.muted,fontSize:10.5,fontWeight:index===0?'600':'500'}}>{label}</Text>
@@ -3886,7 +3922,7 @@ function Client() {
     </View>;
 
     const readingProgressCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
-      <CardHeader title="Reading Progress" subtitle="Annual reading goal" icon="bookmark"/>
+      <CardHeader title="Reading Progress" subtitle="Annual reading goal" icon="target"/>
       <View style={styles.statsCardBody}>
         <DataRing size={116} value={String(completed)} label={'of '+completedGoal+' books'} items={[{label:'Read',count:completed,color:statsPalette.gold},{label:'Remaining',count:progressRemaining,color:statsPalette.blueDeep}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
         <View style={styles.statsCardSide}>
@@ -3899,7 +3935,7 @@ function Client() {
     </View>;
 
     const formatCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
-      <CardHeader title="Format Breakdown" subtitle="How you read" icon="library"/>
+      <CardHeader title="Format Breakdown" subtitle="How you read" icon="bookOpen"/>
       <View style={styles.statsCardBody}>
         <DataRing size={116} value={String(stats?.works||formatsTotal)} label="books" items={formatItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
         {formatItems.length?<Legend items={formatItems} total={formatsTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Add format metadata to reveal your mix.</Text>}
@@ -3907,7 +3943,7 @@ function Client() {
     </View>;
 
     const genreCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
-      <CardHeader title="Genre Reading Time" subtitle="Time spent in each genre" icon="atlas"/>
+      <CardHeader title="Genre Reading Time" subtitle="Time spent in each genre" icon="layers"/>
       <View style={styles.statsCardBody}>
         <DataRing size={116} value={genreTimeItems.length?minutesRead.toLocaleString():String(genreTotal)} label={genreTimeItems.length?'minutes':'books'} items={genreItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
         {genreItems.length?<Legend items={genreItems} total={genreTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Genre activity will appear as you read.</Text>}
@@ -3915,7 +3951,7 @@ function Client() {
     </View>;
 
     const paceCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
-      <CardHeader title="Reading Pace" subtitle="Your reading speed" icon="insights"/>
+      <CardHeader title="Reading Pace" subtitle="Your reading speed" icon="gauge"/>
       <View style={styles.statsCardBody}>
         <DataRing size={116} value="—" label="wpm" items={[{label:'Pace',count:1,color:statsPalette.gold},{label:'Track',count:1,color:statsPalette.blue}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
         <View style={styles.statsCardSide}>
@@ -3926,7 +3962,7 @@ function Client() {
     </View>;
 
     const placesCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
-      <CardHeader title="Where You Read" subtitle="Your favourite reading spots" icon="search"/>
+      <CardHeader title="Where You Read" subtitle="Your favourite reading spots" icon="pin"/>
       <View style={styles.statsCardBody}>
         <DataRing size={116} value="Private" label="places" items={[{label:'Private',count:1,color:statsPalette.goldSoft},{label:'Untracked',count:1,color:statsPalette.blueDeep}]} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={12}/>
         <View style={styles.statsCardSide}><Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Location is not collected. Place tracking remains private and opt-in.</Text></View>
@@ -3934,7 +3970,7 @@ function Client() {
     </View>;
 
     const streakCard=<View style={[styles.statsDashboardCard,{backgroundColor:statsPalette.panel,borderColor:statsPalette.line}]}>
-      <CardHeader title="Reading Streaks" subtitle="Your consistency" icon="moon"/>
+      <CardHeader title="Reading Streaks" subtitle="Your consistency" icon="flame"/>
       <View style={styles.statsStreakTop}>
         <View style={{flex:1}}><Text style={[styles.statsStreakValue,{color:statsPalette.ink}]}>{ritual.currentStreak} days</Text><Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Current streak</Text></View>
         <View style={[styles.statsVerticalRule,{backgroundColor:statsPalette.goldSoft}]}/>
@@ -3968,7 +4004,7 @@ function Client() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.statsTabs}>
         {statTabs.map(tab=>{
           const selected=selectedReaderStatsSection===tab;
-          return <Pressable key={tab} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>tab==='Places'?undefined:setReaderStatsSection(tab as any)} style={[styles.statsTab,selected&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panel}]}>
+          return <Pressable key={tab} accessibilityRole="tab" accessibilityState={{selected}} onPress={()=>setReaderStatsSection(tab)} style={[styles.statsTab,selected&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panel}]}>
             <Text style={[styles.statsTabText,{color:selected?statsPalette.ink:statsPalette.muted}]}>{tab}</Text>
           </Pressable>;
         })}
@@ -3990,6 +4026,7 @@ function Client() {
       {readerStatsSection==='Books'?<View style={styles.statsCardsGrid}>{readingProgressCard}{paceCard}{streakCard}</View>:null}
       {readerStatsSection==='Genres'?<View style={styles.statsCardsGrid}>{genreCard}</View>:null}
       {readerStatsSection==='Formats'?<View style={styles.statsCardsGrid}>{formatCard}</View>:null}
+      {readerStatsSection==='Places'?<View style={styles.statsCardsGrid}>{placesCard}</View>:null}
 
       {profileLoading&&session?<ActivityIndicator accessibilityLabel="Loading reader statistics" color={statsPalette.gold}/>:null}
     </ScrollView>;
@@ -4376,7 +4413,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
+      {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
