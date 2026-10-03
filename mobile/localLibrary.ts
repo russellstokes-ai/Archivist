@@ -3,6 +3,7 @@ import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file
 import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
+import {extractAudioMetadata} from './audioMetadata';
 
 export type LocalBook = {
   id: number;
@@ -274,7 +275,9 @@ export async function scanLocalFolders(
           && modificationTime !== undefined && previous.modificationTime === modificationTime;
         const embeddedFields = unchanged && previous?.embeddedMetadata
           ? previous.embeddedMetadata
-          : await extractEmbeddedMetadata(child, ext, fileInfo || undefined);
+          : format === 'Audio'
+            ? await extractAudioMetadata(child, ext, fileInfo || undefined)
+            : await extractEmbeddedMetadata(child, ext, fileInfo || undefined);
         if (Object.keys(embeddedFields).length) {
           evidence.push({source:'embedded' as const, confidence:'high' as const, fields:embeddedFields});
           identity = applyLocalMetadata(identity, embeddedFields, 'embedded');
