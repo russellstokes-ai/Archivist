@@ -95,6 +95,11 @@ async function persistPickedProfilePhoto(uri:string,fileName?:string|null) {
 
 const appVersion=Constants.expoConfig?.version||'0.9.3';
 const platformLabel=Platform.OS==='ios'?'iOS':Platform.OS==='android'?'Android':'Web';
+function audioStatusError(status:unknown){
+  if(!status||typeof status!=='object'||!('error' in status))return undefined;
+  const value=(status as {error?:unknown}).error;
+  return typeof value==='string'&&value.trim()?value:undefined;
+}
 const nativeSplashEnabled=Platform.OS==='android'||Platform.OS==='ios';
 if(nativeSplashEnabled){
   void SplashScreen.preventAutoHideAsync().catch(()=>undefined);
@@ -855,7 +860,8 @@ function Client() {
         };
         const timeout = setTimeout(() => finish(Error('Audio loading timed out. Check server connectivity and format support.')), 30000);
         const listener = player.addListener('playbackStatusUpdate', status => {
-          if (status.error) { finish(Error(status.error)); return; }
+          const statusError=audioStatusError(status);
+          if (statusError) { finish(Error(statusError)); return; }
           if (!status.isLoaded || seeking || done) return;
           seeking = true;
           void player.seekTo(Math.min(seconds, status.duration || seconds)).then(() => finish(), e => finish(e));
@@ -1278,7 +1284,7 @@ function Client() {
 
 
   useEffect(() => {
-    const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,s.error));
+    const subscription = player.addListener('playbackStatusUpdate', s => controller.update(s.currentTime,s.duration,s.playing,s.didJustFinish,audioStatusError(s)));
     const lifecycle = AppState.addEventListener('change', state => {
       setAppActive(state==='active');
       controller.tick();
@@ -2157,7 +2163,8 @@ function Client() {
       };
       const timeout = setTimeout(() => finish(Error('Audio loading timed out.')), 30000);
       const listener = player.addListener('playbackStatusUpdate', status => {
-        if (status.error) { finish(Error(status.error)); return; }
+        const statusError=audioStatusError(status);
+          if (statusError) { finish(Error(statusError)); return; }
         if (!status.isLoaded || seeking || done) return;
         seeking = true;
         void player.seekTo(Math.min(Math.max(0, seconds), status.duration || Math.max(0, seconds))).then(() => finish(), e => finish(e));
