@@ -37,6 +37,7 @@ export type LocalBook = {
   coverShape?: 'portrait' | 'square';
   metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual';
   coverUri?: string;
+  coverCandidates?: string[];
 };
 
 export type LocalSortPreview = {
@@ -301,7 +302,15 @@ export async function scanLocalFolders(
         }
         const resolvedMetadata = resolveMetadataCandidates(evidence);
 
-        const discoveredCoverUri = artworkByStem.get(fileStem(child).toLowerCase()) || genericCover || undefined;
+        const coverCandidates = [
+          artworkByStem.get(fileStem(child).toLowerCase()),
+          artworkByStem.get('cover'),
+          artworkByStem.get('front'),
+          artworkByStem.get('folder'),
+          artworkByStem.get('coverart'),
+        ].filter((value,index,all): value is string => !!value && all.indexOf(value)===index);
+        const discoveredCoverUri = coverCandidates[0] || genericCover || undefined;
+        if(genericCover && !coverCandidates.includes(genericCover))coverCandidates.push(genericCover);
         const coverUri = override?.coverUri?.trim() || discoveredCoverUri;
         if (identity.needsReview) review += 1;
         books.push({
@@ -336,6 +345,7 @@ export async function scanLocalFolders(
           coverShape: identity.coverShape,
           metadataSource: identity.metadataSource,
           coverUri,
+          coverCandidates,
         });
         if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
       } else {
