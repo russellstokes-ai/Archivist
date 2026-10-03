@@ -4,6 +4,15 @@
 **Method:** screen-by-screen, small commits, preserve existing React Native/Expo architecture.  
 **Reference:** Apple Human Interface Guidelines used as a craft/accessibility baseline; Android conventions remain authoritative for Android-specific behavior.
 
+## Standing development workflow
+
+- Draftbit is the primary interactive development and review environment for Archivist app work.
+- GitHub is the source of truth for committed code.
+- Draftbit target: repository `russellstokes-ai/Archivist`, branch `design/hig-refresh`, app folder `mobile`.
+- App changes are made in small commits, then reviewed with **Sync → Preview** in Draftbit.
+- Keep the existing React Native/Expo architecture and native integrations intact.
+- Use the connected-repository workflow rather than creating a second imported copy.
+
 ## Status
 
 | Stage | Area | Status | Commit |
