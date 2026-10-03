@@ -868,7 +868,7 @@ function Client() {
 
   const sourceCounts = useMemo(() => ({
     all: dedupeForAll(sourceWorks).length,
-    local: sourceWorks.filter(item=>item.source==='local').length,
+    local: sourceWorks.filter(item=>matchesSource(item.source,'local')).length,
     server: sourceWorks.filter(item=>item.source==='server').length,
     downloaded: sourceWorks.filter(item=>item.source==='downloaded').length,
   }),[sourceWorks]);
@@ -937,7 +937,7 @@ function Client() {
     };
   }
   const allUnifiedWorks=useMemo(()=>dedupeForAll(sourceWorks),[sourceWorks]);
-  const localProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>work.source==='local'),'On this device'),[sourceWorks]);
+  const localProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>matchesSource(work.source,'local')),'On this device'),[sourceWorks]);
   const downloadedProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>work.source==='downloaded'),'Downloaded'),[sourceWorks]);
   const combinedProfileStats=useMemo(()=>statsFromUnified(allUnifiedWorks,'All libraries'),[allUnifiedWorks]);
   const profileStats = sourceFilter==='server' && session ? serverProfileStats
