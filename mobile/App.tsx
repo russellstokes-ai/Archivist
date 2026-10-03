@@ -3999,6 +3999,162 @@ function Client() {
     return <Insights/>;
   }
 
+  async function refreshDuplicateCandidates() {
+    if(!session || !owner)return;
+    setDuplicateLoading(true);setError('');
+    try{
+      const groups=await request(session,'/api/duplicate-candidates') as DuplicateCandidateGroup[];
+      setServerDuplicateGroups(groups);
+      setDuplicateResults({});
+    }catch(e){setError((e as Error).message);}
+    finally{setDuplicateLoading(false);}
+  }
+
+  async function openDuplicateReview() {
+    setDuplicatePanelOpen(true);
+    if(session && owner)await refreshDuplicateCandidates();
+  }
+
+  async function verifyDuplicateGroup(group:DuplicateCandidateGroup) {
+    if(!session || !owner || group.items.length<2)return;
+    setDuplicateLoading(true);setError('');
+    try{
+      const result=await request(
+        session,'/api/duplicate-candidates/verify','POST',
+        {ids:group.items.map(item=>item.id)},300000,
+      ) as DuplicateVerification;
+      setDuplicateResults(current=>({...current,[String(group.size)]:result}));
+    }catch(e){setError((e as Error).message);}
+    finally{setDuplicateLoading(false);}
+  }
+
+  function DuplicateReviewPanel() {
+    if(!duplicatePanelOpen)return null;
+    return (
+      <View style={[styles.duplicatePanel,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <View style={styles.queueHeader}>
+          <View style={{flex:1}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Duplicate review</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>
+              {session
+                ? 'Candidates share the same byte size. Verification reads each file and compares SHA-256; nothing is changed or deleted.'
+                : 'Local candidates share the same normalized title, author, series and format. They are possible duplicates, not byte-verified.'}
+            </Text>
+          </View>
+          <Button label="Close" tone="quiet" onPress={()=>setDuplicatePanelOpen(false)} />
+        </View>
+        {duplicateLoading?<ActivityIndicator accessibilityLabel="Checking duplicate files" />:null}
+        {session ? <>
+          <Button label="Refresh candidates" tone="quiet" disabled={duplicateLoading} onPress={()=>void refreshDuplicateCandidates()} />
+          {!serverDuplicateGroups.length && !duplicateLoading?<Text style={[styles.empty,{color:p.muted}]}>No same-size duplicate candidates found.</Text>:null}
+          {serverDuplicateGroups.map(group=>{
+            const result=duplicateResults[String(group.size)];
+            return <View key={group.size} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+              <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items.length} candidates · {formatBytes(group.size)}</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+              {group.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.title} — {item.path}</Text>)}
+              {!result?<Button label="Verify exact duplicates" tone="quiet" disabled={duplicateLoading} onPress={()=>void verifyDuplicateGroup(group)} />:null}
+              {result?<>
+                <Text style={[styles.meta,{color:p.sage,fontWeight:'700'}]}>{result.exact.reduce((n,set)=>n+set.items.length,0)} files confirmed in exact duplicate sets</Text>
+                {result.exact.map(set=><View key={set.sha256} style={[styles.duplicateExact,{borderColor:p.sage}]}>
+                  <Text style={[styles.meta,{color:p.ink,fontWeight:'800'}]}>Exact SHA-256 match · {set.items.length} files</Text>
+                  {set.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.muted}]}>• {item.path}</Text>)}
+                </View>)}
+                {result.unique.length?<Text style={[styles.meta,{color:p.muted}]}>{result.unique.length} candidate file{result.unique.length===1?'':'s'} proved unique.</Text>:null}
+                {result.errors.map(item=><Text key={'err-'+item.id} style={[styles.meta,{color:p.danger}]}>File {item.id}: {item.error}</Text>)}
+              </>:null}
+            </View>;
+          })}
+        </> : <>
+          {!localDuplicateGroups.length?<Text style={[styles.empty,{color:p.muted}]}>No metadata-match duplicate candidates found.</Text>:null}
+          {localDuplicateGroups.map(group=><View key={group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items[0].title} · {group.items.length} possible copies</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+            {group.items.map(item=><Text key={item.uri} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.uri}</Text>)}
+          </View>)}
+        </>}
+      </View>
+    );
+  }
+
+  function LocalSortingPanel() {
+    if(!localBooks.length)return null;
+    return (
+      <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist copies into the organised layout and leaves originals untouched until you choose to clean up the copy history.</Text>
+        <View style={styles.segment}>
+          {[
+            ['author-title','Author / Title'],
+            ['author-series-title','Author / Series / Title'],
+            ['format-author-title','Format / Author / Title'],
+          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
+        </View>
+        <Button label="Preview visible local items" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+        <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
+        {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+        {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
+          <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
+          <Text style={{color:p.muted}}>From: {item.from}</Text>
+          <Text style={{color:item.state==='conflict'?p.danger:item.state==='review'?p.sage:p.muted}}>To: {item.to}</Text>
+          <Text style={{color:item.state==='review'?p.sage:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
+        </View>)}
+        {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text>:null}
+        {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
+        {localSortHistory.slice(0,3).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
+          <Text style={{color:p.ink,fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
+          <Text style={{color:p.muted}}>{item.copied.length} copied; {item.failed.length} failed</Text>
+          <Button label="Remove copied files" disabled={busy || item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)} />
+        </View>)}
+      </View>
+    );
+  }
+
+  function OfflineDownloadsPanel(){
+    const completed=Object.values(offlineWorks).sort((a,b)=>b.downloadedAt.localeCompare(a.downloadedAt));
+    const partial=Object.values(offlineCheckpoints).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+    const used=offlineStorage?.actualBytes ?? completed.reduce((sum,item)=>sum+Math.max(0,item.bytes||0),0);
+    const capacity=offlineStorage?.capacityBytes || 0;
+    const free=offlineStorage?.freeBytes || 0;
+    return <View style={{gap:10}}>
+      <Text style={[styles.sectionTitle,{color:p.ink}]}>Offline downloads</Text>
+      <View style={[styles.offlineSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <View style={{flex:1}}>
+          <Text style={{color:p.ink,fontWeight:'900'}}>{completed.length} downloaded · {formatBytes(used)}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>
+            {capacity>0 ? formatBytes(free)+' free of '+formatBytes(capacity) : 'Stored in Archivist app storage'}
+          </Text>
+          {partial.length?<Text style={[styles.meta,{color:p.sage}]}>{partial.length} paused or interrupted download{partial.length===1?'':'s'} · {formatBytes(offlineStorage?.partialBytes||0)} partial data</Text>:null}
+          {offlineStorage?.missingFiles?<Text style={[styles.meta,{color:p.danger}]}>{offlineStorage.missingFiles} missing downloaded file{offlineStorage.missingFiles===1?'':'s'} detected</Text>:null}
+        </View>
+      </View>
+      <View style={styles.toolRow}>
+        <Button label={offlineStorageBusy?'Checking…':'Refresh storage'} disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void refreshOfflineStorage()} />
+        <Button label="Clean up storage" disabled={offlineStorageBusy||offlineBusyId!==null} tone="quiet" onPress={()=>void cleanupDownloads()} />
+      </View>
+      {offlineProgress?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{offlineProgress}</Text>:null}
+      {partial.map(checkpoint=>{
+        const connectedWork=session && checkpoint.server===session.server ? serverWorks.find(work=>work.id===checkpoint.workId) : undefined;
+        return <View key={'partial-'+checkpoint.key} style={[styles.sourceRow,{borderColor:p.line}]}>
+          <Text style={{color:p.ink,fontWeight:'800'}}>{checkpoint.title || 'Incomplete download'}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>Paused/incomplete · {checkpoint.completedTrackIds.length} file{checkpoint.completedTrackIds.length===1?'':'s'} complete</Text>
+          <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{checkpoint.server}</Text>
+          <View style={styles.toolRow}>
+            {connectedWork?<Button label="Resume" disabled={offlineBusyId!==null} onPress={()=>void downloadServerWork(connectedWork)} />:null}
+            <Button label="Discard partial" disabled={offlineBusyId!==null||offlineStorageBusy} tone="quiet" onPress={()=>void discardPartialDownload(checkpoint)} />
+          </View>
+        </View>;
+      })}
+      {completed.map(item=><View key={'offline-'+item.key} style={[styles.sourceRow,{borderColor:p.line}]}>
+        <Text style={{color:p.ink,fontWeight:'800'}}>{item.title}</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {formatBytes(item.bytes)} · {new Date(item.downloadedAt).toLocaleDateString()}</Text>
+        <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{item.server}</Text>
+        <Button label="Remove download" disabled={offlineBusyId!==null} tone="quiet" onPress={()=>void removeServerDownload(item)} />
+      </View>)}
+      {!completed.length&&!partial.length?<Text style={[styles.meta,{color:p.muted}]}>Nothing stored offline yet. Use Download for offline on any server work.</Text>:null}
+    </View>;
+  }
+
   function Settings() {
     const connected=!!session;
     return (
