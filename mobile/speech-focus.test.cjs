@@ -1,6 +1,7 @@
-const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
-require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,lib:['es2022','dom']}}).outputText,file);
-const {detectBubbleRegion,speechFocusBrowserSource}=require('./speechFocus.ts');
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {stripTypeScriptTypes}=require('node:module');
+const source=stripTypeScriptTypes(fs.readFileSync(__dirname+'/speechFocus.ts','utf8')).replaceAll('export function','function');
+const {detectBubbleRegion,speechFocusBrowserSource}=vm.runInNewContext(source+';({detectBubbleRegion,speechFocusBrowserSource})');
 
 function image(width,height,r=70,g=70,b=70){
   const data=new Uint8ClampedArray(width*height*4);
@@ -118,10 +119,134 @@ for(const item of corpus){
 }
 
 const browser=speechFocusBrowserSource();
+// Concave silhouette with two spans on the same scanline. The former
+// envelope filled the entire notch, lifting unrelated artwork with it.
+{
+  const w=180,h=150,data=image(w,h,45,45,45);
+  for(let y=25;y<=105;y++)for(let x=30;x<=110;x++){
+    if(x<=48||x>=92||y>=88)pixel(data,w,x,y,245,245,245);
+  }
+  // Enclosed lettering on both arms must survive as original opaque pixels.
+  textBlock(data,w,35,45,42,62,15);
+  textBlock(data,w,98,48,104,65,15);
+  const r=detectBubbleRegion(data,w,h,39,75);
+  assertBounded(r,w,h,'concave bubble');
+  const includes=(x,y)=>r.rows.some(row=>row.y===y&&x>=row.left&&x<=row.right);
+  assert.equal(r.rows.filter(row=>row.y===55).length,2,'concave rows need independent spans');
+  assert(!includes(70,55),'open notch must not include page artwork');
+  assert(includes(38,53)&&includes(101,55),'enclosed text must not become transparent');
+  assert(includes(30,75)&&includes(110,75),'outer edges must survive');
+  // Every source bubble pixel must be represented by the mask.
+  for(let y=25;y<=105;y++)for(let x=30;x<=110;x++){
+    if(x<=48||x>=92||y>=88)assert(includes(x,y),`missing bubble pixel ${x},${y}`);
+  }
+  // A distinct nearby bubble cannot appear in this mask.
+  ellipse(data,w,h,145,55,18,22,245);
+  const r2=detectBubbleRegion(data,w,h,39,75);
+  assert(r2.rows.every(row=>row.right<125),'neighbour must stay outside the selected mask');
+}
+// Rounded outline padding, unlike square/envelope expansion, does not add
+// diagonal artwork beyond the selected silhouette's border allowance.
+{
+  const w=160,h=140,data=image(w,h,35,35,35);
+  for(let y=30;y<=70;y++)for(let x=30;x<=90;x++)pixel(data,w,x,y,245,245,245);
+  textBlock(data,w,45,42,75,48,15);
+  const r=detectBubbleRegion(data,w,h,40,55);
+  const includes=(x,y)=>r.rows.some(row=>row.y===y&&x>=row.left&&x<=row.right);
+  assert(includes(30,28),'retain top border padding');
+  assert(!includes(28,28),'do not pull in square corner artwork');
+  assert(includes(55,45),'keep lettering opaque');
+}
+// Full component coverage: every light pixel is visited exactly once, even
+// with holes for lettering. Padding must preserve the complete top edge.
+{
+  const w=240,h=200,data=image(w,h);
+  rectangle(data,w,40,30,180,100,245,20,2);
+  textBlock(data,w,70,50,150,58);
+  const region=detectBubbleRegion(data,w,h,100,70);
+  assert.equal(region.area,137*67-81*9);
+  assert(region.rows[0].left<=42 && region.rows[0].right>=178,'top border must not become a triangular crop');
+  for(const [x,y] of [[NaN,1],[Infinity,1],[-1,20],[w,20]])assert.equal(detectBubbleRegion(data,w,h,x,y),null);
+  assert.equal(detectBubbleRegion(data,240.5,h,20,20),null);
+  assert.equal(detectBubbleRegion(data,2000,2000,20,20),null);
+}
+// A real coloured narration fill, not merely a greyscale approximation.
+{
+  const w=160,h=120,data=image(w,h,40,40,40);
+  rectangle(data,w,25,20,110,60);
+  for(let y=23;y<=57;y++)for(let x=28;x<=107;x++)pixel(data,w,x,y,242,212,120);
+  textBlock(data,w,40,35,85,39);
+  const region=detectBubbleRegion(data,w,h,60,47);
+  assertBounded(region,w,h,'ochre narration box');
+  assert(region.left<=28&&region.right>=107);
+}
+// Execute the browser controller with controlled pixel input. Two taps in
+// the old 24px cache bucket must run independent detection; replacing the
+// image source at the same page number must also invalidate the cached crop.
+{
+  let detections=0;
+  const canvases=[];
+  const context={
+    document:{addEventListener(){},body:{append(){}},createElement(tag){
+      if(tag==='canvas'){
+        const canvas={style:{},getContext:()=>({drawImage(){},getImageData:()=>({data:new Uint8ClampedArray(400*400*4)}),save(){},clip(){},restore(){}})};
+        canvases.push(canvas);return canvas;
+      }
+      return {style:{},classList:{add(){}},setAttribute(){},append(){},focus(){},remove(){}};
+    }},Path2D:class{rect(){}moveTo(){}lineTo(){}closePath(){}},innerWidth:400,innerHeight:800,requestAnimationFrame:fn=>fn(),
+    detector:()=>{detections++;return {left:20,top:20,right:60,bottom:60,rows:[{y:20,left:20,right:60},{y:60,left:20,right:60}]};}
+  };
+  const controller=vm.runInNewContext(source+';installSpeechFocus(detector)',context);
+  const img={src:'first-page',naturalWidth:400,naturalHeight:400,getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})};
+  assert(controller.focus(img,25,25,'page-1'));controller.close();
+  assert(controller.focus(img,30,25,'page-1'));controller.close();
+  assert.equal(detections,2,'nearby taps must not reuse another bubble');
+  assert(controller.focus(img,30,25,'page-1'));controller.close();
+  assert.equal(detections,2,'identical taps should use the cache');
+  img.src='replacement-page';assert(controller.focus(img,30,25,'page-1'));controller.close();
+  assert.equal(detections,3,'replaced artwork must invalidate the cache');
+  assert.equal(controller.focus(img,-1,25,'page-1'),false);
+}
 assert(browser.includes('speech-focus-overlay'));
 assert(browser.includes('getImageData'));
 assert(browser.includes('Path2D'));
 assert(browser.includes('1600'),'display crop should be bounded while retaining high-resolution source pixels');
 assert(browser.includes('Close enlarged speech bubble'),'enlarged bubble must be keyboard/screen-reader dismissible');
+
+// Motion lifecycle with a controllable animation clock (no timing sleeps).
+{
+  const animations=[],buttons=[],events={};let reduce=false,restored=0;
+  const previous={isConnected:true,focus(options){assert.equal(options.preventScroll,true);restored++;}};
+  const context={
+    document:{activeElement:previous,addEventListener(name,fn){events[name]=fn;},body:{append(){}},createElement(tag){
+      if(tag==='canvas')return {style:{},getContext:()=>({drawImage(){},getImageData:()=>({data:new Uint8ClampedArray(400*400*4)}),save(){},clip(){},restore(){}})};
+      const button={style:{},classList:{add(){}},setAttribute(){},append(){},focus(){},contains(){return false;},remove(){this.removed=true;},
+        animate(frames,options){const a={frames,options,cancel(){this.cancelled=true;}};animations.push(a);return a;}};
+      buttons.push(button);return button;
+    }},Path2D:class{rect(){}moveTo(){}lineTo(){}closePath(){}},innerWidth:320,innerHeight:640,
+    matchMedia:()=>({matches:reduce}),getComputedStyle:()=>({transform:'matrix(0.8, 0, 0, 0.8, -10, -20)',paddingTop:'24px',paddingBottom:'20px',paddingLeft:'0px',paddingRight:'0px'}),
+    detector:()=>({left:20,top:20,right:60,bottom:60,rows:[{y:20,left:20,right:60},{y:60,left:20,right:60}]})
+  };
+  const c=vm.runInNewContext(source+';installSpeechFocus(detector)',context);
+  const img={src:'page',naturalWidth:400,naturalHeight:400,getBoundingClientRect:()=>({left:0,top:0,width:400,height:400})};
+  assert(c.focus(img,30,30));
+  const b=buttons.at(-1);
+  assert.equal(animations[0].options.duration,340);
+  assert.equal(b.style.transition,'none','avoid layout animation competing with transform');
+  assert(parseFloat(b.style.left)>=16&&parseFloat(b.style.top)>=40,'respect safe area');
+  assert(parseFloat(b.style.left)+parseFloat(b.style.width)<=304);
+  c.close();assert(!b.removed,'dismiss should animate, not disappear');
+  assert(animations[0].cancelled,'interrupt opening cleanly');
+  assert.equal(animations[1].frames[0].transform,'matrix(0.8, 0, 0, 0.8, -10, -20)','reverse from current visual position');
+  c.close();assert.equal(animations.length,2,'repeated dismissal is idempotent');
+  animations[1].onfinish();assert(b.removed);assert.equal(restored,1);
+  c.focus(img,30,30);c.close();const stale=animations.at(-1);
+  c.focus(img,31,30);const replacement=buttons.at(-1);stale.onfinish();
+  assert(!replacement.removed,'stale animation cannot remove a new focus');
+  events.touchstart({touches:[{},{}]});assert(replacement.removed,'pinch immediately cancels the overlay');
+  reduce=true;const count=animations.length;c.focus(img,30,30);c.close();
+  assert.equal(animations.length,count,'Reduced Motion creates no animation');
+  assert(buttons.at(-1).removed);
+}
 
 console.log('PASS: speech focus corpus covers oval, rectangular, grey, edge, lettering, adjacent, tailed and negative comic regions');

@@ -14,7 +14,10 @@ export function detectBubbleRegion(
   tapX:number,
   tapY:number,
 ):SpeechBubbleRegion|null{
-  if(width<8||height<8||pixels.length<width*height*4)return null;
+  // Reject malformed or oversized inputs before allocating working buffers.
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<8||height<8||
+    width*height>1048576||!Number.isFinite(tapX)||!Number.isFinite(tapY)||
+    tapX<0||tapY<0||tapX>=width||tapY>=height||pixels.length<width*height*4)return null;
   const lum=(r:number,g:number,b:number)=>0.2126*r+0.7152*g+0.0722*b;
   const index=(x:number,y:number)=>(y*width+x)*4;
   const tx=Math.max(0,Math.min(width-1,Math.round(tapX)));
@@ -40,29 +43,27 @@ export function detectBubbleRegion(
   const total=width*height;
   const visited=new Uint8Array(total);
   const queue=new Int32Array(total);
-  const leftByRow=new Int32Array(height);leftByRow.fill(width);
-  const rightByRow=new Int32Array(height);rightByRow.fill(-1);
   const tolerance=95*95;
   const minLum=Math.max(75,baseLum-95);
   const maxArea=Math.max(96,Math.floor(total*0.30));
   let head=0,tail=0,area=0;
   let left=width,top=height,right=-1,bottom=-1;
-  queue[tail++]=seedY*width+seedX;
+  const enqueue=(pos:number)=>{if(!visited[pos]){visited[pos]=1;queue[tail++]=pos;}};
+  enqueue(seedY*width+seedX);
 
   while(head<tail){
-    const pos=queue[head++];if(visited[pos])continue;
+    const pos=queue[head++];
     const x=pos%width,y=(pos/width)|0,p=pos*4;
     const r=pixels[p],g=pixels[p+1],b=pixels[p+2];
     const dr=r-sr,dg=g-sg,db=b-sb;
     if(pixels[p+3]<160||lum(r,g,b)<minLum||dr*dr+dg*dg+db*db>tolerance)continue;
-    visited[pos]=1;area++;
+    visited[pos]=2;area++;
     if(area>maxArea)return null;
     if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
-    if(x<leftByRow[y])leftByRow[y]=x;if(x>rightByRow[y])rightByRow[y]=x;
-    if(x>0&&!visited[pos-1])queue[tail++]=pos-1;
-    if(x+1<width&&!visited[pos+1])queue[tail++]=pos+1;
-    if(y>0&&!visited[pos-width])queue[tail++]=pos-width;
-    if(y+1<height&&!visited[pos+width])queue[tail++]=pos+width;
+    if(x>0)enqueue(pos-1);
+    if(x+1<width)enqueue(pos+1);
+    if(y>0)enqueue(pos-width);
+    if(y+1<height)enqueue(pos+width);
   }
 
   if(area<Math.max(28,total*0.00035)||right<=left||bottom<=top)return null;
@@ -72,19 +73,52 @@ export function detectBubbleRegion(
   const pad=Math.max(2,Math.round(Math.min(right-left+1,bottom-top+1)*0.045));
   left=Math.max(0,left-pad);right=Math.min(width-1,right+pad);
   top=Math.max(0,top-pad);bottom=Math.min(height-1,bottom+pad);
-  const step=Math.max(1,Math.floor((bottom-top+1)/90));
-  const rows:Array<{y:number;left:number;right:number}>=[];
-  let lastLeft=seedX,lastRight=seedX;
-  for(let y=top;y<=bottom;y+=step){
-    if(rightByRow[y]>=0){lastLeft=leftByRow[y];lastRight=rightByRow[y];}
-    rows.push({
-      y,
-      left:Math.max(left,lastLeft-pad),
-      right:Math.min(right,lastRight+pad),
-    });
+  // Flood the *outside* of the selected component. Enclosed holes are ink
+  // (letters/counters) and must remain opaque; concavities open to the page
+  // remain outside. Unlike a row envelope this preserves split row spans.
+  head=0;tail=0;
+  const outside=(pos:number)=>{
+    if(visited[pos]!==2&&visited[pos]!==3){visited[pos]=3;queue[tail++]=pos;}
+  };
+  for(let x=left;x<=right;x++){outside(top*width+x);outside(bottom*width+x);}
+  for(let y=top;y<=bottom;y++){outside(y*width+left);outside(y*width+right);}
+  while(head<tail){
+    const pos=queue[head++],x=pos%width,y=(pos/width)|0;
+    if(x>left)outside(pos-1);if(x<right)outside(pos+1);
+    if(y>top)outside(pos-width);if(y<bottom)outside(pos+width);
   }
-  if(rows[rows.length-1]?.y!==bottom){
-    rows.push({y:bottom,left:Math.max(left,lastLeft-pad),right:Math.min(right,lastRight+pad)});
+  // Round dilation includes outline ink without bridging a whole concavity.
+  // Bound the mask to the crop; no full-resolution source allocations.
+  const maskW=right-left+1,maskH=bottom-top+1;
+  const mask=new Uint8Array(maskW*maskH);
+  const reaches=Array.from({length:pad*2+1},(_,i)=>Math.floor(Math.sqrt(pad*pad-(i-pad)*(i-pad))));
+  // Dilate runs, not individual pixels: one fill per span/offset keeps large
+  // balloon interiors from multiplying work by every pixel in the crop.
+  for(let y=top;y<=bottom;y++){
+    let x=left;
+    while(x<=right){
+      while(x<=right&&visited[y*width+x]===3)x++;
+      const runStart=x;
+      while(x<=right&&visited[y*width+x]!==3)x++;
+      if(x===runStart)continue;
+      const runEnd=x-1;
+      for(let dy=-pad;dy<=pad;dy++){
+        const yy=y+dy;if(yy<top||yy>bottom)continue;
+        const reach=reaches[dy+pad];
+        const start=Math.max(left,runStart-reach),end=Math.min(right,runEnd+reach);
+        mask.fill(1,(yy-top)*maskW+start-left,(yy-top)*maskW+end-left+1);
+      }
+    }
+  }
+  const rows:Array<{y:number;left:number;right:number}>=[];
+  for(let y=0;y<maskH;y++){
+    let x=0;
+    while(x<maskW){
+      while(x<maskW&&!mask[y*maskW+x])x++;
+      const start=x;
+      while(x<maskW&&mask[y*maskW+x])x++;
+      if(x>start)rows.push({y:y+top,left:start+left,right:x-1+left});
+    }
   }
   return {left,top,right,bottom,area,rows};
 }
@@ -92,11 +126,33 @@ export function detectBubbleRegion(
 function installSpeechFocus(detector:typeof detectBubbleRegion){
   let overlay:any=null;
   let generation=0;
+  let animation:any=null;
+  let closing=false;
+  let origin='none';
+  let previousFocus:any=null;
   const cache=new Map<string,any>();
 
-  function close(){
+  const reduced=()=>typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function cancel(){
     generation++;
+    animation?.cancel();animation=null;closing=false;
     if(overlay){overlay.remove();overlay=null;}
+  }
+  function close(){
+    if(!overlay||closing)return;
+    const button=overlay,token=++generation;
+    closing=true;
+    const current=typeof getComputedStyle==='function'?getComputedStyle(button).transform:'none';
+    animation?.cancel();animation=null;
+    const finish=()=>{
+      if(token!==generation||button!==overlay)return;
+      cancel();
+      if(previousFocus?.isConnected)previousFocus.focus?.({preventScroll:true});
+    };
+    if(reduced()||typeof button.animate!=='function'){finish();return;}
+    animation=button.animate([{transform:current,opacity:1},{transform:origin,opacity:0.85}],
+      {duration:260,easing:'cubic-bezier(.4,0,.2,1)',fill:'both'});
+    animation.onfinish=finish;
   }
 
   function regionFor(img:any,clientX:number,clientY:number,key:string){
@@ -108,7 +164,10 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
     const height=Math.max(8,Math.round(img.naturalHeight*scale));
     const x=(clientX-rect.left)/rect.width*width;
     const y=(clientY-rect.top)/rect.height*height;
-    const bucket=key+':'+Math.round(x/24)+':'+Math.round(y/24);
+    if(x<0||y<0||x>=width||y>=height)return null;
+    // Exact analysis-pixel taps cannot collide across adjacent bubbles.
+    // Source identity prevents stale crops when a reader reuses a page number.
+    const bucket=JSON.stringify([key,img.currentSrc||img.src,img.naturalWidth,img.naturalHeight,Math.floor(x),Math.floor(y)]);
     if(cache.has(bucket))return {region:cache.get(bucket),rect,width,height,bucket};
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
     const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -124,7 +183,8 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
   }
 
   function focus(img:any,clientX:number,clientY:number,key='page'){
-    if(overlay){close();return true;}
+    if(overlay&&!closing){close();return true;}
+    if(closing)cancel();
     const token=++generation;
     const found=regionFor(img,clientX,clientY,key);
     if(!found||token!==generation)return false;
@@ -146,10 +206,10 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
     const yScale=outH/(region.bottom-region.top+1);
     const rows=region.rows;
     if(rows.length<2)return false;
-    path.moveTo((rows[0].left-region.left)*xScale,(rows[0].y-region.top)*yScale);
-    for(const row of rows)path.lineTo((row.left-region.left)*xScale,(row.y-region.top)*yScale);
-    for(let i=rows.length-1;i>=0;i--){const row=rows[i];path.lineTo((row.right-region.left)*xScale,(row.y-region.top)*yScale);}
-    path.closePath();
+    // Each span is part of one binary silhouette. Multiple spans on a row
+    // preserve concavities instead of joining through unrelated artwork.
+    for(const row of rows)path.rect((row.left-region.left)*xScale,(row.y-region.top)*yScale,
+      (row.right-row.left+1)*xScale,yScale);
     ctx.save();ctx.clip(path);
     ctx.drawImage(img,sourceX,sourceY,sourceW,sourceH,0,0,outW,outH);
     ctx.restore();
@@ -158,34 +218,53 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
     const displayTop=rect.top+(region.top/height)*rect.height;
     const displayW=((region.right-region.left+1)/width)*rect.width;
     const displayH=((region.bottom-region.top+1)/height)*rect.height;
-    const ratio=displayW/Math.max(1,displayH);
-    let targetW=Math.min(innerWidth*0.82,Math.max(displayW*2.15,220));
-    let targetH=targetW/Math.max(.2,ratio);
-    if(targetH>innerHeight*0.68){targetH=innerHeight*0.68;targetW=targetH*ratio;}
-    const targetLeft=Math.max(12,Math.min(innerWidth-targetW-12,(innerWidth-targetW)/2));
-    const targetTop=Math.max(12,Math.min(innerHeight-targetH-12,(innerHeight-targetH)/2));
-
     const button=document.createElement('button');
     button.type='button';button.className='speech-focus-overlay';
     button.setAttribute('aria-label','Close enlarged speech bubble');
-    button.style.left=displayLeft+'px';button.style.top=displayTop+'px';
-    button.style.width=displayW+'px';button.style.height=displayH+'px';
+    // Read CSS safe-area insets without changing the reader's scroll/layout.
+    button.style.padding='env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)';
+    document.body.append(button);
+    const inset=typeof getComputedStyle==='function'?getComputedStyle(button):null;
+    const topInset=parseFloat(inset?.paddingTop||'0')||0,bottomInset=parseFloat(inset?.paddingBottom||'0')||0;
+    const leftInset=parseFloat(inset?.paddingLeft||'0')||0,rightInset=parseFloat(inset?.paddingRight||'0')||0;
+    button.style.padding='0';
+    const viewport=typeof window!=='undefined'?window.visualViewport:null;
+    const vw=viewport?.width||innerWidth,vh=viewport?.height||innerHeight;
+    const vx=(viewport?.offsetLeft||0)+leftInset+16,vy=(viewport?.offsetTop||0)+topInset+16;
+    const availableW=Math.max(1,vw-leftInset-rightInset-32),availableH=Math.max(1,vh-topInset-bottomInset-32);
+    const ratio=displayW/displayH;
+    const targetW=Math.min(availableW,availableH*ratio,Math.max(displayW*2.15,220));
+    const targetH=targetW/ratio;
+    // Stay near the source, moving only as much as readability/edges require.
+    const targetLeft=Math.max(vx,Math.min(vx+availableW-targetW,displayLeft+(displayW-targetW)/2));
+    const targetTop=Math.max(vy,Math.min(vy+availableH-targetH,displayTop+(displayH-targetH)/2));
+    origin=`translate(${displayLeft-targetLeft}px, ${displayTop-targetTop}px) scale(${displayW/targetW}, ${displayH/targetH})`;
+    button.style.left=targetLeft+'px';button.style.top=targetTop+'px';
+    button.style.width=targetW+'px';button.style.height=targetH+'px';
+    button.style.transformOrigin='0 0';button.style.transition='none';button.style.opacity='1';
     canvas.style.width='100%';canvas.style.height='100%';button.append(canvas);
     button.onclick=close;button.onkeydown=(event:any)=>{if(event.key==='Escape'||event.key==='Enter'||event.key===' '){event.preventDefault();close();}};
-    document.body.append(button);overlay=button;button.focus({preventScroll:true});
-    requestAnimationFrame(()=>{
-      if(button!==overlay)return;
-      button.classList.add('open');
-      button.style.left=targetLeft+'px';button.style.top=targetTop+'px';
-      button.style.width=targetW+'px';button.style.height=targetH+'px';
-    });
+    previousFocus=document.activeElement;overlay=button;button.classList.add('open');button.focus({preventScroll:true});
+    if(!reduced()&&typeof button.animate==='function'){
+      animation=button.animate([{transform:origin,opacity:.85},{transform:'none',opacity:1}],
+        {duration:340,easing:'cubic-bezier(.2,.72,.2,1)',fill:'both'});
+    }
     return true;
   }
 
   document.addEventListener('pointerdown',(event:any)=>{
     if(overlay && !overlay.contains(event.target))close();
   },true);
-  return {focus,close,cancel:close,isActive:()=>!!overlay};
+  // Geometry becomes stale on page motion, fold/rotation or pinch. Remove
+  // immediately instead of animating back to a location that has moved.
+  if(typeof window!=='undefined'){
+    window.addEventListener('resize',cancel);
+    window.addEventListener('scroll',cancel,{passive:true});
+    window.visualViewport?.addEventListener('resize',cancel);
+    window.visualViewport?.addEventListener('scroll',cancel);
+  }
+  document.addEventListener('touchstart',(event:any)=>{if(event.touches.length>1)cancel();},{passive:true,capture:true});
+  return {focus,close,cancel,isActive:()=>!!overlay&&!closing};
 }
 
 export function speechFocusBrowserSource(){

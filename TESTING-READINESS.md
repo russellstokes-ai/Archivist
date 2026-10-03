@@ -1,5 +1,29 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-04 — Comic shape-following mask sprint
+
+- Replaced envelope clipping with independent silhouette spans, exterior flood-fill to preserve enclosed lettering, and round outline dilation.
+- PASS: `node mobile/speech-focus.test.cjs`, including complete synthetic silhouette coverage, open-notch exclusion, enclosed lettering, neighbouring-bubble isolation, rounded padding and prior motion tests.
+- PASS: generated mobile/web/HA parity and `git diff --check`.
+- Run-based dilation replaced an initially slow per-pixel expansion. Local Node 24 synthetic 400×520 rectangle benchmark: 12 runs, median 2.23 ms, maximum 11.33 ms. This is a single desktop synthetic workload, not a device latency gate.
+- Analysis-resolution masking remains approximate. Real-comic labelled benchmarks, thick/broken/touching outlines, browser rendering and physical-device acceptance remain outstanding. No AI used.
+
+## 2026-10-04 — Comic zoom motion sprint
+
+- Added transform-based 340 ms lift / 260 ms return, mid-animation reversal, source-near placement, visual-viewport/safe-area bounds and focus restoration without scrolling.
+- Immediate cancellation for page changes, pinch, resize and viewport movement; Reduced Motion has no animation.
+- PASS: speech-focus detector/controller suite, including controlled-animation lifecycle and edge-placement tests; generated web/HA module parity; `git diff --check`.
+- Browser rendering blocked: Chromium install returned invalid/truncated downloads. Full typecheck and physical iOS/Android/Fold motion acceptance remain unverified. No visual-quality completion claim.
+
+## 2026-10-04 — Comic speech focus reliability sprint
+
+- Explicit renewed scope: deterministic speech/text bubble enlargement without AI; preserve approved Player/Atlas UI.
+- Fixed repeated flood-fill queue entries, invalid-input allocation guards, clipped top-edge padding and neighbouring-bubble/replaced-page cache collisions.
+- Server and packaged HA speech-focus modules now generated from `mobile/speechFocus.ts` using `scripts/sync-speech-focus.cjs`.
+- PASS: `node mobile/speech-focus.test.cjs` (synthetic detector corpus plus controller cache behaviour).
+- Full app typecheck, real-comic precision benchmark and physical Android/iOS interaction/performance are not verified in this sprint.
+- Remaining scope and limitations: `COMIC-SPEECH-FOCUS.md`. This is an incremental fix, not a declaration of Bubble Zoom parity.
+
 ## 2026-10-03 — iOS CBR parity — source complete, native compile pending
 
 ### Implemented and source-tested
@@ -530,4 +554,3 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Sprint 10 regression-lock commit: `8ae43e2be602049bbbe13c2f9d4626f96b0d1540`.
 - No GitHub Actions run is attached to these latest commits yet, so dependency install, Expo Doctor, TypeScript and full mobile-suite execution are **not claimed** for this checkpoint.
 - Remaining acceptance is runtime visual/interaction verification in Draftbit Preview plus real-device image selection/rescan behaviour on iOS/Android and Fold layouts.
-

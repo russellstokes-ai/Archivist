@@ -339,6 +339,33 @@ Runtime/device release acceptance can still be a QA requirement without reopenin
 
 ## Atlas + comic double-tap zoom — SEPARATE ASTRA/WORK OWNERSHIP
 
+### Comic focus checkpoint — 4 October 2026
+
+Russell explicitly reopened comic speech/text bubble focus in Work and authorised
+saving locally and pushing to the active development branch. Atlas and Live Player
+were not changed. No AI models, OCR service or external inference are permitted.
+
+Completed local implementation checkpoints:
+- `8b0532f`: bounded detector traversal, input guards, crop padding and exact tap/source cache isolation.
+- `c3b49ee`: transform-based lift/return, interruption handling, Reduced Motion, safe-area placement and immediate cancellation on pinch/page/viewport changes.
+- `e910327`: silhouette spans replacing row envelopes, preserved enclosed lettering, rounded outline padding and run-based dilation.
+
+Implementation: `mobile/speechFocus.ts`. Generated server copies:
+`web/speech-focus.js` and `archivist/app/web/speech-focus.js`.
+After changes run `node scripts/sync-speech-focus.cjs` (Node 24), then
+`node scripts/sync-speech-focus.cjs --check` and
+`node mobile/speech-focus.test.cjs`.
+
+Detailed scope, evidence and limitations: `COMIC-SPEECH-FOCUS.md` and the
+4 October entries in `TESTING-READINESS.md`. Synthetic detector/motion tests pass;
+browser rendering was blocked by invalid Chromium downloads. Full typecheck,
+real-comic precision benchmarks and physical-device acceptance are not claimed.
+
+Next: labelled real-page evaluation, thick/broken/touching outlines, dark/inverted
+captions, confidence-based rejection, and phone/Fold motion review. Current masks
+are analysis-resolution silhouettes, not proven pixel-perfect contours. Do not
+describe this checkpoint as Google Play Books parity or release-complete.
+
 A separate Astra/Work stream owns:
 - Atlas perfection/polish
 - deterministic comic double-tap speech-bubble/panel focus/zoom
