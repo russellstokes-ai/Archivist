@@ -90,7 +90,7 @@ assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for
 assert.ok(source.includes('function LocalSortingPanel()'), 'Local organisation controls should live in a dedicated Settings panel');
 assert.match(source,/<LocalSortingPanel\s*\/>/, 'Settings must render the local organisation panel');
 const shelfStart=source.indexOf('function Shelf()');
-const playerStart=source.indexOf('function Player()');
+const playerStart=source.indexOf('function Player(');
 assert.ok(shelfStart>=0 && playerStart>shelfStart, 'Shelf function bounds are missing');
 const shelfSource=source.slice(shelfStart,playerStart);
 assert.equal(shelfSource.includes('>Local sorting</Text>'),false,'Technical local sorting controls must not live on the Shelf');
