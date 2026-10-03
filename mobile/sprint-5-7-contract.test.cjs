@@ -9,7 +9,7 @@ const config=JSON.parse(fs.readFileSync('app.json','utf8'));
 assert.ok(source.includes('function WorkDetailsPanel()'),'Sprint 5 work-details sheet is missing');
 assert.ok(source.includes('>WORK DETAILS</Text>') && source.includes('Edit metadata & cover') && source.includes('Refresh metadata & cover'),'Sprint 5 work-details actions are incomplete');
 assert.ok(source.includes('local.tracks.map(track=>track.uri)'),'Grouped local work edits must target every track');
-assert.ok(source.includes('Cover image URI (optional)') && source.includes('Use scanned metadata & cover') && source.includes('Publication year'),'Sprint 5 metadata/cover editor is incomplete');
+assert.ok(source.includes('Choose image from device') && source.includes('Other local artwork') && source.includes('Use scanned metadata & cover') && source.includes('Publication year'),'Metadata/cover editor must retain Sprint 5 metadata fields and the approved Sprint 9 cover chooser');
 assert.ok(source.includes('Manual override') && source.includes('Sidecar metadata') && source.includes('Filename / folder scan'),'Work details must expose metadata provenance');
 assert.ok(localLibrary.includes('coverUri?: string;') && localLibrary.includes('override?.coverUri?.trim() || discoveredCoverUri'),'Manual local cover overrides must survive rescans');
 assert.ok(localWorks.includes("first.metadataSource!=='manual'"),'Manual audiobook titles must override folder-derived work titles');
