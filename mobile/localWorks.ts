@@ -1,4 +1,4 @@
-import {decodedPathParts} from './libraryIntelligence';
+import {decodedPathParts, logicalWorkKey} from './libraryIntelligence';
 import {LocalBook} from './localLibrary';
 
 export type LocalWork = {
@@ -11,6 +11,8 @@ export type LocalWork = {
   series: string;
   genre: string;
   publishedYear?: number;
+  seriesNumber?: number;
+  logicalWorkKey?: string;
   format: string;
   space: string;
   available: boolean;
@@ -53,6 +55,8 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       series,
       genre,
       publishedYear: tracks.find(item=>item.publishedYear)?.publishedYear,
+      seriesNumber: tracks.find(item=>item.seriesNumber !== undefined)?.seriesNumber,
+      logicalWorkKey: logicalWorkKey({title,author,series,seriesNumber:tracks.find(item=>item.seriesNumber !== undefined)?.seriesNumber}),
       format: first.format,
       space: first.space,
       available: tracks.some(item => item.available),
@@ -106,4 +110,76 @@ function isLibraryRoot(value: string) {
 
 function decode(value: string) {
   try { return decodeURIComponent(value); } catch { return value; }
+}
+
+
+export type LocalEditionGroup = {
+  key: string;
+  format: string;
+  items: LocalBook[];
+};
+
+export type LogicalLocalWork = {
+  key: string;
+  title: string;
+  author: string;
+  series: string;
+  seriesNumber?: number;
+  formats: string[];
+  editions: LocalEditionGroup[];
+  items: LocalBook[];
+};
+
+export function groupLogicalLocalWorks(books: LocalBook[]): LogicalLocalWork[] {
+  const grouped = new Map<string, LocalBook[]>();
+  for (const book of books) {
+    const key = book.workKey || ('asset:' + book.uri);
+    const items = grouped.get(key) || [];
+    items.push(book);
+    grouped.set(key, items);
+  }
+  return [...grouped.entries()].map(([key, items]) => {
+    const editions = new Map<string, LocalBook[]>();
+    for (const item of items) {
+      const editionKey = item.editionKey || (key + '|format:' + cleanLabel(item.format).toLowerCase());
+      const editionItems = editions.get(editionKey) || [];
+      editionItems.push(item);
+      editions.set(editionKey, editionItems);
+    }
+    const first = items[0];
+    return {
+      key,
+      title: first.title,
+      author: commonValue(items.map(item => item.author)) || first.author,
+      series: commonValue(items.map(item => item.series)) || first.series,
+      seriesNumber: items.find(item => item.seriesNumber !== undefined)?.seriesNumber,
+      formats: [...new Set(items.map(item => item.format).filter(Boolean))].sort(),
+      editions: [...editions.entries()].map(([editionKey, editionItems]) => ({
+        key: editionKey,
+        format: editionItems[0]?.format || '',
+        items: editionItems.slice().sort((a,b) => naturalCompare(a.uri,b.uri)),
+      })),
+      items: items.slice().sort((a,b) => naturalCompare(a.uri,b.uri)),
+    };
+  });
+}
+
+export function logicalSeriesGroups(books: LocalBook[]) {
+  const grouped = new Map<string, LogicalLocalWork[]>();
+  for (const work of groupLogicalLocalWorks(books)) {
+    if (!work.series) continue;
+    const key = cleanLabel(work.author).toLowerCase() + '|' + cleanLabel(work.series).toLowerCase();
+    const works = grouped.get(key) || [];
+    works.push(work);
+    grouped.set(key, works);
+  }
+  return [...grouped.entries()].map(([key, works]) => ({
+    key,
+    author: works[0]?.author || '',
+    series: works[0]?.series || '',
+    works: works.slice().sort((a,b) =>
+      (a.seriesNumber ?? Number.MAX_SAFE_INTEGER) - (b.seriesNumber ?? Number.MAX_SAFE_INTEGER)
+      || a.title.localeCompare(b.title,undefined,{numeric:true,sensitivity:'base'})
+    ),
+  }));
 }

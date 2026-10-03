@@ -50,18 +50,26 @@ type source struct {
 	PDFs       int64  `json:"pdfs"`
 }
 type book struct {
-	ID                       int64  `json:"id"`
-	Title                    string `json:"title"`
-	Author                   string `json:"author"`
-	Series                   string `json:"series"`
-	Genre                    string `json:"genre"`
-	Format                   string `json:"format"`
-	Space                    string `json:"space"`
-	Available                bool   `json:"available"`
-	IdentificationConfidence string `json:"identificationConfidence,omitempty"`
-	NeedsReview              bool   `json:"needsReview,omitempty"`
-	ReviewReason             string `json:"reviewReason,omitempty"`
-	MetadataSource           string `json:"metadataSource,omitempty"`
+	ID                       int64   `json:"id"`
+	Title                    string  `json:"title"`
+	Author                   string  `json:"author"`
+	Series                   string  `json:"series"`
+	SeriesNumber             float64 `json:"seriesNumber,omitempty"`
+	Genre                    string  `json:"genre"`
+	PublishedYear            int     `json:"publishedYear,omitempty"`
+	Narrator                 string  `json:"narrator,omitempty"`
+	Publisher                string  `json:"publisher,omitempty"`
+	ISBN                     string  `json:"isbn,omitempty"`
+	ASIN                     string  `json:"asin,omitempty"`
+	Language                 string  `json:"language,omitempty"`
+	Description              string  `json:"description,omitempty"`
+	Format                   string  `json:"format"`
+	Space                    string  `json:"space"`
+	Available                bool    `json:"available"`
+	IdentificationConfidence string  `json:"identificationConfidence,omitempty"`
+	NeedsReview              bool    `json:"needsReview,omitempty"`
+	ReviewReason             string  `json:"reviewReason,omitempty"`
+	MetadataSource           string  `json:"metadataSource,omitempty"`
 }
 
 func openDB(path string) (*sql.DB, error) {
@@ -107,6 +115,14 @@ func openDB(path string) (*sql.DB, error) {
 		"ALTER TABLE assets ADD COLUMN scan_signature TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE assets ADD COLUMN size_bytes INTEGER NOT NULL DEFAULT 0",
 		"ALTER TABLE assets ADD COLUMN modified_unix INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE assets ADD COLUMN series_number REAL NOT NULL DEFAULT 0",
+		"ALTER TABLE assets ADD COLUMN published_year INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE assets ADD COLUMN narrator TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN publisher TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN isbn TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN asin TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN language TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE assets ADD COLUMN description TEXT NOT NULL DEFAULT ''",
 	} {
 		if _, alterErr := db.Exec(stmt); alterErr != nil && !strings.Contains(strings.ToLower(alterErr.Error()), "duplicate column") {
 			db.Close()
@@ -242,17 +258,24 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	encoder := json.NewEncoder(stage)
 	type entry struct {
 		Relative, Title, Author, Series, Genre, Format string
+		Narrator, Publisher, ISBN, ASIN, Language, Description string
+		SeriesNumber float64
+		PublishedYear int
 		MetadataSource, ReviewReason, ScanSignature string
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
 	type cachedEntry struct {
-		Title, Author, Series, Genre, MetadataSource, ReviewReason, ScanSignature string
+		Title, Author, Series, Genre string
+		Narrator, Publisher, ISBN, ASIN, Language, Description string
+		SeriesNumber float64
+		PublishedYear int
+		MetadataSource, ReviewReason, ScanSignature string
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
 	cached := map[string]cachedEntry{}
-	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,genre,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
+	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
 	if cacheErr != nil {
 		return cacheErr
 	}
@@ -260,7 +283,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		var rel string
 		var item cachedEntry
 		var review int
-		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.Genre,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
+		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.Genre,&item.SeriesNumber,&item.PublishedYear,&item.Narrator,&item.Publisher,&item.ISBN,&item.ASIN,&item.Language,&item.Description,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
 			rows.Close()
 			return cacheErr
 		}
@@ -315,6 +338,14 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			item.Author = existing.Author
 			item.Series = existing.Series
 			item.Genre = existing.Genre
+			item.SeriesNumber = existing.SeriesNumber
+			item.PublishedYear = existing.PublishedYear
+			item.Narrator = existing.Narrator
+			item.Publisher = existing.Publisher
+			item.ISBN = existing.ISBN
+			item.ASIN = existing.ASIN
+			item.Language = existing.Language
+			item.Description = existing.Description
 			item.MetadataSource = existing.MetadataSource
 			item.MetadataConfidence = existing.MetadataConfidence
 			item.NeedsReview = existing.NeedsReview
@@ -326,6 +357,14 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			item.Author = meta.Author
 			item.Series = meta.Series
 			item.Genre = meta.Genre
+			item.SeriesNumber = meta.SeriesNumber
+			item.PublishedYear = meta.PublishedYear
+			item.Narrator = meta.Narrator
+			item.Publisher = meta.Publisher
+			item.ISBN = meta.ISBN
+			item.ASIN = meta.ASIN
+			item.Language = meta.Language
+			item.Description = meta.Description
 			item.MetadataSource = meta.Source
 			item.MetadataConfidence = int64(meta.Confidence)
 			item.NeedsReview = meta.NeedsReview
@@ -363,13 +402,21 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if e != nil {
 			return e
 		}
-		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,genre,format,available,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix)
-			VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?,?,?)
+		if _, e = tx.Exec(`INSERT INTO assets(source_id,relative_path,title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,format,available,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?)
 			ON CONFLICT(source_id,relative_path) DO UPDATE SET
 				title=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.title ELSE excluded.title END,
 				author=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.author ELSE excluded.author END,
 				series=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.series ELSE excluded.series END,
 				genre=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.genre ELSE excluded.genre END,
+				series_number=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.series_number ELSE excluded.series_number END,
+				published_year=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.published_year ELSE excluded.published_year END,
+				narrator=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.narrator ELSE excluded.narrator END,
+				publisher=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.publisher ELSE excluded.publisher END,
+				isbn=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.isbn ELSE excluded.isbn END,
+				asin=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.asin ELSE excluded.asin END,
+				language=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.language ELSE excluded.language END,
+				description=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.description ELSE excluded.description END,
 				format=excluded.format,
 				available=1,
 				metadata_source=CASE WHEN assets.metadata_source IN ('manual','legacy') THEN assets.metadata_source ELSE excluded.metadata_source END,
@@ -379,7 +426,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 				scan_signature=excluded.scan_signature,
 				size_bytes=excluded.size_bytes,
 				modified_unix=excluded.modified_unix`,
-			id, item.Relative, item.Title, item.Author, item.Series, item.Genre, item.Format, item.MetadataSource, item.MetadataConfidence, item.NeedsReview, item.ReviewReason, item.ScanSignature, item.SizeBytes, item.ModifiedUnix); e != nil {
+			id, item.Relative, item.Title, item.Author, item.Series, item.Genre, item.SeriesNumber, item.PublishedYear, item.Narrator, item.Publisher, item.ISBN, item.ASIN, item.Language, item.Description, item.Format, item.MetadataSource, item.MetadataConfidence, item.NeedsReview, item.ReviewReason, item.ScanSignature, item.SizeBytes, item.ModifiedUnix); e != nil {
 			return e
 		}
 	}
@@ -589,7 +636,7 @@ func (a *app) routes() http.Handler {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
-		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.genre,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
+		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.series_number,a.genre,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
 			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ?)
 			AND (?='' OR s.space=?)
@@ -613,7 +660,7 @@ func (a *app) routes() http.Handler {
 		for rows.Next() {
 			var b book
 			var confidence int
-			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.Genre, &b.Format, &b.Space, &b.Available, &confidence, &b.NeedsReview, &b.ReviewReason, &b.MetadataSource); e != nil {
+			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.SeriesNumber, &b.Genre, &b.PublishedYear, &b.Narrator, &b.Publisher, &b.ISBN, &b.ASIN, &b.Language, &b.Description, &b.Format, &b.Space, &b.Available, &confidence, &b.NeedsReview, &b.ReviewReason, &b.MetadataSource); e != nil {
 				fail(w, 500, e)
 				return
 			}

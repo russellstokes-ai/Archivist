@@ -299,3 +299,16 @@ func TestCopyFailureRetainsOriginalAndCatalogue(t *testing.T) {
 	if e:=a.db.QueryRow("SELECT relative_path FROM assets WHERE id=1").Scan(&rel);e!=nil{t.Fatal(e)}
 	if rel!="Book.mp3"{t.Fatalf("catalogue moved despite failed copy: %q",rel)}
 }
+
+
+func TestSeriesNumberAwareSortTemplate(t *testing.T) {
+	got, e := sortTemplatePathWithSeriesNumber("author-series-title", "Dune Messiah", "Frank Herbert", "Dune", "Ebook", "Dune Messiah.epub", 2)
+	if e != nil { t.Fatal(e) }
+	want := filepath.Join("Frank Herbert", "Dune", "02 - Dune Messiah.epub")
+	if got != want { t.Fatalf("got %q want %q", got, want) }
+
+	got, e = sortTemplatePathWithSeriesNumber("format-author-series-title", "A Novella", "Author", "Saga", "Ebook", "A Novella.epub", 2.5)
+	if e != nil { t.Fatal(e) }
+	want = filepath.Join("Ebook", "Author", "Saga", "2.5 - A Novella.epub")
+	if got != want { t.Fatalf("decimal series got %q want %q", got, want) }
+}

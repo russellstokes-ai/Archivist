@@ -4,7 +4,7 @@ const ts = require('typescript');
 require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
-const {groupLocalWorks} = require('./localWorks.ts');
+const {groupLocalWorks,groupLogicalLocalWorks,logicalSeriesGroups} = require('./localWorks.ts');
 
 function book(id, uri, extra={}) {
   return {
@@ -82,3 +82,13 @@ assert.equal(largeGrouped[0].title,'Book 00000');
 assert.equal(largeGrouped[4999].title,'Book 04999');
 
 console.log('PASS: conservative local work grouping handles a 5,000-work shelf with deterministic ordering');
+
+
+const logical=groupLogicalLocalWorks([
+  {...book(100,'content://root/document/primary:Books%2FFrank%20Herbert%2FDune.epub',{title:'Dune',format:'EPUB',series:'Dune',seriesNumber:1,coverShape:'portrait'}),workKey:'dune-1',editionKey:'dune-1|epub'},
+  {...book(101,'content://root/document/primary:Books%2FFrank%20Herbert%2FDune.pdf',{title:'Dune',format:'PDF',series:'Dune',seriesNumber:1,coverShape:'portrait'}),workKey:'dune-1',editionKey:'dune-1|pdf'},
+  {...book(102,'content://root/document/primary:Books%2FFrank%20Herbert%2FDune%20Messiah.epub',{title:'Dune Messiah',format:'EPUB',series:'Dune',seriesNumber:2,coverShape:'portrait'}),workKey:'dune-2',editionKey:'dune-2|epub'},
+]);
+assert.equal(logical.length,2,'logical format grouping');
+assert.equal(logical.find(item=>item.title==='Dune').formats.join(','),'EPUB,PDF');
+assert.deepEqual(logicalSeriesGroups(logical.flatMap(item=>item.items))[0].works.map(item=>item.seriesNumber),[1,2]);

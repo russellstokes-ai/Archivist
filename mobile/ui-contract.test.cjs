@@ -127,7 +127,9 @@ assert.equal(source.includes("title:'Browse by format'"),false,'Shelf must not c
 assert.equal(source.includes("title:'From your library'"),false,'Shelf must not duplicate the full Library catalogue');
 assert.equal(shelfSource.includes('<SourceSwitcher'),false,'Shelf Browse must not directly filter Shelf by storage source');
 assert.equal(shelfSource.includes('<LibrarySwitcher'),false,'Shelf must not expose Library folder/space organisation');
-assert.ok(shelfSource.includes('const base:UnifiedWork[]=allUnifiedWorks') && source.includes("{id:'favourites',title:'Favourites',visible:true}") && source.includes("{id:'smart',title:'Smart Shelves',visible:true}") && source.includes("{id:'collections',title:'Collections',visible:true}") && source.includes("{id:'series',title:'Series',visible:true}"), 'Shelf must be built from the full personal catalogue with curated personal sections');
+assert.ok(source.includes('const shelfUnifiedWorks=useMemo<UnifiedWork[]>(()=>groupShelfFormats(allUnifiedWorks),[allUnifiedWorks])') && shelfSource.includes('const base:UnifiedWork[]=shelfUnifiedWorks') && source.includes("{id:'favourites',title:'Favourites',visible:true}") && source.includes("{id:'smart',title:'Smart Shelves',visible:true}") && source.includes("{id:'collections',title:'Collections',visible:true}") && source.includes("{id:'series',title:'Series',visible:true}"), 'Shelf must be built from the full personal catalogue, grouping only alternate formats before curated personal sections');
+assert.ok(shelfSource.includes('const toggleSeries=(name:string)=>') && shelfSource.includes('accessibilityState={{expanded:false}}') && shelfSource.includes('accessibilityState={{expanded:true}}'), 'Approved Shelf series stacks must expand and collapse in place');
+assert.ok(source.includes('function FormatPickerPanel()') && source.includes('obviousShelfFormatChoice(choices,remembered)') && source.includes('label="Choose format"'), 'Approved grouped works must resume an obvious format or expose an explicit format chooser');
 assert.ok(shelfSource.includes('Automatic shelves that update from your rules.') && shelfSource.includes("item.id==='collections'") && shelfSource.includes("const relevance=works.reduce"), 'Shelf must retain explained Smart Shelves, Collections and relevance-ranked Series');
 assert.ok(shelfSource.includes('>BROWSE LIBRARY</Text>') && shelfSource.includes("label:'Books'") && shelfSource.includes("label:'Comics'") && shelfSource.includes("label:'Audiobooks'") && shelfSource.includes("label:'PDFs'"), 'Shelf Browse must route to Library by content type');
 assert.ok(shelfSource.includes('>On this device</Text>') && shelfSource.includes('>On Archivist Server</Text>') && shelfSource.includes('{session?<View style={styles.shelfStorageShortcuts}'), 'Shelf storage shortcuts must appear only for a connected Archivist Server');
@@ -202,17 +204,31 @@ assert.ok(source.includes("relation.availability || []"), 'Atlas relationship vi
 
 assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'"), 'Local catalogue cache key is missing');
 assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold start must restore the cached local catalogue');
-assert.ok(source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
+assert.ok(source.includes("setPersistedJSON(localCatalogKey,result.books)") || source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
 assert.ok(source.includes('function LibraryManagementPanel()'), 'Library management workspace is missing');
 assert.ok(source.includes('Manage Library') && source.includes('SCAN & REPAIR') && source.includes('ADVANCED ORGANISATION'), 'Library management hierarchy is incomplete');
 assert.ok(source.includes("const [metadataGapFilter,setMetadataGapFilter]=useState<MetadataGapFilter>('')"), 'Library metadata-gap state is missing');
 assert.ok(source.includes('METADATA GAPS') && source.includes('Missing author') && source.includes('Missing series') && source.includes('Missing genre'), 'Library blank-field filters are missing');
+assert.ok(source.includes('>NEEDS ATTENTION</Text>') && source.includes("label:'Missing metadata'") && source.includes("label:'Conflicts'") && source.includes("label:'Possible duplicates'") && source.includes("label:'Series order'"), 'Library Needs Attention summary is incomplete');
+assert.ok(source.includes("openGap('incomplete')") && source.includes("openGap('conflicts')") && source.includes("openGap('seriesNumber')"), 'Library Needs Attention categories must open actionable maintenance views');
+assert.ok(source.includes('accessibilityLabel="Series number"') && source.includes('accessibilityLabel="Narrator"') && source.includes('accessibilityLabel="Publisher"') && source.includes('accessibilityLabel="ISBN"') && source.includes('accessibilityLabel="ASIN"') && source.includes('accessibilityLabel="Language"') && source.includes('accessibilityLabel="Description"'), 'Rich metadata editor fields are incomplete');
+assert.ok(source.includes('Manual edits are protected from future rescans.') && source.includes('metadataSource:\'manual\''), 'Metadata editor must expose provenance and preserve manual-edit semantics');
+assert.ok(source.includes('function BulkMetadataPanel()') && source.includes('>Edit metadata</Text>') && source.includes('accessibilityLabel="Bulk author"') && source.includes('accessibilityLabel="Bulk series"') && source.includes('accessibilityLabel="Bulk genre"'), 'Library selection mode must expose approved bulk metadata editing');
+assert.ok(source.includes('Number series sequentially') && source.includes('Numbers follow the works\' current Library order.'), 'Bulk metadata must support sequential series numbering in visible Library order');
+assert.ok(source.includes('consolidates selected author-name variants'), 'Bulk author editing must explain author variant consolidation');
+assert.ok(source.includes('>POSSIBLE DUPLICATES</Text>') && source.includes('>ALTERNATE FORMATS</Text>') && source.includes('>DIFFERENT EDITIONS</Text>'), 'Duplicate review must distinguish copies, formats and editions');
+assert.ok(source.includes('not a deletion candidate') && source.includes('Kept as separate editions under the same logical work.'), 'Format and edition review must not imply destructive duplicate handling');
 assert.ok(source.includes('(reviewOnly||!!metadataGapFilter) ? request(session, serverAssetsPath(0,200))'), 'Server raw assets must load only for explicit maintenance views');
 assert.ok(source.includes('<MaintenanceList/>') && source.includes('maintenanceMode=reviewOnly||!!metadataGapFilter'), 'Library maintenance results must use editable raw-file rows');
 assert.ok(source.includes('Rescan device folders') && source.includes('Add device folder'), 'Library scan controls are missing');
-assert.ok(source.includes('Preview matching server items') && source.includes('Apply pending safe moves'), 'Library server organisation controls are missing');
+assert.ok(source.includes("scanPhaseLabel(scanProgress.phase)") && source.includes("scanPhaseStep(scanProgress.phase)") && source.includes('>Library updated</Text>'), 'Scan UI must expose phased progress and a compact rescan result summary');
+assert.ok(source.includes('Library may be out of date') && source.includes('Some files changed while Archivist was organising your library.') && source.includes('label="Rescan"') && source.includes('label="Not now"'), 'Interrupted local organisation must use the approved simple rescan prompt');
+assert.ok(source.includes("setLocalMoveSelection(readyIds)") && source.includes("item.state==='ready'&&selected.has(item.id)") && source.includes('Metadata used · {item.metadataSummary}'), 'Local organisation preview must default-select only Ready items and show current/proposed metadata context');
+assert.ok(source.includes("setServerMoveSelection(result.items.flatMap") && source.includes("const ids=serverMoveSelection.slice()"), 'Server organisation Apply must operate only on the explicit preview selection');
+assert.ok(source.includes("status=item.state==='ready'?'Ready':item.state==='review'?'Review recommended':item.state==='conflict'?'Conflict':'Already organised'"), 'Organisation preview must use user-facing Ready, Review recommended and Conflict states');
+assert.ok(source.includes("label=\"Preview\"") && source.includes("label={'Apply selected'") && source.includes('serverMoveSelection'), 'Library server organisation preview/apply controls are missing');
 assert.ok(source.includes('Archivist never removes duplicate candidates automatically.'), 'Duplicate-management safety copy is missing');
 assert.ok(source.includes('function LocalSortingPanel()'), 'Local organisation controls should live in a dedicated Settings panel');
 assert.match(source,/<LocalSortingPanel\s*\/>/, 'Settings must render the local organisation panel');
@@ -247,7 +263,8 @@ assert.ok(source.includes("message?.type==='archivist-reader-ready'"), 'Server r
 assert.ok(source.includes("reading.format"), 'Reader header must expose the active format');
 
 assert.ok(source.includes("Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRatingPrompt(null)}"), 'Completion rating prompt must be dismissible and respect Reduced Motion');
-assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose edition for '"), 'Edition picker must expose modal accessibility semantics');
+assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose format or edition for '"), 'Format / edition picker must expose modal accessibility semantics');
+assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose format for '+work.title}"), 'Grouped Shelf format picker must expose modal accessibility semantics');
 assert.ok(source.includes("KeyboardAvoidingView style={styles.modalKeyboard}"), 'Metadata editor must remain usable with the on-screen keyboard');
 assert.ok(source.includes("accessibilityLabel={'Open player for '+playing.title}"), 'Mini player must expose a separate open-player action');
 assert.match(source,/accessibilityLabel=\{[\s\S]{0,240}['"]Pause ['"]\+playing\.title[\s\S]{0,120}['"]Play ['"]\+playing\.title/, 'Mini player play/pause must be source-aware and separately labelled');

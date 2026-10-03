@@ -1,6 +1,9 @@
 import {Platform} from 'react-native';
 import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
-import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar} from './libraryIntelligence';
+import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
+import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
+import {extractEmbeddedMetadata} from './embeddedMetadata';
+import {extractAudioMetadata} from './audioMetadata';
 
 export type LocalBook = {
   id: number;
@@ -8,8 +11,23 @@ export type LocalBook = {
   title: string;
   author: string;
   series: string;
+  seriesNumber?: number;
   genre: string;
   publishedYear?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
+  workKey?: string;
+  editionKey?: string;
+  metadataProvenance?: Partial<Record<string, MetadataSource>>;
+  metadataFieldConfidence?: Partial<Record<string, IdentificationConfidence>>;
+  metadataConflicts?: MetadataConflict[];
+  embeddedMetadata?: LocalMetadataFields;
+  fileSize?: number;
+  modificationTime?: number;
   format: string;
   space: string;
   available: boolean;
@@ -17,7 +35,7 @@ export type LocalBook = {
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
-  metadataSource?: 'path' | 'sidecar' | 'manual';
+  metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual';
   coverUri?: string;
 };
 
@@ -31,6 +49,7 @@ export type LocalSortPreview = {
   from: string;
   to: string;
   state: 'ready' | 'same' | 'conflict' | 'review';
+  metadataSummary?: string;
 };
 
 export type LocalSortApplyResult = {
@@ -43,6 +62,7 @@ export type LocalSortHistory = {
   createdAt: string;
   copied: Array<{id: string; title: string; uri: string}>;
   failed: Array<{id: string; title: string; error: string}>;
+  complete?: boolean;
 };
 
 export type LocalFolder = {
@@ -55,7 +75,7 @@ export type LocalFolder = {
 };
 
 export type LocalScanProgress = {
-  phase: 'discovering' | 'complete';
+  phase: 'discovering' | 'reading-metadata' | 'matching' | 'checking-duplicates' | 'preparing' | 'complete';
   currentFolder: string;
   entriesVisited: number;
   found: number;
@@ -66,8 +86,15 @@ export type LocalMetadataOverride = {
   title: string;
   author: string;
   series: string;
+  seriesNumber?: number;
   genre: string;
   publishedYear?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
   coverUri?: string;
 };
 
@@ -79,12 +106,15 @@ export type LocalScanResult = {
   truncatedReason?: 'book-limit' | 'entry-limit';
   identified: number;
   review: number;
+  entriesVisited: number;
 };
 
 const supported = new Map<string, string>([
   ['epub', 'EPUB'],
   ['pdf', 'PDF'],
   ['cbz', 'Comic'],
+  ['cbr', 'Comic'],
+  ['cbt', 'Comic'],
   ['zip', 'Comic'],
   ['mp3', 'Audio'],
   ['m4a', 'Audio'],
@@ -95,13 +125,12 @@ const supported = new Map<string, string>([
   ['flac', 'Audio'],
 ]);
 
-const maxEntriesPerScan = 10000;
-const maxVisitedEntriesPerScan = 50000;
+const maxEntriesPerScan = 100000;
+const maxVisitedEntriesPerScan = 250000;
 const knownNonDirectoryExtensions = new Set([
   ...supported.keys(),
   'cbr','cbt','opf','nfo','jpg','jpeg','png','webp','gif','txt','cue','m3u','m3u8','json','xml','srt',
 ]);
-const maxDepth = 8;
 
 export function localFolderName(uri: string) {
   try {
@@ -133,6 +162,7 @@ export async function scanLocalFolders(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
+  previousBooks: LocalBook[] = [],
 ): Promise<LocalScanResult> {
   const books: LocalBook[] = [];
   let skipped = 0;
@@ -140,8 +170,11 @@ export async function scanLocalFolders(
   let truncatedReason: 'book-limit' | 'entry-limit' | undefined;
   let entriesVisited = 0;
   let review = 0;
+  let metadataStarted = false;
   const seen = new Set<string>();
   const sidecarCache = new Map<string, LocalMetadataFields>();
+  const visitedDirectories = new Set<string>();
+  const previousByUri = new Map(previousBooks.filter(book=>!!book.uri).map(book=>[book.uri,book]));
 
   async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
     const cached = sidecarCache.get(uri);
@@ -165,7 +198,8 @@ export async function scanLocalFolders(
   };
 
   async function scanDir(uri: string, space: string, depth: number, countUnreadable = true) {
-    if (truncated || depth > maxDepth) return;
+    if (truncated || visitedDirectories.has(uri)) return;
+    visitedDirectories.add(uri);
     let children: string[];
     try {
       children = await StorageAccessFramework.readDirectoryAsync(uri);
@@ -189,13 +223,13 @@ export async function scanLocalFolders(
     for (const child of children) {
       const ext = extension(child);
       const stem = fileStem(child).toLowerCase();
-      if (ext === 'opf' || ext === 'nfo') {
+      if (ext === 'opf' || ext === 'nfo' || ext === 'json' || ext === 'xml') {
         sidecarByStem.set(stem, child);
-        if (stem === 'metadata' || stem === 'book') genericSidecar = child;
+        if (stem === 'metadata' || stem === 'book' || stem === 'comicinfo') genericSidecar = child;
       }
       if (['jpg','jpeg','png','webp'].includes(ext)) {
         artworkByStem.set(stem, child);
-        const rank = stem === 'cover' ? 0 : stem === 'folder' ? 1 : 99;
+        const rank = stem === 'cover' ? 0 : stem === 'front' ? 1 : stem === 'folder' ? 2 : stem === 'coverart' ? 3 : 99;
         if (genericBookLevelFilesAllowed && rank < genericCoverRank) {
           genericCover = child;
           genericCoverRank = rank;
@@ -211,7 +245,7 @@ export async function scanLocalFolders(
         truncatedReason = 'entry-limit';
         return;
       }
-      if (entriesVisited === 1 || entriesVisited % 20 === 0) report('discovering', space);
+      if (entriesVisited === 1 || entriesVisited % 20 === 0) report(metadataStarted ? 'reading-metadata' : 'discovering', space);
       if (books.length >= maxEntriesPerScan) {
         truncated = true;
         truncatedReason = 'book-limit';
@@ -221,18 +255,51 @@ export async function scanLocalFolders(
       const format = ext ? supported.get(ext) : undefined;
       if (format && !seen.has(child)) {
         seen.add(child);
+        if (!metadataStarted) {
+          metadataStarted = true;
+          report('reading-metadata', space);
+        }
         let identity = inferLocalBookMetadata(child, format);
+        const evidence: MetadataCandidate[] = [{
+          source: 'path' as const,
+          confidence: identity.confidence,
+          fields: {
+            title: identity.title, author: identity.author, series: identity.series, seriesNumber: identity.seriesNumber,
+            genre: identity.genre, publishedYear: identity.publishedYear,
+          },
+        }];
 
         const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
         if (sidecarUri) {
           const fields = await cachedSidecarFields(sidecarUri);
-          if (fields.title || fields.author || fields.series || fields.genre) {
+          if (Object.keys(fields).length) {
+            evidence.push({source:'sidecar' as const, confidence:'high' as const, fields});
             identity = applyLocalMetadata(identity, fields, 'sidecar');
           }
         }
 
+        const fileInfo = await getInfoAsync(child).catch(()=>null);
+        const fileSize = fileInfo && 'size' in fileInfo && typeof fileInfo.size==='number' ? fileInfo.size : undefined;
+        const modificationTime = fileInfo && 'modificationTime' in fileInfo && typeof fileInfo.modificationTime==='number' ? fileInfo.modificationTime : undefined;
+        const previous = previousByUri.get(child);
+        const unchanged = !!previous && fileSize !== undefined && previous.fileSize === fileSize
+          && modificationTime !== undefined && previous.modificationTime === modificationTime;
+        const embeddedFields = unchanged && previous?.embeddedMetadata
+          ? previous.embeddedMetadata
+          : format === 'Audio'
+            ? await extractAudioMetadata(child, ext, {size:fileSize})
+            : await extractEmbeddedMetadata(child, ext, {exists:fileInfo?.exists,size:fileSize});
+        if (Object.keys(embeddedFields).length) {
+          evidence.push({source:'embedded' as const, confidence:'high' as const, fields:embeddedFields});
+          identity = applyLocalMetadata(identity, embeddedFields, 'embedded');
+        }
+
         const override = overrides[child];
-        if (override) identity = applyLocalMetadata(identity, override, 'manual');
+        if (override) {
+          evidence.push({source:'manual' as const, confidence:'high' as const, fields:override});
+          identity = applyLocalMetadata(identity, override, 'manual');
+        }
+        const resolvedMetadata = resolveMetadataCandidates(evidence);
 
         const discoveredCoverUri = artworkByStem.get(fileStem(child).toLowerCase()) || genericCover || undefined;
         const coverUri = override?.coverUri?.trim() || discoveredCoverUri;
@@ -243,8 +310,23 @@ export async function scanLocalFolders(
           title: identity.title || titleFromUri(child),
           author: identity.author,
           series: identity.series,
+          seriesNumber: identity.seriesNumber,
           genre: identity.genre,
           publishedYear: identity.publishedYear,
+          narrator: identity.narrator,
+          publisher: identity.publisher,
+          isbn: identity.isbn,
+          asin: identity.asin,
+          language: identity.language,
+          description: identity.description,
+          workKey: logicalWorkKey(identity),
+          editionKey: editionKey(identity, format),
+          metadataProvenance: resolvedMetadata.provenance,
+          metadataFieldConfidence: resolvedMetadata.confidence,
+          metadataConflicts: resolvedMetadata.conflicts,
+          embeddedMetadata: Object.keys(embeddedFields).length ? embeddedFields : undefined,
+          fileSize,
+          modificationTime,
           format,
           space,
           available: true,
@@ -256,7 +338,7 @@ export async function scanLocalFolders(
           coverUri,
         });
         if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
-      } else if (depth < maxDepth) {
+      } else {
         if (!ext) {
           await scanDir(child, space, depth + 1);
         } else if (!knownNonDirectoryExtensions.has(ext)) {
@@ -284,7 +366,7 @@ export async function scanLocalFolders(
     if (truncated) break;
   }
 
-  report('complete', '');
+  report('matching', '');
   return {
     folders: nextFolders.concat(folders.slice(nextFolders.length)),
     books,
@@ -293,10 +375,15 @@ export async function scanLocalFolders(
     truncatedReason,
     identified: books.length - review,
     review,
+    entriesVisited,
   };
 }
 
 export function previewLocalSort(books: LocalBook[], template: string): LocalSortPreview[] {
+  return previewLocalSortToRoot(books, template);
+}
+
+export function previewLocalSortToRoot(books: LocalBook[], template: string, destinationRootUri?: string): LocalSortPreview[] {
   const destinations = new Map<string, number>();
   const previews = books.map(book => {
     const filename = fileNameFromUri(book.uri);
@@ -309,27 +396,45 @@ export function previewLocalSort(books: LocalBook[], template: string): LocalSor
       asset: book.id,
       title: book.title,
       sourceUri: book.uri,
-      rootUri: rootUriFromFileUri(book.uri),
+      rootUri: destinationRootUri || rootUriFromFileUri(book.uri),
       relativePath: target,
       from,
       to: target,
       state: book.needsReview ? 'review' as const : from.endsWith(target) ? 'same' as const : 'ready' as const,
+      metadataSummary: [
+        book.author ? 'Author: '+book.author : '',
+        book.series ? 'Series: '+book.series+(book.seriesNumber !== undefined ? ' #'+book.seriesNumber : '') : '',
+        book.format ? 'Format: '+book.format : '',
+      ].filter(Boolean).join(' · '),
     };
   });
   return previews.map(preview => preview.state === 'review' ? preview : destinations.get(preview.to)! > 1 ? {...preview, state: 'conflict'} : preview);
 }
 
-export async function applyLocalSortCopies(previews: LocalSortPreview[]): Promise<LocalSortApplyResult> {
+export async function applyLocalSortCopies(
+  previews: LocalSortPreview[],
+  onCheckpoint?: (result: LocalSortApplyResult) => void | Promise<void>,
+): Promise<LocalSortApplyResult> {
   const copied: LocalSortApplyResult['copied'] = [];
   const failed: LocalSortApplyResult['failed'] = [];
   for (const preview of previews) {
     if (preview.state !== 'ready') continue;
     try {
       const target = await createTargetFile(preview.rootUri, preview.relativePath);
+      const sourceInfo = await getInfoAsync(preview.sourceUri).catch(() => null);
       await StorageAccessFramework.copyAsync({from: preview.sourceUri, to: target});
+      const verification = await getInfoAsync(target);
+      if (!verification.exists) throw Error('Destination verification failed after copy');
+      if (sourceInfo?.exists && typeof sourceInfo.size === 'number' && sourceInfo.size > 0
+        && typeof verification.size === 'number' && verification.size !== sourceInfo.size) {
+        await StorageAccessFramework.deleteAsync(target).catch(() => undefined);
+        throw Error('Destination size verification failed after copy');
+      }
       copied.push({id: preview.id, title: preview.title, uri: target});
+      await onCheckpoint?.({copied: copied.slice(), failed: failed.slice()});
     } catch (e) {
       failed.push({id: preview.id, title: preview.title, error: (e as Error).message});
+      await onCheckpoint?.({copied: copied.slice(), failed: failed.slice()});
     }
   }
   return {copied, failed};
@@ -368,10 +473,17 @@ function targetPath(book: LocalBook, filename: string, template: string) {
   const author = cleanPart(book.author || 'Unknown author');
   const series = cleanPart(book.series || 'Standalone');
   const title = cleanPart(book.title || filename.replace(/\.[^.]+$/, ''));
+  const orderedTitle = book.series && book.seriesNumber !== undefined ? cleanPart(seriesNumberLabel(book.seriesNumber) + ' - ' + title) : title;
   const format = cleanPart(book.format || 'Books');
-  if (template === 'author-series-title') return `${author}/${series}/${title}/${filename}`;
+  if (template === 'author-series-title') return `${author}/${series}/${orderedTitle}/${filename}`;
   if (template === 'format-author-title') return `${format}/${author}/${title}/${filename}`;
   return `${author}/${title}/${filename}`;
+}
+
+function seriesNumberLabel(value: number) {
+  if (!Number.isFinite(value)) return '';
+  if (!Number.isInteger(value)) return String(value);
+  return value < 10 ? '0' + value : String(value);
 }
 
 function fileNameFromUri(uri: string) {
@@ -391,6 +503,14 @@ async function createTargetFile(rootUri: string, relativePath: string) {
   for (const part of parts) {
     dir = await ensureDirectory(dir, part);
   }
+  const children = await StorageAccessFramework.readDirectoryAsync(dir);
+  const wantedStem = filename.replace(/\.[^.]+$/, '');
+  const collision = children.some(child => {
+    const childName = lastPathPart(child);
+    return childName.localeCompare(filename, undefined, {sensitivity:'accent'}) === 0
+      || childName.localeCompare(wantedStem, undefined, {sensitivity:'accent'}) === 0;
+  });
+  if (collision) throw Error('Destination already exists: ' + filename);
   const dot = filename.lastIndexOf('.');
   const name = dot > 0 ? filename.slice(0, dot) : filename;
   const ext = dot > 0 ? filename.slice(dot + 1).toLowerCase() : '';

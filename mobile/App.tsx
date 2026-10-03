@@ -1,4 +1,4 @@
-import {publicationYear} from './libraryIntelligence';
+import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
 import React, {useEffect, useMemo, useState, useRef} from 'react';
@@ -31,13 +31,13 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
-import {possibleLocalDuplicateGroups} from './duplicates';
+import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
@@ -46,6 +46,9 @@ import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTra
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
 import {shelfRecommendations} from './shelfRecommendations';
+import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
+import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from './bulkMetadata';
+import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanPhaseStep} from './scanFeedback';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -77,6 +80,14 @@ type Book = {
   series: string;
   genre?: string;
   publishedYear?: number;
+  seriesNumber?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
+  metadataConflicts?: Array<{field?: string;values?: unknown[]}>;
   format: string;
   space: string;
   available: boolean;
@@ -101,6 +112,7 @@ type ServerWork = {
   series: string;
   genre?: string;
   publishedYear?: number;
+  seriesNumber?: number;
   format: string;
   space: string;
   editions: number;
@@ -161,6 +173,8 @@ type UnifiedWork = {
   series: string;
   genre: string;
   publishedYear?: number;
+  seriesNumber?: number;
+  logicalWorkKey?: string;
   format: string;
   space: string;
   available: boolean;
@@ -174,7 +188,9 @@ type UnifiedWork = {
   serverWork?: ServerWork;
   server?: string;
   serverWorkId?: number;
+  formatChoices?: UnifiedWork[];
 };
+type FormatPicker = {work: UnifiedWork; choices: UnifiedWork[]};
 type LibrarySort = 'title'|'author'|'series'|'format'|'progress'|'rating';
 type LibraryFormatFamily = ''|'books'|'comics'|'audio'|'pdf';
 type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'rewards' | 'settings';
@@ -220,6 +236,7 @@ const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 const smartShelvesKey = 'archivist.smartShelves.v1';
 const collectionsKey = 'archivist.collections.v1';
 const shelfSectionsKey = 'archivist.shelfSections.v1';
+const shelfFormatChoiceKey = 'archivist.shelfFormatChoice.v1';
 const playerBookmarksKey = 'archivist.playerBookmarks.v1';
 const trackOrdersKey = 'archivist.trackOrders.v1';
 const chapterOverridesKey = 'archivist.chapterOverrides.v1';
@@ -615,6 +632,13 @@ function Client() {
   const [smartShelfAdvanced,setSmartShelfAdvanced]=useState(false);
   const [collectionTarget,setCollectionTarget]=useState<UnifiedWork|null>(null);
   const [selectedWorkKeys,setSelectedWorkKeys]=useState<string[]>([]);
+  const [bulkEditOpen,setBulkEditOpen]=useState(false);
+  const [bulkAuthor,setBulkAuthor]=useState('');
+  const [bulkSeries,setBulkSeries]=useState('');
+  const [bulkGenre,setBulkGenre]=useState('');
+  const [bulkNarrator,setBulkNarrator]=useState('');
+  const [bulkSequential,setBulkSequential]=useState(false);
+  const [bulkSeriesStart,setBulkSeriesStart]=useState('1');
   const [collectionFilter,setCollectionFilter]=useState('');
   const [libraryFiltersOpen,setLibraryFiltersOpen]=useState(false);
   const [librarySourcesOpen,setLibrarySourcesOpen]=useState(false);
@@ -623,8 +647,12 @@ function Client() {
   const [libraryFolderExact,setLibraryFolderExact]=useState(false);
   const [shelfManageOpen,setShelfManageOpen]=useState(false);
   const [shelfSections,setShelfSections]=useState<ShelfSectionPref[]>(defaultShelfSections);
+  const [expandedSeries,setExpandedSeries]=useState('');
+  const [formatPicker,setFormatPicker]=useState<FormatPicker|null>(null);
+  const [shelfFormatChoice,setShelfFormatChoice]=useState<Record<string,string>>({});
   const [renameTarget,setRenameTarget]=useState<{kind:'shelf'|'collection';id:string}|null>(null);
   const shelfScrollRef=useRef<ScrollView|null>(null);
+  const seriesExpansionAnim=useRef(new Animated.Value(0)).current;
   const libraryListRef=useRef<any>(null);
   const shelfScrollOffset=useRef(0);
   const libraryScrollOffset=useRef(0);
@@ -735,13 +763,27 @@ function Client() {
   const [editTitle,setEditTitle]=useState('');
   const [editAuthor,setEditAuthor]=useState('');
   const [editSeries,setEditSeries]=useState('');
+  const [editSeriesNumber,setEditSeriesNumber]=useState('');
   const [editGenre,setEditGenre]=useState('');
   const [editYear,setEditYear]=useState('');
+  const [editNarrator,setEditNarrator]=useState('');
+  const [editPublisher,setEditPublisher]=useState('');
+  const [editISBN,setEditISBN]=useState('');
+  const [editASIN,setEditASIN]=useState('');
+  const [editLanguage,setEditLanguage]=useState('');
+  const [editDescription,setEditDescription]=useState('');
+  const [editAdvancedOpen,setEditAdvancedOpen]=useState(false);
   const [editCoverUri,setEditCoverUri]=useState('');
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
+  const [localMoveSelection,setLocalMoveSelection]=useState<string[]>([]);
+  const [serverMovePreviews,setServerMovePreviews]=useState<MoveBatchResult['items']>([]);
+  const [serverMoveSelection,setServerMoveSelection]=useState<string[]>([]);
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
+  const [scanResultSummary,setScanResultSummary]=useState<ScanResultSummary|null>(null);
+  const [rescanPromptOpen,setRescanPromptOpen]=useState(false);
+  useEffect(()=>{if(!libraryManageOpen&&scanResultSummary)setScanResultSummary(null);},[libraryManageOpen,scanResultSummary]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
@@ -754,6 +796,7 @@ function Client() {
   const [privacyBackupText,setPrivacyBackupText]=useState('');
   const [privacyRestoreText,setPrivacyRestoreText]=useState('');
   const [privacyDataNotice,setPrivacyDataNotice]=useState('');
+  useEffect(()=>{let live=true;getPersistedJSON<Record<string,string>>(shelfFormatChoiceKey).then(value=>{if(live&&value&&typeof value==='object')setShelfFormatChoice(value)}).catch(()=>undefined);return()=>{live=false;};},[]);
   const loadCancel = useRef<(() => void) | null>(null);
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
@@ -915,17 +958,17 @@ function Client() {
   const sourceWorks = useMemo<UnifiedWork[]>(() => {
     const phone:UnifiedWork[] = phonePersonalWorks.map(work => {
       const identity=sourceIdentity({source:'local',localKey:work.key,space:work.space,title:work.title});
-      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work};
+      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work};
     });
     const downloaded:UnifiedWork[] = downloadedPersonalWorks.flatMap(work => {
       if(!work.originServer || !work.originWorkId)return [];
       const identity=sourceIdentity({source:'downloaded',server:work.originServer,serverWorkId:work.originWorkId,space:work.space,title:work.title});
-      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,format:work.format,space:work.space,available:true,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
+      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:true,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
     });
     const remote:UnifiedWork[] = session ? serverWorks.map(work => {
       const identity=sourceIdentity({source:'server',server:session.server,serverWorkId:work.id,space:work.space,title:work.title});
       const pref=serverPreferences[work.id] || {rating:work.rating||0,favourite:!!work.favourite,state:work.state||'not-started' as ReadingState};
-      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre||'',publishedYear:publicationYear(work.publishedYear),format:work.format,space:work.space,available:work.available,files:work.files,editions:work.editions,readingState:pref.state||'not-started',rating:pref.rating||0,favourite:!!pref.favourite,serverWork:work,server:session.server,serverWorkId:work.id};
+      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre||'',publishedYear:publicationYear(work.publishedYear),seriesNumber:work.seriesNumber,format:work.format,space:work.space,available:work.available,files:work.files,editions:work.editions,readingState:pref.state||'not-started',rating:pref.rating||0,favourite:!!pref.favourite,serverWork:work,server:session.server,serverWorkId:work.id};
     }) : [];
     return [...phone,...downloaded,...remote];
   },[downloadedPersonalWorks,phonePersonalWorks,serverPreferences,serverWorks,session]);
@@ -976,10 +1019,13 @@ function Client() {
     return ()=>{atlasPulseLoop.stop();atlasPulse.setValue(0);};
   },[activeTab,atlasBreakdown,atlasNodeId,atlasPulse,reduceMotion]);
 
-  const localDuplicateGroups = useMemo(() => {
+  const localRelations = useMemo(() => {
     const local=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-    return possibleLocalDuplicateGroups(local);
+    return localRelationClassification(local);
   },[localBooks]);
+  const localDuplicateGroups=localRelations.duplicates;
+  const localAlternateFormatGroups=localRelations.alternateFormats;
+  const localDifferentEditionGroups=localRelations.differentEditions;
 
 
   function statsFromUnified(items:UnifiedWork[],name:string):VerifiedProfileStats{
@@ -1001,6 +1047,7 @@ function Client() {
     };
   }
   const allUnifiedWorks=useMemo(()=>dedupeForAll(sourceWorks),[sourceWorks]);
+  const shelfUnifiedWorks=useMemo<UnifiedWork[]>(()=>groupShelfFormats(allUnifiedWorks),[allUnifiedWorks]);
   const localProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>matchesSource(work.source,'local')),'On this device'),[sourceWorks]);
   const downloadedProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>work.source==='downloaded'),'Downloaded'),[sourceWorks]);
   const combinedProfileStats=useMemo(()=>statsFromUnified(allUnifiedWorks,'All libraries'),[allUnifiedWorks]);
@@ -1306,7 +1353,10 @@ function Client() {
       if (Array.isArray(value)) setQueuedBooks(value);
     }).catch(() => undefined);
     getPersistedJSON<LocalSortHistory[]>(localSortHistoryKey).then(value => {
-      if (Array.isArray(value)) setLocalSortHistory(value);
+      if (Array.isArray(value)) {
+        setLocalSortHistory(value);
+        if(value.some(item=>item.complete===false))setRescanPromptOpen(true);
+      }
     }).catch(() => undefined);
     getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(value => {
       if (value && typeof value === 'object') setLocalMetadataOverrides(value);
@@ -1678,24 +1728,28 @@ function Client() {
     return total;
   }
 
-  async function previewSort(assetIds: number[]) {
+  async function previewSort(assetIds:number[]) {
     if(!session)return;
     setBusy(true);setError('');setMoveStatus('Preparing safe move previews...');
-    try {
-      const result = await previewAssetIDs(assetIds);
-      setMoveStatus(assetIds.length ? describeBatch(result,'ready to move') : 'No matching files to preview.');
-    } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
+    try{
+      const result=await previewAssetIDs(assetIds);
+      setServerMovePreviews(result.items);
+      setServerMoveSelection(result.items.flatMap(item=>item.move?.id?[item.move.id]:[]));
+      setMoveStatus(assetIds.length?describeBatch(result,'ready to move'):'No matching files to preview.');
+    }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
 
-  async function previewLibrary(allLibrary: boolean) {
+  async function previewLibrary(allLibrary:boolean) {
     if(!session)return;
     setBusy(true);setError('');setMoveStatus('Reading library…');
-    try {
+    try{
       const ids=await fetchAllAssetIDs(allLibrary);
-      if(!ids.length){setMoveStatus('No files to preview.');return;}
+      if(!ids.length){setServerMovePreviews([]);setServerMoveSelection([]);setMoveStatus('No files to preview.');return;}
       const result=await previewAssetIDs(ids);
+      setServerMovePreviews(result.items);
+      setServerMoveSelection(result.items.flatMap(item=>item.move?.id?[item.move.id]:[]));
       setMoveStatus(describeBatch(result,'ready to move'));
-    } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
+    }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
 
   async function fetchPendingMoveIDs() {
@@ -1711,22 +1765,24 @@ function Client() {
 
   async function applySortBatch() {
     if(!session)return;
-    setBusy(true);setError('');setMoveStatus('Reading pending safe moves...');
-    try {
-      const ids=await fetchPendingMoveIDs();
-      if(!ids.length){setMoveStatus('No pending safe moves.');return;}
+    const ids=serverMoveSelection.slice();
+    if(!ids.length){setMoveStatus('No selected ready server moves to apply.');return;}
+    setBusy(true);setError('');setMoveStatus('Applying selected safe moves...');
+    try{
       const total:MoveBatchResult={ok:0,failed:0,items:[]};
       const batchSize=10;
       for(let i=0;i<ids.length;i+=batchSize){
-        setMoveStatus(`Applying safe moves… ${Math.min(i+batchSize,ids.length)} / ${ids.length}`);
+        setMoveStatus(`Applying selected moves… ${Math.min(i+batchSize,ids.length)} / ${ids.length}`);
         const result=await request(
           session,'/api/file-moves/apply-batch','POST',{ids:ids.slice(i,i+batchSize)},120000,
         ) as MoveBatchResult;
         total.ok+=result.ok;total.failed+=result.failed;total.items.push(...result.items);
       }
       setMoveStatus(describeBatch(total,'moved'));
+      setServerMoveSelection([]);
+      setServerMovePreviews([]);
       await refreshSourcesAndShelf();
-    } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
+    }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
 
   async function signIn() {
@@ -1887,63 +1943,92 @@ function Client() {
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
 
+  const scanFrame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+
+  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[]) {
+    setScanProgress({phase:'checking-duplicates',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
+    await scanFrame();
+    localRelationClassification(result.books);
+    setScanProgress({phase:'preparing',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
+    await scanFrame();
+
+    const summary=reconcileScan(previousLocal,result.books);
+    setScanResultSummary(summary);
+    setLocalFolders(result.folders);
+    setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
+    setLocalMovePreviews([]);
+    setLocalMoveSelection([]);
+    setSpaces([...new Set(result.books.map(book=>book.space))]);
+
+    const reconciledHistory=localSortHistory.map(item=>item.complete===false?{...item,complete:true}:item);
+    const historyChanged=reconciledHistory.some((item,index)=>item.complete!==localSortHistory[index]?.complete);
+    if(historyChanged)setLocalSortHistory(reconciledHistory);
+
+    await Promise.all([
+      setPersistedJSON(localFoldersKey,result.folders),
+      setPersistedJSON(localCatalogKey,result.books),
+      historyChanged?setPersistedJSON(localSortHistoryKey,reconciledHistory):Promise.resolve(),
+    ]);
+    setRescanPromptOpen(false);
+    setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
+    await scanFrame();
+    return summary;
+  }
+
+  function scanNotice(result:LocalScanResult) {
+    const limitNotice=result.truncatedReason==='entry-limit'
+      ? ' · scan safety limit reached'
+      : result.truncated
+        ? ' · library safety limit reached'
+        : '';
+    return `${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`;
+  }
+
   async function addLocalFolder() {
     setError('');
     setLocalFolderNotice('');
+    setScanResultSummary(null);
     setLocalScanning(true);
     try {
-      const picked = await pickLocalFolder();
-      if (!picked) {
+      const picked=await pickLocalFolder();
+      if(!picked){
         setLocalFolderNotice('Folder selection cancelled.');
         return;
       }
-      const folders = localFolders.some(folder => folder.uri === picked.uri) ? localFolders : [...localFolders, picked];
-      setScanProgress({phase: 'discovering', currentFolder: picked.name, entriesVisited: 0, found: 0, review: 0});
-      const result = await scanLocalFolders(folders, setScanProgress, localMetadataOverrides);
-      setLocalFolders(result.folders);
-      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
-      setLocalMovePreviews([]);
-      setSpaces([...new Set(result.books.map(book => book.space))]);
-      await Promise.all([
-        setPersistedJSON(localFoldersKey, result.folders),
-        setPersistedJSON(localCatalogKey, result.books),
-      ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
-      if (result.books.length && celebrationEligible) {
+      const folders=localFolders.some(folder=>folder.uri===picked.uri)?localFolders:[...localFolders,picked];
+      setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
+      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const result=await scanLocalFolders(folders,setScanProgress,localMetadataOverrides,previousLocal);
+      await finaliseLocalScan(result,previousLocal);
+      setLocalFolderNotice(scanNotice(result));
+      if(result.books.length&&celebrationEligible){
         setCelebrating(true);
         setCelebrationEligible(false);
-        void SecureStore.setItemAsync(firstLibraryCelebratedKey, '1');
-        setTimeout(() => setCelebrating(false), 1900);
+        void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1');
+        setTimeout(()=>setCelebrating(false),1900);
       }
-    } catch (e) {
+    }catch(e){
       setError((e as Error).message);
-    } finally {
+    }finally{
       setLocalScanning(false);
       setScanProgress(null);
     }
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides) {
-    if (!localFolders.length) return;
+    if(!localFolders.length)return;
     setError('');
+    setScanResultSummary(null);
     setLocalScanning(true);
-    try {
-      setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
-      const result = await scanLocalFolders(localFolders, setScanProgress, overrides);
-      setLocalFolders(result.folders);
-      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
-      setLocalMovePreviews([]);
-      setSpaces([...new Set(result.books.map(book => book.space))]);
-      await Promise.all([
-        setPersistedJSON(localFoldersKey, result.folders),
-        setPersistedJSON(localCatalogKey, result.books),
-      ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
-    } catch (e) {
+    try{
+      setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
+      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const result=await scanLocalFolders(localFolders,setScanProgress,overrides,previousLocal);
+      await finaliseLocalScan(result,previousLocal);
+      setLocalFolderNotice(scanNotice(result));
+    }catch(e){
       setError((e as Error).message);
-    } finally {
+    }finally{
       setLocalScanning(false);
       setScanProgress(null);
     }
@@ -2118,33 +2203,47 @@ function Client() {
   }
 
   function previewLocalSortBatch() {
-    const previews = previewLocalSort(localBooks.filter(book => book.uri) as LocalBook[], sortTemplate);
+    const previews=previewLocalSort(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate);
+    const readyIds=previews.filter(item=>item.state==='ready').map(item=>item.id);
     setLocalMovePreviews(previews);
-    const ready = previews.filter(item => item.state === 'ready').length;
-    const conflicts = previews.filter(item => item.state === 'conflict').length;
-    const review = previews.filter(item => item.state === 'review').length;
-    const same = previews.filter(item => item.state === 'same').length;
-    setMoveStatus(`${ready} ready; ${review} need metadata review; ${conflicts} conflicts; ${same} already organised.`);
+    setLocalMoveSelection(readyIds);
+    const conflicts=previews.filter(item=>item.state==='conflict').length;
+    const review=previews.filter(item=>item.state==='review').length;
+    const same=previews.filter(item=>item.state==='same').length;
+    setMoveStatus(`${readyIds.length} ready and selected; ${review} review recommended; ${conflicts} conflicts; ${same} already organised.`);
   }
 
   async function applyLocalSortBatch() {
-    const ready = localMovePreviews.filter(item => item.state === 'ready');
-    if (!ready.length) {
-      setMoveStatus('No ready local moves to apply.');
+    const selected=new Set(localMoveSelection);
+    const ready=localMovePreviews.filter(item=>item.state==='ready'&&selected.has(item.id));
+    if(!ready.length){
+      setMoveStatus('No selected ready items to apply.');
       return;
     }
     setBusy(true);
     setError('');
     setMoveStatus('Copying organised files...');
     try {
-      const result = await applyLocalSortCopies(ready);
-      const entry: LocalSortHistory = {id: String(Date.now()), createdAt: new Date().toISOString(), copied: result.copied, failed: result.failed};
-      const history = [entry, ...localSortHistory].slice(0, 20);
+      const transactionId = String(Date.now());
+      const started: LocalSortHistory = {id: transactionId, createdAt: new Date().toISOString(), copied: [], failed: [], complete:false};
+      let history = [started, ...localSortHistory].slice(0, 20);
+      setLocalSortHistory(history);
+      await setPersistedJSON(localSortHistoryKey, history);
+      const checkpoint = async (partial: {copied: LocalSortHistory['copied']; failed: LocalSortHistory['failed']}) => {
+        history = history.map(item => item.id === transactionId ? {...item, copied: partial.copied, failed: partial.failed} : item);
+        setLocalSortHistory(history);
+        await setPersistedJSON(localSortHistoryKey, history);
+      };
+      const result = await applyLocalSortCopies(ready, checkpoint);
+      const entry: LocalSortHistory = {id: transactionId, createdAt: started.createdAt, copied: result.copied, failed: result.failed, complete:true};
+      history = history.map(item => item.id === transactionId ? entry : item);
       setLocalSortHistory(history);
       await setPersistedJSON(localSortHistoryKey, history);
       setMoveStatus(`${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
+      setLocalMoveSelection([]);
       await rescanLocalFolders();
     } catch (e) {
+      setRescanPromptOpen(true);
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -2391,8 +2490,20 @@ function Client() {
     if (first) openBook({...first,localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId});
   }
 
+  function rememberServerFormatChoice(work:ServerWork,track:WorkTrack){
+    if(!session)return;
+    const historyKey='server:'+session.server.replace(/\/+$/,'').toLowerCase()+':'+work.id;
+    const value=track.format+'|'+track.edition;
+    setShelfFormatChoice(current=>{
+      const next={...current,[historyKey]:value};
+      void setPersistedJSON(shelfFormatChoiceKey,next);
+      return next;
+    });
+  }
+
   function openServerWorkTrack(work: ServerWork, track: WorkTrack) {
     setWorkPicker(null);
+    rememberServerFormatChoice(work,track);
     const item: Book = {
       id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
       format:track.format,space:work.space,available:track.available,serverWorkId:work.id,
@@ -2412,17 +2523,23 @@ function Client() {
       const tracks = await request(session, '/api/works/' + work.id + '/tracks') as WorkTrack[];
       const available = tracks.filter(track => track.available);
       if (!available.length) throw Error('No readable files are currently available for this work.');
-      if (work.format === 'Audio' || available.every(track => track.format === 'Audio')) {
+      const formats = new Set(available.map(track => track.format));
+      const editions = new Set(available.map(track => track.edition));
+      if (formats.size === 1 && available.every(track => track.format === 'Audio')) {
         const first = available.find(track => track.format === 'Audio')!;
+        rememberServerFormatChoice(work,first);
         await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:'Audio',space:work.space,available:true,coverShape:'square',serverWorkId:work.id,source:'server',originServer:session.server});
         return;
       }
-      const editions = new Set(available.map(track => track.edition));
-      if (editions.size === 1) {
-        const first = available[0];
-        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:first.format,space:work.space,available:true,serverWorkId:work.id,coverShape:first.format==='Audio'?'square':'portrait',source:'server',originServer:session.server});
+      if (formats.size === 1 && editions.size === 1) {
+        openServerWorkTrack(work,available[0]);
         return;
       }
+      const variants=available.filter((track,index,all)=>all.findIndex(item=>item.format===track.format&&item.edition===track.edition)===index);
+      const historyKey='server:'+session.server.replace(/\/+$/,'').toLowerCase()+':'+work.id;
+      const remembered=shelfFormatChoice[historyKey];
+      const rememberedTrack=remembered?variants.find(track=>track.format+'|'+track.edition===remembered):undefined;
+      if(rememberedTrack){openServerWorkTrack(work,rememberedTrack);return;}
       setWorkPicker({work,tracks:available});
     } catch (e) {
       setError((e as Error).message);
@@ -2659,8 +2776,16 @@ function Client() {
     setEditTitle(item.title);
     setEditAuthor(item.author || '');
     setEditSeries(item.series || '');
+    setEditSeriesNumber(item.seriesNumber === undefined ? '' : String(item.seriesNumber));
     setEditGenre(item.genre || '');
     setEditYear(item.publishedYear ? String(item.publishedYear) : '');
+    setEditNarrator(item.narrator || '');
+    setEditPublisher(item.publisher || '');
+    setEditISBN(item.isbn || '');
+    setEditASIN(item.asin || '');
+    setEditLanguage(item.language || '');
+    setEditDescription(item.description || '');
+    setEditAdvancedOpen(false);
     setEditCoverUri(item.coverUri || '');
   }
 
@@ -2787,16 +2912,17 @@ function Client() {
 
   function WorkPickerPanel() {
     if (!workPicker) return null;
-    const choices = workPicker.tracks.filter((track,index,all)=>all.findIndex(item=>item.edition===track.edition)===index);
+    const choices = workPicker.tracks.filter((track,index,all)=>all.findIndex(item=>item.edition===track.edition&&item.format===track.format)===index);
+    const formatCounts=choices.reduce<Record<string,number>>((counts,track)=>({...counts,[track.format]:(counts[track.format]||0)+1}),{});
     return (
       <Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setWorkPicker(null)}>
         <View style={styles.modalBackdrop}>
-          <View accessibilityViewIsModal={true} accessibilityLabel={'Choose edition for '+workPicker.work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+          <View accessibilityViewIsModal={true} accessibilityLabel={'Choose format or edition for '+workPicker.work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{workPicker.work.title}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Choose an edition to open.</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Choose a format or edition to open.</Text>
             {choices.map(track=><Button
-              key={track.edition}
-              label={(track.format==='Audio'?'Listen':'Open')+' · '+track.format}
+              key={track.format+'-'+track.edition}
+              label={track.format+' · '+(track.format==='Audio'?'Listen':'Open')+(formatCounts[track.format]>1?' · Edition '+track.edition:'')}
               tone="quiet"
               onPress={()=>openServerWorkTrack(workPicker.work,track)}
             />)}
@@ -2807,10 +2933,60 @@ function Client() {
     );
   }
 
-  function openUnifiedWork(work: UnifiedWork) {
-    setWorkMenu(null);
+  function shelfFormatGroupKey(work:UnifiedWork){
+    return work.logicalWorkKey?'local:'+work.logicalWorkKey:work.canonicalKey;
+  }
+
+  function rememberShelfFormatChoice(work:UnifiedWork,choice:UnifiedWork){
+    const key=shelfFormatGroupKey(work);
+    setShelfFormatChoice(current=>{
+      const next={...current,[key]:choice.key};
+      void setPersistedJSON(shelfFormatChoiceKey,next);
+      return next;
+    });
+  }
+
+  function openSingleUnifiedWork(work:UnifiedWork){
     if (work.localWork) { openLocalWork(work.localWork); return; }
     if (work.serverWork) { void openServerWork(work.serverWork); }
+  }
+
+  function openShelfFormatChoice(work:UnifiedWork,choice:UnifiedWork){
+    setFormatPicker(null);
+    rememberShelfFormatChoice(work,choice);
+    openSingleUnifiedWork(choice);
+  }
+
+  function FormatPickerPanel(){
+    if(!formatPicker)return null;
+    const work=formatPicker.work;
+    const choices=formatPicker.choices.filter(choice=>choice.available);
+    return <Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setFormatPicker(null)}>
+      <View style={styles.modalBackdrop}>
+        <View accessibilityViewIsModal={true} accessibilityLabel={'Choose format for '+work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{work.title}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'} · Choose how to continue.</Text>
+          {choices.map(choice=>{
+            const action=choice.readingState==='in-progress'?(choice.format==='Audio'?'Continue listening':'Continue reading'):(choice.format==='Audio'?'Listen':'Open');
+            return <Button key={choice.key} label={choice.format+' · '+action} tone="quiet" onPress={()=>openShelfFormatChoice(work,choice)}/>;
+          })}
+          <Button label="Cancel" tone="quiet" onPress={()=>setFormatPicker(null)}/>
+        </View>
+      </View>
+    </Modal>;
+  }
+
+  function openUnifiedWork(work: UnifiedWork) {
+    setWorkMenu(null);
+    const choices=(work.formatChoices||[]).filter(choice=>choice.available);
+    if(choices.length>1){
+      const remembered=shelfFormatChoice[shelfFormatGroupKey(work)];
+      const obvious=obviousShelfFormatChoice(choices,remembered);
+      if(obvious){openShelfFormatChoice(work,obvious);return;}
+      setFormatPicker({work,choices});
+      return;
+    }
+    openSingleUnifiedWork(work);
   }
 
   function ContinueCard({
@@ -2902,6 +3078,7 @@ function Client() {
       <View style={[styles.unifiedCardCopy,list&&{flex:1}]}>
         <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
+        {work.formatChoices&&work.formatChoices.length>1?<Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{work.formatChoices.map(choice=>choice.format).join(' · ')}</Text>:null}
         {list?<View style={styles.unifiedListMeta}>
           <View style={[styles.workSourceDot,{backgroundColor:work.source==='downloaded'?p.sage:p.muted}]}/>
           <Text numberOfLines={1} style={[styles.workSource,{color:p.muted}]}>{sourceLabel(work.source)} · {work.format}{work.series?' · '+work.series:''}</Text>
@@ -2950,6 +3127,7 @@ function Client() {
           <Button label={work.format==='Audio'?'Listen':'Open'} onPress={()=>openUnifiedWork(work)}/>
           <View style={styles.sheetActionList}>
             <SheetAction label="Work details" onPress={()=>{setWorkDetails(work);close();}}/>
+            {work.formatChoices&&work.formatChoices.length>1?<SheetAction label="Choose format" onPress={()=>{setFormatPicker({work,choices:work.formatChoices!});close();}}/>:null}
             <SheetAction label={personal.favourite?'Remove favourite':'Add favourite'} onPress={setFav}/>
             {work.format==='Audio'&&local?<SheetAction label="Add to queue" onPress={()=>{close();void addLocalWorkQueue(local);}}/>:null}
             {work.format==='Audio'&&remote?<SheetAction label="Add to queue" onPress={()=>{close();void queueServerWork(remote);}}/>:null}
@@ -3031,7 +3209,7 @@ function Client() {
                 <Text style={[styles.workDetailsAuthor,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
                 {work.series?<Text style={[styles.meta,{color:p.muted}]}>{work.series}</Text>:null}
                 <View style={styles.workDetailsTags}>
-                  {[work.format,work.genre,work.publishedYear?String(work.publishedYear):''].filter(Boolean).map(value=><View key={String(value)} style={[styles.workDetailsTag,{borderColor:p.line}]}><Text style={[styles.workDetailsTagText,{color:p.muted}]}>{value}</Text></View>)}
+                  {[...(work.formatChoices?.map(choice=>choice.format)||[work.format]),work.genre,work.publishedYear?String(work.publishedYear):''].filter(Boolean).filter((value,index,all)=>all.indexOf(value)===index).map(value=><View key={String(value)} style={[styles.workDetailsTag,{borderColor:p.line}]}><Text style={[styles.workDetailsTagText,{color:p.muted}]}>{value}</Text></View>)}
                 </View>
                 <Text style={[styles.meta,{color:p.sage}]}>{progressCopy}</Text>
                 {personal.rating?<Text style={[styles.meta,{color:p.gold}]}>{ratingLabel(personal.rating)}</Text>:null}
@@ -3049,7 +3227,8 @@ function Client() {
               ].map(([label,value])=><View key={label} style={styles.workDetailsFact}><Text style={[styles.workDetailsFactLabel,{color:p.muted}]}>{label}</Text><Text numberOfLines={2} style={[styles.workDetailsFactValue,{color:p.ink}]}>{value}</Text></View>)}
             </View>
 
-            <Button label={work.format==='Audio'?'Listen':'Open'} onPress={()=>{close();openUnifiedWork(work)}}/>
+            <Button label={work.formatChoices&&work.formatChoices.length>1?'Continue':work.format==='Audio'?'Listen':'Open'} onPress={()=>{close();openUnifiedWork(work)}}/>
+            {work.formatChoices&&work.formatChoices.length>1?<Button label="Choose format" tone="quiet" onPress={()=>{setFormatPicker({work,choices:work.formatChoices!});close();}}/>:null}
             <View style={styles.workDetailsActionGrid}>
               <Pressable accessibilityRole="button" onPress={setFav} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="bookmark" color={personal.favourite?p.gold:p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>{personal.favourite?'Favourited':'Favourite'}</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="library" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Collection</Text></Pressable>
@@ -3072,18 +3251,21 @@ function Client() {
     const targets=editingUris.length?editingUris:(editing.uri?[editing.uri]:[]);
     const save=()=>{
       const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
+      const seriesNumberText=editSeriesNumber.trim();
+      const seriesNumber=seriesNumberText!==''&&Number.isFinite(Number(seriesNumberText))?Number(seriesNumberText):undefined;
       const yearText=editYear.trim();
       const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
+      const narrator=editNarrator.trim(),publisher=editPublisher.trim(),isbn=editISBN.trim(),asin=editASIN.trim(),language=editLanguage.trim(),description=editDescription.trim();
       const coverUri=editCoverUri.trim();
       if(!title)return;
       setBusy(true);setError('');
       if(editing.source==='server'){
         if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
-        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
-          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);})
+        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber:seriesNumber??0,genre,publishedYear:publishedYear??0,narrator,publisher,isbn,asin,language,description})
+          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
-        const override:LocalMetadataOverride={title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||undefined};
+        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
         const next={...localMetadataOverrides};
         for(const uri of targets)next[uri]=override;
         setLocalMetadataOverrides(next);
@@ -3091,7 +3273,7 @@ function Client() {
           .then(()=>{
             setLocalBooks(old=>{
               const wanted=new Set(targets);
-              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
+              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const,metadataConflicts:[]}:b);
               void setPersistedJSON(localCatalogKey,updated);
               return updated;
             });
@@ -3121,20 +3303,125 @@ function Client() {
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
+            <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
+            {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Series number" keyboardType="decimal-pad" value={editSeriesNumber} onChangeText={setEditSeriesNumber} placeholder="Series number (for example 2 or 2.5)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
-            {localEdit?<TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+            <TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <Button label={editAdvancedOpen?'Hide additional details':'Additional details'} tone="quiet" onPress={()=>setEditAdvancedOpen(value=>!value)}/>
+            {editAdvancedOpen?<View style={styles.settingsSubgroup}>
+              {editing.format==='Audio'?<TextInput accessibilityLabel="Narrator" value={editNarrator} onChangeText={setEditNarrator} placeholder="Narrator" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+              <TextInput accessibilityLabel="Publisher" value={editPublisher} onChangeText={setEditPublisher} placeholder="Publisher" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="ISBN" autoCapitalize="characters" autoCorrect={false} value={editISBN} onChangeText={setEditISBN} placeholder="ISBN" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="ASIN" autoCapitalize="characters" autoCorrect={false} value={editASIN} onChangeText={setEditASIN} placeholder="ASIN" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="Language" autoCapitalize="none" value={editLanguage} onChangeText={setEditLanguage} placeholder="Language" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="Description" multiline value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:96,textAlignVertical:'top'}]}/>
+            </View>:null}
             {localEdit?<View style={styles.metadataCoverEditor}>
               <View style={styles.metadataCoverPreview}><Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
               <View style={{flex:1,gap:6}}><Text style={[styles.bookTitle,{color:p.ink}]}>Cover artwork</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist normally finds companion cover files during scanning. Paste a local/content/HTTPS image URI only when you want a manual override.</Text></View>
             </View>:null}
             {localEdit?<TextInput accessibilityLabel="Cover image URI" autoCapitalize="none" autoCorrect={false} value={editCoverUri} onChangeText={setEditCoverUri} placeholder="Cover image URI (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
-            {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan; this editor changes textual metadata only.</Text>:null}
+            {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
             <Button label="Save details" disabled={busy||!editTitle.trim()} onPress={save}/>
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
             <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>{setEditing(null);setEditingUris([])}}/>
+          </View>
+        </ScrollView></View>
+      </KeyboardAvoidingView>
+    </Modal>;
+  }
+
+  function BulkMetadataPanel(){
+    if(!bulkEditOpen)return null;
+    const wanted=new Set(selectedWorkKeys);
+    const visibleOrdered=sortedUnifiedWorks.filter(work=>wanted.has(work.canonicalKey));
+    const visibleKeys=new Set(visibleOrdered.map(work=>work.canonicalKey));
+    const ordered=[...visibleOrdered,...selectedWorks.filter(work=>!visibleKeys.has(work.canonicalKey))];
+    const editable=ordered.filter(work=>work.source==='local'||work.source==='server');
+    const skippedDownloaded=ordered.filter(work=>work.source==='downloaded').length;
+    const hasAudio=editable.some(work=>work.format==='Audio');
+    const serverBlocked=editable.some(work=>work.source==='server')&&(!session||!owner);
+    const hasFields=!!(bulkAuthor.trim()||bulkSeries.trim()||bulkGenre.trim()||bulkNarrator.trim());
+    const hasChange=hasFields||bulkSequential;
+    const close=()=>{if(!busy)setBulkEditOpen(false);};
+    const save=async()=>{
+      if(!hasChange||!editable.length||busy)return;
+      if(serverBlocked){setError('Server metadata can only be changed by an Archivist Server admin.');return;}
+      const patch:BulkMetadataPatch={};
+      if(bulkAuthor.trim())patch.author=bulkAuthor.trim();
+      if(bulkSeries.trim())patch.series=bulkSeries.trim();
+      if(bulkGenre.trim())patch.genre=bulkGenre.trim();
+      if(bulkNarrator.trim())patch.narrator=bulkNarrator.trim();
+      const start=Number(bulkSeriesStart.trim());
+      const numbered=bulkSequential?sequentialSeriesNumbers(editable,Number.isFinite(start)?start:1):editable.map(work=>({item:work,seriesNumber:undefined as number|undefined}));
+      setBusy(true);setError('');
+      try{
+        const nextOverrides={...localMetadataOverrides};
+        const localUpdates=new Map<string,LocalMetadataOverride>();
+        let serverTouched=false;
+        for(const entry of numbered){
+          const work=entry.item;
+          if(work.source==='local'&&work.localWork){
+            for(const track of work.localWork.tracks){
+              if(!track.uri)continue;
+              const override=bulkOverrideForBook(track,work.title,patch,entry.seriesNumber);
+              nextOverrides[track.uri]=override;
+              localUpdates.set(track.uri,override);
+            }
+          }else if(work.source==='server'&&work.serverWork&&session){
+            const payload:Record<string,unknown>={};
+            if(patch.author!==undefined)payload.author=patch.author;
+            if(patch.series!==undefined)payload.series=patch.series;
+            if(patch.genre!==undefined)payload.genre=patch.genre;
+            if(patch.narrator!==undefined)payload.narrator=patch.narrator;
+            if(entry.seriesNumber!==undefined)payload.seriesNumber=entry.seriesNumber;
+            const tracks=await request(session,'/api/works/'+work.serverWork.id+'/tracks') as WorkTrack[];
+            const assetIds=[...new Set(tracks.map(track=>track.id))];
+            for(const assetId of assetIds)await request(session,'/api/assets/'+assetId+'/metadata','PATCH',payload);
+            serverTouched=true;
+          }
+        }
+        if(localUpdates.size){
+          setLocalMetadataOverrides(nextOverrides);
+          await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
+          const updated=localBooks.map(book=>{
+            if(!book.uri)return book;
+            const override=localUpdates.get(book.uri);
+            if(!override)return book;
+            const next={...book,...override,metadataSource:'manual' as const,identificationConfidence:'high' as const,needsReview:false,reviewReason:'',metadataConflicts:[]};
+            return {...next,workKey:logicalWorkKey(next),editionKey:editionKey(next,next.format)};
+          });
+          setLocalBooks(updated);
+          await setPersistedJSON(localCatalogKey,updated);
+        }
+        if(serverTouched)await refreshSourcesAndShelf();
+        setSelectedWorkKeys([]);
+        setBulkEditOpen(false);
+        setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');
+      }catch(e){setError((e as Error).message);}
+      finally{setBusy(false);}
+    };
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
+      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
+        <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+          <View accessibilityViewIsModal={true} accessibilityLabel={'Bulk edit '+selectedWorks.length+' selected works'} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.playerEyebrow,{color:p.sage}]}>BULK METADATA</Text>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit {selectedWorks.length} selected work{selectedWorks.length===1?'':'s'}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Only fields you enter are changed. Leave a field blank to keep each work's existing value. Setting one author name also consolidates selected author-name variants.</Text>
+            {skippedDownloaded?<Text style={[styles.meta,{color:p.muted}]}>{skippedDownloaded} downloaded cop{skippedDownloaded===1?'y keeps':'ies keep'} source metadata and will not be changed here.</Text>:null}
+            {serverBlocked?<Text style={[styles.meta,{color:p.danger}]}>The selection includes server works. Reconnect as an Admin to change their metadata.</Text>:null}
+            <TextInput accessibilityLabel="Bulk author" value={bulkAuthor} onChangeText={setBulkAuthor} placeholder="Set author (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Bulk series" value={bulkSeries} onChangeText={setBulkSeries} placeholder="Set series (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Bulk genre" value={bulkGenre} onChangeText={setBulkGenre} placeholder="Set genre (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            {hasAudio?<TextInput accessibilityLabel="Bulk narrator" value={bulkNarrator} onChangeText={setBulkNarrator} placeholder="Set narrator (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+            <Button label={bulkSequential?'Sequential series numbering: on':'Number series sequentially'} tone="quiet" onPress={()=>setBulkSequential(value=>!value)}/>
+            {bulkSequential?<><Text style={[styles.meta,{color:p.muted}]}>Numbers follow the works' current Library order.</Text><TextInput accessibilityLabel="Starting series number" keyboardType="decimal-pad" value={bulkSeriesStart} onChangeText={setBulkSeriesStart} placeholder="Start at 1" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/></>:null}
+            <Button label={'Apply to '+editable.length+' work'+(editable.length===1?'':'s')} disabled={busy||serverBlocked||!editable.length||!hasChange} onPress={()=>void save()}/>
+            <Button label="Cancel" tone="quiet" disabled={busy} onPress={close}/>
           </View>
         </ScrollView></View>
       </KeyboardAvoidingView>
@@ -3307,7 +3594,7 @@ function Client() {
 
   function Shelf(){
     // Shelf is deliberately personal/content-led. Folder and source organisation lives in Library.
-    const base:UnifiedWork[]=allUnifiedWorks;
+    const base:UnifiedWork[]=shelfUnifiedWorks;
     const continuing=base.filter(work=>work.readingState==='in-progress').slice(0,12);
     const favourites=base.filter(work=>work.favourite).slice(0,12);
     const recommendationLimit=foldLayout?5:3;
@@ -3334,13 +3621,35 @@ function Client() {
 
     const seriesGroups=[...new Set(base.map(work=>work.series).filter(Boolean))]
       .map(name=>{
-        const works=base.filter(work=>work.series===name);
+        const works=sortSeriesWorks(base.filter(work=>work.series===name));
         const relevance=works.reduce((score,work)=>score+(work.readingState==='in-progress'?5:0)+(work.favourite?3:0)+(work.readingState==='not-started'?1:0),0);
-        return {name,total:works.length,works:works.slice(0,4),relevance};
+        return {name,total:works.length,works,relevance};
       })
       .filter(group=>group.total>1)
       .sort((a,b)=>b.relevance-a.relevance||b.total-a.total||a.name.localeCompare(b.name))
       .slice(0,8);
+
+    const animateSeriesOpen=(name:string)=>{
+      setExpandedSeries(name);
+      seriesExpansionAnim.stopAnimation();
+      seriesExpansionAnim.setValue(0);
+      if(reduceMotion){seriesExpansionAnim.setValue(1);return;}
+      Animated.timing(seriesExpansionAnim,{toValue:1,duration:380,useNativeDriver:false}).start();
+    };
+    const toggleSeries=(name:string)=>{
+      if(expandedSeries===name){
+        if(reduceMotion){seriesExpansionAnim.setValue(0);setExpandedSeries('');return;}
+        seriesExpansionAnim.stopAnimation();
+        Animated.timing(seriesExpansionAnim,{toValue:0,duration:320,useNativeDriver:false}).start(({finished})=>{if(finished)setExpandedSeries('')});
+        return;
+      }
+      if(expandedSeries&&!reduceMotion){
+        seriesExpansionAnim.stopAnimation();
+        Animated.timing(seriesExpansionAnim,{toValue:0,duration:220,useNativeDriver:false}).start(({finished})=>{if(finished)animateSeriesOpen(name)});
+        return;
+      }
+      animateSeriesOpen(name);
+    };
 
     const localReview=localBooks.filter(book=>book.needsReview).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
@@ -3453,19 +3762,53 @@ function Client() {
         </ScrollView>:null}
 
         {item.id==='series'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
-          {seriesGroups.map(({name,total,works})=><Pressable
-            key={name}
-            accessibilityRole="button"
-            accessibilityLabel={name+', '+total+' work'+(total===1?'':'s')}
-            onPress={()=>{clearLibraryFilters();setSourceFilter('all');setSeriesFilter(name);setActiveTab('library')}}
-            style={({pressed})=>[styles.seriesTile,pressed&&styles.cardPressed]}>
-            <View style={styles.seriesCoverStack}>
-              {works.slice(0,3).map((work,index)=><View key={work.key} style={[styles.seriesCover,{left:index*34,top:index===1?3:index===2?6:0,zIndex:10-index}]}>{workArtwork(work)}</View>)}
-              {!works.length?<View style={[styles.seriesEmpty,{borderColor:p.line}]}/>:null}
-            </View>
-            <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
-          </Pressable>)}
+          {seriesGroups.map(({name,total,works})=>{
+            const expanded=expandedSeries===name;
+            const expandedWidth=Math.max(252,Math.min(width-36,foldLayout?520:360));
+            const animatedWidth=expanded?seriesExpansionAnim.interpolate({inputRange:[0,1],outputRange:[152,expandedWidth]}):152;
+            return <Animated.View key={name} style={[styles.seriesTile,{width:animatedWidth}]}>
+              {expanded?<React.Fragment>
+                <View style={[styles.seriesCoverStack,{overflow:'hidden'}]}>
+                  <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight:8}}>
+                    {works.map((work,index)=>{
+                      const translateX=seriesExpansionAnim.interpolate({inputRange:[0,1],outputRange:[-Math.min(index,2)*48,0]});
+                      const opacity=index<3?1:seriesExpansionAnim.interpolate({inputRange:[0,.58,1],outputRange:[0,0,1]});
+                      return <Animated.View key={work.key} style={{width:72,marginRight:10,opacity,transform:[{translateX}]}}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={'Open '+work.title+', '+name+' '+(work.seriesNumber!==undefined?work.seriesNumber:index+1)}
+                          onPress={()=>openUnifiedWork(work)}
+                          style={({pressed})=>[{width:64},pressed&&styles.cardPressed]}>
+                          <View style={[styles.seriesCover,{position:'relative',left:undefined,top:undefined,width:64}]}>{workArtwork(work)}</View>
+                        </Pressable>
+                      </Animated.View>;
+                    })}
+                  </ScrollView>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={'Collapse '+name+' series'}
+                  accessibilityState={{expanded:true}}
+                  onPress={()=>toggleSeries(name)}
+                  style={({pressed})=>[pressed&&styles.cardPressed]}>
+                  <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
+                </Pressable>
+              </React.Fragment>:<Pressable
+                accessibilityRole="button"
+                accessibilityLabel={name+', '+total+' work'+(total===1?'':'s')+', expand series'}
+                accessibilityState={{expanded:false}}
+                onPress={()=>toggleSeries(name)}
+                style={({pressed})=>[pressed&&styles.cardPressed]}>
+                <View style={styles.seriesCoverStack}>
+                  {works.slice(0,3).map((work,index)=><View key={work.key} style={[styles.seriesCover,{left:index*34,top:index===1?3:index===2?6:0,zIndex:10-index}]}>{workArtwork(work)}</View>)}
+                  {!works.length?<View style={[styles.seriesEmpty,{borderColor:p.line}]}/>:null}
+                </View>
+                <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
+              </Pressable>}
+            </Animated.View>;
+          })}
         </ScrollView>:null}
       </View>;
     };
@@ -3579,7 +3922,14 @@ function Client() {
     const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
     const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
     const maintenanceMode=reviewOnly||!!metadataGapFilter;
-    const maintenanceTitle=reviewOnly?'Metadata review':metadataGapFilter==='author'?'Missing authors':metadataGapFilter==='series'?'Missing series':metadataGapFilter==='genre'?'Missing genres':'Missing device covers';
+    const maintenanceTitle=reviewOnly?'Metadata review'
+      :metadataGapFilter==='incomplete'?'Missing metadata'
+      :metadataGapFilter==='conflicts'?'Metadata conflicts'
+      :metadataGapFilter==='seriesNumber'?'Series order needs attention'
+      :metadataGapFilter==='author'?'Missing authors'
+      :metadataGapFilter==='series'?'Missing series'
+      :metadataGapFilter==='genre'?'Missing genres'
+      :'Missing device covers';
     const MaintenanceList=()=>maintenanceMode?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} in this maintenance view</Text></View><Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>:null}{serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}</View>:null;
     const main=<View style={[styles.libraryMain,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
@@ -3599,6 +3949,7 @@ function Client() {
       {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>{setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');setBulkEditOpen(true)}} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Edit metadata</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={favouriteSelected} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Favourite</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={()=>setSelectedWorkKeys([])} style={styles.librarySelectionAction}><Text style={{color:p.sage,fontWeight:'700'}}>Done</Text></Pressable>
       </View>:<>
@@ -3644,7 +3995,7 @@ function Client() {
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
-      <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/><LibraryManagementPanel/>
+      <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/><BulkMetadataPanel/><LibraryManagementPanel/>
       {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibrarySourcesOpen(false)}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
@@ -3671,6 +4022,9 @@ function Client() {
         <Text style={[styles.filterLabel,{color:p.muted}]}>GENRE</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!genreFilter}} onPress={()=>setGenreFilter('')} style={[styles.filterChip,{backgroundColor:!genreFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{genreOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:genreFilter===value}} onPress={()=>setGenreFilter(value)} style={[styles.filterChip,{backgroundColor:genreFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
         <Text style={[styles.filterLabel,{color:p.muted}]}>METADATA GAPS</Text><View style={styles.filterWrap}>{([
           ['','Any metadata'],
+          ['incomplete','Any missing details'],
+          ['conflicts','Conflicts'],
+          ['seriesNumber','Series order'],
           ['author','Missing author'],
           ['series','Missing series'],
           ['genre','Missing genre'],
@@ -5384,8 +5738,8 @@ function Client() {
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Duplicate review</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
               {session
-                ? 'Candidates share the same byte size. Verification reads each file and compares SHA-256; nothing is changed or deleted.'
-                : 'Local candidates share the same normalized title, author, series and format. They are possible duplicates, not byte-verified.'}
+                ? 'Possible server duplicates share the same byte size. Verification reads each file and compares SHA-256; nothing is changed or deleted.'
+                : 'Archivist separates possible duplicate copies from alternate formats and different editions. None of these categories deletes or changes files.'}
             </Text>
           </View>
           <Button label="Close" tone="quiet" onPress={()=>setDuplicatePanelOpen(false)} />
@@ -5397,7 +5751,7 @@ function Client() {
           {serverDuplicateGroups.map(group=>{
             const result=duplicateResults[String(group.size)];
             return <View key={group.size} style={[styles.duplicateGroup,{borderColor:p.line}]}>
-              <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items.length} candidates · {formatBytes(group.size)}</Text>
+              <Text style={[styles.bookTitle,{color:p.ink}]}>Possible duplicate · {group.items.length} candidates · {formatBytes(group.size)}</Text>
               <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
               {group.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.title} — {item.path}</Text>)}
               {!result?<Button label="Verify exact duplicates" tone="quiet" disabled={duplicateLoading} onPress={()=>void verifyDuplicateGroup(group)} />:null}
@@ -5413,11 +5767,39 @@ function Client() {
             </View>;
           })}
         </> : <>
-          {!localDuplicateGroups.length?<Text style={[styles.empty,{color:p.muted}]}>No metadata-match duplicate candidates found.</Text>:null}
-          {localDuplicateGroups.map(group=><View key={group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
-            <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items[0].title} · {group.items.length} possible copies</Text>
+          {!localDuplicateGroups.length&&!localAlternateFormatGroups.length&&!localDifferentEditionGroups.length?<Text style={[styles.empty,{color:p.muted}]}>No duplicate, alternate-format or edition relationships need review.</Text>:null}
+
+          {localDuplicateGroups.length?<Text style={[styles.settingsSectionTitle,{color:p.muted}]}>POSSIBLE DUPLICATES</Text>:null}
+          {localDuplicateGroups.map(group=><View key={'duplicate-'+group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Possible duplicate · {group.items[0].title}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
-            {group.items.map(item=><Text key={item.uri} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.uri}</Text>)}
+            {group.items.map(item=><View key={item.uri} style={[styles.sourceRow,{borderColor:p.line}]}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'700'}]}>{item.format}{item.isbn?' · ISBN '+item.isbn:item.asin?' · ASIN '+item.asin:''}</Text>
+              <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.uri}</Text>
+            </View>)}
+            <Text style={[styles.meta,{color:p.muted}]}>Review only. Archivist will not choose a copy to remove.</Text>
+          </View>)}
+
+          {localAlternateFormatGroups.length?<Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ALTERNATE FORMATS</Text>:null}
+          {localAlternateFormatGroups.map(group=><View key={'format-'+group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Alternate format · {group.items[0].title}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+            {group.items.map(item=><View key={item.uri} style={[styles.sourceRow,{borderColor:p.line}]}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'700'}]}>{item.format}</Text>
+              <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.uri}</Text>
+            </View>)}
+            <Text style={[styles.meta,{color:p.sage}]}>Kept together as formats of the same work; not a deletion candidate.</Text>
+          </View>)}
+
+          {localDifferentEditionGroups.length?<Text style={[styles.settingsSectionTitle,{color:p.muted}]}>DIFFERENT EDITIONS</Text>:null}
+          {localDifferentEditionGroups.map(group=><View key={'edition-'+group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Different edition · {group.items[0].title}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+            {group.items.map(item=><View key={item.uri} style={[styles.sourceRow,{borderColor:p.line}]}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'700'}]}>{item.format}{item.isbn?' · ISBN '+item.isbn:item.asin?' · ASIN '+item.asin:' · Identifier unavailable'}</Text>
+              <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.uri}</Text>
+            </View>)}
+            <Text style={[styles.meta,{color:p.sage}]}>Kept as separate editions under the same logical work.</Text>
           </View>)}
         </>}
       </View>
@@ -5426,10 +5808,15 @@ function Client() {
 
   function LocalSortingPanel() {
     if(!localBooks.length)return null;
+    const readyIds=localMovePreviews.filter(item=>item.state==='ready').map(item=>item.id);
+    const selectedReady=readyIds.filter(id=>localMoveSelection.includes(id));
+    const togglePreview=(id:string)=>{
+      setLocalMoveSelection(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);
+    };
     return (
       <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist copies into the organised layout and leaves originals untouched until you choose to clean up the copy history.</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist shows the current path, proposed path and metadata used. Only selected Ready items are applied; originals remain untouched until the verified copy succeeds.</Text>
         <View style={styles.segment}>
           {[
             ['author-title','Author / Title'],
@@ -5437,21 +5824,45 @@ function Client() {
             ['format-author-title','Format / Author / Title'],
           ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
-        <Button label="Preview visible local items" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
-        <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
+        <View style={styles.toolRow}>
+          <Button label="Preview" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+          <Button label={'Apply selected'+(selectedReady.length?' ('+selectedReady.length+')':'')} disabled={busy||selectedReady.length===0} onPress={()=>void applyLocalSortBatch()}/>
+        </View>
+        {readyIds.length?<View style={styles.toolRow}>
+          <Button label="Select all Ready" tone="quiet" onPress={()=>setLocalMoveSelection(readyIds)}/>
+          <Button label="Clear selection" tone="quiet" onPress={()=>setLocalMoveSelection([])}/>
+        </View>:null}
         {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
-        {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
-          <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
-          <Text style={{color:p.muted}}>From: {item.from}</Text>
-          <Text style={{color:item.state==='conflict'?p.danger:item.state==='review'?p.sage:p.muted}}>To: {item.to}</Text>
-          <Text style={{color:item.state==='review'?p.sage:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
-        </View>)}
-        {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text>:null}
+        {localMovePreviews.slice(0,20).map(item=>{
+          const selectable=item.state==='ready';
+          const selected=selectable&&localMoveSelection.includes(item.id);
+          const status=item.state==='ready'?'Ready':item.state==='review'?'Review recommended':item.state==='conflict'?'Conflict':'Already organised';
+          const statusColor=item.state==='conflict'?p.danger:item.state==='ready'?p.sage:p.muted;
+          return <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={item.title+', '+status+(selectable?(selected?', selected':', not selected'):'')}
+            accessibilityState={{selected,disabled:!selectable}}
+            disabled={!selectable}
+            onPress={()=>togglePreview(item.id)}
+            style={({pressed})=>[styles.sourceRow,{borderColor:selected?p.sage:p.line,opacity:pressed?.72:1}]}>
+            <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,alignItems:'baseline'}}>
+              <Text style={{color:p.ink,fontWeight:'700',flex:1}}>{item.title}</Text>
+              <Text style={{color:statusColor,fontWeight:'700'}}>{selected?'✓ ':''}{status}</Text>
+            </View>
+            <Text style={[styles.meta,{color:p.muted}]}>Current</Text>
+            <Text numberOfLines={2} style={{color:p.ink}}>{item.from}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Proposed</Text>
+            <Text numberOfLines={2} style={{color:item.state==='conflict'?p.danger:p.ink}}>{item.to}</Text>
+            {item.metadataSummary?<Text numberOfLines={3} style={[styles.meta,{color:p.muted}]}>Metadata used · {item.metadataSummary}</Text>:null}
+          </Pressable>;
+        })}
+        {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed changes.</Text>:null}
         {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
         {localSortHistory.slice(0,3).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
           <Text style={{color:p.ink,fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
           <Text style={{color:p.muted}}>{item.copied.length} copied; {item.failed.length} failed</Text>
-          <Button label="Remove copied files" disabled={busy || item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)} />
+          <Button label="Remove copied files" disabled={busy||item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)}/>
         </View>)}
       </View>
     );
@@ -5459,9 +5870,10 @@ function Client() {
 
   function LibraryManagementPanel(){
     if(!libraryManageOpen)return null;
-    const gaps=metadataGapCounts(allUnifiedWorks);
+    const gaps=metadataGapCounts(reviewAssetPool);
     const reviewCount=reviewAssetPool.filter(item=>item.needsReview).length;
     const localDuplicateCount=localDuplicateGroups.reduce((sum,group)=>sum+group.items.length,0);
+    const localDuplicateGroupCount=localDuplicateGroups.length;
     const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
     const openReview=()=>{clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
@@ -5474,13 +5886,14 @@ function Client() {
               <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" onPress={()=>setLibraryManageOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
             </View>
 
+            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEEDS ATTENTION</Text>
             <View style={styles.libraryHealthGrid}>
               {[
-                ['Needs review',reviewCount],
-                ['Missing author',gaps.author],
-                ['Missing series',gaps.series],
-                ['Missing genre',gaps.genre],
-              ].map(([label,value])=><View key={String(label)} style={[styles.libraryHealthMetric,{borderColor:p.line}]}><Text style={[styles.libraryHealthValue,{color:Number(value)>0?p.gold:p.sage}]}>{value}</Text><Text style={[styles.libraryHealthLabel,{color:p.muted}]}>{label}</Text></View>)}
+                {label:'Missing metadata',value:gaps.incomplete,onPress:()=>openGap('incomplete')},
+                {label:'Conflicts',value:gaps.conflicts,onPress:()=>openGap('conflicts')},
+                {label:'Possible duplicates',value:localDuplicateGroupCount,onPress:()=>void openDuplicateReview()},
+                {label:'Series order',value:gaps.seriesNumber,onPress:()=>openGap('seriesNumber')},
+              ].map(item=><Pressable key={item.label} accessibilityRole="button" accessibilityLabel={item.label+', '+item.value} onPress={item.onPress} style={({pressed})=>[styles.libraryHealthMetric,{borderColor:p.line,opacity:pressed?.72:1}]}><Text style={[styles.libraryHealthValue,{color:item.value>0?p.gold:p.sage}]}>{item.value}</Text><Text style={[styles.libraryHealthLabel,{color:p.muted}]}>{item.label}</Text></Pressable>)}
             </View>
 
             <View style={[styles.libraryManageSection,{borderTopColor:p.line}]}>
@@ -5490,9 +5903,21 @@ function Client() {
                 <Button label={localScanning?'Scanning…':'Rescan device folders'} disabled={localScanning||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
                 <Button label="Add device folder" tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
-              {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}><ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/><View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found · {scanProgress.review} review</Text></View></View>:null}
+              {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+                <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+                <View style={{flex:1,gap:6}}>
+                  <Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(scanProgress.phase)}</Text>
+                  <Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found · {scanProgress.review} review{scanProgress.currentFolder?' · '+scanProgress.currentFolder:''}</Text>
+                  <View style={{height:2,backgroundColor:p.line,overflow:'hidden'}}><View style={{height:2,width:`${scanPhaseStep(scanProgress.phase)*20}%` as `${number}%`,backgroundColor:p.sage}}/></View>
+                </View>
+              </View>:null}
+              {!localScanning&&scanResultSummary?<View accessibilityLiveRegion="polite" style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+                <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'700'}}>Library updated</Text><Text style={{color:p.muted}}>{scanResultSummary.unchanged} unchanged · {scanResultSummary.added} new · {scanResultSummary.updated} updated · {scanResultSummary.removed} removed</Text></View>
+              </View>:null}
               <View style={styles.libraryRepairList}>
                 <Pressable accessibilityRole="button" onPress={openReview} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Review uncertain metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Open the exact files Archivist could not identify confidently.</Text></View><Text style={[styles.libraryRepairCount,{color:reviewCount?p.gold:p.muted}]}>{reviewCount}</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={()=>openGap('conflicts')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Resolve metadata conflicts</Text><Text style={[styles.meta,{color:p.muted}]}>Compare fields where embedded, sidecar or folder evidence disagrees.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.conflicts?p.gold:p.muted}]}>{gaps.conflicts}</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={()=>openGap('seriesNumber')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Check series order</Text><Text style={[styles.meta,{color:p.muted}]}>Find series with no position or conflicting series evidence.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.seriesNumber?p.gold:p.muted}]}>{gaps.seriesNumber}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('author')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Fill missing authors</Text><Text style={[styles.meta,{color:p.muted}]}>Filter to unresolved author fields for quick editing.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.author?p.gold:p.muted}]}>{gaps.author}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('series')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Fill missing series</Text><Text style={[styles.meta,{color:p.muted}]}>Show files with no series metadata.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.series?p.gold:p.muted}]}>{gaps.series}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('genre')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Fill missing genres</Text><Text style={[styles.meta,{color:p.muted}]}>Show files with no genre metadata.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.genre?p.gold:p.muted}]}>{gaps.genre}</Text></Pressable>
@@ -5515,8 +5940,36 @@ function Client() {
               <Text style={[styles.meta,{color:p.muted}]}>Scan configured server folders here, then preview safe organisation before applying it.</Text>
               {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable></View>)}
               <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
-              <View style={styles.toolRow}><Button label="Preview matching server items" tone="quiet" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)}/><Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/></View>
+              <View style={styles.toolRow}><Button label="Preview" tone="quiet" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)}/><Button label={'Apply selected'+(serverMoveSelection.length?' ('+serverMoveSelection.length+')':'')} disabled={busy||serverMoveSelection.length===0} onPress={()=>void applySortBatch()}/></View>
+              {serverMovePreviews.some(item=>!!item.move)?<View style={styles.toolRow}>
+                <Button label="Select all Ready" tone="quiet" onPress={()=>setServerMoveSelection(serverMovePreviews.flatMap(item=>item.move?.id?[item.move.id]:[]))}/>
+                <Button label="Clear selection" tone="quiet" onPress={()=>setServerMoveSelection([])}/>
+              </View>:null}
               {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+              {serverMovePreviews.slice(0,20).map((item,index)=>{
+                const move=item.move;
+                const asset=serverBooks.find(book=>book.id===item.asset);
+                const selected=!!move&&serverMoveSelection.includes(move.id);
+                const review=!!item.error&&item.error.toLowerCase().includes('review metadata');
+                const status=move?'Ready':review?'Review recommended':'Conflict';
+                const statusColor=move?p.sage:review?p.muted:p.danger;
+                return <Pressable
+                  key={move?.id||'server-preview-'+item.asset+'-'+index}
+                  accessibilityRole="button"
+                  accessibilityState={{selected,disabled:!move}}
+                  disabled={!move}
+                  onPress={()=>move&&setServerMoveSelection(current=>current.includes(move.id)?current.filter(id=>id!==move.id):[...current,move.id])}
+                  style={({pressed})=>[styles.sourceRow,{borderColor:selected?p.sage:p.line,opacity:pressed?.72:1}]}>
+                  <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,alignItems:'baseline'}}>
+                    <Text style={{color:p.ink,fontWeight:'700',flex:1}}>{asset?.title||('File '+item.asset)}</Text>
+                    <Text style={{color:statusColor,fontWeight:'700'}}>{selected?'✓ ':''}{status}</Text>
+                  </View>
+                  {move?<><Text style={[styles.meta,{color:p.muted}]}>Current</Text><Text numberOfLines={2} style={{color:p.ink}}>{move.from}</Text><Text style={[styles.meta,{color:p.muted}]}>Proposed</Text><Text numberOfLines={2} style={{color:p.ink}}>{move.to}</Text></>:null}
+                  {asset?<Text numberOfLines={3} style={[styles.meta,{color:p.muted}]}>Metadata used · {[asset.author?'Author: '+asset.author:'',asset.series?'Series: '+asset.series+(asset.seriesNumber!==undefined?' #'+asset.seriesNumber:''):'',asset.format?'Format: '+asset.format:''].filter(Boolean).join(' · ')}</Text>:null}
+                  {item.error?<Text style={[styles.meta,{color:statusColor}]}>{item.error}</Text>:null}
+                </Pressable>;
+              })}
+              {serverMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {serverMovePreviews.length} proposed changes.</Text>:null}
             </View>:null}
           </View>
         </ScrollView>
@@ -5839,7 +6292,18 @@ function Client() {
       />
       <ProfileMenu/>
       <WorkDetailsPanel/>
+      <FormatPickerPanel/>
       <RatingPromptPanel />
+      {rescanPromptOpen?<Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRescanPromptOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View accessibilityViewIsModal={true} accessibilityLabel="Library may be out of date" style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Library may be out of date</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Some files changed while Archivist was organising your library. Rescan to make sure everything is correctly indexed.</Text>
+            <Button label="Rescan" disabled={localScanning||!localFolders.length} onPress={()=>{setRescanPromptOpen(false);void rescanLocalFolders();}}/>
+            <Button label="Not now" tone="quiet" onPress={()=>setRescanPromptOpen(false)}/>
+          </View>
+        </View>
+      </Modal>:null}
       {playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>{setLiveMode('player');setActiveTab('now')}} style={styles.miniPlayerMain}>

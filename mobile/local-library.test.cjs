@@ -21,6 +21,7 @@ const saf = {
   async createFileAsync(parent, name, mime) {
     const uri = parent + '%2F' + encodeURIComponent(name);
     this.files.push([parent, name, mime, uri]);
+    this.dirs.set(parent, [...(this.dirs.get(parent) || []), uri]);
     return uri;
   },
   async copyAsync(copy) { this.copies.push(copy); },
@@ -33,6 +34,7 @@ const infoReads = [];
 Module._load = function(request, parent, isMain) {
   if (request === 'react-native') return {Platform: {OS: 'android'}};
   if (request === 'expo-file-system/legacy') return {
+    EncodingType: {Base64:'base64'},
     StorageAccessFramework: saf,
     async readAsStringAsync(uri) { fileReads.push(uri); return fileText.get(uri) || ''; },
     async getInfoAsync(uri) { infoReads.push(uri); return fileInfo.get(uri) || {exists: true, size: (fileText.get(uri) || '').length}; },
@@ -75,6 +77,15 @@ assert.equal(dashed.author, 'Frank Herbert');
 assert.equal(dashed.series, 'Dune');
 assert.equal(dashed.confidence, 'high');
 assert.equal(dashed.coverShape, 'square');
+
+const qualified = inferLocalBookMetadata(
+  'content://root/document/primary:Audiobooks%2FAndy%20Weir%20-%20Project%20Hail%20Mary%20%7BRay%20Porter%7D%20%5BASIN%20B08G9PRS1K%5D.m4b',
+  'Audio',
+);
+assert.equal(qualified.title, 'Project Hail Mary');
+assert.equal(qualified.author, 'Andy Weir');
+assert.equal(qualified.narrator, 'Ray Porter');
+assert.equal(qualified.asin, 'B08G9PRS1K');
 
 const messy = inferLocalBookMetadata(
   'content://root/document/primary:Books%2FNeil_Gaiman%20-%20Sandman%20-%2001%20-%20Preludes_%26_Nocturnes%20%5Bebook%5D.epub',
@@ -158,17 +169,16 @@ assert.equal(previews[0].state, 'review');
   assert.equal(dottedScan.books.length,1);
   assert.equal(dottedScan.books[0].title,'The Hobbit');
 
-  // Local reading is deliberately CBZ/ZIP only. CBR is unsupported and CBT
-  // remains server-reader-only, so neither should appear as broken local books.
+  // Discovery matches the local reader: CBZ, CBR and CBT all enter the library.
   const comicRoot='content://root/tree/primary:Comics/document/primary:Comics';
   const cbz=comicRoot+'%2FSupported.cbz';
-  const cbr=comicRoot+'%2FUnsupported.cbr';
-  const cbt=comicRoot+'%2FRemoteOnly.cbt';
+  const cbr=comicRoot+'%2FSupported.cbr';
+  const cbt=comicRoot+'%2FSupported.cbt';
   saf.dirs.set(comicRoot,[cbz,cbr,cbt]);
   const comicScan=await scanLocalFolders([{id:comicRoot,uri:comicRoot,name:'Comics',status:'Ready',itemCount:0}]);
-  assert.equal(comicScan.books.length,1);
-  assert.equal(comicScan.books[0].uri,cbz);
-  assert.equal(comicScan.books[0].format,'Comic');
+  assert.equal(comicScan.books.length,3);
+  assert.deepEqual(comicScan.books.map(item=>item.uri),[cbz,cbr,cbt]);
+  assert.equal(comicScan.books.every(item=>item.format==='Comic'),true);
 
   // Multi-track audiobooks may use one book-level OPF/cover. Parse that OPF once,
   // then reuse it for every track instead of doing repeated I/O.
@@ -197,13 +207,13 @@ assert.equal(previews[0].state, 'review');
   fileInfo.set(hugeBook,{exists:true,size:8*1024*1024*1024});
   const hugeScan=await scanLocalFolders([{id:hugeRoot,uri:hugeRoot,name:'Huge',status:'Ready',itemCount:0}]);
   assert.equal(hugeScan.books.length,1);
-  assert.equal(infoReads.includes(hugeBook),false);
+  assert.equal(infoReads.includes(hugeBook),true);
   assert.equal(fileReads.includes(hugeBook),false);
 
-  // A valid media file at the maximum supported recursion depth is still found.
+  // Deeply nested libraries have no arbitrary folder-depth limit.
   const deepRoot='content://root/tree/primary:Books/document/primary:Deep';
   let deepParent=deepRoot;
-  for(let depth=1;depth<=8;depth++){
+  for(let depth=1;depth<=30;depth++){
     const child=deepParent+'%2FLevel'+depth;
     saf.dirs.set(deepParent,[child]);
     deepParent=child;
@@ -247,6 +257,23 @@ assert.equal(previews[0].state, 'review');
   assert.equal(saf.files[0][2], 'application/epub+zip');
   assert.equal(saf.copies[0].from, books[0].uri);
   assert.equal(saf.copies[0].to, saf.files[0][3]);
+
+  const collisionResult = await applyLocalSortCopies(previews);
+  assert.equal(collisionResult.copied.length, 0);
+  assert.match(collisionResult.failed[0].error, /Destination already exists/);
+
+  const checkpointRoot='content://root/tree/primary:Sort2/document/primary:Sort2';
+  const checkpointBook={...books[0],id:77,uri:'content://root/document/primary:Source%2FCheckpoint.epub',title:'Checkpoint'};
+  const checkpointPreview=previewLocalSort([checkpointBook],'author-title').map(item=>({...item,rootUri:checkpointRoot}));
+  saf.dirs.set(checkpointRoot,[]);
+  let checkpointCalls=0;
+  const checkpointResult=await applyLocalSortCopies(checkpointPreview,async partial=>{
+    checkpointCalls+=1;
+    assert.equal(partial.copied.length,1,'sort checkpoint durability');
+  });
+  assert.equal(checkpointResult.copied.length,1);
+  assert.equal(checkpointCalls,1);
+
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);

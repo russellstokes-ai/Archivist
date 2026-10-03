@@ -52,8 +52,20 @@ func safePathPart(s string) string {
 }
 
 func sortTemplatePath(template, title, author, series, format, current string) (string, error) {
+	return sortTemplatePathWithSeriesNumber(template, title, author, series, format, current, 0)
+}
+
+func sortTemplatePathWithSeriesNumber(template, title, author, series, format, current string, seriesNumber float64) (string, error) {
 	ext := filepath.Ext(current)
-	base := safePathPart(title) + ext
+	displayTitle := title
+	if strings.TrimSpace(series) != "" && seriesNumber > 0 {
+		number := strconv.FormatFloat(seriesNumber, 'f', -1, 64)
+		if seriesNumber < 10 && seriesNumber == float64(int64(seriesNumber)) {
+			number = "0" + number
+		}
+		displayTitle = number + " - " + title
+	}
+	base := safePathPart(displayTitle) + ext
 	authorPart := safePathPart(author)
 	seriesPart := safePathPart(series)
 	formatPart := safePathPart(format)
@@ -174,14 +186,15 @@ func (a *app) previewMove(asset int64, target string) (fileMove, error) {
 
 func (a *app) previewMoveTemplate(asset int64, template string) (fileMove, error) {
 	var title, author, series, format, current string
+	var seriesNumber float64
 	var needsReview bool
-	if e := a.db.QueryRow(`SELECT title,author,series,format,relative_path,needs_review FROM assets WHERE id=? AND available=1`, asset).Scan(&title, &author, &series, &format, &current, &needsReview); e != nil {
+	if e := a.db.QueryRow(`SELECT title,author,series,series_number,format,relative_path,needs_review FROM assets WHERE id=? AND available=1`, asset).Scan(&title, &author, &series, &seriesNumber, &format, &current, &needsReview); e != nil {
 		return fileMove{Asset: asset}, e
 	}
 	if needsReview {
 		return fileMove{Asset: asset}, errors.New("review metadata before organising this file")
 	}
-	target, e := sortTemplatePath(template, title, author, series, format, current)
+	target, e := sortTemplatePathWithSeriesNumber(template, title, author, series, format, current, seriesNumber)
 	if e != nil {
 		return fileMove{Asset: asset, To: target}, e
 	}
@@ -212,8 +225,9 @@ func (a *app) previewMoveTemplateBatch(assets []int64, template string) fileMove
 	out := fileMoveBatchResult{}
 	for _, asset := range assets {
 		var title, author, series, format, current string
+		var seriesNumber float64
 		var needsReview bool
-		if e := a.db.QueryRow(`SELECT title,author,series,format,relative_path,needs_review FROM assets WHERE id=? AND available=1`, asset).Scan(&title, &author, &series, &format, &current, &needsReview); e != nil {
+		if e := a.db.QueryRow(`SELECT title,author,series,series_number,format,relative_path,needs_review FROM assets WHERE id=? AND available=1`, asset).Scan(&title, &author, &series, &seriesNumber, &format, &current, &needsReview); e != nil {
 			out.Items = append(out.Items, fileMoveBatchItem{Asset: asset, Error: e.Error()})
 			out.Failed++
 			continue
@@ -223,7 +237,7 @@ func (a *app) previewMoveTemplateBatch(assets []int64, template string) fileMove
 			out.Failed++
 			continue
 		}
-		target, e := sortTemplatePath(template, title, author, series, format, current)
+		target, e := sortTemplatePathWithSeriesNumber(template, title, author, series, format, current, seriesNumber)
 		if e != nil {
 			out.Items = append(out.Items, fileMoveBatchItem{Asset: asset, Error: e.Error()})
 			out.Failed++
