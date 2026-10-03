@@ -24,7 +24,11 @@ const saf = {
     this.dirs.set(parent, [...(this.dirs.get(parent) || []), uri]);
     return uri;
   },
-  async copyAsync(copy) { this.copies.push(copy); },
+  async copyAsync(copy) {
+    this.copies.push(copy);
+    const source=fileInfo.get(copy.from)||{exists:true,size:1};
+    fileInfo.set(copy.to,{...source,exists:true});
+  },
   async deleteAsync(uri) { this.deleted.push(uri); },
 };
 const fileText = new Map();
