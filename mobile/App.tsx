@@ -3057,7 +3057,7 @@ function Client() {
           .then(()=>{
             setLocalBooks(old=>{
               const wanted=new Set(targets);
-              const updated=old.map(b=>wanted.has(b.uri)?{...b,title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
+              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
               void setPersistedJSON(localCatalogKey,updated);
               return updated;
             });
