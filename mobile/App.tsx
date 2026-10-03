@@ -29,6 +29,7 @@ import * as SecureStore from 'expo-secure-store';
 import {useFonts} from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import * as ImagePicker from 'expo-image-picker';
+import Constants from 'expo-constants';
 import {copyAsync, documentDirectory, makeDirectoryAsync} from 'expo-file-system/legacy';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
@@ -92,6 +93,8 @@ async function persistPickedProfilePhoto(uri:string,fileName?:string|null) {
   return target;
 }
 
+const appVersion=Constants.expoConfig?.version||'0.9.3';
+const platformLabel=Platform.OS==='ios'?'iOS':Platform.OS==='android'?'Android':'Web';
 const nativeSplashEnabled=Platform.OS==='android'||Platform.OS==='ios';
 if(nativeSplashEnabled){
   void SplashScreen.preventAutoHideAsync().catch(()=>undefined);
@@ -6156,7 +6159,7 @@ function Client() {
     const snapshot={
       archivistBackup:1,
       createdAt:new Date().toISOString(),
-      appVersion:'0.9.3',
+      appVersion,
       theme,
       accessibility:accessibilityPrefs,
       profileAvatar:{initials:profileAvatar.initials,color:profileAvatar.color},
@@ -6334,8 +6337,8 @@ function Client() {
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ABOUT ARCHIVIST</Text>
               <View style={styles.settingsAboutHero}><View style={[styles.settingsAboutMark,{borderColor:p.gold,backgroundColor:p.card}]}><ArchivistLogo size={40}/></View><View style={{flex:1}}><Text style={[styles.settingsAboutTitle,{color:p.ink}]}>Archivist</Text><Text style={[styles.meta,{color:p.muted}]}>Private media library · iOS and Android</Text></View></View>
-              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>App version</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>0.9.3</Text></View>
-              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Platform</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>{Platform.OS}</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>App version</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>{appVersion}</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Platform</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>{platformLabel}</Text></View>
               <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server</Text><Text numberOfLines={1} style={[styles.settingsInfoValue,{color:connected?p.sage:p.muted,maxWidth:'62%'}]}>{connected?session?.server:'Not connected'}</Text></View>
               <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server version</Text><Text style={[styles.settingsInfoValue,{color:p.muted}]}>{connected?'Not reported by server':'—'}</Text></View>
               <View style={[styles.settingsDiagnostics,{backgroundColor:p.card,borderColor:p.line}]}>
