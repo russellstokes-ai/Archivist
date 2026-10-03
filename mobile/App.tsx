@@ -3376,7 +3376,7 @@ function Client() {
             <Button label={'Apply to '+editable.length+' work'+(editable.length===1?'':'s')} disabled={busy||serverBlocked||!editable.length||!hasChange} onPress={()=>void save()}/>
             <Button label="Cancel" tone="quiet" disabled={busy} onPress={close}/>
           </View>
-        </View></ScrollView>
+        </ScrollView></View>
       </KeyboardAvoidingView>
     </Modal>;
   }
