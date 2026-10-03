@@ -17,20 +17,18 @@ concurrency:
 jobs:
   mobile-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          node-version: '22'
 
       - name: Install dependencies
         working-directory: mobile
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           node harden-forge.cjs
 
       - name: Expo Doctor
@@ -45,3 +43,19 @@ jobs:
         working-directory: mobile
         run: npm test
 
+      - name: Version consistency
+        working-directory: mobile
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const app=JSON.parse(fs.readFileSync('app.json','utf8'));
+          if(pkg.version!==app.expo.version){
+            throw new Error(`Version mismatch: package.json=${pkg.version}, app.json=${app.expo.version}`);
+          }
+          console.log('Archivist mobile version:',pkg.version);
+          NODE
+
+      - name: Expo web bundle
+        working-directory: mobile
+        run: npx expo export --platform web --output-dir "$RUNNER_TEMP/archivist-web"
