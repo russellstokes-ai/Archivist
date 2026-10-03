@@ -4,12 +4,12 @@ import {LocalMetadataFields, parseLocalSidecar} from './libraryIntelligence';
 
 const maxEmbeddedArchiveBytes = 64 * 1024 * 1024;
 
-export async function extractEmbeddedMetadata(uri:string, extension:string):Promise<LocalMetadataFields> {
+export async function extractEmbeddedMetadata(uri:string, extension:string, knownInfo?:{exists?:boolean;size?:number}):Promise<LocalMetadataFields> {
   const ext=extension.toLowerCase();
   if(ext!=='epub'&&ext!=='cbz'&&ext!=='zip')return {};
   try{
-    const info=await getInfoAsync(uri);
-    if(!info.exists)return {};
+    const info=knownInfo || await getInfoAsync(uri);
+    if(info.exists===false)return {};
     if(typeof info.size==='number'&&info.size>maxEmbeddedArchiveBytes)return {};
     const base64=await readAsStringAsync(uri,{encoding:EncodingType.Base64});
     return extractEmbeddedMetadataFromBase64(base64,ext);
