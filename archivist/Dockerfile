@@ -1,14 +1,17 @@
+ARG BUILD_VERSION=dev
+
 FROM golang:1.25-alpine AS builder
+ARG BUILD_VERSION
 
 WORKDIR /src
 RUN apk add --no-cache ca-certificates
 COPY app/ .
 RUN go mod tidy
-RUN go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/archivist .
+RUN go build -trimpath -buildvcs=false -ldflags="-s -w -X main.buildVersion=${BUILD_VERSION}" -o /out/archivist .
 
 FROM alpine:3.22
 
-ARG BUILD_VERSION=dev
+ARG BUILD_VERSION
 ARG BUILD_ARCH
 LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="app" io.hass.arch="${BUILD_ARCH}"
 
