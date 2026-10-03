@@ -4139,6 +4139,23 @@ function Client() {
           <View style={styles.statsStatusLine}><View style={[styles.statsSmallDot,{backgroundColor:statsPalette.mint}]}/><Text style={[styles.statsStatusText,{color:statsPalette.mint}]}>{progressPercent>=75?'On track':'Keep going'}</Text></View>
         </View>
       </View>
+      <View style={styles.statsDetailGrid}>
+        <DetailMetric label="Completion rate" value={completionRate+'%'} meta="of started works"/>
+        <DetailMetric label="In progress" value={String(inProgressCount)} meta="currently active"/>
+        <DetailMetric label="Series completed" value={trackedSeries.length?completedSeries+'/'+trackedSeries.length:'—'} meta={trackedSeries.length?seriesCompletionRate+'% of collected series':'No multi-book series yet'}/>
+      </View>
+      <View style={styles.statsFinishSection}>
+        <Text style={[styles.statsMinorHeading,{color:statsPalette.muted}]}>Finishes by month · {periodLabel}</Text>
+        <View style={styles.statsFinishMonths}>
+          {finishesByMonth.map((value,index)=><View key={index} style={styles.statsFinishMonth}>
+            <View style={[styles.statsFinishTrack,{backgroundColor:statsPalette.panelRaised}]}>
+              <View style={[styles.statsFinishFill,{backgroundColor:statsPalette.gold,height:(Math.max(value?12:3,Math.round(value/maxMonthlyFinishes*100))+'%') as any,opacity:value?1:.25}]}/>
+            </View>
+            <Text style={[styles.statsFinishMonthLabel,{color:statsPalette.muted}]}>{new Date(2000,index,1).toLocaleDateString(undefined,{month:'narrow'})}</Text>
+            <Text style={[styles.statsFinishMonthValue,{color:statsPalette.ink}]}>{value}</Text>
+          </View>)}
+        </View>
+      </View>
     </View>;
 
     const formatCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
@@ -4147,6 +4164,10 @@ function Client() {
         <DataRing size={110} value={String(stats?.works||formatsTotal)} label="books" items={formatItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
         {formatItems.length?<Legend items={formatItems} total={formatsTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Add format metadata to reveal your mix.</Text>}
       </View>
+      {formatCompletionRows.length?<View style={styles.statsSplitBlock}>
+        <Text style={[styles.statsMinorHeading,{color:statsPalette.muted}]}>Completion by format</Text>
+        <CompletionRows items={formatCompletionRows}/>
+      </View>:null}
     </View>;
 
     const genreCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
@@ -4155,6 +4176,10 @@ function Client() {
         <DataRing size={110} value={genreTimeItems.length?minutesRead.toLocaleString():String(genreTotal)} label={genreTimeItems.length?'minutes':'books'} items={genreItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
         {genreItems.length?<Legend items={genreItems} total={genreTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Genre activity will appear as you read.</Text>}
       </View>
+      {genreCompletionRows.length?<View style={styles.statsSplitBlock}>
+        <Text style={[styles.statsMinorHeading,{color:statsPalette.muted}]}>Completion by genre</Text>
+        <CompletionRows items={genreCompletionRows}/>
+      </View>:null}
     </View>;
 
     const paceTarget=Math.max(60,paceMinutes);
@@ -4166,6 +4191,12 @@ function Client() {
           <Text style={[styles.statsPaceDelta,{color:statsPalette.gold}]}>{paceMinutes?paceMinutes+' min':'No activity yet'}</Text>
           <Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Average reading and listening time across {activeDays} active day{activeDays===1?'':'s'}.</Text>
         </View>
+      </View>
+      <View style={styles.statsDetailGrid}>
+        <DetailMetric label="Average session" value={averageSessionMinutes?averageSessionMinutes+' min':'—'}/>
+        <DetailMetric label="Longest session" value={longestSessionMinutes?longestSessionMinutes+' min':'—'}/>
+        <DetailMetric label="Most active day" value={mostActiveDay}/>
+        <DetailMetric label="Most active month" value={mostActiveMonth}/>
       </View>
     </View>;
 
@@ -4192,6 +4223,13 @@ function Client() {
           const active=(ritualDays[day.key]||0)>=60;
           return <View key={day.key} style={styles.statsWeekDay}><View style={[styles.statsWeekDot,{backgroundColor:active?statsPalette.gold:statsPalette.blueDeep,borderColor:active?statsPalette.gold:statsPalette.line}]}/><Text style={[styles.statsWeekLabel,{color:statsPalette.muted}]}>{day.label.slice(0,1)}</Text></View>;
         })}
+      </View>
+      <View style={styles.statsConsistencyRow}>
+        <View>
+          <Text style={[styles.statsConsistencyValue,{color:statsPalette.gold}]}>{consistencyPercent}%</Text>
+          <Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Reading consistency</Text>
+        </View>
+        <Text style={[styles.statsConsistencyCopy,{color:statsPalette.muted}]}>{activeDateKeys.size} active day{activeDateKeys.size===1?'':'s'} across {trackedCalendarDays} tracked calendar day{trackedCalendarDays===1?'':'s'}.</Text>
       </View>
     </View>;
 
