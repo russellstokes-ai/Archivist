@@ -37,7 +37,7 @@ import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
-import {possibleLocalDuplicateGroups} from './duplicates';
+import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
@@ -47,6 +47,7 @@ import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation,
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
 import {shelfRecommendations} from './shelfRecommendations';
 import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
+import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from './bulkMetadata';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -630,6 +631,13 @@ function Client() {
   const [smartShelfAdvanced,setSmartShelfAdvanced]=useState(false);
   const [collectionTarget,setCollectionTarget]=useState<UnifiedWork|null>(null);
   const [selectedWorkKeys,setSelectedWorkKeys]=useState<string[]>([]);
+  const [bulkEditOpen,setBulkEditOpen]=useState(false);
+  const [bulkAuthor,setBulkAuthor]=useState('');
+  const [bulkSeries,setBulkSeries]=useState('');
+  const [bulkGenre,setBulkGenre]=useState('');
+  const [bulkNarrator,setBulkNarrator]=useState('');
+  const [bulkSequential,setBulkSequential]=useState(false);
+  const [bulkSeriesStart,setBulkSeriesStart]=useState('1');
   const [collectionFilter,setCollectionFilter]=useState('');
   const [libraryFiltersOpen,setLibraryFiltersOpen]=useState(false);
   const [librarySourcesOpen,setLibrarySourcesOpen]=useState(false);
@@ -1004,10 +1012,13 @@ function Client() {
     return ()=>{atlasPulseLoop.stop();atlasPulse.setValue(0);};
   },[activeTab,atlasBreakdown,atlasNodeId,atlasPulse,reduceMotion]);
 
-  const localDuplicateGroups = useMemo(() => {
+  const localRelations = useMemo(() => {
     const local=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-    return possibleLocalDuplicateGroups(local);
+    return localRelationClassification(local);
   },[localBooks]);
+  const localDuplicateGroups=localRelations.duplicates;
+  const localAlternateFormatGroups=localRelations.alternateFormats;
+  const localDifferentEditionGroups=localRelations.differentEditions;
 
 
   function statsFromUnified(items:UnifiedWork[],name:string):VerifiedProfileStats{
