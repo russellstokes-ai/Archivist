@@ -49,6 +49,7 @@ export type LocalSortPreview = {
   from: string;
   to: string;
   state: 'ready' | 'same' | 'conflict' | 'review';
+  metadataSummary?: string;
 };
 
 export type LocalSortApplyResult = {
@@ -61,6 +62,7 @@ export type LocalSortHistory = {
   createdAt: string;
   copied: Array<{id: string; title: string; uri: string}>;
   failed: Array<{id: string; title: string; error: string}>;
+  complete?: boolean;
 };
 
 export type LocalFolder = {
@@ -73,7 +75,7 @@ export type LocalFolder = {
 };
 
 export type LocalScanProgress = {
-  phase: 'discovering' | 'complete';
+  phase: 'discovering' | 'reading-metadata' | 'matching' | 'checking-duplicates' | 'preparing' | 'complete';
   currentFolder: string;
   entriesVisited: number;
   found: number;
@@ -167,6 +169,7 @@ export async function scanLocalFolders(
   let truncatedReason: 'book-limit' | 'entry-limit' | undefined;
   let entriesVisited = 0;
   let review = 0;
+  let metadataStarted = false;
   const seen = new Set<string>();
   const sidecarCache = new Map<string, LocalMetadataFields>();
   const visitedDirectories = new Set<string>();
@@ -241,7 +244,7 @@ export async function scanLocalFolders(
         truncatedReason = 'entry-limit';
         return;
       }
-      if (entriesVisited === 1 || entriesVisited % 20 === 0) report('discovering', space);
+      if (entriesVisited === 1 || entriesVisited % 20 === 0) report(metadataStarted ? 'reading-metadata' : 'discovering', space);
       if (books.length >= maxEntriesPerScan) {
         truncated = true;
         truncatedReason = 'book-limit';
@@ -251,6 +254,10 @@ export async function scanLocalFolders(
       const format = ext ? supported.get(ext) : undefined;
       if (format && !seen.has(child)) {
         seen.add(child);
+        if (!metadataStarted) {
+          metadataStarted = true;
+          report('reading-metadata', space);
+        }
         let identity = inferLocalBookMetadata(child, format);
         const evidence: MetadataCandidate[] = [{
           source: 'path' as const,
@@ -358,7 +365,7 @@ export async function scanLocalFolders(
     if (truncated) break;
   }
 
-  report('complete', '');
+  report('matching', '');
   return {
     folders: nextFolders.concat(folders.slice(nextFolders.length)),
     books,
@@ -392,6 +399,11 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
       from,
       to: target,
       state: book.needsReview ? 'review' as const : from.endsWith(target) ? 'same' as const : 'ready' as const,
+      metadataSummary: [
+        book.author ? 'Author: '+book.author : '',
+        book.series ? 'Series: '+book.series+(book.seriesNumber !== undefined ? ' #'+book.seriesNumber : '') : '',
+        book.format ? 'Format: '+book.format : '',
+      ].filter(Boolean).join(' · '),
     };
   });
   return previews.map(preview => preview.state === 'review' ? preview : destinations.get(preview.to)! > 1 ? {...preview, state: 'conflict'} : preview);
