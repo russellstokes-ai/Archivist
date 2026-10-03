@@ -1,24 +1,24 @@
 # Archivist Project Constants
 
-**Status:** Durable project source of truth for app development. Read this before changing Archivist UI, architecture, branding, or release scope.
+**Status:** Durable project source of truth. Read `CURRENT-UI-HANDOFF.md` first for the current approved UI state and active work boundaries.
 
 ## Development environment
 
-- Primary interactive development/review environment: **Draftbit**.
-- GitHub repository: `russellstokes-ai/Archivist`.
-- Active app-development branch: `design/hig-refresh`.
-- App folder: `mobile`.
-- GitHub remains the committed source of truth.
+- Repository: `russellstokes-ai/Archivist`
+- GitHub is the committed source of truth.
+- Active universal-mobile / Draftbit branch: `design/draftbit-universal-phone`
+- Pre-migration universal responsive branch: `design/universal-phone`
+- Locked Fold/open reference: `design/hig-refresh`
+- App folder: `mobile`
 - Work in small, reviewable commits.
-- After each visual stage, review with **Draftbit → Sync → Preview**.
-- Preserve the existing React Native / Expo architecture and native integrations.
-- Do not move app-development work to `main` until the approved merge/release step.
+- Do not move active UI development to `main` until the approved merge/release step.
+- Draftbit is used for interactive review, but an imported Draftbit project is a copy, not a live mirror. Sandbox-only work must be exported/synced to GitHub before the sandbox is deleted.
 
 ## Product identity
 
 Archivist is a premium, private, local-first personal library for ebooks, audiobooks, comics and PDFs.
 
-Core product character:
+Core character:
 - editorial rather than dashboard-like;
 - content-led rather than control-led;
 - restrained rather than colourful;
@@ -26,211 +26,156 @@ Core product character:
 - privacy-first and useful without a server;
 - optional self-hosted server for household sharing, storage and streaming.
 
-Do not use beta/experimental/unfinished product language in normal UI.
+Do not use beta/experimental/unfinished language in normal UI.
+
+## Product platform
+
+Archivist is a universal **iOS + Android** mobile product.
+
+It must support:
+- narrow phones;
+- ordinary phones;
+- large phones / Fold closed;
+- Fold open;
+- wider/tablet layouts.
+
+Open Fold is a first-class composition, not a stretched phone.
+
+Do not describe the project as Android-first.
+
+Responsive breakpoints and current approval boundaries are defined in `CURRENT-UI-HANDOFF.md`.
 
 ## Canonical branding
 
 ### Logo and icons
+- Primary repository/README logo: `web/assets/archivist-primary-logo.png`
+- Mobile app icon: `mobile/assets/icon.png`
+- Do not replace/redraw/substitute the canonical Archivist logo without explicit approval.
+- Do not introduce generic letter-A branding.
 
-- Primary repository/README logo: `web/assets/archivist-primary-logo.png`.
-- Mobile app icon: `mobile/assets/icon.png`.
-- Expo and Android adaptive icon use that mobile icon.
-- Current Android adaptive-icon background: `#072632`.
-- Do not replace, redraw or substitute the canonical logo/icon without explicit approval.
-- Do not introduce a competing logo treatment in app or server UI.
-
-### Colour palette
-
+### Colour
 Light:
-- Canvas `#FFFFFF`
-- Raised surface `#F7F7F7`
-- Primary text `#111111`
-- Secondary text `#6B6B6B`
-- Divider `#E8E8E8`
+- canvas `#FFFFFF`
+- raised `#F7F7F7`
+- primary text `#111111`
+- secondary text `#6B6B6B`
+- divider `#E8E8E8`
 
 Dark:
-- Canvas `#000000`
-- Raised surface `#111111`
-- Higher surface `#181818`
-- Primary text `#F5F5F5`
-- Secondary text `#A0A0A0`
-- Divider `#252525`
+- canvas `#000000` / approved deep-navy atmosphere where used
+- raised `#111111`
+- higher surface `#181818`
+- primary text `#F5F5F5`
+- secondary text `#A0A0A0`
+- divider `#252525`
 
 Accents:
-- Archivist Sage `#47736F` — primary actions, selected states, progress and links.
-- Archivist Gold `#B99A68` — achievements and rare milestone detail only.
-- Artwork supplies most other colour.
-- Do not colour-code formats, genres, sources or Atlas relationships.
+- Archivist Sage `#47736F`
+- Archivist Gold `#B99A68` for milestones/rare emphasis
+- artwork supplies most other colour
 
 ### Typography
+- editorial face: ArchivistEditorial / Libre Caslon Text
+- interface: clean platform sans
+- editorial typography for brand/major titles/reading texture
+- sans for controls, metadata and dense UI
 
-- Canonical bundled editorial face: **ArchivistEditorial / Libre Caslon Text**.
-- Interface UI: platform sans / Android sans.
-- Use editorial typography for brand, major titles and reading texture; use sans for controls, metadata and dense UI.
-- Avoid heavy bold everywhere.
+## Permanent design rules
 
-## Design-quality baseline
-
-The reusable **App Work** design skill and the repository's `DESIGN-STANDARD.md` are the design baseline.
-
-Use Apple Human Interface Guidelines as a craft benchmark for:
-- purpose and hierarchy;
-- agency and recoverability;
-- accessibility;
-- adaptable layout;
-- purposeful motion;
-- privacy and permission timing;
-- familiar interaction;
-- restrained delight.
-
-Archivist is Android-first today, so do **not** turn it into an iOS clone. Android navigation, back behavior, permissions and platform expectations remain authoritative.
-
-Permanent visual rules:
 - no card soup;
 - no arbitrary extra colours;
 - no emoji/Unicode as production UI icons;
 - one clear screen purpose;
 - minimum comfortable touch targets;
-- important gestures need an onscreen alternative;
+- gestures need discoverable fallbacks where appropriate;
 - light and dark modes must both work;
-- reduced motion must be respected;
+- Reduced Motion must be respected;
 - realistic content must be used for acceptance;
-- compilation is not visual acceptance.
+- compilation is not visual acceptance;
+- phone adaptation must not silently alter the locked Fold/open design.
 
-## Device targets
+The detailed screen-by-screen approved UI is in `CURRENT-UI-HANDOFF.md`.
 
-Android-first.
+## Local-first app
 
-Primary physical acceptance target:
-- Samsung Galaxy Fold closed mode;
-- Samsung Galaxy Fold open mode.
-
-Open Fold is a first-class layout, not a stretched phone layout.
-
-Also support:
-- ordinary Android phones;
-- wider/tablet compositions where shared React Native code naturally supports them.
-
-## Core development goals
-
-### Local-first app
-
-The app must work without any server:
-- browse and organise local books, audiobooks and comics;
-- read ebooks/PDFs/comics;
-- play audiobooks;
-- preserve progress and personal state;
-- handle local folders and multiple folders;
+The app must remain fully useful without a server:
+- browse and organise local books/audiobooks/comics/PDFs;
+- read and listen;
+- preserve progress/personal state;
+- handle multiple folders;
 - work offline.
 
-A server is optional and can be added later from Settings.
+A server is optional and may be added later from Settings.
 
-### Optional server
+## Optional server
 
 The server should:
-- support Home Assistant and general self-hosting/Docker;
+- support Home Assistant and general Docker/self-hosting;
 - allow multiple folders;
 - provide simple Admin/User household roles;
-- support remote storage and streaming;
-- make setup understandable without requiring a key before entering the UI;
-- allow key generation from the UI;
-- provide folder browsing rather than requiring manual path typing;
+- support remote storage/streaming;
+- allow understandable setup and folder browsing;
 - avoid unnecessary HDD wake-ups;
 - remain suitable for Raspberry Pi 4-class hardware.
 
-### Shelf and Library
+## Core product goals
 
-- Shelf is an editorial home, not another catalogue grid.
-- Continue Reading/Listening is the dominant contextual feature.
-- Library is cover-led, searchable and high-density.
-- Sorting, filtering, selection and metadata work must remain safe and understandable.
-- Multiple local/server/downloaded sources should coexist without duplicate-looking copies.
+### Shelf / Library
+- Shelf = editorial/personal home.
+- Library = dense searchable catalogue/location/organisation view.
+- Multiple local/server/downloaded sources coexist without duplicate-looking copies.
+- Scanning, sorting, metadata and repair must be powerful but understandable.
+- Preview/apply/recovery protect user media.
 
-### Living Audiobook Player
-
-This is a signature feature:
-- realistic book-opening behavior;
-- page movement tied to playback state, not constant decoration;
-- strong first viewport;
-- background playback;
-- chapters;
-- bookmarks;
-- speed;
-- sleep timer;
-- lock-screen/media controls;
-- Android Auto support built on the current native foundation.
+### Live Player / Now
+Signature Living Book Player. Current phase is locked as complete unless a regression or explicit new request reopens it.
 
 ### Reader
-
 - immersive reading;
-- realistic page-turn motion;
-- reduced-motion fallback;
 - ebooks, PDFs and comics;
-- saved position, bookmarks, highlights and notes.
+- saved position, bookmarks, highlights, notes;
+- realistic motion with Reduced Motion fallback.
 
 ### Comic Focus
-
-Headline feature:
-- double-tap speech-bubble/panel focus;
-- use original comic pixels only;
+Headline feature owned by the separate Astra/Work stream while active:
+- deterministic local focus;
+- original pixels only;
 - no generative redraw;
-- preserve context and return accurately;
-- fall back gracefully to manual zoom.
+- double-tap focus with graceful fallback.
 
 ### Atlas
-
-Headline feature:
-- Obsidian-like connected visual universe;
-- works, authors, series, collections, genres, notes and tags;
+Headline feature owned by the separate Astra/Work stream while active:
+- connected visual universe;
+- works/authors/series/collections/genres/notes/tags;
 - stable spatial relationships;
-- responsive inspector behavior;
-- no dashboard/card presentation;
-- genre layer included.
+- polished adaptive inspector.
 
-### Insights, rewards and profile
+### Stats / profile / rewards
+- meaningful reading/listening history;
+- goals, ratings, achievements, streaks;
+- premium editorial/journal feeling;
+- not generic BI/game dashboards.
 
-- reading/listening history;
-- meaningful charts;
-- goals;
-- ratings;
-- achievements/rewards;
-- streaks and personal progress;
-- editorial/journal feeling rather than BI-dashboard styling.
+## Release-quality rule
 
-### Organisation and integrity
+Do not mark features complete merely because code exists.
 
-- preview before apply;
-- safe rename/copy/sort workflows;
-- duplicate detection;
-- interrupted-operation recovery;
-- cross-drive support;
-- no silent destructive moves;
-- protect user media first.
-
-## Release and quality goals
-
-Do not mark a feature complete merely because code exists.
-
-Before calling a screen or feature finished:
-- typecheck/tests appropriate to the change pass;
-- native compilation passes when native code changed;
-- real rendered output is reviewed;
-- phone and open-Fold layouts are checked;
-- long titles and missing artwork are checked;
-- loading, empty, error and offline states are checked where relevant;
-- light/dark mode is checked;
-- reduced-motion behavior is checked for custom animation;
-- remaining physical-device verification is stated explicitly.
-
-Production goal:
-- polished Android app suitable for eventual Google Play release;
-- professional README and release presentation;
-- no knowingly incomplete visual surfaces;
-- no claiming untested features as complete.
+Before calling a screen/feature finished, use the relevant combination of:
+- typecheck/tests;
+- native compile when needed;
+- rendered output review;
+- phone and Fold checks;
+- long titles/missing artwork;
+- loading/empty/error/offline states;
+- light/dark;
+- Reduced Motion;
+- explicit physical-device verification status.
 
 ## Related source-of-truth files
 
-- `DESIGN-STANDARD.md` — canonical visual and interaction standard.
-- `DESIGN-REFRESH.md` — current screen-by-screen HIG-informed design refresh and Draftbit workflow.
-- `TESTING-READINESS.md` — engineering and physical acceptance evidence.
-- `MOBILE-TESTING.md` — device acceptance procedure.
+- `CURRENT-UI-HANDOFF.md` — current branch ownership, visual approval and screen-by-screen UI state
+- `DESIGN-STANDARD.md` — canonical visual/interaction standard
+- `mobile/FOLD-REFERENCE-LOCK.md` — locked Fold/open reference
+- `TESTING-READINESS.md` — engineering/testing evidence
+- `MOBILE-TESTING.md` — device acceptance procedure
+- `AI-HANDOFF.md` — future AI/session recovery instructions
