@@ -1,5 +1,28 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-03 — Final polish Sprint 4: source and offline removal safety
+
+### Implemented and source-verified
+- Added an explicit Remove action for local folders in Settings → Library & Metadata.
+- Android local-folder removal disconnects Archivist from the selected Storage Access Framework folder and never deletes the user's original media.
+- iOS imported-folder removal deletes only Archivist's private imported copy under its own `Documents/local-libraries` storage; deletion outside that protected root is rejected.
+- Removing a local source rescans remaining local sources, clears catalogue entries from the removed root and drops metadata overrides tied to removed assets.
+- Server source removal now requires confirmation and states that server media files are not deleted; only the Archivist source/catalogue entry is removed.
+- Completed offline downloads and partial downloads now require confirmation before local data is removed, explicitly stating that the Archivist Server original is untouched.
+- Added automated guards for non-destructive Android removal, protected iOS import deletion and visible confirmation contracts.
+
+### UI boundary
+- No Shelf/Library/Settings layout redesign was introduced.
+- Existing Settings rows gained only the approved quiet Remove action.
+- Atlas, comic focus and Live Player design were not changed.
+
+### Runtime proof still required
+- Real Android SAF source disconnect with original files verified unchanged.
+- Real iOS imported-source removal and reclaimed app storage.
+- Multi-source removal while another source is selected.
+- Offline removal during/after interrupted downloads.
+
+
 ## 2026-10-03 — Universal-mobile engineering baseline GREEN
 
 GitHub Mobile checks run `37157845522` completed successfully on commit `d35723bdc177a156866016f2fce6e45dc5affd10`.
