@@ -50,18 +50,26 @@ type source struct {
 	PDFs       int64  `json:"pdfs"`
 }
 type book struct {
-	ID                       int64  `json:"id"`
-	Title                    string `json:"title"`
-	Author                   string `json:"author"`
-	Series                   string `json:"series"`
-	Genre                    string `json:"genre"`
-	Format                   string `json:"format"`
-	Space                    string `json:"space"`
-	Available                bool   `json:"available"`
-	IdentificationConfidence string `json:"identificationConfidence,omitempty"`
-	NeedsReview              bool   `json:"needsReview,omitempty"`
-	ReviewReason             string `json:"reviewReason,omitempty"`
-	MetadataSource           string `json:"metadataSource,omitempty"`
+	ID                       int64   `json:"id"`
+	Title                    string  `json:"title"`
+	Author                   string  `json:"author"`
+	Series                   string  `json:"series"`
+	SeriesNumber             float64 `json:"seriesNumber,omitempty"`
+	Genre                    string  `json:"genre"`
+	PublishedYear            int     `json:"publishedYear,omitempty"`
+	Narrator                 string  `json:"narrator,omitempty"`
+	Publisher                string  `json:"publisher,omitempty"`
+	ISBN                     string  `json:"isbn,omitempty"`
+	ASIN                     string  `json:"asin,omitempty"`
+	Language                 string  `json:"language,omitempty"`
+	Description              string  `json:"description,omitempty"`
+	Format                   string  `json:"format"`
+	Space                    string  `json:"space"`
+	Available                bool    `json:"available"`
+	IdentificationConfidence string  `json:"identificationConfidence,omitempty"`
+	NeedsReview              bool    `json:"needsReview,omitempty"`
+	ReviewReason             string  `json:"reviewReason,omitempty"`
+	MetadataSource           string  `json:"metadataSource,omitempty"`
 }
 
 func openDB(path string) (*sql.DB, error) {
@@ -628,7 +636,7 @@ func (a *app) routes() http.Handler {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
-		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.genre,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
+		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.series_number,a.genre,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
 			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ?)
 			AND (?='' OR s.space=?)
@@ -652,7 +660,7 @@ func (a *app) routes() http.Handler {
 		for rows.Next() {
 			var b book
 			var confidence int
-			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.Genre, &b.Format, &b.Space, &b.Available, &confidence, &b.NeedsReview, &b.ReviewReason, &b.MetadataSource); e != nil {
+			if e = rows.Scan(&b.ID, &b.Title, &b.Author, &b.Series, &b.SeriesNumber, &b.Genre, &b.PublishedYear, &b.Narrator, &b.Publisher, &b.ISBN, &b.ASIN, &b.Language, &b.Description, &b.Format, &b.Space, &b.Available, &confidence, &b.NeedsReview, &b.ReviewReason, &b.MetadataSource); e != nil {
 				fail(w, 500, e)
 				return
 			}
