@@ -9,17 +9,17 @@ assert.equal(gradle.includes('edgeToEdgeEnabled=true'),true,'Expo production bui
 console.log('PASS: Android startup configuration matches current Expo production defaults');
 
 const appPkg=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8'));
+const appConfig=JSON.parse(fs.readFileSync(path.join(__dirname,'app.json'),'utf8'));
 assert.equal(appPkg.dependencies?.['expo-asset'],'~55.0.20','Expo SDK 55 standalone audio builds require the matching expo-asset dependency.');
 assert.equal(appPkg.dependencies?.['expo-file-system'],'~55.0.26','Use the Expo SDK 55 file-system native module.');
 assert.equal(appPkg.dependencies?.['react-native-unarchive'],'^1.1.0','Cross-platform CBR extraction dependency must remain installed.');
 assert.equal(appPkg.dependencies?.['expo-build-properties'],'~55.0.18','Use the Expo SDK 55 build-properties plugin.');
-const buildProps=(app.expo.plugins||[]).find(plugin=>Array.isArray(plugin)&&plugin[0]==='expo-build-properties');
+const buildProps=(appConfig.expo.plugins||[]).find(plugin=>Array.isArray(plugin)&&plugin[0]==='expo-build-properties');
 assert.equal(buildProps?.[1]?.ios?.deploymentTarget,'15.5','iOS deployment target must satisfy native CBR archive dependencies.');
 const manifest=fs.readFileSync(path.join(__dirname,'android','app','src','main','AndroidManifest.xml'),'utf8');
 assert.equal(manifest.includes('android.permission.RECORD_AUDIO'),false,'Archivist playback does not request microphone access.');
 assert.equal(manifest.includes('android.permission.POST_NOTIFICATIONS'),true,'Background media controls require Android 13+ notification permission declaration.');
 assert.equal(manifest.includes('android:usesCleartextTraffic="true"'),true,'Android must permit HTTP transport after Archivist validates that the server is a private LAN or Tailscale address.');
-const appConfig=JSON.parse(fs.readFileSync(path.join(__dirname,'app.json'),'utf8'));
 const appGradle=fs.readFileSync(path.join(__dirname,'android','app','build.gradle'),'utf8');
 const nativeVersion=(appGradle.match(/versionName\s+"([^"]+)"/)||[])[1];
 assert.equal(appConfig.expo?.version,pkg.version,'Expo app version must match package.json.');
