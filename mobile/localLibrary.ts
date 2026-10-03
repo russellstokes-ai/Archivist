@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
-import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar} from './libraryIntelligence';
+import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
 
 export type LocalBook = {
   id: number;
@@ -269,6 +269,8 @@ export async function scanLocalFolders(
           asin: identity.asin,
           language: identity.language,
           description: identity.description,
+          workKey: logicalWorkKey(identity),
+          editionKey: editionKey(identity, format),
           format,
           space,
           available: true,
