@@ -36,6 +36,13 @@ assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Insights['"]/, 'In
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
 
+// Reader Stats visual contract: keep the approved stats destination distinct and data-led.
+assert.ok(source.includes(">Reader Stats</Text>"), 'Reader Stats title is missing');
+assert.ok(source.includes(">Reading Rhythm</Text>"), 'Reader Stats rhythm visual is missing');
+assert.ok(source.includes("['Overview','Time','Books','Genres','Formats']"), 'Reader Stats section tabs are missing');
+assert.ok(source.includes('readerStatsHeatCell'), 'Reader Stats activity heatmap is missing');
+assert.ok(source.includes("{id:'insights',label:'Stats',icon:'insights'}"), 'Bottom navigation must expose Reader Stats as Stats');
+
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 
 assert.ok(source.includes("function DuplicateReviewPanel()"), 'Duplicate review UI is not implemented');
