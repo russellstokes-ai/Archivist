@@ -4331,7 +4331,18 @@ function Client() {
       </View>
     </View>;
 
-    const overviewCards=<View style={styles.statsCardsGrid}>{readingProgressCard}{paceCard}{streakCard}{formatCard}{genreCard}{tasteCard}{placesCard}</View>;
+    const donutCards=<View style={styles.statsDonutGrid}>
+      {readingProgressCard}
+      {formatCard}
+      {genreCard}
+      {paceCard}
+      {placesCard}
+    </View>;
+
+    const supportingCards=<View style={styles.statsSupportingGrid}>
+      {streakCard}
+      {tasteCard}
+    </View>;
 
     return <ScrollView style={{backgroundColor:'transparent'}} contentContainerStyle={[styles.statsScreen,width>=600&&styles.statsScreenFold,width>=940&&styles.statsScreenWide]}>
       <PageHeader
@@ -4355,7 +4366,22 @@ function Client() {
       </View>
 
       {rhythmCard}
-      {overviewCards}
+
+      <View style={styles.statsSectionGroup}>
+        <View style={styles.statsSectionHeading}>
+          <Text style={[styles.statsSectionTitle,{color:statsPalette.ink}]}>Reading Breakdown</Text>
+          <Text style={[styles.statsSectionCopy,{color:statsPalette.muted}]}>Progress, formats, genres, pace and reading context.</Text>
+        </View>
+        {donutCards}
+      </View>
+
+      <View style={styles.statsSectionGroup}>
+        <View style={styles.statsSectionHeading}>
+          <Text style={[styles.statsSectionTitle,{color:statsPalette.ink}]}>More Insights</Text>
+          <Text style={[styles.statsSectionCopy,{color:statsPalette.muted}]}>Consistency, favourites, ratings and annotations.</Text>
+        </View>
+        {supportingCards}
+      </View>
 
       {profileLoading&&session?<ActivityIndicator accessibilityLabel="Loading reader statistics" color={statsPalette.gold}/>:null}
     </ScrollView>;
@@ -5451,6 +5477,12 @@ const styles = StyleSheet.create({
   statsMonthBarFill: {width:'100%',borderRadius:9},
   statsMonthLabel: {fontSize:9,lineHeight:12,fontWeight:'600'},
   statsMonthValue: {fontSize:8.5,lineHeight:11,fontWeight:'500',fontVariant:['tabular-nums']},
+  statsSectionGroup: {gap:10},
+  statsSectionHeading: {gap:2,paddingTop:2,paddingBottom:2},
+  statsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.16},
+  statsSectionCopy: {fontSize:10.5,lineHeight:15,fontWeight:'400'},
+  statsDonutGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
+  statsSupportingGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
   statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0},
   statsDashboardCard: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:20,paddingHorizontal:0,gap:14,flexGrow:1},
   statsDashboardCardWide: {width:'48%',flexBasis:300},
