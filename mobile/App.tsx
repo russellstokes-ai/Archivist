@@ -886,7 +886,7 @@ function Client() {
       sleep: seconds => {
         const native=player as typeof player & {setSleepTimer?: (seconds:number)=>void};
         if(typeof native.setSleepTimer!=='function'){
-          if(seconds>0)throw Error('Sleep timer is unavailable in this build.');
+          if(seconds>0)throw Error('Sleep timer isn’t available on this device.');
           return;
         }
         native.setSleepTimer(seconds);
@@ -6465,7 +6465,7 @@ function Client() {
                 <View style={[styles.settingsPrivacyMark,{borderColor:p.gold}]}><UiIcon name="bookmark" color={p.gold} size={20}/></View>
                 <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Local-first · private by default</Text><Text style={[styles.meta,{color:p.muted}]}>Reading history, profile settings and local library state stay on this device unless you explicitly connect an Archivist server. Backup snapshots never include server credentials.</Text></View>
               </View>
-              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>External metadata network access</Text><Text style={[styles.meta,{color:p.muted}]}>Off in this build. Scanning uses local/embedded metadata and connected Archivist server data.</Text></View><Text style={[styles.settingsStateLabel,{color:p.sage}]}>OFF</Text></View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>External metadata network access</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist does not contact external metadata services. Scanning uses local and embedded metadata plus your connected Archivist Server.</Text></View><Text style={[styles.settingsStateLabel,{color:p.sage}]}>OFF</Text></View>
               <View style={styles.settingsSubgroup}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Backup & restore</Text>
                 <Text style={[styles.meta,{color:p.muted}]}>Save a portable backup file of reading history and non-sensitive app settings, or restore one from Files. Server credentials and access keys are never included.</Text>
