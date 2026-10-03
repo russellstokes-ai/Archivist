@@ -46,6 +46,7 @@ import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTra
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
 import {shelfRecommendations} from './shelfRecommendations';
+import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -101,6 +102,7 @@ type ServerWork = {
   series: string;
   genre?: string;
   publishedYear?: number;
+  seriesNumber?: number;
   format: string;
   space: string;
   editions: number;
@@ -161,6 +163,8 @@ type UnifiedWork = {
   series: string;
   genre: string;
   publishedYear?: number;
+  seriesNumber?: number;
+  logicalWorkKey?: string;
   format: string;
   space: string;
   available: boolean;
@@ -174,7 +178,9 @@ type UnifiedWork = {
   serverWork?: ServerWork;
   server?: string;
   serverWorkId?: number;
+  formatChoices?: UnifiedWork[];
 };
+type FormatPicker = {work: UnifiedWork; choices: UnifiedWork[]};
 type LibrarySort = 'title'|'author'|'series'|'format'|'progress'|'rating';
 type LibraryFormatFamily = ''|'books'|'comics'|'audio'|'pdf';
 type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'rewards' | 'settings';
@@ -220,6 +226,7 @@ const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 const smartShelvesKey = 'archivist.smartShelves.v1';
 const collectionsKey = 'archivist.collections.v1';
 const shelfSectionsKey = 'archivist.shelfSections.v1';
+const shelfFormatChoiceKey = 'archivist.shelfFormatChoice.v1';
 const playerBookmarksKey = 'archivist.playerBookmarks.v1';
 const trackOrdersKey = 'archivist.trackOrders.v1';
 const chapterOverridesKey = 'archivist.chapterOverrides.v1';
@@ -623,8 +630,12 @@ function Client() {
   const [libraryFolderExact,setLibraryFolderExact]=useState(false);
   const [shelfManageOpen,setShelfManageOpen]=useState(false);
   const [shelfSections,setShelfSections]=useState<ShelfSectionPref[]>(defaultShelfSections);
+  const [expandedSeries,setExpandedSeries]=useState('');
+  const [formatPicker,setFormatPicker]=useState<FormatPicker|null>(null);
+  const [shelfFormatChoice,setShelfFormatChoice]=useState<Record<string,string>>({});
   const [renameTarget,setRenameTarget]=useState<{kind:'shelf'|'collection';id:string}|null>(null);
   const shelfScrollRef=useRef<ScrollView|null>(null);
+  const seriesExpansionAnim=useRef(new Animated.Value(0)).current;
   const libraryListRef=useRef<any>(null);
   const shelfScrollOffset=useRef(0);
   const libraryScrollOffset=useRef(0);
@@ -754,6 +765,7 @@ function Client() {
   const [privacyBackupText,setPrivacyBackupText]=useState('');
   const [privacyRestoreText,setPrivacyRestoreText]=useState('');
   const [privacyDataNotice,setPrivacyDataNotice]=useState('');
+  useEffect(()=>{let live=true;getPersistedJSON<Record<string,string>>(shelfFormatChoiceKey).then(value=>{if(live&&value&&typeof value==='object')setShelfFormatChoice(value)}).catch(()=>undefined);return()=>{live=false;};},[]);
   const loadCancel = useRef<(() => void) | null>(null);
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
@@ -915,17 +927,17 @@ function Client() {
   const sourceWorks = useMemo<UnifiedWork[]>(() => {
     const phone:UnifiedWork[] = phonePersonalWorks.map(work => {
       const identity=sourceIdentity({source:'local',localKey:work.key,space:work.space,title:work.title});
-      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work};
+      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work};
     });
     const downloaded:UnifiedWork[] = downloadedPersonalWorks.flatMap(work => {
       if(!work.originServer || !work.originWorkId)return [];
       const identity=sourceIdentity({source:'downloaded',server:work.originServer,serverWorkId:work.originWorkId,space:work.space,title:work.title});
-      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,format:work.format,space:work.space,available:true,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
+      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:true,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
     });
     const remote:UnifiedWork[] = session ? serverWorks.map(work => {
       const identity=sourceIdentity({source:'server',server:session.server,serverWorkId:work.id,space:work.space,title:work.title});
       const pref=serverPreferences[work.id] || {rating:work.rating||0,favourite:!!work.favourite,state:work.state||'not-started' as ReadingState};
-      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre||'',publishedYear:publicationYear(work.publishedYear),format:work.format,space:work.space,available:work.available,files:work.files,editions:work.editions,readingState:pref.state||'not-started',rating:pref.rating||0,favourite:!!pref.favourite,serverWork:work,server:session.server,serverWorkId:work.id};
+      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre||'',publishedYear:publicationYear(work.publishedYear),seriesNumber:work.seriesNumber,format:work.format,space:work.space,available:work.available,files:work.files,editions:work.editions,readingState:pref.state||'not-started',rating:pref.rating||0,favourite:!!pref.favourite,serverWork:work,server:session.server,serverWorkId:work.id};
     }) : [];
     return [...phone,...downloaded,...remote];
   },[downloadedPersonalWorks,phonePersonalWorks,serverPreferences,serverWorks,session]);
@@ -1001,6 +1013,7 @@ function Client() {
     };
   }
   const allUnifiedWorks=useMemo(()=>dedupeForAll(sourceWorks),[sourceWorks]);
+  const shelfUnifiedWorks=useMemo<UnifiedWork[]>(()=>groupShelfFormats(allUnifiedWorks),[allUnifiedWorks]);
   const localProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>matchesSource(work.source,'local')),'On this device'),[sourceWorks]);
   const downloadedProfileStats=useMemo(()=>statsFromUnified(sourceWorks.filter(work=>work.source==='downloaded'),'Downloaded'),[sourceWorks]);
   const combinedProfileStats=useMemo(()=>statsFromUnified(allUnifiedWorks,'All libraries'),[allUnifiedWorks]);
@@ -2403,8 +2416,20 @@ function Client() {
     if (first) openBook({...first,localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId});
   }
 
+  function rememberServerFormatChoice(work:ServerWork,track:WorkTrack){
+    if(!session)return;
+    const historyKey='server:'+session.server.replace(/\/+$/,'').toLowerCase()+':'+work.id;
+    const value=track.format+'|'+track.edition;
+    setShelfFormatChoice(current=>{
+      const next={...current,[historyKey]:value};
+      void setPersistedJSON(shelfFormatChoiceKey,next);
+      return next;
+    });
+  }
+
   function openServerWorkTrack(work: ServerWork, track: WorkTrack) {
     setWorkPicker(null);
+    rememberServerFormatChoice(work,track);
     const item: Book = {
       id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',
       format:track.format,space:work.space,available:track.available,serverWorkId:work.id,
@@ -2424,17 +2449,23 @@ function Client() {
       const tracks = await request(session, '/api/works/' + work.id + '/tracks') as WorkTrack[];
       const available = tracks.filter(track => track.available);
       if (!available.length) throw Error('No readable files are currently available for this work.');
-      if (work.format === 'Audio' || available.every(track => track.format === 'Audio')) {
+      const formats = new Set(available.map(track => track.format));
+      const editions = new Set(available.map(track => track.edition));
+      if (formats.size === 1 && available.every(track => track.format === 'Audio')) {
         const first = available.find(track => track.format === 'Audio')!;
+        rememberServerFormatChoice(work,first);
         await playBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:'Audio',space:work.space,available:true,coverShape:'square',serverWorkId:work.id,source:'server',originServer:session.server});
         return;
       }
-      const editions = new Set(available.map(track => track.edition));
-      if (editions.size === 1) {
-        const first = available[0];
-        openBook({id:first.id,title:work.title,author:work.author,series:work.series,genre:work.genre || '',format:first.format,space:work.space,available:true,serverWorkId:work.id,coverShape:first.format==='Audio'?'square':'portrait',source:'server',originServer:session.server});
+      if (formats.size === 1 && editions.size === 1) {
+        openServerWorkTrack(work,available[0]);
         return;
       }
+      const variants=available.filter((track,index,all)=>all.findIndex(item=>item.format===track.format&&item.edition===track.edition)===index);
+      const historyKey='server:'+session.server.replace(/\/+$/,'').toLowerCase()+':'+work.id;
+      const remembered=shelfFormatChoice[historyKey];
+      const rememberedTrack=remembered?variants.find(track=>track.format+'|'+track.edition===remembered):undefined;
+      if(rememberedTrack){openServerWorkTrack(work,rememberedTrack);return;}
       setWorkPicker({work,tracks:available});
     } catch (e) {
       setError((e as Error).message);
@@ -2799,16 +2830,17 @@ function Client() {
 
   function WorkPickerPanel() {
     if (!workPicker) return null;
-    const choices = workPicker.tracks.filter((track,index,all)=>all.findIndex(item=>item.edition===track.edition)===index);
+    const choices = workPicker.tracks.filter((track,index,all)=>all.findIndex(item=>item.edition===track.edition&&item.format===track.format)===index);
+    const formatCounts=choices.reduce<Record<string,number>>((counts,track)=>({...counts,[track.format]:(counts[track.format]||0)+1}),{});
     return (
       <Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setWorkPicker(null)}>
         <View style={styles.modalBackdrop}>
-          <View accessibilityViewIsModal={true} accessibilityLabel={'Choose edition for '+workPicker.work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+          <View accessibilityViewIsModal={true} accessibilityLabel={'Choose format or edition for '+workPicker.work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{workPicker.work.title}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>Choose an edition to open.</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Choose a format or edition to open.</Text>
             {choices.map(track=><Button
-              key={track.edition}
-              label={(track.format==='Audio'?'Listen':'Open')+' · '+track.format}
+              key={track.format+'-'+track.edition}
+              label={track.format+' · '+(track.format==='Audio'?'Listen':'Open')+(formatCounts[track.format]>1?' · Edition '+track.edition:'')}
               tone="quiet"
               onPress={()=>openServerWorkTrack(workPicker.work,track)}
             />)}
@@ -2819,10 +2851,60 @@ function Client() {
     );
   }
 
-  function openUnifiedWork(work: UnifiedWork) {
-    setWorkMenu(null);
+  function shelfFormatGroupKey(work:UnifiedWork){
+    return work.logicalWorkKey?'local:'+work.logicalWorkKey:work.canonicalKey;
+  }
+
+  function rememberShelfFormatChoice(work:UnifiedWork,choice:UnifiedWork){
+    const key=shelfFormatGroupKey(work);
+    setShelfFormatChoice(current=>{
+      const next={...current,[key]:choice.key};
+      void setPersistedJSON(shelfFormatChoiceKey,next);
+      return next;
+    });
+  }
+
+  function openSingleUnifiedWork(work:UnifiedWork){
     if (work.localWork) { openLocalWork(work.localWork); return; }
     if (work.serverWork) { void openServerWork(work.serverWork); }
+  }
+
+  function openShelfFormatChoice(work:UnifiedWork,choice:UnifiedWork){
+    setFormatPicker(null);
+    rememberShelfFormatChoice(work,choice);
+    openSingleUnifiedWork(choice);
+  }
+
+  function FormatPickerPanel(){
+    if(!formatPicker)return null;
+    const work=formatPicker.work;
+    const choices=formatPicker.choices.filter(choice=>choice.available);
+    return <Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setFormatPicker(null)}>
+      <View style={styles.modalBackdrop}>
+        <View accessibilityViewIsModal={true} accessibilityLabel={'Choose format for '+work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+          <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{work.title}</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'} · Choose how to continue.</Text>
+          {choices.map(choice=>{
+            const action=choice.readingState==='in-progress'?(choice.format==='Audio'?'Continue listening':'Continue reading'):(choice.format==='Audio'?'Listen':'Open');
+            return <Button key={choice.key} label={choice.format+' · '+action} tone="quiet" onPress={()=>openShelfFormatChoice(work,choice)}/>;
+          })}
+          <Button label="Cancel" tone="quiet" onPress={()=>setFormatPicker(null)}/>
+        </View>
+      </View>
+    </Modal>;
+  }
+
+  function openUnifiedWork(work: UnifiedWork) {
+    setWorkMenu(null);
+    const choices=(work.formatChoices||[]).filter(choice=>choice.available);
+    if(choices.length>1){
+      const remembered=shelfFormatChoice[shelfFormatGroupKey(work)];
+      const obvious=obviousShelfFormatChoice(choices,remembered);
+      if(obvious){openShelfFormatChoice(work,obvious);return;}
+      setFormatPicker({work,choices});
+      return;
+    }
+    openSingleUnifiedWork(work);
   }
 
   function ContinueCard({
@@ -2914,6 +2996,7 @@ function Client() {
       <View style={[styles.unifiedCardCopy,list&&{flex:1}]}>
         <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
+        {work.formatChoices&&work.formatChoices.length>1?<Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{work.formatChoices.map(choice=>choice.format).join(' · ')}</Text>:null}
         {list?<View style={styles.unifiedListMeta}>
           <View style={[styles.workSourceDot,{backgroundColor:work.source==='downloaded'?p.sage:p.muted}]}/>
           <Text numberOfLines={1} style={[styles.workSource,{color:p.muted}]}>{sourceLabel(work.source)} · {work.format}{work.series?' · '+work.series:''}</Text>
@@ -2962,6 +3045,7 @@ function Client() {
           <Button label={work.format==='Audio'?'Listen':'Open'} onPress={()=>openUnifiedWork(work)}/>
           <View style={styles.sheetActionList}>
             <SheetAction label="Work details" onPress={()=>{setWorkDetails(work);close();}}/>
+            {work.formatChoices&&work.formatChoices.length>1?<SheetAction label="Choose format" onPress={()=>{setFormatPicker({work,choices:work.formatChoices!});close();}}/>:null}
             <SheetAction label={personal.favourite?'Remove favourite':'Add favourite'} onPress={setFav}/>
             {work.format==='Audio'&&local?<SheetAction label="Add to queue" onPress={()=>{close();void addLocalWorkQueue(local);}}/>:null}
             {work.format==='Audio'&&remote?<SheetAction label="Add to queue" onPress={()=>{close();void queueServerWork(remote);}}/>:null}
@@ -3043,7 +3127,7 @@ function Client() {
                 <Text style={[styles.workDetailsAuthor,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
                 {work.series?<Text style={[styles.meta,{color:p.muted}]}>{work.series}</Text>:null}
                 <View style={styles.workDetailsTags}>
-                  {[work.format,work.genre,work.publishedYear?String(work.publishedYear):''].filter(Boolean).map(value=><View key={String(value)} style={[styles.workDetailsTag,{borderColor:p.line}]}><Text style={[styles.workDetailsTagText,{color:p.muted}]}>{value}</Text></View>)}
+                  {[...(work.formatChoices?.map(choice=>choice.format)||[work.format]),work.genre,work.publishedYear?String(work.publishedYear):''].filter(Boolean).filter((value,index,all)=>all.indexOf(value)===index).map(value=><View key={String(value)} style={[styles.workDetailsTag,{borderColor:p.line}]}><Text style={[styles.workDetailsTagText,{color:p.muted}]}>{value}</Text></View>)}
                 </View>
                 <Text style={[styles.meta,{color:p.sage}]}>{progressCopy}</Text>
                 {personal.rating?<Text style={[styles.meta,{color:p.gold}]}>{ratingLabel(personal.rating)}</Text>:null}
@@ -3061,7 +3145,8 @@ function Client() {
               ].map(([label,value])=><View key={label} style={styles.workDetailsFact}><Text style={[styles.workDetailsFactLabel,{color:p.muted}]}>{label}</Text><Text numberOfLines={2} style={[styles.workDetailsFactValue,{color:p.ink}]}>{value}</Text></View>)}
             </View>
 
-            <Button label={work.format==='Audio'?'Listen':'Open'} onPress={()=>{close();openUnifiedWork(work)}}/>
+            <Button label={work.formatChoices&&work.formatChoices.length>1?'Continue':work.format==='Audio'?'Listen':'Open'} onPress={()=>{close();openUnifiedWork(work)}}/>
+            {work.formatChoices&&work.formatChoices.length>1?<Button label="Choose format" tone="quiet" onPress={()=>{setFormatPicker({work,choices:work.formatChoices!});close();}}/>:null}
             <View style={styles.workDetailsActionGrid}>
               <Pressable accessibilityRole="button" onPress={setFav} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="bookmark" color={personal.favourite?p.gold:p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>{personal.favourite?'Favourited':'Favourite'}</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="library" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Collection</Text></Pressable>
@@ -3319,7 +3404,7 @@ function Client() {
 
   function Shelf(){
     // Shelf is deliberately personal/content-led. Folder and source organisation lives in Library.
-    const base:UnifiedWork[]=allUnifiedWorks;
+    const base:UnifiedWork[]=shelfUnifiedWorks;
     const continuing=base.filter(work=>work.readingState==='in-progress').slice(0,12);
     const favourites=base.filter(work=>work.favourite).slice(0,12);
     const recommendationLimit=foldLayout?5:3;
@@ -3346,13 +3431,35 @@ function Client() {
 
     const seriesGroups=[...new Set(base.map(work=>work.series).filter(Boolean))]
       .map(name=>{
-        const works=base.filter(work=>work.series===name);
+        const works=sortSeriesWorks(base.filter(work=>work.series===name));
         const relevance=works.reduce((score,work)=>score+(work.readingState==='in-progress'?5:0)+(work.favourite?3:0)+(work.readingState==='not-started'?1:0),0);
-        return {name,total:works.length,works:works.slice(0,4),relevance};
+        return {name,total:works.length,works,relevance};
       })
       .filter(group=>group.total>1)
       .sort((a,b)=>b.relevance-a.relevance||b.total-a.total||a.name.localeCompare(b.name))
       .slice(0,8);
+
+    const animateSeriesOpen=(name:string)=>{
+      setExpandedSeries(name);
+      seriesExpansionAnim.stopAnimation();
+      seriesExpansionAnim.setValue(0);
+      if(reduceMotion){seriesExpansionAnim.setValue(1);return;}
+      Animated.timing(seriesExpansionAnim,{toValue:1,duration:380,useNativeDriver:false}).start();
+    };
+    const toggleSeries=(name:string)=>{
+      if(expandedSeries===name){
+        if(reduceMotion){seriesExpansionAnim.setValue(0);setExpandedSeries('');return;}
+        seriesExpansionAnim.stopAnimation();
+        Animated.timing(seriesExpansionAnim,{toValue:0,duration:320,useNativeDriver:false}).start(({finished})=>{if(finished)setExpandedSeries('')});
+        return;
+      }
+      if(expandedSeries&&!reduceMotion){
+        seriesExpansionAnim.stopAnimation();
+        Animated.timing(seriesExpansionAnim,{toValue:0,duration:220,useNativeDriver:false}).start(({finished})=>{if(finished)animateSeriesOpen(name)});
+        return;
+      }
+      animateSeriesOpen(name);
+    };
 
     const localReview=localBooks.filter(book=>book.needsReview).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
@@ -3465,19 +3572,53 @@ function Client() {
         </ScrollView>:null}
 
         {item.id==='series'?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesRow}>
-          {seriesGroups.map(({name,total,works})=><Pressable
-            key={name}
-            accessibilityRole="button"
-            accessibilityLabel={name+', '+total+' work'+(total===1?'':'s')}
-            onPress={()=>{clearLibraryFilters();setSourceFilter('all');setSeriesFilter(name);setActiveTab('library')}}
-            style={({pressed})=>[styles.seriesTile,pressed&&styles.cardPressed]}>
-            <View style={styles.seriesCoverStack}>
-              {works.slice(0,3).map((work,index)=><View key={work.key} style={[styles.seriesCover,{left:index*34,top:index===1?3:index===2?6:0,zIndex:10-index}]}>{workArtwork(work)}</View>)}
-              {!works.length?<View style={[styles.seriesEmpty,{borderColor:p.line}]}/>:null}
-            </View>
-            <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
-          </Pressable>)}
+          {seriesGroups.map(({name,total,works})=>{
+            const expanded=expandedSeries===name;
+            const expandedWidth=Math.max(252,Math.min(width-36,foldLayout?520:360));
+            const animatedWidth=expanded?seriesExpansionAnim.interpolate({inputRange:[0,1],outputRange:[152,expandedWidth]}):152;
+            return <Animated.View key={name} style={[styles.seriesTile,{width:animatedWidth}]}>
+              {expanded?<React.Fragment>
+                <View style={[styles.seriesCoverStack,{overflow:'hidden'}]}>
+                  <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight:8}}>
+                    {works.map((work,index)=>{
+                      const translateX=seriesExpansionAnim.interpolate({inputRange:[0,1],outputRange:[-Math.min(index,2)*48,0]});
+                      const opacity=index<3?1:seriesExpansionAnim.interpolate({inputRange:[0,.58,1],outputRange:[0,0,1]});
+                      return <Animated.View key={work.key} style={{width:72,marginRight:10,opacity,transform:[{translateX}]}}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={'Open '+work.title+', '+name+' '+(work.seriesNumber!==undefined?work.seriesNumber:index+1)}
+                          onPress={()=>openUnifiedWork(work)}
+                          style={({pressed})=>[{width:64},pressed&&styles.cardPressed]}>
+                          <View style={[styles.seriesCover,{position:'relative',left:undefined,top:undefined,width:64}]}>{workArtwork(work)}</View>
+                        </Pressable>
+                      </Animated.View>;
+                    })}
+                  </ScrollView>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={'Collapse '+name+' series'}
+                  accessibilityState={{expanded:true}}
+                  onPress={()=>toggleSeries(name)}
+                  style={({pressed})=>[pressed&&styles.cardPressed]}>
+                  <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
+                </Pressable>
+              </React.Fragment>:<Pressable
+                accessibilityRole="button"
+                accessibilityLabel={name+', '+total+' work'+(total===1?'':'s')+', expand series'}
+                accessibilityState={{expanded:false}}
+                onPress={()=>toggleSeries(name)}
+                style={({pressed})=>[pressed&&styles.cardPressed]}>
+                <View style={styles.seriesCoverStack}>
+                  {works.slice(0,3).map((work,index)=><View key={work.key} style={[styles.seriesCover,{left:index*34,top:index===1?3:index===2?6:0,zIndex:10-index}]}>{workArtwork(work)}</View>)}
+                  {!works.length?<View style={[styles.seriesEmpty,{borderColor:p.line}]}/>:null}
+                </View>
+                <Text numberOfLines={2} style={[styles.seriesName,{color:p.ink}]}>{name}</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>{total} work{total===1?'':'s'}</Text>
+              </Pressable>}
+            </Animated.View>;
+          })}
         </ScrollView>:null}
       </View>;
     };
@@ -5851,6 +5992,7 @@ function Client() {
       />
       <ProfileMenu/>
       <WorkDetailsPanel/>
+      <FormatPickerPanel/>
       <RatingPromptPanel />
       {playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
