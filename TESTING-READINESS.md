@@ -189,3 +189,101 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Draftbit visual confirmation on phone-width and Fold-width layouts in both light and dark themes.
 - Native typecheck/test execution for these latest commits has **not** been observed from GitHub Actions on this branch; do not mark CI passed.
 - Native photo picking is not implemented until an image-picker dependency is added and verified without breaking the Draftbit/mobile dependency lock.
+\n\n## 2026-10-03 — Shelf / Library Sprint 1\n\n### Implemented and source-verified\n- Shelf is now independent of the current Library source/folder filters and uses the full unified personal catalogue.\n- Removed the catalogue-style Browse by format and From your library Shelf sections.\n- Retained Continue, Favourites, Smart Shelves, Collections and relevance-ranked Series. Smart Shelves now explain that they update automatically from user rules.\n- Shelf Browse is now a navigation gateway into Library for Books, Comics, Audiobooks and PDFs rather than a Shelf filter.\n- When an Archivist Server is connected, Shelf adds On this device and On Archivist Server shortcuts. On this device includes local files plus offline server downloads.\n- Fresh-install setup now offers Add a folder and Connect to Archivist Server, plus a persisted Use Archivist locally only choice that suppresses future Shelf server prompts without removing server setup from Settings.\n- Added a Library-only content-family filter so the Books shortcut can include EPUB/Ebook representations without changing stored metadata or Smart Shelf rules.\n- Existing stored Shelf section preferences migrate through the new defaults, so removed catalogue sections do not reappear.\n\n### Deferred / runtime proof\n- Recently Added is intentionally not shown yet because the unified local/server work model does not expose a reliable per-work added timestamp. Do not infer recency from title order or scan order.\n- Shelf recommendation rows (Books for you / Comics for you / Audiobooks for you) belong to Sprint 2 and are not claimed complete here.\n- Draftbit/device visual confirmation is still required on phone and Fold layouts.\n- No GitHub Actions pass is claimed unless a workflow/status is attached to the final Sprint 1 commit.\n
+
+## 2026-10-03 — Shelf / Library Sprints 2–3
+
+### Sprint 2 — Shelf recommendations
+- Added an owned-content-only recommendation engine for Books, Comics and Audiobooks.
+- Recommendation candidates are available, not-started works already present in the user's unified catalogue; finished/in-progress works are excluded from recommendation rows because Continue owns active content.
+- Ranking uses existing local signals only: reading/listening state, favourites, ratings, genre, author and series affinity. No generative AI or external recommendation service is used.
+- Cold-start ranking remains deterministic and labels itself as learning the user's taste rather than pretending to be personalised.
+- Rows are capped at 3 works on phone and 5 on Fold/wide.
+- Added shelf-recommendations.test.cjs; mobile test discovery picks it up automatically.
+
+### Sprint 3 — Library source/folder architecture
+- Replaced Library's horizontal source/space chips with a shared Sources & folders navigator.
+- Fold/wide uses a persistent left rail: All Library; On this device with configured local folders and Offline downloads; Archivist Server with configured server folders.
+- Phone uses the same navigator in a dedicated Sources & folders sheet.
+- Specific folder selection uses exact source filtering, while the broad On this device bucket includes both local files and offline server downloads.
+- Storage labels now use physical-language semantics: local/downloaded = On this device; remote-only = Archivist Server. Downloaded server works retain the SAVED badge to show origin/state.
+- Local folder rows are driven by the actual configured LocalFolder records. Server rows are driven by /api/sources records.
+
+### Known limitation / next work
+- Current server work records expose space but not source-folder ID/path. If multiple server source folders share the same space name, selecting either row currently filters that shared space. Advanced Library management should add source-folder identity to the server work payload in the later scan/organisation sprint.
+- Recently Added remains deferred until a reliable cross-source added timestamp exists.
+- Runtime visual proof is still required on phone and Fold layouts; no CI pass is claimed unless GitHub attaches one to the final commit.
+
+## 2026-10-03 — Shelf / Library Sprint 4: scan, metadata & organisation
+
+### Implemented and source-verified
+- Library now has a dedicated **Manage** workspace rather than hiding the core content-management workflow in Settings.
+- **Scan & Repair** provides beginner-friendly device-folder rescan/add actions, live scan progress and direct maintenance queues.
+- Added explicit maintenance views for uncertain metadata plus blank author, series, genre and device-cover fields.
+- Local and server maintenance views use editable raw-file rows, so metadata fixes act on the underlying asset rather than merely filtering grouped works.
+- Server raw assets are loaded only when an explicit metadata-review/gap workflow needs them; normal Shelf/Library browsing remains work-level and bounded.
+- **Advanced Organisation** reuses the existing safe local organiser: choose a layout, preview proposed copies, apply only ready items, preserve originals, and retain recovery/copy history.
+- Duplicate review is available from Library and retains exact server SHA-256 verification plus non-destructive local candidate review.
+- Connected Admin users can scan individual Archivist Server source folders and use the existing preview/apply safe-sort workflow from Library.
+- Added `libraryMaintenance.ts` metadata-gap classification helpers and `library-maintenance.test.cjs`.
+- Restored duplicate-review request handlers that were referenced but missing on the Draftbit branch.
+- Fixed the progression callback type and stale UI-contract assertions uncovered by the Sprint 4 CI pass; these were pre-existing branch gate failures, not new product-scope additions.
+
+### Automated evidence
+- Mobile Checks run `37134732350` on commit `596b4d2141722f48c2af2ba0fd00c213c4eeab82`: **passed**.
+- Dependency install: passed.
+- Expo Doctor: passed.
+- TypeScript: passed.
+- Full discovered mobile test suite, including the new Library maintenance test and updated UI contract: passed.
+
+### Acceptance still outstanding
+- Draftbit **Sync → Preview** visual review on phone-width and Fold/open-width layouts.
+- Light/dark visual review of the Manage sheet and maintenance queues.
+- Real Android Storage Access Framework rescan against representative folders.
+- Real server-folder scan / duplicate verification / safe-sort smoke against the user's Archivist Server.
+- No destructive automatic metadata fill or duplicate deletion was introduced; uncertain values remain reviewable by design.
+
+## 2026-10-03 — Draftbit Sprints 5–7: work details, branding & integrated QA
+
+### Sprint 5 — Work details, metadata & covers
+- Added a polished Work Details sheet for every unified work with artwork, title/author/series, format/genre/year, reading state, rating, location, availability, file/edition counts and metadata provenance.
+- Work actions now expose Work Details without cluttering the Library cards.
+- Local grouped works can edit metadata across every track in the work rather than only the first file.
+- Manual local overrides now support publication year and cover URI and survive rescans.
+- Manual audiobook titles take precedence over folder-derived group names.
+- The metadata editor includes cover preview, optional manual cover URI and a **Use scanned metadata & cover** action that removes manual overrides and rescans.
+- Server cover management remains scan-driven; the app does not pretend it can write arbitrary remote cover art when the server API does not support that safely.
+- Work Details routes server Admin users into the Library management workflow for metadata/scan work and retains download/favourite/collection actions.
+
+### Sprint 6 — Canonical Archivist logo & splash
+- Added a shared in-app `ArchivistLogo` component using the canonical `mobile/assets/icon.png`.
+- Replaced visible generic “A” branding in empty states, fallback covers and About with the canonical logo. User initials remain user identity, not app branding.
+- The font-loading launch screen now uses the canonical logo and Archivist wordmark.
+- Android app/adaptive icon and splash all use the same canonical asset.
+- Expo SDK 57 splash configuration uses the supported `expo-splash-screen` config plugin with light and dark backgrounds and `contain` sizing.
+- Added and locked `expo-splash-screen ~57.0.9`; Expo Doctor validates the final configuration.
+
+### Sprint 7 — Integrated QA & lock
+- Added `sprint-5-7-contract.test.cjs` to lock Work Details, grouped metadata/cover editing, canonical branding/splash, core screen presence, Fold responsive paths, themes, reduced motion and retention of Sprint 4 Library management.
+- Extended local-library tests for manual cover/year overrides.
+- Extended grouped-work tests so manual audiobook titles remain stable.
+- Brand sweep found no remaining visible generic “A” marks; only obsolete unused style names remain and do not render.
+- Core app surfaces remain present: Shelf, Library, Now/Player/Reader, Atlas, Reader Stats, Profile, Rewards and Settings.
+- Existing phone/Fold responsive styles, light/dark/system themes and reduced-motion support remain wired.
+
+### Automated evidence
+- Final Mobile Checks run `37135925849` on commit `4185c9e21fbf93c3fa3e0c6eb443f2ae2ac56cb7`: **passed**.
+- Dependency installation: passed.
+- Expo Doctor: passed.
+- TypeScript: passed.
+- Mobile tests: **23/23 suites passed**, including `library-maintenance.test.cjs` and `sprint-5-7-contract.test.cjs`.
+
+### Runtime acceptance we will check next
+- Draftbit **Sync → Preview** on phone-width and Fold/open-width layouts.
+- Light and dark modes for Shelf, Library, Work Details, Manage Library, Player/Reader, Atlas, Stats, Profile/Rewards and Settings.
+- Work Details sheet scrolling, keyboard behaviour and action-sheet transitions on a real Android device.
+- Real grouped audiobook edit/rescan and local cover override/revert using Android Storage Access Framework folders.
+- Native release-build splash appearance; development clients do not constitute final splash visual acceptance.
+- Real Archivist Server metadata/source scan and remote cover refresh.
+- No physical Galaxy Fold or Home Assistant/server runtime acceptance is claimed by this checkpoint.
+

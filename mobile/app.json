@@ -3,7 +3,6 @@
     "name": "Archivist",
     "slug": "archivist",
     "version": "0.9.3",
-    "extra": {"router": {"origin": "https://f0d86f2330.sandbox.draftbit.dev:5100"}},
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -31,6 +30,19 @@
           "enableBackgroundPlayback": true,
           "recordAudioAndroid": false,
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FBFAF7",
+          "image": "./assets/icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "dark": {
+            "image": "./assets/icon.png",
+            "backgroundColor": "#07151C"
+          }
         }
       ],
       "./plugins/withCleartextTraffic"

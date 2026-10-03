@@ -50,7 +50,7 @@ assert.ok(source.includes('title={current.title}') && source.includes('cover={(c
 assert.ok(livingBookSource.includes('skipPages=3') && livingBookSource.includes('leafCount') && livingBookSource.includes('closedCover'), 'Living book must support smooth closed-cover and multi-page skip animation');
 assert.ok(livingBookSource.includes('opacity:open.interpolate') && livingBookSource.includes("rotateY:open.interpolate"), 'Living book open/close transition is missing');
 assert.ok(source.includes("const ambientHaloColor=darkMode?'#2F8B86':'#C99A43'") && source.includes("const ambientHaloStrength=darkMode?.95:.48") && source.includes("backgroundColor:darkMode?'#07151C':'#FBFAF7'") && source.includes("color={ambientHaloColor}") && source.includes("strength={ambientHaloStrength}"), 'Every app page must use the theme-aware ambient halo standard');
-assert.ok(source.includes("paper: dark ? '#000000' : '#FBFAF7'") && source.includes("line: dark ? '#252525' : '#E3DDD2'") && source.includes("gold: dark ? '#B99A68' : '#A67A2F'"), 'Light mode must use the warm ivory and champagne palette');
+assert.ok(source.includes("paper: dark ? '#000000' : '#FBFAF7'") && source.includes("highContrast?'#C6B9A5':'#E3DDD2'") && source.includes("gold: dark ? '#B99A68' : '#A67A2F'"), 'Light mode must use the warm ivory and champagne palette while preserving increased contrast');
 assert.ok(source.includes("glowColor={ambientHaloColor}") && source.includes("glowStrength={darkMode?.72:.46}") && livingBookSource.includes("glowColor='#2F8B86'"), 'Living Player artwork must inherit the theme-aware halo');
 assert.ok(source.includes("<AmbientGlow color={ambientHaloColor} size={Math.max(680,ringSize*1.35)} strength={darkMode?.72:.52}/>"), 'Atlas atmosphere must switch from teal in dark mode to champagne in light mode');
 
@@ -116,6 +116,34 @@ assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includ
 assert.ok(source.includes("statsMetricCardWide: {width:'19%'") && source.includes('rowGap:22') && source.includes('minHeight:118'), 'Reader Stats five-metric layout and chart alignment spacing are not locked');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"), 'Primary page gutters must match the Reader Stats header standard');
 assert.ok(source.includes("profileHubScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,width:'100%',maxWidth:980") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,maxWidth:980"), 'Profile, Rewards and Settings must share the same responsive page width and vertical rhythm');
+const shelfStart=source.indexOf('function Shelf(){');
+const shelfEnd=source.indexOf('function Library(){',shelfStart);
+assert.ok(shelfStart>=0 && shelfEnd>shelfStart,'Shelf function bounds are missing');
+const shelfSource=source.slice(shelfStart,shelfEnd);
+assert.equal(source.includes("title:'Browse by format'"),false,'Shelf must not contain the old catalogue-style Browse by format section');
+assert.equal(source.includes("title:'From your library'"),false,'Shelf must not duplicate the full Library catalogue');
+assert.equal(shelfSource.includes('<SourceSwitcher'),false,'Shelf Browse must not directly filter Shelf by storage source');
+assert.equal(shelfSource.includes('<LibrarySwitcher'),false,'Shelf must not expose Library folder/space organisation');
+assert.ok(shelfSource.includes('const base:UnifiedWork[]=allUnifiedWorks') && source.includes("{id:'favourites',title:'Favourites',visible:true}") && source.includes("{id:'smart',title:'Smart Shelves',visible:true}") && source.includes("{id:'collections',title:'Collections',visible:true}") && source.includes("{id:'series',title:'Series',visible:true}"), 'Shelf must be built from the full personal catalogue with curated personal sections');
+assert.ok(shelfSource.includes('Automatic shelves that update from your rules.') && shelfSource.includes("item.id==='collections'") && shelfSource.includes("const relevance=works.reduce"), 'Shelf must retain explained Smart Shelves, Collections and relevance-ranked Series');
+assert.ok(shelfSource.includes('>BROWSE LIBRARY</Text>') && shelfSource.includes("label:'Books'") && shelfSource.includes("label:'Comics'") && shelfSource.includes("label:'Audiobooks'") && shelfSource.includes("label:'PDFs'"), 'Shelf Browse must route to Library by content type');
+assert.ok(shelfSource.includes('>On this device</Text>') && shelfSource.includes('>On Archivist Server</Text>') && shelfSource.includes('{session?<View style={styles.shelfStorageShortcuts}'), 'Shelf storage shortcuts must appear only for a connected Archivist Server');
+assert.ok(source.includes("const shelfServerPromptKey = 'archivist.shelfServerPrompt.v1'") && source.includes('>Use Archivist locally only</Text>') && source.includes('label="Connect to Archivist Server"') && source.includes("label={localScanning?'Scanning…':'Add a folder'}"), 'Fresh Shelf setup must support local folders, server connection and a persistent locally-only choice');
+assert.ok(source.includes("type LibraryFormatFamily = ''|'books'|'comics'|'audio'|'pdf'") && source.includes('libraryFormatFamilyMatches'), 'Shelf content shortcuts must use a non-destructive Library content-family filter');
+assert.ok(source.includes("import {shelfRecommendations} from './shelfRecommendations'") && shelfSource.includes("title:'Books for you'") && shelfSource.includes("title:'Comics for you'") && shelfSource.includes("title:'Audiobooks for you'"), 'Shelf must expose the three owned-content recommendation rows');
+assert.ok(shelfSource.includes('const recommendationLimit=foldLayout?5:3') && shelfSource.includes('From your collection while Archivist learns your taste.') && shelfSource.includes('Based on your reading, ratings and favourites.'), 'Shelf recommendation rows must be capped and distinguish cold-start from personalised ranking');
+
+const libraryStart=source.indexOf('function Library(){');
+const libraryEnd=source.indexOf('function Player(',libraryStart);
+assert.ok(libraryStart>=0 && libraryEnd>libraryStart,'Library function bounds are missing');
+const librarySource=source.slice(libraryStart,libraryEnd);
+assert.ok(source.includes('function LibrarySourceNavigator(') && source.includes('localFolders.map(folder=>') && source.includes('sources.map(source=>') && source.includes('>OFFLINE DOWNLOADS</Text>')===false, 'Library source navigator must be driven by the configured local and server folder models');
+assert.ok(source.includes('label="Offline downloads"') && source.includes('label="On Archivist Server"') && source.includes('label="On this device"'), 'Library source navigator must expose physical storage locations');
+assert.ok(source.includes('libraryFolderExact?item.source===sourceFilter:matchesSource(item.source,sourceFilter)') && source.includes('setLibraryFolderExact(exact)'), 'Specific Library folders must use exact source filtering without changing broad On this device semantics');
+assert.ok(librarySource.includes('setLibrarySourcesOpen(true)') && librarySource.includes('>SOURCES & FOLDERS</Text>') && librarySource.includes('<LibrarySourceNavigator compact/>'), 'Phone Library must open the shared Sources & folders navigator');
+assert.ok(source.includes('return wide?<View style={styles.libraryTwoPane}') && source.includes('<LibrarySourceNavigator/></ScrollView>{main}</View>:main;'), 'Fold/wide Library must use the persistent source/folder rail');
+assert.equal(librarySource.includes('<SourceSwitcher/>'),false,'Library must not fall back to the old horizontal source switcher');
+assert.equal(librarySource.includes('<LibrarySwitcher/>'),false,'Library must not fall back to the old horizontal space switcher');
 assert.ok(source.includes('>LIBRARY & METADATA</Text>') && source.includes('>OFFLINE & STORAGE</Text>') && source.includes('>PRIVACY & DATA</Text>') && source.includes('>SERVER & FAMILY</Text>') && source.includes('>ACCESSIBILITY</Text>') && source.includes('>ABOUT ARCHIVIST</Text>'), 'Settings must use exactly the six approved top-level areas');
 assert.equal(source.includes('>APPEARANCE</Text>'),false,'Appearance must not return as a seventh Settings area');
 assert.ok(source.includes('accessibilityPreferencesKey') && source.includes('saveAccessibilityPreferences') && source.includes('systemReduceMotion||accessibilityPrefs.reduceMotion') && source.includes('highContrast') && source.includes('largeText'), 'Accessibility settings must persist and Reduced Motion must remain the master motion control');
@@ -143,7 +171,8 @@ assert.ok(source.includes('const atlasPulse=useRef(new Animated.Value(0)).curren
 assert.ok(source.includes('atlasRingControlPulse') && source.includes('atlasSelectedRingPulse'), 'Atlas ring controls and ring chart need selected pulse feedback');
 assert.ok(source.includes("outputRange:[.48,0]") && source.includes("outputRange:[1,1.26]") && source.includes("borderColor:'#FF9A92'") && source.includes("borderColor:'#88D7E8'") && source.includes("borderColor:'#C7A6EE'"), 'Atlas selected controls must radiate a brighter colour-matched halo that expands and fades out');
 assert.ok(atlasSource.includes('color="#E2736B"') && atlasSource.includes('color="#62AFC1"') && atlasSource.includes('color="#A78BC7"'), 'Atlas Genre, Format and Year controls must retain distinct colours even when not selected');
-assert.ok(atlasSource.includes('>Universe Stats</Text>') && atlasSource.includes("label:'Nodes'") && atlasSource.includes("label:'Connections'") && atlasSource.includes("label:'Constellations'") && atlasSource.includes("label:'Bridges'") && atlasSource.includes("label:'Series'") && atlasSource.includes("label:'Collections'"), 'Atlas Universe Stats are missing');
+assert.ok(atlasSource.includes('>Universe Stats</Text>') && atlasSource.includes("label:'Nodes'") && atlasSource.includes("label:'Connections'") && atlasSource.includes("label:'Constellations'") && atlasSource.includes("label:'Bridges'") && atlasSource.includes("label:'Series'") && atlasSource.includes("label:'Collections'") && atlasSource.includes("label:'Authors'") && atlasSource.includes("label:'Genres'"), 'Atlas Universe Stats must expose all eight approved metrics');
+assert.ok(source.includes("atlasUniverseStat: {width:'50%',minHeight:92") && source.includes("atlasUniverseStatWide: {width:'25%',minHeight:94") && source.includes("atlasUniverseStatCopy: {fontSize:9,lineHeight:13,marginTop:1,minHeight:26}"), 'Atlas Universe Stats must use the aligned 2-column phone / 4-column wide grid');
 assert.ok(atlasSource.includes('Most connected') && atlasSource.includes('Largest constellation') && atlasSource.includes('Deepest series'), 'Atlas Universe Highlights are incomplete');
 assert.ok(source.includes('atlasInspectorAnim') && source.includes('atlasInspectorRevealMobile') && source.includes('atlasInspectorRevealWide') && source.includes("outputRange:[.96,1]"), 'Atlas selected-node details must expand into a floating responsive inspector');
 assert.ok(source.includes('function atlasSelectNearestNodeAt(') && source.includes('nearestDistance') && source.includes('selectionRadius') && source.includes('onResponderRelease={atlasGestureEnd}'), 'Atlas taps must resolve to the nearest visible node instead of overlapping node Pressables');
@@ -173,12 +202,17 @@ assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold st
 assert.ok(source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
+assert.ok(source.includes('function LibraryManagementPanel()'), 'Library management workspace is missing');
+assert.ok(source.includes('Manage Library') && source.includes('SCAN & REPAIR') && source.includes('ADVANCED ORGANISATION'), 'Library management hierarchy is incomplete');
+assert.ok(source.includes("const [metadataGapFilter,setMetadataGapFilter]=useState<MetadataGapFilter>('')"), 'Library metadata-gap state is missing');
+assert.ok(source.includes('METADATA GAPS') && source.includes('Missing author') && source.includes('Missing series') && source.includes('Missing genre'), 'Library blank-field filters are missing');
+assert.ok(source.includes('(reviewOnly||!!metadataGapFilter) ? request(session, serverAssetsPath(0,200))'), 'Server raw assets must load only for explicit maintenance views');
+assert.ok(source.includes('<MaintenanceList/>') && source.includes('maintenanceMode=reviewOnly||!!metadataGapFilter'), 'Library maintenance results must use editable raw-file rows');
+assert.ok(source.includes('Rescan device folders') && source.includes('Add device folder'), 'Library scan controls are missing');
+assert.ok(source.includes('Preview matching server items') && source.includes('Apply pending safe moves'), 'Library server organisation controls are missing');
+assert.ok(source.includes('Archivist never removes duplicate candidates automatically.'), 'Duplicate-management safety copy is missing');
 assert.ok(source.includes('function LocalSortingPanel()'), 'Local organisation controls should live in a dedicated Settings panel');
 assert.match(source,/<LocalSortingPanel\s*\/>/, 'Settings must render the local organisation panel');
-const shelfStart=source.indexOf('function Shelf()');
-const playerStart=source.indexOf('function Player(');
-assert.ok(shelfStart>=0 && playerStart>shelfStart, 'Shelf function bounds are missing');
-const shelfSource=source.slice(shelfStart,playerStart);
 assert.equal(shelfSource.includes('>Local sorting</Text>'),false,'Technical local sorting controls must not live on the Shelf');
 
 assert.ok(source.includes('function PersonalControls('), 'Personal star/favourite controls are missing');

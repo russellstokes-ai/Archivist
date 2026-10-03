@@ -40,7 +40,7 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
     const first = tracks[0];
     const audio = first.format === 'Audio';
     const folderTitle = audio ? audioFolderTitle(first.uri) : '';
-    const title = audio && folderTitle ? folderTitle : first.title;
+    const title = audio && folderTitle && first.metadataSource!=='manual' ? folderTitle : first.title;
     const author = commonValue(tracks.map(item => item.author));
     const series = commonValue(tracks.map(item => item.series));
     const genre = commonValue(tracks.map(item => item.genre));

@@ -68,6 +68,7 @@ export type LocalMetadataOverride = {
   series: string;
   genre: string;
   publishedYear?: number;
+  coverUri?: string;
 };
 
 export type LocalScanResult = {
@@ -233,7 +234,8 @@ export async function scanLocalFolders(
         const override = overrides[child];
         if (override) identity = applyLocalMetadata(identity, override, 'manual');
 
-        const coverUri = artworkByStem.get(fileStem(child).toLowerCase()) || genericCover || undefined;
+        const discoveredCoverUri = artworkByStem.get(fileStem(child).toLowerCase()) || genericCover || undefined;
+        const coverUri = override?.coverUri?.trim() || discoveredCoverUri;
         if (identity.needsReview) review += 1;
         books.push({
           id: books.length + 1,

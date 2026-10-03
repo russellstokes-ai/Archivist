@@ -140,12 +140,14 @@ assert.equal(previews[0].state, 'review');
   scanned = await scanLocalFolders(
     [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
     undefined,
-    {[file]: {title:'My correction',author:'Manual Author',series:'Manual Series',genre:'Fantasy'}},
+    {[file]: {title:'My correction',author:'Manual Author',series:'Manual Series',genre:'Fantasy',publishedYear:2001,coverUri:'content://manual/MyCover.jpg'}},
   );
   assert.equal(scanned.books[0].title, 'My correction');
   assert.equal(scanned.books[0].metadataSource, 'manual');
   assert.equal(scanned.books[0].genre, 'Fantasy');
   assert.equal(scanned.books[0].needsReview, false);
+  assert.equal(scanned.books[0].publishedYear, 2001);
+  assert.equal(scanned.books[0].coverUri, 'content://manual/MyCover.jpg');
 
   const dottedRoot='content://root/tree/primary:Books/document/primary:Books2';
   const dottedAuthor=dottedRoot+'%2FJ.R.R.%20Tolkien';

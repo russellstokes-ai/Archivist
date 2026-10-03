@@ -54,13 +54,14 @@ export function sourceIdentity(input: SourceIdentityInput): SourceIdentity {
 }
 
 export function matchesSource(source: WorkSource, filter: LibrarySource) {
-  return filter === 'all' || source === filter;
+  if (filter === 'all') return true;
+  if (filter === 'local') return source === 'local' || source === 'downloaded';
+  return source === filter;
 }
 
 export function sourceLabel(source: WorkSource) {
-  if (source === 'local') return 'On this device';
-  if (source === 'downloaded') return 'Downloaded';
-  return 'Server';
+  if (source === 'local' || source === 'downloaded') return 'On this device';
+  return 'Archivist Server';
 }
 
 export function dedupeForAll<T extends SourceLike>(items: T[]): T[] {
