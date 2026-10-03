@@ -4023,6 +4023,8 @@ function Client() {
       {label:'Bridges',value:bridgeNodeIds.length,copy:'cross-cluster connectors'},
       {label:'Series',value:atlasUniverse.nodes.filter(node=>node.kind==='series').length,copy:'series networks'},
       {label:'Collections',value:atlasUniverse.nodes.filter(node=>node.kind==='collection').length,copy:'collection networks'},
+      {label:'Authors',value:atlasUniverse.nodes.filter(node=>node.kind==='author').length,copy:'author nodes'},
+      {label:'Genres',value:new Set(atlasUniverseWorks.map(work=>String(work.genre||'').trim()).filter(Boolean)).size,copy:'recorded genres'},
     ];
     return (
       <ScrollView contentContainerStyle={[styles.atlasScreen,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled">
@@ -4145,7 +4147,7 @@ function Client() {
               <Text style={[styles.atlasUniverseStatsTotal,{color:p.sage}]}>{atlasUniverseWorks.length} works</Text>
             </View>
             <View style={styles.atlasUniverseStatsGrid}>
-              {universeStats.map(item=><View key={item.label} style={[styles.atlasUniverseStat,{borderBottomColor:p.line}]}>
+              {universeStats.map(item=><View key={item.label} style={[styles.atlasUniverseStat,width>=760&&styles.atlasUniverseStatWide,{borderBottomColor:p.line}]}>
                 <Text style={[styles.atlasUniverseStatValue,{color:p.ink}]}>{item.value}</Text>
                 <Text style={[styles.atlasUniverseStatLabel,{color:p.muted}]}>{item.label}</Text>
                 <Text style={[styles.atlasUniverseStatCopy,{color:p.muted}]}>{item.copy}</Text>
@@ -5831,11 +5833,12 @@ const styles = StyleSheet.create({
   atlasUniverseStatsTitle: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,fontWeight:'500',letterSpacing:-.2},
   atlasUniverseStatsCopy: {fontSize:11,lineHeight:16,marginTop:2},
   atlasUniverseStatsTotal: {fontSize:11,lineHeight:16,fontWeight:'700',letterSpacing:.35,textTransform:'uppercase'},
-  atlasUniverseStatsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:18,rowGap:0},
-  atlasUniverseStat: {width:'46%',minWidth:126,flexGrow:1,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:13},
-  atlasUniverseStatValue: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500'},
+  atlasUniverseStatsGrid: {flexDirection:'row',flexWrap:'wrap',alignItems:'stretch'},
+  atlasUniverseStat: {width:'50%',minHeight:92,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:13,paddingHorizontal:9,justifyContent:'flex-start'},
+  atlasUniverseStatWide: {width:'25%',minHeight:94},
+  atlasUniverseStatValue: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500',fontVariant:['tabular-nums']},
   atlasUniverseStatLabel: {fontSize:10.5,lineHeight:15,fontWeight:'700',marginTop:1},
-  atlasUniverseStatCopy: {fontSize:9,lineHeight:13,marginTop:1},
+  atlasUniverseStatCopy: {fontSize:9,lineHeight:13,marginTop:1,minHeight:26},
   atlasUniverseHighlights: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,gap:2},
   atlasUniverseHighlightsKicker: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.3,marginBottom:5},
   atlasUniverseHighlightRow: {minHeight:58,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:12,paddingVertical:9},
