@@ -1,11 +1,13 @@
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
+import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
   Animated,
+  Easing,
   AppState,
   FlatList,
   Image,
@@ -713,6 +715,10 @@ function Client() {
   const shelfSkeletonPulse=useRef(new Animated.Value(.45)).current;
   const player = useAudioPlayer(null);
   const audio = useAudioPlayerStatus(player);
+  const playerSeeks=useRef(new PlayerSeekQueue()).current;
+  const currentAudioKey=playing ? [playing.source,playing.uri,playing.id].join(':') : '';
+  const currentAudioKeyRef=useRef(currentAudioKey);currentAudioKeyRef.current=currentAudioKey;
+  useEffect(()=>{playerSeeks.reset(currentAudioKey);},[currentAudioKey,playerSeeks]);
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
@@ -743,10 +749,10 @@ function Client() {
   const skipGeneration=useRef(0);
   function turnPages(pages:number,direction:1|-1){
     if(reduceMotion||!playbackVisible)return;
-    const count=Math.max(1,Math.min(5,Math.round(pages)));
+    const count=Math.max(1,Math.min(6,Math.round(pages)));
     const generation=++skipGeneration.current;
     skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
-    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=5?1040:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
+    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=6?1040:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
   }
 
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
@@ -864,7 +870,7 @@ function Client() {
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
   const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
-  useEffect(()=>{if(!playbackVisible||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,reduceMotion]);
+  useEffect(()=>{if(!playbackVisible||!playbackIsPlaying||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,playbackIsPlaying,reduceMotion]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>('archivist.dailyRitual.v1').then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
     if(!ritualReady)return;
@@ -923,7 +929,7 @@ function Client() {
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
     bookOpenAnim.stopAnimation();
-    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:(playbackIsPlaying?680:560),useNativeDriver:true}).start();
+    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:520,easing:Easing.inOut(Easing.cubic),useNativeDriver:true}).start();
 
     if(motion!=='turning'){
       pageTurnAnim.stopAnimation(value=>{
@@ -4137,26 +4143,23 @@ function Client() {
       if(activeLocalWork){const order=moveTrackOrder(activeLocalWork.tracks,index,direction,track=>track.uri||String(track.id));const currentUri=activeLocalWork.tracks[localWorkIndex]?.uri;const next={...activeLocalWork,tracks:applyTrackOrder(activeLocalWork.tracks,order,track=>track.uri||String(track.id))};setActiveLocalWork(next);setLocalWorkIndex(Math.max(0,next.tracks.findIndex(track=>track.uri===currentUri)));await saveTrackOrder(workKey,order);}
     }
 
-    function seekTo(seconds: number) {
-      const target = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, seconds));
-      if (serverPlayer) void controller.seek(target);
-      else void player.seekTo(target);
+    const transportReady = !!current && audio.isLoaded && !(serverPlayer && playback?.loading);
+    function requestSeek(input:{target?:number;delta?:number},pages?:number,direction:1|-1=1) {
+      if(!transportReady)return;
+      const key=currentAudioKey;
+      const target=playerSeeks.request({
+        key,current:position,duration,...input,
+        seek:async seconds=>{if(serverPlayer){if(!await controller.seek(seconds))throw Error(controller.state.error||'Playback changed. Try again.');}else await player.seekTo(seconds);},
+        persist:async seconds=>{if(!serverPlayer)await persistLocalPlaybackPosition(seconds);},
+        isCurrent:()=>currentAudioKeyRef.current===key,
+        onError:error=>setError(error instanceof Error?error.message:String(error)),
+      });
+      if(target!==null && pages && isPlaying)turnPages(pages,direction);
     }
-
-    function jumpChapter(direction:-1|1){
-      if(effectiveChapters.length){
-        let targetIndex=currentChapterIndex;
-        if(direction<0){
-          const currentStart=currentChapter?.start||0;
-          targetIndex=position-currentStart>5?Math.max(0,currentChapterIndex):Math.max(0,currentChapterIndex-1);
-        }else{
-          targetIndex=Math.min(effectiveChapters.length-1,Math.max(0,currentChapterIndex)+1);
-        }
-        const chapter=effectiveChapters[targetIndex];
-        if(chapter){seekTo(chapter.start);turnPages(5,direction);return;}
-      }
-      seekTo(position+(direction*60));
-      turnPages(5,direction);
+    function seekTo(seconds:number){requestSeek({target:seconds});}
+    function skipAudio(size:'small'|'large',direction:1|-1){
+      const skip=PLAYER_SKIP[size];
+      requestSeek({delta:direction*skip.seconds},skip.pages,direction);
     }
 
     function setPlayerSpeed(rate: number) {
@@ -4186,7 +4189,7 @@ function Client() {
             <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
-              {current.author?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>By {current.author}</Text>:null}
+              {(current.narrator||current.author)?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>{current.narrator?'Narrated by '+current.narrator:'By '+current.author}</Text>:null}
               {current.series?<Text numberOfLines={1} style={[styles.playerSeries,{color:p.muted}]}>{current.series}</Text>:null}
             </View>
             <View style={styles.playerStatusRow}>
@@ -4205,8 +4208,8 @@ function Client() {
               accessibilityValue={{min:0,max:Math.max(1,Math.round(duration)),now:Math.round(position),text:formatTime(position)+' of '+formatTime(duration)}}
               accessibilityActions={[{name:'increment',label:'Forward 30 seconds'},{name:'decrement',label:'Back 30 seconds'}]}
               onAccessibilityAction={event=>{
-                if(event.nativeEvent.actionName==='increment'){seekTo(position+30);turnPages(3,1);}
-                if(event.nativeEvent.actionName==='decrement'){seekTo(position-30);turnPages(3,-1);}
+                if(event.nativeEvent.actionName==='increment'){skipAudio('large',1);}
+                if(event.nativeEvent.actionName==='decrement'){skipAudio('large',-1);}
               }}
               onLayout={event=>setPlayerProgressWidth(Math.max(1,event.nativeEvent.layout.width))}
               onPress={event => {
@@ -4225,27 +4228,27 @@ function Client() {
             </View>
 
             <View style={styles.transport}>
-              <Pressable accessibilityRole="button" accessibilityLabel={effectiveChapters.length?'Previous chapter':'Back 60 seconds'} onPress={()=>jumpChapter(-1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
-                <UiIcon name="trackBack" color={p.ink} size={27}/>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
+                <UiIcon name="skipBack" color={p.ink} size={30}/><Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={()=>{seekTo(position-15);turnPages(3,-1);}} style={[styles.skipButton,{backgroundColor:p.card}]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipBack" color={p.ink} size={30}/>
                 <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-                disabled={serverPlayer ? playback?.loading : false}
+                disabled={!transportReady}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
+                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>{seekTo(position+30);turnPages(3,1);}} style={[styles.skipButton,{backgroundColor:p.card}]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipForward" color={p.ink} size={30}/>
-                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
+                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel={effectiveChapters.length?'Next chapter':'Forward 60 seconds'} onPress={()=>jumpChapter(1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
-                <UiIcon name="trackForward" color={p.ink} size={27}/>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
+                <UiIcon name="skipForward" color={p.ink} size={30}/><Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
               </Pressable>
             </View>
 
@@ -7392,3 +7395,4 @@ const styles = StyleSheet.create({
   insightAchievement: {borderWidth:0,padding:11,minWidth:140,flexGrow:1},
 
 });
+

@@ -1,4 +1,41 @@
 # Archivist 0.9.2 â€” Testing Readiness
+## 2026-10-03 — Universal mobile Live Player checkpoint (not release-ready)
+
+Active branch: `design/draftbit-universal-phone`. The user's current instruction supersedes older references to developing on `design/hig-refresh`; that Fold reference remains locked and untouched.
+
+### Verified baseline
+- Inspected source at `a579c37852a2eed01b18c27782661e784d1972bd`.
+- Both top-level Settings columns apply content-height overrides only below 600dp.
+- Universe Stats, Taste & Notes, Reading Snapshot and Personal Bests apply centred metric styling only on phones.
+- Existing Fold style-snapshot assertions pass; no App StyleSheet entries changed in this checkpoint. This is source evidence, not rendered visual acceptance.
+
+### Implemented
+- Transport is now −30 / −15 / play-pause / +15 / +30 seconds. Chapters remain accessible in the Chapters panel.
+- Small skips animate three leaves; large skips animate six. Audio seeking runs independently of animation. Reduced Motion disables decorative turns; paused audio stays paused with the cover closed.
+- Book opening/closing uses a 520ms eased transition. Narrow artwork stages scale to contain the binding; established full-size geometry is retained when it fits.
+- Narrator metadata is used for the player byline when available.
+- Rapid requests accumulate and coalesce through a serial seek queue. Local seek completion persists the final target. Stale track completions and failed native seeks cannot claim successful persistence.
+- Server seeking rejects non-finite inputs and blocked sessions, checks the active generation after native completion, and clears completed state after a successful seek.
+- Supplemental artwork is hidden from screen readers; playback information remains in the accessible controls.
+
+### Executed checks
+- `node player-transport.test.cjs`: PASS on Node 24, using its built-in TypeScript stripping. Covers skip amounts, bounds, unknown duration, rapid taps, coalescing, final persistence, failure recovery and stale-track completion.
+- `node ui-contract.test.cjs`: PASS, including protected Fold styles and both approved phone fixes.
+- Full discovered suite attempted: 2/30 passed in the partial local source workspace. Remaining suites cannot be accepted: TypeScript dependency is absent, and native/asset-dependent checks lack the complete checkout.
+- `npm run typecheck`: BLOCKED — tsc unavailable.
+- `npm run web -- --offline`: BLOCKED — Expo unavailable.
+- Git clone failed because the bundled Git HTTPS helper is unavailable. Direct archive retrieval is denied by session network permissions. Source was read through the connected GitHub API.
+- The checked-in Mobile Checks workflow references `mobile/package-lock.json` and uses `npm ci`, but this branch tree has no package lock. No CI pass is claimed.
+
+### Required before feature acceptance
+- Obtain the current migrated Draftbit workspace/configuration or a complete dependency-enabled checkout; do not overwrite its Expo/Yarn migration with this raw GitHub package configuration.
+- Typecheck and full mobile suite; rendered phone 320/360/390/599dp and Fold 600/720/900dp review in both themes.
+- Verify actual open/close reversal, six-leaf forward/reverse turns, rapid mixed skips, Reduced Motion, long titles, missing covers, safe areas and first-viewport transport visibility.
+- Real audio checks: paused seeking/relaunch resume, end-of-track skipping, track changes during seek, offline playback, background/lock-screen/Bluetooth, interruptions and sleep timer.
+- Adjustable skip intervals in Settings remain outstanding; this checkpoint implements approved 15/30 defaults only.
+- Screenshot parity, local sleep timer parity, history/characters tools and production motion quality are not claimed complete.
+- Android Auto target is native cover art plus standard media controls; native integration and car testing remain outstanding.
+- Atlas interaction/performance and deterministic comic focus remain subsequent sprints, not completed by this player checkpoint.
 
 **Candidate branch:** `design/hig-refresh`  
 **Candidate mobile commit:** `81526e38548620a4bc076d11ca0495478fb9a763`  
@@ -319,3 +356,4 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Sprint 10 regression-lock commit: `8ae43e2be602049bbbe13c2f9d4626f96b0d1540`.
 - No GitHub Actions run is attached to these latest commits yet, so dependency install, Expo Doctor, TypeScript and full mobile-suite execution are **not claimed** for this checkpoint.
 - Remaining acceptance is runtime visual/interaction verification in Draftbit Preview plus real-device image selection/rescan behaviour on iOS/Android and Fold layouts.
+

@@ -44,9 +44,9 @@ assert.ok(source.includes("setActiveTab('now')") && source.includes("setLiveMode
 assert.ok(source.includes("const lastReadingKey = 'archivist.lastReading.v1'") && source.includes("const lastPlayingKey = 'archivist.lastPlaying.v1'"), 'Recent Player/Reader targets must persist for fast resume');
 assert.ok(source.includes("!playing && (reading||lastReading)") && source.includes("playing && !(activeTab==='now'&&liveMode==='player')"), 'Persistent activity bar must prioritise audio and fall back to reading');
 assert.ok(source.includes('tabCenterOrb') && source.includes('liveHubSegment'), 'Center live-tab visual treatment is missing');
-assert.ok(source.includes('name="trackBack"') && source.includes('name="trackForward"') && source.includes('Back 15 seconds') && source.includes('Forward 30 seconds'), 'Approved Live Player transport must expose chapter/fallback controls around 15s back and 30s forward');
-assert.ok(source.includes('function jumpChapter(direction:-1|1)') && source.includes('turnPages(5,direction)'), 'Large Live Player jumps must animate five pages');
-assert.ok(source.includes('turnPages(3,-1)') && source.includes('turnPages(3,1)'), 'Short Live Player skips must animate three pages');
+for(const label of ['Back 30 seconds','Back 15 seconds','Forward 15 seconds','Forward 30 seconds'])assert.ok(source.includes('accessibilityLabel="'+label+'"'),'Missing timed skip '+label);
+assert.ok(source.includes("skipAudio('large',-1)") && source.includes("skipAudio('large',1)") && source.includes("skipAudio('small',-1)") && source.includes("skipAudio('small',1)"),'Both skip sizes must work in both directions');
+assert.ok(livingBookSource.includes('Math.min(6,Math.round(skipPages))'),'Living Book must allow six leaves for large skips');
 assert.ok(source.includes('title={current.title}') && source.includes('cover={(current.coverUri||current.source===\'server\')?<Cover book={current} fill/>:null}'), 'Living book must use the current title and metadata cover');
 assert.ok(livingBookSource.includes('skipPages=3') && livingBookSource.includes('leafCount') && livingBookSource.includes('closedCover'), 'Living book must support smooth closed-cover and multi-page skip animation');
 assert.ok(livingBookSource.includes('opacity:open.interpolate') && livingBookSource.includes("rotateY:open.interpolate"), 'Living book open/close transition is missing');
@@ -328,4 +328,8 @@ assert.ok(source.includes('phoneLayout&&styles.shelfContentPhone') && source.inc
 assert.ok(source.includes('phoneLayout&&styles.playerScreenPhone') && source.includes('phoneLayout&&styles.atlasScreenPhone') && source.includes('phoneLayout&&styles.statsScreenPhone'),'Player, Atlas and Stats must use phone overrides');
 assert.ok(source.includes('phoneLayout&&styles.profileHubScreenPhone') && source.includes('phoneLayout&&styles.settingsScreenPhone'),'Profile/Rewards and Settings must use phone overrides');
 assert.ok(source.includes('phoneLayout&&styles.tabBarPhone') && source.includes('phoneLayout&&styles.standardPageHeaderPhone'),'Global navigation and headers must adapt below 600dp');
+assert.ok(source.includes("settingsColumnPhone: {flexGrow:0,flexShrink:0,flexBasis:'auto',width:'100%'}"),'Stacked phone Settings columns must keep content height');
+assert.equal((source.match(/styles.settingsColumn,phoneLayout&&styles.settingsColumnPhone/g)||[]).length,2,'Both Settings columns need the phone-only overlap fix');
+for(const name of ['atlasUniverseStatPhone','statsDetailMetricPhone','profileSnapshotItemPhone','profileBestCardPhone'])assert.ok(source.includes('phoneLayout&&styles.'+name),'Missing phone-only centred metrics: '+name);
+
 

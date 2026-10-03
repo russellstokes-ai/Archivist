@@ -131,9 +131,16 @@ export class Playback {
     this.emit();
   }
   async seek(seconds: number) {
-    if (this.state.loading || !this.state.tracks.length) return;
+    if (this.state.loading || !this.state.tracks.length || this.blocked || !Number.isFinite(seconds)) return false;
+    const generation=this.generation;
+    const track=this.state.tracks[this.state.index];
     const target=Math.max(0,Math.min(this.state.duration || Infinity,seconds));
-    try { await this.audio.seek(target); this.state.seconds=target; this.complete=false; this.emit(); await this.save(); } catch(e) { this.fail(e); }
+    try {
+      await this.audio.seek(target);
+      if(generation!==this.generation || track!==this.state.tracks[this.state.index])return false;
+      this.state.seconds=target; this.complete=false; this.state.completed=false;
+      this.emit(); await this.save(); return !this.blocked;
+    } catch(e) { if(generation===this.generation)this.fail(e); return false; }
   }
   setSpeed(rate: number) {
     if (!Number.isFinite(rate) || rate<0.5 || rate>3) return;
@@ -155,3 +162,4 @@ export class Playback {
   }
   async stop() { ++this.generation;this.audio.sleep?.(0);this.audio.pause();await this.save();this.state.tracks=[];this.progressURL='';this.state.playing=false;this.state.sleepAt=null;this.emit(); }
 }
+

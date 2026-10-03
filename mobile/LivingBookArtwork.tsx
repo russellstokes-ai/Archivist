@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {Animated,View,Text,StyleSheet} from 'react-native';
 
 /** Layered translucent discs work on native and web without a raster glow asset. */
@@ -7,10 +7,13 @@ export function AmbientGlow({color='#47736F',size=520,strength=1}:{color?:string
 }
 
 export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,skipPages=3,direction,skipping,cover,glowColor='#2F8B86',glowStrength=.72}:{title:string;author:string;chapter?:string;number?:number;open:Animated.Value;turn:Animated.Value;skip:Animated.Value;skipPages?:number;direction:1|-1;skipping:boolean;cover:React.ReactNode;glowColor?:string;glowStrength?:number}){
+  const [availableWidth,setAvailableWidth]=useState(390);
+  const scale=Math.min(1,availableWidth/354);
   const page=(side:number)=><View style={s.pageContent}><Text numberOfLines={1} style={s.runningHead}>{title.toUpperCase()}</Text><Text numberOfLines={2} style={s.chapter}>{chapter||title}</Text><View style={{gap:3,marginTop:8}}>{Array.from({length:29},(_,i)=><View key={i} style={{height:1,backgroundColor:'#5C594B',opacity:.4,width:(i%8===7?56:i%5===0?89:96)+'%' as any,marginTop:i%8===0?4:0}}/>)}</View><Text style={s.pageNumber}>{Math.max(1,number*2+side)}</Text></View>;
   const coverArt=cover||<View style={s.fallbackCover}><Text style={s.fallbackKicker}>ARCHIVIST</Text><Text numberOfLines={5} style={s.fallbackTitle}>{title}</Text><Text style={s.fallbackAuthor}>{author}</Text></View>;
-  const leafCount=Math.max(1,Math.min(5,Math.round(skipPages)));
-  return <View accessibilityLabel="Living book artwork" style={s.stage}>
+  const leafCount=Math.max(1,Math.min(6,Math.round(skipPages)));
+  return <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" onLayout={event=>setAvailableWidth(Math.max(1,event.nativeEvent.layout.width))} style={[s.stage,{height:320*scale}]}>
+    <View pointerEvents="none" style={[s.stage,{maxWidth:undefined,transform:[{scale}]}]}>
     <AmbientGlow color={glowColor} size={520} strength={glowStrength}/>
     <View style={s.shadow}/>
     <Animated.View style={[s.closedCover,{opacity:open.interpolate({inputRange:[0,.18,.62,1],outputRange:[1,1,.18,0]}),transform:[{perspective:1000},{rotateX:'7deg'},{scale:open.interpolate({inputRange:[0,1],outputRange:[1,.88]})},{translateX:open.interpolate({inputRange:[0,1],outputRange:[0,34]})}]}]}>{coverArt}</Animated.View>
@@ -23,6 +26,7 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
       {skipping?Array.from({length:leafCount},(_,i)=><Animated.View key={i} pointerEvents="none" style={[s.page,s.leaf,{left:direction===-1?0:undefined,right:direction===1?0:undefined,zIndex:9-i,opacity:skip.interpolate({inputRange:[i,i+.01,i+.98,i+1],outputRange:[0,1,1,0],extrapolate:'clamp'}),transformOrigin:direction===1?'left center':'right center',transform:[{perspective:900},{rotateY:skip.interpolate({inputRange:[i,i+1],outputRange:['0deg',direction===1?'-180deg':'180deg'],extrapolate:'clamp'})}]} as any]}>{page(direction===1?1:0)}</Animated.View>):null}
       <Animated.View pointerEvents="none" style={[s.front,{opacity:open.interpolate({inputRange:[0,.28,.92,1],outputRange:[0,1,1,0]}),transformOrigin:'left center',transform:[{perspective:900},{rotateY:open.interpolate({inputRange:[0,1],outputRange:['0deg','-180deg']})}]} as any]}>{coverArt}</Animated.View>
     </Animated.View>
+    </View>
   </View>;
 }
 const s=StyleSheet.create({
@@ -45,3 +49,4 @@ const s=StyleSheet.create({
  leaf:{zIndex:5,backfaceVisibility:'visible',shadowColor:'#372D14',shadowOpacity:.16,shadowRadius:8,shadowOffset:{width:-3,height:0},elevation:5},
  front:{position:'absolute',right:0,top:-3,width:171,height:244,overflow:'hidden',backgroundColor:'#183337',zIndex:10,backfaceVisibility:'hidden',borderTopRightRadius:5,borderBottomRightRadius:5}
 });
+

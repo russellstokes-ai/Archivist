@@ -13,7 +13,7 @@ export type PlayerMotionState = 'closed'|'open'|'turning';
 export function playerMotionState(input:{playing:boolean;visible:boolean;reduceMotion:boolean}):PlayerMotionState{
   if(!input.visible)return 'closed';
   if(input.reduceMotion)return input.playing?'open':'closed';
-  return input.playing?'turning':'open';
+  return input.playing?'turning':'closed';
 }
 
 export function sanitizeBookmarks(value:unknown):PlayerBookmark[]{
@@ -129,3 +129,4 @@ export function setChapterBoundary(chapters:Chapter[],index:number,start:number)
   current.start=target;
   return next;
 }
+
