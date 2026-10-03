@@ -49,6 +49,11 @@ assert.ok(statsSource.includes('Reading Progress') && statsSource.includes('Form
 assert.ok(source.includes("activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar"), 'Reader Stats must retain the standard bottom navigation');
 assert.ok(source.includes("'#2F8B86'") && source.includes('AmbientGlow'), 'Reader Stats teal ambient glow is missing');
 assert.ok(source.includes("statsDashboardCard: {width:'100%',borderTopWidth"), 'Reader Stats should use open edge-to-edge sections instead of boxed dashboard cards');
+assert.ok(statsSource.includes('Average session') && statsSource.includes('Longest session') && statsSource.includes('Most active day') && statsSource.includes('Most active month'), 'Reader Stats reading-habit metrics are incomplete');
+assert.ok(statsSource.includes('Completion rate') && statsSource.includes('Series completed') && statsSource.includes('Finishes by month'), 'Reader Stats completion metrics are incomplete');
+assert.ok(statsSource.includes('Completion by format') && statsSource.includes('Completion by genre'), 'Reader Stats completion splits are missing');
+assert.ok(statsSource.includes('Avg finished rating') && statsSource.includes('Favourites') && statsSource.includes('Annotations') && statsSource.includes('Highlights'), 'Reader Stats taste and notes metrics are incomplete');
+assert.ok(statsSource.includes('Reading consistency'), 'Reader Stats consistency metric is missing');
 assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includes('statsScreenFold') && source.includes('statsScreenWide'), 'Reader Stats spacing must align with the app responsive gutters');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
