@@ -166,7 +166,7 @@ type UnifiedWork = {
   serverWorkId?: number;
 };
 type LibrarySort = 'title'|'author'|'series'|'format'|'progress'|'rating';
-type Tab = 'shelf' | 'library' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'rewards' | 'settings';
+type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'rewards' | 'settings';
 type ShelfSectionId = 'continue' | 'formats' | 'favourites' | 'smart' | 'collections' | 'series' | 'library';
 type ShelfSectionPref = {id:ShelfSectionId;title:string;visible:boolean};
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -214,6 +214,8 @@ const readerAnnotationsKey = 'archivist.readerAnnotations.v1';
 const readerAppearanceKey = 'archivist.readerAppearance.v1';
 const insightGoalKey = 'archivist.insightGoal.v1';
 const profileAvatarKey = 'archivist.profileAvatar.v1';
+const lastReadingKey = 'archivist.lastReading.v1';
+const lastPlayingKey = 'archivist.lastPlaying.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'formats',title:'Browse by format',visible:true},
@@ -604,6 +606,9 @@ function Client() {
   const [readerNote,setReaderNote]=useState('');
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
+  const [liveMode,setLiveMode]=useState<'player'|'reader'>('player');
+  const [lastReading,setLastReading]=useState<Book|null>(null);
+  const [lastPlaying,setLastPlaying]=useState<Book|null>(null);
   const tabTransition=useRef(new Animated.Value(1)).current;
   const player = useAudioPlayer(null);
   const audio = useAudioPlayerStatus(player);
@@ -724,7 +729,7 @@ function Client() {
   const localAudioProgress = !serverPlaybackActive && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
-  const playbackVisible = activeTab==='player' && appActive && !!playing;
+  const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
   useEffect(()=>{if(!playbackVisible||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,reduceMotion]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>('archivist.dailyRitual.v1').then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
@@ -740,12 +745,12 @@ function Client() {
       const day=localDay();setRitualToday(day);
       const audioAdvanced=playbackIsPlaying&&ritualAudioLatest.current>ritualAudioPosition.current;
       ritualAudioPosition.current=ritualAudioLatest.current;
-      const readingNow=appActive&&activeTab==='reader'&&!!reading&&!readerLoading&&!readerLoadError;
+      const readingNow=appActive&&(activeTab==='reader'||(activeTab==='now'&&liveMode==='reader'))&&!!reading&&!readerLoading&&!readerLoadError;
       if(!audioAdvanced&&!readingNow)return;
       setRitualDays(current=>current[day]>=60?current:{...current,[day]:Math.min(60,(current[day]||0)+15)});
     },15000);
     return()=>clearInterval(timer);
-  },[ritualReady,playbackIsPlaying,appActive,activeTab,reading,readerLoading,readerLoadError]);
+  },[ritualReady,playbackIsPlaying,appActive,activeTab,liveMode,reading,readerLoading,readerLoadError]);
 
 
   useEffect(()=>{
@@ -1186,6 +1191,8 @@ function Client() {
     getPersistedJSON<ReaderAppearance>(readerAppearanceKey).then(value=>setReaderAppearance(sanitizeReaderAppearance(value))).catch(()=>undefined);
     getPersistedJSON(insightGoalKey).then(value=>{const goal=sanitizeInsightGoal(value);setInsightGoal(goal);setGoalDraft({completed:String(goal.completedTarget),annotations:String(goal.annotationTarget)});}).catch(()=>undefined);
     getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F')});}).catch(()=>undefined);
+    getPersistedJSON<Book>(lastReadingKey).then(value=>{if(value&&typeof value==='object')setLastReading(value);}).catch(()=>undefined);
+    getPersistedJSON<Book>(lastPlayingKey).then(value=>{if(value&&typeof value==='object')setLastPlaying(value);}).catch(()=>undefined);
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
@@ -1866,7 +1873,10 @@ function Client() {
       serverWorkId: work.originWorkId,
     };
     setPlaying(display);
-    setActiveTab('player');
+    setLastPlaying(display);
+    void setPersistedJSON(lastPlayingKey,display).catch(()=>undefined);
+    setLiveMode('player');
+    setActiveTab('now');
 
     await new Promise<void>((resolve, reject) => {
       let done = false;
@@ -1931,7 +1941,10 @@ function Client() {
         loadCancel.current?.();
         await controller.stop();
         setPlaying(book);
-        setActiveTab('player');
+        setLastPlaying(book);
+        void setPersistedJSON(lastPlayingKey,book).catch(()=>undefined);
+        setLiveMode('player');
+        setActiveTab('now');
         player.replace({uri: book.uri});
         player.setActiveForLockScreen(true, {title: book.title, albumTitle: 'Archivist'});
         if (localProgress[book.uri]) await player.seekTo(localProgress[book.uri]);
@@ -1949,7 +1962,10 @@ function Client() {
     setError('');
     try {
       setPlaying(book);
-      setActiveTab('player');
+      setLastPlaying(book);
+      void setPersistedJSON(lastPlayingKey,book).catch(()=>undefined);
+      setLiveMode('player');
+      setActiveTab('now');
       await controller.open(book.id);
       const order=trackOrders[playbackWorkKey(book)]?.map(Number).filter(Number.isFinite);
       if(order?.length)controller.setTrackOrder(order);
@@ -2056,7 +2072,10 @@ function Client() {
     else if (book.source!=='server') {
       if (!book.uri) return;
       setReading(book);
-      setActiveTab('reader');
+      setLastReading(book);
+      void setPersistedJSON(lastReadingKey,book).catch(()=>undefined);
+      setLiveMode('reader');
+      setActiveTab('now');
       setReaderLoading(true);
       setLocalReader(null);
       buildLocalReaderDocument(book.uri, book.format, book.title, localReadingProgress[book.uri] || 0)
@@ -2067,8 +2086,11 @@ function Client() {
     else {
       if(!session){setError('Server is unavailable. Download this title for offline use or reconnect in Settings.');return;}
       setReading(book);
+      setLastReading(book);
+      void setPersistedJSON(lastReadingKey,book).catch(()=>undefined);
       setReaderLoading(true);
-      setActiveTab('reader');
+      setLiveMode('reader');
+      setActiveTab('now');
     }
   }
 
@@ -3215,7 +3237,7 @@ function Client() {
     return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
-  function Player() {
+  function Player({embedded=false}:{embedded?:boolean}={}) {
     const current = playing;
     const serverPlayer = current?.source==='server';
     const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
@@ -3261,13 +3283,13 @@ function Client() {
     }
 
     return (
-      <ScrollView contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold]}>
-        <View style={styles.playerHeading}>
+      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold,embedded&&styles.playerScreenEmbedded]}>
+        {!embedded?<View style={styles.playerHeading}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable>
           <Text style={[styles.playerEyebrow,{color:p.ink,flex:1}]}>NOW PLAYING</Text>
           {current ? <Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>{speed}×</Text> : null}
           <ProfileAvatarButton size={38}/>
-        </View>
+        </View>:null}
         {current ? (
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
@@ -3409,7 +3431,8 @@ function Client() {
           <View style={styles.playerEmpty}>
             <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Nothing playing</Text>
-            <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Choose an audiobook from Shelf. Archivist will remember where you stopped.</Text>
+            <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastPlaying?'Resume your most recent audiobook, or choose another from Shelf.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.'}</Text>
+            {lastPlaying?<Button label={'Resume '+lastPlaying.title} onPress={()=>void playBook(lastPlaying)}/>:null}
             <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/>
           </View>
         )}
@@ -3475,10 +3498,10 @@ function Client() {
     </View></ScrollView></View></Modal>;
   }
 
-  function Reader() {
+  function Reader({embedded=false}:{embedded?:boolean}={}) {
     const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}><Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><ProfileAvatarButton size={38}/><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
-    if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Open an EPUB, PDF or comic from Shelf.</Text></View>;
+    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View>{!embedded?<ProfileAvatarButton size={38}/>:null}<Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
+    if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastReading?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.'}</Text>{lastReading?<Button label={'Resume '+lastReading.title} onPress={()=>openBook(lastReading)}/>:null}<Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/></View>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
@@ -3486,6 +3509,36 @@ function Client() {
     }
     if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View><ReaderTools/></View>;
     return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}<ReaderTools/></View>;
+  }
+
+  function LiveHub(){
+    const audioLive=!!playing;
+    const readerLive=!!reading;
+    return <View style={styles.liveHub}>
+      <View style={styles.liveHubTop}>
+        <View style={[styles.liveHubSegment,{backgroundColor:p.card,borderColor:p.line}]}>
+          {(['player','reader'] as const).map(mode=>{
+            const selected=liveMode===mode;
+            const available=mode==='player'?(audioLive||!!lastPlaying):(readerLive||!!lastReading);
+            return <Pressable
+              key={mode}
+              accessibilityRole="tab"
+              accessibilityState={{selected}}
+              accessibilityLabel={mode==='player'?'Player':'Reader'}
+              onPress={()=>setLiveMode(mode)}
+              style={[styles.liveHubSegmentItem,selected&&{backgroundColor:p.raised,borderColor:p.sage}]}>
+              <UiIcon name={mode==='player'?'play':'bookOpen'} color={selected?p.sage:p.muted} size={18}/>
+              <Text style={[styles.liveHubSegmentText,{color:selected?p.ink:p.muted}]}>{mode==='player'?'Player':'Reader'}</Text>
+              {available?<View style={[styles.liveHubDot,{backgroundColor:mode==='player'&&playbackIsPlaying?p.gold:p.sage}]}/>:null}
+            </Pressable>;
+          })}
+        </View>
+        <ProfileAvatarButton size={42}/>
+      </View>
+      <View style={styles.liveHubBody}>
+        {liveMode==='player'?<Player embedded/>:<Reader embedded/>}
+      </View>
+    </View>;
   }
 
   function atlasSelect(kind: AtlasKind, value: string) {
@@ -4630,6 +4683,7 @@ function Client() {
   function CurrentTab() {
     if (activeTab === 'shelf') return Shelf();
     if (activeTab === 'library') return Library();
+    if (activeTab === 'now') return LiveHub();
     if (activeTab === 'player') return Player();
     if (activeTab === 'reader') return Reader();
     if (activeTab === 'atlas') return Atlas();
@@ -4668,6 +4722,7 @@ function Client() {
   const tabs: Array<{id: Tab; label: string; icon: UiIconName}> = [
     {id:'shelf',label:'Shelf',icon:'shelf'},
     {id:'library',label:'Library',icon:'library'},
+    {id:'now',label:'Now',icon:'bookOpen'},
     {id:'atlas',label:'Atlas',icon:'atlas'},
     {id:'insights',label:'Stats',icon:'insights'},
   ];
@@ -4694,9 +4749,9 @@ function Client() {
       />
       <ProfileMenu/>
       <RatingPromptPanel />
-      {playing && activeTab!=='player' && activeTab!=='reader' ? (
+      {playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>setActiveTab('player')} style={styles.miniPlayerMain}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>{setLiveMode('player');setActiveTab('now')}} style={styles.miniPlayerMain}>
             <MiniArtwork book={playing}/>
             <View style={{flex:1,minWidth:0}}>
               <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
@@ -4707,14 +4762,29 @@ function Client() {
             <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
           </Pressable>
         </View>
+      ) : !playing && (reading||lastReading) && !(activeTab==='now'&&liveMode==='reader') && activeTab!=='reader' ? (
+        <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Open reader for '+(reading||lastReading)!.title} onPress={()=>{if(!reading&&lastReading)openBook(lastReading);else{setLiveMode('reader');setActiveTab('now')}}} style={styles.miniPlayerMain}>
+            <MiniArtwork book={(reading||lastReading)!}/>
+            <View style={{flex:1,minWidth:0}}>
+              <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{(reading||lastReading)!.title}</Text>
+              <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{reading?.format||lastReading?.format||'Reader'} · {readerPage>0?'Page '+(readerPage+1):'Resume reading'}</Text>
+            </View>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Resume '+(reading||lastReading)!.title} onPress={()=>{if(!reading&&lastReading)openBook(lastReading);else{setLiveMode('reader');setActiveTab('now')}}} style={[styles.miniButton,{backgroundColor:p.raised}]}>
+            <UiIcon name="bookOpen" color={p.ink} size={20}/>
+          </Pressable>
+        </View>
       ):null}
       {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:activeTab==='insights'?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:activeTab==='insights'?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
         {tabs.map(tab=>{
-          const selected=activeTab===tab.id;
-          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
-            <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:tab.id==='insights'?p.gold:p.sage,opacity:selected?1:0}]}/>
-            <UiIcon name={tab.icon} color={selected?(tab.id==='insights'?p.gold:p.sage):p.muted} size={22}/>
-            <Text style={[styles.tabText,{color:selected?(tab.id==='insights'?p.gold:p.sage):p.muted}]}>{tab.label}</Text>
+          const selected=activeTab===tab.id||(tab.id==='now'&&(activeTab==='player'||activeTab==='reader'));
+          const centre=tab.id==='now';
+          const accent=tab.id==='insights'?p.gold:p.sage;
+          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,centre&&styles.tabCenter]}>
+            <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:accent,opacity:selected?1:0}]}/>
+            {centre?<View style={[styles.tabCenterOrb,{backgroundColor:selected?p.sage:p.card,borderColor:selected?p.sage:p.line}]}><UiIcon name={tab.icon} color={selected?'#FFFFFF':p.ink} size={25}/></View>:<UiIcon name={tab.icon} color={selected?accent:p.muted} size={22}/>}
+            <Text style={[styles.tabText,centre&&styles.tabCenterText,{color:selected?accent:p.muted}]}>{tab.label}</Text>
           </Pressable>;
         })}
       </View>:null}
@@ -4967,8 +5037,20 @@ const styles = StyleSheet.create({
   miniMeta: {fontSize:10.5,lineHeight:14},
   miniButton: {width:40,height:40,borderRadius:10,borderWidth:0,alignItems:'center',justifyContent:'center'},
   miniButtonText: {fontWeight:'600'},
-  tabBar: {height:60,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
-  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:2,position:'relative'},
+  tabBar: {height:66,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'stretch'},
+  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:2,position:'relative',minWidth:0},
+  tabCenter: {paddingTop:1},
+  tabCenterOrb: {width:46,height:46,borderRadius:23,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',marginTop:-10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:4},
+  tabCenterText: {marginTop:-2},
+  liveHub: {flex:1,width:'100%'},
+  liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:8,paddingBottom:6,flexDirection:'row',alignItems:'center',gap:12},
+  liveHubSegment: {flex:1,maxWidth:320,height:44,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,padding:3,flexDirection:'row',alignItems:'center'},
+  liveHubSegmentItem: {flex:1,height:36,borderRadius:18,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,position:'relative'},
+  liveHubSegmentText: {fontSize:12,lineHeight:16,fontWeight:'600'},
+  liveHubDot: {position:'absolute',right:10,top:8,width:6,height:6,borderRadius:3},
+  liveHubBody: {flex:1,minHeight:0},
+  liveHubScroll: {flex:1},
+  playerScreenEmbedded: {paddingTop:4,paddingBottom:96},
   tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
   tabText: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
