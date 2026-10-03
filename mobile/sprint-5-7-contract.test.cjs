@@ -26,12 +26,12 @@ assert.equal(splashPlugin[1]?.dark?.image,'./assets/icon.png','Dark splash must 
 assert.equal(config.expo.android?.adaptiveIcon?.foregroundImage,'./assets/icon.png','Android adaptive icon must use the canonical logo');
 assert.ok(fs.existsSync('assets/icon.png'),'Canonical icon asset is missing');
 
-for(const page of ['function Shelf(){','function Library(){','function LiveHub()','function Atlas(){','function Insights(){','function Profile()','function Rewards()','function Settings()']){
-  assert.ok(source.includes(page),'Integrated QA page missing: '+page);
+for(const page of ['Shelf','Library','LiveHub','Atlas','Insights','Profile','Rewards','Settings']){
+  assert.match(source,new RegExp('function\\s+'+page+'\\s*\\(.*?\\)\\s*\\{'),'Integrated QA page missing: '+page);
 }
 assert.ok(source.includes("const foldLayout=width>=600") || source.includes("const foldLayout = width>=600") || source.includes("const foldLayout = width >= 600"),'Fold responsive breakpoint is missing');
 assert.ok(source.includes('shelfContentFold') && source.includes('libraryMainFold') && source.includes('playerScreenFold') && source.includes('atlasScreenFold'),'Core Fold responsive styles are incomplete');
-assert.ok(source.includes("useColorScheme()") && source.includes("theme === 'dark'") || source.includes("mode === 'dark'"),'Theme handling is missing');
+assert.ok(source.includes("useColorScheme()") && (source.includes("theme === 'dark'") || source.includes("mode === 'dark'")),'Theme handling is missing');
 assert.ok(source.includes('reduceMotion') && source.includes('AccessibilityInfo.isReduceMotionEnabled()'),'Reduced-motion support is missing');
 assert.ok(source.includes('function LibraryManagementPanel()') && source.includes('SCAN & REPAIR') && source.includes('ADVANCED ORGANISATION'),'Sprint 4 Library management must remain intact through Sprint 7');
 assert.ok(source.includes("<WorkDetailsPanel/>"),'Global work-details panel mount is missing');
