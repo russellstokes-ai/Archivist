@@ -18,8 +18,11 @@ assert.ok(source.includes('function ArchivistLogo(') && source.includes("require
 assert.equal(/styles\.emptyMark[\s\S]{0,80}>A<\/Text>/.test(source),false,'Generic A empty-state branding remains');
 assert.equal(/styles\.coverFallbackMark[\s\S]{0,80}>A<\/Text>/.test(source),false,'Generic A fallback-cover branding remains');
 assert.equal(config.expo.icon,'./assets/icon.png','App icon must use the canonical logo');
-assert.equal(config.expo.splash?.image,'./assets/icon.png','Splash must use the canonical logo');
-assert.equal(config.expo.splash?.resizeMode,'contain','Splash must preserve logo proportions');
+const splashPlugin=(config.expo.plugins||[]).find(item=>Array.isArray(item)&&item[0]==='expo-splash-screen');
+assert.ok(splashPlugin,'Expo splash-screen config plugin is missing');
+assert.equal(splashPlugin[1]?.image,'./assets/icon.png','Splash must use the canonical logo');
+assert.equal(splashPlugin[1]?.resizeMode,'contain','Splash must preserve logo proportions');
+assert.equal(splashPlugin[1]?.dark?.image,'./assets/icon.png','Dark splash must use the canonical logo');
 assert.equal(config.expo.android?.adaptiveIcon?.foregroundImage,'./assets/icon.png','Android adaptive icon must use the canonical logo');
 assert.ok(fs.existsSync('assets/icon.png'),'Canonical icon asset is missing');
 
