@@ -4609,22 +4609,17 @@ function Client() {
 
   function Profile() {
     const stats=profileStats;
+    const profileLinks=[
+      {id:'rewards' as Tab,label:'Rewards',copy:profileAchievements.filter(item=>item.unlocked).length+' unlocked',icon:'target' as UiIconName,tone:'#E3BC67'},
+      {id:'settings' as Tab,label:'Settings',copy:'App, library and server',icon:'settings' as UiIconName,tone:'#7AA7E8'},
+    ];
     return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Profile" subtitle="Your identity and reading life."/>
-      <View style={styles.profileIdentityHero}>
+      <View style={[styles.profileIdentityHero,{borderBottomColor:p.line}]}>
         <View style={[styles.profileIdentityAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text></View>
         <View style={{flex:1,minWidth:0}}>
           <Text style={[styles.profileIdentityName,{color:p.ink}]}>{stats?.name||'Reader'}</Text>
           <Text style={[styles.pageSubtitle,{color:p.muted}]}>{stats?.works||0} works · {stats?.completed||0} completed · {ritual.currentStreak} day streak</Text>
-        </View>
-      </View>
-
-      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
-        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>AVATAR</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. This stays on this device.</Text>
-        <TextInput accessibilityLabel="Avatar initials" value={profileAvatar.initials} maxLength={2} autoCapitalize="characters" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>
-        <View style={styles.profileAvatarPalette}>
-          {avatarColours.map(color=><Pressable key={color} accessibilityRole="button" accessibilityLabel={'Use avatar colour '+color} accessibilityState={{selected:profileAvatar.color===color}} onPress={()=>void saveProfileAvatar({...profileAvatar,color})} style={[styles.profileAvatarSwatch,{backgroundColor:color,borderColor:profileAvatar.color===color?p.ink:'transparent'}]}/>)}
         </View>
       </View>
 
@@ -4636,13 +4631,28 @@ function Client() {
             ['Completed',String(stats?.completed||0)],
             ['Favourites',String(stats?.favourites||0)],
             ['Best streak',String(ritual.bestStreak)+' days'],
-          ].map(([label,value])=><View key={label} style={styles.profileSnapshotItem}><Text style={[styles.profileSnapshotValue,{color:p.ink}]}>{value}</Text><Text style={[styles.profileSnapshotLabel,{color:p.muted}]}>{label}</Text></View>)}
+          ].map(([label,value])=><View key={label} style={[styles.profileSnapshotItem,width>=700&&styles.profileSnapshotItemWide]}><Text style={[styles.profileSnapshotValue,{color:p.ink}]}>{value}</Text><Text style={[styles.profileSnapshotLabel,{color:p.muted}]}>{label}</Text></View>)}
         </View>
       </View>
 
       <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
-        <Pressable accessibilityRole="button" onPress={()=>setActiveTab('rewards')} style={styles.profileHubLink}><Text style={[styles.bookTitle,{color:p.ink}]}>Rewards</Text><Text style={[styles.meta,{color:p.muted}]}>{profileAchievements.filter(item=>item.unlocked).length} unlocked</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={()=>setActiveTab('settings')} style={styles.profileHubLink}><Text style={[styles.bookTitle,{color:p.ink}]}>Settings</Text><Text style={[styles.meta,{color:p.muted}]}>App, library and server</Text></Pressable>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>AVATAR</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. This stays on this device.</Text>
+        <View style={styles.profileAvatarEditor}>
+          <TextInput accessibilityLabel="Avatar initials" value={profileAvatar.initials} maxLength={2} autoCapitalize="characters" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>
+          <View style={styles.profileAvatarPalette}>
+            {avatarColours.map(color=><Pressable key={color} accessibilityRole="button" accessibilityLabel={'Use avatar colour '+color} accessibilityState={{selected:profileAvatar.color===color}} onPress={()=>void saveProfileAvatar({...profileAvatar,color})} style={[styles.profileAvatarSwatch,{backgroundColor:color,borderColor:profileAvatar.color===color?p.ink:'transparent'}]}/>)}
+          </View>
+        </View>
+      </View>
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>MORE</Text>
+        {profileLinks.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>setActiveTab(item.id)} style={({pressed})=>[styles.profileHubLink,{borderBottomColor:p.line,opacity:pressed?.72:1}]}>
+          <View style={[styles.profileHubLinkIcon,{backgroundColor:item.tone+'20'}]}><UiIcon name={item.icon} color={item.tone} size={18}/></View>
+          <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,{color:p.ink}]}>{item.label}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.copy}</Text></View>
+          <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={item.tone} size={16}/></View>
+        </Pressable>)}
       </View>
     </ScrollView>;
   }
@@ -4653,28 +4663,52 @@ function Client() {
       .filter(item=>awardCategory==='All'||(item.category||'Other')===awardCategory)
       .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
     const unlocked=profileAchievements.filter(item=>item.unlocked).length;
+    const total=profileAchievements.length;
+    const completion=total?Math.round(unlocked/total*100):0;
+    const locked=profileAchievements.filter(item=>!item.unlocked).sort((a,b)=>clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
+    const nearest=locked[0]||null;
+    const inProgress=visible.filter(item=>!item.unlocked);
+    const completedRewards=visible.filter(item=>item.unlocked);
+    const renderReward=(item:Achievement)=>{
+      const progress=Math.round(clampProgress(item.progress,item.target)*100);
+      const recent=recentAchievementId===item.id;
+      const tone=item.unlocked?p.gold:p.sage;
+      return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
+        <View style={styles.rewardBadgeWrap}>
+          {recent?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:tone,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[.42,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.48]})}]}]}/>:null}
+          <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}><Text style={[styles.profileAchievementInitial,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'✓':Math.min(99,progress)}</Text></View>
+        </View>
+        <View style={{flex:1,minWidth:0,gap:5}}>
+          <View style={styles.rewardTitleRow}><Text style={[styles.achievementTitle,{color:p.ink,flex:1}]}>{item.title}</Text>{recent?<Text style={[styles.rewardRecent,{color:p.gold}]}>RECENT</Text>:<Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Unlocked':progress+'%'}</Text>}</View>
+          <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
+          <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:tone,width:(progress+'%') as any}]}/></View>
+        </View>
+      </View>;
+    };
     return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Rewards" subtitle="Milestones from your reading life."/>
       <View style={[styles.rewardsSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <Text style={[styles.rewardsSummaryValue,{color:p.gold}]}>{unlocked}</Text>
-        <View><Text style={[styles.bookTitle,{color:p.ink}]}>Unlocked rewards</Text><Text style={[styles.meta,{color:p.muted}]}>{profileAchievements.length} milestones available</Text></View>
+        <View style={[styles.rewardsSummaryEmblem,{borderColor:p.gold,backgroundColor:p.card}]}>
+          <View style={[styles.rewardsSummarySpark,styles.rewardsSummarySparkTop,{backgroundColor:p.gold}]}/>
+          <View style={[styles.rewardsSummarySpark,styles.rewardsSummarySparkRight,{backgroundColor:p.gold}]}/>
+          <Text style={[styles.rewardsSummaryValue,{color:p.gold}]}>{unlocked}</Text>
+          <Text style={[styles.rewardsSummaryOf,{color:p.muted}]}>of {total}</Text>
+        </View>
+        <View style={styles.rewardsSummaryCopy}>
+          <Text style={[styles.bookTitle,{color:p.ink}]}>Your reward cabinet</Text>
+          <Text style={[styles.meta,{color:p.muted}]}>{completion}% complete · {Math.max(0,total-unlocked)} still to discover</Text>
+          <View style={[styles.rewardsCompletionTrack,{backgroundColor:p.line}]}><View style={[styles.rewardsCompletionFill,{backgroundColor:p.gold,width:(completion+'%') as any}]}/></View>
+        </View>
       </View>
+      {nearest?<View style={[styles.rewardsNearest,{borderBottomColor:p.line}]}>
+        <View style={[styles.rewardsNearestIcon,{backgroundColor:p.card}]}><UiIcon name="target" color={p.sage} size={18}/></View>
+        <View style={{flex:1,minWidth:0}}><Text style={[styles.rewardsNearestKicker,{color:p.muted}]}>NEXT MILESTONE</Text><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{nearest.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{Math.round(clampProgress(nearest.progress,nearest.target)*100)}% complete</Text></View>
+      </View>:null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
-        {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
+        {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card,borderColor:p.gold}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
       </ScrollView>
-      <View style={styles.profileAchievementList}>
-        {visible.map(item=>{
-          const progress=Math.round(clampProgress(item.progress,item.target)*100);
-          return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
-            <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}><Text style={[styles.profileAchievementInitial,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'✓':Math.min(99,progress)}</Text></View>
-            <View style={{flex:1,minWidth:0,gap:4}}>
-              <Text style={[styles.achievementTitle,{color:p.ink}]}>{item.title}</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
-              <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(progress+'%') as any}]}/></View>
-            </View>
-          </View>;
-        })}
-      </View>
+      {inProgress.length?<View style={styles.rewardsSection}><View style={styles.rewardsSectionHeader}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>IN PROGRESS</Text><Text style={[styles.rewardsSectionCount,{color:p.muted}]}>{inProgress.length}</Text></View><View style={styles.profileAchievementList}>{inProgress.map(renderReward)}</View></View>:null}
+      {completedRewards.length?<View style={styles.rewardsSection}><View style={styles.rewardsSectionHeader}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>UNLOCKED</Text><Text style={[styles.rewardsSectionCount,{color:p.gold}]}>{completedRewards.length}</Text></View><View style={styles.profileAchievementList}>{completedRewards.map(renderReward)}</View></View>:null}
     </ScrollView>;
   }
 
@@ -4842,6 +4876,7 @@ function Client() {
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
           <View style={styles.settingsColumn}>
+            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>APP & LIBRARY</Text>
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>APPEARANCE</Text>
               <View style={styles.settingsRow}>
@@ -4877,6 +4912,7 @@ function Client() {
           </View>
 
           <View style={styles.settingsColumn}>
+            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>SERVER & FAMILY</Text>
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SERVER</Text>
               <View style={styles.settingsRow}>
@@ -5353,14 +5389,15 @@ const styles = StyleSheet.create({
   celebrationTitle: {color:'#F5F5F5',fontSize:18,lineHeight:23,fontWeight:'600'},
   celebrationCopy: {color:'#A0A0A0',fontSize:12.5,lineHeight:18,marginTop:3},
   profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
-  settingsScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:22,maxWidth:1060,width:'100%',alignSelf:'center'},
+  settingsScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,maxWidth:980,width:'100%',alignSelf:'center'},
   settingsScreenFold: {paddingHorizontal:24,paddingTop:10},
   settingsScreenWide: {paddingHorizontal:28,paddingTop:10},
   settingsTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
-  settingsColumns: {gap:22},
-  settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:36},
-  settingsColumn: {flex:1,minWidth:0,gap:22},
-  settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,gap:10},
+  settingsColumns: {gap:20},
+  settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:32},
+  settingsColumn: {flex:1,minWidth:0,gap:20},
+  settingsColumnKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.6,paddingBottom:2},
+  settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
   settingsSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
   settingsRow: {minHeight:46,flexDirection:'row',alignItems:'center',gap:12},
   settingsStatusDot: {width:8,height:8,borderRadius:4},
@@ -5544,24 +5581,46 @@ const styles = StyleSheet.create({
   profileHubScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,width:'100%',maxWidth:980,alignSelf:'center'},
   profileHubScreenFold: {paddingHorizontal:24,paddingTop:10},
   profileHubScreenWide: {paddingHorizontal:28,paddingTop:10},
-  profileIdentityHero: {flexDirection:'row',alignItems:'center',gap:16,paddingVertical:8},
+  profileIdentityHero: {flexDirection:'row',alignItems:'center',gap:16,paddingTop:8,paddingBottom:18,borderBottomWidth:StyleSheet.hairlineWidth},
   profileIdentityAvatar: {width:82,height:82,borderRadius:41,alignItems:'center',justifyContent:'center'},
   profileIdentityAvatarText: {color:'#FFFFFF',fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500'},
   profileIdentityName: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,fontWeight:'500'},
   profileHubSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
   profileHubSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
   profileInitialInput: {width:86,minHeight:44,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,textAlign:'center'},
+  profileAvatarEditor: {gap:12},
   profileAvatarPalette: {flexDirection:'row',flexWrap:'wrap',gap:10},
   profileAvatarSwatch: {width:38,height:38,borderRadius:19,borderWidth:2},
   profileSnapshotGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:16,rowGap:14},
   profileSnapshotItem: {width:'46%',flexGrow:1},
+  profileSnapshotItemWide: {width:'22%',minWidth:120},
   profileSnapshotValue: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:27,fontWeight:'500'},
   profileSnapshotLabel: {fontSize:10,lineHeight:14,marginTop:2},
-  profileHubLink: {minHeight:54,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.22)'},
-  rewardsSummary: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,flexDirection:'row',alignItems:'center',gap:16},
-  rewardsSummaryValue: {fontFamily:'ArchivistEditorial',fontSize:34,lineHeight:40,fontWeight:'500'},
+  profileHubLink: {minHeight:64,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:StyleSheet.hairlineWidth},
+  profileHubLinkIcon: {width:36,height:36,borderRadius:18,alignItems:'center',justifyContent:'center'},
+  rewardsSummary: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:18,flexDirection:'row',alignItems:'center',gap:18},
+  rewardsSummaryEmblem: {width:72,height:72,borderRadius:36,borderWidth:1.5,alignItems:'center',justifyContent:'center',position:'relative'},
+  rewardsSummarySpark: {position:'absolute',width:5,height:5,borderRadius:3},
+  rewardsSummarySparkTop: {top:7,right:12},
+  rewardsSummarySparkRight: {right:6,bottom:18,width:3,height:3},
+  rewardsSummaryValue: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:34,fontWeight:'500'},
+  rewardsSummaryOf: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
+  rewardsSummaryCopy: {flex:1,minWidth:0,gap:5},
+  rewardsCompletionTrack: {height:5,borderRadius:3,overflow:'hidden',marginTop:3},
+  rewardsCompletionFill: {height:'100%',borderRadius:3},
+  rewardsNearest: {borderBottomWidth:StyleSheet.hairlineWidth,paddingBottom:16,flexDirection:'row',alignItems:'center',gap:12},
+  rewardsNearestIcon: {width:40,height:40,borderRadius:20,alignItems:'center',justifyContent:'center'},
+  rewardsNearestKicker: {fontSize:8.5,lineHeight:11,fontWeight:'700',letterSpacing:1.2,marginBottom:2},
   rewardsCategories: {gap:6,paddingRight:12},
-  rewardsCategory: {minHeight:40,borderRadius:20,paddingHorizontal:13,alignItems:'center',justifyContent:'center'},
+  rewardsCategory: {minHeight:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',paddingHorizontal:13,alignItems:'center',justifyContent:'center'},
+  rewardsSection: {gap:4},
+  rewardsSectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingTop:4},
+  rewardsSectionCount: {fontSize:11,lineHeight:15,fontWeight:'700',fontVariant:['tabular-nums']},
+  rewardBadgeWrap: {width:48,height:48,alignItems:'center',justifyContent:'center',position:'relative'},
+  rewardPulseHalo: {position:'absolute',width:44,height:44,borderRadius:22},
+  rewardTitleRow: {flexDirection:'row',alignItems:'center',gap:8},
+  rewardRecent: {fontSize:8.5,lineHeight:11,fontWeight:'800',letterSpacing:1.1},
+  rewardProgressLabel: {fontSize:9.5,lineHeight:13,fontWeight:'700',fontVariant:['tabular-nums']},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
   headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:8,alignItems:'center',justifyContent:'center'},
