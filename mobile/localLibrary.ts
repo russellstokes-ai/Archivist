@@ -110,6 +110,8 @@ const supported = new Map<string, string>([
   ['epub', 'EPUB'],
   ['pdf', 'PDF'],
   ['cbz', 'Comic'],
+  ['cbr', 'Comic'],
+  ['cbt', 'Comic'],
   ['zip', 'Comic'],
   ['mp3', 'Audio'],
   ['m4a', 'Audio'],
