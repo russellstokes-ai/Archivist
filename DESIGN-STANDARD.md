@@ -334,3 +334,17 @@ The canonical Atlas reference image is the visual acceptance target for the Atla
 - The lower breakdown should show the strongest categories cleanly; long tails may be consolidated into an honest **Other** row rather than producing an unreadable list.
 - Search, fit, zoom and graph exploration remain functional. Selecting a constellation node still exposes its connected content and relationship actions.
 - Atlas retains pinch/pan/zoom and relationship exploration; visual redesign must never replace these with a static illustration.
+
+### Atlas Universe Stats
+
+Atlas ends with a structural **Universe Stats** section rather than repeating Reader Stats or Genre / Format / Year breakdowns.
+
+- Headline measures are Nodes, Connections, Constellations, Bridges, Series and Collections.
+- **Nodes** counts mapped entities in the active universe. **Connections** counts graph relationship edges. **Constellations** counts genre clusters. **Bridges** counts author, series or collection nodes whose connected works span more than one genre cluster.
+- Universe Highlights show **Most connected**, **Largest constellation** and **Deepest series** when those relationships exist.
+- Highlights are interactive: selecting one should focus that entity in the constellation and reveal its node information rather than opening a disconnected statistics screen.
+- Universe Stats remain visible at the bottom of Atlas. When a ring breakdown opens, its expanding panel physically pushes Universe Stats down with a smooth layout transition.
+- Selecting a book, genre, author, series or collection reveals the node inspector with a fade/slide/expand transition; Universe Stats move down with it. Closing the inspector reverses the motion.
+- The transitions must feel continuous and restrained. Avoid abrupt layout jumps, competing panels or simultaneous large movements.
+- Reduced Motion removes the animated expansion/fade while preserving the same information hierarchy and navigation.
+
