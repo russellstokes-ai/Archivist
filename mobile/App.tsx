@@ -3995,6 +3995,47 @@ function Client() {
       :metadataGapFilter==='series'?'Missing series'
       :metadataGapFilter==='genre'?'Missing genres'
       :'Missing device covers';
+    const LibraryEmptyState=()=>{
+      const hasFilter=filtersActive>0||!!query.trim();
+      const selectedServerOffline=sourceFilter==='server'&&!session&&!!recoverableSession;
+      const noConfiguredSources=!localFolders.length&&!session&&!recoverableSession&&!sourceCounts.downloaded;
+      const selectedFolder=!!space&&libraryFolderExact;
+      let title='No matching works';
+      let copy='Try a different search, filter, source or folder.';
+      if(selectedServerOffline){
+        title='Archivist Server is offline';
+        copy='Reconnect your saved server, or choose content stored on this device.';
+      }else if(noConfiguredSources&&!hasFilter){
+        title='Your Library is waiting';
+        copy='Add a folder from this device or connect an Archivist Server to start building your library.';
+      }else if(!hasFilter&&selectedFolder){
+        title='This folder is empty';
+        copy='No supported works are indexed in this folder yet. Rescan it after adding files, or choose another folder.';
+      }else if(!hasFilter&&sourceFilter==='downloaded'){
+        title='No offline downloads';
+        copy='Download a server title to keep it available on this device.';
+      }else if(!hasFilter&&sourceFilter==='local'){
+        title='Nothing stored here yet';
+        copy='Add or rescan a device folder, or choose another source.';
+      }else if(!hasFilter&&sourceFilter==='server'){
+        title='Nothing on this server yet';
+        copy='Add or scan a server folder, or choose another source.';
+      }else if(!hasFilter&&!sourceCounts.all){
+        title='Your Library is waiting';
+        copy='Add or scan a folder, or connect an Archivist Server to begin.';
+      }
+      return <View style={styles.designedEmpty}>
+        <ArchivistLogo size={46}/>
+        <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{title}</Text>
+        <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{copy}</Text>
+        {hasFilter?<Button label="Clear filters & search" tone="quiet" onPress={clearLibraryFilters}/>:null}
+        {selectedServerOffline?<Button label="Server settings" tone="quiet" onPress={()=>setActiveTab('settings')}/>:null}
+        {!hasFilter&&(noConfiguredSources||sourceFilter==='local'||selectedFolder)?<Button label="Add device folder" tone="quiet" onPress={()=>void addLocalFolder()}/>:null}
+        {!hasFilter&&!noConfiguredSources?<Button label="Choose source or folder" tone="quiet" onPress={()=>setLibrarySourcesOpen(true)}/>:null}
+        {!hasFilter&&noConfiguredSources?<Button label="Connect Archivist Server" tone="quiet" onPress={connectServerFromShelf}/>:null}
+      </View>;
+    };
+
     const MaintenanceList=()=>maintenanceMode?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} in this maintenance view</Text></View><Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>:null}{serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}</View>:null;
     const main=<View style={[styles.libraryMain,phoneLayout&&styles.libraryMainPhone,narrowPhone&&styles.libraryMainNarrow,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
@@ -4055,7 +4096,7 @@ function Client() {
         contentContainerStyle={libraryView==='grid'?styles.unifiedGrid:styles.unifiedList}
         columnWrapperStyle={columns>1?styles.unifiedGridRow:undefined}
         renderItem={({item})=><UnifiedWorkCard work={item} list={libraryView==='list'}/>} 
-        ListEmptyComponent={!shelfLoading?<View style={styles.designedEmpty}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>No matching works</Text><Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>Clear filters or choose another source or Space.</Text><Button label="Clear filters" tone="quiet" onPress={clearLibraryFilters}/></View>:null}
+        ListEmptyComponent={!shelfLoading?<LibraryEmptyState/>:null}
         onScroll={e=>{libraryScrollOffset.current=e.nativeEvent.contentOffset.y}}
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
