@@ -4338,9 +4338,11 @@ function Client() {
         title="Reader Stats"
         subtitle="Your reading journey."
       />
-      <PageToolbar>
-        <Pressable accessibilityRole="button" accessibilityLabel={'Statistics period '+periodLabel} accessibilityHint={periodOptions.length>1?'Double tap to change period':undefined} disabled={periodOptions.length<=1} onPress={cycleStatsPeriod} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel,opacity:periodOptions.length>1?1:.7}]}><Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{periodLabel}</Text>{periodOptions.length>1?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}</Pressable>
-      </PageToolbar>
+      {periodOptions.length>1?<PageToolbar>
+        <Pressable accessibilityRole="button" accessibilityLabel={'Change statistics period. Current '+periodLabel} onPress={cycleStatsPeriod} style={[styles.statsPeriodIconButton,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel}]}>
+          <UiIcon name="calendar" color={statsPalette.gold} size={18}/>
+        </Pressable>
+      </PageToolbar>:null}
 
       <View style={[styles.statsMetricRow,{borderTopColor:statsPalette.line,borderBottomColor:statsPalette.line}]}>
         {metricCards.map(card=><View key={card.label} style={[styles.statsMetricCard,width>=700?styles.statsMetricCardWide:styles.statsMetricCardPhone]}>
@@ -5400,6 +5402,7 @@ const styles = StyleSheet.create({
   statsSubtitle: {fontSize:12,lineHeight:17,fontWeight:'500',marginTop:1},
   statsYearPill: {minWidth:84,height:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7},
   statsYearText: {fontSize:12.5,lineHeight:18,fontWeight:'600',fontVariant:['tabular-nums']},
+  statsPeriodIconButton: {width:40,height:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center'},
   statsMetricRow: {flexDirection:'row',flexWrap:'wrap',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:8,columnGap:8,rowGap:0},
   statsMetricCard: {minHeight:72,paddingHorizontal:2,paddingVertical:9,flexDirection:'row',alignItems:'center',gap:9},
   statsMetricCardPhone: {width:'48.5%',flexGrow:1},
