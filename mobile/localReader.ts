@@ -136,6 +136,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
   let pinchStartScale = Number(localStorage.getItem('archivist-reader-text-scale')) || 1;
   let soundEnabled = localStorage.getItem('archivist-reader-sound') !== 'off';
   let hudTimer;
+  let lastTapAt=0,lastTapX=0,lastTapY=0,suppressClickUntil=0;
 
   document.documentElement.style.setProperty('--reader-scale', String(Math.max(.78, Math.min(1.5, pinchStartScale))));
 
@@ -224,7 +225,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
   }
 
   reader.addEventListener('click',event=>{
-    if(turning)return;
+    if(turning||Date.now()<suppressClickUntil)return;
     const x=event.clientX;
     if(x<innerWidth*.18){move(-1);return;}
     if(x>innerWidth*.82){move(1);return;}
@@ -232,7 +233,12 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
     refreshHud();
   });
 
-  reader.addEventListener('dblclick',event=>{event.preventDefault();focusAt(event.target,event.clientX,event.clientY);refreshHud();});
+  reader.addEventListener('dblclick',event=>{
+    event.preventDefault();
+    suppressClickUntil=Date.now()+420;
+    focusAt(event.target,event.clientX,event.clientY);
+    refreshHud();
+  });
 
   reader.addEventListener('touchstart',event=>{
     if(event.touches.length===2){
@@ -269,7 +275,22 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number) {
         localStorage.setItem('archivist-reader-text-scale',String(scale));
         page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;refreshHud();
       }
+      return;
     }
+    if(event.touches.length||event.changedTouches.length!==1)return;
+    const tap=event.changedTouches[0],now=Date.now();
+    const delta=now-lastTapAt;
+    const distanceFromLast=Math.hypot(tap.clientX-lastTapX,tap.clientY-lastTapY);
+    if(delta>0&&delta<=320&&distanceFromLast<=30){
+      event.preventDefault();
+      suppressClickUntil=now+440;
+      lastTapAt=0;
+      const target=document.elementFromPoint(tap.clientX,tap.clientY)||event.target;
+      focusAt(target,tap.clientX,tap.clientY);
+      refreshHud();
+      return;
+    }
+    lastTapAt=now;lastTapX=tap.clientX;lastTapY=tap.clientY;
   },{passive:false});
 
   prev.onclick=()=>move(-1);

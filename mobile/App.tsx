@@ -166,10 +166,11 @@ type UnifiedWork = {
   serverWorkId?: number;
 };
 type LibrarySort = 'title'|'author'|'series'|'format'|'progress'|'rating';
-type Tab = 'shelf' | 'library' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'settings';
+type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'rewards' | 'settings';
 type ShelfSectionId = 'continue' | 'formats' | 'favourites' | 'smart' | 'collections' | 'series' | 'library';
 type ShelfSectionPref = {id:ShelfSectionId;title:string;visible:boolean};
 type ThemeMode = 'system' | 'light' | 'dark';
+type ProfileAvatarConfig = {initials:string;color:string};
 type Palette = {
   ink: string;
   paper: string;
@@ -212,6 +213,9 @@ const readerBookmarksKey = 'archivist.readerBookmarks.v1';
 const readerAnnotationsKey = 'archivist.readerAnnotations.v1';
 const readerAppearanceKey = 'archivist.readerAppearance.v1';
 const insightGoalKey = 'archivist.insightGoal.v1';
+const profileAvatarKey = 'archivist.profileAvatar.v1';
+const lastReadingKey = 'archivist.lastReading.v1';
+const lastPlayingKey = 'archivist.lastPlaying.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'formats',title:'Browse by format',visible:true},
@@ -287,7 +291,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'trackBack'|'trackForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
 
 function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
   const k=size/20;
@@ -357,6 +361,10 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   if(name==='skipBack'||name==='skipForward')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
     <View style={{position:'absolute',width:size*.72,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderRadius:size*.36,borderLeftColor:name==='skipBack'?color:'transparent',borderRightColor:name==='skipForward'?color:'transparent'}}/>
     <View style={{position:'absolute',left:name==='skipBack'?size*.02:undefined,right:name==='skipForward'?size*.02:undefined,top:size*.12,width:0,height:0,borderTopWidth:size*.12,borderBottomWidth:size*.12,borderTopColor:'transparent',borderBottomColor:'transparent',borderRightWidth:name==='skipBack'?size*.18:0,borderRightColor:name==='skipBack'?color:'transparent',borderLeftWidth:name==='skipForward'?size*.18:0,borderLeftColor:name==='skipForward'?color:'transparent'}}/>
+  </View>;
+  if(name==='trackBack'||name==='trackForward')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{position:'absolute',left:name==='trackBack'?size*.16:undefined,right:name==='trackForward'?size*.16:undefined,top:size*.20,width:Math.max(1,stroke*.8),height:size*.60,borderRadius:2,backgroundColor:color}}/>
+    <View style={{width:0,height:0,borderTopWidth:size*.25,borderBottomWidth:size*.25,borderTopColor:'transparent',borderBottomColor:'transparent',borderRightWidth:name==='trackBack'?size*.38:0,borderRightColor:name==='trackBack'?color:'transparent',borderLeftWidth:name==='trackForward'?size*.38:0,borderLeftColor:name==='trackForward'?color:'transparent',marginLeft:name==='trackBack'?size*.08:0,marginRight:name==='trackForward'?size*.08:0}}/>
   </View>;
   if(name==='bookmark')return <View style={{width:size,height:size,position:'relative',alignItems:'center'}}>
     <View style={{width:size*.52,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderBottomWidth:0,borderTopLeftRadius:3,borderTopRightRadius:3}}/>
@@ -514,6 +522,8 @@ function Client() {
   const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
   const [readerStatsRhythmMode,setReaderStatsRhythmMode]=useState<'Time'|'Day'|'Month'>('Time');
   const [readerStatsYear,setReaderStatsYear]=useState<number|'all'>(new Date().getFullYear());
+  const [profileMenuOpen,setProfileMenuOpen]=useState(false);
+  const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
   const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'>('Genre');
@@ -600,6 +610,9 @@ function Client() {
   const [readerNote,setReaderNote]=useState('');
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
+  const [liveMode,setLiveMode]=useState<'player'|'reader'>('player');
+  const [lastReading,setLastReading]=useState<Book|null>(null);
+  const [lastPlaying,setLastPlaying]=useState<Book|null>(null);
   const tabTransition=useRef(new Animated.Value(1)).current;
   const player = useAudioPlayer(null);
   const audio = useAudioPlayerStatus(player);
@@ -621,12 +634,14 @@ function Client() {
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
   const [skipTurning,setSkipTurning]=useState(false);
+  const [skipPageCount,setSkipPageCount]=useState(3);
   const skipGeneration=useRef(0);
-  function turnThreePages(direction:1|-1){
+  function turnPages(pages:number,direction:1|-1){
     if(reduceMotion||!playbackVisible)return;
+    const count=Math.max(1,Math.min(5,Math.round(pages)));
     const generation=++skipGeneration.current;
-    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipTurning(true);
-    Animated.timing(skipTurnAnim,{toValue:3,duration:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
+    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
+    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=5?1040:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
   }
 
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
@@ -720,7 +735,7 @@ function Client() {
   const localAudioProgress = !serverPlaybackActive && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
-  const playbackVisible = activeTab==='player' && appActive && !!playing;
+  const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
   useEffect(()=>{if(!playbackVisible||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,reduceMotion]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>('archivist.dailyRitual.v1').then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
@@ -736,12 +751,12 @@ function Client() {
       const day=localDay();setRitualToday(day);
       const audioAdvanced=playbackIsPlaying&&ritualAudioLatest.current>ritualAudioPosition.current;
       ritualAudioPosition.current=ritualAudioLatest.current;
-      const readingNow=appActive&&activeTab==='reader'&&!!reading&&!readerLoading&&!readerLoadError;
+      const readingNow=appActive&&(activeTab==='reader'||(activeTab==='now'&&liveMode==='reader'))&&!!reading&&!readerLoading&&!readerLoadError;
       if(!audioAdvanced&&!readingNow)return;
       setRitualDays(current=>current[day]>=60?current:{...current,[day]:Math.min(60,(current[day]||0)+15)});
     },15000);
     return()=>clearInterval(timer);
-  },[ritualReady,playbackIsPlaying,appActive,activeTab,reading,readerLoading,readerLoadError]);
+  },[ritualReady,playbackIsPlaying,appActive,activeTab,liveMode,reading,readerLoading,readerLoadError]);
 
 
   useEffect(()=>{
@@ -759,7 +774,7 @@ function Client() {
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
     bookOpenAnim.stopAnimation();
-    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:520,useNativeDriver:true}).start();
+    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:(playbackIsPlaying?680:560),useNativeDriver:true}).start();
 
     if(motion!=='turning'){
       pageTurnAnim.stopAnimation(value=>{
@@ -1181,6 +1196,9 @@ function Client() {
     getPersistedJSON<ReaderAnnotation[]>(readerAnnotationsKey).then(value=>setReaderAnnotations(sanitizeReaderAnnotations(value))).catch(()=>undefined);
     getPersistedJSON<ReaderAppearance>(readerAppearanceKey).then(value=>setReaderAppearance(sanitizeReaderAppearance(value))).catch(()=>undefined);
     getPersistedJSON(insightGoalKey).then(value=>{const goal=sanitizeInsightGoal(value);setInsightGoal(goal);setGoalDraft({completed:String(goal.completedTarget),annotations:String(goal.annotationTarget)});}).catch(()=>undefined);
+    getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F')});}).catch(()=>undefined);
+    getPersistedJSON<Book>(lastReadingKey).then(value=>{if(value&&typeof value==='object')setLastReading(value);}).catch(()=>undefined);
+    getPersistedJSON<Book>(lastPlayingKey).then(value=>{if(value&&typeof value==='object')setLastPlaying(value);}).catch(()=>undefined);
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
@@ -1861,7 +1879,10 @@ function Client() {
       serverWorkId: work.originWorkId,
     };
     setPlaying(display);
-    setActiveTab('player');
+    setLastPlaying(display);
+    void setPersistedJSON(lastPlayingKey,display).catch(()=>undefined);
+    setLiveMode('player');
+    setActiveTab('now');
 
     await new Promise<void>((resolve, reject) => {
       let done = false;
@@ -1926,7 +1947,10 @@ function Client() {
         loadCancel.current?.();
         await controller.stop();
         setPlaying(book);
-        setActiveTab('player');
+        setLastPlaying(book);
+        void setPersistedJSON(lastPlayingKey,book).catch(()=>undefined);
+        setLiveMode('player');
+        setActiveTab('now');
         player.replace({uri: book.uri});
         player.setActiveForLockScreen(true, {title: book.title, albumTitle: 'Archivist'});
         if (localProgress[book.uri]) await player.seekTo(localProgress[book.uri]);
@@ -1944,7 +1968,10 @@ function Client() {
     setError('');
     try {
       setPlaying(book);
-      setActiveTab('player');
+      setLastPlaying(book);
+      void setPersistedJSON(lastPlayingKey,book).catch(()=>undefined);
+      setLiveMode('player');
+      setActiveTab('now');
       await controller.open(book.id);
       const order=trackOrders[playbackWorkKey(book)]?.map(Number).filter(Number.isFinite);
       if(order?.length)controller.setTrackOrder(order);
@@ -2051,7 +2078,10 @@ function Client() {
     else if (book.source!=='server') {
       if (!book.uri) return;
       setReading(book);
-      setActiveTab('reader');
+      setLastReading(book);
+      void setPersistedJSON(lastReadingKey,book).catch(()=>undefined);
+      setLiveMode('reader');
+      setActiveTab('now');
       setReaderLoading(true);
       setLocalReader(null);
       buildLocalReaderDocument(book.uri, book.format, book.title, localReadingProgress[book.uri] || 0)
@@ -2062,8 +2092,11 @@ function Client() {
     else {
       if(!session){setError('Server is unavailable. Download this title for offline use or reconnect in Settings.');return;}
       setReading(book);
+      setLastReading(book);
+      void setPersistedJSON(lastReadingKey,book).catch(()=>undefined);
       setReaderLoading(true);
-      setActiveTab('reader');
+      setLiveMode('reader');
+      setActiveTab('now');
     }
   }
 
@@ -2272,9 +2305,9 @@ function Client() {
   }
 
   function Artwork({
-    title,format,coverShape,coverUri,serverPath,large=false,
+    title,format,coverShape,coverUri,serverPath,large=false,fill=false,
   }: {
-    title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;
+    title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;fill?:boolean;
   }) {
     const square = coverShape ? coverShape === 'square' : format === 'Audio';
     const imageSource = session && serverPath
@@ -2283,7 +2316,7 @@ function Client() {
     const [coverFailed, setCoverFailed] = useState(false);
     useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
-      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor:p.card}]}>
+      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, fill&&styles.coverFill, {backgroundColor:p.card}]}>
         {imageSource && !coverFailed ? (
           <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
         ) : (
@@ -2299,7 +2332,7 @@ function Client() {
     );
   }
 
-  function Cover({book, large = false}: {book: Book; large?: boolean}) {
+  function Cover({book, large = false,fill=false}: {book: Book; large?: boolean;fill?:boolean}) {
     return <Artwork
       title={book.title}
       format={book.format}
@@ -2307,6 +2340,7 @@ function Client() {
       coverUri={book.coverUri}
       serverPath={session && book.source==='server' ? '/api/assets/' + book.id + '/cover' : undefined}
       large={large}
+      fill={fill}
     />;
   }
 
@@ -2848,6 +2882,64 @@ function Client() {
     </View></Modal>;
   }
 
+  const avatarColours=['#47736F','#2F8B86','#6B7698','#8B6F47','#7D586E','#536A7D'];
+  const avatarInitials=(profileAvatar.initials||String(profileStats?.name||'Reader').trim().split(/\s+/).map(part=>part[0]||'').join('').slice(0,2)||'R').toUpperCase();
+
+  async function saveProfileAvatar(next:ProfileAvatarConfig){
+    const cleaned={initials:String(next.initials||'').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase(),color:avatarColours.includes(next.color)?next.color:'#47736F'};
+    setProfileAvatar(cleaned);
+    try{await setPersistedJSON(profileAvatarKey,cleaned);}catch(e){setError((e as Error).message);}
+  }
+
+  function ProfileAvatarButton({size=42}:{size?:number}={}){
+    return <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open profile menu"
+      accessibilityState={{expanded:profileMenuOpen}}
+      onPress={()=>setProfileMenuOpen(true)}
+      style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:profileAvatar.color||'#47736F'}]}>
+      <Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>
+    </Pressable>;
+  }
+
+  function PageHeader({title,subtitle,action}:{title:string;subtitle:string;action?:React.ReactNode}){
+    return <View style={styles.standardPageHeader}>
+      <View style={styles.standardPageHeaderCopy}>
+        <Text maxFontSizeMultiplier={1.15} style={[styles.standardPageTitle,{color:p.ink}]}>{title}</Text>
+        <Text maxFontSizeMultiplier={1.2} style={[styles.standardPageSubtitle,{color:p.muted}]}>{subtitle}</Text>
+      </View>
+      {action?<View style={styles.standardPageHeaderAction}>{action}</View>:null}
+      <ProfileAvatarButton/>
+    </View>;
+  }
+
+  function ProfileMenu(){
+    const unlocked=profileAchievements.filter(item=>item.unlocked).length;
+    return <Modal transparent visible={profileMenuOpen} animationType="fade" onRequestClose={()=>setProfileMenuOpen(false)}>
+      <View style={styles.profileMenuLayer}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close profile menu" onPress={()=>setProfileMenuOpen(false)} style={styles.profileMenuBackdrop}/>
+        <View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line}]}>
+          <View style={styles.profileMenuIdentity}>
+            <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text></View>
+            <View style={{flex:1,minWidth:0}}>
+              <Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text>
+              <Text style={[styles.profileMenuMeta,{color:p.muted}]}>{unlocked} reward{unlocked===1?'':'s'} unlocked</Text>
+            </View>
+          </View>
+          {[
+            {id:'profile' as Tab,label:'Profile',copy:'Identity, avatar and reading summary',icon:'bookmark' as UiIconName},
+            {id:'rewards' as Tab,label:'Rewards',copy:'Milestones and achievements',icon:'target' as UiIconName},
+            {id:'settings' as Tab,label:'Settings',copy:'App, library and server',icon:'settings' as UiIconName},
+          ].map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>{setProfileMenuOpen(false);setActiveTab(item.id)}} style={[styles.profileMenuItem,{borderTopColor:p.line}]}>
+            <View style={[styles.profileMenuIcon,{backgroundColor:p.card}]}><UiIcon name={item.icon} color={p.sage} size={18}/></View>
+            <View style={{flex:1,minWidth:0}}><Text style={[styles.profileMenuItemTitle,{color:p.ink}]}>{item.label}</Text><Text style={[styles.profileMenuItemCopy,{color:p.muted}]}>{item.copy}</Text></View>
+            <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={p.muted} size={15}/></View>
+          </Pressable>)}
+        </View>
+      </View>
+    </Modal>;
+  }
+
   function Shelf(){
     const base:UnifiedWork[]=(sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter))).filter((work:UnifiedWork)=>!space||work.space===space);
     const continuing=base.filter((work:UnifiedWork)=>work.readingState==='in-progress').slice(0,12);
@@ -3017,16 +3109,11 @@ function Client() {
       scrollEventThrottle={120}
       onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
       contentContainerStyle={[styles.shelfContent,foldLayout&&styles.shelfContentFold]}>
-      <View style={[styles.shelfEditorialHeader,foldLayout&&styles.shelfEditorialHeaderFold]}>
-        <View style={{flex:1,minWidth:0}}>
-          <Text style={[styles.shelfKicker,{color:p.sage}]}>YOUR LIBRARY</Text>
-          <Text maxFontSizeMultiplier={1.15} style={[styles.shelfGreeting,{color:p.ink},layoutTier==='compact'&&styles.shelfGreetingCompact,layoutTier==='fold'&&styles.shelfGreetingFold]}>{shelfGreeting}</Text>
-          <Text style={[styles.shelfEditorialSubtitle,{color:p.muted}]}>Stories make a kinder world.</Text>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
-          <Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text>
-        </Pressable>
-      </View>
+      <PageHeader
+        title="Shelf"
+        subtitle={shelfGreeting+' Pick up where you left off.'}
+        action={<Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}><Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text></Pressable>}
+      />
 
       <OnboardingGuide/>
 
@@ -3083,13 +3170,8 @@ function Client() {
     const ReviewList=()=>reviewOnly?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Metadata review</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} item{visibleBooks.length===1?'':'s'} need attention</Text></View><Button label="Done reviewing" tone="quiet" onPress={()=>setReviewOnly(false)}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs review.</Text>:null}</View>:null;
     const main=<View style={[styles.libraryMain,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
-        <Text style={[styles.libraryKicker,{color:p.sage}]}>COLLECTION</Text>
-        <View style={styles.pageHeadingRow}>
-          <View style={{flex:1}}>
-            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryTitle,{color:p.ink},layoutTier==='compact'&&styles.libraryTitleCompact,layoutTier==='fold'&&styles.libraryTitleFold]}>Library</Text>
-            <Text style={[styles.pageSubtitle,{color:p.muted}]}>{sortedUnifiedWorks.length} work{sortedUnifiedWorks.length===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
-          </View>
-        </View>
+        <PageHeader title="Library" subtitle="Every book. In its place."/>
+        <Text style={[styles.pageHeaderMeta,{color:p.muted}]}>{sortedUnifiedWorks.length} work{sortedUnifiedWorks.length===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
       </View>
       {!wide?<><SourceSwitcher/>{availableSpaces.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.libraryChipsScroll} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}</>:null}
       {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
@@ -3162,7 +3244,7 @@ function Client() {
     return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
-  function Player() {
+  function Player({embedded=false}:{embedded?:boolean}={}) {
     const current = playing;
     const serverPlayer = current?.source==='server';
     const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
@@ -3195,6 +3277,22 @@ function Client() {
       else void player.seekTo(target);
     }
 
+    function jumpChapter(direction:-1|1){
+      if(effectiveChapters.length){
+        let targetIndex=currentChapterIndex;
+        if(direction<0){
+          const currentStart=currentChapter?.start||0;
+          targetIndex=position-currentStart>5?Math.max(0,currentChapterIndex):Math.max(0,currentChapterIndex-1);
+        }else{
+          targetIndex=Math.min(effectiveChapters.length-1,Math.max(0,currentChapterIndex)+1);
+        }
+        const chapter=effectiveChapters[targetIndex];
+        if(chapter){seekTo(chapter.start);turnPages(5,direction);return;}
+      }
+      seekTo(position+(direction*60));
+      turnPages(5,direction);
+    }
+
     function setPlayerSpeed(rate: number) {
       if (serverPlayer) controller.setSpeed(rate);
       else {
@@ -3208,23 +3306,23 @@ function Client() {
     }
 
     return (
-      <ScrollView contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold]}>
-        <View style={styles.playerHeading}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text>
+      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold,embedded&&styles.playerScreenEmbedded]}>
+        {!embedded?<View style={styles.playerHeading}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable>
+          <Text style={[styles.playerEyebrow,{color:p.ink,flex:1}]}>NOW PLAYING</Text>
           {current ? <Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>{speed}×</Text> : null}
-        </View>
+          <ProfileAvatarButton size={38}/>
+        </View>:null}
         {current ? (
+          <>
+          {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} direction={skipDirection} skipping={skipTurning} cover={current.coverUri||current.source==='server'?<Cover book={current}/>:null}/>
+            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
-              <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
-                {[current.author, current.series, current.space].filter(Boolean).join(' · ')}
-              </Text>
-              {currentChapter ? <Text numberOfLines={1} style={[styles.playerChapter,{color:p.sage}]}>
-                Chapter {currentChapterIndex + 1} of {effectiveChapters.length} · {currentChapter.title}
-              </Text> : null}
+              {current.author?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>By {current.author}</Text>:null}
+              {current.series?<Text numberOfLines={1} style={[styles.playerSeries,{color:p.muted}]}>{current.series}</Text>:null}
             </View>
             <View style={styles.playerStatusRow}>
               <Text style={[styles.playerStatusText,{color:p.muted}]}>{current.source==='server'?'Server':current.source==='downloaded'?'Downloaded':'On this device'}</Text>
@@ -3242,8 +3340,8 @@ function Client() {
               accessibilityValue={{min:0,max:Math.max(1,Math.round(duration)),now:Math.round(position),text:formatTime(position)+' of '+formatTime(duration)}}
               accessibilityActions={[{name:'increment',label:'Forward 30 seconds'},{name:'decrement',label:'Back 30 seconds'}]}
               onAccessibilityAction={event=>{
-                if(event.nativeEvent.actionName==='increment'){seekTo(position+30);turnThreePages(1);}
-                if(event.nativeEvent.actionName==='decrement'){seekTo(position-30);turnThreePages(-1);}
+                if(event.nativeEvent.actionName==='increment'){seekTo(position+30);turnPages(3,1);}
+                if(event.nativeEvent.actionName==='decrement'){seekTo(position-30);turnPages(3,-1);}
               }}
               onLayout={event=>setPlayerProgressWidth(Math.max(1,event.nativeEvent.layout.width))}
               onPress={event => {
@@ -3262,8 +3360,11 @@ function Client() {
             </View>
 
             <View style={styles.transport}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={()=>{seekTo(position-15);turnThreePages(-1);}} style={[styles.skipButton,{backgroundColor:p.card,borderRadius:48}]}>
-                <UiIcon name="skipBack" color={p.ink} size={32}/>
+              <Pressable accessibilityRole="button" accessibilityLabel={effectiveChapters.length?'Previous chapter':'Back 60 seconds'} onPress={()=>jumpChapter(-1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
+                <UiIcon name="trackBack" color={p.ink} size={27}/>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={()=>{seekTo(position-15);turnPages(3,-1);}} style={[styles.skipButton,{backgroundColor:p.card}]}>
+                <UiIcon name="skipBack" color={p.ink} size={30}/>
                 <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
               </Pressable>
               <Pressable
@@ -3272,11 +3373,14 @@ function Client() {
                 disabled={serverPlayer ? playback?.loading : false}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={27}/>}
+                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>{seekTo(position+30);turnThreePages(1);}} style={styles.skipButton}>
-                <UiIcon name="skipForward" color={p.ink} size={32}/>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>{seekTo(position+30);turnPages(3,1);}} style={[styles.skipButton,{backgroundColor:p.card}]}>
+                <UiIcon name="skipForward" color={p.ink} size={30}/>
                 <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={effectiveChapters.length?'Next chapter':'Forward 60 seconds'} onPress={()=>jumpChapter(1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
+                <UiIcon name="trackForward" color={p.ink} size={27}/>
               </Pressable>
             </View>
 
@@ -3350,11 +3454,13 @@ function Client() {
             </View> : null}
             </View>
           </View>
+          </>
         ) : (
           <View style={styles.playerEmpty}>
             <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Nothing playing</Text>
-            <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Choose an audiobook from Shelf. Archivist will remember where you stopped.</Text>
+            <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastPlaying?'Resume your most recent audiobook, or choose another from Shelf.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.'}</Text>
+            {lastPlaying?<Button label={'Resume '+lastPlaying.title} onPress={()=>void playBook(lastPlaying)}/>:null}
             <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/>
           </View>
         )}
@@ -3420,10 +3526,10 @@ function Client() {
     </View></ScrollView></View></Modal>;
   }
 
-  function Reader() {
+  function Reader({embedded=false}:{embedded?:boolean}={}) {
     const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}><Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
-    if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>Open an EPUB, PDF or comic from Shelf.</Text></View>;
+    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View>{!embedded?<ProfileAvatarButton size={38}/>:null}<Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
+    if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastReading?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.'}</Text>{lastReading?<Button label={'Resume '+lastReading.title} onPress={()=>openBook(lastReading)}/>:null}<Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/></View>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
@@ -3431,6 +3537,36 @@ function Client() {
     }
     if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View><ReaderTools/></View>;
     return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}<ReaderTools/></View>;
+  }
+
+  function LiveHub(){
+    const audioLive=!!playing;
+    const readerLive=!!reading;
+    return <View style={styles.liveHub}>
+      <View style={styles.liveHubTop}>
+        <View style={[styles.liveHubSegment,{backgroundColor:p.card,borderColor:p.line}]}>
+          {(['player','reader'] as const).map(mode=>{
+            const selected=liveMode===mode;
+            const available=mode==='player'?(audioLive||!!lastPlaying):(readerLive||!!lastReading);
+            return <Pressable
+              key={mode}
+              accessibilityRole="tab"
+              accessibilityState={{selected}}
+              accessibilityLabel={mode==='player'?'Player':'Reader'}
+              onPress={()=>setLiveMode(mode)}
+              style={[styles.liveHubSegmentItem,selected&&{backgroundColor:p.raised,borderColor:p.sage}]}>
+              <UiIcon name={mode==='player'?'play':'bookOpen'} color={selected?p.sage:p.muted} size={18}/>
+              <Text style={[styles.liveHubSegmentText,{color:selected?p.ink:p.muted}]}>{mode==='player'?'Player':'Reader'}</Text>
+              {available?<View style={[styles.liveHubDot,{backgroundColor:mode==='player'&&playbackIsPlaying?p.gold:p.sage}]}/>:null}
+            </Pressable>;
+          })}
+        </View>
+        <ProfileAvatarButton size={42}/>
+      </View>
+      <View style={styles.liveHubBody}>
+        {liveMode==='player'?<Player embedded/>:<Reader embedded/>}
+      </View>
+    </View>;
   }
 
   function atlasSelect(kind: AtlasKind, value: string) {
@@ -3508,7 +3644,7 @@ function Client() {
     const relation=unifiedAtlasRelationship;
     return (
       <ScrollView contentContainerStyle={styles.content}>
-        <Button label="Back to Atlas" tone="quiet" onPress={()=>setAtlasFocus(null)} />
+        <PageHeader title={atlasFocus.value} subtitle={(atlasFocus.kind==='space'?'Folder':atlasFocus.kind)+' · Atlas relationship'} action={<Pressable accessibilityRole="button" accessibilityLabel="Back to Atlas" onPress={()=>setAtlasFocus(null)} style={styles.headerAction}><UiIcon name="back" color={p.muted} size={20}/></Pressable>}/>
         <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
           <Text style={[styles.playerEyebrow,{color:p.sage}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
           <Text maxFontSizeMultiplier={1.15} style={[styles.atlasFocusTitle,{color:p.ink}]}>{atlasFocus.value}</Text>
@@ -3665,15 +3801,11 @@ function Client() {
     const breakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:atlasBreakdown==='Genre'?genreColour(label):genreColours[index%genreColours.length]}));
     return (
       <ScrollView contentContainerStyle={styles.atlasScreen} keyboardShouldPersistTaps="handled">
-        <View style={styles.pageHeadingRow}>
-          <View style={{flex:1}}>
-            <Text maxFontSizeMultiplier={1.15} style={[styles.atlasTitle,{color:p.ink}]}>Atlas</Text>
-            <Text style={[styles.pageSubtitle,{color:p.muted}]}>A living map of the books, people, series and ideas in your library.</Text>
-          </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}>
-            <UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/>
-          </Pressable>
-        </View>
+        <PageHeader
+          title="Atlas"
+          subtitle="Characters, stories and ideas — your reading universe."
+          action={<Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}><UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/></Pressable>}
+        />
 
         {atlasListMode?<SourceSwitcher/>:null}
         {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
@@ -4088,6 +4220,23 @@ function Client() {
           <View style={styles.statsStatusLine}><View style={[styles.statsSmallDot,{backgroundColor:statsPalette.mint}]}/><Text style={[styles.statsStatusText,{color:statsPalette.mint}]}>{progressPercent>=75?'On track':'Keep going'}</Text></View>
         </View>
       </View>
+      <View style={styles.statsDetailGrid}>
+        <DetailMetric label="Completion rate" value={completionRate+'%'} meta="of started works"/>
+        <DetailMetric label="In progress" value={String(inProgressCount)} meta="currently active"/>
+        <DetailMetric label="Series completed" value={trackedSeries.length?completedSeries+'/'+trackedSeries.length:'—'} meta={trackedSeries.length?seriesCompletionRate+'% of collected series':'No multi-book series yet'}/>
+      </View>
+      <View style={styles.statsFinishSection}>
+        <Text style={[styles.statsMinorHeading,{color:statsPalette.muted}]}>Finishes by month · {periodLabel}</Text>
+        <View style={styles.statsFinishMonths}>
+          {finishesByMonth.map((value,index)=><View key={index} style={styles.statsFinishMonth}>
+            <View style={[styles.statsFinishTrack,{backgroundColor:statsPalette.panelRaised}]}>
+              <View style={[styles.statsFinishFill,{backgroundColor:statsPalette.gold,height:(Math.max(value?12:3,Math.round(value/maxMonthlyFinishes*100))+'%') as any,opacity:value?1:.25}]}/>
+            </View>
+            <Text style={[styles.statsFinishMonthLabel,{color:statsPalette.muted}]}>{new Date(2000,index,1).toLocaleDateString(undefined,{month:'narrow'})}</Text>
+            <Text style={[styles.statsFinishMonthValue,{color:statsPalette.ink}]}>{value}</Text>
+          </View>)}
+        </View>
+      </View>
     </View>;
 
     const formatCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
@@ -4096,6 +4245,10 @@ function Client() {
         <DataRing size={110} value={String(stats?.works||formatsTotal)} label="books" items={formatItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
         {formatItems.length?<Legend items={formatItems} total={formatsTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Add format metadata to reveal your mix.</Text>}
       </View>
+      {formatCompletionRows.length?<View style={styles.statsSplitBlock}>
+        <Text style={[styles.statsMinorHeading,{color:statsPalette.muted}]}>Completion by format</Text>
+        <CompletionRows items={formatCompletionRows}/>
+      </View>:null}
     </View>;
 
     const genreCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
@@ -4104,6 +4257,10 @@ function Client() {
         <DataRing size={110} value={genreTimeItems.length?minutesRead.toLocaleString():String(genreTotal)} label={genreTimeItems.length?'minutes':'books'} items={genreItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
         {genreItems.length?<Legend items={genreItems} total={genreTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Genre activity will appear as you read.</Text>}
       </View>
+      {genreCompletionRows.length?<View style={styles.statsSplitBlock}>
+        <Text style={[styles.statsMinorHeading,{color:statsPalette.muted}]}>Completion by genre</Text>
+        <CompletionRows items={genreCompletionRows}/>
+      </View>:null}
     </View>;
 
     const paceTarget=Math.max(60,paceMinutes);
@@ -4115,6 +4272,12 @@ function Client() {
           <Text style={[styles.statsPaceDelta,{color:statsPalette.gold}]}>{paceMinutes?paceMinutes+' min':'No activity yet'}</Text>
           <Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Average reading and listening time across {activeDays} active day{activeDays===1?'':'s'}.</Text>
         </View>
+      </View>
+      <View style={styles.statsDetailGrid}>
+        <DetailMetric label="Average session" value={averageSessionMinutes?averageSessionMinutes+' min':'—'}/>
+        <DetailMetric label="Longest session" value={longestSessionMinutes?longestSessionMinutes+' min':'—'}/>
+        <DetailMetric label="Most active day" value={mostActiveDay}/>
+        <DetailMetric label="Most active month" value={mostActiveMonth}/>
       </View>
     </View>;
 
@@ -4142,6 +4305,13 @@ function Client() {
           return <View key={day.key} style={styles.statsWeekDay}><View style={[styles.statsWeekDot,{backgroundColor:active?statsPalette.gold:statsPalette.blueDeep,borderColor:active?statsPalette.gold:statsPalette.line}]}/><Text style={[styles.statsWeekLabel,{color:statsPalette.muted}]}>{day.label.slice(0,1)}</Text></View>;
         })}
       </View>
+      <View style={styles.statsConsistencyRow}>
+        <View>
+          <Text style={[styles.statsConsistencyValue,{color:statsPalette.gold}]}>{consistencyPercent}%</Text>
+          <Text style={[styles.statsStatusText,{color:statsPalette.muted}]}>Reading consistency</Text>
+        </View>
+        <Text style={[styles.statsConsistencyCopy,{color:statsPalette.muted}]}>{activeDateKeys.size} active day{activeDateKeys.size===1?'':'s'} across {trackedCalendarDays} tracked calendar day{trackedCalendarDays===1?'':'s'}.</Text>
+      </View>
     </View>;
 
     const tasteCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
@@ -4157,19 +4327,11 @@ function Client() {
     const overviewCards=<View style={styles.statsCardsGrid}>{readingProgressCard}{paceCard}{streakCard}{formatCard}{genreCard}{tasteCard}{placesCard}</View>;
 
     return <ScrollView style={{backgroundColor:'transparent'}} contentContainerStyle={[styles.statsScreen,width>=600&&styles.statsScreenFold,width>=940&&styles.statsScreenWide]}>
-      <View style={styles.statsTopRow}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" hitSlop={8} onPress={()=>setActiveTab('shelf')} style={[styles.statsBackButton,{borderColor:statsPalette.line,backgroundColor:statsPalette.panel}]}>
-          <UiIcon name="back" color={statsPalette.ink} size={20}/>
-        </Pressable>
-        <View style={{flex:1,minWidth:0}}>
-          <Text maxFontSizeMultiplier={1.2} style={[styles.statsTitle,{color:statsPalette.ink}]}>Reader Stats</Text>
-          <Text style={[styles.statsSubtitle,{color:statsPalette.muted}]}>Your reading journey</Text>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={'Statistics period '+periodLabel} accessibilityHint={periodOptions.length>1?'Double tap to change period':undefined} disabled={periodOptions.length<=1} onPress={cycleStatsPeriod} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel,opacity:periodOptions.length>1?1:.7}]}>
-          <Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{periodLabel}</Text>
-          {periodOptions.length>1?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}
-        </Pressable>
-      </View>
+      <PageHeader
+        title="Reader Stats"
+        subtitle="Your reading journey."
+        action={<Pressable accessibilityRole="button" accessibilityLabel={'Statistics period '+periodLabel} accessibilityHint={periodOptions.length>1?'Double tap to change period':undefined} disabled={periodOptions.length<=1} onPress={cycleStatsPeriod} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel,opacity:periodOptions.length>1?1:.7}]}><Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{periodLabel}</Text>{periodOptions.length>1?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}</Pressable>}
+      />
 
       <View style={[styles.statsMetricRow,{borderTopColor:statsPalette.line,borderBottomColor:statsPalette.line}]}>
         {metricCards.map(card=><View key={card.label} style={[styles.statsMetricCard,width>=700?styles.statsMetricCardWide:styles.statsMetricCardPhone]}>
@@ -4189,7 +4351,74 @@ function Client() {
   }
 
   function Profile() {
-    return <Insights/>;
+    const stats=profileStats;
+    return <ScrollView contentContainerStyle={styles.profileHubScreen}>
+      <PageHeader title="Profile" subtitle="Your identity and reading life."/>
+      <View style={styles.profileIdentityHero}>
+        <View style={[styles.profileIdentityAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text></View>
+        <View style={{flex:1,minWidth:0}}>
+          <Text style={[styles.profileIdentityName,{color:p.ink}]}>{stats?.name||'Reader'}</Text>
+          <Text style={[styles.pageSubtitle,{color:p.muted}]}>{stats?.works||0} works · {stats?.completed||0} completed · {ritual.currentStreak} day streak</Text>
+        </View>
+      </View>
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>AVATAR</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. This stays on this device.</Text>
+        <TextInput accessibilityLabel="Avatar initials" value={profileAvatar.initials} maxLength={2} autoCapitalize="characters" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>
+        <View style={styles.profileAvatarPalette}>
+          {avatarColours.map(color=><Pressable key={color} accessibilityRole="button" accessibilityLabel={'Use avatar colour '+color} accessibilityState={{selected:profileAvatar.color===color}} onPress={()=>void saveProfileAvatar({...profileAvatar,color})} style={[styles.profileAvatarSwatch,{backgroundColor:color,borderColor:profileAvatar.color===color?p.ink:'transparent'}]}/>)}
+        </View>
+      </View>
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>READING SNAPSHOT</Text>
+        <View style={styles.profileSnapshotGrid}>
+          {[
+            ['Library',String(stats?.works||0)],
+            ['Completed',String(stats?.completed||0)],
+            ['Favourites',String(stats?.favourites||0)],
+            ['Best streak',String(ritual.bestStreak)+' days'],
+          ].map(([label,value])=><View key={label} style={styles.profileSnapshotItem}><Text style={[styles.profileSnapshotValue,{color:p.ink}]}>{value}</Text><Text style={[styles.profileSnapshotLabel,{color:p.muted}]}>{label}</Text></View>)}
+        </View>
+      </View>
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Pressable accessibilityRole="button" onPress={()=>setActiveTab('rewards')} style={styles.profileHubLink}><Text style={[styles.bookTitle,{color:p.ink}]}>Rewards</Text><Text style={[styles.meta,{color:p.muted}]}>{profileAchievements.filter(item=>item.unlocked).length} unlocked</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>setActiveTab('settings')} style={styles.profileHubLink}><Text style={[styles.bookTitle,{color:p.ink}]}>Settings</Text><Text style={[styles.meta,{color:p.muted}]}>App, library and server</Text></Pressable>
+      </View>
+    </ScrollView>;
+  }
+
+  function Rewards() {
+    const categories=['All',...Array.from(new Set(profileAchievements.map(item=>item.category||'Other')))];
+    const visible=profileAchievements
+      .filter(item=>awardCategory==='All'||(item.category||'Other')===awardCategory)
+      .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
+    const unlocked=profileAchievements.filter(item=>item.unlocked).length;
+    return <ScrollView contentContainerStyle={styles.profileHubScreen}>
+      <PageHeader title="Rewards" subtitle="Milestones from your reading life."/>
+      <View style={[styles.rewardsSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <Text style={[styles.rewardsSummaryValue,{color:p.gold}]}>{unlocked}</Text>
+        <View><Text style={[styles.bookTitle,{color:p.ink}]}>Unlocked rewards</Text><Text style={[styles.meta,{color:p.muted}]}>{profileAchievements.length} milestones available</Text></View>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
+        {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
+      </ScrollView>
+      <View style={styles.profileAchievementList}>
+        {visible.map(item=>{
+          const progress=Math.round(clampProgress(item.progress,item.target)*100);
+          return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
+            <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}><Text style={[styles.profileAchievementInitial,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'✓':Math.min(99,progress)}</Text></View>
+            <View style={{flex:1,minWidth:0,gap:4}}>
+              <Text style={[styles.achievementTitle,{color:p.ink}]}>{item.title}</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
+              <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:item.unlocked?p.gold:p.sage,width:(progress+'%') as any}]}/></View>
+            </View>
+          </View>;
+        })}
+      </View>
+    </ScrollView>;
   }
 
   async function refreshDuplicateCandidates() {
@@ -4352,12 +4581,7 @@ function Client() {
     const connected=!!session;
     return (
       <ScrollView contentContainerStyle={styles.settingsScreen}>
-        <View style={styles.pageHeadingRow}>
-          <View style={{flex:1}}>
-            <Text maxFontSizeMultiplier={1.15} style={[styles.settingsTitle,{color:p.ink}]}>Settings</Text>
-            <Text style={[styles.pageSubtitle,{color:p.muted}]}>Your app, library and optional server.</Text>
-          </View>
-        </View>
+        <PageHeader title="Settings" subtitle="Your app, library and account."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
           <View style={styles.settingsColumn}>
@@ -4487,11 +4711,13 @@ function Client() {
   function CurrentTab() {
     if (activeTab === 'shelf') return Shelf();
     if (activeTab === 'library') return Library();
+    if (activeTab === 'now') return LiveHub();
     if (activeTab === 'player') return Player();
     if (activeTab === 'reader') return Reader();
     if (activeTab === 'atlas') return Atlas();
     if (activeTab === 'insights') return Insights();
     if (activeTab === 'profile') return Profile();
+    if (activeTab === 'rewards') return Rewards();
     return Settings();
   }
 
@@ -4524,18 +4750,13 @@ function Client() {
   const tabs: Array<{id: Tab; label: string; icon: UiIconName}> = [
     {id:'shelf',label:'Shelf',icon:'shelf'},
     {id:'library',label:'Library',icon:'library'},
+    {id:'now',label:'Now',icon:'bookOpen'},
     {id:'atlas',label:'Atlas',icon:'atlas'},
     {id:'insights',label:'Stats',icon:'insights'},
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#07151C':'#F5F8F7'):p.paper}]}><AmbientGlow color={(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={(activeTab==='insights'||activeTab==='profile')?Math.max(1500,width*2.2):Math.max(480,width)} strength={(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?.95:.34):(p.paper==='#000000'?.6:.22)}/>
-      {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={styles.appHeader}>
-        <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
-        <Pressable accessibilityRole="button" accessibilityLabel={activeTab==='settings'?'Close Settings':'Settings'} onPress={()=>setActiveTab(activeTab==='settings'?'shelf':'settings')} style={styles.settingsButton}>
-          <UiIcon name={activeTab==='settings'?'close':'settings'} color={p.muted} size={21}/>
-        </Pressable>
-      </View>:null}
+    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07151C':'#F5F8F7'):p.paper}]}><AmbientGlow color={(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={(activeTab==='insights'||activeTab==='now')?Math.max(1500,width*2.2):Math.max(480,width)} strength={activeTab==='insights'?(p.paper==='#000000'?.95:.34):activeTab==='now'?(p.paper==='#000000'?.72:.26):(p.paper==='#000000'?.6:.22)}/>
       {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
@@ -4554,10 +4775,11 @@ function Client() {
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
+      <ProfileMenu/>
       <RatingPromptPanel />
-      {playing && activeTab!=='player' && activeTab!=='reader' ? (
+      {playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>setActiveTab('player')} style={styles.miniPlayerMain}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>{setLiveMode('player');setActiveTab('now')}} style={styles.miniPlayerMain}>
             <MiniArtwork book={playing}/>
             <View style={{flex:1,minWidth:0}}>
               <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
@@ -4568,14 +4790,29 @@ function Client() {
             <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
           </Pressable>
         </View>
+      ) : !playing && (reading||lastReading) && !(activeTab==='now'&&liveMode==='reader') && activeTab!=='reader' ? (
+        <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Open reader for '+(reading||lastReading)!.title} onPress={()=>{if(!reading&&lastReading)openBook(lastReading);else{setLiveMode('reader');setActiveTab('now')}}} style={styles.miniPlayerMain}>
+            <MiniArtwork book={(reading||lastReading)!}/>
+            <View style={{flex:1,minWidth:0}}>
+              <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{(reading||lastReading)!.title}</Text>
+              <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{reading?.format||lastReading?.format||'Reader'} · {readerPage>0?'Page '+(readerPage+1):'Resume reading'}</Text>
+            </View>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Resume '+(reading||lastReading)!.title} onPress={()=>{if(!reading&&lastReading)openBook(lastReading);else{setLiveMode('reader');setActiveTab('now')}}} style={[styles.miniButton,{backgroundColor:p.raised}]}>
+            <UiIcon name="bookOpen" color={p.ink} size={20}/>
+          </Pressable>
+        </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
-          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
-            <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:tab.id==='insights'?p.gold:p.sage,opacity:selected?1:0}]}/>
-            <UiIcon name={tab.icon} color={selected?(tab.id==='insights'?p.gold:p.sage):p.muted} size={22}/>
-            <Text style={[styles.tabText,{color:selected?(tab.id==='insights'?p.gold:p.sage):p.muted}]}>{tab.label}</Text>
+          const centre=tab.id==='now';
+          const accent=tab.id==='insights'?p.gold:p.sage;
+          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,centre&&styles.tabCenter]}>
+            <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:accent,opacity:selected?1:0}]}/>
+            {centre?<View style={[styles.tabCenterOrb,{backgroundColor:selected?p.sage:p.card,borderColor:selected?p.sage:p.line}]}><UiIcon name={tab.icon} color={selected?'#FFFFFF':p.ink} size={25}/></View>:<UiIcon name={tab.icon} color={selected?accent:p.muted} size={22}/>}
+            <Text style={[styles.tabText,centre&&styles.tabCenterText,{color:selected?accent:p.muted}]}>{tab.label}</Text>
           </Pressable>;
         })}
       </View>:null}
@@ -4681,6 +4918,7 @@ const styles = StyleSheet.create({
   coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
   coverLargeSquare: {width: 230, height: 230},
+  coverFill: {width:'100%',height:'100%',borderRadius:0,shadowOpacity:0,elevation:0},
   coverFallback: {flex:1,padding:10,justifyContent:'space-between'},
   coverFallbackMark: {fontFamily:'serif',fontSize:20,lineHeight:24,opacity:.5},
   coverFallbackCopy: {gap:4},
@@ -4699,7 +4937,7 @@ const styles = StyleSheet.create({
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
   modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:18,gap:9},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {paddingHorizontal:18,paddingTop:12,gap:14,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreen: {paddingHorizontal:18,paddingTop:8,gap:15,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
   playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
   livingBookStage: {height:220,width:276,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
   livingBookShadow: {position:'absolute',width:202,height:28,borderRadius:101,top:178,transform:[{scaleY:.3}],shadowColor:'#000',shadowOpacity:.16,shadowRadius:18,elevation:4},
@@ -4728,22 +4966,24 @@ const styles = StyleSheet.create({
   playerControlColumn: {flex:1,minWidth:250,maxWidth:500,gap:12,justifyContent:'center'},
   playerEyebrow: {fontSize:11,lineHeight:14,fontWeight:'700',letterSpacing:1.6},
   playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},
-  playerIdentity: {alignItems:'center',gap:4,paddingHorizontal:8,maxWidth:620},
+  playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:8,maxWidth:620},
   playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:8,minHeight:20},
   playerSourcePill: {borderWidth:0,minHeight:28,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   playerStatusText: {fontSize:11,lineHeight:16},
   playerStatusAction: {minHeight:36,justifyContent:'center',paddingHorizontal:2},
-  nowTitle: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500',textAlign:'center',marginTop:0,letterSpacing:-.2,maxWidth:620},
-  nowTitleCompact: {fontSize:22,lineHeight:27},
-  nowTitleFold: {fontSize:24,lineHeight:29},
-  playerByline: {fontSize:13,lineHeight:18,textAlign:'center'},
+  nowTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:38,fontWeight:'500',textAlign:'center',marginTop:0,letterSpacing:-.32,maxWidth:620},
+  nowTitleCompact: {fontSize:29,lineHeight:35},
+  nowTitleFold: {fontSize:31,lineHeight:37},
+  playerByline: {fontSize:14,lineHeight:20,textAlign:'center'},
+  playerSeries: {fontSize:12,lineHeight:17,textAlign:'center'},
   playerChapter: {fontSize:12,lineHeight:17,fontWeight:'600',textAlign:'center',marginTop:2},
   progressHitArea: {paddingVertical:10},
   progressTrack: {height:4,borderRadius:999,overflow:'hidden'},
   progressFill: {height:4,borderRadius:999},
   timeRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:-6},
   playerTime: {fontSize:12,fontVariant:['tabular-nums'],fontWeight:'500'},
-  transport: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:28,marginVertical:6},
+  transport: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginVertical:8,maxWidth:560,width:'100%',alignSelf:'center'},
+  transportEdgeButton: {width:50,height:50,borderRadius:25,borderWidth:0,alignItems:'center',justifyContent:'center'},
   skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center',position:'relative'},
   skipNumber: {position:'absolute',fontSize:9,lineHeight:11,fontWeight:'700',fontVariant:['tabular-nums']},
   skipMain: {fontSize:17,fontWeight:'900',lineHeight:19},
@@ -4828,8 +5068,22 @@ const styles = StyleSheet.create({
   miniMeta: {fontSize:10.5,lineHeight:14},
   miniButton: {width:40,height:40,borderRadius:10,borderWidth:0,alignItems:'center',justifyContent:'center'},
   miniButtonText: {fontWeight:'600'},
-  tabBar: {height:60,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'},
-  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:2,position:'relative'},
+  tabBar: {height:66,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'stretch'},
+  tab: {flex:1,alignItems:'center',justifyContent:'center',gap:2,position:'relative',minWidth:0},
+  tabCenter: {paddingTop:1},
+  tabCenterOrb: {width:46,height:46,borderRadius:23,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',marginTop:-10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:4},
+  tabCenterText: {marginTop:-2},
+  liveHub: {flex:1,width:'100%'},
+  liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:8,paddingBottom:6,flexDirection:'row',alignItems:'center',gap:12},
+  liveHubSegment: {flex:1,maxWidth:320,height:44,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,padding:3,flexDirection:'row',alignItems:'center'},
+  liveHubSegmentItem: {flex:1,height:36,borderRadius:18,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,position:'relative'},
+  liveHubSegmentText: {fontSize:12,lineHeight:16,fontWeight:'600'},
+  liveHubDot: {position:'absolute',right:10,top:8,width:6,height:6,borderRadius:3},
+  liveHubBody: {flex:1,minHeight:0},
+  liveHubScroll: {flex:1},
+  playerScreenEmbedded: {paddingTop:0,paddingBottom:96},
+  playerLiveKicker: {alignItems:'center',gap:4,paddingTop:2,paddingBottom:2},
+  playerLiveMeta: {fontSize:10.5,lineHeight:14,fontWeight:'500'},
   tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
   tabText: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
@@ -4839,7 +5093,7 @@ const styles = StyleSheet.create({
   celebrationCopy: {color:'#A0A0A0',fontSize:12.5,lineHeight:18,marginTop:3},
   profileScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:920,width:'100%',alignSelf:'center'},
   settingsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:22,maxWidth:1060,width:'100%',alignSelf:'center'},
-  settingsTitle: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  settingsTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   settingsColumns: {gap:22},
   settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:36},
   settingsColumn: {flex:1,minWidth:0,gap:22},
@@ -4924,7 +5178,7 @@ const styles = StyleSheet.create({
   atlasInspectorWide: {width:236,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
 
   atlasScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
-  atlasTitle: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
+  atlasTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   atlasFocusTitle: {fontFamily:'ArchivistEditorial',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
   atlasListAlternative: {gap:0},
   atlasHint: {fontSize:10.5,lineHeight:15,textAlign:'center',letterSpacing:.2},
@@ -4950,6 +5204,45 @@ const styles = StyleSheet.create({
   shelfEditorialSubtitle: {fontFamily:'sans-serif',fontSize:14,lineHeight:20,fontStyle:'italic',marginTop:3,maxWidth:320},
   shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8},
   shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
+  standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',gap:10},
+  standardPageHeaderCopy: {flex:1,minWidth:0},
+  standardPageTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
+  standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
+  standardPageHeaderAction: {alignItems:'center',justifyContent:'center',flexShrink:0},
+  pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},
+  profileAvatarButton: {alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:StyleSheet.hairlineWidth,borderColor:'rgba(255,255,255,.16)'},
+  profileAvatarInitials: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontWeight:'600',letterSpacing:.2},
+  profileMenuLayer: {flex:1,position:'relative'},
+  profileMenuBackdrop: {position:'absolute',left:0,right:0,top:0,bottom:0,backgroundColor:'rgba(0,0,0,.28)'},
+  profileMenu: {position:'absolute',right:14,top:58,width:300,maxWidth:'88%',borderRadius:18,borderWidth:StyleSheet.hairlineWidth,padding:10,shadowColor:'#000',shadowOpacity:.2,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:10},
+  profileMenuIdentity: {flexDirection:'row',alignItems:'center',gap:11,padding:8,paddingBottom:12},
+  profileMenuAvatar: {width:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center'},
+  profileMenuAvatarText: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontSize:17,fontWeight:'600'},
+  profileMenuName: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:22,fontWeight:'500'},
+  profileMenuMeta: {fontSize:10.5,lineHeight:14,marginTop:2},
+  profileMenuItem: {minHeight:58,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:8,paddingVertical:7},
+  profileMenuIcon: {width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center'},
+  profileMenuItemTitle: {fontSize:13,lineHeight:18,fontWeight:'600'},
+  profileMenuItemCopy: {fontSize:9.5,lineHeight:13,marginTop:1},
+  profileHubScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,width:'100%',maxWidth:980,alignSelf:'center'},
+  profileIdentityHero: {flexDirection:'row',alignItems:'center',gap:16,paddingVertical:8},
+  profileIdentityAvatar: {width:82,height:82,borderRadius:41,alignItems:'center',justifyContent:'center'},
+  profileIdentityAvatarText: {color:'#FFFFFF',fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500'},
+  profileIdentityName: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,fontWeight:'500'},
+  profileHubSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
+  profileHubSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
+  profileInitialInput: {width:86,minHeight:44,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,textAlign:'center'},
+  profileAvatarPalette: {flexDirection:'row',flexWrap:'wrap',gap:10},
+  profileAvatarSwatch: {width:38,height:38,borderRadius:19,borderWidth:2},
+  profileSnapshotGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:16,rowGap:14},
+  profileSnapshotItem: {width:'46%',flexGrow:1},
+  profileSnapshotValue: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:27,fontWeight:'500'},
+  profileSnapshotLabel: {fontSize:10,lineHeight:14,marginTop:2},
+  profileHubLink: {minHeight:54,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.22)'},
+  rewardsSummary: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,flexDirection:'row',alignItems:'center',gap:16},
+  rewardsSummaryValue: {fontFamily:'ArchivistEditorial',fontSize:34,lineHeight:40,fontWeight:'500'},
+  rewardsCategories: {gap:6,paddingRight:12},
+  rewardsCategory: {minHeight:40,borderRadius:20,paddingHorizontal:13,alignItems:'center',justifyContent:'center'},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
   headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:8,alignItems:'center',justifyContent:'center'},
@@ -5040,7 +5333,7 @@ const styles = StyleSheet.create({
   libraryMainWide: {paddingHorizontal:28,paddingTop:24,gap:18},
   libraryCatalogueHeader: {gap:2,paddingBottom:2},
   libraryKicker: {fontSize:10,lineHeight:14,fontWeight:'700',letterSpacing:2.0},
-  libraryTitle: {fontFamily:'ArchivistEditorial',fontSize:36,lineHeight:44,fontWeight:'500',letterSpacing:-.4},
+  libraryTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   libraryTitleCompact: {fontSize:32,lineHeight:40},
   libraryTitleFold: {fontSize:40,lineHeight:48},
   librarySearchRow: {flexDirection:'row',alignItems:'center',gap:6},

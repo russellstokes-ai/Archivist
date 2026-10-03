@@ -254,3 +254,48 @@ Every major screen must be reviewed with:
 - reduced motion where the screen contains custom animation.
 
 A code/build pass is not visual acceptance.
+
+
+## Standard page identity
+
+Primary app destinations use one shared page-header pattern. The page title is the screen identity, not the generic Archivist brand name.
+
+- Major page titles use `ArchivistEditorial`, 32/39, weight 500, with the same size across Shelf, Library, Atlas, Reader Stats, Profile, Rewards and Settings.
+- Every major title is followed by one short, quiet descriptive line in sans-serif. Examples: Library — “Every book. In its place.”; Atlas — “Characters, stories and ideas — your reading universe.”; Reader Stats — “Your reading journey.”
+- Do not put a back-to-Shelf arrow beside primary destination titles. Bottom navigation handles primary navigation.
+- A persistent customizable profile avatar sits at the top right of every app page. Immersive Player and Reader chrome also expose the same avatar.
+- Tapping the avatar opens the account hub with Profile, Rewards and Settings. Profile owns avatar customization; Rewards owns achievements/milestones; Settings owns app/library/server configuration.
+- The avatar is a consistent circular identity control, not a replacement for the page title.
+- Generic “Archivist” top chrome must not displace page-specific titles.
+
+
+## Live Player / Reader hub
+
+The bottom navigation has five primary destinations in this order: Shelf, Library, Now, Atlas, Stats.
+
+- **Now** is the central Player / Reader destination and may be visually stronger than the other tab items without becoming an oversized floating action button.
+- The Now screen has no page title. Its top chrome is a compact Player / Reader segmented switch plus the persistent profile avatar.
+- Player and Reader are parallel live contexts. Starting or resuming audio opens Now in Player mode; opening an ebook, PDF or comic opens Now in Reader mode.
+- Audio playback continues when Reader mode is active. A user may listen to an audiobook while reading a book or comic.
+- Leaving Now for another primary destination does not discard either live context. Returning to Now restores the last selected Player / Reader mode when possible.
+- The compact activity bar sits above bottom navigation. Active audiobook playback has priority. If no audiobook is active, the bar may represent the current/recent reading session instead.
+- Tapping the audiobook activity bar returns to Now / Player. Tapping the reading activity bar returns to Now / Reader.
+- The current/recent audio and reading targets are persisted so a cold app start can offer direct resume from the Now screen.
+- Reader features such as comic speech-bubble focus, zoom, reading position, reader tools and appearance remain available inside Now / Reader.
+- The persistent profile avatar remains visible at the top right of the Now screen and every other navigable page.
+
+
+### Approved Live Player motion and transport
+
+The canonical Player reference image remains the visual acceptance target for Now / Player.
+
+- The hero is a physical open book, not a generic cover card. The actual metadata cover is the closed/front cover when available.
+- Play opens the book smoothly; pause closes it smoothly. While audio is actively playing, page turns occur subtly and periodically.
+- Short rewind/forward actions animate three pages. The primary short transport is **15 seconds back** and **30 seconds forward**.
+- The outer transport controls move by chapter when chapter data exists; otherwise they fall back to a 60-second jump. Those larger jumps animate five pages.
+- The transport row has five controls: previous chapter/fallback, 15s back, large play/pause, 30s forward, next chapter/fallback.
+- The Now / Player background uses one continuous subtle teal ambient halo, matching the approved Stats lighting language without introducing a visible seam.
+- Player identity remains editorial: large serif title, quiet author/byline, series metadata, chapter/progress and time remaining beneath the book.
+- The Now page itself does not add a redundant page title above the Player / Reader switch.
+- Reader remains the full Archivist reader. Comics support pinch zoom and robust touch double-tap. Double-tap first attempts local speech-bubble focus; if no bubble is detected it falls back to focused image zoom.
+- These behaviors are functional requirements, not decorative mock states, and must remain covered by mobile tests.
