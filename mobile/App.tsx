@@ -3159,7 +3159,7 @@ function Client() {
     if(!organisationModal)return null;
     const close=()=>{setOrganisationModal(null);setOrganisationName('');setCollectionTarget(null);setRenameTarget(null)};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
-      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled">
+      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
         <View accessibilityViewIsModal={true} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
           <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
           {organisationModal==='smart-shelf'?<>
@@ -3915,7 +3915,7 @@ function Client() {
   function ReaderTools(){
     if(!reading)return null;const workKey=readerWorkKey(reading);const bookmarks=workReaderBookmarks(readerBookmarks,workKey);const annotations=workReaderAnnotations(readerAnnotations,workKey);
     const updateScale=(delta:number)=>void persistReaderAppearance({...readerAppearance,scale:Math.max(.78,Math.min(1.5,readerAppearance.scale+delta))});
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled"><View accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}><View accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
       <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
       <View style={styles.readerSheetHeader}>
         <View style={{flex:1}}>
@@ -4405,7 +4405,7 @@ function Client() {
       {label:'Genres',value:new Set(atlasUniverseWorks.map(work=>String(work.genre||'').trim()).filter(Boolean)).size,copy:'recorded genres'},
     ];
     return (
-      <ScrollView contentContainerStyle={[styles.atlasScreen,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.atlasScreen,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
         <PageHeader
           title="Atlas"
           subtitle="Characters, stories and ideas — your reading universe."
@@ -5458,7 +5458,7 @@ function Client() {
     const openReview=()=>{clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
       <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.libraryManageScroll}>
+        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} contentContainerStyle={styles.libraryManageScroll}>
           <View accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]}>
             <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
             <View style={styles.sheetHeader}>
@@ -5623,7 +5623,7 @@ function Client() {
     const Toggle=({value,onPress,label}:{value:boolean;onPress:()=>void;label:string})=><Pressable accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{checked:value}} hitSlop={{top:9,bottom:9,left:0,right:0}} onPress={onPress} style={[styles.settingsToggle,{backgroundColor:value?p.gold:p.line,justifyContent:value?'flex-end':'flex-start'}]}><View style={[styles.settingsToggleKnob,{backgroundColor:darkMode?'#FFFFFF':'#FFFDF9'}]}/></Pressable>;
     const localStorageText=offlineStorage?formatBytes(offlineStorage.actualBytes||offlineStorage.trackedBytes):'Not measured';
     return (
-      <ScrollView contentContainerStyle={[styles.settingsScreen,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]}>
+      <ScrollView contentContainerStyle={[styles.settingsScreen,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
         <PageHeader title="Settings" subtitle="Your library, privacy, accessibility and server."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
