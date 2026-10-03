@@ -25,6 +25,7 @@ import {
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import {useFonts} from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
@@ -61,6 +62,13 @@ import {
   removeOfflineCheckpoint,
   removeOfflineWork,
 } from './offlineLibrary';
+
+const nativeSplashEnabled=Platform.OS==='android'||Platform.OS==='ios';
+if(nativeSplashEnabled){
+  void SplashScreen.preventAutoHideAsync().catch(()=>undefined);
+  SplashScreen.setOptions({duration:350,fade:true});
+}
+
 
 type Book = {
   id: number;
@@ -5878,7 +5886,11 @@ function Client() {
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ArchivistEditorial: require('./assets/fonts/LibreCaslonText.ttf')});
   const system = useColorScheme();
-  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={[styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7'}]}><ArchivistLogo size={88}/><Text style={[styles.brandLaunchWordmark,{color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text><ActivityIndicator color={system==='dark'?'#B99A68':'#47736F'} /></View>;
+  useEffect(()=>{
+    if(!nativeSplashEnabled||(!fontsLoaded&&!fontError))return;
+    void SplashScreen.hideAsync().catch(()=>undefined);
+  },[fontsLoaded,fontError]);
+  if (!fontsLoaded && !fontError) return nativeSplashEnabled?null:<View accessibilityLabel="Opening Archivist" style={[styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7'}]}><ArchivistLogo size={88}/><Text style={[styles.brandLaunchWordmark,{color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text><ActivityIndicator color={system==='dark'?'#B99A68':'#47736F'} /></View>;
   return <SafeAreaProvider><Client /></SafeAreaProvider>;
 }
 
