@@ -527,6 +527,7 @@ function Client() {
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
   const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'>('Genre');
+  const atlasBreakdownAnim=useRef(new Animated.Value(1)).current;
   const [atlasSearch,setAtlasSearch]=useState('');
   const [atlasNodeId,setAtlasNodeId]=useState('');
   const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
@@ -3767,12 +3768,16 @@ function Client() {
     if(!atlasNodeVisible(node))return null;
     const selected=node.id===atlasNodeId;
     const connected=!atlasNodeId||selected||atlasUniverse.edges.some(edge=>(edge.from===atlasNodeId&&edge.to===node.id)||(edge.to===atlasNodeId&&edge.from===node.id));
-    const zoom=atlasTransform.scale,hit=44/zoom;
-    const dot=(node.kind==='genre'?8:node.kind==='author'?6:node.kind==='work'?4:5)/zoom;
-    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>setAtlasNodeId(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.22}}>
-      {selected?<View pointerEvents="none" style={{position:'absolute',width:70,height:70,borderRadius:35,backgroundColor:p.sage,opacity:.16}}/>:null}
-      <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:atlasNodeColor(node),boxShadow:selected?'0px 0px 18px rgba(71,115,111,.7)':'none'}}/>
-      {(selected||node.kind==='genre'||zoom>.55)?<Text numberOfLines={2} style={{position:'absolute',top:hit/2+10/zoom,left:(hit-144/zoom)/2,width:144/zoom,minWidth:144/zoom,flexShrink:0,textAlign:'center',fontSize:12/zoom,lineHeight:16/zoom,color:selected?p.ink:p.muted,fontWeight:selected?'700':'400'}}>{node.label}</Text>:null}
+    const zoom=atlasTransform.scale,hit=48/zoom;
+    const colour=atlasNodeColor(node);
+    const dot=(node.kind==='genre'?18:node.kind==='author'?7:node.kind==='work'?4:5.5)/zoom;
+    const genreHub=node.kind==='genre';
+    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>setAtlasNodeId(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
+      {(selected||genreHub)?<View pointerEvents="none" style={{position:'absolute',width:(selected?58:38)/zoom,height:(selected?58:38)/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:selected?.22:.12}}/>:null}
+      <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:colour,borderWidth:genreHub?1/zoom:0,borderColor:genreHub?'rgba(255,255,255,.55)':'transparent',boxShadow:selected?'0px 0px 22px '+colour:genreHub?'0px 0px 12px '+colour:'none'}}/>
+      {(selected||genreHub||zoom>.60)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
+        <Text numberOfLines={2} style={{paddingHorizontal:genreHub?7/zoom:0,paddingVertical:genreHub?3/zoom:0,borderRadius:999,borderWidth:genreHub?StyleSheet.hairlineWidth:0,borderColor:genreHub?colour:'transparent',backgroundColor:genreHub?(p.paper==='#000000'?'rgba(7,17,29,.82)':'rgba(255,255,255,.86)'):'transparent',textAlign:'center',fontSize:(genreHub?11.5:11)/zoom,lineHeight:(genreHub?15:14)/zoom,color:genreHub?colour:(selected?p.ink:p.muted),fontWeight:selected||genreHub?'600':'400'}}>{node.label}</Text>
+      </View>:null}
     </Pressable>;
   }
 
@@ -3793,17 +3798,36 @@ function Client() {
     </View>;
   }
 
+  function selectAtlasBreakdown(next:'Genre'|'Format'|'Published year'){
+    if(next===atlasBreakdown)return;
+    if(reduceMotion){setAtlasBreakdown(next);atlasBreakdownAnim.setValue(1);return;}
+    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:140,useNativeDriver:true}).start(()=>{
+      setAtlasBreakdown(next);
+      atlasBreakdownAnim.setValue(0);
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:190,mass:.7,useNativeDriver:true}).start();
+    });
+  }
+
   function Atlas() {
     if(atlasFocus)return <AtlasRelationshipView />;
     const renderedNodes=atlasUniverse.nodes.filter(atlasNodeVisible);
     const renderedIds=new Set(renderedNodes.map(node=>node.id));
     const renderedEdges=atlasUniverse.edges.filter(edge=>renderedIds.has(edge.from)&&renderedIds.has(edge.to));
     const nodeMap=new Map(atlasUniverse.nodes.map(node=>[node.id,node]));
-    const ringSize=Math.min(width-48,480);
+    const ringSize=Math.min(width-(width>=600?48:28),width>=940?720:width>=600?620:520);
     const viewHeight=ringSize;
     const breakdownCounts=new Map<string,number>();
     for(const work of atlasUniverseWorks){const label=atlasBreakdown==='Genre'?(work.genre||'Unclassified'):atlasBreakdown==='Format'?work.format:work.publishedYear?String(work.publishedYear):'Not recorded';breakdownCounts.set(label,(breakdownCounts.get(label)||0)+1);}
-    const breakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:atlasBreakdown==='Genre'?genreColour(label):genreColours[index%genreColours.length]}));
+    const rawBreakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:atlasBreakdown==='Genre'?genreColour(label):atlasBreakdown==='Format'?['#62AFC1','#5F8FE3','#8C68D8','#69B99B','#98A6B9'][index%5]:['#98A6B9','#778BC2','#62AFC1','#7BA8A1','#B68B62'][index%5]}));
+    const visibleBreakdown=rawBreakdown.slice(0,7);
+    const overflowBreakdown=rawBreakdown.slice(7);
+    const overflowCount=overflowBreakdown.reduce((sum,item)=>sum+item.count,0);
+    const breakdown:ChartItem[]=overflowCount?[...visibleBreakdown,{label:'Other',count:overflowCount,color:p.muted}]:visibleBreakdown;
+    const atlasRingItems:ChartItem[]=[
+      {label:'Genre',count:1,color:atlasBreakdown==='Genre'?'#E2736B':'#7A4D50'},
+      {label:'Format',count:1,color:atlasBreakdown==='Format'?'#62AFC1':'#385F78'},
+      {label:'Year',count:1,color:atlasBreakdown==='Published year'?'#A78BC7':'#5A526F'},
+    ];
     return (
       <ScrollView contentContainerStyle={[styles.atlasScreen,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled">
         <PageHeader
@@ -3833,15 +3857,15 @@ function Client() {
             <Pressable accessibilityRole="button" accessibilityLabel="Find in Atlas" onPress={atlasSearchGo} style={styles.atlasSearchButton}><UiIcon name="search" color={p.ink} size={20}/></Pressable>
           </View>
 
-          <View style={[styles.atlasUniverseLayout]}>
-            <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:p.paper}]}
+          <View style={styles.atlasConstellationStage}>
+            <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:'transparent'}]}
               onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
               onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
               onResponderRelease={()=>{atlasGesture.current=null}} onResponderTerminate={()=>{atlasGesture.current=null}}>
-              <AmbientGlow size={600} strength={.55}/><View pointerEvents="none" style={{position:'absolute',left:'50%',top:0,marginLeft:-ringSize/2,zIndex:2}}><DataRing size={ringSize} items={[{label:'Genre',count:1,color:'#bc8880'},{label:'Format',count:1,color:'#6ca8b2'},{label:'Published year',count:1,color:'#9ba5b2'}]} ink={p.ink} muted={p.muted} track={p.line} thickness={14}/></View><View style={styles.atlasViewportTools}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><UiIcon name="fit" color={p.ink} size={18}/></Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.max(.18,atlasTransform.scale-.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.min(2.25,atlasTransform.scale+.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
+              <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color="#2F8B86" size={Math.max(680,ringSize*1.35)} strength={.72}/></View>
+              <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
+                <DataRing size={ringSize} items={atlasRingItems} ink={p.ink} muted={p.muted} track={p.line} thickness={22}/>
+                <View style={[styles.atlasInnerRing,{width:ringSize-42,height:ringSize-42,borderRadius:(ringSize-42)/2,borderColor:p.line}]}/>
               </View>
 
               <View style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
@@ -3849,19 +3873,59 @@ function Client() {
                 {renderedNodes.map(node=><AtlasUniverseNodeView key={node.id} node={node}/>)}
               </View>
 
-              
+              <View style={styles.atlasViewportTools}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><UiIcon name="fit" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.max(.18,atlasTransform.scale-.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.min(2.25,atlasTransform.scale+.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
+              </View>
+
+              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Genre'}} accessibilityLabel="Show genre breakdown" onPress={()=>selectAtlasBreakdown('Genre')} style={[styles.atlasRingControl,styles.atlasRingControlGenre,{borderColor:atlasBreakdown==='Genre'?'#E2736B':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                <UiIcon name="bookOpen" color={atlasBreakdown==='Genre'?'#E2736B':p.muted} size={19}/>
+                <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Genre'?'#E2736B':p.muted}]}>GENRE</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Format'}} accessibilityLabel="Show format breakdown" onPress={()=>selectAtlasBreakdown('Format')} style={[styles.atlasRingControl,styles.atlasRingControlFormat,{borderColor:atlasBreakdown==='Format'?'#62AFC1':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                <UiIcon name="layers" color={atlasBreakdown==='Format'?'#62AFC1':p.muted} size={19}/>
+                <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Format'?'#62AFC1':p.muted}]}>FORMAT</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Published year'}} accessibilityLabel="Show publication year breakdown" onPress={()=>selectAtlasBreakdown('Published year')} style={[styles.atlasRingControl,styles.atlasRingControlYear,{borderColor:atlasBreakdown==='Published year'?'#A78BC7':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                <UiIcon name="calendar" color={atlasBreakdown==='Published year'?'#A78BC7':p.muted} size={19}/>
+                <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Published year'?'#A78BC7':p.muted}]}>YEAR</Text>
+              </Pressable>
+
               {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
             <AtlasInspector/>
           </View>
 
-          <View style={{flexDirection:'row',gap:8,justifyContent:'center',marginTop:12}}>{(['Genre','Format','Published year'] as const).map(label=><Pressable key={label} accessibilityRole="button" accessibilityState={{selected:atlasBreakdown===label}} onPress={()=>setAtlasBreakdown(label)} style={{minHeight:44,paddingHorizontal:14,justifyContent:'center',borderRadius:24,borderWidth:1,borderColor:atlasBreakdown===label?p.sage:p.line,backgroundColor:atlasBreakdown===label?p.card:'transparent'}}><Text style={{color:atlasBreakdown===label?p.ink:p.muted}}>{label}</Text></Pressable>)}</View>
-          <View style={{padding:20,borderRadius:24,borderWidth:1,borderColor:p.line,backgroundColor:p.raised,gap:14,marginTop:16}}>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{atlasBreakdown}</Text><Text style={[styles.meta,{color:p.muted}]}>Your library, in perspective</Text>
-            {breakdown.map(item=><View key={item.label} style={{gap:7}}><View style={{flexDirection:'row',justifyContent:'space-between'}}><Text style={{color:p.ink}}>{item.label}</Text><Text style={{color:p.muted}}>{item.count} · {Math.round(item.count/Math.max(1,atlasUniverseWorks.length)*100)}%</Text></View><View style={{height:5,borderRadius:3,backgroundColor:p.line}}><View style={{height:5,borderRadius:3,width:`${item.count/Math.max(1,atlasUniverseWorks.length)*100}%`,backgroundColor:item.color}}/></View></View>)}
-            {!breakdown.length?<Text style={{color:p.muted}}>Add books to reveal your library’s patterns.</Text>:null}
-            {atlasBreakdown==='Published year'?<Text style={[styles.meta,{color:p.muted}]}>Dates come from recorded metadata. Books without a verified publication date are grouped as not recorded.</Text>:null}
-          </View><Text style={[styles.atlasHint,{color:p.muted}]}>Pinch, pan and explore</Text>
+          <Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
+            <View style={styles.atlasBreakdownHandle}><View style={[styles.atlasBreakdownHandleBar,{backgroundColor:p.muted}]}/></View>
+            <View style={styles.atlasBreakdownHeader}>
+              <View style={[styles.atlasBreakdownBadge,{borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',backgroundColor:p.card}]}>
+                <UiIcon name={atlasBreakdown==='Genre'?'bookOpen':atlasBreakdown==='Format'?'layers':'calendar'} color={atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7'} size={22}/>
+              </View>
+              <View style={{flex:1,minWidth:0}}>
+                <Text style={[styles.atlasBreakdownTitle,{color:p.ink}]}>{atlasBreakdown==='Published year'?'Year':atlasBreakdown}</Text>
+                <Text style={[styles.atlasBreakdownSubtitle,{color:p.muted}]}>Breakdown of your library</Text>
+              </View>
+            </View>
+            <View style={styles.atlasBreakdownRows}>
+              {breakdown.map(item=>{
+                const percent=Math.round(item.count/Math.max(1,atlasUniverseWorks.length)*100);
+                return <View key={item.label} style={styles.atlasBreakdownRow}>
+                  <View style={[styles.atlasBreakdownDot,{backgroundColor:item.color}]}/>
+                  <Text numberOfLines={1} style={[styles.atlasBreakdownName,{color:p.ink}]}>{item.label}</Text>
+                  <View style={[styles.atlasBreakdownTrack,{backgroundColor:p.card}]}>
+                    <View style={[styles.atlasBreakdownFill,{width:(percent+'%') as any,backgroundColor:item.color}]}/>
+                  </View>
+                  <Text style={[styles.atlasBreakdownCount,{color:p.ink}]}>{item.count}</Text>
+                  <Text style={[styles.atlasBreakdownPercent,{color:p.muted}]}>{percent}%</Text>
+                </View>;
+              })}
+              {!breakdown.length?<Text style={[styles.meta,{color:p.muted}]}>Add books to reveal your library’s patterns.</Text>:null}
+            </View>
+            {atlasBreakdown==='Published year'?<Text style={[styles.atlasBreakdownNote,{color:p.muted}]}>Dates come from recorded metadata. Books without a verified publication date are grouped as not recorded.</Text>:null}
+          </Animated.View>
+          <Text style={[styles.atlasHint,{color:p.muted}]}>Pinch, pan and explore</Text>
         </>}
       </ScrollView>
     );
@@ -4331,7 +4395,18 @@ function Client() {
       </View>
     </View>;
 
-    const overviewCards=<View style={styles.statsCardsGrid}>{readingProgressCard}{paceCard}{streakCard}{formatCard}{genreCard}{tasteCard}{placesCard}</View>;
+    const donutCards=<View style={styles.statsDonutGrid}>
+      {readingProgressCard}
+      {formatCard}
+      {genreCard}
+      {paceCard}
+      {placesCard}
+    </View>;
+
+    const supportingCards=<View style={styles.statsSupportingGrid}>
+      {streakCard}
+      {tasteCard}
+    </View>;
 
     return <ScrollView style={{backgroundColor:'transparent'}} contentContainerStyle={[styles.statsScreen,width>=600&&styles.statsScreenFold,width>=940&&styles.statsScreenWide]}>
       <PageHeader
@@ -4355,7 +4430,22 @@ function Client() {
       </View>
 
       {rhythmCard}
-      {overviewCards}
+
+      <View style={styles.statsSectionGroup}>
+        <View style={styles.statsSectionHeading}>
+          <Text style={[styles.statsSectionTitle,{color:statsPalette.ink}]}>Reading Breakdown</Text>
+          <Text style={[styles.statsSectionCopy,{color:statsPalette.muted}]}>Progress, formats, genres, pace and reading context.</Text>
+        </View>
+        {donutCards}
+      </View>
+
+      <View style={styles.statsSectionGroup}>
+        <View style={styles.statsSectionHeading}>
+          <Text style={[styles.statsSectionTitle,{color:statsPalette.ink}]}>More Insights</Text>
+          <Text style={[styles.statsSectionCopy,{color:statsPalette.muted}]}>Consistency, favourites, ratings and annotations.</Text>
+        </View>
+        {supportingCards}
+      </View>
 
       {profileLoading&&session?<ActivityIndicator accessibilityLabel="Loading reader statistics" color={statsPalette.gold}/>:null}
     </ScrollView>;
@@ -5160,10 +5250,35 @@ const styles = StyleSheet.create({
   atlasSearchInput: {flex:1,minHeight:44,borderWidth:0,borderRadius:0,paddingHorizontal:2,fontSize:14},
   atlasSearchButton: {width:44,height:44,borderRadius:0,alignItems:'center',justifyContent:'center'},
   atlasUniverseLayout: {position:'relative',gap:0},
+  atlasConstellationStage: {position:'relative',alignItems:'center',justifyContent:'center'},
+  atlasConstellationGlow: {position:'absolute',left:0,right:0,top:0,bottom:0,alignItems:'center',justifyContent:'center'},
+  atlasRingLayer: {position:'absolute',left:0,top:0,alignItems:'center',justifyContent:'center',zIndex:1},
+  atlasInnerRing: {position:'absolute',borderWidth:StyleSheet.hairlineWidth,opacity:.55},
+  atlasRingControl: {position:'absolute',zIndex:30,minWidth:72,minHeight:48,borderRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,shadowColor:'#000',shadowOpacity:.12,shadowRadius:10,shadowOffset:{width:0,height:4},elevation:8},
+  atlasRingControlGenre: {left:2,top:'42%'},
+  atlasRingControlFormat: {right:2,top:'42%'},
+  atlasRingControlYear: {bottom:2,alignSelf:'center'},
+  atlasRingControlLabel: {fontSize:8,lineHeight:11,fontWeight:'700',letterSpacing:1.05},
+  atlasBreakdownSheet: {borderWidth:StyleSheet.hairlineWidth,borderRadius:28,paddingHorizontal:18,paddingBottom:18,paddingTop:8,gap:13,shadowColor:'#000',shadowOpacity:.12,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:5},
+  atlasBreakdownHandle: {height:8,alignItems:'center',justifyContent:'center'},
+  atlasBreakdownHandleBar: {width:54,height:4,borderRadius:2,opacity:.55},
+  atlasBreakdownHeader: {flexDirection:'row',alignItems:'center',gap:12},
+  atlasBreakdownBadge: {width:50,height:50,borderRadius:25,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center'},
+  atlasBreakdownTitle: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:29,fontWeight:'500',letterSpacing:-.2},
+  atlasBreakdownSubtitle: {fontSize:12,lineHeight:17,marginTop:1},
+  atlasBreakdownRows: {gap:10},
+  atlasBreakdownRow: {minHeight:28,flexDirection:'row',alignItems:'center',gap:9},
+  atlasBreakdownDot: {width:12,height:12,borderRadius:6,flexShrink:0},
+  atlasBreakdownName: {width:96,fontSize:12,lineHeight:17,fontWeight:'500'},
+  atlasBreakdownTrack: {flex:1,height:8,borderRadius:4,overflow:'hidden'},
+  atlasBreakdownFill: {height:'100%',borderRadius:4},
+  atlasBreakdownCount: {width:34,textAlign:'right',fontSize:12,lineHeight:17,fontVariant:['tabular-nums']},
+  atlasBreakdownPercent: {width:36,textAlign:'right',fontSize:11,lineHeight:16,fontVariant:['tabular-nums']},
+  atlasBreakdownNote: {fontSize:9.5,lineHeight:14},
   atlasUniverseLayoutWide: {flexDirection:'row',alignItems:'stretch'},
-  atlasViewport: {flex:1,borderWidth:0,borderRadius:0,overflow:'hidden',position:'relative',minWidth:0},
+  atlasViewport: {flex:1,borderWidth:0,borderRadius:999,overflow:'hidden',position:'relative',minWidth:0},
   atlasUniverseCanvas: {position:'absolute'},
-  atlasUniverseEdge: {position:'absolute',height:1},
+  atlasUniverseEdge: {position:'absolute',height:1,shadowColor:'#7DA9C4',shadowOpacity:.18,shadowRadius:3},
   atlasUniverseNode: {position:'absolute',borderWidth:0,borderRadius:14,padding:5,alignItems:'center',justifyContent:'center',overflow:'visible',shadowColor:'#000',shadowOpacity:.06,shadowRadius:4,elevation:2},
   atlasUniverseNodeSelected: {borderWidth:2,shadowOpacity:.16,shadowRadius:9,elevation:5},
   atlasGenreNode: {borderRadius:48,padding:10,borderWidth:StyleSheet.hairlineWidth,shadowOpacity:.04,shadowRadius:12},
@@ -5451,6 +5566,12 @@ const styles = StyleSheet.create({
   statsMonthBarFill: {width:'100%',borderRadius:9},
   statsMonthLabel: {fontSize:9,lineHeight:12,fontWeight:'600'},
   statsMonthValue: {fontSize:8.5,lineHeight:11,fontWeight:'500',fontVariant:['tabular-nums']},
+  statsSectionGroup: {gap:10},
+  statsSectionHeading: {gap:2,paddingTop:2,paddingBottom:2},
+  statsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.16},
+  statsSectionCopy: {fontSize:10.5,lineHeight:15,fontWeight:'400'},
+  statsDonutGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
+  statsSupportingGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
   statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0},
   statsDashboardCard: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:20,paddingHorizontal:0,gap:14,flexGrow:1},
   statsDashboardCardWide: {width:'48%',flexBasis:300},

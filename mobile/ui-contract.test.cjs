@@ -95,9 +95,29 @@ assert.ok(statsSource.includes('Completion rate') && statsSource.includes('Serie
 assert.ok(statsSource.includes('Completion by format') && statsSource.includes('Completion by genre'), 'Reader Stats completion splits are missing');
 assert.ok(statsSource.includes('Avg finished rating') && statsSource.includes('Favourites') && statsSource.includes('Annotations') && statsSource.includes('Highlights'), 'Reader Stats taste and notes metrics are incomplete');
 assert.ok(statsSource.includes('Reading consistency'), 'Reader Stats consistency metric is missing');
+const rhythmIndex=statsSource.indexOf('{rhythmCard}');
+const breakdownIndex=statsSource.indexOf('>Reading Breakdown</Text>');
+const moreInsightsIndex=statsSource.indexOf('>More Insights</Text>');
+assert.ok(rhythmIndex>=0 && breakdownIndex>rhythmIndex && moreInsightsIndex>breakdownIndex, 'Reader Stats chart hierarchy must place doughnut sections below Reading Rhythm and supporting insights below them');
+assert.ok(statsSource.includes('const donutCards=') && statsSource.includes('{readingProgressCard}') && statsSource.includes('{formatCard}') && statsSource.includes('{genreCard}') && statsSource.includes('{paceCard}') && statsSource.includes('{placesCard}'), 'Reader Stats doughnut section grouping is incomplete');
+assert.ok(statsSource.includes('const supportingCards=') && statsSource.includes('{streakCard}') && statsSource.includes('{tasteCard}'), 'Reader Stats non-doughnut insight grouping is incomplete');
+
 assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includes('statsScreenFold') && source.includes('statsScreenWide'), 'Reader Stats spacing must align with the app responsive gutters');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"), 'Primary page gutters must match the Reader Stats header standard');
 
+
+const atlasStart=source.indexOf('function Atlas()');
+const atlasEnd=source.indexOf('async function saveInsightGoals()',atlasStart);
+assert.ok(atlasStart>=0 && atlasEnd>atlasStart, 'Atlas function bounds are missing');
+const atlasSource=source.slice(atlasStart,atlasEnd);
+assert.ok(atlasSource.includes('atlasRingItems') && atlasSource.includes("label:'Genre'") && atlasSource.includes("label:'Format'") && atlasSource.includes("label:'Year'"), 'Atlas must use the approved three-way ring');
+assert.ok(atlasSource.includes("selectAtlasBreakdown('Genre')") && atlasSource.includes("selectAtlasBreakdown('Format')") && atlasSource.includes("selectAtlasBreakdown('Published year')"), 'Atlas ring controls must switch the breakdown');
+assert.ok(atlasSource.includes('atlasBreakdownAnim') && atlasSource.includes('Animated.View') && atlasSource.includes('translateY'), 'Atlas breakdown transition is missing');
+assert.ok(atlasSource.includes('Breakdown of your library') && atlasSource.includes('atlasBreakdownTrack') && atlasSource.includes('atlasBreakdownPercent'), 'Atlas breakdown sheet must match the approved concept');
+assert.ok(atlasSource.includes('atlasConstellationStage') && atlasSource.includes('atlasRingControlGenre') && atlasSource.includes('atlasRingControlFormat') && atlasSource.includes('atlasRingControlYear'), 'Atlas ring controls must sit around the constellation');
+assert.ok(source.includes("node.kind==='genre'?18") && source.includes("boxShadow:selected?'0px 0px 22px '"), 'Atlas genre hubs must be visually prominent and luminous');
+assert.ok(source.includes('const atlasRingItems:ChartItem[]'), 'Atlas ring chart is missing');
+assert.ok(source.includes("genreColours=[") || fs.readFileSync('LibraryCharts.tsx','utf8').includes("genreColours=["), 'Atlas genre palette is missing');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 
