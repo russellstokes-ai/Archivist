@@ -84,7 +84,7 @@ export function resolveMetadataCandidates(candidates:MetadataCandidate[]):Metada
     confidence[field]=fieldConfidence(chosen.score);
 
     const alternatives=ranked.filter(item=>normal(item.value)!==normal(chosen.value));
-    if(alternatives.length&&alternatives[0].score>=chosen.score-15){
+    if(chosen.source!=='manual'&&alternatives.length&&alternatives[0].score>=chosen.score-15){
       conflicts.push({field,chosen:chosen.value,alternatives});
     }
   }
