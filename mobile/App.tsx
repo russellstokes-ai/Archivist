@@ -2897,18 +2897,123 @@ function Client() {
           </View>
           <Button label={work.format==='Audio'?'Listen':'Open'} onPress={()=>openUnifiedWork(work)}/>
           <View style={styles.sheetActionList}>
+            <SheetAction label="Work details" onPress={()=>{setWorkDetails(work);close();}}/>
             <SheetAction label={personal.favourite?'Remove favourite':'Add favourite'} onPress={setFav}/>
             {work.format==='Audio'&&local?<SheetAction label="Add to queue" onPress={()=>{close();void addLocalWorkQueue(local);}}/>:null}
             {work.format==='Audio'&&remote?<SheetAction label="Add to queue" onPress={()=>{close();void queueServerWork(remote);}}/>:null}
             {remote&&!downloaded?<SheetAction label="Download for offline" disabled={offlineBusyId!==null} onPress={()=>{close();void downloadServerWork(remote);}}/>:null}
             {downloaded?<SheetAction label={'Remove download · '+formatBytes(downloaded.bytes)} disabled={offlineBusyId!==null} onPress={()=>{close();void removeServerDownload(downloaded);}}/>:null}
             <SheetAction label="Add to collection" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}}/>
-            {local?.tracks[0]?<SheetAction label="Edit details" onPress={()=>{beginEdit({...local.tracks[0],source:work.source,originServer:local.originServer,serverWorkId:local.originWorkId});close();}}/>:null}
+            {local?.tracks[0]?<SheetAction label="Edit details & cover" onPress={()=>{beginEdit({...local.tracks[0],title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,coverUri:work.coverUri,source:work.source,originServer:local.originServer,serverWorkId:local.originWorkId},local.tracks.map(track=>track.uri));close();}}/>:null}
           </View>
         </Pressable>
       </Pressable>
     </Modal>;
   }
+  function WorkDetailsPanel(){
+    if(!workDetails)return null;
+    const work=workDetails;
+    const local=work.localWork;
+    const remote=work.serverWork;
+    const localTrack=local?.tracks[0];
+    const serverPath=remote&&session&&(!work.server||work.server===session.server)?'/api/works/'+remote.id+'/cover':undefined;
+    const personal=local?(localPreferences[local.key]||{rating:work.rating||0,favourite:work.favourite||false})
+      :remote?(serverPreferences[remote.id]||{rating:work.rating||0,favourite:work.favourite||false,state:work.readingState})
+      :{rating:work.rating||0,favourite:work.favourite||false};
+    const downloaded=remote?downloadedServerWork(remote):undefined;
+    const matchingServerSources=remote?sources.filter(source=>source.space===work.space):[];
+    const progressCopy=(()=>{
+      if(work.readingState==='finished')return 'Finished';
+      if(work.readingState==='not-started')return 'Not started';
+      if(local&&work.format==='Audio'){
+        const seconds=localWorkProgress[local.key]?.seconds||0;
+        return seconds>0?'In progress · '+formatTime(seconds):'In progress';
+      }
+      if(local){
+        const page=Math.max(0,...local.tracks.map(track=>track.uri?(localReadingProgress[track.uri]||0):0));
+        return page>0?'In progress · page '+(page+1):'In progress';
+      }
+      return 'In progress';
+    })();
+    const provenance=localTrack?.metadataSource==='manual'?'Manual override'
+      :localTrack?.metadataSource==='sidecar'?'Sidecar metadata'
+      :localTrack?.metadataSource==='path'?'Filename / folder scan'
+      :remote?'Archivist Server catalogue'
+      :'Scanned metadata';
+    const close=()=>setWorkDetails(null);
+    const setFav=()=>{
+      if(local)void saveLocalPreference(local,{...personal,favourite:!personal.favourite});
+      else if(remote)void saveServerPreference(remote,{...personal,favourite:!personal.favourite});
+    };
+    const editLocal=()=>{
+      if(!localTrack)return;
+      beginEdit({...localTrack,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,coverUri:work.coverUri,source:work.source,originServer:local?.originServer,serverWorkId:local?.originWorkId},local?.tracks.map(track=>track.uri)||[]);
+      close();
+    };
+    const openServerManagement=()=>{
+      clearLibraryFilters();
+      setSourceFilter('server');
+      setQuery(work.title);
+      setActiveTab('library');
+      setLibraryManageOpen(true);
+      close();
+    };
+    const refreshMetadata=()=>{
+      if(local){void rescanLocalFolders();close();return;}
+      if(remote&&owner&&matchingServerSources.length===1){void sourceAction('/api/sources/'+matchingServerSources[0].id+'/scan');close();return;}
+      openServerManagement();
+    };
+    return <Modal transparent animationType="slide" visible onRequestClose={close}>
+      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
+        <ScrollView contentContainerStyle={styles.workDetailsScroll}>
+          <View accessibilityViewIsModal accessibilityLabel={'Work details for '+work.title} style={[styles.workDetailsSheet,{backgroundColor:p.paper,borderColor:p.line}]}>
+            <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+            <View style={styles.sheetHeader}>
+              <View><Text style={[styles.playerEyebrow,{color:p.sage}]}>WORK DETAILS</Text><Text style={[styles.meta,{color:p.muted}]}>{sourceLabel(work.source)}</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close work details" onPress={close} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
+            </View>
+            <View style={[styles.workDetailsHero,foldLayout&&styles.workDetailsHeroFold]}>
+              <View style={[styles.workDetailsCover,work.format==='Audio'&&styles.workDetailsCoverSquare]}><Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath} fill/></View>
+              <View style={styles.workDetailsIdentity}>
+                <Text maxFontSizeMultiplier={1.18} style={[styles.workDetailsTitle,{color:p.ink}]}>{work.title}</Text>
+                <Text style={[styles.workDetailsAuthor,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
+                {work.series?<Text style={[styles.meta,{color:p.muted}]}>{work.series}</Text>:null}
+                <View style={styles.workDetailsTags}>
+                  {[work.format,work.genre,work.publishedYear?String(work.publishedYear):''].filter(Boolean).map(value=><View key={String(value)} style={[styles.workDetailsTag,{borderColor:p.line}]}><Text style={[styles.workDetailsTagText,{color:p.muted}]}>{value}</Text></View>)}
+                </View>
+                <Text style={[styles.meta,{color:p.sage}]}>{progressCopy}</Text>
+                {personal.rating?<Text style={[styles.meta,{color:p.gold}]}>{ratingLabel(personal.rating)}</Text>:null}
+              </View>
+            </View>
+
+            <View style={[styles.workDetailsFacts,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+              {[
+                ['Location',work.space||sourceLabel(work.source)],
+                ['Metadata',provenance],
+                ['Files',String(work.files)],
+                ['Editions',String(work.editions)],
+                ['Availability',work.available?'Available':'Unavailable'],
+                ['Cover',work.coverUri||serverPath?'Artwork available':'Fallback cover'],
+              ].map(([label,value])=><View key={label} style={styles.workDetailsFact}><Text style={[styles.workDetailsFactLabel,{color:p.muted}]}>{label}</Text><Text numberOfLines={2} style={[styles.workDetailsFactValue,{color:p.ink}]}>{value}</Text></View>)}
+            </View>
+
+            <Button label={work.format==='Audio'?'Listen':'Open'} onPress={()=>{close();openUnifiedWork(work)}}/>
+            <View style={styles.workDetailsActionGrid}>
+              <Pressable accessibilityRole="button" onPress={setFav} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="bookmark" color={personal.favourite?p.gold:p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>{personal.favourite?'Favourited':'Favourite'}</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="library" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Collection</Text></Pressable>
+              {localTrack?<Pressable accessibilityRole="button" onPress={editLocal} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="edit" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Edit metadata & cover</Text></Pressable>
+                :remote&&owner?<Pressable accessibilityRole="button" onPress={openServerManagement} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="edit" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Manage metadata</Text></Pressable>:null}
+              <Pressable accessibilityRole="button" onPress={refreshMetadata} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="refresh" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Refresh metadata & cover</Text></Pressable>
+              {remote&&!downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{void downloadServerWork(remote);close();}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null?.45:1}]}><UiIcon name="download" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Download</Text></Pressable>:null}
+              {downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{void removeServerDownload(downloaded);close();}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null?.45:1}]}><UiIcon name="close" color={p.danger} size={18}/><Text style={[styles.workDetailsActionText,{color:p.danger}]}>Remove download</Text></Pressable>:null}
+            </View>
+            {local&&local.tracks.length>1?<View style={[styles.workDetailsTrackSummary,{borderTopColor:p.line}]}><Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FILES IN THIS WORK</Text>{local.tracks.slice(0,8).map((track,index)=><View key={track.uri} style={styles.workDetailsTrackRow}><Text numberOfLines={1} style={[styles.meta,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{track.format}</Text></View>)}{local.tracks.length>8?<Text style={[styles.meta,{color:p.muted}]}>+ {local.tracks.length-8} more files</Text>:null}</View>:null}
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>;
+  }
+
   function MetadataEditorPanel(){
     if(!editing)return null;
     const localEdit=editing.source!=='server'&&!!editing.uri;
@@ -5651,6 +5756,7 @@ function Client() {
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
       <ProfileMenu/>
+      <WorkDetailsPanel/>
       <RatingPromptPanel />
       {playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
@@ -5835,6 +5941,27 @@ const styles = StyleSheet.create({
   coverFallbackCopy: {gap:4},
   metadataCoverEditor: {flexDirection:'row',alignItems:'center',gap:14},
   metadataCoverPreview: {width:74},
+  workDetailsScroll: {flexGrow:1,justifyContent:'flex-end',paddingTop:42},
+  workDetailsSheet: {width:'100%',maxWidth:760,alignSelf:'center',maxHeight:'94%',borderTopLeftRadius:24,borderTopRightRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:18,paddingBottom:28,gap:16},
+  workDetailsHero: {flexDirection:'row',gap:18,alignItems:'flex-start'},
+  workDetailsHeroFold: {gap:24},
+  workDetailsCover: {width:126,aspectRatio:2/3,overflow:'hidden',borderRadius:12,flexShrink:0},
+  workDetailsCoverSquare: {aspectRatio:1},
+  workDetailsIdentity: {flex:1,minWidth:0,gap:6,paddingTop:2},
+  workDetailsTitle: {fontFamily:'ArchivistEditorial',fontSize:26,lineHeight:32,fontWeight:'500',letterSpacing:-.35},
+  workDetailsAuthor: {fontSize:14.5,lineHeight:20,fontWeight:'600'},
+  workDetailsTags: {flexDirection:'row',flexWrap:'wrap',gap:7,marginTop:3},
+  workDetailsTag: {borderWidth:StyleSheet.hairlineWidth,borderRadius:999,paddingHorizontal:9,paddingVertical:5},
+  workDetailsTagText: {fontSize:10.5,lineHeight:14,fontWeight:'600'},
+  workDetailsFacts: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',flexWrap:'wrap',paddingVertical:12,rowGap:13},
+  workDetailsFact: {width:'50%',paddingRight:12,gap:2},
+  workDetailsFactLabel: {fontSize:9,lineHeight:12,fontWeight:'800',letterSpacing:1.1,textTransform:'uppercase'},
+  workDetailsFactValue: {fontSize:12.5,lineHeight:17,fontWeight:'600'},
+  workDetailsActionGrid: {flexDirection:'row',flexWrap:'wrap',gap:8},
+  workDetailsAction: {minHeight:48,minWidth:150,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:13,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:9},
+  workDetailsActionText: {fontSize:12,lineHeight:16,fontWeight:'700',flexShrink:1},
+  workDetailsTrackSummary: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,gap:7},
+  workDetailsTrackRow: {minHeight:28,flexDirection:'row',alignItems:'center',gap:10},
   coverFormat: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.4},
   coverTitle: {fontFamily:'sans-serif-medium',fontSize:13,lineHeight:17,fontWeight:'500'},
   coverTitleLarge: {fontSize:16,lineHeight:21},
