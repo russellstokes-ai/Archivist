@@ -1249,7 +1249,7 @@ function Client() {
     getPersistedJSON<ReaderAnnotation[]>(readerAnnotationsKey).then(value=>setReaderAnnotations(sanitizeReaderAnnotations(value))).catch(()=>undefined);
     getPersistedJSON<ReaderAppearance>(readerAppearanceKey).then(value=>setReaderAppearance(sanitizeReaderAppearance(value))).catch(()=>undefined);
     getPersistedJSON(insightGoalKey).then(value=>{const goal=sanitizeInsightGoal(value);setInsightGoal(goal);setGoalDraft({completed:String(goal.completedTarget),annotations:String(goal.annotationTarget)});}).catch(()=>undefined);
-    getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F')});}).catch(()=>undefined);
+    getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F'),photoUri:typeof value.photoUri==='string'?value.photoUri:undefined});}).catch(()=>undefined);
     getPersistedJSON<Book>(lastReadingKey).then(value=>{if(value&&typeof value==='object')setLastReading(value);}).catch(()=>undefined);
     getPersistedJSON<Book>(lastPlayingKey).then(value=>{if(value&&typeof value==='object')setLastPlaying(value);}).catch(()=>undefined);
     AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
@@ -2944,7 +2944,7 @@ function Client() {
   const avatarInitials=(profileAvatar.initials||String(profileStats?.name||'Reader').trim().split(/\s+/).map(part=>part[0]||'').join('').slice(0,2)||'R').toUpperCase();
 
   async function saveProfileAvatar(next:ProfileAvatarConfig){
-    const cleaned={initials:String(next.initials||'').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase(),color:avatarColours.includes(next.color)?next.color:'#47736F'};
+    const cleaned={initials:String(next.initials||'').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase(),color:avatarColours.includes(next.color)?next.color:'#47736F',photoUri:typeof next.photoUri==='string'&&next.photoUri.trim()?next.photoUri.trim():undefined};
     setProfileAvatar(cleaned);
     try{await setPersistedJSON(profileAvatarKey,cleaned);}catch(e){setError((e as Error).message);}
   }
@@ -2974,8 +2974,8 @@ function Client() {
     return <View style={[styles.profileAvatarButtonWrap,{width:ringSize,height:ringSize}]}>
       {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:ringSize/2,backgroundColor:interfaceHaloColor||avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.36:.28,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.38]})}]}]}/>:null}
       <View pointerEvents="none" style={styles.profileAvatarLevelRing}><DataRing size={ringSize} items={ringItems} ink={p.ink} muted={p.muted} track={p.line} thickness={3} opacity={1}/></View>
-      <Pressable accessibilityRole="button" accessibilityLabel={profileMenuOpen?'Close profile menu':'Open profile menu'} accessibilityState={{expanded:profileMenuOpen}} onPress={profileMenuOpen?()=>closeProfileMenu():openProfileMenu} style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:avatarColor}]}>
-        <Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={profileMenuOpen?'Close profile menu':'Open profile menu'} accessibilityState={{expanded:profileMenuOpen}} onPress={profileMenuOpen?()=>closeProfileMenu():openProfileMenu} style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:avatarColor,overflow:'hidden'}]}>
+        {profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={{width:size,height:size}}/>:<Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>}
       </Pressable>
       <View pointerEvents="none" style={[styles.profileAvatarLevelBadge,{backgroundColor:darkMode?'#0B1725':'#FFF8E9',borderColor:p.gold}]}>
         <Text style={[styles.profileAvatarLevelText,{color:p.gold}]}>{level}</Text>
@@ -3008,7 +3008,7 @@ function Client() {
         <Animated.View pointerEvents="box-none" style={[styles.profileMenuBackdropLayer,{opacity:profileMenuAnim}]}><Pressable accessibilityRole="button" accessibilityLabel="Close profile menu" onPress={()=>closeProfileMenu()} style={styles.profileMenuBackdrop}/></Animated.View>
         <Animated.View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
           <View style={styles.profileMenuIdentity}>
-            <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text></View>
+            <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileMenuAvatarImage}/>:<Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text>}</View>
             <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>Level {profileProgression?.overall.level||1} · {profileProgression?.overall.title||'Reader'} · {unlocked} unlocked</Text></View>
           </View>
           {menuItems.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>closeProfileMenu(()=>setActiveTab(item.id))} style={({pressed})=>[styles.profileMenuItem,{borderTopColor:p.line,opacity:pressed?0.72:1}]}>
@@ -4723,7 +4723,7 @@ function Client() {
       <View style={[styles.profileIdentityHero,styles.profileIdentityHeroRich,{borderBottomColor:p.line}]}>
         <View style={styles.profileIdentityRing}>
           <DataRing size={112} items={identityRing} ink={p.ink} muted={p.muted} track={p.line} thickness={6} opacity={1}/>
-          <View style={[styles.profileIdentityAvatar,styles.profileIdentityAvatarRing,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text></View>
+          <View style={[styles.profileIdentityAvatar,styles.profileIdentityAvatarRing,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileIdentityAvatarImage}/>:<Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text>}</View>
           <View style={[styles.profileIdentityLevelBadge,{backgroundColor:darkMode?'#0B1725':'#FFF8E9',borderColor:p.gold}]}><Text style={[styles.profileIdentityLevelText,{color:p.gold}]}>L{overall.level}</Text></View>
         </View>
         <View style={styles.profileIdentityCopy}>
@@ -5131,13 +5131,11 @@ function Client() {
       if(Array.isArray(raw.readerAnnotations)){const value=sanitizeReaderAnnotations(raw.readerAnnotations);setReaderAnnotations(value);await setPersistedJSON(readerAnnotationsKey,value);}
       if(raw.localPreferences&&typeof raw.localPreferences==='object'){setLocalPreferences(raw.localPreferences);await setPersistedJSON(localPreferencesKey,raw.localPreferences);}
       if(raw.ritualDays&&typeof raw.ritualDays==='object'){const value=Object.fromEntries(Object.entries(raw.ritualDays).filter(([key,value])=>/^\d{4}-\d{2}-\d{2}$/.test(key)&&Number.isFinite(Number(value))).map(([key,value])=>[key,Math.max(0,Math.min(60,Number(value)))]));setRitualDays(value);await setPersistedJSON('archivist.dailyRitual.v1',value);}
-      for(const [key,setter,storeKey] of [
-        ['localReadingProgress',setLocalReadingProgress,localReadingProgressKey],
-        ['localReadingComplete',setLocalReadingComplete,localReadingCompleteKey],
-        ['localReadingCurrentComplete',setLocalReadingCurrentComplete,localReadingCurrentCompleteKey],
-        ['localWorkProgress',setLocalWorkProgress,localWorkProgressKey],
-        ['localAudioCompleted',setLocalAudioCompleted,localAudioCompletedKey],
-      ] as const){const value=raw[key];if(value&&typeof value==='object'){setter(value as any);await setPersistedJSON(storeKey,value);}}
+      if(raw.localReadingProgress&&typeof raw.localReadingProgress==='object'){setLocalReadingProgress(raw.localReadingProgress);await setPersistedJSON(localReadingProgressKey,raw.localReadingProgress);}
+      if(raw.localReadingComplete&&typeof raw.localReadingComplete==='object'){setLocalReadingComplete(raw.localReadingComplete);await setPersistedJSON(localReadingCompleteKey,raw.localReadingComplete);}
+      if(raw.localReadingCurrentComplete&&typeof raw.localReadingCurrentComplete==='object'){setLocalReadingCurrentComplete(raw.localReadingCurrentComplete);await setPersistedJSON(localReadingCurrentCompleteKey,raw.localReadingCurrentComplete);}
+      if(raw.localWorkProgress&&typeof raw.localWorkProgress==='object'){setLocalWorkProgress(raw.localWorkProgress);await setPersistedJSON(localWorkProgressKey,raw.localWorkProgress);}
+      if(raw.localAudioCompleted&&typeof raw.localAudioCompleted==='object'){setLocalAudioCompleted(raw.localAudioCompleted);await setPersistedJSON(localAudioCompletedKey,raw.localAudioCompleted);}
       setPrivacyDataNotice('Backup restored. Server credentials remain unchanged.');
       setPrivacyRestoreText('');
     }catch(e){setPrivacyDataNotice((e as Error).message||'Backup could not be restored.');}
@@ -5892,6 +5890,7 @@ const styles = StyleSheet.create({
   profileMenu: {position:'absolute',right:14,top:58,width:300,maxWidth:'88%',borderRadius:18,borderWidth:StyleSheet.hairlineWidth,padding:10,shadowColor:'#000',shadowOpacity:.2,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:10},
   profileMenuIdentity: {flexDirection:'row',alignItems:'center',gap:11,padding:8,paddingBottom:12},
   profileMenuAvatar: {width:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center'},
+  profileMenuAvatarImage: {width:'100%',height:'100%'},
   profileMenuAvatarText: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontSize:17,fontWeight:'600'},
   profileMenuName: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:22,fontWeight:'500'},
   profileMenuMeta: {fontSize:10.5,lineHeight:14,marginTop:2},
@@ -5910,6 +5909,7 @@ const styles = StyleSheet.create({
   profileIdentityLevelBadge: {position:'absolute',right:2,bottom:4,minWidth:28,height:22,borderRadius:11,borderWidth:1,alignItems:'center',justifyContent:'center',paddingHorizontal:6},
   profileIdentityLevelText: {fontSize:9.5,lineHeight:12,fontWeight:'800',fontVariant:['tabular-nums']},
   profileIdentityAvatarText: {color:'#FFFFFF',fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500'},
+  profileIdentityAvatarImage: {width:'100%',height:'100%'},
   profileIdentityCopy: {flex:1,minWidth:0,gap:4},
   profileIdentityKicker: {fontSize:9,lineHeight:12,fontWeight:'800',letterSpacing:1.3},
   profileIdentityName: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,fontWeight:'500'},
