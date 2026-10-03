@@ -3102,7 +3102,7 @@ function Client() {
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
             <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>{setEditing(null);setEditingUris([])}}/>
           </View>
-        </View></ScrollView>
+        </ScrollView></View>
       </KeyboardAvoidingView>
     </Modal>;
   }
