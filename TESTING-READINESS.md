@@ -1,5 +1,22 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-03 — Final polish Sprint 2: profile identity and server connection
+
+### Implemented and source-verified
+- Added native profile-photo selection using the existing Expo system image picker.
+- Selected profile photos are copied into Archivist app-private storage before being persisted, rather than relying on a temporary picker URI.
+- Profile keeps initials and accent colour as the fallback; a stored photo can be changed or removed from Profile.
+- Portable JSON backup intentionally stores only avatar initials/accent, not a device-local photo path that would be invalid on another installation.
+- Restoring a portable backup therefore preserves portable avatar settings without importing a stale local-file URI.
+- Server **Connect** is disabled until both server address and profile access key are present; **Check server** still requires only the server address.
+- UI-contract guards now cover photo selection/removal, portable avatar backup, and the server-connect input gate.
+
+### Boundaries / runtime proof
+- No Atlas, comic-focus or Live Player code was changed.
+- Existing Profile layout was retained; this adds controls within the approved AVATAR section rather than redesigning Profile.
+- System-picker behaviour, photo persistence after process kill/relaunch, iOS/Android crop behaviour and screen-reader wording still require runtime/device verification.
+
+
 ## 2026-10-03 — Final polish Sprint 1: Library recovery states
 
 ### Implemented and source-verified
@@ -232,7 +249,7 @@ User explicitly authorised APK build, download publication and GitHub server upd
 
 ### Implemented and source-verified
 - **Sprint 4 — Profile:** richer identity hero with Archivist level ring/title, derived reading traits, reading snapshot, personal bests, current goals, milestone highlights, and persistent level-aware profile chrome.
-- **Profile avatar:** initials remain the working local fallback; rendering now supports a persisted photoUri when present. A native photo picker is **not** claimed complete because the current mobile package does not include an image-picker dependency.
+- **Profile avatar:** initials remain the reliable fallback. Native system photo picking is now implemented using the existing Expo image-picker dependency, with selected photos copied into app-private storage.
 - **Sprint 5 — Settings:** rebuilt around the six approved areas only: Library & Metadata; Offline & Storage; Privacy & Data; Server & Family; Accessibility; About Archivist.
 - **Privacy & Data:** local-first messaging plus local JSON backup/restore for non-sensitive reading/app data; server credentials and access keys are excluded.
 - **Accessibility:** persistent Reduced Motion, Increased Contrast and Larger Interface Text preferences; effective Reduced Motion also respects the device setting and remains the master switch for decorative motion.
@@ -243,7 +260,7 @@ User explicitly authorised APK build, download publication and GitHub server upd
 ### Still requires runtime proof
 - Draftbit visual confirmation on phone-width and Fold-width layouts in both light and dark themes.
 - Native typecheck/test execution for these latest commits has **not** been observed from GitHub Actions on this branch; do not mark CI passed.
-- Native photo picking is not implemented until an image-picker dependency is added and verified without breaking the Draftbit/mobile dependency lock.
+- Native profile-photo picking is source-implemented; runtime persistence/crop behaviour still requires Draftbit/device verification.
 \n\n## 2026-10-03 — Shelf / Library Sprint 1\n\n### Implemented and source-verified\n- Shelf is now independent of the current Library source/folder filters and uses the full unified personal catalogue.\n- Removed the catalogue-style Browse by format and From your library Shelf sections.\n- Retained Continue, Favourites, Smart Shelves, Collections and relevance-ranked Series. Smart Shelves now explain that they update automatically from user rules.\n- Shelf Browse is now a navigation gateway into Library for Books, Comics, Audiobooks and PDFs rather than a Shelf filter.\n- When an Archivist Server is connected, Shelf adds On this device and On Archivist Server shortcuts. On this device includes local files plus offline server downloads.\n- Fresh-install setup now offers Add a folder and Connect to Archivist Server, plus a persisted Use Archivist locally only choice that suppresses future Shelf server prompts without removing server setup from Settings.\n- Added a Library-only content-family filter so the Books shortcut can include EPUB/Ebook representations without changing stored metadata or Smart Shelf rules.\n- Existing stored Shelf section preferences migrate through the new defaults, so removed catalogue sections do not reappear.\n\n### Deferred / runtime proof\n- Recently Added is intentionally not shown yet because the unified local/server work model does not expose a reliable per-work added timestamp. Do not infer recency from title order or scan order.\n- Shelf recommendation rows (Books for you / Comics for you / Audiobooks for you) belong to Sprint 2 and are not claimed complete here.\n- Draftbit/device visual confirmation is still required on phone and Fold layouts.\n- No GitHub Actions pass is claimed unless a workflow/status is attached to the final Sprint 1 commit.\n
 
 ## 2026-10-03 — Shelf / Library Sprints 2–3
