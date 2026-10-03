@@ -6,7 +6,7 @@
 
 **Your library. Yours.**
 
-Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
+Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The iOS and Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
 
 Local files remain useful without a server, and connecting a server later does not replace the phone library.
 
@@ -14,7 +14,7 @@ Local files remain useful without a server, and connecting a server later does n
 
 - **One library, multiple sources** — Local, Server and Downloaded content coexist without duplicate online/offline copies.
 - **Shelf & Library** — cover-first browsing, search, filters, grid/list views, Smart Shelves, Collections, favourites, ratings and metadata review.
-- **Audiobooks** — background playback, durable progress, mixed-source queue, chapters, bookmarks, speed, native sleep-timer support and offline server downloads.
+- **Audiobooks** — background playback, durable progress, mixed-source queue, chapters, bookmarks, speed, sleep-timer controls and offline server downloads.
 - **Reader** — ebooks, PDFs and comics with saved position, bookmarks, highlights, notes, appearance controls and Comic Focus Zoom foundations.
 - **Atlas** — a pannable, zoomable visual universe of genres, works, authors, series, collections, notes and tags.
 - **Insights** — personal history, goals, ratings, achievements and a library-wide annotation hub.
@@ -22,17 +22,17 @@ Local files remain useful without a server, and connecting a server later does n
 - **Family server** — simple Admin/User roles with separate progress, ratings, favourites, sessions and statistics.
 - **Server resilience** — watched folders, persistent scan jobs, disconnected-drive retention, database backup/restore and OPDS.
 
-## Android testing build
+## Mobile build validation
 
-GitHub Actions includes **Android Test APK**. It builds an optimized release variant for device acceptance, signs it with the repository debug key, verifies package metadata/signature/alignment, and launches it in an Android emulator.
+GitHub Actions includes **Android Test APK** for installable Android device acceptance and **iOS checks** for Expo prebuild, CocoaPods and unsigned iOS Simulator compilation. The Android workflow signs its optimized test release with the repository debug key, verifies package metadata/signature/alignment and launches it in an emulator.
 
-Successful output:
+Android test workflow output:
 
 - artifact: `Archivist-0.9.3-Test-APK`
 - APK: `Archivist-0.9.3-test.apk`
 - checksum: `Archivist-0.9.3-test.apk.sha256`
 
-This is an installable testing APK, not a Google Play production build. Production publication still requires private production signing, an AAB, Play Console testing/review and store assets.
+This is an installable Android testing APK, not a production store build. Google Play publication still requires private production signing, an AAB, Play Console testing/review and store assets. iOS production distribution separately requires Apple signing/provisioning, App Store Connect testing/review and store assets.
 
 See `GITHUB-ANDROID-BUILD.md` and `MOBILE-TESTING.md`.
 
@@ -72,9 +72,9 @@ Archivist is designed to keep the catalogue, reading history, ratings and recomm
 
 ## Validation status
 
-Automated mobile and server checks cover TypeScript, behavioural tests, Go tests, package parity, browser contracts, ARM64 compilation, Home Assistant container startup and health checks. The Android workflow additionally builds and emulator-launches the testing APK.
+Automated mobile and server checks cover Expo Doctor, TypeScript, behavioural tests, web export, Go tests, package parity, browser contracts, ARM64 compilation, Home Assistant container startup and health checks. Android and iOS native build gates are tracked separately in `TESTING-READINESS.md`; do not infer a native pass from the shared JavaScript/web gate.
 
-Physical-device acceptance remains a separate gate: Galaxy Fold closed/open layouts, real background audio, real Home Assistant/Pi installation and real remote networking must be exercised on the intended hardware before production release.
+Physical-device acceptance remains a separate gate: iPhone/iPad and Android phone/Fold layouts, real background audio, local Files/folder workflows, real Home Assistant/Pi installation and real remote networking must be exercised on intended hardware before production release.
 
 See `TESTING-READINESS.md` for current evidence.
 
@@ -86,5 +86,5 @@ Archivist application source is proprietary. See `LICENSE.md`. Third-party compo
 
 Refresh the app/add-on store for this GitHub repository, open Archivist and install version 0.9.3. Keep the existing installation: its database and configured folders remain under `/data`. The canonical package is `archivist/`; the old duplicate package is not published.
 
-Android 0.9.3 is a testing release. Physical-device acceptance and remaining server metadata improvements are still in progress.
+Archivist 0.9.3 remains a testing candidate. Physical-device acceptance, store signing/distribution and the remaining platform-specific release gaps recorded in `TESTING-READINESS.md` are still in progress.
 
