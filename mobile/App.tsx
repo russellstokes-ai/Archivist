@@ -48,6 +48,7 @@ import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal}
 import {shelfRecommendations} from './shelfRecommendations';
 import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
 import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from './bulkMetadata';
+import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanPhaseStep} from './scanFeedback';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -776,7 +777,12 @@ function Client() {
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
+  const [localMoveSelection,setLocalMoveSelection]=useState<string[]>([]);
+  const [serverMovePreviews,setServerMovePreviews]=useState<MoveBatchResult['items']>([]);
+  const [serverMoveSelection,setServerMoveSelection]=useState<string[]>([]);
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
+  const [scanResultSummary,setScanResultSummary]=useState<ScanResultSummary|null>(null);
+  const [rescanPromptOpen,setRescanPromptOpen]=useState(false);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
@@ -1346,7 +1352,10 @@ function Client() {
       if (Array.isArray(value)) setQueuedBooks(value);
     }).catch(() => undefined);
     getPersistedJSON<LocalSortHistory[]>(localSortHistoryKey).then(value => {
-      if (Array.isArray(value)) setLocalSortHistory(value);
+      if (Array.isArray(value)) {
+        setLocalSortHistory(value);
+        if(value.some(item=>item.complete===false))setRescanPromptOpen(true);
+      }
     }).catch(() => undefined);
     getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(value => {
       if (value && typeof value === 'object') setLocalMetadataOverrides(value);
