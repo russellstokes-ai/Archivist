@@ -1727,24 +1727,28 @@ function Client() {
     return total;
   }
 
-  async function previewSort(assetIds: number[]) {
+  async function previewSort(assetIds:number[]) {
     if(!session)return;
     setBusy(true);setError('');setMoveStatus('Preparing safe move previews...');
-    try {
-      const result = await previewAssetIDs(assetIds);
-      setMoveStatus(assetIds.length ? describeBatch(result,'ready to move') : 'No matching files to preview.');
-    } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
+    try{
+      const result=await previewAssetIDs(assetIds);
+      setServerMovePreviews(result.items);
+      setServerMoveSelection(result.items.flatMap(item=>item.move?.id?[item.move.id]:[]));
+      setMoveStatus(assetIds.length?describeBatch(result,'ready to move'):'No matching files to preview.');
+    }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
 
-  async function previewLibrary(allLibrary: boolean) {
+  async function previewLibrary(allLibrary:boolean) {
     if(!session)return;
     setBusy(true);setError('');setMoveStatus('Reading library…');
-    try {
+    try{
       const ids=await fetchAllAssetIDs(allLibrary);
-      if(!ids.length){setMoveStatus('No files to preview.');return;}
+      if(!ids.length){setServerMovePreviews([]);setServerMoveSelection([]);setMoveStatus('No files to preview.');return;}
       const result=await previewAssetIDs(ids);
+      setServerMovePreviews(result.items);
+      setServerMoveSelection(result.items.flatMap(item=>item.move?.id?[item.move.id]:[]));
       setMoveStatus(describeBatch(result,'ready to move'));
-    } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
+    }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
 
   async function fetchPendingMoveIDs() {
@@ -1760,22 +1764,24 @@ function Client() {
 
   async function applySortBatch() {
     if(!session)return;
-    setBusy(true);setError('');setMoveStatus('Reading pending safe moves...');
-    try {
-      const ids=await fetchPendingMoveIDs();
-      if(!ids.length){setMoveStatus('No pending safe moves.');return;}
+    const ids=serverMoveSelection.slice();
+    if(!ids.length){setMoveStatus('No selected ready server moves to apply.');return;}
+    setBusy(true);setError('');setMoveStatus('Applying selected safe moves...');
+    try{
       const total:MoveBatchResult={ok:0,failed:0,items:[]};
       const batchSize=10;
       for(let i=0;i<ids.length;i+=batchSize){
-        setMoveStatus(`Applying safe moves… ${Math.min(i+batchSize,ids.length)} / ${ids.length}`);
+        setMoveStatus(`Applying selected moves… ${Math.min(i+batchSize,ids.length)} / ${ids.length}`);
         const result=await request(
           session,'/api/file-moves/apply-batch','POST',{ids:ids.slice(i,i+batchSize)},120000,
         ) as MoveBatchResult;
         total.ok+=result.ok;total.failed+=result.failed;total.items.push(...result.items);
       }
       setMoveStatus(describeBatch(total,'moved'));
+      setServerMoveSelection([]);
+      setServerMovePreviews([]);
       await refreshSourcesAndShelf();
-    } catch(e) {setError((e as Error).message);setMoveStatus('');} finally {setBusy(false);}
+    }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
 
   async function signIn() {
@@ -2196,19 +2202,21 @@ function Client() {
   }
 
   function previewLocalSortBatch() {
-    const previews = previewLocalSort(localBooks.filter(book => book.uri) as LocalBook[], sortTemplate);
+    const previews=previewLocalSort(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate);
+    const readyIds=previews.filter(item=>item.state==='ready').map(item=>item.id);
     setLocalMovePreviews(previews);
-    const ready = previews.filter(item => item.state === 'ready').length;
-    const conflicts = previews.filter(item => item.state === 'conflict').length;
-    const review = previews.filter(item => item.state === 'review').length;
-    const same = previews.filter(item => item.state === 'same').length;
-    setMoveStatus(`${ready} ready; ${review} need metadata review; ${conflicts} conflicts; ${same} already organised.`);
+    setLocalMoveSelection(readyIds);
+    const conflicts=previews.filter(item=>item.state==='conflict').length;
+    const review=previews.filter(item=>item.state==='review').length;
+    const same=previews.filter(item=>item.state==='same').length;
+    setMoveStatus(`${readyIds.length} ready and selected; ${review} review recommended; ${conflicts} conflicts; ${same} already organised.`);
   }
 
   async function applyLocalSortBatch() {
-    const ready = localMovePreviews.filter(item => item.state === 'ready');
-    if (!ready.length) {
-      setMoveStatus('No ready local moves to apply.');
+    const selected=new Set(localMoveSelection);
+    const ready=localMovePreviews.filter(item=>item.state==='ready'&&selected.has(item.id));
+    if(!ready.length){
+      setMoveStatus('No selected ready items to apply.');
       return;
     }
     setBusy(true);
@@ -2216,7 +2224,7 @@ function Client() {
     setMoveStatus('Copying organised files...');
     try {
       const transactionId = String(Date.now());
-      const started: LocalSortHistory = {id: transactionId, createdAt: new Date().toISOString(), copied: [], failed: []};
+      const started: LocalSortHistory = {id: transactionId, createdAt: new Date().toISOString(), copied: [], failed: [], complete:false};
       let history = [started, ...localSortHistory].slice(0, 20);
       setLocalSortHistory(history);
       await setPersistedJSON(localSortHistoryKey, history);
@@ -2226,13 +2234,15 @@ function Client() {
         await setPersistedJSON(localSortHistoryKey, history);
       };
       const result = await applyLocalSortCopies(ready, checkpoint);
-      const entry: LocalSortHistory = {id: transactionId, createdAt: started.createdAt, copied: result.copied, failed: result.failed};
+      const entry: LocalSortHistory = {id: transactionId, createdAt: started.createdAt, copied: result.copied, failed: result.failed, complete:true};
       history = history.map(item => item.id === transactionId ? entry : item);
       setLocalSortHistory(history);
       await setPersistedJSON(localSortHistoryKey, history);
       setMoveStatus(`${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
+      setLocalMoveSelection([]);
       await rescanLocalFolders();
     } catch (e) {
+      setRescanPromptOpen(true);
       setError((e as Error).message);
     } finally {
       setBusy(false);
