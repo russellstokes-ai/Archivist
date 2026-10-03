@@ -1,0 +1,61 @@
+name: iOS checks
+
+on:
+  push:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ios-check.yml'
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ios-check.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-check:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+
+      - name: Expo Doctor
+        working-directory: mobile
+        run: npx expo-doctor
+
+      - name: TypeScript
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Generate iOS project
+        working-directory: mobile
+        env:
+          CI: '1'
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Install CocoaPods
+        working-directory: mobile
+        run: npx pod-install ios
+
+      - name: Compile iOS simulator build
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$WORKSPACE"
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(next((s for s in schemes if s.lower()=="archivist"), schemes[0] if schemes else ""))')
+          test -n "$SCHEME"
+          xcodebuild             -workspace "$WORKSPACE"             -scheme "$SCHEME"             -configuration Debug             -sdk iphonesimulator             -destination 'generic/platform=iOS Simulator'             CODE_SIGNING_ALLOWED=NO             ONLY_ACTIVE_ARCH=NO             build
