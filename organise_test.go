@@ -32,13 +32,17 @@ func TestEditMetadataAuthorSeriesSearchAndRescan(t *testing.T) {
 		handler.ServeHTTP(w, r)
 		return w
 	}
-	w := call("PATCH", "/api/assets/1/metadata", `{"title":"Corrected","author":"Ada Lovelace","series":"Engine Notes"}`)
+	w := call("PATCH", "/api/assets/1/metadata", `{"title":"Corrected","author":"Ada Lovelace","series":"Engine Notes","seriesNumber":2.5,"genre":"History","publishedYear":1843,"narrator":"Reader","publisher":"Analytical Press","isbn":"9780000000001","asin":"B000000001","language":"en","description":"Protected manual description"}`)
 	if w.Code != 200 {
 		t.Fatalf("metadata save: %d %s", w.Code, w.Body.String())
 	}
 	w = call("GET", "/api/books?q=Lovelace&space=", "")
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"author":"Ada Lovelace"`) || !strings.Contains(w.Body.String(), `"series":"Engine Notes"`) {
-		t.Fatalf("metadata search/list: %d %s", w.Code, w.Body.String())
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"author":"Ada Lovelace"`) || !strings.Contains(w.Body.String(), `"series":"Engine Notes"`) ||
+		!strings.Contains(w.Body.String(), `"seriesNumber":2.5`) || !strings.Contains(w.Body.String(), `"publishedYear":1843`) ||
+		!strings.Contains(w.Body.String(), `"narrator":"Reader"`) || !strings.Contains(w.Body.String(), `"publisher":"Analytical Press"`) ||
+		!strings.Contains(w.Body.String(), `"isbn":"9780000000001"`) || !strings.Contains(w.Body.String(), `"asin":"B000000001"`) ||
+		!strings.Contains(w.Body.String(), `"language":"en"`) || !strings.Contains(w.Body.String(), `"description":"Protected manual description"`) {
+		t.Fatalf("rich metadata search/list: %d %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), `"metadataSource":"manual"`) || strings.Contains(w.Body.String(), `"needsReview":true`) {
 		t.Fatalf("manual metadata provenance/review state missing: %s", w.Body.String())
@@ -47,8 +51,10 @@ func TestEditMetadataAuthorSeriesSearchAndRescan(t *testing.T) {
 		t.Fatal(e)
 	}
 	w = call("GET", "/api/books?q=Engine&space=", "")
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"title":"Corrected"`) || !strings.Contains(w.Body.String(), `"series":"Engine Notes"`) {
-		t.Fatalf("rescan lost metadata: %d %s", w.Code, w.Body.String())
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"title":"Corrected"`) || !strings.Contains(w.Body.String(), `"series":"Engine Notes"`) ||
+		!strings.Contains(w.Body.String(), `"seriesNumber":2.5`) || !strings.Contains(w.Body.String(), `"narrator":"Reader"`) ||
+		!strings.Contains(w.Body.String(), `"description":"Protected manual description"`) {
+		t.Fatalf("rescan lost rich manual metadata: %d %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), `"metadataSource":"manual"`) {
 		t.Fatalf("rescan lost manual provenance: %s", w.Body.String())
