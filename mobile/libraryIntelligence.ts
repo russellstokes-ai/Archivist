@@ -278,16 +278,16 @@ function filenameQualifiers(value:string) {
   let asin:string|undefined;
   let publishedYear:number|undefined;
 
-  stem=stem.replace(/\{([^{}]{2,100})\}\s*$/,(match,name)=>{
-    narrator=cleanLabel(name);
-    return '';
-  });
   stem=stem.replace(/\[\s*ASIN\s*[:#-]?\s*([A-Z0-9]{10})\s*\]/ig,(match,id)=>{
     asin=normalizeIdentifier(id);
     return '';
   });
   stem=stem.replace(/\[\s*ISBN(?:-1[03])?\s*[:#-]?\s*([0-9Xx -]{10,20})\s*\]/ig,(match,id)=>{
     isbn=normalizeIdentifier(id)?.replace(/-/g,'');
+    return '';
+  });
+  stem=stem.replace(/\{([^{}]{2,100})\}\s*$/,(match,name)=>{
+    narrator=cleanLabel(name);
     return '';
   });
   stem=stem.replace(/\(\s*((?:19|20)\d{2})\s*\)\s*$/,(match,year)=>{
