@@ -21,23 +21,24 @@ assert(quality.complete===false&&quality.missing.join(',')==='series,genre','met
 console.log('library-maintenance.test.cjs passed');
 
 
-const advanced=advancedMetadataCompleteness({
+const advanced=x.advancedMetadataCompleteness({
   title:'Dune',author:'Frank Herbert',series:'Dune',seriesNumber:1,genre:'Science Fiction',
   coverUri:'cover.jpg',publishedYear:1965,narrator:'Simon Vance',publisher:'Chilton',
   isbn:'9780441172719',language:'en',description:'A desert world.',format:'Audio',source:'local',
 });
-assert.equal(advanced.complete,true);
-assert.deepEqual(advanced.missing,[]);
+assert(advanced.complete===true,'advanced metadata complete');
+assert(advanced.missing.length===0,'advanced metadata missing should be empty');
 
-const incomplete=advancedMetadataCompleteness({title:'Book',author:'Author',series:'Saga',format:'Audio',source:'local'});
-assert.equal(incomplete.complete,false);
-assert.equal(incomplete.missing.includes('seriesNumber'),true);
-assert.equal(incomplete.missing.includes('narrator'),true);
-assert.equal(incomplete.missing.includes('identifier'),true);
+const incomplete=x.advancedMetadataCompleteness({title:'Book',author:'Author',series:'Saga',format:'Audio',source:'local'});
+assert(incomplete.complete===false,'advanced incomplete metadata');
+assert(incomplete.missing.includes('seriesNumber'),'missing series number');
+assert(incomplete.missing.includes('narrator'),'missing narrator');
+assert(incomplete.missing.includes('identifier'),'missing identifier');
 
-const advancedCounts=advancedMetadataGapCounts([
+const advancedCounts=x.advancedMetadataGapCounts([
   {title:'One',author:'A',series:'S',seriesNumber:1,format:'EPUB',source:'local'},
   {title:'Two',author:'B',series:'',format:'Audio',source:'local'},
 ]);
-assert.equal(advancedCounts.series,1);
-assert.equal(advancedCounts.narrator,1);
+assert(advancedCounts.series===1,'advanced series gap count');
+assert(advancedCounts.narrator===1,'advanced narrator gap count');
+console.log('advanced library metadata maintenance passed');
