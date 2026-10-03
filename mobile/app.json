@@ -36,6 +36,11 @@
     ],
     "updates": {
       "enabled": false
+    },
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#07151C"
     }
   }
 }
