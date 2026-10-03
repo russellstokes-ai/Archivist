@@ -26,6 +26,8 @@ import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import {useFonts} from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import * as ImagePicker from 'expo-image-picker';
+import {copyAsync, documentDirectory, makeDirectoryAsync} from 'expo-file-system/legacy';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
@@ -66,6 +68,17 @@ import {
   removeOfflineWork,
 } from './offlineLibrary';
 
+async function persistPickedCover(uri:string,fileName?:string|null) {
+  if(!documentDirectory)return uri;
+  const directory=documentDirectory+'covers/';
+  await makeDirectoryAsync(directory,{intermediates:true});
+  const candidate=(fileName||uri.split('?')[0].split('/').pop()||'cover.jpg').toLowerCase();
+  const extension=(candidate.match(/\.([a-z0-9]{2,5})$/)?.[1]||'jpg').replace(/[^a-z0-9]/g,'')||'jpg';
+  const target=directory+'manual-cover-'+Date.now()+'.'+extension;
+  await copyAsync({from:uri,to:target});
+  return target;
+}
+
 const nativeSplashEnabled=Platform.OS==='android'||Platform.OS==='ios';
 if(nativeSplashEnabled){
   void SplashScreen.preventAutoHideAsync().catch(()=>undefined);
@@ -97,6 +110,7 @@ type Book = {
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
+  coverCandidates?: string[];
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'legacy';
   localWorkKey?: string;
   serverWorkId?: number;
@@ -774,6 +788,8 @@ function Client() {
   const [editDescription,setEditDescription]=useState('');
   const [editAdvancedOpen,setEditAdvancedOpen]=useState(false);
   const [editCoverUri,setEditCoverUri]=useState('');
+  const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null}|null>(null);
+  const [coverPicking,setCoverPicking]=useState(false);
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
@@ -2787,6 +2803,8 @@ function Client() {
     setEditDescription(item.description || '');
     setEditAdvancedOpen(false);
     setEditCoverUri(item.coverUri || '');
+    setEditPickedCover(null);
+    setCoverPicking(false);
   }
 
   function RawAssetCard({item}: {item: Book}) {
@@ -3249,20 +3267,24 @@ function Client() {
     if(!editing)return null;
     const localEdit=editing.source!=='server'&&!!editing.uri;
     const targets=editingUris.length?editingUris:(editing.uri?[editing.uri]:[]);
-    const save=()=>{
+    const save=async()=>{
       const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
       const seriesNumberText=editSeriesNumber.trim();
       const seriesNumber=seriesNumberText!==''&&Number.isFinite(Number(seriesNumberText))?Number(seriesNumberText):undefined;
       const yearText=editYear.trim();
       const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
       const narrator=editNarrator.trim(),publisher=editPublisher.trim(),isbn=editISBN.trim(),asin=editASIN.trim(),language=editLanguage.trim(),description=editDescription.trim();
-      const coverUri=editCoverUri.trim();
+      let coverUri=editCoverUri.trim();
       if(!title)return;
+      if(localEdit&&editPickedCover){
+        try{coverUri=await persistPickedCover(editPickedCover.uri,editPickedCover.fileName);}
+        catch(e){setError('Could not save the selected cover: '+(e as Error).message);return;}
+      }
       setBusy(true);setError('');
       if(editing.source==='server'){
         if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
         request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber:seriesNumber??0,genre,publishedYear:publishedYear??0,narrator,publisher,isbn,asin,language,description})
-          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);})
+          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);setEditPickedCover(null);})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
         const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
@@ -3277,10 +3299,23 @@ function Client() {
               void setPersistedJSON(localCatalogKey,updated);
               return updated;
             });
-            setEditing(null);setEditingUris([]);
+            setEditing(null);setEditingUris([]);setEditPickedCover(null);
           })
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else setBusy(false);
+    };
+    const chooseCoverFromDevice=async()=>{
+      if(!localEdit||coverPicking)return;
+      setCoverPicking(true);setError('');
+      try{
+        const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:false,quality:1,selectionLimit:1});
+        if(result.canceled||!result.assets?.length)return;
+        const asset=result.assets[0];
+        if(asset.fileSize&&asset.fileSize>25*1024*1024){setError('Choose a cover image smaller than 25 MB.');return;}
+        setEditPickedCover({uri:asset.uri,fileName:asset.fileName});
+        setEditCoverUri(asset.uri);
+      }catch(e){setError((e as Error).message);}
+      finally{setCoverPicking(false);}
     };
     const restoreScanned=async()=>{
       if(!localEdit||!targets.length||busy)return;
@@ -3295,7 +3330,7 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>{if(!busy){setEditing(null);setEditingUris([])}}}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>{if(!busy&&!coverPicking){setEditing(null);setEditingUris([]);setEditPickedCover(null)}}}>
       <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
         <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
           <View accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
@@ -3320,15 +3355,37 @@ function Client() {
               <TextInput accessibilityLabel="Language" autoCapitalize="none" value={editLanguage} onChangeText={setEditLanguage} placeholder="Language" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
               <TextInput accessibilityLabel="Description" multiline value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:96,textAlignVertical:'top'}]}/>
             </View>:null}
-            {localEdit?<View style={styles.metadataCoverEditor}>
-              <View style={styles.metadataCoverPreview}><Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
-              <View style={{flex:1,gap:6}}><Text style={[styles.bookTitle,{color:p.ink}]}>Cover artwork</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist normally finds companion cover files during scanning. Paste a local/content/HTTPS image URI only when you want a manual override.</Text></View>
+            {localEdit?<View style={{gap:10}}>
+              <View style={styles.metadataCoverEditor}>
+                <View style={styles.metadataCoverPreview}><Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
+                <View style={{flex:1,gap:6}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>Cover artwork</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>{editPickedCover?'Device image selected. Save details to make it the protected manual cover.':localMetadataOverrides[editing.uri!]?.coverUri?'Manual cover · protected from rescans':'Archivist uses the best local artwork it finds unless you choose a cover manually.'}</Text>
+                  <Button label={coverPicking?'Opening photos…':'Choose image from device'} tone="quiet" disabled={coverPicking||busy} onPress={()=>void chooseCoverFromDevice()}/>
+                </View>
+              </View>
+              {editing.coverCandidates?.length?<View style={{gap:6}}>
+                <Text style={[styles.meta,{color:p.muted}]}>Other local artwork</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:10,paddingVertical:2}}>
+                  {editing.coverCandidates.map((uri,index)=>{
+                    const selected=!editPickedCover&&editCoverUri===uri;
+                    return <Pressable
+                      key={uri}
+                      accessibilityRole="button"
+                      accessibilityLabel={'Use local cover '+(index+1)}
+                      accessibilityState={{selected}}
+                      onPress={()=>{setEditPickedCover(null);setEditCoverUri(uri)}}
+                      style={({pressed})=>[{width:64,opacity:pressed?.72:1,borderWidth:selected?2:0,borderColor:p.sage,borderRadius:9,overflow:'hidden'}]}>
+                      <Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={uri}/>
+                    </Pressable>;
+                  })}
+                </ScrollView>
+              </View>:null}
             </View>:null}
-            {localEdit?<TextInput accessibilityLabel="Cover image URI" autoCapitalize="none" autoCorrect={false} value={editCoverUri} onChangeText={setEditCoverUri} placeholder="Cover image URI (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
-            <Button label="Save details" disabled={busy||!editTitle.trim()} onPress={save}/>
+            <Button label="Save details" disabled={busy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
-            <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>{setEditing(null);setEditingUris([])}}/>
+            <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null)}}/>
           </View>
         </ScrollView></View>
       </KeyboardAvoidingView>

@@ -137,7 +137,9 @@ assert.equal(previews[0].state, 'review');
   const file = root + '%2FMystery.epub';
   const sidecar = root + '%2FMystery.opf';
   const cover = root + '%2FMystery.jpg';
-  saf.dirs.set(root, [file, sidecar, cover]);
+  const genericCover = root + '%2Fcover.jpg';
+  const frontCover = root + '%2Ffront.jpg';
+  saf.dirs.set(root, [file, sidecar, cover, genericCover, frontCover]);
   fileText.set(sidecar, '<package><metadata><dc:title>The Dispossessed</dc:title><dc:creator>Ursula K. Le Guin</dc:creator><dc:subject>Science Fiction</dc:subject></metadata></package>');
   fileInfo.set(sidecar, {exists: true, size: 160});
   let scanned = await scanLocalFolders([{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}]);
@@ -147,6 +149,7 @@ assert.equal(previews[0].state, 'review');
   assert.equal(scanned.books[0].genre, 'Science Fiction');
   assert.equal(scanned.books[0].needsReview, false);
   assert.equal(scanned.books[0].coverUri, cover);
+  assert.deepEqual(scanned.books[0].coverCandidates, [cover, genericCover, frontCover]);
 
   scanned = await scanLocalFolders(
     [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
@@ -159,6 +162,7 @@ assert.equal(previews[0].state, 'review');
   assert.equal(scanned.books[0].needsReview, false);
   assert.equal(scanned.books[0].publishedYear, 2001);
   assert.equal(scanned.books[0].coverUri, 'content://manual/MyCover.jpg');
+  assert.deepEqual(scanned.books[0].coverCandidates, [cover, genericCover, frontCover]);
 
   const dottedRoot='content://root/tree/primary:Books/document/primary:Books2';
   const dottedAuthor=dottedRoot+'%2FJ.R.R.%20Tolkien';

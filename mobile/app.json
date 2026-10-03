@@ -45,7 +45,15 @@
           }
         }
       ],
-      "./plugins/withCleartextTraffic"
+      "./plugins/withCleartextTraffic",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Archivist uses your selected photo only when you choose it as cover artwork.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "updates": {
       "enabled": false
