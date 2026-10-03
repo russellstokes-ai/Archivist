@@ -117,6 +117,13 @@ assert.ok(source.includes("useState<'Genre'|'Format'|'Published year'|null>(null
 assert.ok(atlasSource.includes("{atlasBreakdown?<Animated.View") && atlasSource.includes("Choose Genre, Format or Year to reveal the library breakdown"), 'Atlas breakdown should appear only after a ring control is pressed');
 assert.ok(source.includes('const atlasPulse=useRef(new Animated.Value(0)).current') && source.includes('const atlasPulseLoop=Animated.loop'), 'Atlas selected-state pulse animation is missing');
 assert.ok(source.includes('atlasRingControlPulse') && source.includes('atlasSelectedRingPulse'), 'Atlas ring controls and ring chart need selected pulse feedback');
+assert.ok(atlasSource.includes('>Universe Stats</Text>') && atlasSource.includes("label:'Nodes'") && atlasSource.includes("label:'Connections'") && atlasSource.includes("label:'Constellations'") && atlasSource.includes("label:'Bridges'") && atlasSource.includes("label:'Series'") && atlasSource.includes("label:'Collections'"), 'Atlas Universe Stats are missing');
+assert.ok(atlasSource.includes('Most connected') && atlasSource.includes('Largest constellation') && atlasSource.includes('Deepest series'), 'Atlas Universe Highlights are incomplete');
+assert.ok(source.includes('atlasInspectorAnim') && source.includes('maxHeight:atlasInspectorAnim.interpolate'), 'Atlas selected-node information must fade and expand in');
+assert.ok(source.includes('atlasBreakdownReveal') && source.includes('maxHeight:atlasBreakdownAnim.interpolate'), 'Atlas breakdown must expand in and push Universe Stats down');
+assert.ok(atlasSource.includes('focusAtlasNode(item.node.id)'), 'Atlas Universe Highlights must navigate back into the graph');
+assert.ok(atlasSource.includes('bridgeNodeIds') && atlasSource.includes("genres.size>1"), 'Atlas Bridges must represent real cross-genre connectors');
+
 assert.ok(source.includes('opacity:atlasPulse.interpolate') && source.includes('node.id===atlasNodeId'), 'Atlas selected nodes need slow glow feedback');
 
 assert.ok(atlasSource.includes('Breakdown of your library') && atlasSource.includes('atlasBreakdownTrack') && atlasSource.includes('atlasBreakdownPercent'), 'Atlas breakdown sheet must match the approved concept');
