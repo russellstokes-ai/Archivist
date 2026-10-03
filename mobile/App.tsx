@@ -166,6 +166,7 @@ type UnifiedWork = {
   serverWorkId?: number;
 };
 type LibrarySort = 'title'|'author'|'series'|'format'|'progress'|'rating';
+type LibraryFormatFamily = ''|'books'|'comics'|'audio'|'pdf';
 type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'rewards' | 'settings';
 type ShelfSectionId = 'continue' | 'favourites' | 'smart' | 'collections' | 'series';
 type ShelfSectionPref = {id:ShelfSectionId;title:string;visible:boolean};
@@ -593,6 +594,7 @@ function Client() {
   const libraryScrollOffset=useRef(0);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all'|'available'|'unavailable'>('all');
   const [formatFilter, setFormatFilter] = useState('');
+  const [libraryFormatFamily,setLibraryFormatFamily]=useState<LibraryFormatFamily>('');
   const [authorFilter, setAuthorFilter] = useState('');
   const [seriesFilter, setSeriesFilter] = useState('');
   const [genreFilter, setGenreFilter] = useState('');
@@ -973,6 +975,14 @@ function Client() {
 
   const availabilityMatches = (available: boolean) =>
     availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
+  const libraryFormatFamilyMatches=(format:string)=>{
+    if(!libraryFormatFamily)return true;
+    const value=String(format||'').trim().toLowerCase();
+    if(libraryFormatFamily==='books')return value==='epub'||value==='ebook'||value==='book';
+    if(libraryFormatFamily==='comics')return value==='comic'||value==='cbz'||value==='cbr'||value==='cbt';
+    if(libraryFormatFamily==='audio')return value==='audio'||value==='audiobook';
+    return value==='pdf';
+  };
 
   const reviewAssetPool = useMemo(() => {
     if(sourceFilter==='server')return serverBooks;
@@ -986,6 +996,7 @@ function Client() {
     return reviewAssetPool.filter(book => {
       if (space && book.space !== space) return false;
       if (reviewOnly && !book.needsReview) return false;
+      if (!libraryFormatFamilyMatches(book.format)) return false;
       if (formatFilter && book.format !== formatFilter) return false;
       if (authorFilter && book.author !== authorFilter) return false;
       if (seriesFilter && book.series !== seriesFilter) return false;
@@ -995,7 +1006,7 @@ function Client() {
       if (!q) return true;
       return [book.title, book.author, book.series, book.genre || '', book.format, book.space].some(value => value.toLowerCase().includes(q));
     });
-  }, [authorFilter, availabilityFilter, formatFilter, genreFilter, query, reviewAssetPool, reviewOnly, seriesFilter, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, formatFilter, genreFilter, libraryFormatFamily, query, reviewAssetPool, reviewOnly, seriesFilter, space, unknownAuthorOnly]);
 
   const visibleUnifiedWorks = useMemo(() => {
     const q=query.trim().toLowerCase();
@@ -1005,6 +1016,7 @@ function Client() {
     return base.filter(work=>{
       if(collectionKeys && !collectionKeys.has(work.canonicalKey))return false;
       if(space && work.space!==space)return false;
+      if(!libraryFormatFamilyMatches(work.format))return false;
       if(formatFilter && work.format!==formatFilter)return false;
       if(authorFilter && work.author!==authorFilter)return false;
       if(seriesFilter && work.series!==seriesFilter)return false;
@@ -1017,7 +1029,7 @@ function Client() {
       if(q && ![work.title,work.author,work.series,work.genre,work.format,work.space].some(value=>value.toLowerCase().includes(q)))return false;
       return true;
     });
-  },[authorFilter,availabilityFilter,collectionFilter,collections,favouriteOnly,formatFilter,genreFilter,query,ratingFilter,readingFilter,seriesFilter,sourceFilter,sourceWorks,space,unknownAuthorOnly]);
+  },[authorFilter,availabilityFilter,collectionFilter,collections,favouriteOnly,formatFilter,genreFilter,libraryFormatFamily,query,ratingFilter,readingFilter,seriesFilter,sourceFilter,sourceWorks,space,unknownAuthorOnly]);
 
 
   const sortedUnifiedWorks = useMemo(() => [...visibleUnifiedWorks].sort((a,b)=>{
@@ -1038,7 +1050,7 @@ function Client() {
 
   async function persistSmartShelves(next:SmartShelfDefinition[]){setSmartShelves(next);await setPersistedJSON(smartShelvesKey,next);}
   async function persistCollections(next:LibraryCollection[]){setCollections(next);await setPersistedJSON(collectionsKey,next);}
-  function clearLibraryFilters(){setQuery('');setSpace('');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setReadingFilter('');setRatingFilter(0);setFavouriteOnly(false);setUnknownAuthorOnly(false);setAvailabilityFilter('all');setCollectionFilter('');}
+  function clearLibraryFilters(){setQuery('');setSpace('');setFormatFilter('');setLibraryFormatFamily('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setReadingFilter('');setRatingFilter(0);setFavouriteOnly(false);setUnknownAuthorOnly(false);setAvailabilityFilter('all');setCollectionFilter('');}
   function openSmartShelf(shelf:SmartShelfDefinition){clearLibraryFilters();setSourceFilter(shelf.source);setSpace(shelf.space);setFormatFilter(shelf.format);setAuthorFilter(shelf.author);setSeriesFilter(shelf.series);setGenreFilter(shelf.genre);setReadingFilter(shelf.readingState);setRatingFilter(shelf.minimumRating);setFavouriteOnly(shelf.favouriteOnly);setAvailabilityFilter(shelf.availableOnly?'available':'all');setLibrarySort(shelf.sort);setActiveTab('library');}
   function openCollection(collection:LibraryCollection){clearLibraryFilters();setSourceFilter('all');setCollectionFilter(collection.id);setActiveTab('library');}
   async function createSmartShelf(){
