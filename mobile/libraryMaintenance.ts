@@ -1,11 +1,22 @@
-export type MetadataGapFilter = '' | 'author' | 'series' | 'genre' | 'cover';
+export type MetadataGapFilter = '' | 'author' | 'series' | 'genre' | 'cover' | 'incomplete' | 'conflicts' | 'seriesNumber';
 
 export type MaintenanceWork = {
+  title?: string | null;
   author?: string | null;
   series?: string | null;
+  seriesNumber?: number | null;
   genre?: string | null;
   coverUri?: string | null;
+  publishedYear?: number | null;
+  narrator?: string | null;
+  publisher?: string | null;
+  isbn?: string | null;
+  asin?: string | null;
+  language?: string | null;
+  description?: string | null;
+  format?: string | null;
   source?: string | null;
+  metadataConflicts?: Array<{field?: string}> | null;
 };
 
 const present = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
@@ -18,6 +29,13 @@ export function matchesMetadataGap(work: MaintenanceWork, gap: MetadataGapFilter
   // Remote server works have a server-side cover route even when coverUri is not populated
   // on the unified client model, so only device-held works can be safely classified here.
   if (gap === 'cover') return work.source !== 'server' && !present(work.coverUri);
+  if (gap === 'incomplete') return !advancedMetadataCompleteness(work).complete;
+  if (gap === 'conflicts') return (work.metadataConflicts?.length || 0) > 0;
+  if (gap === 'seriesNumber') {
+    if (!present(work.series)) return false;
+    const conflicts=work.metadataConflicts?.map(item=>String(item.field || '').toLowerCase()) || [];
+    return work.seriesNumber === undefined || work.seriesNumber === null || conflicts.includes('series') || conflicts.includes('seriesnumber');
+  }
   return true;
 }
 
@@ -27,6 +45,9 @@ export function metadataGapCounts(works: MaintenanceWork[]) {
     series: works.filter(work => matchesMetadataGap(work, 'series')).length,
     genre: works.filter(work => matchesMetadataGap(work, 'genre')).length,
     cover: works.filter(work => matchesMetadataGap(work, 'cover')).length,
+    incomplete: works.filter(work => matchesMetadataGap(work, 'incomplete')).length,
+    conflicts: works.filter(work => matchesMetadataGap(work, 'conflicts')).length,
+    seriesNumber: works.filter(work => matchesMetadataGap(work, 'seriesNumber')).length,
   };
 }
 
@@ -40,19 +61,7 @@ export function metadataCompleteness(work: MaintenanceWork) {
 }
 
 
-export type AdvancedMaintenanceWork = MaintenanceWork & {
-  title?: string | null;
-  seriesNumber?: number | null;
-  publishedYear?: number | null;
-  narrator?: string | null;
-  publisher?: string | null;
-  isbn?: string | null;
-  asin?: string | null;
-  language?: string | null;
-  description?: string | null;
-  format?: string | null;
-  metadataConflicts?: Array<{field?: string}> | null;
-};
+export type AdvancedMaintenanceWork = MaintenanceWork;
 
 export type AdvancedMetadataField =
   | 'title' | 'author' | 'series' | 'seriesNumber' | 'genre' | 'cover'
