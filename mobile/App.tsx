@@ -4772,7 +4772,7 @@ function Client() {
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
-      <View pointerEvents="box-none" style={[styles.globalProfileCorner,{right:wide?28:foldLayout?24:18}]}>
+      <View pointerEvents="box-none" style={[styles.globalProfileCorner,{right:width>=940?28:width>=600?24:18}]}>
         <ProfileAvatarButton size={42}/>
       </View>
       <Animated.View style={[styles.tabBody,{
