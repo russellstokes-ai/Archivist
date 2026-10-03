@@ -1,4 +1,4 @@
-import {EncodingType,getInfoAsync,readAsStringAsync} from 'expo-file-system/legacy';
+import {cacheDirectory,deleteAsync,EncodingType,getInfoAsync,readAsStringAsync} from 'expo-file-system/legacy';
 
 declare const require:any;
 export type ArchiveImage={name:string;mime:string;base64:string};
@@ -36,6 +36,41 @@ export async function readCbtImages(uri:string){
 }
 export async function readCbrImages(uri:string):Promise<ArchiveImage[]>{
   const info=await getInfoAsync(uri);if(!info.exists)throw Error('Comic archive is unavailable.');if('size' in info&&typeof info.size==='number'&&info.size>maxArchiveBytes)throw Error('Comic archive exceeds the 256 MB reader safety limit.');
-  const rn=require('react-native');const module=rn.NativeModules?.ArchivistArchive;if(!module?.readRarImages)throw Error('CBR reading requires the Archivist Android native reader module.');
-  const result=await module.readRarImages(uri,maxPages,maxEntryBytes,maxArchiveBytes);return Array.isArray(result)?result:[];
+  const rn=require('react-native');
+  const nativeModule=rn.NativeModules?.ArchivistArchive;
+  if(nativeModule?.readRarImages){
+    const result=await nativeModule.readRarImages(uri,maxPages,maxEntryBytes,maxArchiveBytes);
+    return Array.isArray(result)?result:[];
+  }
+  if(rn.Platform?.OS!=='ios')throw Error('CBR reading is unavailable on this platform.');
+  if(!cacheDirectory)throw Error('Archivist cache storage is unavailable.');
+  const inputPath=decodeURIComponent(uri.replace(/^file:\/\//,''));
+  const token='archivist-cbr-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const outputUri=cacheDirectory.replace(/\/$/,'')+'/'+token;
+  const outputPath=decodeURIComponent(outputUri.replace(/^file:\/\//,''));
+  const unarchiveModule=require('react-native-unarchive') as {unarchive:(archivePath:string,outputPath:string)=>Promise<{files?:Array<{path:string;name?:string;relativePath?:string;size?:number}>}>};
+  try{
+    const extracted=await unarchiveModule.unarchive(inputPath,outputPath);
+    const files=Array.isArray(extracted?.files)?extracted.files:[];
+    const images=files
+      .filter(file=>imageName(file.name||file.relativePath||file.path||''))
+      .sort((a,b)=>(a.relativePath||a.name||a.path||'').localeCompare(b.relativePath||b.name||b.path||'',undefined,{numeric:true}))
+      .slice(0,maxPages);
+    let total=0;
+    const result:ArchiveImage[]=[];
+    for(const file of images){
+      const size=Math.max(0,Number(file.size)||0);
+      if(size>maxEntryBytes)throw Error('Comic archive entry exceeds the 64 MB safety limit.');
+      total+=size;if(total>maxArchiveBytes)throw Error('Comic archive expands beyond the 256 MB reader safety limit.');
+      const path=String(file.path||'');
+      if(!path)continue;
+      const fileUri=path.startsWith('file://')?path:'file://'+path;
+      const base64=await readAsStringAsync(fileUri,{encoding:EncodingType.Base64});
+      const name=file.relativePath||file.name||path.split('/').pop()||'page.jpg';
+      result.push({name,mime:mime(name),base64});
+    }
+    return result;
+  }finally{
+    await deleteAsync(outputUri,{idempotent:true}).catch(()=>undefined);
+  }
 }
