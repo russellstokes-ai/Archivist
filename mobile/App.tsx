@@ -3968,7 +3968,7 @@ function Client() {
       })}
     </View>;
 
-    const rhythmCard=<View style={[styles.statsHeroCard,{borderTopColor:statsPalette.line}]}><AmbientGlow color={darkStats?'#2F8B86':'#9BCFCB'} size={Math.max(440,Math.min(width*1.15,760))} strength={darkStats?1.25:.42}/>
+    const rhythmCard=<View style={styles.statsHeroCard}>
       <View style={[styles.statsRhythmTop,width<520&&styles.statsRhythmTopCompact]}>
         <CardHeader title="Reading Rhythm" subtitle={'When and how you read · '+periodLabel} icon="clock"/>
         <View style={[styles.statsMiniSegment,{borderColor:statsPalette.line,backgroundColor:statsPalette.canvas}]}>
@@ -4425,7 +4425,7 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper}]}><AmbientGlow color={(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={(activeTab==='insights'||activeTab==='profile')?Math.max(720,width*1.3):Math.max(480,width)} strength={(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?1.55:.48):(p.paper==='#000000'?.6:.22)}/>
+    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#07151C':'#F5F8F7'):p.paper}]}><AmbientGlow color={(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={(activeTab==='insights'||activeTab==='profile')?Math.max(1500,width*2.2):Math.max(480,width)} strength={(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?.95:.34):(p.paper==='#000000'?.6:.22)}/>
       {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={styles.appHeader}>
         <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel={activeTab==='settings'?'Close Settings':'Settings'} onPress={()=>setActiveTab(activeTab==='settings'?'shelf':'settings')} style={styles.settingsButton}>
@@ -4988,7 +4988,7 @@ const styles = StyleSheet.create({
   statsMetricIcon: {width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center',flexShrink:0},
   statsMetricValue: {fontFamily:'ArchivistEditorial',fontSize:19,lineHeight:23,fontWeight:'500',fontVariant:['tabular-nums']},
   statsMetricLabel: {fontSize:10,lineHeight:13.5,fontWeight:'500',marginTop:1},
-  statsHeroCard: {position:'relative',overflow:'hidden',borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,paddingBottom:8,gap:18},
+  statsHeroCard: {position:'relative',paddingTop:6,paddingBottom:8,gap:18},
   statsRhythmTop: {flexDirection:'row',alignItems:'flex-start',gap:12},
   statsRhythmTopCompact: {flexDirection:'column',alignItems:'stretch'},
   statsCardHeader: {flex:1,flexDirection:'row',alignItems:'center',gap:10,minWidth:0,minHeight:44},
