@@ -159,7 +159,7 @@ func TestCSRFAndPersistence(t *testing.T) {
 	req = httptest.NewRequest("GET", "/healthz", nil)
 	res = httptest.NewRecorder()
 	a.routes().ServeHTTP(res, req)
-	if res.Code != 200 || !strings.Contains(res.Body.String(), `"ok":true`) {
+	if res.Code != 200 || !strings.Contains(res.Body.String(), `"ok":true`) || !strings.Contains(res.Body.String(), `"version":"dev"`) {
 		t.Fatalf("health endpoint: %d %q", res.Code, res.Body.String())
 	}
 }
