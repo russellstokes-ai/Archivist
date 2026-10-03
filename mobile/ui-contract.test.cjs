@@ -41,13 +41,15 @@ const statsEnd=source.indexOf('function Profile()',statsStart);
 assert.ok(statsStart>=0 && statsEnd>statsStart, 'Reader Stats function bounds are missing');
 const statsSource=source.slice(statsStart,statsEnd);
 assert.ok(statsSource.includes('>Reader Stats</Text>'), 'Reader Stats title is missing');
-assert.ok(statsSource.includes("['Overview','Time','Books','Genres','Formats','Places']"), 'Reader Stats section tabs are missing');
+assert.equal(statsSource.includes("['Overview','Time','Books','Genres','Formats','Places']"),false,'Reader Stats should not expose redundant top section filters');
 assert.ok(statsSource.includes('readerStatsRhythmMode') && statsSource.includes("['Time','Day','Month']"), 'Reader Stats rhythm modes are not wired');
 assert.ok(statsSource.includes('cycleStatsPeriod') && statsSource.includes('readerStatsYear'), 'Reader Stats period selector is not functional');
 assert.ok(statsSource.includes('statsRhythmDial') && statsSource.includes('statsHeatCell'), 'Reader Stats rhythm ring or heatmap is missing');
 assert.ok(statsSource.includes('Reading Progress') && statsSource.includes('Format Breakdown') && statsSource.includes('Genre Reading Time') && statsSource.includes('Reading Pace') && statsSource.includes('Where You Read') && statsSource.includes('Reading Streaks'), 'Reader Stats content is incomplete');
 assert.ok(source.includes("activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar"), 'Reader Stats must retain the standard bottom navigation');
-
+assert.ok(source.includes("'#2F8B86'") && source.includes('AmbientGlow'), 'Reader Stats teal ambient glow is missing');
+assert.ok(source.includes("statsDashboardCard: {width:'100%',borderTopWidth"), 'Reader Stats should use open edge-to-edge sections instead of boxed dashboard cards');
+assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includes('statsScreenFold') && source.includes('statsScreenWide'), 'Reader Stats spacing must align with the app responsive gutters');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 
