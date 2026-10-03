@@ -95,6 +95,13 @@ assert.ok(statsSource.includes('Completion rate') && statsSource.includes('Serie
 assert.ok(statsSource.includes('Completion by format') && statsSource.includes('Completion by genre'), 'Reader Stats completion splits are missing');
 assert.ok(statsSource.includes('Avg finished rating') && statsSource.includes('Favourites') && statsSource.includes('Annotations') && statsSource.includes('Highlights'), 'Reader Stats taste and notes metrics are incomplete');
 assert.ok(statsSource.includes('Reading consistency'), 'Reader Stats consistency metric is missing');
+const rhythmIndex=statsSource.indexOf('{rhythmCard}');
+const breakdownIndex=statsSource.indexOf('>Reading Breakdown</Text>');
+const moreInsightsIndex=statsSource.indexOf('>More Insights</Text>');
+assert.ok(rhythmIndex>=0 && breakdownIndex>rhythmIndex && moreInsightsIndex>breakdownIndex, 'Reader Stats chart hierarchy must place doughnut sections below Reading Rhythm and supporting insights below them');
+assert.ok(statsSource.includes('const donutCards=') && statsSource.includes('{readingProgressCard}') && statsSource.includes('{formatCard}') && statsSource.includes('{genreCard}') && statsSource.includes('{paceCard}') && statsSource.includes('{placesCard}'), 'Reader Stats doughnut section grouping is incomplete');
+assert.ok(statsSource.includes('const supportingCards=') && statsSource.includes('{streakCard}') && statsSource.includes('{tasteCard}'), 'Reader Stats non-doughnut insight grouping is incomplete');
+
 assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includes('statsScreenFold') && source.includes('statsScreenWide'), 'Reader Stats spacing must align with the app responsive gutters');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"), 'Primary page gutters must match the Reader Stats header standard');
 
