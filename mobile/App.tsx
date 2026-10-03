@@ -4778,7 +4778,7 @@ function Client() {
       ):null}
       {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:activeTab==='insights'?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:activeTab==='insights'?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
         {tabs.map(tab=>{
-          const selected=activeTab===tab.id||(tab.id==='now'&&(activeTab==='player'||activeTab==='reader'));
+          const selected=activeTab===tab.id;
           const centre=tab.id==='now';
           const accent=tab.id==='insights'?p.gold:p.sage;
           return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,centre&&styles.tabCenter]}>
