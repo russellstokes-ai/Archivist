@@ -65,6 +65,9 @@ assert.ok(source.includes('profileMenuMounted') && source.includes('profileMenuA
 assert.ok(source.includes("tone:'#54C6B8'") && source.includes("tone:'#E3BC67'") && source.includes("tone:'#7AA7E8'"), 'Profile, Rewards and Settings overlay actions must have distinct restrained accent colours');
 assert.ok(source.includes('profileAvatarHalo') && source.includes('interfacePulse.interpolate'), 'Active profile overlay must use the shared outward fade halo');
 assert.ok(source.includes("const profileAvatarKey = 'archivist.profileAvatar.v1'"), 'Custom avatar persistence is missing');
+assert.ok(source.includes('async function chooseProfilePhoto()') && source.includes('persistPickedProfilePhoto') && source.includes("label={profileAvatar.photoUri?'Change photo':'Choose photo'}") && source.includes('label="Remove photo"'), 'Profile must support native photo selection and removal');
+assert.ok(source.includes("profileAvatar:{initials:profileAvatar.initials,color:profileAvatar.color}") && !source.includes("profileAvatar,\n      insightGoal"), 'Portable backup must not include a device-local avatar photo URI');
+assert.ok(source.includes("disabled={busy || !server.trim() || !key.trim()}"), 'Server Connect must require both server address and access key');
 assert.ok(source.includes('function PageHeader('), 'Shared standard page header is missing');
 assert.ok(source.includes('styles.globalProfileCorner') && source.includes('<ProfileAvatarButton size={42}/>'), 'A single global top-right avatar must persist across app pages');
 const stateStoreSource = fs.readFileSync('stateStore.ts','utf8');
