@@ -200,10 +200,10 @@ assert.equal(previews[0].state, 'review');
   assert.equal(infoReads.includes(hugeBook),false);
   assert.equal(fileReads.includes(hugeBook),false);
 
-  // A valid media file at the maximum supported recursion depth is still found.
+  // Deeply nested libraries have no arbitrary folder-depth limit.
   const deepRoot='content://root/tree/primary:Books/document/primary:Deep';
   let deepParent=deepRoot;
-  for(let depth=1;depth<=8;depth++){
+  for(let depth=1;depth<=30;depth++){
     const child=deepParent+'%2FLevel'+depth;
     saf.dirs.set(deepParent,[child]);
     deepParent=child;
