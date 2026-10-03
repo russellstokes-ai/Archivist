@@ -337,7 +337,7 @@ Current product direction includes:
 
 Runtime/device release acceptance can still be a QA requirement without reopening the approved design.
 
-## Atlas + comic double-tap zoom — SEPARATE ASTRA/WORK OWNERSHIP
+## Atlas ownership + locked Comic Focus
 
 ### Comic focus checkpoint — 4 October 2026
 
@@ -366,17 +366,20 @@ captions, confidence-based rejection, and phone/Fold motion review. Current mask
 are analysis-resolution silhouettes, not proven pixel-perfect contours. Do not
 describe this checkpoint as Google Play Books parity or release-complete.
 
-A separate Astra/Work stream owns:
+Russell considers Comic Focus complete for the current product-finishing phase.
+
+**Comic Focus is now locked.** Do not redesign or continue feature work there unless Russell explicitly reopens it or a regression is proven. Release/device QA may still verify it without reopening the design.
+
+The separate Astra/Work stream now owns **Atlas only**:
 - Atlas perfection/polish
-- deterministic comic double-tap speech-bubble/panel focus/zoom
 
-The normal chat polish stream must not independently redesign or implement those areas while that work is active.
+The normal chat polish stream must not independently redesign or implement Atlas while that work is active.
 
-Any overlapping file change must preserve the Astra work and avoid reverting it.
+Any overlapping file change must preserve the Astra Atlas work and the locked Comic Focus implementation.
 
 Atlas remains subject to the canonical Atlas design rules in `DESIGN-STANDARD.md`.
 
-Comic focus rules remain:
+Locked Comic Focus rules remain:
 - original pixels only
 - no generative redraw
 - deterministic/local analysis
@@ -386,7 +389,7 @@ Comic focus rules remain:
 
 ## Remaining polish stream — chat, piecemeal
 
-Outside Atlas, comic focus and the locked Player, the active finishing stream covers:
+Outside Atlas, with both Comic Focus and Live Player locked, the active finishing stream covers:
 - Shelf final polish
 - Library final polish
 - scanning/metadata/organisation release polish
