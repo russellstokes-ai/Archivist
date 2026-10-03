@@ -1,7 +1,7 @@
 import {Platform} from 'react-native';
 import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
-import {MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
+import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
 import {extractAudioMetadata} from './audioMetadata';
 
@@ -157,6 +157,7 @@ export async function scanLocalFolders(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
+  previousBooks: LocalBook[] = [],
 ): Promise<LocalScanResult> {
   const books: LocalBook[] = [];
   let skipped = 0;
@@ -249,7 +250,7 @@ export async function scanLocalFolders(
       if (format && !seen.has(child)) {
         seen.add(child);
         let identity = inferLocalBookMetadata(child, format);
-        const evidence = [{
+        const evidence: MetadataCandidate[] = [{
           source: 'path' as const,
           confidence: identity.confidence,
           fields: {
@@ -268,16 +269,16 @@ export async function scanLocalFolders(
         }
 
         const fileInfo = await getInfoAsync(child).catch(()=>null);
-        const fileSize = fileInfo && typeof fileInfo.size==='number' ? fileInfo.size : undefined;
-        const modificationTime = fileInfo && typeof (fileInfo as any).modificationTime==='number' ? (fileInfo as any).modificationTime : undefined;
+        const fileSize = fileInfo && 'size' in fileInfo && typeof fileInfo.size==='number' ? fileInfo.size : undefined;
+        const modificationTime = fileInfo && 'modificationTime' in fileInfo && typeof fileInfo.modificationTime==='number' ? fileInfo.modificationTime : undefined;
         const previous = previousByUri.get(child);
         const unchanged = !!previous && fileSize !== undefined && previous.fileSize === fileSize
           && modificationTime !== undefined && previous.modificationTime === modificationTime;
         const embeddedFields = unchanged && previous?.embeddedMetadata
           ? previous.embeddedMetadata
           : format === 'Audio'
-            ? await extractAudioMetadata(child, ext, fileInfo || undefined)
-            : await extractEmbeddedMetadata(child, ext, fileInfo || undefined);
+            ? await extractAudioMetadata(child, ext, {size:fileSize})
+            : await extractEmbeddedMetadata(child, ext, {exists:fileInfo?.exists,size:fileSize});
         if (Object.keys(embeddedFields).length) {
           evidence.push({source:'embedded' as const, confidence:'high' as const, fields:embeddedFields});
           identity = applyLocalMetadata(identity, embeddedFields, 'embedded');
