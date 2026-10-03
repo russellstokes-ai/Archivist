@@ -1,0 +1,14 @@
+--- app.json
++++ app.json
+@@ -3,6 +3,11 @@
+     "name": "Archivist",
+     "slug": "archivist",
+     "version": "0.9.3",
++    "extra": {
++      "router": {
++        "origin": "https://f0d86f2330.sandbox.draftbit.dev:5100"
++      }
++    },
+     "orientation": "default",
+ 
+ 
