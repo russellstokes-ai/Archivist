@@ -34,6 +34,16 @@ console.log('PASS: no placeholder UI markers and every visible mobile button/tab
 
 assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats tab is not wired');
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
+assert.match(source,/\{id:\s*['"]now['"],\s*label:\s*['"]Now['"]/, 'Center Player/Reader live tab is not wired');
+assert.ok(source.includes('function LiveHub()'), 'Player/Reader live hub is missing');
+assert.ok(source.includes("(['player','reader'] as const)") && source.includes("setLiveMode(mode)"), 'Player/Reader live toggle is not functional');
+assert.ok(source.includes("setActiveTab('now')") && source.includes("setLiveMode('player')") && source.includes("setLiveMode('reader')"), 'Player and Reader launches must route through the live hub');
+assert.ok(source.includes("const lastReadingKey = 'archivist.lastReading.v1'") && source.includes("const lastPlayingKey = 'archivist.lastPlaying.v1'"), 'Recent Player/Reader targets must persist for fast resume');
+assert.ok(source.includes("!playing && (reading||lastReading)") && source.includes("playing && !(activeTab==='now'&&liveMode==='player')"), 'Persistent activity bar must prioritise audio and fall back to reading');
+assert.ok(source.includes('tabCenterOrb') && source.includes('liveHubSegment'), 'Center live-tab visual treatment is missing');
+assert.ok(source.includes("(activeTab==='player'||(activeTab==='now'&&liveMode==='player'))"), 'Player motion visibility must include the live hub');
+assert.ok(source.includes("(activeTab==='reader'||(activeTab==='now'&&liveMode==='reader'))"), 'Reader activity tracking must include the live hub');
+
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
 assert.ok(source.includes('function Rewards()'), 'Rewards screen is not implemented');
 assert.ok(source.includes('function ProfileAvatarButton(') && source.includes('function ProfileMenu()'), 'Persistent profile avatar/menu is missing');
