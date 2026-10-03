@@ -28,6 +28,8 @@ import (
 //go:embed web/*
 var web embed.FS
 
+var buildVersion = "dev"
+
 type app struct {
 	db     *sql.DB
 	dbPath string
@@ -707,7 +709,7 @@ func (a *app) routes() http.Handler {
 			fail(w, 503, errors.New("database unavailable"))
 			return
 		}
-		reply(w, map[string]bool{"ok": true})
+		reply(w, map[string]any{"ok": true, "version": buildVersion})
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		base, ingressErr := ingressBase(r)
