@@ -81,6 +81,17 @@ async function persistPickedCover(uri:string,fileName?:string|null) {
   return target;
 }
 
+async function persistPickedProfilePhoto(uri:string,fileName?:string|null) {
+  if(!documentDirectory)return uri;
+  const directory=documentDirectory+'profile/';
+  await makeDirectoryAsync(directory,{intermediates:true});
+  const candidate=(fileName||uri.split('?')[0].split('/').pop()||'avatar.jpg').toLowerCase();
+  const extension=(candidate.match(/\.([a-z0-9]{2,5})$/)?.[1]||'jpg').replace(/[^a-z0-9]/g,'')||'jpg';
+  const target=directory+'avatar-'+Date.now()+'.'+extension;
+  await copyAsync({from:uri,to:target});
+  return target;
+}
+
 const nativeSplashEnabled=Platform.OS==='android'||Platform.OS==='ios';
 if(nativeSplashEnabled){
   void SplashScreen.preventAutoHideAsync().catch(()=>undefined);
@@ -2645,7 +2656,7 @@ function Client() {
           <TextInput accessibilityLabel="Server address" autoCapitalize="none" autoCorrect={false} keyboardType="url" value={server} onChangeText={setServer} placeholder="https://books.example.com" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <TextInput accessibilityLabel="Profile access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={key} onChangeText={setKey} placeholder="Profile access key" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
-          <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy} />
+          <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy || !server.trim() || !key.trim()} />
           {serverNotice?<Text style={[styles.meta,{color:p.sage}]}>{serverNotice}</Text>:null}
           {error ? <Text accessibilityRole="alert" style={[styles.error, {color:p.danger}]}>{error}</Text> : null}
       </View>
@@ -3583,6 +3594,18 @@ function Client() {
     const cleaned={initials:String(next.initials||'').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase(),color:avatarColours.includes(next.color)?next.color:'#47736F',photoUri:typeof next.photoUri==='string'&&next.photoUri.trim()?next.photoUri.trim():undefined};
     setProfileAvatar(cleaned);
     try{await setPersistedJSON(profileAvatarKey,cleaned);}catch(e){setError((e as Error).message);}
+  }
+
+  async function chooseProfilePhoto(){
+    setError('');
+    try{
+      const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:true,aspect:[1,1],quality:.9,selectionLimit:1});
+      if(result.canceled||!result.assets?.length)return;
+      const asset=result.assets[0];
+      if(asset.fileSize&&asset.fileSize>15*1024*1024){setError('Choose a profile photo smaller than 15 MB.');return;}
+      const photoUri=await persistPickedProfilePhoto(asset.uri,asset.fileName);
+      await saveProfileAvatar({...profileAvatar,photoUri});
+    }catch(e){setError((e as Error).message);}
   }
 
   function openProfileMenu(){
@@ -5619,8 +5642,12 @@ function Client() {
 
       <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
         <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>AVATAR</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. Profile-photo support is prepared for the native picker pass; initials remain the reliable local fallback.</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Use a photo or up to two initials. The accent remains visible whenever initials are used.</Text>
         <View style={styles.profileAvatarEditor}>
+          <View style={styles.toolRow}>
+            <Button label={profileAvatar.photoUri?'Change photo':'Choose photo'} tone="quiet" onPress={()=>void chooseProfilePhoto()}/>
+            {profileAvatar.photoUri?<Button label="Remove photo" tone="quiet" onPress={()=>void saveProfileAvatar({...profileAvatar,photoUri:undefined})}/>:null}
+          </View>
           <TextInput accessibilityLabel="Avatar initials" value={profileAvatar.initials} maxLength={2} autoCapitalize="characters" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>
           <View style={styles.profileAvatarPalette}>
             {avatarColours.map(color=><Pressable key={color} accessibilityRole="button" accessibilityLabel={'Use avatar colour '+color} accessibilityState={{selected:profileAvatar.color===color}} onPress={()=>void saveProfileAvatar({...profileAvatar,color})} style={[styles.profileAvatarSwatch,{backgroundColor:color,borderColor:profileAvatar.color===color?p.ink:'transparent'}]}/>)}
@@ -6132,7 +6159,7 @@ function Client() {
       appVersion:'0.9.3',
       theme,
       accessibility:accessibilityPrefs,
-      profileAvatar,
+      profileAvatar:{initials:profileAvatar.initials,color:profileAvatar.color},
       insightGoal,
       readerAppearance,
       smartShelves,
@@ -6160,7 +6187,7 @@ function Client() {
       if(!raw||raw.archivistBackup!==1)throw Error('This is not an Archivist backup snapshot.');
       if(raw.theme==='system'||raw.theme==='light'||raw.theme==='dark')await chooseTheme(raw.theme);
       if(raw.accessibility&&typeof raw.accessibility==='object')await saveAccessibilityPreferences({reduceMotion:!!raw.accessibility.reduceMotion,highContrast:!!raw.accessibility.highContrast,largeText:!!raw.accessibility.largeText});
-      if(raw.profileAvatar&&typeof raw.profileAvatar==='object')await saveProfileAvatar({initials:String(raw.profileAvatar.initials||''),color:String(raw.profileAvatar.color||'#47736F'),photoUri:typeof raw.profileAvatar.photoUri==='string'?raw.profileAvatar.photoUri:undefined});
+      if(raw.profileAvatar&&typeof raw.profileAvatar==='object')await saveProfileAvatar({initials:String(raw.profileAvatar.initials||''),color:String(raw.profileAvatar.color||'#47736F')});
       if(raw.insightGoal){const value=sanitizeInsightGoal(raw.insightGoal);setInsightGoal(value);setGoalDraft({completed:String(value.completedTarget),annotations:String(value.annotationTarget)});await setPersistedJSON(insightGoalKey,value);}
       if(raw.readerAppearance){const value=sanitizeReaderAppearance(raw.readerAppearance);setReaderAppearance(value);await setPersistedJSON(readerAppearanceKey,value);}
       if(Array.isArray(raw.smartShelves)){const value=sanitizeSmartShelves(raw.smartShelves);setSmartShelves(value);await setPersistedJSON(smartShelvesKey,value);}
