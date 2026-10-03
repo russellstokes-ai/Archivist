@@ -8,7 +8,11 @@
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.archivist.reader"
+      "bundleIdentifier": "app.archivist.reader",
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
+      }
     },
     "android": {
       "package": "app.archivist.reader",
@@ -50,7 +54,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Archivist uses your selected photo only when you choose it as cover artwork.",
+          "photosPermission": "Archivist uses only the image you select for cover artwork or your profile photo.",
           "cameraPermission": false,
           "microphonePermission": false
         }
