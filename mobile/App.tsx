@@ -3799,10 +3799,10 @@ function Client() {
     const paceMinutes=activeDays?Math.round(minutesRead/activeDays):0;
 
     const metricCards=[
-      {label:'Books read',value:completed,icon:'bookOpen' as UiIconName,section:'Books' as const},
-      {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'clock' as UiIconName,section:'Time' as const},
-      {label:'Reading days',value:activeDays,icon:'calendar' as UiIconName,section:'Time' as const},
-      {label:'Day streak',value:ritual.currentStreak,icon:'flame' as UiIconName,section:'Books' as const},
+      {label:'Books read',value:completed,icon:'bookOpen' as UiIconName},
+      {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'clock' as UiIconName},
+      {label:'Reading days',value:activeDays,icon:'calendar' as UiIconName},
+      {label:'Day streak',value:ritual.currentStreak,icon:'flame' as UiIconName},
     ];
 
     const hourTotals=Array.from({length:24},()=>0);
@@ -3824,6 +3824,81 @@ function Client() {
     const maxHour=Math.max(1,...hourTotals);
     const maxDay=Math.max(1,...dayTotals);
     const maxMonth=Math.max(1,...monthTotals);
+    const sessionSeconds=periodActivity.map(item=>Math.max(0,item.activeSeconds||0)).filter(Boolean);
+    const averageSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(sessionSeconds.reduce((sum,value)=>sum+value,0)/sessionSeconds.length/60)):0;
+    const longestSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(Math.max(...sessionSeconds)/60)):0;
+    const weekdayLabels=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const peakDayIndex=dayTotals.reduce((best,value,index)=>value>dayTotals[best]?index:best,0);
+    const mostActiveDay=dayTotals[peakDayIndex]?weekdayLabels[peakDayIndex]:'—';
+    const peakMonthIndex=monthTotals.reduce((best,value,index)=>value>monthTotals[best]?index:best,0);
+    const mostActiveMonth=monthTotals[peakMonthIndex]?new Date(2000,peakMonthIndex,1).toLocaleDateString(undefined,{month:'long'}):'—';
+
+    const startedWorks=insightWorks.filter(work=>work.readingState!=='not-started');
+    const finishedWorks=insightWorks.filter(work=>work.readingState==='finished');
+    const completionRate=startedWorks.length?Math.round(finishedWorks.length/startedWorks.length*100):0;
+    const inProgressCount=insightWorks.filter(work=>work.readingState==='in-progress').length;
+    const ratedFinished=finishedWorks.filter(work=>work.rating>0);
+    const finishedAverageRating=ratedFinished.length?ratedFinished.reduce((sum,work)=>sum+work.rating,0)/ratedFinished.length:0;
+    const favouritesCount=insightWorks.filter(work=>work.favourite).length;
+    const favouritesRatio=insightWorks.length?Math.round(favouritesCount/insightWorks.length*100):0;
+
+    const seriesGroups=new Map<string,UnifiedWork[]>();
+    for(const work of insightWorks){
+      const series=String(work.series||'').trim();
+      if(!series)continue;
+      seriesGroups.set(series,[...(seriesGroups.get(series)||[]),work]);
+    }
+    const trackedSeries=[...seriesGroups.values()].filter(items=>items.length>1);
+    const completedSeries=trackedSeries.filter(items=>items.every(work=>work.readingState==='finished')).length;
+    const seriesCompletionRate=trackedSeries.length?Math.round(completedSeries/trackedSeries.length*100):0;
+
+    const periodAnnotations=readerAnnotations.filter(item=>{
+      if(effectivePeriod==='all')return true;
+      const date=new Date(item.createdAt);
+      return Number.isFinite(date.getTime())&&date.getFullYear()===effectivePeriod;
+    });
+    const highlightCount=periodAnnotations.filter(item=>item.kind==='highlight').length;
+    const noteCount=periodAnnotations.filter(item=>item.kind==='note').length;
+
+    const finishMonthSets=Array.from({length:12},()=>new Set<number>());
+    for(const item of periodActivity){
+      if(!item.completed)continue;
+      finishMonthSets[new Date(item.updatedAt*1000).getMonth()].add(item.workId);
+    }
+    const finishesByMonth=finishMonthSets.map(items=>items.size);
+    const maxMonthlyFinishes=Math.max(1,...finishesByMonth);
+
+    const activeDateKeys=new Set<string>();
+    for(const item of periodActivity)activeDateKeys.add(new Date(item.updatedAt*1000).toISOString().slice(0,10));
+    for(const [day,seconds] of Object.entries(ritualDays)){
+      if(seconds<60)continue;
+      if(effectivePeriod!=='all'&&!day.startsWith(String(effectivePeriod)+'-'))continue;
+      activeDateKeys.add(day);
+    }
+    const consistencyEnd=effectivePeriod==='all'||effectivePeriod===currentYear?new Date():new Date(effectivePeriod,11,31);
+    const consistencyStart=effectivePeriod==='all'
+      ? (()=>{const keys=[...activeDateKeys].sort();return keys.length?new Date(keys[0]+'T00:00:00'):new Date();})()
+      : new Date(effectivePeriod,0,1);
+    consistencyStart.setHours(0,0,0,0);
+    consistencyEnd.setHours(0,0,0,0);
+    const trackedCalendarDays=Math.max(1,Math.floor((consistencyEnd.getTime()-consistencyStart.getTime())/86400000)+1);
+    const consistencyPercent=Math.min(100,Math.round(activeDateKeys.size/trackedCalendarDays*100));
+
+    const completionRows=(field:'format'|'genre')=>{
+      const grouped=new Map<string,{total:number;finished:number}>();
+      for(const work of insightWorks){
+        const label=String(work[field]||'').trim()||'Other';
+        const current=grouped.get(label)||{total:0,finished:0};
+        current.total+=1;
+        if(work.readingState==='finished')current.finished+=1;
+        grouped.set(label,current);
+      }
+      return [...grouped].sort((a,b)=>b[1].total-a[1].total).slice(0,5).map(([label,value])=>({
+        label,total:value.total,finished:value.finished,percent:value.total?Math.round(value.finished/value.total*100):0,
+      }));
+    };
+    const formatCompletionRows=completionRows('format');
+    const genreCompletionRows=completionRows('genre');
 
     const anchorDate=periodActivity.length
       ? new Date(periodActivity[0].updatedAt*1000)
@@ -3867,6 +3942,25 @@ function Client() {
         <Text numberOfLines={1} style={[styles.statsLegendName,{color:statsPalette.muted}]}>{item.label}</Text>
         <Text style={[styles.statsLegendCount,{color:statsPalette.ink}]}>{item.count}</Text>
         <Text style={[styles.statsLegendPercent,{color:statsPalette.muted}]}>{Math.round(item.count/Math.max(1,total)*100)}%</Text>
+      </View>)}
+    </View>;
+
+    const DetailMetric=({label,value,meta}:{label:string;value:string;meta?:string})=><View style={styles.statsDetailMetric}>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.75} style={[styles.statsDetailValue,{color:statsPalette.ink}]}>{value}</Text>
+      <Text style={[styles.statsDetailLabel,{color:statsPalette.muted}]}>{label}</Text>
+      {meta?<Text style={[styles.statsDetailMeta,{color:statsPalette.muted}]}>{meta}</Text>:null}
+    </View>;
+
+    const CompletionRows=({items}:{items:Array<{label:string;total:number;finished:number;percent:number}>})=><View style={styles.statsCompletionRows}>
+      {items.map(item=><View key={item.label} style={styles.statsCompletionRow}>
+        <View style={styles.statsCompletionCopy}>
+          <Text numberOfLines={1} style={[styles.statsCompletionLabel,{color:statsPalette.muted}]}>{item.label}</Text>
+          <Text style={[styles.statsCompletionValue,{color:statsPalette.ink}]}>{item.finished}/{item.total}</Text>
+        </View>
+        <View style={[styles.statsCompletionTrack,{backgroundColor:statsPalette.panelRaised}]}>
+          <View style={[styles.statsCompletionFill,{backgroundColor:statsPalette.teal,width:(item.percent+'%') as any}]}/>
+        </View>
+        <Text style={[styles.statsCompletionPercent,{color:statsPalette.muted}]}>{item.percent}%</Text>
       </View>)}
     </View>;
 
@@ -4050,7 +4144,17 @@ function Client() {
       </View>
     </View>;
 
-    const overviewCards=<View style={styles.statsCardsGrid}>{readingProgressCard}{formatCard}{genreCard}{paceCard}{placesCard}{streakCard}</View>;
+    const tasteCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
+      <CardHeader title="Taste & Notes" subtitle="How you respond to what you read" icon="bookmark"/>
+      <View style={styles.statsDetailGrid}>
+        <DetailMetric label="Avg finished rating" value={ratedFinished.length?finishedAverageRating.toFixed(1)+' / 5':'—'} meta={ratedFinished.length?ratedFinished.length+' rated finish'+(ratedFinished.length===1?'':'es'):'No rated finishes yet'}/>
+        <DetailMetric label="Favourites" value={favouritesRatio+'%'} meta={favouritesCount+' of '+insightWorks.length+' works'}/>
+        <DetailMetric label="Annotations" value={String(periodAnnotations.length)} meta={noteCount+' notes'}/>
+        <DetailMetric label="Highlights" value={String(highlightCount)} meta={periodLabel}/>
+      </View>
+    </View>;
+
+    const overviewCards=<View style={styles.statsCardsGrid}>{readingProgressCard}{paceCard}{streakCard}{formatCard}{genreCard}{tasteCard}{placesCard}</View>;
 
     return <ScrollView style={{backgroundColor:'transparent'}} contentContainerStyle={[styles.statsScreen,width>=600&&styles.statsScreenFold,width>=940&&styles.statsScreenWide]}>
       <View style={styles.statsTopRow}>
@@ -5054,6 +5158,31 @@ const styles = StyleSheet.create({
   statsWeekDay: {flex:1,alignItems:'center',gap:5},
   statsWeekDot: {width:18,height:18,borderRadius:9,borderWidth:StyleSheet.hairlineWidth},
   statsWeekLabel: {fontSize:8.5,lineHeight:11,fontWeight:'600'},
+  statsDetailGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:14,rowGap:12,paddingTop:2},
+  statsDetailMetric: {width:'47%',minWidth:118,flexGrow:1,paddingVertical:2},
+  statsDetailValue: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:24,fontWeight:'500'},
+  statsDetailLabel: {fontSize:9.5,lineHeight:13,fontWeight:'600',marginTop:2},
+  statsDetailMeta: {fontSize:8.5,lineHeight:12,marginTop:1},
+  statsMinorHeading: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:.55,textTransform:'uppercase'},
+  statsFinishSection: {gap:9,paddingTop:2},
+  statsFinishMonths: {height:92,flexDirection:'row',alignItems:'flex-end',gap:5},
+  statsFinishMonth: {flex:1,height:'100%',alignItems:'center',justifyContent:'flex-end',gap:3},
+  statsFinishTrack: {width:'72%',maxWidth:16,height:56,borderRadius:8,overflow:'hidden',justifyContent:'flex-end'},
+  statsFinishFill: {width:'100%',borderRadius:8},
+  statsFinishMonthLabel: {fontSize:7.5,lineHeight:10,fontWeight:'600'},
+  statsFinishMonthValue: {fontSize:7.5,lineHeight:10,fontVariant:['tabular-nums']},
+  statsSplitBlock: {gap:9,paddingTop:2},
+  statsCompletionRows: {gap:7},
+  statsCompletionRow: {flexDirection:'row',alignItems:'center',gap:8},
+  statsCompletionCopy: {width:82,flexDirection:'row',alignItems:'center',gap:5},
+  statsCompletionLabel: {flex:1,fontSize:8.8,lineHeight:12},
+  statsCompletionValue: {fontSize:8.5,lineHeight:12,fontWeight:'600',fontVariant:['tabular-nums']},
+  statsCompletionTrack: {flex:1,height:7,borderRadius:4,overflow:'hidden'},
+  statsCompletionFill: {height:'100%',borderRadius:4},
+  statsCompletionPercent: {width:30,textAlign:'right',fontSize:8.5,lineHeight:12,fontVariant:['tabular-nums']},
+  statsConsistencyRow: {flexDirection:'row',alignItems:'center',gap:14,paddingTop:4},
+  statsConsistencyValue: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:27,fontWeight:'500'},
+  statsConsistencyCopy: {flex:1,fontSize:9,lineHeight:13},
   insightEditorialHero: {paddingVertical:4,gap:6,maxWidth:760},
   insightEditorialKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
   insightEditorialTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:28,fontWeight:'400',letterSpacing:-.1},
