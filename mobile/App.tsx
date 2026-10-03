@@ -535,7 +535,7 @@ function Client() {
   const [atlasSearch,setAtlasSearch]=useState('');
   const [atlasNodeId,setAtlasNodeId]=useState('');
   const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
-  const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number}|null>(null);
+  const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number;moved:boolean}|null>(null);
   const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
   const [duplicateScope,setDuplicateScope]=useState<'local'|'server'>('local');
   const [duplicateLoading,setDuplicateLoading]=useState(false);
@@ -3758,11 +3758,11 @@ function Client() {
     if(touches.length>=2){
       const [a,b]=touches;
       const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
-      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:Math.max(1,Math.hypot(dx,dy)),focusX:(a.locationX+b.locationX)/2,focusY:(a.locationY+b.locationY)/2};
+      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:Math.max(1,Math.hypot(dx,dy)),focusX:(a.locationX+b.locationX)/2,focusY:(a.locationY+b.locationY)/2,moved:true};
       return;
     }
     const point=touches[0]||event.nativeEvent;
-    atlasGesture.current={mode:'pan',startX:point.locationX||0,startY:point.locationY||0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:0,focusX:0,focusY:0};
+    atlasGesture.current={mode:'pan',startX:point.locationX||0,startY:point.locationY||0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:0,focusX:0,focusY:0,moved:false};
   }
 
   function atlasGestureMove(event:any){
@@ -3780,7 +3780,30 @@ function Client() {
     }
     if(gesture.mode==='pinch')return;
     const point=touches[0]||event.nativeEvent;
-    setAtlasTransform(current=>({...current,x:gesture.baseX+(point.locationX-gesture.startX),y:gesture.baseY+(point.locationY-gesture.startY)}));
+    const dx=(point.locationX||0)-gesture.startX,dy=(point.locationY||0)-gesture.startY;
+    if(Math.hypot(dx,dy)>7)gesture.moved=true;
+    setAtlasTransform(current=>({...current,x:gesture.baseX+dx,y:gesture.baseY+dy}));
+  }
+
+  function atlasSelectNearestNodeAt(viewX:number,viewY:number){
+    const candidates=atlasUniverse.nodes.filter(atlasNodeVisible);
+    let nearest:AtlasUniverseNode|null=null,nearestDistance=Infinity;
+    for(const node of candidates){
+      const x=atlasTransform.x+node.x*atlasTransform.scale;
+      const y=atlasTransform.y+node.y*atlasTransform.scale;
+      const distance=Math.hypot(x-viewX,y-viewY);
+      if(distance<nearestDistance){nearest=node;nearestDistance=distance;}
+    }
+    const selectionRadius=foldLayout?30:26;
+    if(nearest&&nearestDistance<=selectionRadius)selectAtlasNode(nearest.id);
+  }
+
+  function atlasGestureEnd(event:any){
+    const gesture=atlasGesture.current;
+    atlasGesture.current=null;
+    if(!gesture||gesture.mode!=='pan'||gesture.moved)return;
+    const point=event.nativeEvent;
+    atlasSelectNearestNodeAt(point.locationX||0,point.locationY||0);
   }
 
   function atlasNodeColor(node:AtlasUniverseNode){
@@ -3816,13 +3839,13 @@ function Client() {
     const colour=atlasNodeColor(node);
     const dot=(node.kind==='genre'?18:node.kind==='author'?7:node.kind==='work'?4:5.5)/zoom;
     const genreHub=node.kind==='genre';
-    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>selectAtlasNode(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
+    return <View pointerEvents="none" style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
       {selected?<Animated.View pointerEvents="none" style={{position:'absolute',width:58/zoom,height:58/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.34,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.38]})}]}}/>:genreHub?<View pointerEvents="none" style={{position:'absolute',width:38/zoom,height:38/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:.12}}/>:null}
       <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:colour,borderWidth:genreHub?1/zoom:0,borderColor:genreHub?'rgba(255,255,255,.55)':'transparent',boxShadow:selected?'0px 0px 22px '+colour:genreHub?'0px 0px 12px '+colour:'none'}}/>
       {(selected||genreHub||zoom>.60)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
         <Text numberOfLines={2} style={{paddingHorizontal:genreHub?7/zoom:0,paddingVertical:genreHub?3/zoom:0,borderRadius:999,borderWidth:genreHub?StyleSheet.hairlineWidth:0,borderColor:genreHub?colour:'transparent',backgroundColor:genreHub?(p.paper==='#000000'?'rgba(7,17,29,.82)':'rgba(255,255,255,.86)'):'transparent',textAlign:'center',fontSize:(genreHub?11.5:11)/zoom,lineHeight:(genreHub?15:14)/zoom,color:genreHub?colour:(selected?p.ink:p.muted),fontWeight:selected||genreHub?'600':'400'}}>{node.label}</Text>
       </View>:null}
-    </Pressable>;
+    </View>;
   }
 
   function selectAtlasNode(nextId:string){
@@ -3831,19 +3854,19 @@ function Client() {
     if(nextId===atlasNodeId){
       atlasInspectorAnim.stopAnimation();
       atlasInspectorAnim.setValue(.92);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:19,stiffness:210,mass:.68,useNativeDriver:false}).start();
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:19,stiffness:210,mass:.68,useNativeDriver:true}).start();
       return;
     }
     if(!atlasNodeId){
       setAtlasNodeId(nextId);
       atlasInspectorAnim.setValue(0);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:false}).start();
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
       return;
     }
     Animated.timing(atlasInspectorAnim,{toValue:0,duration:115,useNativeDriver:false}).start(()=>{
       setAtlasNodeId(nextId);
       atlasInspectorAnim.setValue(0);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:false}).start();
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
     });
   }
 
@@ -3867,15 +3890,28 @@ function Client() {
     const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
-    return <View style={[styles.atlasInspector,{backgroundColor:foldLayout?p.paper:p.raised},foldLayout?styles.atlasInspectorWide:styles.atlasInspectorMobile,foldLayout&&{borderLeftColor:p.line}]}>
-      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={dismissAtlasNode} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
-      {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
-      <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
-      <View style={styles.toolRow}>
-        {work?<Button label="Open" onPress={()=>openUnifiedWork(work)}/>:null}
-        {node.relationKind&&node.relationValue?<Button label="Explore" onPress={()=>setAtlasFocus({kind:node.relationKind as AtlasKind,value:node.relationValue!})}/>:null}
-        {collection?<Button label="Open collection" onPress={()=>openCollection(collection)}/>:null}
+    const accent=atlasNodeColor(node);
+    const icon:UiIconName=node.kind==='series'?'layers':node.kind==='collection'?'shelf':node.kind==='author'?'bookmark':node.kind==='note'?'bookmark':'bookOpen';
+    return <View style={[styles.atlasInspector,{backgroundColor:p.paper==='#000000'?'rgba(9,20,29,.96)':'rgba(255,252,245,.97)',borderColor:p.line}]}>
+      <View pointerEvents="none" style={[styles.atlasInspectorAccent,{backgroundColor:accent}]}/>
+      <View style={styles.atlasInspectorHeader}>
+        <View style={[styles.atlasInspectorIcon,{backgroundColor:p.card,borderColor:accent}]}><UiIcon name={icon} color={accent} size={19}/></View>
+        <View style={{flex:1,minWidth:0}}>
+          <Text style={[styles.atlasInspectorKicker,{color:accent}]}>{node.kind.toUpperCase()}</Text>
+          <Text numberOfLines={2} style={[styles.atlasInspectorTitle,{color:p.ink}]}>{node.label}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close Atlas details" onPress={dismissAtlasNode} style={styles.atlasInspectorClose}><UiIcon name="close" color={p.muted} size={17}/></Pressable>
       </View>
+      {node.subtitle?<Text numberOfLines={2} style={[styles.atlasInspectorSubtitle,{color:p.muted}]}>{node.subtitle}</Text>:null}
+      <View style={styles.atlasInspectorMetaRow}>
+        <View style={[styles.atlasInspectorMetaChip,{backgroundColor:p.card}]}><Text style={[styles.atlasInspectorMetaText,{color:p.ink}]}>{connected} connection{connected===1?'':'s'}</Text></View>
+        {node.source?<View style={[styles.atlasInspectorMetaChip,{backgroundColor:p.card}]}><Text style={[styles.atlasInspectorMetaText,{color:p.muted}]}>{sourceLabel(node.source as WorkSource)}</Text></View>:null}
+      </View>
+      {(work||node.relationKind&&node.relationValue||collection)?<View style={styles.atlasInspectorActions}>
+        {work?<Button label="Open" tone="quiet" onPress={()=>openUnifiedWork(work)}/>:null}
+        {node.relationKind&&node.relationValue?<Button label="Explore" tone="quiet" onPress={()=>setAtlasFocus({kind:node.relationKind as AtlasKind,value:node.relationValue!})}/>:null}
+        {collection?<Button label="Open collection" tone="quiet" onPress={()=>openCollection(collection)}/>:null}
+      </View>:null}
     </View>;
   }
 
@@ -3884,19 +3920,19 @@ function Client() {
     if(next===atlasBreakdown){
       atlasBreakdownAnim.stopAnimation();
       atlasBreakdownAnim.setValue(.90);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:false}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:true}).start();
       return;
     }
     if(!atlasBreakdown){
       setAtlasBreakdown(next);
       atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
       return;
     }
     Animated.timing(atlasBreakdownAnim,{toValue:0,duration:150,useNativeDriver:false}).start(()=>{
       setAtlasBreakdown(next);
       atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
     });
   }
 
@@ -3989,7 +4025,7 @@ function Client() {
             <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:'transparent'}]}
               onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
               onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
-              onResponderRelease={()=>{atlasGesture.current=null}} onResponderTerminate={()=>{atlasGesture.current=null}}>
+              onResponderRelease={atlasGestureEnd} onResponderTerminate={()=>{atlasGesture.current=null}}>
               <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color="#2F8B86" size={Math.max(680,ringSize*1.35)} strength={.72}/></View>
               <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
                 <DataRing size={ringSize} items={atlasRingItems} ink={p.ink} muted={p.muted} track={p.line} thickness={22}/>
@@ -4026,9 +4062,15 @@ function Client() {
 
               {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
-            {atlasNodeId?<Animated.View style={[styles.atlasInspectorReveal,{height:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[0,foldLayout?220:188]}),opacity:atlasInspectorAnim,transform:[{translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})}]}]}>
-              <AtlasInspector/>
-            </Animated.View>:null}
+            {atlasNodeId?<Animated.View style={[
+              styles.atlasInspectorReveal,
+              foldLayout?styles.atlasInspectorRevealWide:styles.atlasInspectorRevealMobile,
+              {opacity:atlasInspectorAnim,transform:[
+                {translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[foldLayout?-8:18,0]})},
+                {translateX:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[foldLayout?18:0,0]})},
+                {scale:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[.96,1]})},
+              ]}
+            ]}><AtlasInspector/></Animated.View>:null}
           </View>
 
           {atlasBreakdown?<Animated.View style={[styles.atlasBreakdownReveal,{maxHeight:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[0,520]}),opacity:atlasBreakdownAnim}]}>
@@ -5455,7 +5497,9 @@ const styles = StyleSheet.create({
   atlasRingControlFormat: {right:2,top:'42%'},
   atlasRingControlYear: {bottom:2,alignSelf:'center'},
   atlasRingControlLabel: {fontSize:8,lineHeight:11,fontWeight:'700',letterSpacing:1.05},
-  atlasInspectorReveal: {width:'100%',overflow:'hidden'},
+  atlasInspectorReveal: {position:'absolute',zIndex:42,elevation:14},
+  atlasInspectorRevealMobile: {left:10,right:10,bottom:10},
+  atlasInspectorRevealWide: {right:14,top:64,width:310,maxWidth:'42%'},
   atlasBreakdownReveal: {width:'100%',overflow:'hidden'},
   atlasBreakdownSheet: {borderWidth:StyleSheet.hairlineWidth,borderRadius:28,paddingHorizontal:18,paddingBottom:18,paddingTop:8,gap:13,shadowColor:'#000',shadowOpacity:.12,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:5},
   atlasBreakdownHandle: {height:8,alignItems:'center',justifyContent:'center'},
@@ -5502,9 +5546,18 @@ const styles = StyleSheet.create({
   atlasFindButton: {height:46,paddingHorizontal:16,borderRadius:12,alignItems:'center',justifyContent:'center'},
   atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
   atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:0,borderRadius:0,paddingHorizontal:6,paddingVertical:4,opacity:.88},
-  atlasInspector: {borderWidth:0,padding:14,gap:8,zIndex:25},
-  atlasInspectorMobile: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'rgba(127,127,127,.18)',borderRadius:0},
-  atlasInspectorWide: {width:'100%',minHeight:0,alignSelf:'stretch',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
+  atlasInspector: {borderWidth:StyleSheet.hairlineWidth,borderRadius:22,padding:16,gap:11,overflow:'hidden',shadowColor:'#000',shadowOpacity:.18,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:14},
+  atlasInspectorAccent: {position:'absolute',left:0,top:0,bottom:0,width:3},
+  atlasInspectorHeader: {flexDirection:'row',alignItems:'center',gap:11},
+  atlasInspectorIcon: {width:38,height:38,borderRadius:19,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',flexShrink:0},
+  atlasInspectorKicker: {fontSize:9,lineHeight:12,fontWeight:'800',letterSpacing:1.25},
+  atlasInspectorTitle: {fontFamily:'ArchivistEditorial',fontSize:19,lineHeight:24,fontWeight:'500',marginTop:1},
+  atlasInspectorSubtitle: {fontSize:11,lineHeight:16},
+  atlasInspectorClose: {width:38,height:38,borderRadius:19,alignItems:'center',justifyContent:'center',flexShrink:0},
+  atlasInspectorMetaRow: {flexDirection:'row',flexWrap:'wrap',gap:7},
+  atlasInspectorMetaChip: {minHeight:28,borderRadius:14,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
+  atlasInspectorMetaText: {fontSize:9.5,lineHeight:13,fontWeight:'600'},
+  atlasInspectorActions: {flexDirection:'row',flexWrap:'wrap',gap:8,paddingTop:2},
 
   atlasScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
   atlasScreenFold: {paddingHorizontal:24,paddingTop:10},
