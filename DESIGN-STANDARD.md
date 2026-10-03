@@ -267,3 +267,19 @@ Primary app destinations use one shared page-header pattern. The page title is t
 - Tapping the avatar opens the account hub with Profile, Rewards and Settings. Profile owns avatar customization; Rewards owns achievements/milestones; Settings owns app/library/server configuration.
 - The avatar is a consistent circular identity control, not a replacement for the page title.
 - Generic “Archivist” top chrome must not displace page-specific titles.
+
+
+## Live Player / Reader hub
+
+The bottom navigation has five primary destinations in this order: Shelf, Library, Now, Atlas, Stats.
+
+- **Now** is the central Player / Reader destination and may be visually stronger than the other tab items without becoming an oversized floating action button.
+- The Now screen has no page title. Its top chrome is a compact Player / Reader segmented switch plus the persistent profile avatar.
+- Player and Reader are parallel live contexts. Starting or resuming audio opens Now in Player mode; opening an ebook, PDF or comic opens Now in Reader mode.
+- Audio playback continues when Reader mode is active. A user may listen to an audiobook while reading a book or comic.
+- Leaving Now for another primary destination does not discard either live context. Returning to Now restores the last selected Player / Reader mode when possible.
+- The compact activity bar sits above bottom navigation. Active audiobook playback has priority. If no audiobook is active, the bar may represent the current/recent reading session instead.
+- Tapping the audiobook activity bar returns to Now / Player. Tapping the reading activity bar returns to Now / Reader.
+- The current/recent audio and reading targets are persisted so a cold app start can offer direct resume from the Now screen.
+- Reader features such as comic speech-bubble focus, zoom, reading position, reader tools and appearance remain available inside Now / Reader.
+- The persistent profile avatar remains visible at the top right of the Now screen and every other navigable page.
