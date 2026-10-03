@@ -4,8 +4,15 @@ export type LocalIdentity = {
   title: string;
   author: string;
   series: string;
+  seriesNumber?: number;
   genre: string;
   publishedYear?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
   confidence: IdentificationConfidence;
   needsReview: boolean;
   reviewReason: string;
@@ -17,8 +24,15 @@ export type LocalMetadataFields = {
   title?: string;
   author?: string;
   series?: string;
+  seriesNumber?: number;
   genre?: string;
   publishedYear?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
 };
 
 export function inferLocalBookMetadata(uri: string, format: string): LocalIdentity {
@@ -35,6 +49,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   let title = stem || 'Untitled';
   let author = '';
   let series = '';
+  let seriesNumber: number | undefined;
   let genre = '';
   let confidence: IdentificationConfidence = 'low';
   let reviewReason = 'Could not confidently identify author and series from the file path.';
@@ -43,11 +58,13 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   if (dashed.length >= 4 && looksIndex(dashed[2])) {
     author = dashed[0];
     series = dashed[1];
+    seriesNumber = numericIndex(dashed[2]);
     title = dashed.slice(3).join(' - ');
     confidence = 'high';
     reviewReason = '';
   } else if (dashed.length >= 3 && looksIndex(dashed[1])) {
     author = dashed[0];
+    seriesNumber = numericIndex(dashed[1]);
     title = dashed.slice(2).join(' - ');
     series = sensibleFolder(parent, title) ? parent : '';
     confidence = 'medium';
@@ -81,7 +98,14 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     const numbered = stem.match(/^\s*(\d+(?:\.\d+)?)\s*[-._:]\s*(.+)$/);
     if (numbered && sensibleFolder(parent, stem)) {
       series = parent;
+      seriesNumber = numericIndex(numbered[1]);
       title = cleanLabel(numbered[2]);
+      const possibleAuthor = cleanLabel(grandparent);
+      if (possibleAuthor && !isLibraryRoot(possibleAuthor) && looksAuthorLike(possibleAuthor)) {
+        author = possibleAuthor;
+        confidence = 'high';
+        reviewReason = '';
+      }
       confidence = 'medium';
       reviewReason = 'Series and title inferred from numbered filename; author needs review.';
     } else if (sensibleFolder(parent, stem) && looksAuthorLike(parent)) {
@@ -92,7 +116,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   }
 
   title = cleanLabel(title) || 'Untitled';
-  author = cleanLabel(author);
+  author = normalizeAuthorName(author);
   series = cleanLabel(series);
   genre = cleanLabel(genre);
 
@@ -101,6 +125,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     title,
     author,
     series,
+    seriesNumber,
     genre,
     confidence,
     needsReview,
@@ -116,8 +141,9 @@ export function applyLocalMetadata(
   source: 'sidecar' | 'manual',
 ): LocalIdentity {
   const title = cleanLabel(fields.title || '') || base.title;
-  const author = fields.author === undefined ? base.author : cleanLabel(fields.author);
+  const author = fields.author === undefined ? base.author : normalizeAuthorName(fields.author);
   const series = fields.series === undefined ? base.series : cleanLabel(fields.series);
+  const seriesNumber = fields.seriesNumber === undefined ? base.seriesNumber : fields.seriesNumber;
   const genre = fields.genre === undefined ? base.genre : cleanLabel(fields.genre);
   const manual = source === 'manual';
   const completeEnough = title !== 'Untitled' && (!!author || manual);
@@ -126,8 +152,15 @@ export function applyLocalMetadata(
     title,
     author,
     series,
+    seriesNumber,
     genre,
-    publishedYear: fields.publishedYear || base.publishedYear,
+    publishedYear: fields.publishedYear ?? base.publishedYear,
+    narrator: cleanOptional(fields.narrator) ?? base.narrator,
+    publisher: cleanOptional(fields.publisher) ?? base.publisher,
+    isbn: normalizeIdentifier(fields.isbn) ?? base.isbn,
+    asin: normalizeIdentifier(fields.asin) ?? base.asin,
+    language: cleanOptional(fields.language) ?? base.language,
+    description: cleanOptional(fields.description) ?? base.description,
     confidence: 'high',
     needsReview: !completeEnough,
     reviewReason: completeEnough ? '' : 'Metadata was found, but the author still needs review.',
@@ -138,15 +171,26 @@ export function applyLocalMetadata(
 export function parseLocalSidecar(text: string, extension: string): LocalMetadataFields {
   if (!text || text.length > 2 * 1024 * 1024) return {};
   const ext = extension.toLowerCase();
-  const title = xmlValue(text, ['dc:title', 'title']);
-  const author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer']);
+  if (ext === 'json') return parseJsonSidecar(text);
+  const title = xmlValue(text, ['dc:title', 'title', 'Title']);
+  const author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer', 'Writer']);
 
-  let series = xmlValue(text, ['series']);
-  const genre = xmlValue(text, ['dc:subject', 'subject', 'genre']);
+  let series = xmlValue(text, ['series', 'Series']);
+  let seriesNumber = numberValue(xmlValue(text, ['seriesindex', 'series_index', 'number', 'Number', 'volume', 'Volume']));
+  const genre = xmlValue(text, ['dc:subject', 'subject', 'genre', 'Genre']);
+  const narrator = xmlValue(text, ['narrator', 'Narrator']);
+  const publisher = xmlValue(text, ['dc:publisher', 'publisher', 'Publisher']);
+  const isbn = xmlValue(text, ['isbn', 'ISBN']);
+  const asin = xmlValue(text, ['asin', 'ASIN']);
+  const language = xmlValue(text, ['dc:language', 'language', 'Language']);
+  const description = xmlValue(text, ['dc:description', 'description', 'Description', 'summary', 'Summary', 'comments', 'Comments']);
   if (!series && ext === 'opf') {
     const calibre = text.match(/<meta\b[^>]*name\s*=\s*["']calibre:series["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
       || text.match(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']calibre:series["'][^>]*>/i);
     if (calibre) series = decodeXml(calibre[1]);
+    const calibreIndex = text.match(/<meta\b[^>]*name\s*=\s*["']calibre:series_index["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
+      || text.match(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']calibre:series_index["'][^>]*>/i);
+    if (seriesNumber === undefined && calibreIndex) seriesNumber = numberValue(calibreIndex[1]);
 
     if (!series) {
       const collection = text.match(/<meta\b[^>]*property\s*=\s*["'][^"']*belongs-to-collection["'][^>]*>([\s\S]*?)<\/meta>/i);
@@ -154,13 +198,21 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     }
   }
 
-  return {
+  const year = publicationYear(xmlValue(text,['dc:date','date','year','Year']));
+  return compactFields({
     title: cleanLabel(title || '') || undefined,
-    author: cleanLabel(author || '') || undefined,
+    author: normalizeAuthorName(author || '') || undefined,
     series: cleanLabel(series || '') || undefined,
+    seriesNumber,
     genre: cleanLabel(genre || '') || undefined,
-    ...(publicationYear(xmlValue(text,['dc:date','date','year','Year']))?{publishedYear:publicationYear(xmlValue(text,['dc:date','date','year','Year']))}:{}),
-  };
+    publishedYear: year,
+    narrator: cleanOptional(narrator),
+    publisher: cleanOptional(publisher),
+    isbn: normalizeIdentifier(isbn),
+    asin: normalizeIdentifier(asin),
+    language: cleanOptional(language),
+    description: cleanOptional(description),
+  });
 }
 
 export function decodedPathParts(uri: string): string[] {
@@ -192,6 +244,94 @@ function decodeXml(value: string) {
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'");
+}
+
+export function normalizeAuthorName(value: string) {
+  let author = cleanLabel(value);
+  if (!author) return '';
+  const comma = author.match(/^([^,]+),\s*([^,]+)$/);
+  if (comma && !/\b(?:jr\.?|sr\.?|ii|iii|iv)$/i.test(comma[2])) author = cleanLabel(comma[2] + ' ' + comma[1]);
+  return author.replace(/\s+/g, ' ').trim();
+}
+
+export function logicalWorkKey(fields: LocalMetadataFields) {
+  const strong = normalizeIdentifier(fields.isbn) || normalizeIdentifier(fields.asin);
+  if (strong) return 'id:' + strong.toLowerCase();
+  return [
+    normalizedKey(fields.author),
+    normalizedKey(fields.series),
+    fields.seriesNumber === undefined ? '' : String(fields.seriesNumber),
+    normalizedKey(fields.title),
+  ].join('|');
+}
+
+export function editionKey(fields: LocalMetadataFields, format = '') {
+  return logicalWorkKey(fields) + '|format:' + normalizedKey(format);
+}
+
+function parseJsonSidecar(text: string): LocalMetadataFields {
+  try {
+    const raw = JSON.parse(text);
+    const metadata = raw && typeof raw === 'object' && raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : raw;
+    const pick = (...keys: string[]) => {
+      for (const key of keys) {
+        const value = metadata?.[key];
+        if (value !== undefined && value !== null && String(value).trim()) return String(value);
+      }
+      return '';
+    };
+    return compactFields({
+      title: pick('title','name'),
+      author: normalizeAuthorName(pick('author','creator','writer')) || undefined,
+      series: pick('series','collection') || undefined,
+      seriesNumber: numberValue(pick('seriesNumber','series_index','seriesIndex','number','volume')),
+      genre: pick('genre','subject') || undefined,
+      publishedYear: publicationYear(pick('publishedYear','year','date','published')),
+      narrator: pick('narrator') || undefined,
+      publisher: pick('publisher') || undefined,
+      isbn: normalizeIdentifier(pick('isbn','ISBN')),
+      asin: normalizeIdentifier(pick('asin','ASIN')),
+      language: pick('language') || undefined,
+      description: pick('description','summary','comments') || undefined,
+    });
+  } catch {
+    return {};
+  }
+}
+
+function compactFields(fields: LocalMetadataFields): LocalMetadataFields {
+  const out: LocalMetadataFields = {};
+  for (const [key,value] of Object.entries(fields)) {
+    if (value === undefined || value === null || String(value).trim() === '') continue;
+    (out as any)[key] = value;
+  }
+  return out;
+}
+
+function cleanOptional(value: unknown) {
+  const result = cleanLabel(String(value ?? ''));
+  return result || undefined;
+}
+
+function normalizeIdentifier(value: unknown) {
+  const result = String(value ?? '').trim().replace(/\s+/g,'').replace(/^urn:(?:isbn|asin):/i,'');
+  return result || undefined;
+}
+
+function numberValue(value: unknown) {
+  const match = String(value ?? '').trim().match(/-?\d+(?:\.\d+)?/);
+  if (!match) return undefined;
+  const number = Number(match[0]);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function numericIndex(value: string) {
+  const number = Number(String(value).replace(/^#/,'').trim());
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+}
+
+function normalizedKey(value: unknown) {
+  return cleanLabel(String(value ?? '')).toLowerCase().replace(/[^a-z0-9]+/g,'');
 }
 
 function cleanLabel(value: string) {
