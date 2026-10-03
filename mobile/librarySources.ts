@@ -54,7 +54,9 @@ export function sourceIdentity(input: SourceIdentityInput): SourceIdentity {
 }
 
 export function matchesSource(source: WorkSource, filter: LibrarySource) {
-  return filter === 'all' || source === filter;
+  if (filter === 'all') return true;
+  if (filter === 'local') return source === 'local' || source === 'downloaded';
+  return source === filter;
 }
 
 export function sourceLabel(source: WorkSource) {
