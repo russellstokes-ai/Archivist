@@ -143,6 +143,7 @@ assert.ok(source.includes("type LibraryFormatFamily = ''|'books'|'comics'|'audio
 assert.ok(source.includes("import {shelfRecommendations} from './shelfRecommendations'") && shelfSource.includes("title:'Books for you'") && shelfSource.includes("title:'Comics for you'") && shelfSource.includes("title:'Audiobooks for you'"), 'Shelf must expose the three owned-content recommendation rows');
 assert.ok(shelfSource.includes('const recommendationLimit=foldLayout?5:3') && shelfSource.includes('From your collection while Archivist learns your taste.') && shelfSource.includes('Based on your reading, ratings and favourites.'), 'Shelf recommendation rows must be capped and distinguish cold-start from personalised ranking');
 
+assert.ok(source.includes('async function removeLocalFolder(folder:LocalFolder)') && source.includes('confirmRemoveLocalFolder(folder)') && source.includes("accessibilityLabel={'Remove local folder '+folder.name}") && source.includes("The original Files/iCloud folder was not changed."), 'Local folder removal must be explicit, accessible and non-destructive');
 const libraryStart=source.indexOf('function Library(){');
 const libraryEnd=source.indexOf('function Player(',libraryStart);
 assert.ok(libraryStart>=0 && libraryEnd>libraryStart,'Library function bounds are missing');
