@@ -78,6 +78,15 @@ assert.equal(dashed.series, 'Dune');
 assert.equal(dashed.confidence, 'high');
 assert.equal(dashed.coverShape, 'square');
 
+const qualified = inferLocalBookMetadata(
+  'content://root/document/primary:Audiobooks%2FAndy%20Weir%20-%20Project%20Hail%20Mary%20%7BRay%20Porter%7D%20%5BASIN%20B08G9PRS1K%5D.m4b',
+  'Audio',
+);
+assert.equal(qualified.title, 'Project Hail Mary');
+assert.equal(qualified.author, 'Andy Weir');
+assert.equal(qualified.narrator, 'Ray Porter');
+assert.equal(qualified.asin, 'B08G9PRS1K');
+
 const messy = inferLocalBookMetadata(
   'content://root/document/primary:Books%2FNeil_Gaiman%20-%20Sandman%20-%2001%20-%20Preludes_%26_Nocturnes%20%5Bebook%5D.epub',
   'EPUB',
