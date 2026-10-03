@@ -255,18 +255,46 @@ export function normalizeAuthorName(value: string) {
 }
 
 export function logicalWorkKey(fields: LocalMetadataFields) {
-  const strong = normalizeIdentifier(fields.isbn) || normalizeIdentifier(fields.asin);
-  if (strong) return 'id:' + strong.toLowerCase();
-  return [
+  const semantic = [
     normalizedKey(fields.author),
     normalizedKey(fields.series),
     fields.seriesNumber === undefined ? '' : String(fields.seriesNumber),
     normalizedKey(fields.title),
   ].join('|');
+  if (semantic.replace(/\|/g,'')) return semantic;
+  const strong = normalizeIdentifier(fields.isbn) || normalizeIdentifier(fields.asin);
+  return strong ? 'id:' + strong.toLowerCase() : 'unknown';
 }
 
 export function editionKey(fields: LocalMetadataFields, format = '') {
-  return logicalWorkKey(fields) + '|format:' + normalizedKey(format);
+  const strong = normalizeIdentifier(fields.isbn) || normalizeIdentifier(fields.asin);
+  return logicalWorkKey(fields) + '|edition:' + (strong ? strong.toLowerCase() : 'unspecified') + '|format:' + normalizedKey(format);
+}
+
+function filenameQualifiers(value:string) {
+  let stem=value;
+  let narrator:string|undefined;
+  let isbn:string|undefined;
+  let asin:string|undefined;
+  let publishedYear:number|undefined;
+
+  stem=stem.replace(/\{([^{}]{2,100})\}\s*$/,(match,name)=>{
+    narrator=cleanLabel(name);
+    return '';
+  });
+  stem=stem.replace(/\[\s*ASIN\s*[:#-]?\s*([A-Z0-9]{10})\s*\]/ig,(match,id)=>{
+    asin=normalizeIdentifier(id);
+    return '';
+  });
+  stem=stem.replace(/\[\s*ISBN(?:-1[03])?\s*[:#-]?\s*([0-9Xx -]{10,20})\s*\]/ig,(match,id)=>{
+    isbn=normalizeIdentifier(id)?.replace(/-/g,'');
+    return '';
+  });
+  stem=stem.replace(/\(\s*((?:19|20)\d{2})\s*\)\s*$/,(match,year)=>{
+    publishedYear=publicationYear(year);
+    return '';
+  });
+  return {stem:cleanLabel(stem),narrator,isbn,asin,publishedYear};
 }
 
 function parseJsonSidecar(text: string): LocalMetadataFields {
