@@ -296,3 +296,26 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Archivist is a universal iOS + Android product. “Android-first” and Expo Go implementation wording are not approved production copy.
 - `design/universal-phone` is the dedicated phone-layout workspace. Phone-specific visual adaptation must not be developed on the locked Fold/reference branch.
 - Automated CI is an engineering gate, not physical visual acceptance. VoiceOver/TalkBack, real iOS/Android safe areas, Fold open/close, keyboard behaviour, real artwork, long metadata, gestures, animation frame quality and large-library runtime performance still require rendered/native verification.
+
+
+## 2026-10-03 — Sprints 9–10: cover management and final UI-lock regression
+
+### Sprint 9 — Cover management
+- Replaced the old raw cover-URI workflow with the native privacy-preserving system image picker for local works.
+- Selected device artwork previews immediately and is copied into Archivist app storage before becoming a protected manual cover override.
+- The editor exposes ranked local cover candidates under **Other local artwork** so users can choose discovered alternatives without leaving metadata editing.
+- Manual covers remain protected from rescans; **Use scanned metadata & cover** removes the override and returns the work to scan-driven artwork.
+- Cover selection is single-image only and rejects files above 25 MB.
+- No broad photo-library permission request is made before opening the system picker.
+- Server cover management remains scan-driven until the server API safely supports explicit remote artwork writes.
+
+### Sprint 10 — UI-lock regression
+- No approved layout, copy hierarchy or StyleSheet geometry was changed.
+- Extended the UI contract to lock the system picker, privacy behaviour, single-image limit, oversized-art rejection, immediate preview and local-candidate selection.
+- The existing full StyleSheet snapshot remains the hard guard against accidental Fold/reference UI drift on `design/hig-refresh`.
+
+### Current branch evidence
+- Sprint 9 implementation tip before the regression checkpoint: `86bfe0735bbe8aeb65604b46e9b1eb597550a319`.
+- Sprint 10 regression-lock commit: `8ae43e2be602049bbbe13c2f9d4626f96b0d1540`.
+- No GitHub Actions run is attached to these latest commits yet, so dependency install, Expo Doctor, TypeScript and full mobile-suite execution are **not claimed** for this checkpoint.
+- Remaining acceptance is runtime visual/interaction verification in Draftbit Preview plus real-device image selection/rescan behaviour on iOS/Android and Fold layouts.
