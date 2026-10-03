@@ -1,4 +1,4 @@
-import {publicationYear} from './libraryIntelligence';
+import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
 import React, {useEffect, useMemo, useState, useRef} from 'react';
@@ -3214,7 +3214,7 @@ function Client() {
       setBusy(true);setError('');
       if(editing.source==='server'){
         if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
-        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description})
+        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber:seriesNumber??0,genre,publishedYear:publishedYear??0,narrator,publisher,isbn,asin,language,description})
           .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
@@ -3284,6 +3284,99 @@ function Client() {
             <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>{setEditing(null);setEditingUris([])}}/>
           </View>
         </ScrollView></View>
+      </KeyboardAvoidingView>
+    </Modal>;
+  }
+
+  function BulkMetadataPanel(){
+    if(!bulkEditOpen)return null;
+    const wanted=new Set(selectedWorkKeys);
+    const visibleOrdered=sortedUnifiedWorks.filter(work=>wanted.has(work.canonicalKey));
+    const visibleKeys=new Set(visibleOrdered.map(work=>work.canonicalKey));
+    const ordered=[...visibleOrdered,...selectedWorks.filter(work=>!visibleKeys.has(work.canonicalKey))];
+    const editable=ordered.filter(work=>work.source==='local'||work.source==='server');
+    const skippedDownloaded=ordered.filter(work=>work.source==='downloaded').length;
+    const hasAudio=editable.some(work=>work.format==='Audio');
+    const serverBlocked=editable.some(work=>work.source==='server')&&(!session||!owner);
+    const hasFields=!!(bulkAuthor.trim()||bulkSeries.trim()||bulkGenre.trim()||bulkNarrator.trim());
+    const hasChange=hasFields||bulkSequential;
+    const close=()=>{if(!busy)setBulkEditOpen(false);};
+    const save=async()=>{
+      if(!hasChange||!editable.length||busy)return;
+      if(serverBlocked){setError('Server metadata can only be changed by an Archivist Server admin.');return;}
+      const patch:BulkMetadataPatch={};
+      if(bulkAuthor.trim())patch.author=bulkAuthor.trim();
+      if(bulkSeries.trim())patch.series=bulkSeries.trim();
+      if(bulkGenre.trim())patch.genre=bulkGenre.trim();
+      if(bulkNarrator.trim())patch.narrator=bulkNarrator.trim();
+      const start=Number(bulkSeriesStart.trim());
+      const numbered=bulkSequential?sequentialSeriesNumbers(editable,Number.isFinite(start)?start:1):editable.map(work=>({item:work,seriesNumber:undefined as number|undefined}));
+      setBusy(true);setError('');
+      try{
+        const nextOverrides={...localMetadataOverrides};
+        const localUpdates=new Map<string,LocalMetadataOverride>();
+        let serverTouched=false;
+        for(const entry of numbered){
+          const work=entry.item;
+          if(work.source==='local'&&work.localWork){
+            for(const track of work.localWork.tracks){
+              if(!track.uri)continue;
+              const override=bulkOverrideForBook(track,work.title,patch,entry.seriesNumber);
+              nextOverrides[track.uri]=override;
+              localUpdates.set(track.uri,override);
+            }
+          }else if(work.source==='server'&&work.serverWork&&session){
+            const payload:Record<string,unknown>={};
+            if(patch.author!==undefined)payload.author=patch.author;
+            if(patch.series!==undefined)payload.series=patch.series;
+            if(patch.genre!==undefined)payload.genre=patch.genre;
+            if(patch.narrator!==undefined)payload.narrator=patch.narrator;
+            if(entry.seriesNumber!==undefined)payload.seriesNumber=entry.seriesNumber;
+            const tracks=await request(session,'/api/works/'+work.serverWork.id+'/tracks') as WorkTrack[];
+            const assetIds=[...new Set(tracks.map(track=>track.id))];
+            for(const assetId of assetIds)await request(session,'/api/assets/'+assetId+'/metadata','PATCH',payload);
+            serverTouched=true;
+          }
+        }
+        if(localUpdates.size){
+          setLocalMetadataOverrides(nextOverrides);
+          await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
+          const updated=localBooks.map(book=>{
+            if(!book.uri)return book;
+            const override=localUpdates.get(book.uri);
+            if(!override)return book;
+            const next={...book,...override,metadataSource:'manual' as const,identificationConfidence:'high' as const,needsReview:false,reviewReason:'',metadataConflicts:[]};
+            return {...next,workKey:logicalWorkKey(next),editionKey:editionKey(next,next.format)};
+          });
+          setLocalBooks(updated);
+          await setPersistedJSON(localCatalogKey,updated);
+        }
+        if(serverTouched)await refreshSourcesAndShelf();
+        setSelectedWorkKeys([]);
+        setBulkEditOpen(false);
+        setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');
+      }catch(e){setError((e as Error).message);}
+      finally{setBusy(false);}
+    };
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
+      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
+        <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+          <View accessibilityViewIsModal={true} accessibilityLabel={'Bulk edit '+selectedWorks.length+' selected works'} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+            <Text style={[styles.playerEyebrow,{color:p.sage}]}>BULK METADATA</Text>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit {selectedWorks.length} selected work{selectedWorks.length===1?'':'s'}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Only fields you enter are changed. Leave a field blank to keep each work's existing value. Setting one author name also consolidates selected author-name variants.</Text>
+            {skippedDownloaded?<Text style={[styles.meta,{color:p.muted}]}>{skippedDownloaded} downloaded cop{skippedDownloaded===1?'y keeps':'ies keep'} source metadata and will not be changed here.</Text>:null}
+            {serverBlocked?<Text style={[styles.meta,{color:p.danger}]}>The selection includes server works. Reconnect as an Admin to change their metadata.</Text>:null}
+            <TextInput accessibilityLabel="Bulk author" value={bulkAuthor} onChangeText={setBulkAuthor} placeholder="Set author (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Bulk series" value={bulkSeries} onChangeText={setBulkSeries} placeholder="Set series (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Bulk genre" value={bulkGenre} onChangeText={setBulkGenre} placeholder="Set genre (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            {hasAudio?<TextInput accessibilityLabel="Bulk narrator" value={bulkNarrator} onChangeText={setBulkNarrator} placeholder="Set narrator (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+            <Button label={bulkSequential?'Sequential series numbering: on':'Number series sequentially'} tone="quiet" onPress={()=>setBulkSequential(value=>!value)}/>
+            {bulkSequential?<><Text style={[styles.meta,{color:p.muted}]}>Numbers follow the works' current Library order.</Text><TextInput accessibilityLabel="Starting series number" keyboardType="decimal-pad" value={bulkSeriesStart} onChangeText={setBulkSeriesStart} placeholder="Start at 1" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/></>:null}
+            <Button label={'Apply to '+editable.length+' work'+(editable.length===1?'':'s')} disabled={busy||serverBlocked||!editable.length||!hasChange} onPress={()=>void save()}/>
+            <Button label="Cancel" tone="quiet" disabled={busy} onPress={close}/>
+          </View>
+        </View></ScrollView>
       </KeyboardAvoidingView>
     </Modal>;
   }
@@ -3809,6 +3902,7 @@ function Client() {
       {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>{setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');setBulkEditOpen(true)}} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Edit metadata</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={favouriteSelected} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Favourite</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={()=>setSelectedWorkKeys([])} style={styles.librarySelectionAction}><Text style={{color:p.sage,fontWeight:'700'}}>Done</Text></Pressable>
       </View>:<>
@@ -3854,7 +3948,7 @@ function Client() {
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
-      <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/><LibraryManagementPanel/>
+      <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/><BulkMetadataPanel/><LibraryManagementPanel/>
       {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibrarySourcesOpen(false)}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
