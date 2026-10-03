@@ -1,6 +1,7 @@
 import {Platform} from 'react-native';
 import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
+import {MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 
 export type LocalBook = {
   id: number;
@@ -19,6 +20,9 @@ export type LocalBook = {
   description?: string;
   workKey?: string;
   editionKey?: string;
+  metadataProvenance?: Partial<Record<string, MetadataSource>>;
+  metadataFieldConfidence?: Partial<Record<string, IdentificationConfidence>>;
+  metadataConflicts?: MetadataConflict[];
   format: string;
   space: string;
   available: boolean;
@@ -239,17 +243,30 @@ export async function scanLocalFolders(
       if (format && !seen.has(child)) {
         seen.add(child);
         let identity = inferLocalBookMetadata(child, format);
+        const evidence = [{
+          source: 'path' as const,
+          confidence: identity.confidence,
+          fields: {
+            title: identity.title, author: identity.author, series: identity.series, seriesNumber: identity.seriesNumber,
+            genre: identity.genre, publishedYear: identity.publishedYear,
+          },
+        }];
 
         const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
         if (sidecarUri) {
           const fields = await cachedSidecarFields(sidecarUri);
           if (Object.keys(fields).length) {
+            evidence.push({source:'sidecar' as const, confidence:'high' as const, fields});
             identity = applyLocalMetadata(identity, fields, 'sidecar');
           }
         }
 
         const override = overrides[child];
-        if (override) identity = applyLocalMetadata(identity, override, 'manual');
+        if (override) {
+          evidence.push({source:'manual' as const, confidence:'high' as const, fields:override});
+          identity = applyLocalMetadata(identity, override, 'manual');
+        }
+        const resolvedMetadata = resolveMetadataCandidates(evidence);
 
         const discoveredCoverUri = artworkByStem.get(fileStem(child).toLowerCase()) || genericCover || undefined;
         const coverUri = override?.coverUri?.trim() || discoveredCoverUri;
@@ -271,6 +288,9 @@ export async function scanLocalFolders(
           description: identity.description,
           workKey: logicalWorkKey(identity),
           editionKey: editionKey(identity, format),
+          metadataProvenance: resolvedMetadata.provenance,
+          metadataFieldConfidence: resolvedMetadata.confidence,
+          metadataConflicts: resolvedMetadata.conflicts,
           format,
           space,
           available: true,
