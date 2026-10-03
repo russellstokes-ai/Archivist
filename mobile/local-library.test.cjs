@@ -21,6 +21,7 @@ const saf = {
   async createFileAsync(parent, name, mime) {
     const uri = parent + '%2F' + encodeURIComponent(name);
     this.files.push([parent, name, mime, uri]);
+    this.dirs.set(parent, [...(this.dirs.get(parent) || []), uri]);
     return uri;
   },
   async copyAsync(copy) { this.copies.push(copy); },
@@ -33,6 +34,7 @@ const infoReads = [];
 Module._load = function(request, parent, isMain) {
   if (request === 'react-native') return {Platform: {OS: 'android'}};
   if (request === 'expo-file-system/legacy') return {
+    EncodingType: {Base64:'base64'},
     StorageAccessFramework: saf,
     async readAsStringAsync(uri) { fileReads.push(uri); return fileText.get(uri) || ''; },
     async getInfoAsync(uri) { infoReads.push(uri); return fileInfo.get(uri) || {exists: true, size: (fileText.get(uri) || '').length}; },
@@ -158,17 +160,16 @@ assert.equal(previews[0].state, 'review');
   assert.equal(dottedScan.books.length,1);
   assert.equal(dottedScan.books[0].title,'The Hobbit');
 
-  // Local reading is deliberately CBZ/ZIP only. CBR is unsupported and CBT
-  // remains server-reader-only, so neither should appear as broken local books.
+  // Discovery matches the local reader: CBZ, CBR and CBT all enter the library.
   const comicRoot='content://root/tree/primary:Comics/document/primary:Comics';
   const cbz=comicRoot+'%2FSupported.cbz';
-  const cbr=comicRoot+'%2FUnsupported.cbr';
-  const cbt=comicRoot+'%2FRemoteOnly.cbt';
+  const cbr=comicRoot+'%2FSupported.cbr';
+  const cbt=comicRoot+'%2FSupported.cbt';
   saf.dirs.set(comicRoot,[cbz,cbr,cbt]);
   const comicScan=await scanLocalFolders([{id:comicRoot,uri:comicRoot,name:'Comics',status:'Ready',itemCount:0}]);
-  assert.equal(comicScan.books.length,1);
-  assert.equal(comicScan.books[0].uri,cbz);
-  assert.equal(comicScan.books[0].format,'Comic');
+  assert.equal(comicScan.books.length,3);
+  assert.deepEqual(comicScan.books.map(item=>item.uri),[cbz,cbr,cbt]);
+  assert.equal(comicScan.books.every(item=>item.format==='Comic'),true);
 
   // Multi-track audiobooks may use one book-level OPF/cover. Parse that OPF once,
   // then reuse it for every track instead of doing repeated I/O.
@@ -197,7 +198,7 @@ assert.equal(previews[0].state, 'review');
   fileInfo.set(hugeBook,{exists:true,size:8*1024*1024*1024});
   const hugeScan=await scanLocalFolders([{id:hugeRoot,uri:hugeRoot,name:'Huge',status:'Ready',itemCount:0}]);
   assert.equal(hugeScan.books.length,1);
-  assert.equal(infoReads.includes(hugeBook),false);
+  assert.equal(infoReads.includes(hugeBook),true);
   assert.equal(fileReads.includes(hugeBook),false);
 
   // Deeply nested libraries have no arbitrary folder-depth limit.
@@ -247,6 +248,23 @@ assert.equal(previews[0].state, 'review');
   assert.equal(saf.files[0][2], 'application/epub+zip');
   assert.equal(saf.copies[0].from, books[0].uri);
   assert.equal(saf.copies[0].to, saf.files[0][3]);
+
+  const collisionResult = await applyLocalSortCopies(previews);
+  assert.equal(collisionResult.copied.length, 0);
+  assert.match(collisionResult.failed[0].error, /Destination already exists/);
+
+  const checkpointRoot='content://root/tree/primary:Sort2/document/primary:Sort2';
+  const checkpointBook={...books[0],id:77,uri:'content://root/document/primary:Source%2FCheckpoint.epub',title:'Checkpoint'};
+  const checkpointPreview=previewLocalSort([checkpointBook],'author-title').map(item=>({...item,rootUri:checkpointRoot}));
+  saf.dirs.set(checkpointRoot,[]);
+  let checkpointCalls=0;
+  const checkpointResult=await applyLocalSortCopies(checkpointPreview,async partial=>{
+    checkpointCalls+=1;
+    assert.equal(partial.copied.length,1,'sort checkpoint durability');
+  });
+  assert.equal(checkpointResult.copied.length,1);
+  assert.equal(checkpointCalls,1);
+
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);
