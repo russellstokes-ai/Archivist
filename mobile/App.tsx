@@ -4007,7 +4007,7 @@ function Client() {
 
               {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
-            {atlasNodeId?<Animated.View style={[styles.atlasInspectorReveal,{maxHeight:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[0,240]}),opacity:atlasInspectorAnim,transform:[{translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})}]}]}>
+            {atlasNodeId?<Animated.View style={[styles.atlasInspectorReveal,{height:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[0,foldLayout?220:188]}),opacity:atlasInspectorAnim,transform:[{translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})}]}]}>
               <AtlasInspector/>
             </Animated.View>:null}
           </View>
@@ -4064,7 +4064,7 @@ function Client() {
                 {label:'Most connected',node:mostConnectedNode,value:mostConnectedNode?mostConnectedNode.label:'—',meta:mostConnectedNode?(universeDegrees.get(mostConnectedNode.id)||0)+' links':'No relationships yet'},
                 {label:'Largest constellation',node:largestConstellation,value:largestConstellation?largestConstellation.label:'—',meta:largestConstellation?largestConstellation.count+' works':'No genre clusters yet'},
                 {label:'Deepest series',node:deepestSeries,value:deepestSeries?deepestSeries.label:'—',meta:deepestSeries?deepestSeries.count+' works':'No series yet'},
-              ].map(item=><Pressable key={item.label} disabled={!item.node} accessibilityRole={item.node?'button':undefined} accessibilityLabel={item.node?'Focus '+item.label+' '+item.value:undefined} onPress={()=>item.node&&focusAtlasNode(item.node.id)} style={({pressed})=>[styles.atlasUniverseHighlightRow,{borderBottomColor:p.line,opacity:pressed?.72:1}]}>
+              ].map(item=><Pressable key={item.label} disabled={!item.node} accessibilityRole={item.node?'button':undefined} accessibilityLabel={item.node?'Focus '+item.label+' '+item.value:undefined} onPress={()=>item.node&&focusAtlasNode(item.node.id)} style={({pressed})=>[styles.atlasUniverseHighlightRow,{borderBottomColor:p.line,opacity:pressed ? .72 : 1}]}>
                 <Text style={[styles.atlasUniverseHighlightLabel,{color:p.muted}]}>{item.label}</Text>
                 <View style={{flex:1,minWidth:0}}>
                   <Text numberOfLines={1} style={[styles.atlasUniverseHighlightValue,{color:p.ink}]}>{item.value}</Text>
@@ -5459,8 +5459,8 @@ const styles = StyleSheet.create({
   atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
   atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:0,borderRadius:0,paddingHorizontal:6,paddingVertical:4,opacity:.88},
   atlasInspector: {borderWidth:0,padding:14,gap:8,zIndex:25},
-  atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12,borderTopLeftRadius:20,borderTopRightRadius:20,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
-  atlasInspectorWide: {width:236,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
+  atlasInspectorMobile: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'rgba(127,127,127,.18)',borderRadius:0},
+  atlasInspectorWide: {width:'100%',minHeight:0,alignSelf:'stretch',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
 
   atlasScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
   atlasScreenFold: {paddingHorizontal:24,paddingTop:10},
