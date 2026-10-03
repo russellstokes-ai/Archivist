@@ -3308,8 +3308,6 @@ function Client() {
       if(!localEdit||coverPicking)return;
       setCoverPicking(true);setError('');
       try{
-        const permission=await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if(!permission.granted){setError('Photo access is needed only to choose cover artwork from your device.');return;}
         const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:false,quality:1,selectionLimit:1});
         if(result.canceled||!result.assets?.length)return;
         const asset=result.assets[0];
