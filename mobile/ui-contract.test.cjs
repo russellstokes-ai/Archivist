@@ -67,7 +67,7 @@ assert.ok(source.includes("errorBanner: {position:'absolute'") && source.include
 assert.equal(source.includes('function PageHeader({title,subtitle,action}'),false,'PageHeader must not place page actions beside the profile avatar');
 assert.equal(source.includes('action={<Pressable'),false,'Primary page actions must not sit beside the profile avatar');
 assert.ok(source.includes('function PageToolbar('), 'Secondary page controls must move into the standard toolbar below the header');
-assert.ok(source.includes('title="Reader Stats"') && source.includes('statsPeriodIconButton') && source.includes("Change statistics period. Current "), 'Stats period control must remain compact and separate from the avatar');
+assert.ok(source.includes('title="Reader Stats"') && source.includes("(['Day','Week','Month'] as const)") && source.includes("accessibilityLabel={'Show '+label.toLowerCase()+' reading data'}"), 'Stats Day / Week / Month controls must remain compact and separate from the avatar');
 assert.ok(source.includes('title="Atlas"') && source.includes("accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'}"), 'Atlas view control must remain available below the title');
 
 for (const title of ['Shelf','Library','Atlas','Reader Stats','Profile','Rewards','Settings']) {
@@ -82,14 +82,16 @@ assert.ok(statsStart>=0 && statsEnd>statsStart, 'Reader Stats function bounds ar
 const statsSource=source.slice(statsStart,statsEnd);
 assert.ok(statsSource.includes('title="Reader Stats"') && statsSource.includes('subtitle="Your reading journey."'), 'Reader Stats standard title or subtitle is missing');
 assert.equal(statsSource.includes("['Overview','Time','Books','Genres','Formats','Places']"),false,'Reader Stats should not expose redundant top section filters');
-assert.ok(statsSource.includes('readerStatsRhythmMode') && statsSource.includes("['Time','Day','Month']"), 'Reader Stats rhythm modes are not wired');
-assert.ok(statsSource.includes('cycleStatsPeriod') && statsSource.includes('readerStatsYear'), 'Reader Stats period selector is not functional');
+assert.ok(statsSource.includes('readerStatsPeriod') && statsSource.includes("(['Day','Week','Month'] as const)") && statsSource.includes('setReaderStatsPeriod(label)'), 'Reader Stats Day / Week / Month controls are not wired');
+assert.ok(statsSource.includes('statsPeriodStart') && statsSource.includes("readerStatsPeriod==='Week'") && statsSource.includes("readerStatsPeriod==='Month'") && statsSource.includes('inStatsPeriod(new Date(item.updatedAt*1000))'), 'Reader Stats range filtering is not functional');
+assert.ok(statsSource.includes('{timeRhythm}') && !statsSource.includes("readerStatsRhythmMode==='Time'"), 'Reader Stats range controls must change data without changing the approved chart');
 assert.equal(statsSource.includes('>{periodLabel}</Text>'),false,'Stats should not display a redundant All time label');
 assert.ok(statsSource.includes('statsRhythmDial') && statsSource.includes('statsHeatCell'), 'Reader Stats rhythm ring or heatmap is missing');
 assert.ok(statsSource.includes('Reading Progress') && statsSource.includes('Format Breakdown') && statsSource.includes('Genre Reading Time') && statsSource.includes('Reading Pace') && statsSource.includes('Where You Read') && statsSource.includes('Reading Streaks'), 'Reader Stats content is incomplete');
 assert.ok(source.includes("activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar"), 'Reader Stats must retain the standard bottom navigation');
 assert.ok(source.includes("'#2F8B86'") && source.includes('AmbientGlow'), 'Reader Stats teal ambient glow is missing');
 assert.ok(source.includes("statsDashboardCard: {width:'100%',borderTopWidth"), 'Reader Stats should use open edge-to-edge sections instead of boxed dashboard cards');
+assert.ok(statsSource.includes("label:'Longest read'") && statsSource.indexOf("label:'Longest read'")>statsSource.indexOf("label:'Minutes read'"), 'Reader Stats top strip must place Longest read after Minutes read');
 assert.ok(statsSource.includes('Average session') && statsSource.includes('Longest session') && statsSource.includes('Most active day') && statsSource.includes('Most active month'), 'Reader Stats reading-habit metrics are incomplete');
 assert.ok(statsSource.includes('Completion rate') && statsSource.includes('Series completed') && statsSource.includes('Finishes by month'), 'Reader Stats completion metrics are incomplete');
 assert.ok(statsSource.includes('Completion by format') && statsSource.includes('Completion by genre'), 'Reader Stats completion splits are missing');
@@ -99,10 +101,12 @@ const rhythmIndex=statsSource.indexOf('{rhythmCard}');
 const breakdownIndex=statsSource.indexOf('>Reading Breakdown</Text>');
 const moreInsightsIndex=statsSource.indexOf('>More Insights</Text>');
 assert.ok(rhythmIndex>=0 && breakdownIndex>rhythmIndex && moreInsightsIndex>breakdownIndex, 'Reader Stats chart hierarchy must place doughnut sections below Reading Rhythm and supporting insights below them');
-assert.ok(statsSource.includes('const donutCards=') && statsSource.includes('{readingProgressCard}') && statsSource.includes('{formatCard}') && statsSource.includes('{genreCard}') && statsSource.includes('{paceCard}') && statsSource.includes('{placesCard}'), 'Reader Stats doughnut section grouping is incomplete');
+assert.ok(statsSource.includes('const primaryReadingCards=') && statsSource.indexOf('{readingProgressCard}')<statsSource.indexOf('{paceCard}'), 'Reading Progress and Reading Pace must share the primary aligned row');
+assert.ok(statsSource.includes('const breakdownCards=') && statsSource.includes('{formatCard}') && statsSource.includes('{genreCard}') && statsSource.includes('{placesCard}'), 'Reader Stats breakdown grouping is incomplete');
 assert.ok(statsSource.includes('const supportingCards=') && statsSource.includes('{streakCard}') && statsSource.includes('{tasteCard}'), 'Reader Stats non-doughnut insight grouping is incomplete');
 
 assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includes('statsScreenFold') && source.includes('statsScreenWide'), 'Reader Stats spacing must align with the app responsive gutters');
+assert.ok(source.includes("statsMetricCardWide: {width:'19%'") && source.includes('rowGap:22') && source.includes('minHeight:118'), 'Reader Stats five-metric layout and chart alignment spacing are not locked');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"), 'Primary page gutters must match the Reader Stats header standard');
 
 
@@ -117,6 +121,13 @@ assert.ok(source.includes("useState<'Genre'|'Format'|'Published year'|null>(null
 assert.ok(atlasSource.includes("{atlasBreakdown?<Animated.View") && atlasSource.includes("Choose Genre, Format or Year to reveal the library breakdown"), 'Atlas breakdown should appear only after a ring control is pressed');
 assert.ok(source.includes('const atlasPulse=useRef(new Animated.Value(0)).current') && source.includes('const atlasPulseLoop=Animated.loop'), 'Atlas selected-state pulse animation is missing');
 assert.ok(source.includes('atlasRingControlPulse') && source.includes('atlasSelectedRingPulse'), 'Atlas ring controls and ring chart need selected pulse feedback');
+assert.ok(atlasSource.includes('>Universe Stats</Text>') && atlasSource.includes("label:'Nodes'") && atlasSource.includes("label:'Connections'") && atlasSource.includes("label:'Constellations'") && atlasSource.includes("label:'Bridges'") && atlasSource.includes("label:'Series'") && atlasSource.includes("label:'Collections'"), 'Atlas Universe Stats are missing');
+assert.ok(atlasSource.includes('Most connected') && atlasSource.includes('Largest constellation') && atlasSource.includes('Deepest series'), 'Atlas Universe Highlights are incomplete');
+assert.ok(source.includes('atlasInspectorAnim') && source.includes('height:atlasInspectorAnim.interpolate'), 'Atlas selected-node information must fade and expand in');
+assert.ok(source.includes('atlasBreakdownReveal') && source.includes('maxHeight:atlasBreakdownAnim.interpolate'), 'Atlas breakdown must expand in and push Universe Stats down');
+assert.ok(atlasSource.includes('focusAtlasNode(item.node.id)'), 'Atlas Universe Highlights must navigate back into the graph');
+assert.ok(atlasSource.includes('bridgeNodeIds') && atlasSource.includes("genres.size>1"), 'Atlas Bridges must represent real cross-genre connectors');
+
 assert.ok(source.includes('opacity:atlasPulse.interpolate') && source.includes('node.id===atlasNodeId'), 'Atlas selected nodes need slow glow feedback');
 
 assert.ok(atlasSource.includes('Breakdown of your library') && atlasSource.includes('atlasBreakdownTrack') && atlasSource.includes('atlasBreakdownPercent'), 'Atlas breakdown sheet must match the approved concept');

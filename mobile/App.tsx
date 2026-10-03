@@ -520,14 +520,14 @@ function Client() {
   const [serverActivity,setServerActivity]=useState<ProfileActivity[]>([]);
   const [insightGoal,setInsightGoal]=useState(defaultInsightGoal);
   const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
-  const [readerStatsRhythmMode,setReaderStatsRhythmMode]=useState<'Time'|'Day'|'Month'>('Time');
-  const [readerStatsYear,setReaderStatsYear]=useState<number|'all'>(new Date().getFullYear());
+  const [readerStatsPeriod,setReaderStatsPeriod]=useState<'Day'|'Week'|'Month'>('Week');
   const [profileMenuOpen,setProfileMenuOpen]=useState(false);
   const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
   const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'|null>(null);
   const atlasBreakdownAnim=useRef(new Animated.Value(0)).current;
+  const atlasInspectorAnim=useRef(new Animated.Value(0)).current;
   const atlasPulse=useRef(new Animated.Value(0)).current;
   const [atlasSearch,setAtlasSearch]=useState('');
   const [atlasNodeId,setAtlasNodeId]=useState('');
@@ -873,11 +873,13 @@ function Client() {
       setAtlasNodeId('');
       atlasBreakdownAnim.stopAnimation();
       atlasBreakdownAnim.setValue(0);
+      atlasInspectorAnim.stopAnimation();
+      atlasInspectorAnim.setValue(0);
       atlasPulse.stopAnimation();
       atlasPulse.setValue(0);
       return;
     }
-  },[activeTab,atlasBreakdownAnim,atlasPulse]);
+  },[activeTab,atlasBreakdownAnim,atlasInspectorAnim,atlasPulse]);
 
   useEffect(()=>{
     atlasPulse.stopAnimation();
@@ -3778,10 +3780,7 @@ function Client() {
     const q=atlasSearch.trim().toLowerCase();if(!q)return;
     const node=atlasUniverse.nodes.find(item=>item.label.toLowerCase().includes(q)||item.subtitle?.toLowerCase().includes(q));
     if(!node)return;
-    setAtlasNodeId(node.id);
-    const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=900?620:foldLayout?580:500;
-    const scale=Math.max(.82,atlasTransform.scale);
-    animateAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
+    focusAtlasNode(node.id);
   }
 
   function AtlasEdgeView({from,to,kind}:{from:AtlasUniverseNode;to:AtlasUniverseNode;kind:string}){
@@ -3797,7 +3796,7 @@ function Client() {
     const colour=atlasNodeColor(node);
     const dot=(node.kind==='genre'?18:node.kind==='author'?7:node.kind==='work'?4:5.5)/zoom;
     const genreHub=node.kind==='genre';
-    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>setAtlasNodeId(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
+    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>selectAtlasNode(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
       {selected?<Animated.View pointerEvents="none" style={{position:'absolute',width:58/zoom,height:58/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.14,.30]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.94,1.16]})}]}}/>:genreHub?<View pointerEvents="none" style={{position:'absolute',width:38/zoom,height:38/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:.12}}/>:null}
       <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:colour,borderWidth:genreHub?1/zoom:0,borderColor:genreHub?'rgba(255,255,255,.55)':'transparent',boxShadow:selected?'0px 0px 22px '+colour:genreHub?'0px 0px 12px '+colour:'none'}}/>
       {(selected||genreHub||zoom>.60)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
@@ -3806,13 +3805,50 @@ function Client() {
     </Pressable>;
   }
 
+  function selectAtlasNode(nextId:string){
+    if(!nextId)return;
+    if(reduceMotion){setAtlasNodeId(nextId);atlasInspectorAnim.setValue(1);return;}
+    if(nextId===atlasNodeId){
+      atlasInspectorAnim.stopAnimation();
+      atlasInspectorAnim.setValue(.92);
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:19,stiffness:210,mass:.68,useNativeDriver:false}).start();
+      return;
+    }
+    if(!atlasNodeId){
+      setAtlasNodeId(nextId);
+      atlasInspectorAnim.setValue(0);
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:false}).start();
+      return;
+    }
+    Animated.timing(atlasInspectorAnim,{toValue:0,duration:115,useNativeDriver:false}).start(()=>{
+      setAtlasNodeId(nextId);
+      atlasInspectorAnim.setValue(0);
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:false}).start();
+    });
+  }
+
+  function dismissAtlasNode(){
+    if(!atlasNodeId)return;
+    if(reduceMotion){atlasInspectorAnim.setValue(0);setAtlasNodeId('');return;}
+    Animated.timing(atlasInspectorAnim,{toValue:0,duration:160,useNativeDriver:false}).start(()=>setAtlasNodeId(''));
+  }
+
+  function focusAtlasNode(nodeId:string){
+    const node=atlasUniverse.nodes.find(item=>item.id===nodeId);
+    if(!node)return;
+    selectAtlasNode(nodeId);
+    const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=900?620:foldLayout?580:500;
+    const scale=Math.max(.82,atlasTransform.scale);
+    animateAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
+  }
+
   function AtlasInspector(){
     const node=atlasSelectedNode;if(!node)return null;
     const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
     return <View style={[styles.atlasInspector,{backgroundColor:foldLayout?p.paper:p.raised},foldLayout?styles.atlasInspectorWide:styles.atlasInspectorMobile,foldLayout&&{borderLeftColor:p.line}]}>
-      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={()=>setAtlasNodeId('')} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
+      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={dismissAtlasNode} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
       {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
       <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
       <View style={styles.toolRow}>
@@ -3828,19 +3864,19 @@ function Client() {
     if(next===atlasBreakdown){
       atlasBreakdownAnim.stopAnimation();
       atlasBreakdownAnim.setValue(.90);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:true}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:false}).start();
       return;
     }
     if(!atlasBreakdown){
       setAtlasBreakdown(next);
       atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
       return;
     }
-    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:150,useNativeDriver:true}).start(()=>{
+    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:150,useNativeDriver:false}).start(()=>{
       setAtlasBreakdown(next);
       atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
     });
   }
 
@@ -3864,6 +3900,41 @@ function Client() {
       {label:'Genre',count:1,color:atlasBreakdown==='Genre'?'#E2736B':'#7A4D50'},
       {label:'Format',count:1,color:atlasBreakdown==='Format'?'#62AFC1':'#385F78'},
       {label:'Year',count:1,color:atlasBreakdown==='Published year'?'#A78BC7':'#5A526F'},
+    ];
+
+    const universeDegrees=new Map<string,number>();
+    const workGenre=new Map<string,string>();
+    const adjacentWorks=new Map<string,Set<string>>();
+    for(const edge of atlasUniverse.edges){
+      universeDegrees.set(edge.from,(universeDegrees.get(edge.from)||0)+1);
+      universeDegrees.set(edge.to,(universeDegrees.get(edge.to)||0)+1);
+      const from=nodeMap.get(edge.from),to=nodeMap.get(edge.to);
+      if(edge.kind==='genre'){
+        if(from?.kind==='genre'&&to?.kind==='work')workGenre.set(to.id,from.id);
+        if(to?.kind==='genre'&&from?.kind==='work')workGenre.set(from.id,to.id);
+      }
+      const connector=from&&['author','series','collection'].includes(from.kind)&&to?.kind==='work'?from:to&&['author','series','collection'].includes(to.kind)&&from?.kind==='work'?to:null;
+      const work=connector===from?to:connector===to?from:null;
+      if(connector&&work?.kind==='work'){
+        const set=adjacentWorks.get(connector.id)||new Set<string>();
+        set.add(work.id);adjacentWorks.set(connector.id,set);
+      }
+    }
+    const bridgeNodeIds=[...adjacentWorks.entries()].filter(([,works])=>{
+      const genres=new Set([...works].map(id=>workGenre.get(id)).filter(Boolean));
+      return genres.size>1;
+    }).map(([id])=>id);
+    const universeMajorNodes=atlasUniverse.nodes.filter(node=>['work','author','series','collection'].includes(node.kind));
+    const mostConnectedNode=universeMajorNodes.slice().sort((a,b)=>(universeDegrees.get(b.id)||0)-(universeDegrees.get(a.id)||0)||b.count-a.count)[0]||null;
+    const largestConstellation=atlasUniverse.nodes.filter(node=>node.kind==='genre').slice().sort((a,b)=>b.count-a.count)[0]||null;
+    const deepestSeries=atlasUniverse.nodes.filter(node=>node.kind==='series').slice().sort((a,b)=>b.count-a.count)[0]||null;
+    const universeStats=[
+      {label:'Nodes',value:atlasUniverse.nodes.length,copy:'mapped entities'},
+      {label:'Connections',value:atlasUniverse.edges.length,copy:'relationship links'},
+      {label:'Constellations',value:atlasUniverse.nodes.filter(node=>node.kind==='genre').length,copy:'genre clusters'},
+      {label:'Bridges',value:bridgeNodeIds.length,copy:'cross-cluster connectors'},
+      {label:'Series',value:atlasUniverse.nodes.filter(node=>node.kind==='series').length,copy:'series networks'},
+      {label:'Collections',value:atlasUniverse.nodes.filter(node=>node.kind==='collection').length,copy:'collection networks'},
     ];
     return (
       <ScrollView contentContainerStyle={[styles.atlasScreen,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled">
@@ -3935,10 +4006,13 @@ function Client() {
 
               {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
-            <AtlasInspector/>
+            {atlasNodeId?<Animated.View style={[styles.atlasInspectorReveal,{height:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[0,foldLayout?220:188]}),opacity:atlasInspectorAnim,transform:[{translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})}]}]}>
+              <AtlasInspector/>
+            </Animated.View>:null}
           </View>
 
-          {atlasBreakdown?<Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
+          {atlasBreakdown?<Animated.View style={[styles.atlasBreakdownReveal,{maxHeight:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[0,520]}),opacity:atlasBreakdownAnim}]}>
+            <Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
             <View style={styles.atlasBreakdownHandle}><View style={[styles.atlasBreakdownHandleBar,{backgroundColor:p.muted}]}/></View>
             <View style={styles.atlasBreakdownHeader}>
               <Animated.View style={[styles.atlasBreakdownBadge,{borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',backgroundColor:p.card,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.84,1]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.98,1.05]})}]}]}>
@@ -3965,7 +4039,41 @@ function Client() {
               {!breakdown.length?<Text style={[styles.meta,{color:p.muted}]}>Add books to reveal your library’s patterns.</Text>:null}
             </View>
             {atlasBreakdown==='Published year'?<Text style={[styles.atlasBreakdownNote,{color:p.muted}]}>Dates come from recorded metadata. Books without a verified publication date are grouped as not recorded.</Text>:null}
+            </Animated.View>
           </Animated.View>:null}
+
+          <Animated.View style={[styles.atlasUniverseStats,{borderTopColor:p.line,transform:[{translateY:atlasBreakdown||atlasNodeId?8:0}]}]}>
+            <View style={styles.atlasUniverseStatsHeader}>
+              <View style={{flex:1,minWidth:0}}>
+                <Text style={[styles.atlasUniverseStatsTitle,{color:p.ink}]}>Universe Stats</Text>
+                <Text style={[styles.atlasUniverseStatsCopy,{color:p.muted}]}>The structure and relationships inside your library.</Text>
+              </View>
+              <Text style={[styles.atlasUniverseStatsTotal,{color:p.sage}]}>{atlasUniverseWorks.length} works</Text>
+            </View>
+            <View style={styles.atlasUniverseStatsGrid}>
+              {universeStats.map(item=><View key={item.label} style={[styles.atlasUniverseStat,{borderBottomColor:p.line}]}>
+                <Text style={[styles.atlasUniverseStatValue,{color:p.ink}]}>{item.value}</Text>
+                <Text style={[styles.atlasUniverseStatLabel,{color:p.muted}]}>{item.label}</Text>
+                <Text style={[styles.atlasUniverseStatCopy,{color:p.muted}]}>{item.copy}</Text>
+              </View>)}
+            </View>
+            <View style={[styles.atlasUniverseHighlights,{borderTopColor:p.line}]}>
+              <Text style={[styles.atlasUniverseHighlightsKicker,{color:p.muted}]}>UNIVERSE HIGHLIGHTS</Text>
+              {[
+                {label:'Most connected',node:mostConnectedNode,value:mostConnectedNode?mostConnectedNode.label:'—',meta:mostConnectedNode?(universeDegrees.get(mostConnectedNode.id)||0)+' links':'No relationships yet'},
+                {label:'Largest constellation',node:largestConstellation,value:largestConstellation?largestConstellation.label:'—',meta:largestConstellation?largestConstellation.count+' works':'No genre clusters yet'},
+                {label:'Deepest series',node:deepestSeries,value:deepestSeries?deepestSeries.label:'—',meta:deepestSeries?deepestSeries.count+' works':'No series yet'},
+              ].map(item=><Pressable key={item.label} disabled={!item.node} accessibilityRole={item.node?'button':undefined} accessibilityLabel={item.node?'Focus '+item.label+' '+item.value:undefined} onPress={()=>item.node&&focusAtlasNode(item.node.id)} style={({pressed})=>[styles.atlasUniverseHighlightRow,{borderBottomColor:p.line,opacity:pressed ? .72 : 1}]}>
+                <Text style={[styles.atlasUniverseHighlightLabel,{color:p.muted}]}>{item.label}</Text>
+                <View style={{flex:1,minWidth:0}}>
+                  <Text numberOfLines={1} style={[styles.atlasUniverseHighlightValue,{color:p.ink}]}>{item.value}</Text>
+                  <Text style={[styles.atlasUniverseHighlightMeta,{color:p.muted}]}>{item.meta}</Text>
+                </View>
+                {item.node?<View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={p.muted} size={15}/></View>:null}
+              </Pressable>)}
+            </View>
+          </Animated.View>
+
           <Text style={[styles.atlasHint,{color:p.muted}]}>{atlasBreakdown?'Pinch, pan and explore':'Choose Genre, Format or Year to reveal the library breakdown'}</Text>
         </>}
       </ScrollView>
@@ -4010,41 +4118,43 @@ function Client() {
       mint:darkStats?'#73DDB0':'#4FA97F',
     };
 
-    const currentYear=new Date().getFullYear();
     const activitySource=(sourceFilter==='local'||sourceFilter==='downloaded')?[]:serverActivity;
-    const activityYears=Array.from(new Set(activitySource.map(item=>new Date(item.updatedAt*1000).getFullYear()).filter(year=>Number.isFinite(year))));
-    if(!activityYears.includes(currentYear))activityYears.push(currentYear);
-    activityYears.sort((a,b)=>b-a);
-    const periodOptions:Array<number|'all'>=activitySource.length?[...activityYears,'all']:['all'];
-    const effectivePeriod: number|'all'=activitySource.length?readerStatsYear:'all';
-    const periodActivity=[...activitySource].filter(item=>effectivePeriod==='all'||new Date(item.updatedAt*1000).getFullYear()===effectivePeriod).sort((a,b)=>b.updatedAt-a.updatedAt);
-    const cycleStatsPeriod=()=>{
-      const currentIndex=Math.max(0,periodOptions.findIndex(option=>option===effectivePeriod));
-      setReaderStatsYear(periodOptions[(currentIndex+1)%periodOptions.length]);
+    const statsNow=new Date();
+    const statsPeriodStart=new Date(statsNow);
+    statsPeriodStart.setHours(0,0,0,0);
+    if(readerStatsPeriod==='Week'){
+      const mondayOffset=(statsPeriodStart.getDay()+6)%7;
+      statsPeriodStart.setDate(statsPeriodStart.getDate()-mondayOffset);
+    }else if(readerStatsPeriod==='Month'){
+      statsPeriodStart.setDate(1);
+    }
+    const periodStartMs=statsPeriodStart.getTime();
+    const periodEndMs=statsNow.getTime();
+    const inStatsPeriod=(date:Date)=>{
+      const value=date.getTime();
+      return Number.isFinite(value)&&value>=periodStartMs&&value<=periodEndMs;
     };
-    const periodLabel=effectivePeriod==='all'?'All time':String(effectivePeriod);
+    const periodActivity=[...activitySource].filter(item=>inStatsPeriod(new Date(item.updatedAt*1000))).sort((a,b)=>b.updatedAt-a.updatedAt);
+    const periodLabel=readerStatsPeriod==='Day'?'Today':readerStatsPeriod==='Week'?'This week':'This month';
 
     const completedGoal=Math.max(1,summary.completedGoal.target);
-    const completed=effectivePeriod==='all'
-      ? summary.completed
-      : new Set(periodActivity.filter(item=>item.completed).map(item=>item.workId)).size;
+    const completed=new Set(periodActivity.filter(item=>item.completed).map(item=>item.workId)).size;
     const progressRemaining=Math.max(0,completedGoal-completed);
     const progressPercent=Math.min(100,Math.round(completed/completedGoal*100));
     const totalActivitySeconds=periodActivity.reduce((sum,item)=>sum+Math.max(0,item.activeSeconds||0),0);
     const minutesRead=Math.round(totalActivitySeconds/60);
-    const ritualScopeDays=Object.entries(ritualDays).filter(([day,seconds])=>{
-      if(seconds<60)return false;
-      if(effectivePeriod==='all')return true;
-      return day.startsWith(String(effectivePeriod)+'-');
-    }).length;
+    const ritualScopeDays=Object.entries(ritualDays).filter(([day,seconds])=>seconds>=60&&inStatsPeriod(new Date(day+'T12:00:00'))).length;
     const activeDays=periodActivity.length
-      ? new Set(periodActivity.map(item=>new Date(item.updatedAt*1000).toISOString().slice(0,10))).size
+      ? new Set(periodActivity.map(item=>localDay(new Date(item.updatedAt*1000)))).size
       : ritualScopeDays;
     const paceMinutes=activeDays?Math.round(minutesRead/activeDays):0;
+    const sessionSeconds=periodActivity.map(item=>Math.max(0,item.activeSeconds||0)).filter(Boolean);
+    const longestSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(Math.max(...sessionSeconds)/60)):0;
 
     const metricCards=[
       {label:'Books read',value:completed,icon:'bookOpen' as UiIconName},
       {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'clock' as UiIconName},
+      {label:'Longest read',value:longestSessionMinutes?longestSessionMinutes+' min':'—',icon:'gauge' as UiIconName},
       {label:'Reading days',value:activeDays,icon:'calendar' as UiIconName},
       {label:'Day streak',value:ritual.currentStreak,icon:'flame' as UiIconName},
     ];
@@ -4068,9 +4178,7 @@ function Client() {
     const maxHour=Math.max(1,...hourTotals);
     const maxDay=Math.max(1,...dayTotals);
     const maxMonth=Math.max(1,...monthTotals);
-    const sessionSeconds=periodActivity.map(item=>Math.max(0,item.activeSeconds||0)).filter(Boolean);
     const averageSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(sessionSeconds.reduce((sum,value)=>sum+value,0)/sessionSeconds.length/60)):0;
-    const longestSessionMinutes=sessionSeconds.length?Math.max(1,Math.round(Math.max(...sessionSeconds)/60)):0;
     const weekdayLabels=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     const peakDayIndex=dayTotals.reduce((best,value,index)=>value>dayTotals[best]?index:best,0);
     const mostActiveDay=dayTotals[peakDayIndex]?weekdayLabels[peakDayIndex]:'—';
@@ -4096,11 +4204,7 @@ function Client() {
     const completedSeries=trackedSeries.filter(items=>items.every(work=>work.readingState==='finished')).length;
     const seriesCompletionRate=trackedSeries.length?Math.round(completedSeries/trackedSeries.length*100):0;
 
-    const periodAnnotations=readerAnnotations.filter(item=>{
-      if(effectivePeriod==='all')return true;
-      const date=new Date(item.createdAt);
-      return Number.isFinite(date.getTime())&&date.getFullYear()===effectivePeriod;
-    });
+    const periodAnnotations=readerAnnotations.filter(item=>inStatsPeriod(new Date(item.createdAt)));
     const highlightCount=periodAnnotations.filter(item=>item.kind==='highlight').length;
     const noteCount=periodAnnotations.filter(item=>item.kind==='note').length;
 
@@ -4115,14 +4219,11 @@ function Client() {
     const activeDateKeys=new Set<string>();
     for(const item of periodActivity)activeDateKeys.add(new Date(item.updatedAt*1000).toISOString().slice(0,10));
     for(const [day,seconds] of Object.entries(ritualDays)){
-      if(seconds<60)continue;
-      if(effectivePeriod!=='all'&&!day.startsWith(String(effectivePeriod)+'-'))continue;
+      if(seconds<60||!inStatsPeriod(new Date(day+'T12:00:00')))continue;
       activeDateKeys.add(day);
     }
-    const consistencyEnd=effectivePeriod==='all'||effectivePeriod===currentYear?new Date():new Date(effectivePeriod,11,31);
-    const consistencyStart=effectivePeriod==='all'
-      ? (()=>{const keys=[...activeDateKeys].sort();return keys.length?new Date(keys[0]+'T00:00:00'):new Date();})()
-      : new Date(effectivePeriod,0,1);
+    const consistencyEnd=new Date(statsNow);
+    const consistencyStart=new Date(statsPeriodStart);
     consistencyStart.setHours(0,0,0,0);
     consistencyEnd.setHours(0,0,0,0);
     const trackedCalendarDays=Math.max(1,Math.floor((consistencyEnd.getTime()-consistencyStart.getTime())/86400000)+1);
@@ -4144,11 +4245,7 @@ function Client() {
     const formatCompletionRows=completionRows('format');
     const genreCompletionRows=completionRows('genre');
 
-    const anchorDate=periodActivity.length
-      ? new Date(periodActivity[0].updatedAt*1000)
-      : effectivePeriod==='all'||effectivePeriod===currentYear
-        ? new Date()
-        : new Date(effectivePeriod,11,31);
+    const anchorDate=new Date(statsNow);
     anchorDate.setHours(0,0,0,0);
     const recentDays=Array.from({length:7},(_,index)=>{
       const date=new Date(anchorDate);date.setDate(date.getDate()-6+index);
@@ -4310,15 +4407,15 @@ function Client() {
       <View style={[styles.statsRhythmTop,width<520&&styles.statsRhythmTopCompact]}>
         <CardHeader title="Reading Rhythm" subtitle={'When and how you read · '+periodLabel} icon="clock"/>
         <View style={[styles.statsMiniSegment,{borderColor:statsPalette.line,backgroundColor:statsPalette.canvas}]}>
-          {(['Time','Day','Month'] as const).map(label=>{
-            const selected=readerStatsRhythmMode===label;
-            return <Pressable key={label} accessibilityRole="button" accessibilityState={{selected}} onPress={()=>setReaderStatsRhythmMode(label)} style={[styles.statsMiniSegmentItem,selected&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panelRaised}]}>
+          {(['Day','Week','Month'] as const).map(label=>{
+            const selected=readerStatsPeriod===label;
+            return <Pressable key={label} accessibilityRole="button" accessibilityLabel={'Show '+label.toLowerCase()+' reading data'} accessibilityState={{selected}} onPress={()=>setReaderStatsPeriod(label)} style={[styles.statsMiniSegmentItem,selected&&{borderColor:statsPalette.gold,backgroundColor:statsPalette.panelRaised}]}>
               <Text style={{color:selected?statsPalette.ink:statsPalette.muted,fontSize:10.5,fontWeight:selected?'600':'500'}}>{label}</Text>
             </Pressable>;
           })}
         </View>
       </View>
-      {readerStatsRhythmMode==='Time'?timeRhythm:readerStatsRhythmMode==='Day'?dayRhythm:monthRhythm}
+      {timeRhythm}
     </View>;
 
     const readingProgressCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
@@ -4436,11 +4533,14 @@ function Client() {
       </View>
     </View>;
 
-    const donutCards=<View style={styles.statsDonutGrid}>
+    const primaryReadingCards=<View style={styles.statsDonutGrid}>
       {readingProgressCard}
+      {paceCard}
+    </View>;
+
+    const breakdownCards=<View style={styles.statsDonutGrid}>
       {formatCard}
       {genreCard}
-      {paceCard}
       {placesCard}
     </View>;
 
@@ -4454,12 +4554,6 @@ function Client() {
         title="Reader Stats"
         subtitle="Your reading journey."
       />
-      {periodOptions.length>1?<PageToolbar>
-        <Pressable accessibilityRole="button" accessibilityLabel={'Change statistics period. Current '+periodLabel} onPress={cycleStatsPeriod} style={[styles.statsPeriodIconButton,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel}]}>
-          <UiIcon name="calendar" color={statsPalette.gold} size={18}/>
-        </Pressable>
-      </PageToolbar>:null}
-
       <View style={[styles.statsMetricRow,{borderTopColor:statsPalette.line,borderBottomColor:statsPalette.line}]}>
         {metricCards.map(card=><View key={card.label} style={[styles.statsMetricCard,width>=700?styles.statsMetricCardWide:styles.statsMetricCardPhone]}>
           <View style={[styles.statsMetricIcon,{backgroundColor:statsPalette.panelRaised}]}><UiIcon name={card.icon} color={statsPalette.gold} size={18}/></View>
@@ -4477,7 +4571,8 @@ function Client() {
           <Text style={[styles.statsSectionTitle,{color:statsPalette.ink}]}>Reading Breakdown</Text>
           <Text style={[styles.statsSectionCopy,{color:statsPalette.muted}]}>Progress, formats, genres, pace and reading context.</Text>
         </View>
-        {donutCards}
+        {primaryReadingCards}
+        {breakdownCards}
       </View>
 
       <View style={styles.statsSectionGroup}>
@@ -5302,6 +5397,8 @@ const styles = StyleSheet.create({
   atlasRingControlFormat: {right:2,top:'42%'},
   atlasRingControlYear: {bottom:2,alignSelf:'center'},
   atlasRingControlLabel: {fontSize:8,lineHeight:11,fontWeight:'700',letterSpacing:1.05},
+  atlasInspectorReveal: {width:'100%',overflow:'hidden'},
+  atlasBreakdownReveal: {width:'100%',overflow:'hidden'},
   atlasBreakdownSheet: {borderWidth:StyleSheet.hairlineWidth,borderRadius:28,paddingHorizontal:18,paddingBottom:18,paddingTop:8,gap:13,shadowColor:'#000',shadowOpacity:.12,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:5},
   atlasBreakdownHandle: {height:8,alignItems:'center',justifyContent:'center'},
   atlasBreakdownHandleBar: {width:54,height:4,borderRadius:2,opacity:.55},
@@ -5348,8 +5445,8 @@ const styles = StyleSheet.create({
   atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
   atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:0,borderRadius:0,paddingHorizontal:6,paddingVertical:4,opacity:.88},
   atlasInspector: {borderWidth:0,padding:14,gap:8,zIndex:25},
-  atlasInspectorMobile: {position:'absolute',left:12,right:12,bottom:12,borderTopLeftRadius:20,borderTopRightRadius:20,shadowColor:'#000',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:5},
-  atlasInspectorWide: {width:236,minHeight:220,alignSelf:'stretch',borderLeftWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
+  atlasInspectorMobile: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'rgba(127,127,127,.18)',borderRadius:0},
+  atlasInspectorWide: {width:'100%',minHeight:0,alignSelf:'stretch',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
 
   atlasScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
   atlasScreenFold: {paddingHorizontal:24,paddingTop:10},
@@ -5357,6 +5454,22 @@ const styles = StyleSheet.create({
   atlasTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   atlasFocusTitle: {fontFamily:'ArchivistEditorial',fontSize:28,lineHeight:34,fontWeight:'500',letterSpacing:-.35},
   atlasListAlternative: {gap:0},
+  atlasUniverseStats: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:18,gap:16},
+  atlasUniverseStatsHeader: {flexDirection:'row',alignItems:'flex-end',gap:12},
+  atlasUniverseStatsTitle: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,fontWeight:'500',letterSpacing:-.2},
+  atlasUniverseStatsCopy: {fontSize:11,lineHeight:16,marginTop:2},
+  atlasUniverseStatsTotal: {fontSize:11,lineHeight:16,fontWeight:'700',letterSpacing:.35,textTransform:'uppercase'},
+  atlasUniverseStatsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:18,rowGap:0},
+  atlasUniverseStat: {width:'46%',minWidth:126,flexGrow:1,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:13},
+  atlasUniverseStatValue: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500'},
+  atlasUniverseStatLabel: {fontSize:10.5,lineHeight:15,fontWeight:'700',marginTop:1},
+  atlasUniverseStatCopy: {fontSize:9,lineHeight:13,marginTop:1},
+  atlasUniverseHighlights: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:14,gap:2},
+  atlasUniverseHighlightsKicker: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.3,marginBottom:5},
+  atlasUniverseHighlightRow: {minHeight:58,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:12,paddingVertical:9},
+  atlasUniverseHighlightLabel: {width:104,fontSize:9.5,lineHeight:13,fontWeight:'600'},
+  atlasUniverseHighlightValue: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:21,fontWeight:'500'},
+  atlasUniverseHighlightMeta: {fontSize:9,lineHeight:13,marginTop:1},
   atlasHint: {fontSize:10.5,lineHeight:15,textAlign:'center',letterSpacing:.2},
   insightsScreen: {paddingHorizontal:18,paddingTop:18,paddingBottom:100,gap:24,maxWidth:1120,width:'100%',alignSelf:'center'},
   insightsTitle: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',letterSpacing:-.4},
@@ -5564,7 +5677,7 @@ const styles = StyleSheet.create({
   statsMetricRow: {flexDirection:'row',flexWrap:'wrap',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:8,columnGap:8,rowGap:0},
   statsMetricCard: {minHeight:72,paddingHorizontal:2,paddingVertical:9,flexDirection:'row',alignItems:'center',gap:9},
   statsMetricCardPhone: {width:'48.5%',flexGrow:1},
-  statsMetricCardWide: {width:'23.8%',flexGrow:1},
+  statsMetricCardWide: {width:'19%',flexGrow:1},
   statsMetricIcon: {width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center',flexShrink:0},
   statsMetricValue: {fontFamily:'ArchivistEditorial',fontSize:19,lineHeight:23,fontWeight:'500',fontVariant:['tabular-nums']},
   statsMetricLabel: {fontSize:10,lineHeight:13.5,fontWeight:'500',marginTop:1},
@@ -5609,16 +5722,16 @@ const styles = StyleSheet.create({
   statsMonthBarFill: {width:'100%',borderRadius:9},
   statsMonthLabel: {fontSize:9,lineHeight:12,fontWeight:'600'},
   statsMonthValue: {fontSize:8.5,lineHeight:11,fontWeight:'500',fontVariant:['tabular-nums']},
-  statsSectionGroup: {gap:10},
-  statsSectionHeading: {gap:2,paddingTop:2,paddingBottom:2},
+  statsSectionGroup: {gap:16,paddingTop:4},
+  statsSectionHeading: {gap:3,paddingTop:2,paddingBottom:6},
   statsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.16},
   statsSectionCopy: {fontSize:10.5,lineHeight:15,fontWeight:'400'},
-  statsDonutGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
-  statsSupportingGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0,alignItems:'stretch'},
-  statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:0},
-  statsDashboardCard: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:20,paddingHorizontal:0,gap:14,flexGrow:1},
+  statsDonutGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22,alignItems:'stretch'},
+  statsSupportingGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22,alignItems:'stretch'},
+  statsCardsGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:22,rowGap:22},
+  statsDashboardCard: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,paddingHorizontal:0,gap:16,flexGrow:1,alignSelf:'stretch'},
   statsDashboardCardWide: {width:'48%',flexBasis:300},
-  statsCardBody: {flexDirection:'row',alignItems:'center',gap:14},
+  statsCardBody: {flexDirection:'row',alignItems:'center',gap:14,minHeight:118},
   statsCardSide: {flex:1,minWidth:0,gap:8},
   statsLegend: {flex:1,minWidth:0,gap:6},
   statsLegendRow: {flexDirection:'row',alignItems:'center',gap:5,minWidth:0},
@@ -5640,13 +5753,13 @@ const styles = StyleSheet.create({
   statsWeekDay: {flex:1,alignItems:'center',gap:5},
   statsWeekDot: {width:18,height:18,borderRadius:9,borderWidth:StyleSheet.hairlineWidth},
   statsWeekLabel: {fontSize:8.5,lineHeight:11,fontWeight:'600'},
-  statsDetailGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:14,rowGap:12,paddingTop:2},
+  statsDetailGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:14,rowGap:14,paddingTop:4,alignItems:'flex-start'},
   statsDetailMetric: {width:'47%',minWidth:118,flexGrow:1,paddingVertical:2},
   statsDetailValue: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:24,fontWeight:'500'},
   statsDetailLabel: {fontSize:9.5,lineHeight:13,fontWeight:'600',marginTop:2},
   statsDetailMeta: {fontSize:8.5,lineHeight:12,marginTop:1},
   statsMinorHeading: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:.55,textTransform:'uppercase'},
-  statsFinishSection: {gap:9,paddingTop:2},
+  statsFinishSection: {gap:10,paddingTop:4},
   statsFinishMonths: {height:92,flexDirection:'row',alignItems:'flex-end',gap:5},
   statsFinishMonth: {flex:1,height:'100%',alignItems:'center',justifyContent:'flex-end',gap:3},
   statsFinishTrack: {width:'72%',maxWidth:16,height:56,borderRadius:8,overflow:'hidden',justifyContent:'flex-end'},
