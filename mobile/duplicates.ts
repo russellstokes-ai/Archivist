@@ -87,3 +87,46 @@ export function possibleAlternateFormatGroups(books:LocalBook[]):LocalVariantGro
     }))
     .sort((a,b)=>b.items.length-a.items.length || a.items[0].title.localeCompare(b.items[0].title));
 }
+
+
+export function possibleDifferentEditionGroups(books:LocalBook[]):LocalVariantGroup[] {
+  const grouped=new Map<string,LocalBook[]>();
+  for(const book of books) {
+    const title=normalized(book.title);
+    if(!title || title==='untitled') continue;
+    const key=book.workKey || fallbackWorkKey(book);
+    const items=grouped.get(key) || [];
+    items.push(book);
+    grouped.set(key,items);
+  }
+
+  const out:LocalVariantGroup[]=[];
+  for(const [key,items] of grouped.entries()) {
+    const byFormat=new Map<string,LocalBook[]>();
+    for(const item of items) {
+      const format=normalized(item.format);
+      const group=byFormat.get(format) || [];
+      group.push(item);
+      byFormat.set(format,group);
+    }
+    for(const [format,formatItems] of byFormat.entries()) {
+      const identifiers=new Set(formatItems.map(identifierKey).filter(Boolean));
+      if(formatItems.length>1 && identifiers.size>1) {
+        out.push({
+          key:key+'|edition-format:'+format,
+          reason:'same logical work and format, but identifiers differ; keep as separate editions rather than treating them as duplicate copies',
+          items:formatItems.slice().sort((a,b)=>identifierKey(a).localeCompare(identifierKey(b)) || a.uri.localeCompare(b.uri,undefined,{numeric:true})),
+        });
+      }
+    }
+  }
+  return out.sort((a,b)=>b.items.length-a.items.length || a.items[0].title.localeCompare(b.items[0].title));
+}
+
+export function localRelationClassification(books:LocalBook[]) {
+  return {
+    duplicates: possibleLocalDuplicateGroups(books),
+    alternateFormats: possibleAlternateFormatGroups(books),
+    differentEditions: possibleDifferentEditionGroups(books),
+  };
+}
