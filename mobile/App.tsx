@@ -2472,7 +2472,7 @@ function Client() {
             key={name || 'all'}
             accessibilityRole="button"
             accessibilityState={{selected}}
-            onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');setFormatFilter('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false);}}
+            onPress={() => {setSpace(name);setReviewOnly(false);setAvailabilityFilter('all');setFormatFilter('');setLibraryFormatFamily('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setUnknownAuthorOnly(false);}}
             style={({pressed})=>[
               styles.librarySpaceTab,
               vertical&&styles.librarySpaceTabVertical,
@@ -3264,7 +3264,7 @@ function Client() {
           <Text style={[styles.shelfBrowseCopy,{color:p.muted}]}>Jump into the full catalogue by content type.</Text>
         </View>
         <View style={styles.shelfBrowseShortcutGrid}>
-          {browseContent.map(item=><Pressable key={item.label} accessibilityRole="button" accessibilityLabel={'Browse '+item.label+' in Library'} onPress={()=>openLibraryBrowse({family:item.family})} style={({pressed})=>[styles.shelfBrowseShortcut,{borderColor:p.line,opacity:pressed?.68:1}]}>
+          {browseContent.map(item=><Pressable key={item.label} accessibilityRole="button" accessibilityLabel={'Browse '+item.label+' in Library'} onPress={()=>openLibraryBrowse({family:item.family})} style={({pressed})=>[styles.shelfBrowseShortcut,{borderColor:p.line,opacity:pressed?0.68:1}]}>
             <View style={[styles.shelfBrowseShortcutIcon,{backgroundColor:p.card}]}><UiIcon name={item.icon} color={p.sage} size={18}/></View>
             <View style={{flex:1,minWidth:0}}><Text style={[styles.shelfBrowseShortcutTitle,{color:p.ink}]}>{item.label}</Text><Text style={[styles.shelfBrowseShortcutMeta,{color:p.muted}]}>{item.count} work{item.count===1?'':'s'}</Text></View>
             <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={p.muted} size={15}/></View>
@@ -3274,10 +3274,10 @@ function Client() {
         {session?<View style={styles.shelfStorageShortcuts}>
           <Text style={[styles.shelfBrowseLabel,{color:p.muted}]}>STORAGE</Text>
           <View style={styles.shelfStorageShortcutRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Browse content on this device" onPress={()=>openLibraryBrowse({source:'local'})} style={({pressed})=>[styles.shelfStorageShortcut,{borderColor:p.line,opacity:pressed?.68:1}]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Browse content on this device" onPress={()=>openLibraryBrowse({source:'local'})} style={({pressed})=>[styles.shelfStorageShortcut,{borderColor:p.line,opacity:pressed?0.68:1}]}>
               <View style={[styles.workSourceDot,{backgroundColor:p.sage}]}/><Text style={[styles.shelfStorageShortcutText,{color:p.ink}]}>On this device</Text><Text style={[styles.shelfStorageShortcutCount,{color:p.muted}]}>{sourceCounts.local}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Browse content on Archivist Server" onPress={()=>openLibraryBrowse({source:'server'})} style={({pressed})=>[styles.shelfStorageShortcut,{borderColor:p.line,opacity:pressed?.68:1}]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Browse content on Archivist Server" onPress={()=>openLibraryBrowse({source:'server'})} style={({pressed})=>[styles.shelfStorageShortcut,{borderColor:p.line,opacity:pressed?0.68:1}]}>
               <View style={[styles.workSourceDot,{backgroundColor:p.gold}]}/><Text style={[styles.shelfStorageShortcutText,{color:p.ink}]}>On Archivist Server</Text><Text style={[styles.shelfStorageShortcutCount,{color:p.muted}]}>{sourceCounts.server}</Text>
             </Pressable>
           </View>
@@ -3297,7 +3297,7 @@ function Client() {
   function Library(){
     const wide=width>=600;
     const columns=libraryView==='list'?1:(width>=1180?6:width>=940?5:width>=600?4:2);
-    const filtersActive=[space,formatFilter,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
+    const filtersActive=[space,formatFilter,libraryFormatFamily,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
     const formatOptions=[...new Set(allUnifiedWorks.map(work=>work.format).filter(Boolean))].sort();
     const authorOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.author).filter((value:string)=>!!value))).sort().slice(0,20);
     const seriesOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.series).filter((value:string)=>!!value))).sort().slice(0,20);
@@ -3330,11 +3330,11 @@ function Client() {
           </Pressable>
         </View>
         {formatOptions.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryFormatTabs}>
-          <Pressable accessibilityRole="button" accessibilityState={{selected:!formatFilter}} onPress={()=>setFormatFilter('')} style={styles.libraryFormatTab}>
-            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:!formatFilter?p.ink:p.muted,fontWeight:!formatFilter?'700':'500'}]}>All</Text>
-            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:!formatFilter?1:0}]}/>
+          <Pressable accessibilityRole="button" accessibilityState={{selected:!formatFilter&&!libraryFormatFamily}} onPress={()=>{setFormatFilter('');setLibraryFormatFamily('')}} style={styles.libraryFormatTab}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:!formatFilter&&!libraryFormatFamily?p.ink:p.muted,fontWeight:!formatFilter&&!libraryFormatFamily?'700':'500'}]}>All</Text>
+            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:!formatFilter&&!libraryFormatFamily?1:0}]}/>
           </Pressable>
-          {formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:formatFilter===format}} onPress={()=>setFormatFilter(formatFilter===format?'':format)} style={styles.libraryFormatTab}>
+          {formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:!libraryFormatFamily&&formatFilter===format}} onPress={()=>{setLibraryFormatFamily('');setFormatFilter(formatFilter===format?'':format)}} style={styles.libraryFormatTab}>
             <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:formatFilter===format?p.ink:p.muted,fontWeight:formatFilter===format?'700':'500'}]}>{format}</Text>
             <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:formatFilter===format?1:0}]}/>
           </Pressable>)}
@@ -3709,6 +3709,7 @@ function Client() {
     setSpace('');
     setAvailabilityFilter('all');
     setFormatFilter('');
+    setLibraryFormatFamily('');
     setAuthorFilter('');
     setSeriesFilter('');
     setGenreFilter('');
