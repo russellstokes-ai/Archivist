@@ -2986,8 +2986,8 @@ function Client() {
   function PageHeader({title,subtitle}:{title:string;subtitle:string}){
     return <View style={styles.standardPageHeader}>
       <View style={styles.standardPageHeaderCopy}>
-        <Text maxFontSizeMultiplier={1.15} style={[styles.standardPageTitle,{color:p.ink}]}>{title}</Text>
-        <Text maxFontSizeMultiplier={1.2} style={[styles.standardPageSubtitle,{color:p.muted}]}>{subtitle}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={[styles.standardPageTitle,accessibilityPrefs.largeText&&styles.standardPageTitleLarge,{color:p.ink}]}>{title}</Text>
+        <Text maxFontSizeMultiplier={1.35} style={[styles.standardPageSubtitle,accessibilityPrefs.largeText&&styles.standardPageSubtitleLarge,{color:p.muted}]}>{subtitle}</Text>
       </View>
     </View>;
   }
@@ -5392,7 +5392,7 @@ function Client() {
           return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,centre&&styles.tabCenter]}>
             <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:accent,opacity:selected?1:0}]}/>
             {centre?<View style={[styles.tabCenterOrb,{backgroundColor:selected?p.sage:p.card,borderColor:selected?p.sage:p.line}]}><UiIcon name={tab.icon} color={selected?'#FFFFFF':p.ink} size={25}/></View>:<UiIcon name={tab.icon} color={selected?accent:p.muted} size={22}/>}
-            <Text style={[styles.tabText,centre&&styles.tabCenterText,{color:selected?accent:p.muted}]}>{tab.label}</Text>
+            <Text style={[styles.tabText,centre&&styles.tabCenterText,accessibilityPrefs.largeText&&styles.tabTextLarge,{color:selected?accent:p.muted}]}>{tab.label}</Text>
           </Pressable>;
         })}
       </View>:null}
@@ -5654,6 +5654,7 @@ const styles = StyleSheet.create({
   tabCenter: {paddingTop:1},
   tabCenterOrb: {width:46,height:46,borderRadius:23,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',marginTop:-10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:4},
   tabCenterText: {marginTop:-2},
+  tabTextLarge: {fontSize:11.5,lineHeight:14},
   liveHub: {flex:1,width:'100%'},
   liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:10,paddingBottom:8,paddingRight:76,flexDirection:'row',alignItems:'center',justifyContent:'center'},
   liveHubSegment: {flex:1,maxWidth:320,height:44,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,padding:3,flexDirection:'row',alignItems:'center'},
@@ -5683,6 +5684,26 @@ const styles = StyleSheet.create({
   settingsColumnKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.6,paddingBottom:2},
   settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
   settingsSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
+  settingsSubgroup: {gap:10,paddingTop:4},
+  settingsSubgroupHeading: {flexDirection:'row',alignItems:'baseline',justifyContent:'space-between',gap:12},
+  settingsSubgroupTitle: {fontSize:13,lineHeight:18,fontWeight:'700'},
+  settingsStatusPanel: {flexDirection:'row',alignItems:'center',gap:12,paddingVertical:4},
+  settingsStatusIcon: {width:40,height:40,borderRadius:20,alignItems:'center',justifyContent:'center',flexShrink:0},
+  settingsPrivacyHero: {borderWidth:StyleSheet.hairlineWidth,borderRadius:18,padding:14,flexDirection:'row',alignItems:'center',gap:12},
+  settingsPrivacyMark: {width:42,height:42,borderRadius:21,borderWidth:1.25,alignItems:'center',justifyContent:'center',flexShrink:0},
+  settingsStateLabel: {fontSize:10,lineHeight:13,fontWeight:'800',letterSpacing:1.1},
+  settingsBackupText: {borderWidth:StyleSheet.hairlineWidth,borderRadius:12,padding:12,fontFamily:Platform.OS==='ios'?'Menlo':'monospace',fontSize:9.5,lineHeight:14,maxHeight:220},
+  settingsRestoreInput: {minHeight:104,borderWidth:StyleSheet.hairlineWidth,borderRadius:12,padding:12,textAlignVertical:'top',fontFamily:Platform.OS==='ios'?'Menlo':'monospace',fontSize:10,lineHeight:15},
+  settingsToggle: {width:46,height:26,borderRadius:13,padding:3,flexDirection:'row',alignItems:'center',flexShrink:0},
+  settingsToggleKnob: {width:20,height:20,borderRadius:10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:3,shadowOffset:{width:0,height:1},elevation:2},
+  settingsAboutHero: {flexDirection:'row',alignItems:'center',gap:12,paddingVertical:2},
+  settingsAboutMark: {width:48,height:48,borderRadius:14,borderWidth:1.25,alignItems:'center',justifyContent:'center'},
+  settingsAboutMarkText: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500'},
+  settingsAboutTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:25,fontWeight:'500'},
+  settingsInfoRow: {minHeight:42,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:14},
+  settingsInfoValue: {fontSize:11,lineHeight:15,fontWeight:'600',textAlign:'right'},
+  settingsDiagnostics: {borderWidth:StyleSheet.hairlineWidth,borderRadius:14,padding:12,gap:7},
+  settingsDiagnosticText: {fontFamily:Platform.OS==='ios'?'Menlo':'monospace',fontSize:9.5,lineHeight:15},
   settingsRow: {minHeight:46,flexDirection:'row',alignItems:'center',gap:12},
   settingsStatusDot: {width:8,height:8,borderRadius:4},
   settingsTextAction: {minHeight:44,paddingHorizontal:2,alignItems:'center',justifyContent:'center'},
@@ -5850,7 +5871,9 @@ const styles = StyleSheet.create({
   standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',paddingRight:58},
   standardPageHeaderCopy: {flex:1,minWidth:0},
   standardPageTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
+  standardPageTitleLarge: {fontSize:36,lineHeight:43},
   standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
+  standardPageSubtitleLarge: {fontSize:16,lineHeight:23},
   pageHeaderToolbar: {minHeight:42,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end',paddingRight:58},
   pageHeaderToolbarStart: {justifyContent:'flex-start'},
   pageHeaderToolbarCenter: {justifyContent:'center'},
