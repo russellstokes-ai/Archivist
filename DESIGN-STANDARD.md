@@ -326,6 +326,9 @@ The canonical Atlas reference image is the visual acceptance target for the Atla
 - The outer Atlas ring is a three-way interactive chart/control divided into **Genre**, **Format** and **Year**. Its three sectors are visually distinct but complementary.
 - Genre sits on the left side of the ring, Format on the right, and Year at the bottom, following the approved concept composition.
 - Pressing a ring control updates the lower breakdown panel. The panel transitions with a short fade/slide rather than appearing abruptly.
+- On first opening Atlas, no breakdown panel is shown. The constellation is the focus; Genre, Format or Year must be deliberately selected before the lower analysis appears.
+- A selected ring control, its active outer-ring accent, and the corresponding breakdown accent use one slow, subtle breathing glow. The effect is feedback, not decoration, and must respect Reduce Motion.
+- Selecting any constellation node — genre, author, series, collection or individual work — gives that node a slow luminous pulse while connected edges remain emphasized.
 - The breakdown panel overlaps/follows the constellation like a refined bottom sheet and contains a title, subtitle, coloured markers, horizontal bars, counts and percentages.
 - Genre breakdown bars use the same colours as the corresponding constellation clusters. Format and Year use their own small complementary colour families.
 - The lower breakdown should show the strongest categories cleanly; long tails may be consolidated into an honest **Other** row rather than producing an unreadable list.
