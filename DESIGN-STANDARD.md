@@ -194,3 +194,63 @@ A candidate fails visual review if:
 ## Mandatory screenshot gate
 Every candidate must be visually reviewed on: Shelf light/dark/phone/Fold, Library phone/Fold, Player paused/playing/Fold, Reader light/dark/Fold, Comic normal/focused, Atlas phone/Fold, Insights phone/Fold, Settings, empty, loading, offline/server unavailable.
 Compilation and CI do not satisfy visual acceptance.
+
+
+## Human-interface quality baseline
+
+Archivist uses the current Apple Human Interface Guidelines as a craft benchmark for hierarchy, agency, accessibility, motion, privacy and adaptive layout. This is a **quality baseline**, not an instruction to make Android look like iOS. Android behavior, back navigation, system surfaces and platform controls remain Android-native where platform expectations differ.
+
+### Purpose and hierarchy
+- Every screen must have one dominant user purpose and one clearly dominant action when an action is required.
+- Secondary controls must not visually compete with content or the primary task.
+- Prefer progressive disclosure over showing every option at once.
+- Content should establish the scan path before controls do.
+- If hierarchy can be solved with alignment, typography, whitespace or a divider, do that before introducing a container.
+
+### Agency and recoverability
+- People must be able to back out, dismiss, undo or retry whenever the underlying action permits it.
+- Destructive actions require a clear semantic warning and must never be the visually dominant default action.
+- Long-running work must expose progress and a useful interrupted/retry state.
+- A gesture may accelerate a task, but essential actions must also have a discoverable onscreen path.
+
+### Touch, focus and control states
+- Ordinary touch targets must be at least 44dp on Archivist's Android UI unless a larger Android platform recommendation applies.
+- The visible glyph may be smaller than 44dp, but the hit region must not be.
+- Every interactive control needs pressed, selected, disabled and loading treatment where those states exist.
+- Icon-only controls require an accessibility label and may not use ambiguous Unicode/emoji substitutes.
+- Focus order must remain logical for keyboard, switch and screen-reader navigation.
+
+### Text and accessibility
+- Text must survive Android font scaling, long real titles and localisation without vertical clipping.
+- Do not solve enlarged text by shrinking the font. Reflow or allow additional lines where the task permits it.
+- Dense navigation/compact controls may constrain scaling only where necessary to preserve operability; content text should remain free to scale.
+- State may never depend on colour alone.
+- Reduced Motion must remove decorative/continuous movement while preserving cause-and-effect feedback.
+- Meaningful audio-only feedback needs a visual or textual equivalent.
+
+### Platform familiarity
+- Keep Archivist's brand, palette and editorial character consistent across platforms.
+- Use familiar Android navigation, back behavior, permissions, sheets and system surfaces on Android.
+- Do not transplant Apple-specific visual effects or control chrome onto Android merely because the HIG is used as a quality reference.
+- When an Apple-platform version is created, follow Apple component and navigation conventions directly.
+
+### Permissions and privacy
+- Ask for protected access only at the moment the related feature is used.
+- Explain why access is needed before or alongside the system prompt when the reason is not obvious.
+- A denied permission must lead to a usable recovery state rather than a dead end.
+- Local, downloaded and self-hosted/server storage behavior must remain explicit and understandable.
+
+### Visual acceptance states
+Every major screen must be reviewed with:
+- realistic populated content;
+- long titles and missing artwork;
+- loading;
+- empty;
+- inline error;
+- offline/server unavailable where relevant;
+- light and dark appearance;
+- compact phone and open Fold;
+- enlarged text;
+- reduced motion where the screen contains custom animation.
+
+A code/build pass is not visual acceptance.
