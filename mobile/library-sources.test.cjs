@@ -13,5 +13,7 @@ const all=x.dedupeForAll([{...downloaded,space:'Main'},{...online,space:'Main'},
 assert(all.length===2,'All must suppress downloaded duplicate while online server copy exists');
 assert(all.some(i=>i.source==='server'),'All must prefer server copy when connected');
 assert(x.spacesForSource([{...downloaded,space:'Offline'},{...local,space:'Device'}],'downloaded').join(',')==='Offline','source spaces');
+assert(x.matchesSource('downloaded','local')===true,'On this device must include offline server downloads');
+assert(x.matchesSource('server','local')===false,'On this device must not include remote-only server content');
 assert(x.normalizeSpaceSelection([{...local,space:'Device'}],'local','Missing')==='','invalid space must reset');
 console.log('library-sources.test.cjs passed');
