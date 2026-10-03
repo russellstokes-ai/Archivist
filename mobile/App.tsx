@@ -3370,6 +3370,11 @@ function Client() {
     const columns=libraryView==='list'?1:(width>=1180?6:width>=940?5:width>=600?4:2);
     const filtersActive=[space,formatFilter,libraryFormatFamily,authorFilter,seriesFilter,genreFilter,readingFilter,ratingFilter?String(ratingFilter):'',favouriteOnly?'fav':'',unknownAuthorOnly?'unknown':'',availabilityFilter!=='all'?availabilityFilter:'',collectionFilter].filter(Boolean).length;
     const formatOptions=[...new Set(allUnifiedWorks.map(work=>work.format).filter(Boolean))].sort();
+    const selectedLocationLabel=sourceFilter==='downloaded'?'Offline downloads'
+      : libraryFolderExact&&space?space
+      : sourceFilter==='local'?'On this device'
+      : sourceFilter==='server'?'On Archivist Server'
+      : space||'All Library';
     const authorOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.author).filter((value:string)=>!!value))).sort().slice(0,20);
     const seriesOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.series).filter((value:string)=>!!value))).sort().slice(0,20);
     const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
@@ -3380,7 +3385,11 @@ function Client() {
         <PageHeader title="Library" subtitle="Every book. In its place."/>
         <Text style={[styles.pageHeaderMeta,{color:p.muted}]}>{sortedUnifiedWorks.length} work{sortedUnifiedWorks.length===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
       </View>
-      {!wide?<><SourceSwitcher/>{availableSpaces.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.libraryChipsScroll} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}</>:null}
+      {!wide?<Pressable accessibilityRole="button" accessibilityLabel={'Sources and folders, '+selectedLocationLabel} onPress={()=>setLibrarySourcesOpen(true)} style={[styles.libraryMobileSourceButton,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <View style={[styles.libraryTreeIcon,{backgroundColor:p.card}]}><UiIcon name="shelf" color={p.sage} size={17}/></View>
+        <View style={{flex:1,minWidth:0}}><Text style={[styles.libraryMobileSourceKicker,{color:p.muted}]}>SOURCES & FOLDERS</Text><Text numberOfLines={1} style={[styles.libraryMobileSourceLabel,{color:p.ink}]}>{selectedLocationLabel}</Text></View>
+        <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={p.muted} size={16}/></View>
+      </Pressable>:null}
       {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
@@ -3430,6 +3439,15 @@ function Client() {
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
       <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/>
+      {librarySourcesOpen?<Modal transparent animationType="slide" visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
+        <Pressable style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibrarySourcesOpen(false)}>
+          <Pressable accessibilityViewIsModal accessibilityLabel="Library sources and folders" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
+            <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+            <View style={styles.sheetHeader}><View style={{flex:1}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Sources & folders</Text><Text style={[styles.meta,{color:p.muted}]}>Choose where the catalogue is physically stored.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close sources and folders" onPress={()=>setLibrarySourcesOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable></View>
+            <ScrollView contentContainerStyle={styles.librarySourceSheetBody}><LibrarySourceNavigator compact/></ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>:null}
       {libraryFiltersOpen?<Modal transparent animationType="slide" visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll}><View accessibilityViewIsModal accessibilityLabel="Library filters" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.filterWrap}>{([
           ['title','Title'],
@@ -3448,7 +3466,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:'transparent',borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
+    return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={styles.libraryRailContent} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
   function Player({embedded=false}:{embedded?:boolean}={}) {
