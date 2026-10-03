@@ -2,6 +2,7 @@ import {Platform} from 'react-native';
 import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
+import {extractEmbeddedMetadata} from './embeddedMetadata';
 
 export type LocalBook = {
   id: number;
@@ -30,7 +31,7 @@ export type LocalBook = {
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
-  metadataSource?: 'path' | 'sidecar' | 'manual';
+  metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual';
   coverUri?: string;
 };
 
@@ -259,6 +260,12 @@ export async function scanLocalFolders(
             evidence.push({source:'sidecar' as const, confidence:'high' as const, fields});
             identity = applyLocalMetadata(identity, fields, 'sidecar');
           }
+        }
+
+        const embeddedFields = await extractEmbeddedMetadata(child, ext);
+        if (Object.keys(embeddedFields).length) {
+          evidence.push({source:'embedded' as const, confidence:'high' as const, fields:embeddedFields});
+          identity = applyLocalMetadata(identity, embeddedFields, 'embedded');
         }
 
         const override = overrides[child];
