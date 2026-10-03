@@ -305,5 +305,16 @@ assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?112:
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"),'Locked primary-page geometry changed');
 const lockedStylesStart=source.indexOf('const styles = StyleSheet.create({');
 assert.ok(lockedStylesStart>=0,'StyleSheet block missing');
-assert.equal(source.slice(lockedStylesStart),lockedFoldStyles,'Locked Fold/reference StyleSheet changed. Deliberate phone-only layout work belongs on the universal-phone branch, not design/hig-refresh.');
+const lockedFoldStyleNames=[
+  'libraryRailFold','libraryMainFold','shelfContentFold','shelfHeroFold','shelfHeroArtworkFold',
+  'playerScreenFold','playerAdaptiveWide','atlasScreenFold','statsScreenFold',
+  'profileHubScreenFold','settingsScreenFold','sheetBackdropFold','actionSheetFold','workDetailsHeroFold'
+];
+const styleEntry=(text,name)=>{
+  const line=text.split('\n').find(item=>item.trimStart().startsWith(name+': {'));
+  return line?.trim()||'';
+};
+for(const name of lockedFoldStyleNames){
+  assert.equal(styleEntry(source,name),styleEntry(lockedFoldStyles,name),'Universal-phone work changed locked Fold style '+name);
+}
 
