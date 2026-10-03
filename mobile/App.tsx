@@ -5940,8 +5940,36 @@ function Client() {
               <Text style={[styles.meta,{color:p.muted}]}>Scan configured server folders here, then preview safe organisation before applying it.</Text>
               {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable></View>)}
               <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
-              <View style={styles.toolRow}><Button label="Preview matching server items" tone="quiet" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)}/><Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/></View>
+              <View style={styles.toolRow}><Button label="Preview" tone="quiet" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)}/><Button label={'Apply selected'+(serverMoveSelection.length?' ('+serverMoveSelection.length+')':'')} disabled={busy||serverMoveSelection.length===0} onPress={()=>void applySortBatch()}/></View>
+              {serverMovePreviews.some(item=>!!item.move)?<View style={styles.toolRow}>
+                <Button label="Select all Ready" tone="quiet" onPress={()=>setServerMoveSelection(serverMovePreviews.flatMap(item=>item.move?.id?[item.move.id]:[]))}/>
+                <Button label="Clear selection" tone="quiet" onPress={()=>setServerMoveSelection([])}/>
+              </View>:null}
               {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+              {serverMovePreviews.slice(0,20).map((item,index)=>{
+                const move=item.move;
+                const asset=serverBooks.find(book=>book.id===item.asset);
+                const selected=!!move&&serverMoveSelection.includes(move.id);
+                const review=!!item.error&&item.error.toLowerCase().includes('review metadata');
+                const status=move?'Ready':review?'Review recommended':'Conflict';
+                const statusColor=move?p.sage:review?p.muted:p.danger;
+                return <Pressable
+                  key={move?.id||'server-preview-'+item.asset+'-'+index}
+                  accessibilityRole="button"
+                  accessibilityState={{selected,disabled:!move}}
+                  disabled={!move}
+                  onPress={()=>move&&setServerMoveSelection(current=>current.includes(move.id)?current.filter(id=>id!==move.id):[...current,move.id])}
+                  style={({pressed})=>[styles.sourceRow,{borderColor:selected?p.sage:p.line,opacity:pressed?.72:1}]}>
+                  <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,alignItems:'baseline'}}>
+                    <Text style={{color:p.ink,fontWeight:'700',flex:1}}>{asset?.title||('File '+item.asset)}</Text>
+                    <Text style={{color:statusColor,fontWeight:'700'}}>{selected?'✓ ':''}{status}</Text>
+                  </View>
+                  {move?<><Text style={[styles.meta,{color:p.muted}]}>Current</Text><Text numberOfLines={2} style={{color:p.ink}}>{move.from}</Text><Text style={[styles.meta,{color:p.muted}]}>Proposed</Text><Text numberOfLines={2} style={{color:p.ink}}>{move.to}</Text></>:null}
+                  {asset?<Text numberOfLines={3} style={[styles.meta,{color:p.muted}]}>Metadata used · {[asset.author?'Author: '+asset.author:'',asset.series?'Series: '+asset.series+(asset.seriesNumber!==undefined?' #'+asset.seriesNumber:''):'',asset.format?'Format: '+asset.format:''].filter(Boolean).join(' · ')}</Text>:null}
+                  {item.error?<Text style={[styles.meta,{color:statusColor}]}>{item.error}</Text>:null}
+                </Pressable>;
+              })}
+              {serverMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {serverMovePreviews.length} proposed changes.</Text>:null}
             </View>:null}
           </View>
         </ScrollView>
