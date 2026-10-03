@@ -231,7 +231,7 @@ Active branch: `design/draftbit-universal-phone`. The user's current instruction
 - Adjustable skip intervals in Settings remain outstanding; this checkpoint implements approved 15/30 defaults only.
 - Screenshot parity, local sleep timer parity, history/characters tools and production motion quality are not claimed complete.
 - Android Auto target is native cover art plus standard media controls; native integration and car testing remain outstanding.
-- Atlas interaction/performance and deterministic comic focus remain subsequent sprints, not completed by this player checkpoint.
+- Atlas remains in the separate Astra finishing stream. Comic Focus has since been completed and locked for the current product-finishing phase.
 
 **Active mobile branch:** `design/draftbit-universal-phone`  
 **Locked Fold/open reference:** `design/hig-refresh`  
@@ -283,8 +283,8 @@ Do not substitute a `main` APK or any pre-`77842e1f` runtime when reviewing this
 | Server connection | Implemented; HTTPS/session compatibility tests | Real DuckDNS/Tailscale HTTPS |
 | Audiobook player | Crafted responsive Player + existing playback tests | Re-review closed/open Fold first viewport, then background/lock screen/Bluetooth/calls |
 | Reader | Immersive chrome + 520ms turn timing + automated reader tests | Closed/open Fold, real EPUB/PDF/comic corpus and page-turn quality |
-| Comic Focus Zoom | Implemented foundations and regression tests | Real comic gesture/focus quality |
-| Atlas | Continuous universe retained; responsive inspector refinement | Phone/Fold visual, gesture and performance review |
+| Comic Focus Zoom | Product work complete/locked for current phase; deterministic local implementation + regression tests | Final physical iOS/Android/Fold acceptance only |
+| Atlas | Active Astra/Work finishing stream; do not treat historical Atlas checkpoints as final | Final phone/Fold visual, gesture and performance acceptance after Astra handoff |
 | Insights | Crafted journal hierarchy + existing tests | Phone/Fold UX review with real usage data |
 | Smart Shelves | Nested ALL/ANY engine implemented/tested | Touch/keyboard UX review |
 | Safe organisation | Preview/journal/hash/copy fallback tested | Real power-loss/storage scenarios |
@@ -312,7 +312,7 @@ Historical crafted UI sweep head was `77842e1f`. The active universal-mobile can
 ## Sprint status
 
 - **Sprint 1â€“4:** durable foundations/player/reader/offline work complete in the recovered development branch.
-- **Sprint 5:** Atlas complete and CI-proven.
+- **Historical Sprint 5:** earlier Atlas implementation reached a CI-proven checkpoint, but Atlas has since been explicitly reopened for final Astra refinement and is not currently locked.
 - **Sprint 6:** Insights, family and organisation complete and CI-proven.
 - **Sprint 7:** core server/resilience/ecosystem scope complete and CI-proven.
 - **Sprint 8:** source/UI/release sweep complete; final candidate CI/APK plus physical acceptance remain.
