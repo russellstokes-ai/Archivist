@@ -3648,6 +3648,19 @@ function Client() {
     return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={styles.libraryRailContent} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
+  function LiveMediaEmpty({mode,lastTitle,onResume}:{mode:'player'|'reader';lastTitle?:string;onResume?:()=>void}) {
+    const playerMode=mode==='player';
+    return <View style={styles.liveMediaEmpty}>
+      <ArchivistLogo size={46}/>
+      <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{playerMode?'Nothing playing':'Reader'}</Text>
+      <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{playerMode
+        ? (lastTitle?'Resume your most recent audiobook, or choose another from Shelf.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.')
+        : (lastTitle?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.')}</Text>
+      {lastTitle&&onResume?<Button label={'Resume '+lastTitle} onPress={onResume}/>:null}
+      <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/>
+    </View>;
+  }
+
   function Player({embedded=false}:{embedded?:boolean}={}) {
     const current = playing;
     const serverPlayer = current?.source==='server';
@@ -3664,6 +3677,7 @@ function Client() {
     const nativeSleepSupported = typeof (player as typeof player & {setSleepTimer?: (seconds:number)=>void}).setSleepTimer === 'function';
     const currentServerWork=current?.serverWorkId?serverWorks.find(work=>work.id===current.serverWorkId):undefined;
     const offlineCopy=currentServerWork?downloadedServerWork(currentServerWork):current?.source==='downloaded'?Object.values(offlineWorks).find(item=>item.server===current.originServer&&item.workId===current.serverWorkId):undefined;
+    if(embedded&&!current)return <LiveMediaEmpty mode="player" lastTitle={lastPlaying?.title} onResume={lastPlaying?()=>void playBook(lastPlaying):undefined}/>;
 
     async function togglePlayback(){
       if(serverPlayer){controller.toggle();return;}
@@ -3932,7 +3946,7 @@ function Client() {
   function Reader({embedded=false}:{embedded?:boolean}={}) {
     const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
     const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
-    if(!reading)return <View style={styles.readerEmpty}><ArchivistLogo size={46}/><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastReading?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.'}</Text>{lastReading?<Button label={'Resume '+lastReading.title} onPress={()=>openBook(lastReading)}/>:null}<Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/></View>;
+    if(!reading)return <LiveMediaEmpty mode="reader" lastTitle={lastReading?.title} onResume={lastReading?()=>openBook(lastReading):undefined}/>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
@@ -5855,17 +5869,17 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:236,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:14,paddingTop:10,paddingBottom:20,backgroundColor:'transparent'},
-  libraryRailFold: {width:190,paddingHorizontal:10,paddingTop:10},
+  libraryRail: {width:184,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,paddingTop:10,paddingBottom:20,backgroundColor:'transparent'},
+  libraryRailFold: {width:156,paddingHorizontal:8,paddingTop:10},
   libraryRailContent: {paddingBottom:28},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
   librarySourceTree: {gap:3},
   libraryTreeGroupLabel: {fontSize:8.5,lineHeight:11,fontWeight:'800',letterSpacing:1.35,marginTop:16,marginBottom:3,paddingHorizontal:8},
-  libraryTreeChildren: {paddingLeft:10,gap:2},
-  libraryTreeRow: {minHeight:46,borderRadius:12,paddingHorizontal:8,paddingVertical:6,flexDirection:'row',alignItems:'center',gap:8},
-  libraryTreeIcon: {width:32,height:32,borderRadius:16,alignItems:'center',justifyContent:'center',flexShrink:0},
+  libraryTreeChildren: {paddingLeft:7,gap:1},
+  libraryTreeRow: {minHeight:42,borderRadius:10,paddingHorizontal:6,paddingVertical:5,flexDirection:'row',alignItems:'center',gap:6},
+  libraryTreeIcon: {width:28,height:28,borderRadius:14,alignItems:'center',justifyContent:'center',flexShrink:0},
   libraryTreeLabel: {fontSize:11.5,lineHeight:15},
   libraryTreeDetail: {fontSize:8.5,lineHeight:11.5,marginTop:1},
   libraryTreeCount: {fontSize:9.5,lineHeight:13,fontWeight:'700',fontVariant:['tabular-nums']},
@@ -6075,6 +6089,7 @@ const styles = StyleSheet.create({
   structureChapter: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,gap:8},
   boundaryRow: {flexDirection:'row',gap:12,flexWrap:'wrap'},
   playerEmpty: {flex:1,borderWidth:0,padding:32,gap:10,alignItems:'center',justifyContent:'center',minHeight:260,maxWidth:420,width:'100%',alignSelf:'center'},
+  liveMediaEmpty: {flex:1,minHeight:0,paddingHorizontal:32,paddingBottom:32,gap:10,alignItems:'center',justifyContent:'center',maxWidth:420,width:'100%',alignSelf:'center'},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex:1,position:'relative'},
   readerBar: {position:'absolute',left:0,right:0,top:0,zIndex:25,minHeight:44,flexDirection:'row',alignItems:'center',paddingLeft:2,paddingRight:66,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.16)'},
