@@ -4721,83 +4721,163 @@ function Client() {
     const visible=profileAchievements
       .filter(item=>awardCategory==='All'||(item.category||'Other')===awardCategory)
       .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
-    const unlocked=profileAchievements.filter(item=>item.unlocked).length;
-    const total=profileAchievements.length;
-    const completion=total?Math.round(unlocked/total*100):0;
     const locked=profileAchievements.filter(item=>!item.unlocked).sort((a,b)=>clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
-    const nearest=locked[0]||null;
-    const inProgress=visible.filter(item=>!item.unlocked);
-    const completedRewards=visible.filter(item=>item.unlocked);
-    const renderReward=(item:Achievement)=>{
+    const nextUp=locked.slice(0,3);
+    const recent=recentAchievementId?profileAchievements.find(item=>item.id===recentAchievementId):null;
+    const overall=profileProgression?.overall||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:'Reader'};
+    const xpIntoLevel=Math.max(0,overall.xp-overall.levelStartXp);
+    const xpForLevel=Math.max(1,overall.nextLevelXp-overall.levelStartXp);
+    const pathSpecs=[
+      {id:'Reading' as const,icon:'bookOpen' as UiIconName,tone:p.sage},
+      {id:'Listening' as const,icon:'play' as UiIconName,tone:darkMode?'#86A9C4':'#66859B'},
+      {id:'Library' as const,icon:'shelf' as UiIconName,tone:p.gold},
+      {id:'Ritual' as const,icon:'flame' as UiIconName,tone:darkMode?'#D58B68':'#A65F42'},
+    ];
+    const milestones=[
+      {level:5,title:'Explorer',icon:'atlas' as UiIconName},
+      {level:10,title:'Collector',icon:'library' as UiIconName},
+      {level:15,title:'Curator',icon:'target' as UiIconName},
+      {level:25,title:'Archivist',icon:'shelf' as UiIconName},
+      {level:40,title:'Senior',icon:'layers' as UiIconName},
+      {level:60,title:'Master',icon:'insights' as UiIconName},
+    ];
+    const nextMilestoneIndex=Math.max(0,milestones.findIndex(item=>overall.level<item.level));
+    const rewardIcon=(item:Achievement):UiIconName=>{
+      const id=item.id;
+      if(id.includes('streak')||id.includes('daily-spark'))return 'flame';
+      if(id.includes('days'))return 'calendar';
+      if(id.includes('listener')||id.includes('audio'))return 'play';
+      if(id.includes('reader')||id.includes('reading')||id.includes('finish'))return 'bookOpen';
+      if(id.includes('series'))return 'layers';
+      if(id.includes('format')||id.includes('balance'))return 'atlas';
+      if(id.includes('rating'))return 'insights';
+      if(id.includes('favourite'))return 'bookmark';
+      if(id.includes('collection')||id.includes('shelf')||id.includes('archive')||id.includes('curator'))return 'shelf';
+      if(id.includes('active-stack')||id.includes('starter'))return 'library';
+      return 'target';
+    };
+    const rewardTone=(item:Achievement)=>{
+      const category=item.category||'Other';
+      if(category==='Reading')return p.sage;
+      if(category==='Listening')return darkMode?'#86A9C4':'#66859B';
+      if(category==='Daily ritual')return darkMode?'#D58B68':'#A65F42';
+      if(category==='Library')return p.gold;
+      return darkMode?'#A78BC7':'#806B9A';
+    };
+    const renderTrophy=(item:Achievement)=>{
       const progress=Math.round(clampProgress(item.progress,item.target)*100);
-      const recent=recentAchievementId===item.id;
-      const tone=item.unlocked?p.gold:p.sage;
-      return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
-        <View style={styles.rewardBadgeWrap}>
-          {recent?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:tone,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[.42,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.48]})}]}]}/>:null}
-          <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}><Text style={[styles.profileAchievementInitial,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'✓':Math.min(99,progress)}</Text></View>
+      const recentItem=recentAchievementId===item.id;
+      const tone=rewardTone(item);
+      const icon=rewardIcon(item);
+      return <View key={item.id} style={[styles.rewardTrophyCard,width>=760&&styles.rewardTrophyCardWide,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}>
+        <View style={styles.rewardTrophyTop}>
+          <View style={styles.rewardMedalWrap}>
+            {recentItem?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:darkMode?tone:p.gold,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.42:.30,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.52]})}]}]}/>:null}
+            <View style={[styles.rewardRibbon,styles.rewardRibbonLeft,{backgroundColor:item.unlocked?tone:p.line}]}/>
+            <View style={[styles.rewardRibbon,styles.rewardRibbonRight,{backgroundColor:item.unlocked?tone:p.line}]}/>
+            <View style={[styles.rewardMedal,{borderColor:item.unlocked?tone:p.line,backgroundColor:item.unlocked?(darkMode?'#151412':'#FFF9EC'):p.card}]}>
+              <UiIcon name={icon} color={item.unlocked?tone:p.muted} size={22}/>
+            </View>
+          </View>
+          <View style={{alignItems:'flex-end',gap:3}}>
+            {recentItem?<Text style={[styles.rewardRecent,{color:p.gold}]}>RECENT</Text>:null}
+            <Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'UNLOCKED':progress+'%'}</Text>
+          </View>
         </View>
-        <View style={{flex:1,minWidth:0,gap:5}}>
-          <View style={styles.rewardTitleRow}><Text style={[styles.achievementTitle,{color:p.ink,flex:1}]}>{item.title}</Text>{recent?<Text style={[styles.rewardRecent,{color:p.gold}]}>RECENT</Text>:<Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Unlocked':progress+'%'}</Text>}</View>
-          <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
-          <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:tone,width:(progress+'%') as any}]}/></View>
-        </View>
+        <Text numberOfLines={2} style={[styles.rewardTrophyTitle,{color:p.ink}]}>{item.title}</Text>
+        <Text numberOfLines={2} style={[styles.rewardTrophyCopy,{color:p.muted}]}>{item.description}</Text>
+        <View style={[styles.rewardTrophyTrack,{backgroundColor:p.line}]}><View style={[styles.rewardTrophyFill,{backgroundColor:item.unlocked?tone:p.muted,width:(progress+'%') as any}]}/></View>
       </View>;
     };
+    const overallRing:ChartItem[]=[
+      {label:'Level progress',count:Math.max(.001,overall.progress),color:p.gold},
+      {label:'Remaining',count:Math.max(.001,1-overall.progress),color:darkMode?'#29303A':'#D8CDBA'},
+    ];
+
     return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
-      <PageHeader title="Rewards" subtitle="Milestones from your reading life."/>
-      <View style={[styles.rewardsSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <View style={[styles.rewardsSummaryEmblem,{borderColor:p.gold,backgroundColor:p.card}]}>
-          <View style={[styles.rewardsSummarySpark,styles.rewardsSummarySparkTop,{backgroundColor:p.gold}]}/>
-          <View style={[styles.rewardsSummarySpark,styles.rewardsSummarySparkRight,{backgroundColor:p.gold}]}/>
-          <Text style={[styles.rewardsSummaryValue,{color:p.gold}]}>{unlocked}</Text>
-          <Text style={[styles.rewardsSummaryOf,{color:p.muted}]}>of {total}</Text>
+      <PageHeader title="Rewards" subtitle="Build your archive. Keep your reading life moving."/>
+
+      <View style={[styles.rewardsLevelHero,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <View style={styles.rewardsHeroRing}>
+          <DataRing size={118} items={overallRing} ink={p.ink} muted={p.muted} track={p.line} thickness={7} opacity={1}/>
+          <View pointerEvents="none" style={styles.rewardsHeroRingCenter}>
+            <Text style={[styles.rewardsHeroLevelLabel,{color:p.muted}]}>LEVEL</Text>
+            <Text style={[styles.rewardsHeroLevel,{color:p.gold}]}>{overall.level}</Text>
+          </View>
         </View>
-        <View style={styles.rewardsSummaryCopy}>
-          <Text style={[styles.bookTitle,{color:p.ink}]}>Your reward cabinet</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>{completion}% complete · {Math.max(0,total-unlocked)} still to discover</Text>
-          <View style={[styles.rewardsCompletionTrack,{backgroundColor:p.line}]}><View style={[styles.rewardsCompletionFill,{backgroundColor:p.gold,width:(completion+'%') as any}]}/></View>
+        <View style={styles.rewardsHeroCopy}>
+          <Text style={[styles.rewardsHeroTitle,{color:p.ink}]}>{overall.title}</Text>
+          <Text style={[styles.rewardsHeroMeta,{color:p.muted}]}>{xpIntoLevel.toLocaleString()} / {xpForLevel.toLocaleString()} XP to Level {overall.level+1}</Text>
+          <View style={[styles.rewardsCompletionTrack,{backgroundColor:p.line}]}><View style={[styles.rewardsCompletionFill,{backgroundColor:p.gold,width:(Math.round(overall.progress*100)+'%') as any}]}/></View>
+          <Text style={[styles.rewardsHeroFootnote,{color:p.muted}]}>{profileProgression?.unlockedAchievements||0} achievements unlocked · progression rewards reading, listening, curation and consistency.</Text>
         </View>
       </View>
-      {nearest?<View style={[styles.rewardsNearest,{borderBottomColor:p.line}]}>
-        <View style={[styles.rewardsNearestIcon,{backgroundColor:p.card}]}><UiIcon name="target" color={p.sage} size={18}/></View>
-        <View style={{flex:1,minWidth:0}}><Text style={[styles.rewardsNearestKicker,{color:p.muted}]}>NEXT MILESTONE</Text><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{nearest.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{Math.round(clampProgress(nearest.progress,nearest.target)*100)}% complete</Text></View>
+
+      <View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}>
+          <View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Your progression</Text><Text style={[styles.meta,{color:p.muted}]}>Four paths grow independently as your habits change.</Text></View>
+        </View>
+        <View style={styles.rewardsPathGrid}>
+          {pathSpecs.map(spec=>{
+            const path=profileProgression?.paths[spec.id]||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:spec.id};
+            const ring:ChartItem[]=[{label:'Progress',count:Math.max(.001,path.progress),color:spec.tone},{label:'Remaining',count:Math.max(.001,1-path.progress),color:p.line}];
+            return <View key={spec.id} style={[styles.rewardsPathCard,{borderColor:p.line}]}>
+              <View style={styles.rewardsPathTop}>
+                <View style={styles.rewardsPathRing}><DataRing size={52} items={ring} ink={p.ink} muted={p.muted} track={p.line} thickness={4} opacity={1}/><View pointerEvents="none" style={styles.rewardsPathIcon}><UiIcon name={spec.icon} color={spec.tone} size={18}/></View></View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.rewardsPathName,{color:p.ink}]}>{spec.id}</Text><Text numberOfLines={1} style={[styles.rewardsPathTitle,{color:p.muted}]}>{path.title}</Text></View>
+                <Text style={[styles.rewardsPathLevel,{color:spec.tone}]}>L{path.level}</Text>
+              </View>
+              <View style={[styles.rewardsPathTrack,{backgroundColor:p.line}]}><View style={[styles.rewardsPathFill,{backgroundColor:spec.tone,width:(Math.round(path.progress*100)+'%') as any}]}/></View>
+            </View>;
+          })}
+        </View>
+      </View>
+
+      <View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Milestones</Text><Text style={[styles.meta,{color:p.muted}]}>The long view of your Archivist journey.</Text></View></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rewardsMilestoneRail}>
+          {milestones.map((milestone,index)=>{
+            const complete=overall.level>=milestone.level;
+            const current=!complete&&(nextMilestoneIndex===index||nextMilestoneIndex<0&&index===milestones.length-1);
+            return <View key={milestone.level} style={styles.rewardsMilestoneItem}>
+              {index>0?<View pointerEvents="none" style={[styles.rewardsMilestoneLine,{backgroundColor:complete?p.gold:p.line}]}/>:null}
+              <View style={[styles.rewardsMilestoneMedal,{borderColor:complete||current?p.gold:p.line,backgroundColor:complete?p.card:'transparent'},current&&styles.rewardsMilestoneCurrent]}>
+                <UiIcon name={milestone.icon} color={complete||current?p.gold:p.muted} size={19}/>
+              </View>
+              <Text style={[styles.rewardsMilestoneLevel,{color:complete?p.gold:p.ink}]}>Level {milestone.level}</Text>
+              <Text numberOfLines={1} style={[styles.rewardsMilestoneTitle,{color:p.muted}]}>{milestone.title}</Text>
+            </View>;
+          })}
+        </ScrollView>
+      </View>
+
+      {nextUp.length?<View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Next up</Text><Text style={[styles.meta,{color:p.muted}]}>Closest achievements to your next unlocks.</Text></View></View>
+        <View style={styles.rewardsNextGrid}>
+          {nextUp.map(item=>{
+            const progress=Math.round(clampProgress(item.progress,item.target)*100),tone=rewardTone(item);
+            return <View key={item.id} style={[styles.rewardsNextCard,{borderColor:p.line}]}>
+              <View style={[styles.rewardsNextIcon,{backgroundColor:p.card}]}><UiIcon name={rewardIcon(item)} color={tone} size={20}/></View>
+              <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{progress}% complete</Text></View>
+              <Text style={[styles.rewardsNextPercent,{color:tone}]}>{progress}%</Text>
+            </View>;
+          })}
+        </View>
       </View>:null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
-        {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card,borderColor:p.gold}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
-      </ScrollView>
-      {inProgress.length?<View style={styles.rewardsSection}><View style={styles.rewardsSectionHeader}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>IN PROGRESS</Text><Text style={[styles.rewardsSectionCount,{color:p.muted}]}>{inProgress.length}</Text></View><View style={styles.profileAchievementList}>{inProgress.map(renderReward)}</View></View>:null}
-      {completedRewards.length?<View style={styles.rewardsSection}><View style={styles.rewardsSectionHeader}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>UNLOCKED</Text><Text style={[styles.rewardsSectionCount,{color:p.gold}]}>{completedRewards.length}</Text></View><View style={styles.profileAchievementList}>{completedRewards.map(renderReward)}</View></View>:null}
+
+      {recent?<View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Recently earned</Text><Text style={[styles.meta,{color:p.muted}]}>Your newest achievement.</Text></View></View>
+        <View style={styles.rewardsRecentSpotlight}>{renderTrophy(recent)}</View>
+      </View>:null}
+
+      <View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Trophy cabinet</Text><Text style={[styles.meta,{color:p.muted}]}>Every milestone has its own mark.</Text></View></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
+          {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card,borderColor:p.gold}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
+        </ScrollView>
+        <View style={styles.rewardTrophyGrid}>{visible.map(renderTrophy)}</View>
+      </View>
     </ScrollView>;
-  }
-
-  async function refreshDuplicateCandidates() {
-    if(!session || !owner)return;
-    setDuplicateLoading(true);setError('');
-    try{
-      const groups=await request(session,'/api/duplicate-candidates') as DuplicateCandidateGroup[];
-      setServerDuplicateGroups(groups);
-      setDuplicateResults({});
-    }catch(e){setError((e as Error).message);}
-    finally{setDuplicateLoading(false);}
-  }
-
-  async function openDuplicateReview() {
-    setDuplicatePanelOpen(true);
-    if(session && owner)await refreshDuplicateCandidates();
-  }
-
-  async function verifyDuplicateGroup(group:DuplicateCandidateGroup) {
-    if(!session || !owner || group.items.length<2)return;
-    setDuplicateLoading(true);setError('');
-    try{
-      const result=await request(
-        session,'/api/duplicate-candidates/verify','POST',
-        {ids:group.items.map(item=>item.id)},300000,
-      ) as DuplicateVerification;
-      setDuplicateResults(current=>({...current,[String(group.size)]:result}));
-    }catch(e){setError((e as Error).message);}
-    finally{setDuplicateLoading(false);}
   }
 
   function DuplicateReviewPanel() {
