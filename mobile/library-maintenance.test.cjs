@@ -19,3 +19,25 @@ assert(x.matchesMetadataGap(works[2],'cover')===false,'remote server work must n
 const quality=x.metadataCompleteness(works[1]);
 assert(quality.complete===false&&quality.missing.join(',')==='series,genre','metadata completeness');
 console.log('library-maintenance.test.cjs passed');
+
+
+const advanced=advancedMetadataCompleteness({
+  title:'Dune',author:'Frank Herbert',series:'Dune',seriesNumber:1,genre:'Science Fiction',
+  coverUri:'cover.jpg',publishedYear:1965,narrator:'Simon Vance',publisher:'Chilton',
+  isbn:'9780441172719',language:'en',description:'A desert world.',format:'Audio',source:'local',
+});
+assert.equal(advanced.complete,true);
+assert.deepEqual(advanced.missing,[]);
+
+const incomplete=advancedMetadataCompleteness({title:'Book',author:'Author',series:'Saga',format:'Audio',source:'local'});
+assert.equal(incomplete.complete,false);
+assert.equal(incomplete.missing.includes('seriesNumber'),true);
+assert.equal(incomplete.missing.includes('narrator'),true);
+assert.equal(incomplete.missing.includes('identifier'),true);
+
+const advancedCounts=advancedMetadataGapCounts([
+  {title:'One',author:'A',series:'S',seriesNumber:1,format:'EPUB',source:'local'},
+  {title:'Two',author:'B',series:'',format:'Audio',source:'local'},
+]);
+assert.equal(advancedCounts.series,1);
+assert.equal(advancedCounts.narrator,1);
