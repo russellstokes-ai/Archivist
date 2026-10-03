@@ -73,6 +73,8 @@ assert.ok(source.includes("backgroundColor:'transparent',borderRightColor:p.line
 assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?112:132") && source.includes("minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0") && source.includes("libraryRail: {width:132,minWidth:132,maxWidth:132,flexBasis:132") && source.includes("libraryRailFold: {width:112,minWidth:112,maxWidth:112,flexBasis:112") && source.includes("libraryMainFold: {paddingLeft:10,paddingRight:24") && source.includes("libraryMainWide: {paddingLeft:12,paddingRight:28"), 'Library folder/source column must be physically constrained and must not stretch from folder content');
 
 assert.ok(source.includes("errorBanner: {position:'absolute'") && source.includes('globalProfileCorner'), 'Error banners must overlay without moving the persistent profile avatar');
+assert.ok(source.includes('const LibraryEmptyState=()=>') && source.includes("title='Archivist Server is offline'") && source.includes("title='Your Library is waiting'") && source.includes("title='This folder is empty'") && source.includes("title='No offline downloads'"), 'Library must distinguish empty, offline and filtered states');
+assert.ok(source.includes('Clear filters & search') && source.includes('Choose source or folder') && source.includes('Connect Archivist Server'), 'Library empty states must expose useful recovery actions');
 
 assert.equal(source.includes('function PageHeader({title,subtitle,action}'),false,'PageHeader must not place page actions beside the profile avatar');
 assert.equal(source.includes('action={<Pressable'),false,'Primary page actions must not sit beside the profile avatar');
