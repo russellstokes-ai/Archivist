@@ -1,4 +1,20 @@
 # Archivist 0.9.2 â€” Testing Readiness
+
+## 2026-10-03 — Final polish Sprint 1: Library recovery states
+
+### Implemented and source-verified
+- Replaced the generic Library empty message with context-aware finished-product states.
+- Library now distinguishes: no configured sources, empty selected device folder, no offline downloads, empty server catalogue, saved server offline, and genuine search/filter no-results.
+- Recovery actions now match the state: clear search/filters, choose another source/folder, add a device folder, open server settings, or connect an Archivist Server.
+- The empty-state treatment reuses the approved Archivist mark and existing designed-empty composition; no Shelf/Library layout redesign was introduced.
+- Confirmed the existing source model still treats downloaded server works as **On this device** while retaining the separate Offline downloads child view.
+- Added UI-contract guards for the new state-specific copy/actions.
+
+### Boundaries
+- No Atlas, comic-focus or Live Player code was changed.
+- Fold/open visual geometry was not changed.
+- Runtime Draftbit/device visual proof of these new empty states remains outstanding.
+
 ## 2026-10-03 — Universal mobile Live Player checkpoint (not release-ready)
 
 Active branch: `design/draftbit-universal-phone`. The user's current instruction supersedes older references to developing on `design/hig-refresh`; that Fold reference remains locked and untouched.
