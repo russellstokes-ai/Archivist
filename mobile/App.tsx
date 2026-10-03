@@ -2902,15 +2902,17 @@ function Client() {
     </Pressable>;
   }
 
-  function PageHeader({title,subtitle,action}:{title:string;subtitle:string;action?:React.ReactNode}){
+  function PageHeader({title,subtitle}:{title:string;subtitle:string}){
     return <View style={styles.standardPageHeader}>
       <View style={styles.standardPageHeaderCopy}>
         <Text maxFontSizeMultiplier={1.15} style={[styles.standardPageTitle,{color:p.ink}]}>{title}</Text>
         <Text maxFontSizeMultiplier={1.2} style={[styles.standardPageSubtitle,{color:p.muted}]}>{subtitle}</Text>
       </View>
-      {action?<View style={styles.standardPageHeaderAction}>{action}</View>:null}
-      <ProfileAvatarButton/>
     </View>;
+  }
+
+  function PageToolbar({children,align='end'}:{children:React.ReactNode;align?:'start'|'end'|'center'}){
+    return <View style={[styles.pageHeaderToolbar,align==='start'&&styles.pageHeaderToolbarStart,align==='center'&&styles.pageHeaderToolbarCenter]}>{children}</View>;
   }
 
   function ProfileMenu(){
@@ -3112,8 +3114,10 @@ function Client() {
       <PageHeader
         title="Shelf"
         subtitle={shelfGreeting+' Pick up where you left off.'}
-        action={<Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}><Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text></Pressable>}
       />
+      <PageToolbar>
+        <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}><Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text></Pressable>
+      </PageToolbar>
 
       <OnboardingGuide/>
 
@@ -3311,8 +3315,7 @@ function Client() {
           <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable>
           <Text style={[styles.playerEyebrow,{color:p.ink,flex:1}]}>NOW PLAYING</Text>
           {current ? <Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>{speed}×</Text> : null}
-          <ProfileAvatarButton size={38}/>
-        </View>:null}
+        </View>:null>
         {current ? (
           <>
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
@@ -3528,7 +3531,7 @@ function Client() {
 
   function Reader({embedded=false}:{embedded?:boolean}={}) {
     const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View>{!embedded?<ProfileAvatarButton size={38}/>:null}<Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
+    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
     if(!reading)return <View style={styles.readerEmpty}><Text style={[styles.emptyMark,{color:p.sage}]}>A</Text><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text><Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{lastReading?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.'}</Text>{lastReading?<Button label={'Resume '+lastReading.title} onPress={()=>openBook(lastReading)}/>:null}<Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/></View>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
@@ -3561,7 +3564,6 @@ function Client() {
             </Pressable>;
           })}
         </View>
-        <ProfileAvatarButton size={42}/>
       </View>
       <View style={styles.liveHubBody}>
         {liveMode==='player'?<Player embedded/>:<Reader embedded/>}
@@ -3644,7 +3646,10 @@ function Client() {
     const relation=unifiedAtlasRelationship;
     return (
       <ScrollView contentContainerStyle={styles.content}>
-        <PageHeader title={atlasFocus.value} subtitle={(atlasFocus.kind==='space'?'Folder':atlasFocus.kind)+' · Atlas relationship'} action={<Pressable accessibilityRole="button" accessibilityLabel="Back to Atlas" onPress={()=>setAtlasFocus(null)} style={styles.headerAction}><UiIcon name="back" color={p.muted} size={20}/></Pressable>}/>
+        <PageHeader title={atlasFocus.value} subtitle={(atlasFocus.kind==='space'?'Folder':atlasFocus.kind)+' · Atlas relationship'}/>
+        <PageToolbar align="start">
+          <Pressable accessibilityRole="button" accessibilityLabel="Back to Atlas" onPress={()=>setAtlasFocus(null)} style={styles.headerAction}><UiIcon name="back" color={p.muted} size={20}/></Pressable>
+        </PageToolbar>
         <View style={[styles.atlasFocusHero,{backgroundColor:p.card,borderColor:p.line}]}>
           <Text style={[styles.playerEyebrow,{color:p.sage}]}>{atlasFocus.kind==='space'?'FOLDER':atlasFocus.kind.toUpperCase()}</Text>
           <Text maxFontSizeMultiplier={1.15} style={[styles.atlasFocusTitle,{color:p.ink}]}>{atlasFocus.value}</Text>
@@ -3804,8 +3809,10 @@ function Client() {
         <PageHeader
           title="Atlas"
           subtitle="Characters, stories and ideas — your reading universe."
-          action={<Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}><UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/></Pressable>}
         />
+        <PageToolbar>
+          <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}><UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/></Pressable>
+        </PageToolbar>
 
         {atlasListMode?<SourceSwitcher/>:null}
         {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
@@ -4330,8 +4337,10 @@ function Client() {
       <PageHeader
         title="Reader Stats"
         subtitle="Your reading journey."
-        action={<Pressable accessibilityRole="button" accessibilityLabel={'Statistics period '+periodLabel} accessibilityHint={periodOptions.length>1?'Double tap to change period':undefined} disabled={periodOptions.length<=1} onPress={cycleStatsPeriod} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel,opacity:periodOptions.length>1?1:.7}]}><Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{periodLabel}</Text>{periodOptions.length>1?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}</Pressable>}
       />
+      <PageToolbar>
+        <Pressable accessibilityRole="button" accessibilityLabel={'Statistics period '+periodLabel} accessibilityHint={periodOptions.length>1?'Double tap to change period':undefined} disabled={periodOptions.length<=1} onPress={cycleStatsPeriod} style={[styles.statsYearPill,{borderColor:statsPalette.goldSoft,backgroundColor:statsPalette.panel,opacity:periodOptions.length>1?1:.7}]}><Text style={[styles.statsYearText,{color:statsPalette.ink}]}>{periodLabel}</Text>{periodOptions.length>1?<UiIcon name="chevronDown" color={statsPalette.muted} size={14}/>:null}</Pressable>
+      </PageToolbar>
 
       <View style={[styles.statsMetricRow,{borderTopColor:statsPalette.line,borderBottomColor:statsPalette.line}]}>
         {metricCards.map(card=><View key={card.label} style={[styles.statsMetricCard,width>=700?styles.statsMetricCardWide:styles.statsMetricCardPhone]}>
@@ -4756,13 +4765,16 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07151C':'#F5F8F7'):p.paper}]}><AmbientGlow color={(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={(activeTab==='insights'||activeTab==='now')?Math.max(1500,width*2.2):Math.max(480,width)} strength={activeTab==='insights'?(p.paper==='#000000'?.95:.34):activeTab==='now'?(p.paper==='#000000'?.72:.26):(p.paper==='#000000'?.6:.22)}/>
+    <SafeAreaView style={[styles.screen,{backgroundColor:p.paper==='#000000'?'#07151C':'#F5F8F7'}]}><AmbientGlow color={p.paper==='#000000'?'#2F8B86':'#9BCFCB'} size={Math.max(1500,width*2.2)} strength={p.paper==='#000000'?.95:.34}/>
       {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
+      <View pointerEvents="box-none" style={[styles.globalProfileCorner,{right:wide?28:foldLayout?24:18}]}>
+        <ProfileAvatarButton size={42}/>
+      </View>
       <Animated.View style={[styles.tabBody,{
         opacity:tabTransition,
         transform:[{translateY:tabTransition.interpolate({inputRange:[0,1],outputRange:[reduceMotion?0:6,0]})}],
@@ -4804,7 +4816,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:p.paper==='#000000'?'#07111D':'#F7F7F5',borderTopColor:p.paper==='#000000'?'#26364A':'#D9D7D0'}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
@@ -5074,7 +5086,7 @@ const styles = StyleSheet.create({
   tabCenterOrb: {width:46,height:46,borderRadius:23,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',marginTop:-10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:4},
   tabCenterText: {marginTop:-2},
   liveHub: {flex:1,width:'100%'},
-  liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:8,paddingBottom:6,flexDirection:'row',alignItems:'center',gap:12},
+  liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:10,paddingBottom:8,paddingRight:76,flexDirection:'row',alignItems:'center',justifyContent:'center'},
   liveHubSegment: {flex:1,maxWidth:320,height:44,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,padding:3,flexDirection:'row',alignItems:'center'},
   liveHubSegmentItem: {flex:1,height:36,borderRadius:18,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,position:'relative'},
   liveHubSegmentText: {fontSize:12,lineHeight:16,fontWeight:'600'},
@@ -5204,13 +5216,16 @@ const styles = StyleSheet.create({
   shelfEditorialSubtitle: {fontFamily:'sans-serif',fontSize:14,lineHeight:20,fontStyle:'italic',marginTop:3,maxWidth:320},
   shelfBrowseBand: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8},
   shelfBrowseLabel: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.8},
-  standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',gap:10},
+  standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',paddingRight:58},
   standardPageHeaderCopy: {flex:1,minWidth:0},
   standardPageTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
   standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
-  standardPageHeaderAction: {alignItems:'center',justifyContent:'center',flexShrink:0},
+  pageHeaderToolbar: {minHeight:42,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end',paddingRight:58},
+  pageHeaderToolbarStart: {justifyContent:'flex-start'},
+  pageHeaderToolbarCenter: {justifyContent:'center'},
   pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},
-  profileAvatarButton: {alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:StyleSheet.hairlineWidth,borderColor:'rgba(255,255,255,.16)'},
+  globalProfileCorner: {position:'absolute',top:10,zIndex:80,elevation:12},
+  profileAvatarButton: {alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:StyleSheet.hairlineWidth,borderColor:'rgba(255,255,255,.16)',shadowColor:'#000',shadowOpacity:.08,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:5},
   profileAvatarInitials: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontWeight:'600',letterSpacing:.2},
   profileMenuLayer: {flex:1,position:'relative'},
   profileMenuBackdrop: {position:'absolute',left:0,right:0,top:0,bottom:0,backgroundColor:'rgba(0,0,0,.28)'},
