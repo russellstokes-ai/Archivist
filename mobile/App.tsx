@@ -6,6 +6,7 @@ import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   AppState,
@@ -36,7 +37,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
@@ -2079,6 +2080,55 @@ function Client() {
       setLocalScanning(false);
       setScanProgress(null);
     }
+  }
+
+  function confirmRemoveLocalFolder(folder:LocalFolder){
+    const imported=Platform.OS==='ios';
+    Alert.alert(
+      imported?'Remove imported folder?':'Remove folder from Archivist?',
+      imported
+        ? 'Archivist will delete its private imported copy to free storage. The original folder in Files or iCloud is not changed.'
+        : 'Archivist will stop indexing this folder. The original files on your device are not changed.',
+      [
+        {text:'Cancel',style:'cancel'},
+        {text:'Remove',style:'destructive',onPress:()=>void removeLocalFolder(folder)},
+      ],
+    );
+  }
+
+  async function removeLocalFolder(folder:LocalFolder){
+    if(localScanning)return;
+    setError('');
+    setLocalFolderNotice('');
+    setScanResultSummary(null);
+    setLocalScanning(true);
+    try{
+      await removeLocalFolderSource(folder);
+      const remaining=localFolders.filter(item=>item.uri!==folder.uri);
+      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const removedUris=new Set(previousLocal.filter(book=>book.rootUri===folder.uri||book.uri.startsWith(folder.uri.replace(/\/$/,'')+'/')).map(book=>book.uri));
+      const nextOverrides=Object.fromEntries(Object.entries(localMetadataOverrides).filter(([uri])=>!removedUris.has(uri)));
+      setLocalMetadataOverrides(nextOverrides);
+      await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
+      const result=await scanLocalFolders(remaining,setScanProgress,nextOverrides,previousLocal);
+      await finaliseLocalScan(result,previousLocal);
+      if(sourceFilter==='local'&&space===folder.name&&libraryFolderExact){
+        setSpace('');
+        setLibraryFolderExact(false);
+      }
+      setLocalFolderNotice(importedPlatformCopyRemovedLabel(folder));
+    }catch(e){
+      setError((e as Error).message);
+    }finally{
+      setLocalScanning(false);
+      setScanProgress(null);
+    }
+  }
+
+  function importedPlatformCopyRemovedLabel(folder:LocalFolder){
+    return Platform.OS==='ios'
+      ? `Removed imported folder “${folder.name}”. The original Files/iCloud folder was not changed.`
+      : `Removed “${folder.name}” from Archivist. Original files were not changed.`;
   }
 
   function playbackWorkKey(book:Book|null){
@@ -6245,6 +6295,7 @@ function Client() {
                 <View style={styles.settingsSubgroupHeading}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Local folders</Text><Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder{localFolders.length===1?'':'s'} · {localBooks.length} files</Text></View>
                 {localFolders.map(folder=><View key={folder.uri} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{folder.name}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{folder.uri}</Text></View>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove local folder '+folder.name} disabled={localScanning} onPress={()=>confirmRemoveLocalFolder(folder)} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable>
                 </View>)}
                 <View style={styles.settingsInlineActions}>
                   <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
