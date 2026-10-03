@@ -3338,7 +3338,7 @@ function Client() {
     }
 
     return (
-      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold,embedded&&styles.playerScreenEmbedded]}>
+      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,foldLayout&&styles.playerScreenFold,!current&&styles.playerScreenEmpty,embedded&&styles.playerScreenEmbedded]}>
         {!embedded?<View style={styles.playerHeading}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable>
           <Text style={[styles.playerEyebrow,{color:p.ink,flex:1}]}>NOW PLAYING</Text>
@@ -5178,6 +5178,7 @@ const styles = StyleSheet.create({
   modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:18,gap:9},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {paddingHorizontal:18,paddingTop:8,gap:15,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreenEmpty: {flexGrow:1},
   playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
   livingBookStage: {height:220,width:276,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
   livingBookShadow: {position:'absolute',width:202,height:28,borderRadius:101,top:178,transform:[{scaleY:.3}],shadowColor:'#000',shadowOpacity:.16,shadowRadius:18,elevation:4},
@@ -5253,7 +5254,7 @@ const styles = StyleSheet.create({
   structureRow: {borderBottomWidth:StyleSheet.hairlineWidth,minHeight:50,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
   structureChapter: {borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:10,gap:8},
   boundaryRow: {flexDirection:'row',gap:12,flexWrap:'wrap'},
-  playerEmpty: {borderWidth:0,padding:32,gap:10,alignItems:'center',justifyContent:'center',minHeight:260,maxWidth:420,alignSelf:'center'},
+  playerEmpty: {flex:1,borderWidth:0,padding:32,gap:10,alignItems:'center',justifyContent:'center',minHeight:260,maxWidth:420,width:'100%',alignSelf:'center'},
   toolRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
   readerScreen: {flex:1,position:'relative'},
   readerBar: {position:'absolute',left:0,right:0,top:0,zIndex:25,minHeight:44,flexDirection:'row',alignItems:'center',paddingLeft:2,paddingRight:66,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:'rgba(127,127,127,.16)'},
