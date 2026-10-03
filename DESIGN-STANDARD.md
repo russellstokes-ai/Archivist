@@ -254,3 +254,16 @@ Every major screen must be reviewed with:
 - reduced motion where the screen contains custom animation.
 
 A code/build pass is not visual acceptance.
+
+
+## Standard page identity
+
+Primary app destinations use one shared page-header pattern. The page title is the screen identity, not the generic Archivist brand name.
+
+- Major page titles use `ArchivistEditorial`, 32/39, weight 500, with the same size across Shelf, Library, Atlas, Reader Stats, Profile, Rewards and Settings.
+- Every major title is followed by one short, quiet descriptive line in sans-serif. Examples: Library — “Every book. In its place.”; Atlas — “Characters, stories and ideas — your reading universe.”; Reader Stats — “Your reading journey.”
+- Do not put a back-to-Shelf arrow beside primary destination titles. Bottom navigation handles primary navigation.
+- A persistent customizable profile avatar sits at the top right of every app page. Immersive Player and Reader chrome also expose the same avatar.
+- Tapping the avatar opens the account hub with Profile, Rewards and Settings. Profile owns avatar customization; Rewards owns achievements/milestones; Settings owns app/library/server configuration.
+- The avatar is a consistent circular identity control, not a replacement for the page title.
+- Generic “Archivist” top chrome must not displace page-specific titles.
