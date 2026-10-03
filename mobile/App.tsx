@@ -295,7 +295,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'trackBack'|'trackForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'trackBack'|'trackForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin'|'edit'|'refresh'|'download';
 
 function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
   const k=size/20;
@@ -439,6 +439,20 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
       {name==='zoomIn'?<View style={{position:'absolute',height:size*.28,width:stroke,borderRadius:stroke,backgroundColor:color}}/>:null}
     </View>
     <View style={{position:'absolute',right:size*.02,bottom:size*.09,width:size*.38,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'45deg'}]}}/>
+  </View>;
+  if(name==='edit')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.16,top:size*.18,width:size*.58,height:Math.max(1,stroke*.62),borderRadius:2,backgroundColor:color,transform:[{rotate:'-42deg'}]}}/>
+    <View style={{position:'absolute',right:size*.13,top:size*.10,width:size*.18,height:size*.18,borderWidth:Math.max(1,stroke*.55),borderColor:color,transform:[{rotate:'45deg'}]}}/>
+    <View style={{position:'absolute',left:size*.11,bottom:size*.14,width:size*.24,height:size*.18,borderLeftWidth:Math.max(1,stroke*.55),borderBottomWidth:Math.max(1,stroke*.55),borderColor:color}}/>
+  </View>;
+  if(name==='refresh')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{width:size*.68,height:size*.68,borderRadius:size*.34,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderLeftColor:'transparent'}}/>
+    <View style={{position:'absolute',right:size*.08,top:size*.13,width:0,height:0,borderTopWidth:size*.11,borderBottomWidth:size*.11,borderLeftWidth:size*.16,borderTopColor:'transparent',borderBottomColor:'transparent',borderLeftColor:color,transform:[{rotate:'18deg'}]}}/>
+  </View>;
+  if(name==='download')return <View style={{width:size,height:size,position:'relative',alignItems:'center'}}>
+    <View style={{position:'absolute',top:size*.10,width:Math.max(1,stroke*.7),height:size*.48,backgroundColor:color,borderRadius:2}}/>
+    <View style={{position:'absolute',top:size*.38,width:size*.28,height:size*.28,borderRightWidth:Math.max(1,stroke*.65),borderBottomWidth:Math.max(1,stroke*.65),borderColor:color,transform:[{rotate:'45deg'}]}}/>
+    <View style={{position:'absolute',left:size*.16,right:size*.16,bottom:size*.10,height:Math.max(1,stroke*.65),backgroundColor:color,borderRadius:2}}/>
   </View>;
   const up=name==='chevronUp';
   return <View style={{width:size,height:size,position:'relative'}}>
