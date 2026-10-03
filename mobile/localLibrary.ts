@@ -95,13 +95,12 @@ const supported = new Map<string, string>([
   ['flac', 'Audio'],
 ]);
 
-const maxEntriesPerScan = 10000;
-const maxVisitedEntriesPerScan = 50000;
+const maxEntriesPerScan = 100000;
+const maxVisitedEntriesPerScan = 250000;
 const knownNonDirectoryExtensions = new Set([
   ...supported.keys(),
   'cbr','cbt','opf','nfo','jpg','jpeg','png','webp','gif','txt','cue','m3u','m3u8','json','xml','srt',
 ]);
-const maxDepth = 8;
 
 export function localFolderName(uri: string) {
   try {
@@ -142,6 +141,7 @@ export async function scanLocalFolders(
   let review = 0;
   const seen = new Set<string>();
   const sidecarCache = new Map<string, LocalMetadataFields>();
+  const visitedDirectories = new Set<string>();
 
   async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
     const cached = sidecarCache.get(uri);
@@ -165,7 +165,8 @@ export async function scanLocalFolders(
   };
 
   async function scanDir(uri: string, space: string, depth: number, countUnreadable = true) {
-    if (truncated || depth > maxDepth) return;
+    if (truncated || visitedDirectories.has(uri)) return;
+    visitedDirectories.add(uri);
     let children: string[];
     try {
       children = await StorageAccessFramework.readDirectoryAsync(uri);
@@ -189,9 +190,9 @@ export async function scanLocalFolders(
     for (const child of children) {
       const ext = extension(child);
       const stem = fileStem(child).toLowerCase();
-      if (ext === 'opf' || ext === 'nfo') {
+      if (ext === 'opf' || ext === 'nfo' || ext === 'json' || ext === 'xml') {
         sidecarByStem.set(stem, child);
-        if (stem === 'metadata' || stem === 'book') genericSidecar = child;
+        if (stem === 'metadata' || stem === 'book' || stem === 'comicinfo') genericSidecar = child;
       }
       if (['jpg','jpeg','png','webp'].includes(ext)) {
         artworkByStem.set(stem, child);
@@ -256,7 +257,7 @@ export async function scanLocalFolders(
           coverUri,
         });
         if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
-      } else if (depth < maxDepth) {
+      } else {
         if (!ext) {
           await scanDir(child, space, depth + 1);
         } else if (!knownNonDirectoryExtensions.has(ext)) {
