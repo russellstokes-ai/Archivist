@@ -4373,7 +4373,7 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor: p.paper}]}><AmbientGlow size={Math.max(480,width)} strength={p.paper==='#000000'?.6:.22}/>
+    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper}]}><AmbientGlow size={Math.max(480,width)} strength={p.paper==='#000000'?.6:.22}/>
       {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={styles.appHeader}>
         <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel={activeTab==='settings'?'Close Settings':'Settings'} onPress={()=>setActiveTab(activeTab==='settings'?'shelf':'settings')} style={styles.settingsButton}>
