@@ -2980,7 +2980,7 @@ function Client() {
             <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text></View>
             <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>{unlocked} reward{unlocked===1?'':'s'} unlocked</Text></View>
           </View>
-          {menuItems.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>closeProfileMenu(()=>setActiveTab(item.id))} style={({pressed})=>[styles.profileMenuItem,{borderTopColor:p.line,opacity:pressed?.72:1}]}>
+          {menuItems.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>closeProfileMenu(()=>setActiveTab(item.id))} style={({pressed})=>[styles.profileMenuItem,{borderTopColor:p.line,opacity:pressed?0.72:1}]}>
             <View style={[styles.profileMenuIcon,{backgroundColor:item.tone+'20',borderColor:item.tone+'55'}]}><UiIcon name={item.icon} color={item.tone} size={18}/></View>
             <View style={{flex:1,minWidth:0}}><Text style={[styles.profileMenuItemTitle,{color:p.ink}]}>{item.label}</Text><Text style={[styles.profileMenuItemCopy,{color:p.muted}]}>{item.copy}</Text></View>
             <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={item.tone} size={15}/></View>
@@ -4648,7 +4648,7 @@ function Client() {
 
       <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
         <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>MORE</Text>
-        {profileLinks.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>setActiveTab(item.id)} style={({pressed})=>[styles.profileHubLink,{borderBottomColor:p.line,opacity:pressed?.72:1}]}>
+        {profileLinks.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>setActiveTab(item.id)} style={({pressed})=>[styles.profileHubLink,{borderBottomColor:p.line,opacity:pressed?0.72:1}]}>
           <View style={[styles.profileHubLinkIcon,{backgroundColor:item.tone+'20'}]}><UiIcon name={item.icon} color={item.tone} size={18}/></View>
           <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,{color:p.ink}]}>{item.label}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.copy}</Text></View>
           <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={item.tone} size={16}/></View>
