@@ -5,7 +5,7 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,file);
 
-const {possibleLocalDuplicateGroups}=require('./duplicates.ts');
+const {possibleLocalDuplicateGroups,possibleAlternateFormatGroups}=require('./duplicates.ts');
 const base={author:'Frank Herbert',series:'Dune',format:'EPUB',space:'Books',available:true};
 const groups=possibleLocalDuplicateGroups([
   {id:1,uri:'content://one',title:'Dune',...base},
@@ -24,3 +24,19 @@ const unknown=possibleLocalDuplicateGroups([
 assert.equal(unknown.length,0);
 
 console.log('PASS: local duplicate candidates are conservative and explicitly unverified');
+
+
+const ids=possibleLocalDuplicateGroups([
+  {id:10,uri:'isbn-a',title:'Different display title',author:'A',series:'',seriesNumber:1,format:'EPUB',isbn:'9780000000001',space:'Books',available:true},
+  {id:11,uri:'isbn-b',title:'Another display title',author:'B',series:'Other',seriesNumber:8,format:'EPUB',isbn:'9780000000001',space:'Books',available:true},
+]);
+assert.equal(ids.length,1);
+assert.match(ids[0].reason,/ISBN or ASIN/);
+
+const variants=possibleAlternateFormatGroups([
+  {id:20,uri:'v1',title:'Dune',author:'Frank Herbert',series:'Dune',seriesNumber:1,format:'EPUB',workKey:'dune-work',space:'Books',available:true},
+  {id:21,uri:'v2',title:'Dune',author:'Frank Herbert',series:'Dune',seriesNumber:1,format:'Audio',workKey:'dune-work',space:'Books',available:true},
+]);
+assert.equal(variants.length,1);
+assert.equal(variants[0].items.length,2);
+assert.match(variants[0].reason,/alternate/);
