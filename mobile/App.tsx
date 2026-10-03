@@ -577,6 +577,7 @@ function Client() {
   const [librarySort,setLibrarySort]=useState<LibrarySort>('title');
   const [libraryView,setLibraryView]=useState<'grid'|'list'>('grid');
   const [workMenu,setWorkMenu]=useState<UnifiedWork|null>(null);
+  const [workDetails,setWorkDetails]=useState<UnifiedWork|null>(null);
   const [smartShelves,setSmartShelves]=useState<SmartShelfDefinition[]>([]);
   const [collections,setCollections]=useState<LibraryCollection[]>([]);
   const [organisationModal,setOrganisationModal]=useState<'smart-shelf'|'new-collection'|'manage'|'add-to-collection'|null>(null);
@@ -698,11 +699,14 @@ function Client() {
   const [folderPath,setFolderPath]=useState('');
   const [folderSpace,setFolderSpace]=useState('My library');
   const [editing,setEditing]=useState<Book|null>(null);
+  const [editingUris,setEditingUris]=useState<string[]>([]);
   const [workPicker,setWorkPicker]=useState<WorkPicker|null>(null);
   const [editTitle,setEditTitle]=useState('');
   const [editAuthor,setEditAuthor]=useState('');
   const [editSeries,setEditSeries]=useState('');
   const [editGenre,setEditGenre]=useState('');
+  const [editYear,setEditYear]=useState('');
+  const [editCoverUri,setEditCoverUri]=useState('');
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
@@ -1868,13 +1872,13 @@ function Client() {
     }
   }
 
-  async function rescanLocalFolders() {
+  async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides) {
     if (!localFolders.length) return;
     setError('');
     setLocalScanning(true);
     try {
       setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
-      const result = await scanLocalFolders(localFolders, setScanProgress, localMetadataOverrides);
+      const result = await scanLocalFolders(localFolders, setScanProgress, overrides);
       setLocalFolders(result.folders);
       setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
       setLocalMovePreviews([]);
@@ -2597,12 +2601,15 @@ function Client() {
     );
   }
 
-  function beginEdit(item: Book) {
+  function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
     setEditing(item);
+    setEditingUris(uris.filter(Boolean));
     setEditTitle(item.title);
     setEditAuthor(item.author || '');
     setEditSeries(item.series || '');
     setEditGenre(item.genre || '');
+    setEditYear(item.publishedYear ? String(item.publishedYear) : '');
+    setEditCoverUri(item.coverUri || '');
   }
 
   function RawAssetCard({item}: {item: Book}) {
@@ -2904,45 +2911,75 @@ function Client() {
   }
   function MetadataEditorPanel(){
     if(!editing)return null;
+    const localEdit=editing.source!=='server'&&!!editing.uri;
+    const targets=editingUris.length?editingUris:(editing.uri?[editing.uri]:[]);
     const save=()=>{
       const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
+      const yearText=editYear.trim();
+      const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
+      const coverUri=editCoverUri.trim();
       if(!title)return;
       setBusy(true);setError('');
       if(editing.source==='server'){
         if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
         request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
-          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);})
+          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
-        const next={...localMetadataOverrides,[editing.uri]:{title,author,series:seriesName,genre}};
+        const override:LocalMetadataOverride={title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||undefined};
+        const next={...localMetadataOverrides};
+        for(const uri of targets)next[uri]=override;
         setLocalMetadataOverrides(next);
         setPersistedJSON(localMetadataOverridesKey,next)
           .then(()=>{
             setLocalBooks(old=>{
-              const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
+              const wanted=new Set(targets);
+              const updated=old.map(b=>wanted.has(b.uri)?{...b,title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
               void setPersistedJSON(localCatalogKey,updated);
               return updated;
             });
-            setEditing(null);
+            setEditing(null);setEditingUris([]);
           })
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else setBusy(false);
     };
-    return <Modal transparent animationType="slide" visible onRequestClose={()=>!busy&&setEditing(null)}>
+    const restoreScanned=async()=>{
+      if(!localEdit||!targets.length||busy)return;
+      setBusy(true);setError('');
+      try{
+        const next={...localMetadataOverrides};
+        for(const uri of targets)delete next[uri];
+        setLocalMetadataOverrides(next);
+        await setPersistedJSON(localMetadataOverridesKey,next);
+        setEditing(null);setEditingUris([]);
+        await rescanLocalFolders(next);
+      }catch(e){setError((e as Error).message);}
+      finally{setBusy(false);}
+    };
+    return <Modal transparent animationType="slide" visible onRequestClose={()=>{if(!busy){setEditing(null);setEditingUris([])}}}>
       <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
         <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
           <View accessibilityViewIsModal accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
-            <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA REVIEW</Text>
+            <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA & COVER</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
+            {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            {localEdit?<TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+            {localEdit?<View style={styles.metadataCoverEditor}>
+              <View style={styles.metadataCoverPreview}><Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
+              <View style={{flex:1,gap:6}}><Text style={[styles.bookTitle,{color:p.ink}]}>Cover artwork</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist normally finds companion cover files during scanning. Paste a local/content/HTTPS image URI only when you want a manual override.</Text></View>
+            </View>:null}
+            {localEdit?<TextInput accessibilityLabel="Cover image URI" autoCapitalize="none" autoCorrect={false} value={editCoverUri} onChangeText={setEditCoverUri} placeholder="Cover image URI (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+            {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan; this editor changes textual metadata only.</Text>:null}
             <Button label="Save details" disabled={busy||!editTitle.trim()} onPress={save}/>
-            <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>setEditing(null)}/>
+            {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
+            <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>{setEditing(null);setEditingUris([])}}/>
           </View>
-        </ScrollView></View>
+        </View></ScrollView>
       </KeyboardAvoidingView>
     </Modal>;
   }
@@ -5796,6 +5833,8 @@ const styles = StyleSheet.create({
   coverFallback: {flex:1,padding:10,justifyContent:'space-between'},
   coverFallbackMark: {fontFamily:'serif',fontSize:20,lineHeight:24,opacity:.5},
   coverFallbackCopy: {gap:4},
+  metadataCoverEditor: {flexDirection:'row',alignItems:'center',gap:14},
+  metadataCoverPreview: {width:74},
   coverFormat: {fontSize:9,lineHeight:12,fontWeight:'700',letterSpacing:1.4},
   coverTitle: {fontFamily:'sans-serif-medium',fontSize:13,lineHeight:17,fontWeight:'500'},
   coverTitleLarge: {fontSize:16,lineHeight:21},
