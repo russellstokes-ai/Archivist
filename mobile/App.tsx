@@ -783,6 +783,7 @@ function Client() {
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
   const [scanResultSummary,setScanResultSummary]=useState<ScanResultSummary|null>(null);
   const [rescanPromptOpen,setRescanPromptOpen]=useState(false);
+  useEffect(()=>{if(!libraryManageOpen&&scanResultSummary)setScanResultSummary(null);},[libraryManageOpen,scanResultSummary]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
@@ -5807,10 +5808,15 @@ function Client() {
 
   function LocalSortingPanel() {
     if(!localBooks.length)return null;
+    const readyIds=localMovePreviews.filter(item=>item.state==='ready').map(item=>item.id);
+    const selectedReady=readyIds.filter(id=>localMoveSelection.includes(id));
+    const togglePreview=(id:string)=>{
+      setLocalMoveSelection(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);
+    };
     return (
       <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist copies into the organised layout and leaves originals untouched until you choose to clean up the copy history.</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist shows the current path, proposed path and metadata used. Only selected Ready items are applied; originals remain untouched until the verified copy succeeds.</Text>
         <View style={styles.segment}>
           {[
             ['author-title','Author / Title'],
@@ -5818,21 +5824,45 @@ function Client() {
             ['format-author-title','Format / Author / Title'],
           ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
-        <Button label="Preview visible local items" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
-        <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
+        <View style={styles.toolRow}>
+          <Button label="Preview" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+          <Button label={'Apply selected'+(selectedReady.length?' ('+selectedReady.length+')':'')} disabled={busy||selectedReady.length===0} onPress={()=>void applyLocalSortBatch()}/>
+        </View>
+        {readyIds.length?<View style={styles.toolRow}>
+          <Button label="Select all Ready" tone="quiet" onPress={()=>setLocalMoveSelection(readyIds)}/>
+          <Button label="Clear selection" tone="quiet" onPress={()=>setLocalMoveSelection([])}/>
+        </View>:null}
         {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
-        {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
-          <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
-          <Text style={{color:p.muted}}>From: {item.from}</Text>
-          <Text style={{color:item.state==='conflict'?p.danger:item.state==='review'?p.sage:p.muted}}>To: {item.to}</Text>
-          <Text style={{color:item.state==='review'?p.sage:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
-        </View>)}
-        {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text>:null}
+        {localMovePreviews.slice(0,20).map(item=>{
+          const selectable=item.state==='ready';
+          const selected=selectable&&localMoveSelection.includes(item.id);
+          const status=item.state==='ready'?'Ready':item.state==='review'?'Review recommended':item.state==='conflict'?'Conflict':'Already organised';
+          const statusColor=item.state==='conflict'?p.danger:item.state==='ready'?p.sage:p.muted;
+          return <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={item.title+', '+status+(selectable?(selected?', selected':', not selected'):'')}
+            accessibilityState={{selected,disabled:!selectable}}
+            disabled={!selectable}
+            onPress={()=>togglePreview(item.id)}
+            style={({pressed})=>[styles.sourceRow,{borderColor:selected?p.sage:p.line,opacity:pressed?.72:1}]}>
+            <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,alignItems:'baseline'}}>
+              <Text style={{color:p.ink,fontWeight:'700',flex:1}}>{item.title}</Text>
+              <Text style={{color:statusColor,fontWeight:'700'}}>{selected?'✓ ':''}{status}</Text>
+            </View>
+            <Text style={[styles.meta,{color:p.muted}]}>Current</Text>
+            <Text numberOfLines={2} style={{color:p.ink}}>{item.from}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Proposed</Text>
+            <Text numberOfLines={2} style={{color:item.state==='conflict'?p.danger:p.ink}}>{item.to}</Text>
+            {item.metadataSummary?<Text numberOfLines={3} style={[styles.meta,{color:p.muted}]}>Metadata used · {item.metadataSummary}</Text>:null}
+          </Pressable>;
+        })}
+        {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed changes.</Text>:null}
         {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
         {localSortHistory.slice(0,3).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
           <Text style={{color:p.ink,fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
           <Text style={{color:p.muted}}>{item.copied.length} copied; {item.failed.length} failed</Text>
-          <Button label="Remove copied files" disabled={busy || item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)} />
+          <Button label="Remove copied files" disabled={busy||item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)}/>
         </View>)}
       </View>
     );
@@ -5873,7 +5903,17 @@ function Client() {
                 <Button label={localScanning?'Scanning…':'Rescan device folders'} disabled={localScanning||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
                 <Button label="Add device folder" tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
-              {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}><ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/><View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found · {scanProgress.review} review</Text></View></View>:null}
+              {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+                <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+                <View style={{flex:1,gap:6}}>
+                  <Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(scanProgress.phase)}</Text>
+                  <Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found · {scanProgress.review} review{scanProgress.currentFolder?' · '+scanProgress.currentFolder:''}</Text>
+                  <View style={{height:2,backgroundColor:p.line,overflow:'hidden'}}><View style={{height:2,width:(scanPhaseStep(scanProgress.phase)/5*100)+'%',backgroundColor:p.sage}}/></View>
+                </View>
+              </View>:null}
+              {!localScanning&&scanResultSummary?<View accessibilityLiveRegion="polite" style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+                <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'700'}}>Library updated</Text><Text style={{color:p.muted}}>{scanResultSummary.unchanged} unchanged · {scanResultSummary.added} new · {scanResultSummary.updated} updated · {scanResultSummary.removed} removed</Text></View>
+              </View>:null}
               <View style={styles.libraryRepairList}>
                 <Pressable accessibilityRole="button" onPress={openReview} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Review uncertain metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Open the exact files Archivist could not identify confidently.</Text></View><Text style={[styles.libraryRepairCount,{color:reviewCount?p.gold:p.muted}]}>{reviewCount}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('conflicts')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Resolve metadata conflicts</Text><Text style={[styles.meta,{color:p.muted}]}>Compare fields where embedded, sidecar or folder evidence disagrees.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.conflicts?p.gold:p.muted}]}>{gaps.conflicts}</Text></Pressable>
