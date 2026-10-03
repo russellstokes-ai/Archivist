@@ -708,6 +708,9 @@ function Client() {
   const [offlineStorageBusy,setOfflineStorageBusy]=useState(false);
   const [offlineBusyId,setOfflineBusyId]=useState<number|null>(null);
   const [offlineProgress,setOfflineProgress]=useState('');
+  const [privacyBackupText,setPrivacyBackupText]=useState('');
+  const [privacyRestoreText,setPrivacyRestoreText]=useState('');
+  const [privacyDataNotice,setPrivacyDataNotice]=useState('');
   const loadCancel = useRef<(() => void) | null>(null);
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
@@ -5080,6 +5083,64 @@ function Client() {
       </View>)}
       {!completed.length&&!partial.length?<Text style={[styles.meta,{color:p.muted}]}>Nothing stored offline yet. Use Download for offline on any server work.</Text>:null}
     </View>;
+  }
+
+  function createPrivacyBackup(){
+    const snapshot={
+      archivistBackup:1,
+      createdAt:new Date().toISOString(),
+      appVersion:'0.9.3',
+      theme,
+      accessibility:accessibilityPrefs,
+      profileAvatar,
+      insightGoal,
+      readerAppearance,
+      smartShelves,
+      collections,
+      shelfSections,
+      playerBookmarks,
+      readerBookmarks,
+      readerAnnotations,
+      localPreferences,
+      ritualDays,
+      localReadingProgress,
+      localReadingComplete,
+      localReadingCurrentComplete,
+      localWorkProgress,
+      localAudioCompleted,
+    };
+    setPrivacyBackupText(JSON.stringify(snapshot,null,2));
+    setPrivacyDataNotice('Backup snapshot created locally. Server credentials and access keys are never included.');
+  }
+
+  async function restorePrivacyBackup(){
+    setPrivacyDataNotice('');
+    try{
+      const raw=JSON.parse(privacyRestoreText);
+      if(!raw||raw.archivistBackup!==1)throw Error('This is not an Archivist backup snapshot.');
+      if(raw.theme==='system'||raw.theme==='light'||raw.theme==='dark')await chooseTheme(raw.theme);
+      if(raw.accessibility&&typeof raw.accessibility==='object')await saveAccessibilityPreferences({reduceMotion:!!raw.accessibility.reduceMotion,highContrast:!!raw.accessibility.highContrast,largeText:!!raw.accessibility.largeText});
+      if(raw.profileAvatar&&typeof raw.profileAvatar==='object')await saveProfileAvatar({initials:String(raw.profileAvatar.initials||''),color:String(raw.profileAvatar.color||'#47736F'),photoUri:typeof raw.profileAvatar.photoUri==='string'?raw.profileAvatar.photoUri:undefined});
+      if(raw.insightGoal){const value=sanitizeInsightGoal(raw.insightGoal);setInsightGoal(value);setGoalDraft({completed:String(value.completedTarget),annotations:String(value.annotationTarget)});await setPersistedJSON(insightGoalKey,value);}
+      if(raw.readerAppearance){const value=sanitizeReaderAppearance(raw.readerAppearance);setReaderAppearance(value);await setPersistedJSON(readerAppearanceKey,value);}
+      if(Array.isArray(raw.smartShelves)){const value=sanitizeSmartShelves(raw.smartShelves);setSmartShelves(value);await setPersistedJSON(smartShelvesKey,value);}
+      if(Array.isArray(raw.collections)){const value=sanitizeCollections(raw.collections);setCollections(value);await setPersistedJSON(collectionsKey,value);}
+      if(Array.isArray(raw.shelfSections)){const allowed=new Set(defaultShelfSections.map(item=>item.id));const value=raw.shelfSections.filter((item:any)=>item&&allowed.has(item.id)).map((item:any)=>({id:item.id,title:String(item.title||''),visible:item.visible!==false}));if(value.length){setShelfSections(value);await setPersistedJSON(shelfSectionsKey,value);}}
+      if(Array.isArray(raw.playerBookmarks)){const value=sanitizeBookmarks(raw.playerBookmarks);setPlayerBookmarks(value);await setPersistedJSON(playerBookmarksKey,value);}
+      if(Array.isArray(raw.readerBookmarks)){const value=sanitizeReaderBookmarks(raw.readerBookmarks);setReaderBookmarks(value);await setPersistedJSON(readerBookmarksKey,value);}
+      if(Array.isArray(raw.readerAnnotations)){const value=sanitizeReaderAnnotations(raw.readerAnnotations);setReaderAnnotations(value);await setPersistedJSON(readerAnnotationsKey,value);}
+      if(raw.localPreferences&&typeof raw.localPreferences==='object'){setLocalPreferences(raw.localPreferences);await setPersistedJSON(localPreferencesKey,raw.localPreferences);}
+      if(raw.ritualDays&&typeof raw.ritualDays==='object'){const value=Object.fromEntries(Object.entries(raw.ritualDays).filter(([key,value])=>/^\d{4}-\d{2}-\d{2}$/.test(key)&&Number.isFinite(Number(value))).map(([key,value])=>[key,Math.max(0,Math.min(60,Number(value)))]));setRitualDays(value);await setPersistedJSON('archivist.dailyRitual.v1',value);}
+      for(const [key,setter,storeKey] of [
+        ['localReadingProgress',setLocalReadingProgress,localReadingProgressKey],
+        ['localReadingComplete',setLocalReadingComplete,localReadingCompleteKey],
+        ['localReadingCurrentComplete',setLocalReadingCurrentComplete,localReadingCurrentCompleteKey],
+        ['localWorkProgress',setLocalWorkProgress,localWorkProgressKey],
+        ['localAudioCompleted',setLocalAudioCompleted,localAudioCompletedKey],
+      ] as const){const value=raw[key];if(value&&typeof value==='object'){setter(value as any);await setPersistedJSON(storeKey,value);}}
+      setPrivacyDataNotice('Backup restored. Server credentials remain unchanged.');
+      setPrivacyRestoreText('');
+    }catch(e){setPrivacyDataNotice((e as Error).message||'Backup could not be restored.');}
   }
 
   function Settings() {
