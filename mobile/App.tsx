@@ -4946,10 +4946,10 @@ function Client() {
               <Text style={[styles.atlasUniverseStatsTotal,{color:p.sage}]}>{atlasUniverseWorks.length} works</Text>
             </View>
             <View style={styles.atlasUniverseStatsGrid}>
-              {universeStats.map(item=><View key={item.label} style={[styles.atlasUniverseStat,width>=760&&styles.atlasUniverseStatWide,{borderBottomColor:p.line}]}>
-                <Text style={[styles.atlasUniverseStatValue,{color:p.ink}]}>{item.value}</Text>
-                <Text style={[styles.atlasUniverseStatLabel,{color:p.muted}]}>{item.label}</Text>
-                <Text style={[styles.atlasUniverseStatCopy,{color:p.muted}]}>{item.copy}</Text>
+              {universeStats.map(item=><View key={item.label} style={[styles.atlasUniverseStat,phoneLayout&&styles.atlasUniverseStatPhone,width>=760&&styles.atlasUniverseStatWide,{borderBottomColor:p.line}]}>
+                <Text style={[styles.atlasUniverseStatValue,phoneLayout&&styles.metricTextCentered,{color:p.ink}]}>{item.value}</Text>
+                <Text style={[styles.atlasUniverseStatLabel,phoneLayout&&styles.metricTextCentered,{color:p.muted}]}>{item.label}</Text>
+                <Text style={[styles.atlasUniverseStatCopy,phoneLayout&&styles.metricTextCentered,{color:p.muted}]}>{item.copy}</Text>
               </View>)}
             </View>
             <View style={[styles.atlasUniverseHighlights,{borderTopColor:p.line}]}>
@@ -5181,10 +5181,10 @@ function Client() {
       </View>)}
     </View>;
 
-    const DetailMetric=({label,value,meta}:{label:string;value:string;meta?:string})=><View style={styles.statsDetailMetric}>
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.75} style={[styles.statsDetailValue,{color:statsPalette.ink}]}>{value}</Text>
-      <Text style={[styles.statsDetailLabel,{color:statsPalette.muted}]}>{label}</Text>
-      {meta?<Text style={[styles.statsDetailMeta,{color:statsPalette.muted}]}>{meta}</Text>:null}
+    const DetailMetric=({label,value,meta}:{label:string;value:string;meta?:string})=><View style={[styles.statsDetailMetric,phoneLayout&&styles.statsDetailMetricPhone]}>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.75} style={[styles.statsDetailValue,phoneLayout&&styles.metricTextCentered,{color:statsPalette.ink}]}>{value}</Text>
+      <Text style={[styles.statsDetailLabel,phoneLayout&&styles.metricTextCentered,{color:statsPalette.muted}]}>{label}</Text>
+      {meta?<Text style={[styles.statsDetailMeta,phoneLayout&&styles.metricTextCentered,{color:statsPalette.muted}]}>{meta}</Text>:null}
     </View>;
 
     const CompletionRows=({items}:{items:Array<{label:string;total:number;finished:number;percent:number}>})=><View style={styles.statsCompletionRows}>
@@ -5543,16 +5543,16 @@ function Client() {
             ['Completed',String(stats?.completed||0)],
             ['Favourites',String(stats?.favourites||0)],
             ['Best streak',String(ritual.bestStreak)+' days'],
-          ].map(([label,value])=><View key={label} style={[styles.profileSnapshotItem,width>=700&&styles.profileSnapshotItemWide]}><Text style={[styles.profileSnapshotValue,{color:p.ink}]}>{value}</Text><Text style={[styles.profileSnapshotLabel,{color:p.muted}]}>{label}</Text></View>)}
+          ].map(([label,value])=><View key={label} style={[styles.profileSnapshotItem,phoneLayout&&styles.profileSnapshotItemPhone,width>=700&&styles.profileSnapshotItemWide]}><Text style={[styles.profileSnapshotValue,phoneLayout&&styles.metricTextCentered,{color:p.ink}]}>{value}</Text><Text style={[styles.profileSnapshotLabel,phoneLayout&&styles.metricTextCentered,{color:p.muted}]}>{label}</Text></View>)}
         </View>
       </View>
 
       <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
         <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>PERSONAL BESTS</Text>
-        <View style={styles.profileBestGrid}>{personalBests.map(item=><View key={item.label} style={[styles.profileBestCard,{borderColor:p.line}]}>
+        <View style={styles.profileBestGrid}>{personalBests.map(item=><View key={item.label} style={[styles.profileBestCard,phoneLayout&&styles.profileBestCardPhone,{borderColor:p.line}]}>
           <View style={[styles.profileBestIcon,{backgroundColor:p.card}]}><UiIcon name={item.icon} color={p.gold} size={17}/></View>
-          <Text style={[styles.profileBestValue,{color:p.ink}]}>{item.value}</Text>
-          <Text style={[styles.profileBestLabel,{color:p.muted}]}>{item.label}</Text>
+          <Text style={[styles.profileBestValue,phoneLayout&&styles.metricTextCentered,{color:p.ink}]}>{item.value}</Text>
+          <Text style={[styles.profileBestLabel,phoneLayout&&styles.metricTextCentered,{color:p.muted}]}>{item.label}</Text>
         </View>)}</View>
       </View>
 
@@ -6920,6 +6920,7 @@ const styles = StyleSheet.create({
   atlasUniverseStatsTotal: {fontSize:11,lineHeight:16,fontWeight:'700',letterSpacing:.35,textTransform:'uppercase'},
   atlasUniverseStatsGrid: {flexDirection:'row',flexWrap:'wrap',alignItems:'stretch'},
   atlasUniverseStat: {width:'50%',minHeight:92,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:13,paddingHorizontal:9,justifyContent:'flex-start'},
+  atlasUniverseStatPhone: {alignItems:'center',justifyContent:'center'},
   atlasUniverseStatWide: {width:'25%',minHeight:94},
   atlasUniverseStatValue: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500',fontVariant:['tabular-nums']},
   atlasUniverseStatLabel: {fontSize:10.5,lineHeight:15,fontWeight:'700',marginTop:1},
@@ -7028,6 +7029,7 @@ const styles = StyleSheet.create({
   profileTraitText: {fontSize:9.5,lineHeight:13,fontWeight:'600'},
   profileBestGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
   profileBestCard: {width:'47%',minWidth:135,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:12,gap:5},
+  profileBestCardPhone: {alignItems:'center'},
   profileBestIcon: {width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center'},
   profileBestValue: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:24,fontWeight:'500'},
   profileBestLabel: {fontSize:9.5,lineHeight:13},
@@ -7050,6 +7052,7 @@ const styles = StyleSheet.create({
   profileAvatarSwatch: {width:38,height:38,borderRadius:19,borderWidth:2},
   profileSnapshotGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:16,rowGap:14},
   profileSnapshotItem: {width:'46%',flexGrow:1},
+  profileSnapshotItemPhone: {alignItems:'center'},
   profileSnapshotItemWide: {width:'22%',minWidth:120},
   profileSnapshotValue: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:27,fontWeight:'500'},
   profileSnapshotLabel: {fontSize:10,lineHeight:14,marginTop:2},
@@ -7335,9 +7338,11 @@ const styles = StyleSheet.create({
   statsWeekLabel: {fontSize:8.5,lineHeight:11,fontWeight:'600'},
   statsDetailGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:14,rowGap:14,paddingTop:4,alignItems:'flex-start'},
   statsDetailMetric: {width:'47%',minWidth:118,flexGrow:1,paddingVertical:2},
+  statsDetailMetricPhone: {alignItems:'center'},
   statsDetailValue: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:24,fontWeight:'500'},
   statsDetailLabel: {fontSize:9.5,lineHeight:13,fontWeight:'600',marginTop:2},
   statsDetailMeta: {fontSize:8.5,lineHeight:12,marginTop:1},
+  metricTextCentered: {textAlign:'center'},
   statsMinorHeading: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:.55,textTransform:'uppercase'},
   statsFinishSection: {gap:10,paddingTop:4},
   statsFinishMonths: {height:92,flexDirection:'row',alignItems:'flex-end',gap:5},
