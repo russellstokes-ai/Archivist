@@ -291,7 +291,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
+type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'trackBack'|'trackForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
 
 function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
   const k=size/20;
@@ -361,6 +361,10 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   if(name==='skipBack'||name==='skipForward')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
     <View style={{position:'absolute',width:size*.72,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderRadius:size*.36,borderLeftColor:name==='skipBack'?color:'transparent',borderRightColor:name==='skipForward'?color:'transparent'}}/>
     <View style={{position:'absolute',left:name==='skipBack'?size*.02:undefined,right:name==='skipForward'?size*.02:undefined,top:size*.12,width:0,height:0,borderTopWidth:size*.12,borderBottomWidth:size*.12,borderTopColor:'transparent',borderBottomColor:'transparent',borderRightWidth:name==='skipBack'?size*.18:0,borderRightColor:name==='skipBack'?color:'transparent',borderLeftWidth:name==='skipForward'?size*.18:0,borderLeftColor:name==='skipForward'?color:'transparent'}}/>
+  </View>;
+  if(name==='trackBack'||name==='trackForward')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
+    <View style={{position:'absolute',left:name==='trackBack'?size*.16:undefined,right:name==='trackForward'?size*.16:undefined,top:size*.20,width:Math.max(1,stroke*.8),height:size*.60,borderRadius:2,backgroundColor:color}}/>
+    <View style={{width:0,height:0,borderTopWidth:size*.25,borderBottomWidth:size*.25,borderTopColor:'transparent',borderBottomColor:'transparent',borderRightWidth:name==='trackBack'?size*.38:0,borderRightColor:name==='trackBack'?color:'transparent',borderLeftWidth:name==='trackForward'?size*.38:0,borderLeftColor:name==='trackForward'?color:'transparent',marginLeft:name==='trackBack'?size*.08:0,marginRight:name==='trackForward'?size*.08:0}}/>
   </View>;
   if(name==='bookmark')return <View style={{width:size,height:size,position:'relative',alignItems:'center'}}>
     <View style={{width:size*.52,height:size*.72,borderWidth:Math.max(1,stroke*.58),borderColor:color,borderBottomWidth:0,borderTopLeftRadius:3,borderTopRightRadius:3}}/>
@@ -630,12 +634,14 @@ function Client() {
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
   const [skipTurning,setSkipTurning]=useState(false);
+  const [skipPageCount,setSkipPageCount]=useState(3);
   const skipGeneration=useRef(0);
-  function turnThreePages(direction:1|-1){
+  function turnPages(pages:number,direction:1|-1){
     if(reduceMotion||!playbackVisible)return;
+    const count=Math.max(1,Math.min(5,Math.round(pages)));
     const generation=++skipGeneration.current;
-    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipTurning(true);
-    Animated.timing(skipTurnAnim,{toValue:3,duration:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
+    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
+    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=5?1040:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
   }
 
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
@@ -768,7 +774,7 @@ function Client() {
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
     bookOpenAnim.stopAnimation();
-    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:520,useNativeDriver:true}).start();
+    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:(playbackIsPlaying?680:560),useNativeDriver:true}).start();
 
     if(motion!=='turning'){
       pageTurnAnim.stopAnimation(value=>{
@@ -2299,9 +2305,9 @@ function Client() {
   }
 
   function Artwork({
-    title,format,coverShape,coverUri,serverPath,large=false,
+    title,format,coverShape,coverUri,serverPath,large=false,fill=false,
   }: {
-    title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;
+    title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;fill?:boolean;
   }) {
     const square = coverShape ? coverShape === 'square' : format === 'Audio';
     const imageSource = session && serverPath
@@ -2310,7 +2316,7 @@ function Client() {
     const [coverFailed, setCoverFailed] = useState(false);
     useEffect(() => setCoverFailed(false), [imageSource?.uri]);
     return (
-      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, {backgroundColor:p.card}]}>
+      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, fill&&styles.coverFill, {backgroundColor:p.card}]}>
         {imageSource && !coverFailed ? (
           <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
         ) : (
@@ -2326,7 +2332,7 @@ function Client() {
     );
   }
 
-  function Cover({book, large = false}: {book: Book; large?: boolean}) {
+  function Cover({book, large = false,fill=false}: {book: Book; large?: boolean;fill?:boolean}) {
     return <Artwork
       title={book.title}
       format={book.format}
@@ -2334,6 +2340,7 @@ function Client() {
       coverUri={book.coverUri}
       serverPath={session && book.source==='server' ? '/api/assets/' + book.id + '/cover' : undefined}
       large={large}
+      fill={fill}
     />;
   }
 
@@ -3270,6 +3277,22 @@ function Client() {
       else void player.seekTo(target);
     }
 
+    function jumpChapter(direction:-1|1){
+      if(effectiveChapters.length){
+        let targetIndex=currentChapterIndex;
+        if(direction<0){
+          const currentStart=currentChapter?.start||0;
+          targetIndex=position-currentStart>5?Math.max(0,currentChapterIndex):Math.max(0,currentChapterIndex-1);
+        }else{
+          targetIndex=Math.min(effectiveChapters.length-1,Math.max(0,currentChapterIndex)+1);
+        }
+        const chapter=effectiveChapters[targetIndex];
+        if(chapter){seekTo(chapter.start);turnPages(5,direction);return;}
+      }
+      seekTo(position+(direction*60));
+      turnPages(5,direction);
+    }
+
     function setPlayerSpeed(rate: number) {
       if (serverPlayer) controller.setSpeed(rate);
       else {
@@ -3291,17 +3314,15 @@ function Client() {
           <ProfileAvatarButton size={38}/>
         </View>:null}
         {current ? (
+          <>
+          {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} direction={skipDirection} skipping={skipTurning} cover={current.coverUri||current.source==='server'?<Cover book={current}/>:null}/>
+            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
-              <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
-                {[current.author, current.series, current.space].filter(Boolean).join(' · ')}
-              </Text>
-              {currentChapter ? <Text numberOfLines={1} style={[styles.playerChapter,{color:p.sage}]}>
-                Chapter {currentChapterIndex + 1} of {effectiveChapters.length} · {currentChapter.title}
-              </Text> : null}
+              {current.author?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>By {current.author}</Text>:null}
+              {current.series?<Text numberOfLines={1} style={[styles.playerSeries,{color:p.muted}]}>{current.series}</Text>:null}
             </View>
             <View style={styles.playerStatusRow}>
               <Text style={[styles.playerStatusText,{color:p.muted}]}>{current.source==='server'?'Server':current.source==='downloaded'?'Downloaded':'On this device'}</Text>
@@ -3319,8 +3340,8 @@ function Client() {
               accessibilityValue={{min:0,max:Math.max(1,Math.round(duration)),now:Math.round(position),text:formatTime(position)+' of '+formatTime(duration)}}
               accessibilityActions={[{name:'increment',label:'Forward 30 seconds'},{name:'decrement',label:'Back 30 seconds'}]}
               onAccessibilityAction={event=>{
-                if(event.nativeEvent.actionName==='increment'){seekTo(position+30);turnThreePages(1);}
-                if(event.nativeEvent.actionName==='decrement'){seekTo(position-30);turnThreePages(-1);}
+                if(event.nativeEvent.actionName==='increment'){seekTo(position+30);turnPages(3,1);}
+                if(event.nativeEvent.actionName==='decrement'){seekTo(position-30);turnPages(3,-1);}
               }}
               onLayout={event=>setPlayerProgressWidth(Math.max(1,event.nativeEvent.layout.width))}
               onPress={event => {
@@ -3339,8 +3360,11 @@ function Client() {
             </View>
 
             <View style={styles.transport}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={()=>{seekTo(position-15);turnThreePages(-1);}} style={[styles.skipButton,{backgroundColor:p.card,borderRadius:48}]}>
-                <UiIcon name="skipBack" color={p.ink} size={32}/>
+              <Pressable accessibilityRole="button" accessibilityLabel={effectiveChapters.length?'Previous chapter':'Back 60 seconds'} onPress={()=>jumpChapter(-1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
+                <UiIcon name="trackBack" color={p.ink} size={27}/>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" onPress={()=>{seekTo(position-15);turnPages(3,-1);}} style={[styles.skipButton,{backgroundColor:p.card}]}>
+                <UiIcon name="skipBack" color={p.ink} size={30}/>
                 <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
               </Pressable>
               <Pressable
@@ -3349,11 +3373,14 @@ function Client() {
                 disabled={serverPlayer ? playback?.loading : false}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={27}/>}
+                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>{seekTo(position+30);turnThreePages(1);}} style={styles.skipButton}>
-                <UiIcon name="skipForward" color={p.ink} size={32}/>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>{seekTo(position+30);turnPages(3,1);}} style={[styles.skipButton,{backgroundColor:p.card}]}>
+                <UiIcon name="skipForward" color={p.ink} size={30}/>
                 <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={effectiveChapters.length?'Next chapter':'Forward 60 seconds'} onPress={()=>jumpChapter(1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
+                <UiIcon name="trackForward" color={p.ink} size={27}/>
               </Pressable>
             </View>
 
@@ -3427,6 +3454,7 @@ function Client() {
             </View> : null}
             </View>
           </View>
+          </>
         ) : (
           <View style={styles.playerEmpty}>
             <Text style={[styles.emptyMark,{color:p.sage}]}>A</Text>
@@ -4728,7 +4756,7 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor:activeTab==='insights'?(p.paper==='#000000'?'#07151C':'#F5F8F7'):p.paper}]}><AmbientGlow color={activeTab==='insights'?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={activeTab==='insights'?Math.max(1500,width*2.2):Math.max(480,width)} strength={activeTab==='insights'?(p.paper==='#000000'?.95:.34):(p.paper==='#000000'?.6:.22)}/>
+    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07151C':'#F5F8F7'):p.paper}]}><AmbientGlow color={(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#2F8B86':'#9BCFCB'):'#47736F'} size={(activeTab==='insights'||activeTab==='now')?Math.max(1500,width*2.2):Math.max(480,width)} strength={activeTab==='insights'?(p.paper==='#000000'?.95:.34):activeTab==='now'?(p.paper==='#000000'?.72:.26):(p.paper==='#000000'?.6:.22)}/>
       {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
@@ -4776,7 +4804,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:activeTab==='insights'?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:activeTab==='insights'?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper,borderTopColor:(activeTab==='insights'||activeTab==='now')?(p.paper==='#000000'?'#26364A':'#D9D7D0'):p.line}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
@@ -4890,6 +4918,7 @@ const styles = StyleSheet.create({
   coverSquare: {aspectRatio: 1},
   coverLarge: {width: 230, alignSelf: 'center'},
   coverLargeSquare: {width: 230, height: 230},
+  coverFill: {width:'100%',height:'100%',borderRadius:0,shadowOpacity:0,elevation:0},
   coverFallback: {flex:1,padding:10,justifyContent:'space-between'},
   coverFallbackMark: {fontFamily:'serif',fontSize:20,lineHeight:24,opacity:.5},
   coverFallbackCopy: {gap:4},
@@ -4908,7 +4937,7 @@ const styles = StyleSheet.create({
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
   modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:18,gap:9},
   meta: {fontSize: 13, lineHeight: 19},
-  playerScreen: {paddingHorizontal:18,paddingTop:12,gap:14,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
+  playerScreen: {paddingHorizontal:18,paddingTop:8,gap:15,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
   playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
   livingBookStage: {height:220,width:276,maxWidth:'100%',alignSelf:'center',alignItems:'center',justifyContent:'center',position:'relative'},
   livingBookShadow: {position:'absolute',width:202,height:28,borderRadius:101,top:178,transform:[{scaleY:.3}],shadowColor:'#000',shadowOpacity:.16,shadowRadius:18,elevation:4},
@@ -4937,22 +4966,24 @@ const styles = StyleSheet.create({
   playerControlColumn: {flex:1,minWidth:250,maxWidth:500,gap:12,justifyContent:'center'},
   playerEyebrow: {fontSize:11,lineHeight:14,fontWeight:'700',letterSpacing:1.6},
   playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},
-  playerIdentity: {alignItems:'center',gap:4,paddingHorizontal:8,maxWidth:620},
+  playerIdentity: {alignItems:'center',gap:5,paddingHorizontal:8,maxWidth:620},
   playerStatusRow: {flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:8,minHeight:20},
   playerSourcePill: {borderWidth:0,minHeight:28,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   playerStatusText: {fontSize:11,lineHeight:16},
   playerStatusAction: {minHeight:36,justifyContent:'center',paddingHorizontal:2},
-  nowTitle: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500',textAlign:'center',marginTop:0,letterSpacing:-.2,maxWidth:620},
-  nowTitleCompact: {fontSize:22,lineHeight:27},
-  nowTitleFold: {fontSize:24,lineHeight:29},
-  playerByline: {fontSize:13,lineHeight:18,textAlign:'center'},
+  nowTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:38,fontWeight:'500',textAlign:'center',marginTop:0,letterSpacing:-.32,maxWidth:620},
+  nowTitleCompact: {fontSize:29,lineHeight:35},
+  nowTitleFold: {fontSize:31,lineHeight:37},
+  playerByline: {fontSize:14,lineHeight:20,textAlign:'center'},
+  playerSeries: {fontSize:12,lineHeight:17,textAlign:'center'},
   playerChapter: {fontSize:12,lineHeight:17,fontWeight:'600',textAlign:'center',marginTop:2},
   progressHitArea: {paddingVertical:10},
   progressTrack: {height:4,borderRadius:999,overflow:'hidden'},
   progressFill: {height:4,borderRadius:999},
   timeRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:-6},
   playerTime: {fontSize:12,fontVariant:['tabular-nums'],fontWeight:'500'},
-  transport: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:28,marginVertical:6},
+  transport: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginVertical:8,maxWidth:560,width:'100%',alignSelf:'center'},
+  transportEdgeButton: {width:50,height:50,borderRadius:25,borderWidth:0,alignItems:'center',justifyContent:'center'},
   skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center',position:'relative'},
   skipNumber: {position:'absolute',fontSize:9,lineHeight:11,fontWeight:'700',fontVariant:['tabular-nums']},
   skipMain: {fontSize:17,fontWeight:'900',lineHeight:19},
@@ -5050,7 +5081,9 @@ const styles = StyleSheet.create({
   liveHubDot: {position:'absolute',right:10,top:8,width:6,height:6,borderRadius:3},
   liveHubBody: {flex:1,minHeight:0},
   liveHubScroll: {flex:1},
-  playerScreenEmbedded: {paddingTop:4,paddingBottom:96},
+  playerScreenEmbedded: {paddingTop:0,paddingBottom:96},
+  playerLiveKicker: {alignItems:'center',gap:4,paddingTop:2,paddingBottom:2},
+  playerLiveMeta: {fontSize:10.5,lineHeight:14,fontWeight:'500'},
   tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
   tabText: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
