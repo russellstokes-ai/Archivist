@@ -13,7 +13,7 @@ import (
 const maxID3Head = 256 << 10
 
 func audioMetadata(filename string) embeddedMetadata {
-	if !strings.EqualFold(filepathExt(filename), ".mp3") {
+	if !strings.EqualFold(audioFileExt(filename), ".mp3") {
 		return embeddedMetadata{}
 	}
 	f, err := os.Open(filename)
@@ -37,7 +37,7 @@ func audioMetadata(filename string) embeddedMetadata {
 	return meta
 }
 
-func filepathExt(filename string) string {
+func audioFileExt(filename string) string {
 	index := strings.LastIndex(filename, ".")
 	if index < 0 { return "" }
 	return filename[index:]
