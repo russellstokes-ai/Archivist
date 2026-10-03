@@ -47,6 +47,16 @@ func TestEditMetadataAuthorSeriesSearchAndRescan(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"metadataSource":"manual"`) || strings.Contains(w.Body.String(), `"needsReview":true`) {
 		t.Fatalf("manual metadata provenance/review state missing: %s", w.Body.String())
 	}
+	w = call("PATCH", "/api/assets/1/metadata", `{"author":"Augusta Ada King"}`)
+	if w.Code != 200 {
+		t.Fatalf("partial metadata save: %d %s", w.Code, w.Body.String())
+	}
+	w = call("GET", "/api/books?q=Augusta&space=", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"author":"Augusta Ada King"`) ||
+		!strings.Contains(w.Body.String(), `"series":"Engine Notes"`) || !strings.Contains(w.Body.String(), `"seriesNumber":2.5`) ||
+		!strings.Contains(w.Body.String(), `"narrator":"Reader"`) || !strings.Contains(w.Body.String(), `"description":"Protected manual description"`) {
+		t.Fatalf("partial metadata update overwrote untouched fields: %d %s", w.Code, w.Body.String())
+	}
 	if e := a.scan(1); e != nil {
 		t.Fatal(e)
 	}
