@@ -399,3 +399,33 @@ func TestMobileSessionCookieIsSecureBehindHTTPSProxy(t *testing.T) {
 	}
 }
 
+
+
+func TestServerScanPersistsRichMetadata(t *testing.T) {
+	a := fixture(t)
+	root := t.TempDir()
+	book := filepath.Join(root, "Dune.epub")
+	writeZipFixture(t, book, map[string]string{
+		"META-INF/container.xml": "<container><rootfiles><rootfile full-path=\"OPS/content.opf\"/></rootfiles></container>",
+		"OPS/content.opf": "<package><metadata><title>Dune</title><creator>Herbert, Frank</creator><subject>Science Fiction</subject><publisher>Chilton</publisher><language>en</language><description>Arrakis.</description><date>1965-08-01</date><identifier>ISBN 9780441172719</identifier><meta name=\"calibre:series\" content=\"Dune\"/><meta name=\"calibre:series_index\" content=\"1\"/></metadata></package>",
+	})
+	if e := a.addSource("Books", root); e != nil { t.Fatal(e) }
+	if e := a.scan(1); e != nil { t.Fatal(e) }
+
+	var title, author, series, publisher, isbn, language, description string
+	var seriesNumber float64
+	var year int
+	if e := a.db.QueryRow(`SELECT title,author,series,series_number,published_year,publisher,isbn,language,description FROM assets WHERE id=1`).
+		Scan(&title,&author,&series,&seriesNumber,&year,&publisher,&isbn,&language,&description); e != nil { t.Fatal(e) }
+	if title!="Dune" || author!="Frank Herbert" || series!="Dune" || seriesNumber!=1 {
+		t.Fatalf("identity=%q %q %q %v",title,author,series,seriesNumber)
+	}
+	if year!=1965 || publisher!="Chilton" || isbn!="9780441172719" || language!="en" || description!="Arrakis." {
+		t.Fatalf("details year=%d publisher=%q isbn=%q language=%q description=%q",year,publisher,isbn,language,description)
+	}
+
+	if e := a.scan(1); e != nil { t.Fatal(e) }
+	var cachedSeriesNumber float64
+	if e := a.db.QueryRow("SELECT series_number FROM assets WHERE id=1").Scan(&cachedSeriesNumber); e != nil { t.Fatal(e) }
+	if cachedSeriesNumber != 1 { t.Fatalf("incremental rescan lost rich metadata: %v", cachedSeriesNumber) }
+}
