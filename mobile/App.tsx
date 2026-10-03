@@ -561,6 +561,8 @@ function Client() {
   const {width} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
+  const phoneLayout = width < 600;
+  const narrowPhone = width < 360;
   const [theme, setTheme] = useState<ThemeMode>('system');
   const [accessibilityPrefs,setAccessibilityPrefs]=useState<AccessibilityPreferences>({reduceMotion:false,highContrast:false,largeText:false});
   const p = useMemo(() => palette(theme, systemScheme,accessibilityPrefs.highContrast), [theme, systemScheme,accessibilityPrefs.highContrast]);
@@ -3612,10 +3614,10 @@ function Client() {
   }
 
   function PageHeader({title,subtitle}:{title:string;subtitle:string}){
-    return <View style={styles.standardPageHeader}>
+    return <View style={[styles.standardPageHeader,phoneLayout&&styles.standardPageHeaderPhone,narrowPhone&&styles.standardPageHeaderNarrow]}>
       <View style={styles.standardPageHeaderCopy}>
-        <Text maxFontSizeMultiplier={1.3} style={[styles.standardPageTitle,accessibilityPrefs.largeText&&styles.standardPageTitleLarge,{color:p.ink}]}>{title}</Text>
-        <Text maxFontSizeMultiplier={1.35} style={[styles.standardPageSubtitle,accessibilityPrefs.largeText&&styles.standardPageSubtitleLarge,{color:p.muted}]}>{subtitle}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={[styles.standardPageTitle,phoneLayout&&styles.standardPageTitlePhone,narrowPhone&&styles.standardPageTitleNarrow,accessibilityPrefs.largeText&&styles.standardPageTitleLarge,{color:p.ink}]}>{title}</Text>
+        <Text maxFontSizeMultiplier={1.35} style={[styles.standardPageSubtitle,phoneLayout&&styles.standardPageSubtitlePhone,accessibilityPrefs.largeText&&styles.standardPageSubtitleLarge,{color:p.muted}]}>{subtitle}</Text>
       </View>
     </View>;
   }
@@ -3742,8 +3744,8 @@ function Client() {
       accessibilityRole="button"
       accessibilityLabel={'Continue '+primaryContinue.title}
       onPress={()=>openUnifiedWork(primaryContinue)}
-      style={({pressed})=>[styles.shelfHero,foldLayout&&styles.shelfHeroFold,width>=900&&styles.shelfHeroWide,{borderTopColor:p.line,borderBottomColor:p.line},pressed&&styles.cardPressed]}>
-      <View style={[styles.shelfHeroArtwork,foldLayout&&styles.shelfHeroArtworkFold,width>=900&&styles.shelfHeroArtworkWide]}>{workArtwork(primaryContinue)}</View>
+      style={({pressed})=>[styles.shelfHero,phoneLayout&&styles.shelfHeroPhone,narrowPhone&&styles.shelfHeroNarrow,foldLayout&&styles.shelfHeroFold,width>=900&&styles.shelfHeroWide,{borderTopColor:p.line,borderBottomColor:p.line},pressed&&styles.cardPressed]}>
+      <View style={[styles.shelfHeroArtwork,phoneLayout&&styles.shelfHeroArtworkPhone,narrowPhone&&styles.shelfHeroArtworkNarrow,foldLayout&&styles.shelfHeroArtworkFold,width>=900&&styles.shelfHeroArtworkWide]}>{workArtwork(primaryContinue)}</View>
       <View style={styles.shelfHeroCopy}>
         <Text style={[styles.shelfHeroEyebrow,{color:p.sage}]}>{primaryContinue.format==='Audio'?'CONTINUE LISTENING':'CONTINUE READING'}</Text>
         <Text maxFontSizeMultiplier={1.12} numberOfLines={3} style={[styles.shelfHeroTitle,{color:p.ink},layoutTier==='compact'&&styles.shelfHeroTitleCompact,layoutTier==='fold'&&styles.shelfHeroTitleFold]}>{primaryContinue.title}</Text>
@@ -3883,7 +3885,7 @@ function Client() {
       onScroll={e=>{shelfScrollOffset.current=e.nativeEvent.contentOffset.y}}
       scrollEventThrottle={120}
       onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
-      contentContainerStyle={[styles.shelfContent,width>=600&&styles.shelfContentFold,width>=940&&styles.shelfContentWide]}>
+      contentContainerStyle={[styles.shelfContent,phoneLayout&&styles.shelfContentPhone,narrowPhone&&styles.shelfContentNarrow,width>=600&&styles.shelfContentFold,width>=940&&styles.shelfContentWide]}>
       <PageHeader title="Shelf" subtitle={shelfGreeting+' Pick up where you left off.'}/>
       <PageToolbar>
         <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}><Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text></Pressable>
@@ -3988,7 +3990,7 @@ function Client() {
       :metadataGapFilter==='genre'?'Missing genres'
       :'Missing device covers';
     const MaintenanceList=()=>maintenanceMode?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} in this maintenance view</Text></View><Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>:null}{serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}</View>:null;
-    const main=<View style={[styles.libraryMain,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
+    const main=<View style={[styles.libraryMain,phoneLayout&&styles.libraryMainPhone,narrowPhone&&styles.libraryMainNarrow,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
         <PageHeader title="Library" subtitle="Every book. In its place."/>
         <View style={styles.libraryHeaderSummary}>
@@ -6332,7 +6334,7 @@ function Client() {
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
-      <View pointerEvents="box-none" style={[styles.globalProfileCorner,{right:width>=940?28:width>=600?24:18}]}>
+      <View pointerEvents="box-none" style={[styles.globalProfileCorner,phoneLayout&&styles.globalProfileCornerPhone,{right:width>=940?28:width>=600?24:narrowPhone?12:16}]}>
         <ProfileAvatarButton size={42}/>
       </View>
       <Animated.View style={[styles.tabBody,{
@@ -6388,15 +6390,15 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:darkMode?'#07111D':'#FBF8F1',borderTopColor:darkMode?'#26364A':'#DDD3C1'}]}>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,phoneLayout&&styles.tabBarPhone,narrowPhone&&styles.tabBarNarrow,{backgroundColor:darkMode?'#07111D':'#FBF8F1',borderTopColor:darkMode?'#26364A':'#DDD3C1'}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
           const accent=tab.id==='insights'?p.gold:p.sage;
-          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,centre&&styles.tabCenter]}>
+          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,phoneLayout&&styles.tabPhone,narrowPhone&&styles.tabNarrow,centre&&styles.tabCenter]}>
             <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:accent,opacity:selected?1:0}]}/>
             {centre?<View style={[styles.tabCenterOrb,{backgroundColor:selected?p.sage:p.card,borderColor:selected?p.sage:p.line}]}><UiIcon name={tab.icon} color={selected?'#FFFFFF':p.ink} size={25}/></View>:<UiIcon name={tab.icon} color={selected?accent:p.muted} size={22}/>}
-            <Text style={[styles.tabText,centre&&styles.tabCenterText,accessibilityPrefs.largeText&&styles.tabTextLarge,{color:selected?accent:p.muted}]}>{tab.label}</Text>
+            <Text style={[styles.tabText,phoneLayout&&styles.tabTextPhone,narrowPhone&&styles.tabTextNarrow,centre&&styles.tabCenterText,accessibilityPrefs.largeText&&styles.tabTextLarge,{color:selected?accent:p.muted}]}>{tab.label}</Text>
           </Pressable>;
         })}
       </View>:null}
@@ -6720,7 +6722,11 @@ const styles = StyleSheet.create({
   miniButton: {width:40,height:40,borderRadius:10,borderWidth:0,alignItems:'center',justifyContent:'center'},
   miniButtonText: {fontWeight:'600'},
   tabBar: {height:66,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'stretch'},
+  tabBarPhone: {height:64},
+  tabBarNarrow: {height:62},
   tab: {flex:1,alignItems:'center',justifyContent:'center',gap:2,position:'relative',minWidth:0},
+  tabPhone: {paddingHorizontal:1},
+  tabNarrow: {paddingHorizontal:0},
   tabCenter: {paddingTop:1},
   tabCenterOrb: {width:46,height:46,borderRadius:23,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',marginTop:-10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:4},
   tabCenterText: {marginTop:-2},
@@ -6738,6 +6744,8 @@ const styles = StyleSheet.create({
   playerLiveMeta: {fontSize:10.5,lineHeight:14,fontWeight:'500'},
   tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
   tabText: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
+  tabTextPhone: {fontSize:9.25,lineHeight:12},
+  tabTextNarrow: {fontSize:8.5,lineHeight:11},
   celebration: {position:'absolute', left:0, right:0, top:0, bottom:0, alignItems:'center', justifyContent:'center', zIndex:50},
   celebrationParticle: {position:'absolute',fontSize:28,color:'#B99A68',fontWeight:'700'},
   celebrationBadge: {backgroundColor:'#111111',borderRadius:18,width:'86%',maxWidth:400,paddingHorizontal:24,paddingVertical:28,alignItems:'center',shadowColor:'#000',shadowOpacity:.18,shadowRadius:14,elevation:8},
@@ -6928,6 +6936,8 @@ const styles = StyleSheet.create({
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
   shelfContent: {paddingHorizontal:18,paddingTop:10,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
+  shelfContentPhone: {paddingHorizontal:16,paddingTop:8,paddingBottom:112,gap:26},
+  shelfContentNarrow: {paddingHorizontal:14,gap:22},
   shelfContentFold: {paddingHorizontal:24,paddingTop:10,gap:34},
   shelfContentWide: {paddingHorizontal:28,paddingTop:10,gap:34},
   shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:2,paddingBottom:0},
@@ -6951,16 +6961,22 @@ const styles = StyleSheet.create({
   shelfStorageShortcutText: {fontSize:11.5,lineHeight:16,fontWeight:'600',flex:1},
   shelfStorageShortcutCount: {fontSize:10,lineHeight:14,fontWeight:'700',fontVariant:['tabular-nums']},
   standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',paddingRight:58},
+  standardPageHeaderPhone: {minHeight:62,paddingRight:54},
+  standardPageHeaderNarrow: {minHeight:58,paddingRight:50},
   standardPageHeaderCopy: {flex:1,minWidth:0},
   standardPageTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
+  standardPageTitlePhone: {fontSize:30,lineHeight:36},
+  standardPageTitleNarrow: {fontSize:28,lineHeight:34},
   standardPageTitleLarge: {fontSize:36,lineHeight:43},
   standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
+  standardPageSubtitlePhone: {fontSize:13,lineHeight:18},
   standardPageSubtitleLarge: {fontSize:16,lineHeight:23},
   pageHeaderToolbar: {minHeight:42,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end',paddingRight:58},
   pageHeaderToolbarStart: {justifyContent:'flex-start'},
   pageHeaderToolbarCenter: {justifyContent:'center'},
   pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},
   globalProfileCorner: {position:'absolute',top:10,zIndex:80,elevation:12},
+  globalProfileCornerPhone: {top:8},
   profileAvatarButtonWrap: {position:'relative',alignItems:'center',justifyContent:'center',flexShrink:0},
   profileAvatarHalo: {position:'absolute',left:0,right:0,top:0,bottom:0},
   profileAvatarLevelRing: {position:'absolute',left:0,top:0},
@@ -7091,9 +7107,13 @@ const styles = StyleSheet.create({
   curatedRow: {gap:18,paddingRight:24},
   curatedCardWrap: {width:136},
   shelfHero: {borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,paddingHorizontal:0,flexDirection:'row',gap:16,alignItems:'center',overflow:'hidden',minHeight:156},
+  shelfHeroPhone: {gap:14,minHeight:148},
+  shelfHeroNarrow: {gap:12,minHeight:140},
   shelfHeroFold: {paddingVertical:16,gap:20,minHeight:168},
   shelfHeroWide: {paddingVertical:18,gap:24,minHeight:180},
   shelfHeroArtwork: {width:104,minWidth:104},
+  shelfHeroArtworkPhone: {width:96,minWidth:96},
+  shelfHeroArtworkNarrow: {width:84,minWidth:84},
   shelfHeroArtworkFold: {width:120,minWidth:120},
   shelfHeroArtworkWide: {width:132,minWidth:132},
   shelfHeroCopy: {flex:1,minWidth:0,gap:6,paddingVertical:2},
@@ -7169,6 +7189,8 @@ const styles = StyleSheet.create({
   orderButton: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   libraryTwoPane: {flex:1,flexDirection:'row',backgroundColor:'transparent'},
   libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10,gap:14},
+  libraryMainPhone: {paddingHorizontal:16,paddingTop:8,gap:12},
+  libraryMainNarrow: {paddingHorizontal:14,gap:10},
   libraryMainFold: {paddingLeft:10,paddingRight:24,paddingTop:10,gap:16},
   libraryMainWide: {paddingLeft:12,paddingRight:28,paddingTop:10,gap:18},
   libraryCatalogueHeader: {gap:2,paddingBottom:2},
