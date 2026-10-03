@@ -1899,7 +1899,8 @@ function Client() {
       }
       const folders = localFolders.some(folder => folder.uri === picked.uri) ? localFolders : [...localFolders, picked];
       setScanProgress({phase: 'discovering', currentFolder: picked.name, entriesVisited: 0, found: 0, review: 0});
-      const result = await scanLocalFolders(folders, setScanProgress, localMetadataOverrides);
+      const previousLocal = localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const result = await scanLocalFolders(folders, setScanProgress, localMetadataOverrides, previousLocal);
       setLocalFolders(result.folders);
       setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
       setLocalMovePreviews([]);
@@ -1930,7 +1931,8 @@ function Client() {
     setLocalScanning(true);
     try {
       setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
-      const result = await scanLocalFolders(localFolders, setScanProgress, overrides);
+      const previousLocal = localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const result = await scanLocalFolders(localFolders, setScanProgress, overrides, previousLocal);
       setLocalFolders(result.folders);
       setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
       setLocalMovePreviews([]);
