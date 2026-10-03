@@ -38,7 +38,9 @@ export type LocalMetadataFields = {
 export function inferLocalBookMetadata(uri: string, format: string): LocalIdentity {
   const parts = decodedPathParts(uri);
   const filename = parts[parts.length - 1] || 'Untitled';
-  const stem = cleanLabel(filename.replace(/\.[^.]+$/, ''));
+  const rawStem = cleanLabel(filename.replace(/\.[^.]+$/, ''));
+  const qualifiers = filenameQualifiers(rawStem);
+  const stem = qualifiers.stem;
   const rawDirs = parts.slice(0, -1).filter(Boolean).map(cleanLabel);
   const dirs = [...rawDirs];
   while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
@@ -51,6 +53,10 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   let series = '';
   let seriesNumber: number | undefined;
   let genre = '';
+  let narrator = qualifiers.narrator;
+  let isbn = qualifiers.isbn;
+  let asin = qualifiers.asin;
+  let publishedYear = qualifiers.publishedYear;
   let confidence: IdentificationConfidence = 'low';
   let reviewReason = 'Could not confidently identify author and series from the file path.';
 
@@ -105,9 +111,10 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
         author = possibleAuthor;
         confidence = 'high';
         reviewReason = '';
+      } else {
+        confidence = 'medium';
+        reviewReason = 'Series and title inferred from numbered filename; author needs review.';
       }
-      confidence = 'medium';
-      reviewReason = 'Series and title inferred from numbered filename; author needs review.';
     } else if (sensibleFolder(parent, stem) && looksAuthorLike(parent)) {
       author = parent;
       confidence = 'medium';
@@ -127,6 +134,10 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     series,
     seriesNumber,
     genre,
+    narrator,
+    isbn,
+    asin,
+    publishedYear,
     confidence,
     needsReview,
     reviewReason: needsReview ? reviewReason : '',
