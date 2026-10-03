@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -399,14 +400,17 @@ func pathMetadata(relative, format string) metadataCandidate {
 		// Author / Book / 01 - Chapter.mp3
 		// Author / Series / Book / 01 - Chapter.mp3
 		if len(parts) >= 4 {
-			m.Author = cleanMetadata(parts[len(parts)-4])
+			m.Author = normalizeAuthor(parts[len(parts)-4])
 			m.Series = cleanMetadata(parts[len(parts)-3])
+			if number, _ := seriesPositionFromLabel(parts[len(parts)-2]); number > 0 {
+				m.SeriesNumber = number
+			}
 			confidence = 72
 		} else if len(parts) >= 3 {
-			m.Author = cleanMetadata(parts[len(parts)-3])
+			m.Author = normalizeAuthor(parts[len(parts)-3])
 			confidence = 65
 		} else if len(parts) == 2 {
-			m.Author = cleanMetadata(parts[0])
+			m.Author = normalizeAuthor(parts[0])
 			confidence = 55
 		}
 		return metadataCandidate{embeddedMetadata: m, source: "path", confidence: confidence}
@@ -426,10 +430,14 @@ func pathMetadata(relative, format string) metadataCandidate {
 	if strings.Contains(base, " - ") {
 		bits := strings.SplitN(base, " - ", 2)
 		if len(bits) == 2 && cleanMetadata(bits[0]) != "" && cleanMetadata(bits[1]) != "" {
-			m.Author = cleanMetadata(bits[0])
-			m.Title = cleanMetadata(bits[1])
-			if confidence < 68 {
-				confidence = 68
+			if number, ok := seriesPositionFromLabel(bits[0]); ok && m.Series != "" {
+				m.SeriesNumber = number
+				m.Title = cleanMetadata(bits[1])
+				if confidence < 76 { confidence = 76 }
+			} else {
+				m.Author = normalizeAuthor(bits[0])
+				m.Title = cleanMetadata(bits[1])
+				if confidence < 68 { confidence = 68 }
 			}
 		}
 	}
@@ -524,6 +532,22 @@ func yearFromText(value string) int {
 	fmt.Sscanf(strings.TrimSpace(value),"%d",&year)
 	if year>=1000 && year<=time.Now().Year()+2 { return year }
 	return 0
+}
+
+func seriesPositionFromLabel(value string) (float64, bool) {
+	value = strings.TrimSpace(strings.TrimPrefix(value, "#"))
+	var number float64
+	if _, err := fmt.Sscanf(value, "%f", &number); err != nil || number < 0 {
+		return 0, false
+	}
+	// Accept only a pure numeric label, not titles that merely begin with digits.
+	if strings.TrimSpace(strconv.FormatFloat(number, 'f', -1, 64)) != strings.TrimLeft(value, "0") {
+		trimmed := strings.TrimLeft(value, "0")
+		if strings.HasPrefix(trimmed, ".") { trimmed = "0" + trimmed }
+		if trimmed == "" { trimmed = "0" }
+		if trimmed != strconv.FormatFloat(number, 'f', -1, 64) { return 0, false }
+	}
+	return number, true
 }
 
 func numberFromText(value string) float64 {
