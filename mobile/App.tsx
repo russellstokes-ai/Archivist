@@ -4154,7 +4154,7 @@ function Client() {
     const metricCards=[
       {label:'Books read',value:completed,icon:'bookOpen' as UiIconName},
       {label:'Minutes read',value:minutesRead.toLocaleString(),icon:'clock' as UiIconName},
-      {label:'Longest read',value:longestSessionMinutes?longestSessionMinutes+' min':'—',icon:'gauge' as UiIconName},
+      {label:'Longest read',value:(longestSessionMinutes||0)+' min',icon:'gauge' as UiIconName},
       {label:'Reading days',value:activeDays,icon:'calendar' as UiIconName},
       {label:'Day streak',value:ritual.currentStreak,icon:'flame' as UiIconName},
     ];
