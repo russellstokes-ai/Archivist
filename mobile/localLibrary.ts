@@ -24,6 +24,9 @@ export type LocalBook = {
   metadataProvenance?: Partial<Record<string, MetadataSource>>;
   metadataFieldConfidence?: Partial<Record<string, IdentificationConfidence>>;
   metadataConflicts?: MetadataConflict[];
+  embeddedMetadata?: LocalMetadataFields;
+  fileSize?: number;
+  modificationTime?: number;
   format: string;
   space: string;
   available: boolean;
@@ -163,6 +166,7 @@ export async function scanLocalFolders(
   const seen = new Set<string>();
   const sidecarCache = new Map<string, LocalMetadataFields>();
   const visitedDirectories = new Set<string>();
+  const previousByUri = new Map(previousBooks.filter(book=>!!book.uri).map(book=>[book.uri,book]));
 
   async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
     const cached = sidecarCache.get(uri);
@@ -262,7 +266,15 @@ export async function scanLocalFolders(
           }
         }
 
-        const embeddedFields = await extractEmbeddedMetadata(child, ext);
+        const fileInfo = await getInfoAsync(child).catch(()=>null);
+        const fileSize = fileInfo && typeof fileInfo.size==='number' ? fileInfo.size : undefined;
+        const modificationTime = fileInfo && typeof (fileInfo as any).modificationTime==='number' ? (fileInfo as any).modificationTime : undefined;
+        const previous = previousByUri.get(child);
+        const unchanged = !!previous && fileSize !== undefined && previous.fileSize === fileSize
+          && modificationTime !== undefined && previous.modificationTime === modificationTime;
+        const embeddedFields = unchanged && previous?.embeddedMetadata
+          ? previous.embeddedMetadata
+          : await extractEmbeddedMetadata(child, ext, fileInfo || undefined);
         if (Object.keys(embeddedFields).length) {
           evidence.push({source:'embedded' as const, confidence:'high' as const, fields:embeddedFields});
           identity = applyLocalMetadata(identity, embeddedFields, 'embedded');
@@ -298,6 +310,9 @@ export async function scanLocalFolders(
           metadataProvenance: resolvedMetadata.provenance,
           metadataFieldConfidence: resolvedMetadata.confidence,
           metadataConflicts: resolvedMetadata.conflicts,
+          embeddedMetadata: Object.keys(embeddedFields).length ? embeddedFields : undefined,
+          fileSize,
+          modificationTime,
           format,
           space,
           available: true,
