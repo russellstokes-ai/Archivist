@@ -1,5 +1,22 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-03 — Universal-mobile engineering baseline GREEN
+
+GitHub Mobile checks run `37157845522` completed successfully on commit `d35723bdc177a156866016f2fce6e45dc5affd10`.
+
+Verified by that run:
+- clean dependency installation against the Expo 55 package set;
+- Expo Doctor;
+- TypeScript;
+- all maintained mobile test suites;
+- version consistency;
+- Expo web export.
+
+This is the first current green gate for the migrated universal-mobile branch after replacing stale pre-migration `package-lock.json` / `npm ci` assumptions and aligning Expo SDK 55 patch versions.
+
+This is an engineering baseline, not physical-device or store-release acceptance. Subsequent commits still require their own checks where they change executable code.
+
+
 ## 2026-10-03 — Final polish Sprint 3: persistent iOS local libraries
 
 ### Implemented and source-verified
