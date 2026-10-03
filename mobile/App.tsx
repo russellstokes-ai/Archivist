@@ -5936,7 +5936,7 @@ const styles = StyleSheet.create({
   shelfStorageShortcuts: {gap:8,paddingTop:2},
   shelfStorageShortcutRow: {flexDirection:'row',flexWrap:'wrap',columnGap:10,rowGap:8},
   shelfStorageShortcut: {minWidth:170,flexGrow:1,minHeight:46,borderWidth:StyleSheet.hairlineWidth,borderRadius:14,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:8},
-  shelfStorageShortcutText: {fontSize:11.5,lineHeight:16,fontWeight:'650',flex:1},
+  shelfStorageShortcutText: {fontSize:11.5,lineHeight:16,fontWeight:'600',flex:1},
   shelfStorageShortcutCount: {fontSize:10,lineHeight:14,fontWeight:'700',fontVariant:['tabular-nums']},
   standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',paddingRight:58},
   standardPageHeaderCopy: {flex:1,minWidth:0},
