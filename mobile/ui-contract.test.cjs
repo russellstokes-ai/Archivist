@@ -37,6 +37,7 @@ assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
 assert.match(source,/\{id:\s*['"]now['"],\s*label:\s*['"]Now['"]/, 'Center Player/Reader live tab is not wired');
 assert.ok(source.includes('function LiveHub()'), 'Player/Reader live hub is missing');
+assert.ok(source.includes("!current&&styles.playerScreenEmpty") && source.includes("playerScreenEmpty: {flexGrow:1}") && source.includes("playerEmpty: {flex:1"), 'Player empty state must fill and centre like the Reader empty state');
 assert.ok(source.includes("(['player','reader'] as const)") && source.includes("setLiveMode(mode)"), 'Player/Reader live toggle is not functional');
 assert.ok(source.includes("setActiveTab('now')") && source.includes("setLiveMode('player')") && source.includes("setLiveMode('reader')"), 'Player and Reader launches must route through the live hub');
 assert.ok(source.includes("const lastReadingKey = 'archivist.lastReading.v1'") && source.includes("const lastPlayingKey = 'archivist.lastPlaying.v1'"), 'Recent Player/Reader targets must persist for fast resume');
