@@ -33,7 +33,7 @@ import {reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
-import {Achievement, achievementsFor, clampProgress, localDay, streakStats, VerifiedProfileStats} from './profileStats';
+import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {possibleLocalDuplicateGroups} from './duplicates';
@@ -939,6 +939,7 @@ function Client() {
     : combinedProfileStats;
 
   const profileAchievements = useMemo(() => profileStats ? achievementsFor({...profileStats,bestStreak:ritual.bestStreak,activeDays:ritual.activeDays}) : [], [profileStats,ritual.bestStreak,ritual.activeDays]);
+  const profileProgression = useMemo(() => profileStats ? progressionFor({...profileStats,bestStreak:ritual.bestStreak,activeDays:ritual.activeDays}) : null, [profileStats,ritual.bestStreak,ritual.activeDays]);
   const insightWorks=useMemo(()=>sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter(work=>matchesSource(work.source,sourceFilter)),[allUnifiedWorks,sourceFilter,sourceWorks]);
   const insightSummary=useMemo(()=>buildInsights(insightWorks,readerAnnotations,sourceFilter==='local'||sourceFilter==='downloaded'?[]:serverActivity,insightGoal),[insightGoal,insightWorks,readerAnnotations,serverActivity,sourceFilter]);
 
