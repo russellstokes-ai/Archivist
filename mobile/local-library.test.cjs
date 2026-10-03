@@ -31,13 +31,38 @@ const fileText = new Map();
 const fileInfo = new Map();
 const fileReads = [];
 const infoReads = [];
+const localDirs = new Map();
+const localCopies = [];
+const localDeletes = [];
+const localMade = [];
 Module._load = function(request, parent, isMain) {
   if (request === 'react-native') return {Platform: {OS: 'android'}};
   if (request === 'expo-file-system/legacy') return {
     EncodingType: {Base64:'base64'},
     StorageAccessFramework: saf,
     async readAsStringAsync(uri) { fileReads.push(uri); return fileText.get(uri) || ''; },
-    async getInfoAsync(uri) { infoReads.push(uri); return fileInfo.get(uri) || {exists: true, size: (fileText.get(uri) || '').length}; },
+    async readDirectoryAsync(uri) { return localDirs.get(uri) || []; },
+    async getInfoAsync(uri) { infoReads.push(uri); return fileInfo.get(uri) || {exists: false, size: 0}; },
+    async makeDirectoryAsync(uri) {
+      localMade.push(uri);
+      if(!localDirs.has(uri))localDirs.set(uri,[]);
+      const slash=uri.lastIndexOf('/');
+      if(slash>7){
+        const parent=uri.slice(0,slash);
+        const name=decodeURIComponent(uri.slice(slash+1));
+        const entries=localDirs.get(parent)||[];
+        if(!entries.includes(name))localDirs.set(parent,[...entries,name]);
+      }
+    },
+    async copyAsync(copy) {
+      localCopies.push(copy);
+      const source=fileInfo.get(copy.from)||{exists:true,size:1};
+      fileInfo.set(copy.to,{...source,exists:true});
+    },
+    async deleteAsync(uri) {
+      localDeletes.push(uri);
+      fileInfo.set(uri,{exists:false,size:0});
+    },
   };
   return load.call(this, request, parent, isMain);
 };
@@ -251,6 +276,33 @@ assert.equal(previews[0].state, 'review');
   assert.equal(oversizedScan.books[0].title,'Original');
   assert.equal(fileReads.includes(oversizedSidecar),false);
 
+  // App-private file:// libraries use the same scanner and organisation engine.
+  // This is the persistent half of the iOS import path after the system picker copy completes.
+  const iosRoot='file:///app/Documents/local-libraries/123-Books';
+  const iosAuthor=iosRoot+'/Frank%20Herbert';
+  const iosBook=iosAuthor+'/Dune.epub';
+  localDirs.set(iosRoot,['Frank Herbert']);
+  localDirs.set(iosAuthor,['Dune.epub']);
+  fileInfo.set(iosBook,{exists:true,size:2048,modificationTime:123});
+  const iosScan=await scanLocalFolders([{id:iosRoot,uri:iosRoot,name:'Books',status:'Imported',itemCount:1}]);
+  assert.equal(iosScan.books.length,1);
+  assert.equal(iosScan.books[0].title,'Dune');
+  assert.equal(iosScan.books[0].rootUri,iosRoot);
+  assert.equal(iosScan.books[0].uri,iosBook);
+
+  const iosPreview=previewLocalSort([{...iosScan.books[0],author:'Frank Herbert',needsReview:false}],'author-title');
+  assert.equal(iosPreview[0].rootUri,iosRoot);
+  assert.equal(iosPreview[0].state,'ready');
+  const iosApply=await applyLocalSortCopies(iosPreview);
+  assert.equal(iosApply.copied.length,1);
+  assert.equal(iosApply.failed.length,0);
+  assert.equal(localCopies.length,1);
+  assert.equal(localCopies[0].from,iosBook);
+  assert.match(localCopies[0].to,/file:\/\/\/app\/Documents\/local-libraries\/123-Books\/Frank%20Herbert\/Dune\/Dune\.epub$/);
+  const iosRemoved=await removeLocalSortCopies({id:'ios',createdAt:new Date().toISOString(),copied:iosApply.copied,failed:[]});
+  assert.equal(iosRemoved.copied.length,1);
+  assert.equal(localDeletes[0],iosApply.copied[0].uri);
+
   previews = previewLocalSort([books[0]], 'author-series-title');
   saf.dirs.set(previews[0].rootUri, []);
   const result = await applyLocalSortCopies(previews);
@@ -281,7 +333,7 @@ assert.equal(previews[0].state, 'review');
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
   assert.equal(saf.deleted[0], result.copied[0].uri);
-  console.log('PASS: local scanner handles messy names, CBZ-only local comics, deep folders, huge files, bounded sidecars, metadata caching, sort previews and recovery');
+  console.log('PASS: local scanner handles Android SAF and app-private iOS libraries, messy names, comics, deep folders, huge files, bounded sidecars, metadata caching, sort previews and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
 
 assert.equal(parseLocalSidecar('<metadata><dc:date>1998-06-01</dc:date></metadata>','opf').publishedYear,1998);
