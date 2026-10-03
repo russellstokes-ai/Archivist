@@ -6,12 +6,12 @@ export function AmbientGlow({color='#47736F',size=520,strength=1}:{color?:string
   return <View pointerEvents="none" accessibilityElementsHidden style={{position:'absolute',width:size,height:size,left:'50%',top:0,marginLeft:-size/2}}>{Array.from({length:24},(_,i)=>{const inset=i*size/64;return <View key={i} style={{position:'absolute',left:inset,top:inset,right:inset,bottom:inset,borderRadius:size,backgroundColor:color,opacity:.009*strength}}/>})}</View>;
 }
 
-export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,skipPages=3,direction,skipping,cover}:{title:string;author:string;chapter?:string;number?:number;open:Animated.Value;turn:Animated.Value;skip:Animated.Value;skipPages?:number;direction:1|-1;skipping:boolean;cover:React.ReactNode}){
+export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,skipPages=3,direction,skipping,cover,glowColor='#2F8B86',glowStrength=.72}:{title:string;author:string;chapter?:string;number?:number;open:Animated.Value;turn:Animated.Value;skip:Animated.Value;skipPages?:number;direction:1|-1;skipping:boolean;cover:React.ReactNode;glowColor?:string;glowStrength?:number}){
   const page=(side:number)=><View style={s.pageContent}><Text numberOfLines={1} style={s.runningHead}>{title.toUpperCase()}</Text><Text numberOfLines={2} style={s.chapter}>{chapter||title}</Text><View style={{gap:3,marginTop:8}}>{Array.from({length:29},(_,i)=><View key={i} style={{height:1,backgroundColor:'#5C594B',opacity:.4,width:(i%8===7?56:i%5===0?89:96)+'%' as any,marginTop:i%8===0?4:0}}/>)}</View><Text style={s.pageNumber}>{Math.max(1,number*2+side)}</Text></View>;
   const coverArt=cover||<View style={s.fallbackCover}><Text style={s.fallbackKicker}>ARCHIVIST</Text><Text numberOfLines={5} style={s.fallbackTitle}>{title}</Text><Text style={s.fallbackAuthor}>{author}</Text></View>;
   const leafCount=Math.max(1,Math.min(5,Math.round(skipPages)));
   return <View accessibilityLabel="Living book artwork" style={s.stage}>
-    <AmbientGlow color="#2F8B86" size={520} strength={.72}/>
+    <AmbientGlow color={glowColor} size={520} strength={glowStrength}/>
     <View style={s.shadow}/>
     <Animated.View style={[s.closedCover,{opacity:open.interpolate({inputRange:[0,.18,.62,1],outputRange:[1,1,.18,0]}),transform:[{perspective:1000},{rotateX:'7deg'},{scale:open.interpolate({inputRange:[0,1],outputRange:[1,.88]})},{translateX:open.interpolate({inputRange:[0,1],outputRange:[0,34]})}]}]}>{coverArt}</Animated.View>
     <Animated.View style={[s.book,{opacity:open.interpolate({inputRange:[0,.12,.38,1],outputRange:[0,.08,1,1]}),transform:[{perspective:1200},{rotateX:'9deg'},{scale:open.interpolate({inputRange:[0,1],outputRange:[.88,1]})}]}]}>
