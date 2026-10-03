@@ -12,6 +12,28 @@ import {
 const root=(documentDirectory || '')+'archivist-state/';
 const pendingWrites=new Map<string,Promise<void>>();
 
+function browserStorageAvailable(){
+  try{return typeof globalThis!=='undefined'&&!!globalThis.localStorage;}catch{return false;}
+}
+
+function readBrowserValue<T>(key:string):T|null{
+  if(!browserStorageAvailable())return null;
+  try{
+    const raw=globalThis.localStorage.getItem(key);
+    return raw?JSON.parse(raw) as T:null;
+  }catch{return null;}
+}
+
+function writeBrowserValue(key:string,value:string){
+  if(!browserStorageAvailable())return false;
+  try{globalThis.localStorage.setItem(key,value);return true;}catch{return false;}
+}
+
+function deleteBrowserValue(key:string){
+  if(!browserStorageAvailable())return;
+  try{globalThis.localStorage.removeItem(key);}catch{}
+}
+
 function queueWrite(key:string,operation:()=>Promise<void>):Promise<void>{
   const previous=pendingWrites.get(key) || Promise.resolve();
   const next=previous.catch(()=>undefined).then(operation);
@@ -57,12 +79,18 @@ export async function getPersistedJSON<T>(key:string):Promise<T|null>{
     if(previous.ok)return previous.value as T;
   }
 
-  // One-time migration from builds that kept all local state in SecureStore.
+  // Draftbit/web previews do not always expose the native SecureStore bridge.
+  // Use browser storage there instead of touching an unavailable native module.
+  const browserValue=readBrowserValue<T>(key);
+  if(browserValue!==null)return browserValue;
+
+  // One-time migration from older native builds that kept local state in SecureStore.
   try{
     const legacy=await SecureStore.getItemAsync(key);
     if(!legacy)return null;
     const value=JSON.parse(legacy) as T;
     await setPersistedJSON(key,value);
+    deleteBrowserValue(key);
     await SecureStore.deleteItemAsync(key).catch(()=>undefined);
     return value;
   }catch{
@@ -74,8 +102,10 @@ export function setPersistedJSON(key:string,value:unknown):Promise<void>{
   const encoded=JSON.stringify(value);
   return queueWrite(key,async()=>{
     if(!(await ensureRoot())){
-      // Extremely defensive fallback for runtimes without a document directory.
-      await SecureStore.setItemAsync(key,encoded);
+      // Draftbit/web previews have no native document directory. Prefer browser
+      // storage so an unavailable SecureStore bridge never surfaces as a UI error.
+      if(writeBrowserValue(key,encoded))return;
+      try{await SecureStore.setItemAsync(key,encoded);}catch{return;}
       return;
     }
     const {primary,backup}=paths(key);
