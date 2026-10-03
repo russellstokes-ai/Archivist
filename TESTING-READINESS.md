@@ -1,14 +1,14 @@
 # Archivist 0.9.2 â€” Testing Readiness
 
-**Candidate branch:** `dev/archivist-work`  
-**Candidate mobile commit:** `77842e1f`  
-**Target:** Android-first local app + optional Home Assistant/Docker server.
+**Candidate branch:** `design/hig-refresh`  
+**Candidate mobile commit:** `81526e38548620a4bc076d11ca0495478fb9a763`  
+**Target:** universal iOS + Android local app + optional Home Assistant/Docker server.
 
 This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
 
 ## Current crafted UI sweep
 
-The canonical mobile UI is on `dev/archivist-work`. This sweep was completed screen-by-screen after physical Galaxy Fold screenshots exposed scaling, typography, fallback-artwork and Fold breakpoint problems. It is **not visually accepted yet**; automated checks verify engineering only.
+The canonical locked Fold/reference mobile UI is on `design/hig-refresh`. Universal phone adaptations belong on `design/universal-phone`. This sweep was completed screen-by-screen after physical Galaxy Fold screenshots exposed scaling, typography, fallback-artwork and Fold breakpoint problems. It is **not visually accepted yet**; automated checks verify engineering only.
 
 Crafted commits:
 
@@ -287,3 +287,12 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Real Archivist Server metadata/source scan and remote cover refresh.
 - No physical Galaxy Fold or Home Assistant/server runtime acceptance is claimed by this checkpoint.
 
+
+
+## 2026-10-03 — locked UI QA baseline
+
+- The approved Fold/reference appearance on `design/hig-refresh` is locked by `mobile/locked-fold-ui.styles.snapshot.txt`; the UI contract compares the complete React Native StyleSheet against that snapshot.
+- Behaviour-only polish completed without changing the approved StyleSheet: Reduced Motion coverage, Fold sheet transition behaviour, Player/Reader transition, Shelf loading pulse, Atlas gesture/animation coalescing, screen-reader semantics, invisible touch-target expansion, Stats Increased Contrast propagation, production-copy cleanup and keyboard/inset hardening.
+- Archivist is a universal iOS + Android product. “Android-first” and Expo Go implementation wording are not approved production copy.
+- `design/universal-phone` is the dedicated phone-layout workspace. Phone-specific visual adaptation must not be developed on the locked Fold/reference branch.
+- Automated CI is an engineering gate, not physical visual acceptance. VoiceOver/TalkBack, real iOS/Android safe areas, Fold open/close, keyboard behaviour, real artwork, long metadata, gestures, animation frame quality and large-library runtime performance still require rendered/native verification.

@@ -25,6 +25,10 @@ assert.equal(splashPlugin[1]?.resizeMode,'contain','Splash must preserve logo pr
 assert.equal(splashPlugin[1]?.dark?.image,'./assets/icon.png','Dark splash must use the canonical logo');
 assert.equal(config.expo.android?.adaptiveIcon?.foregroundImage,'./assets/icon.png','Android adaptive icon must use the canonical logo');
 assert.ok(fs.existsSync('assets/icon.png'),'Canonical icon asset is missing');
+assert.ok(source.includes("import * as SplashScreen from 'expo-splash-screen'"),'Native splash handoff controller is missing');
+assert.ok(source.includes("SplashScreen.preventAutoHideAsync()") && source.includes("SplashScreen.setOptions({duration:350,fade:true})"),'Native splash must remain visible until Archivist is ready and fade into the app');
+assert.ok(source.includes("SplashScreen.hideAsync()") && source.includes("nativeSplashEnabled?null"),'Native launch must avoid showing the fallback wordmark before fonts are ready');
+
 
 for(const page of ['Shelf','Library','LiveHub','Atlas','Insights','Profile','Rewards','Settings']){
   assert.match(source,new RegExp('function\\s+'+page+'\\s*\\(.*?\\)\\s*\\{'),'Integrated QA page missing: '+page);

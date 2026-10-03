@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const source = fs.readFileSync('App.tsx','utf8');
 const clientSource = ['App.tsx','connection.ts','queue.ts','playback.ts'].map(file => fs.readFileSync(file,'utf8')).join('\n');
 const livingBookSource = fs.readFileSync('LivingBookArtwork.tsx','utf8');
+const lockedFoldStyles = fs.readFileSync('locked-fold-ui.styles.snapshot.txt','utf8');
 
 for (const banned of ['Coming soon','Not implemented','TODO','FIXME','Genre is currently represented by media format','coverInitials(']) {
   assert.equal(source.includes(banned), false, 'Banned placeholder/dead-state marker found: ' + banned);
@@ -277,4 +278,7 @@ for(const match of source.matchAll(/<Pressable\b[\s\S]*?>/g)){
 }
 assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?112:132"),'Locked Library folder rail dimensions changed');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"),'Locked primary-page geometry changed');
+const lockedStylesStart=source.indexOf('const styles = StyleSheet.create({');
+assert.ok(lockedStylesStart>=0,'StyleSheet block missing');
+assert.equal(source.slice(lockedStylesStart),lockedFoldStyles,'Locked Fold/reference StyleSheet changed. Deliberate phone-only layout work belongs on the universal-phone branch, not design/hig-refresh.');
 
