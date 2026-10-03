@@ -2949,11 +2949,22 @@ function Client() {
 
   function ProfileAvatarButton({size=42}:{size?:number}={}){
     const avatarColor=profileAvatar.color||'#47736F';
-    return <View style={[styles.profileAvatarButtonWrap,{width:size,height:size}]}>
-      {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:size/2,backgroundColor:interfaceHaloColor||avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.36:.28,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.42]})}]}]}/>:null}
+    const ringSize=size+10;
+    const level=profileProgression?.overall.level||1;
+    const levelProgress=profileProgression?.overall.progress||0;
+    const ringItems:ChartItem[]=[
+      {label:'Level progress',count:Math.max(.001,levelProgress),color:p.gold},
+      {label:'Remaining',count:Math.max(.001,1-levelProgress),color:darkMode?'#2A2A2A':'#D8CDBA'},
+    ];
+    return <View style={[styles.profileAvatarButtonWrap,{width:ringSize,height:ringSize}]}>
+      {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:ringSize/2,backgroundColor:interfaceHaloColor||avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.36:.28,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.38]})}]}]}/>:null}
+      <View pointerEvents="none" style={styles.profileAvatarLevelRing}><DataRing size={ringSize} items={ringItems} ink={p.ink} muted={p.muted} track={p.line} thickness={3} opacity={1}/></View>
       <Pressable accessibilityRole="button" accessibilityLabel={profileMenuOpen?'Close profile menu':'Open profile menu'} accessibilityState={{expanded:profileMenuOpen}} onPress={profileMenuOpen?()=>closeProfileMenu():openProfileMenu} style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:avatarColor}]}>
         <Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>
       </Pressable>
+      <View pointerEvents="none" style={[styles.profileAvatarLevelBadge,{backgroundColor:darkMode?'#0B1725':'#FFF8E9',borderColor:p.gold}]}>
+        <Text style={[styles.profileAvatarLevelText,{color:p.gold}]}>{level}</Text>
+      </View>
     </View>;
   }
 
@@ -2983,7 +2994,7 @@ function Client() {
         <Animated.View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
           <View style={styles.profileMenuIdentity}>
             <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text></View>
-            <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>{unlocked} reward{unlocked===1?'':'s'} unlocked</Text></View>
+            <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>Level {profileProgression?.overall.level||1} · {profileProgression?.overall.title||'Reader'} · {unlocked} unlocked</Text></View>
           </View>
           {menuItems.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>closeProfileMenu(()=>setActiveTab(item.id))} style={({pressed})=>[styles.profileMenuItem,{borderTopColor:p.line,opacity:pressed?0.72:1}]}>
             <View style={[styles.profileMenuIcon,{backgroundColor:item.tone+'20',borderColor:item.tone+'55'}]}><UiIcon name={item.icon} color={item.tone} size={18}/></View>
