@@ -249,7 +249,8 @@ assert.ok(source.includes("message?.type==='archivist-reader-ready'"), 'Server r
 assert.ok(source.includes("reading.format"), 'Reader header must expose the active format');
 
 assert.ok(source.includes("Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRatingPrompt(null)}"), 'Completion rating prompt must be dismissible and respect Reduced Motion');
-assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose edition for '"), 'Edition picker must expose modal accessibility semantics');
+assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose format or edition for '"), 'Format / edition picker must expose modal accessibility semantics');
+assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose format for '+work.title}"), 'Grouped Shelf format picker must expose modal accessibility semantics');
 assert.ok(source.includes("KeyboardAvoidingView style={styles.modalKeyboard}"), 'Metadata editor must remain usable with the on-screen keyboard');
 assert.ok(source.includes("accessibilityLabel={'Open player for '+playing.title}"), 'Mini player must expose a separate open-player action');
 assert.match(source,/accessibilityLabel=\{[\s\S]{0,240}['"]Pause ['"]\+playing\.title[\s\S]{0,120}['"]Play ['"]\+playing\.title/, 'Mini player play/pause must be source-aware and separately labelled');
