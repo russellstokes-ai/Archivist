@@ -167,7 +167,7 @@ type UnifiedWork = {
 };
 type LibrarySort = 'title'|'author'|'series'|'format'|'progress'|'rating';
 type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insights' | 'profile' | 'rewards' | 'settings';
-type ShelfSectionId = 'continue' | 'formats' | 'favourites' | 'smart' | 'collections' | 'series' | 'library';
+type ShelfSectionId = 'continue' | 'favourites' | 'smart' | 'collections' | 'series';
 type ShelfSectionPref = {id:ShelfSectionId;title:string;visible:boolean};
 type ThemeMode = 'system' | 'light' | 'dark';
 type AccessibilityPreferences = {reduceMotion:boolean;highContrast:boolean;largeText:boolean};
@@ -204,6 +204,7 @@ const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
+const shelfServerPromptKey = 'archivist.shelfServerPrompt.v1';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 const smartShelvesKey = 'archivist.smartShelves.v1';
 const collectionsKey = 'archivist.collections.v1';
@@ -220,12 +221,10 @@ const lastReadingKey = 'archivist.lastReading.v1';
 const lastPlayingKey = 'archivist.lastPlaying.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
-  {id:'formats',title:'Browse by format',visible:true},
   {id:'favourites',title:'Favourites',visible:true},
   {id:'smart',title:'Smart Shelves',visible:true},
   {id:'collections',title:'Collections',visible:true},
   {id:'series',title:'Series',visible:true},
-  {id:'library',title:'From your library',visible:true},
 ];
 
 function validateServer(raw: string) {
@@ -558,6 +557,7 @@ function Client() {
   const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
+  const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [ritualDays,setRitualDays]=useState<Record<string,number>>({});
@@ -1255,6 +1255,9 @@ function Client() {
     AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
+    }).catch(() => undefined);
+    SecureStore.getItemAsync(shelfServerPromptKey).then(value => {
+      setShelfServerPromptHidden(value === '1');
     }).catch(() => undefined);
     SecureStore.getItemAsync(firstLibraryCelebratedKey).then(value => {
       setCelebrationEligible(value !== '1');
@@ -2435,6 +2438,16 @@ function Client() {
   async function finishOnboarding() {
     setOnboardingDone(true);
     await SecureStore.setItemAsync(onboardingDoneKey, '1');
+  }
+
+  async function useArchivistLocallyOnly(){
+    setShelfServerPromptHidden(true);
+    await SecureStore.setItemAsync(shelfServerPromptKey,'1');
+  }
+
+  function connectServerFromShelf(){
+    setServerPanelOpen(true);
+    setActiveTab('settings');
   }
 
   function LibrarySwitcher({vertical = false}: {vertical?: boolean}) {
