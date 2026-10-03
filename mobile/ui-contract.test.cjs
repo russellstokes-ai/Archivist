@@ -39,9 +39,10 @@ assert.ok(source.includes("function Profile()"), 'Profile screen is not implemen
 // Reader Stats visual contract: keep the approved stats destination distinct and data-led.
 assert.ok(source.includes(">Reader Stats</Text>"), 'Reader Stats title is missing');
 assert.ok(source.includes(">Reading Rhythm</Text>"), 'Reader Stats rhythm visual is missing');
-assert.ok(source.includes("['Overview','Time','Books','Genres','Formats']"), 'Reader Stats section tabs are missing');
-assert.ok(source.includes('readerStatsHeatCell'), 'Reader Stats activity heatmap is missing');
+assert.ok(source.includes("['Overview','Time','Books','Genres','Formats','Places']"), 'Reader Stats section tabs are missing');
+assert.ok(source.includes('statsRhythmDial') && source.includes('statsHeatCell'), 'Reader Stats rhythm ring or activity heatmap is missing');
 assert.ok(source.includes("{id:'insights',label:'Stats',icon:'insights'}"), 'Bottom navigation must expose Reader Stats as Stats');
+assert.ok(source.includes('Reading Progress') && source.includes('Format Breakdown') && source.includes('Genre Reading Time') && source.includes('Reading Pace') && source.includes('Where You Read') && source.includes('Reading Streaks'), 'Approved Reader Stats dashboard cards are incomplete');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');
 
