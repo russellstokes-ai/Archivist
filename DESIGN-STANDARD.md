@@ -2,6 +2,23 @@
 
 **Status:** Canonical. UI changes must conform to this file before they can be called complete.
 
+
+## Canonical visual references — 2026-10-03
+The four approved visual references for **Library**, **Living Player**, **Atlas** and **Reader Stats / Insights** are the primary composition and finish targets. If older wording elsewhere in this document conflicts with those references, this section takes precedence.
+
+The references define a premium editorial visual language: near-black or dark navy canvas in dark mode, clean white/ivory canvas in light mode, high-contrast editorial serif headings, restrained fine-line controls, subtle depth/glow, generous spacing, and highly intentional chart/graph composition. Do not translate them into generic React Native cards or flatten them into utilitarian lists.
+
+- **Library:** large editorial “Library” heading, short bookish tagline, quiet search, compact format filters, cover-led catalogue, and a refined continue/mini-player element above navigation. Sparse composition is intentional.
+- **Living Player:** the open physical book is the hero and should occupy materially more visual space than ordinary controls. Use a warm near-black/sepia ambience in dark mode, large serif identity, understated metadata, clear progress, oversized central play/pause, and compact secondary actions.
+- **Atlas:** immersive circular universe first, controls second. A segmented outer ring may represent dimensions such as Genre, Format and Year; the central graph uses fine luminous relationships and semantic cluster colour. The selected dimension is explained in an overlapping bottom sheet / inspector rather than a detached dashboard card.
+- **Reader Stats / Insights:** a crafted reading-journal dashboard. Allow compact metric cards, radial charts, heatmaps, progress rings, streaks and balanced two-column compositions where width permits. Warm ivory/gold is a permitted emphasis colour here. The screen should feel personal and editorial, not like business intelligence software.
+
+### Reference precedence rules
+- The product may remain **Insights** in navigation while using **Reader Stats** language inside the destination; do not create duplicate Stats and Insights destinations merely to mirror reference labels.
+- Semantic colour is deliberately limited. General navigation, Library and Player stay near-monochrome with Sage as the main interaction accent. Atlas may use a controlled multi-colour categorical palette; Insights may use restrained gold/ivory/Sage data accents.
+- ArchivistEditorial (currently bundled Libre Caslon Text) is the preferred family for major screen headings, feature titles, selected card headings, the wordmark and reading content. Dense UI labels, controls and metadata remain sans-serif.
+- Exact pixel copying is not required. Match hierarchy, proportion, density, polish, motion and visual intent while preserving Archivist functionality and accessibility.
+
 ## Product character
 Archivist is a premium personal library. It is editorial, content-led and restrained. The app must not look like a generic React Native project, an admin dashboard, or a stack of rounded boxes. Books, covers, reading and listening are visually dominant; controls recede until needed.
 
@@ -27,7 +44,7 @@ The interface is almost monochrome.
 - Archivist Sage: #47736F
 - Sage is used for active navigation, progress, selected controls, links and primary actions.
 - Gold #B99A68 is exceptional only: achievements or rare milestone detail.
-- Do not colour-code formats, genres, sources, Atlas relationships or Insights categories. Artwork supplies colour.
+- Do not colour-code formats or sources in ordinary Library/Player UI. Artwork supplies colour there. Atlas may use a controlled semantic categorical palette for graph clusters and dimension rings; Insights may use restrained Sage, warm ivory and gold to communicate reading data.
 
 ## Typography
 Two roles:
@@ -129,7 +146,7 @@ Pan has restrained inertia; positions remain stable. Phone inspector = bottom sh
 
 ## Insights
 Feels like a personal reading journal, not BI. Strong editorial summary, then listening/reading time, completed works, goals, ratings, genres, annotations and achievements.
-Charts use black/white/grey/Sage only, minimal axes and no spreadsheet grid. Achievements are emblematic, not another set of generic statistic cards.
+Charts use a restrained black/white/grey/Sage base with warm ivory/gold permitted for emphasis, minimal axes and no spreadsheet grid. The approved Stats reference supports compact metric cards, radial charts, heatmaps and two-column chart groupings when they are visually differentiated and purposeful. Achievements are emblematic, not another set of generic statistic cards.
 
 ## Sheets, loading, empty and errors
 Phone prefers bottom sheets with 24dp top corners and ~40-48% dimming. Fold may use side sheets.
@@ -158,8 +175,8 @@ Rules:
 
 ### Typography on Android and variable-width devices
 - Do not rely on Android's generic `serif` for ordinary interface hierarchy. The generic serif may vary substantially by manufacturer and can produce poor metrics.
-- Until a licensed bundled editorial family is introduced, use the platform sans / `sans-serif-medium` for screen titles, feature titles, section titles and dense UI hierarchy.
-- Reserve serif treatment for the Archivist wordmark/mark and actual reading content where editorial texture is intentional.
+- Use the bundled `ArchivistEditorial` family for major screen titles, feature titles, selected section/card titles, the Archivist wordmark and reading content. Use the platform sans / `sans-serif-medium` for dense UI hierarchy, controls, metadata and navigation.
+- Serif is a deliberate part of Archivist's editorial identity; use it selectively but visibly, matching the approved visual references.
 - Dense controls and navigation should generally cap font scaling around 1.15 while preserving accessibility through adequate control height and wrapping elsewhere.
 - Fixed-height controls must be tested with long labels and enlarged text. Text must never be vertically clipped.
 - Prefer the compact hierarchy around 30/24/18/14/12 rather than many unrelated one-off sizes.
