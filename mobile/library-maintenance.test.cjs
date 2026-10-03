@@ -42,3 +42,17 @@ const advancedCounts=x.advancedMetadataGapCounts([
 assert(advancedCounts.series===1,'advanced series gap count');
 assert(advancedCounts.narrator===1,'advanced narrator gap count');
 console.log('advanced library metadata maintenance passed');
+
+
+const attention=[
+  {title:'Complete',author:'A',series:'Saga',seriesNumber:1,genre:'Fantasy',coverUri:'cover.jpg',publishedYear:2024,publisher:'P',isbn:'123',language:'en',description:'D',format:'EPUB',source:'local'},
+  {title:'Conflict',author:'A',series:'Saga',seriesNumber:2,genre:'Fantasy',coverUri:'cover.jpg',publishedYear:2024,publisher:'P',isbn:'124',language:'en',description:'D',format:'EPUB',source:'local',metadataConflicts:[{field:'author'}]},
+  {title:'Order',author:'A',series:'Saga',genre:'Fantasy',coverUri:'cover.jpg',publishedYear:2024,publisher:'P',isbn:'125',language:'en',description:'D',format:'EPUB',source:'local'},
+];
+const attentionCounts=x.metadataGapCounts(attention);
+assert(attentionCounts.conflicts===1,'metadata conflict count');
+assert(attentionCounts.seriesNumber===1,'uncertain series-order count');
+assert(attentionCounts.incomplete===2,'incomplete count includes conflict and missing series number');
+assert(x.matchesMetadataGap(attention[1],'conflicts')===true,'conflict filter');
+assert(x.matchesMetadataGap(attention[2],'seriesNumber')===true,'series order filter');
+console.log('needs-attention maintenance filters passed');
