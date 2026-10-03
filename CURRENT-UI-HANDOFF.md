@@ -166,6 +166,12 @@ Phone adaptation may tighten gutters/artwork but must retain the same design lan
 ### Library
 Library is the location/organisation catalogue view.
 
+Local-library platform behaviour:
+- Android links user-selected folders through Storage Access Framework and scans them in place.
+- iOS uses the native Files directory picker, then imports supported media/sidecars/artwork into Archivist app-private storage because external directory permission is not persistent across app restarts.
+- iOS user-facing action wording is **Import folder**; Android wording is **Add device folder**.
+- iOS organisation is performed only on Archivist's imported copy, never on the user's original Files/iCloud folder.
+
 Approved:
 - high-density cover catalogue
 - phone: Sources & folders opens as a dedicated sheet
