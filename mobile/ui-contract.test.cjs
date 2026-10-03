@@ -57,6 +57,9 @@ assert.ok(source.includes("(activeTab==='reader'||(activeTab==='now'&&liveMode==
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
 assert.ok(source.includes('function Rewards()'), 'Rewards screen is not implemented');
 assert.ok(source.includes('function ProfileAvatarButton(') && source.includes('function ProfileMenu()'), 'Persistent profile avatar/menu is missing');
+assert.ok(source.includes('profileMenuMounted') && source.includes('profileMenuAnim') && source.includes('openProfileMenu()') && source.includes('closeProfileMenu(') && source.includes('animationType="none"'), 'Profile overlay must expand and contract from the persistent top-right avatar');
+assert.ok(source.includes("tone:'#54C6B8'") && source.includes("tone:'#E3BC67'") && source.includes("tone:'#7AA7E8'"), 'Profile, Rewards and Settings overlay actions must have distinct restrained accent colours');
+assert.ok(source.includes('profileAvatarHalo') && source.includes('interfacePulse.interpolate'), 'Active profile overlay must use the shared outward fade halo');
 assert.ok(source.includes("const profileAvatarKey = 'archivist.profileAvatar.v1'"), 'Custom avatar persistence is missing');
 assert.ok(source.includes('function PageHeader('), 'Shared standard page header is missing');
 assert.ok(source.includes('styles.globalProfileCorner') && source.includes('<ProfileAvatarButton size={42}/>'), 'A single global top-right avatar must persist across app pages');
@@ -109,6 +112,10 @@ assert.ok(statsSource.includes('const supportingCards=') && statsSource.includes
 assert.ok(source.includes("statsScreen: {paddingHorizontal:18") && source.includes('statsScreenFold') && source.includes('statsScreenWide'), 'Reader Stats spacing must align with the app responsive gutters');
 assert.ok(source.includes("statsMetricCardWide: {width:'19%'") && source.includes('rowGap:22') && source.includes('minHeight:118'), 'Reader Stats five-metric layout and chart alignment spacing are not locked');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"), 'Primary page gutters must match the Reader Stats header standard');
+assert.ok(source.includes("profileHubScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,width:'100%',maxWidth:980") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,maxWidth:980"), 'Profile, Rewards and Settings must share the same responsive page width and vertical rhythm');
+assert.ok(source.includes('>APP & LIBRARY</Text>') && source.includes('>SERVER & FAMILY</Text>') && source.includes('settingsColumnKicker'), 'Settings columns must use aligned semantic group headers');
+assert.ok(source.includes('rewardsSummaryEmblem') && source.includes('rewardsCompletionTrack') && source.includes('>NEXT MILESTONE</Text>') && source.includes('>IN PROGRESS</Text>') && source.includes('>UNLOCKED</Text>'), 'Rewards must keep the richer progress hierarchy');
+assert.ok(source.includes('recentAchievementId') && source.includes('rewardPulseHalo') && source.includes('>RECENT</Text>'), 'Recent rewards must receive a restrained pulsing halo and recent marker');
 
 
 const atlasStart=source.indexOf('function Atlas()');
@@ -122,6 +129,8 @@ assert.ok(source.includes("useState<'Genre'|'Format'|'Published year'|null>(null
 assert.ok(atlasSource.includes("{atlasBreakdown?<Animated.View") && atlasSource.includes("Choose Genre, Format or Year to reveal the library breakdown"), 'Atlas breakdown should appear only after a ring control is pressed');
 assert.ok(source.includes('const atlasPulse=useRef(new Animated.Value(0)).current') && source.includes('const atlasPulseLoop=Animated.loop'), 'Atlas selected-state pulse animation is missing');
 assert.ok(source.includes('atlasRingControlPulse') && source.includes('atlasSelectedRingPulse'), 'Atlas ring controls and ring chart need selected pulse feedback');
+assert.ok(source.includes("outputRange:[.48,0]") && source.includes("outputRange:[1,1.26]") && source.includes("borderColor:'#FF9A92'") && source.includes("borderColor:'#88D7E8'") && source.includes("borderColor:'#C7A6EE'"), 'Atlas selected controls must radiate a brighter colour-matched halo that expands and fades out');
+assert.ok(atlasSource.includes('color="#E2736B"') && atlasSource.includes('color="#62AFC1"') && atlasSource.includes('color="#A78BC7"'), 'Atlas Genre, Format and Year controls must retain distinct colours even when not selected');
 assert.ok(atlasSource.includes('>Universe Stats</Text>') && atlasSource.includes("label:'Nodes'") && atlasSource.includes("label:'Connections'") && atlasSource.includes("label:'Constellations'") && atlasSource.includes("label:'Bridges'") && atlasSource.includes("label:'Series'") && atlasSource.includes("label:'Collections'"), 'Atlas Universe Stats are missing');
 assert.ok(atlasSource.includes('Most connected') && atlasSource.includes('Largest constellation') && atlasSource.includes('Deepest series'), 'Atlas Universe Highlights are incomplete');
 assert.ok(source.includes('atlasInspectorAnim') && source.includes('height:atlasInspectorAnim.interpolate'), 'Atlas selected-node information must fade and expand in');
@@ -129,7 +138,7 @@ assert.ok(source.includes('atlasBreakdownReveal') && source.includes('maxHeight:
 assert.ok(atlasSource.includes('focusAtlasNode(item.node.id)'), 'Atlas Universe Highlights must navigate back into the graph');
 assert.ok(atlasSource.includes('bridgeNodeIds') && atlasSource.includes("genres.size>1"), 'Atlas Bridges must represent real cross-genre connectors');
 
-assert.ok(source.includes('opacity:atlasPulse.interpolate') && source.includes('node.id===atlasNodeId'), 'Atlas selected nodes need slow glow feedback');
+assert.ok(source.includes('opacity:atlasPulse.interpolate') && source.includes('node.id===atlasNodeId') && source.includes("outputRange:[.34,0]") && source.includes("outputRange:[1,1.38]"), 'Atlas selected nodes need an outward fading halo rather than a breathing node animation');
 
 assert.ok(atlasSource.includes('Breakdown of your library') && atlasSource.includes('atlasBreakdownTrack') && atlasSource.includes('atlasBreakdownPercent'), 'Atlas breakdown sheet must match the approved concept');
 assert.ok(atlasSource.includes('atlasConstellationStage') && atlasSource.includes('atlasRingControlGenre') && atlasSource.includes('atlasRingControlFormat') && atlasSource.includes('atlasRingControlYear'), 'Atlas ring controls must sit around the constellation');
