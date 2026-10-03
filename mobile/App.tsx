@@ -526,8 +526,9 @@ function Client() {
   const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
-  const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'>('Genre');
-  const atlasBreakdownAnim=useRef(new Animated.Value(1)).current;
+  const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'|null>(null);
+  const atlasBreakdownAnim=useRef(new Animated.Value(0)).current;
+  const atlasPulse=useRef(new Animated.Value(0)).current;
   const [atlasSearch,setAtlasSearch]=useState('');
   const [atlasNodeId,setAtlasNodeId]=useState('');
   const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
@@ -865,6 +866,30 @@ function Client() {
     setAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
   },[activeTab,width,foldLayout,atlasUniverse.width,atlasUniverse.height]);
   const atlasSelectedNode=useMemo(()=>atlasUniverse.nodes.find(node=>node.id===atlasNodeId)||null,[atlasNodeId,atlasUniverse]);
+
+  useEffect(()=>{
+    if(activeTab!=='atlas'){
+      setAtlasBreakdown(null);
+      setAtlasNodeId('');
+      atlasBreakdownAnim.stopAnimation();
+      atlasBreakdownAnim.setValue(0);
+      atlasPulse.stopAnimation();
+      atlasPulse.setValue(0);
+      return;
+    }
+  },[activeTab,atlasBreakdownAnim,atlasPulse]);
+
+  useEffect(()=>{
+    atlasPulse.stopAnimation();
+    atlasPulse.setValue(0);
+    if(reduceMotion||activeTab!=='atlas'||(!atlasNodeId&&!atlasBreakdown))return;
+    const atlasPulseLoop=Animated.loop(Animated.sequence([
+      Animated.timing(atlasPulse,{toValue:1,duration:1450,useNativeDriver:true}),
+      Animated.timing(atlasPulse,{toValue:0,duration:1450,useNativeDriver:true}),
+    ]));
+    atlasPulseLoop.start();
+    return ()=>{atlasPulseLoop.stop();atlasPulse.setValue(0);};
+  },[activeTab,atlasBreakdown,atlasNodeId,atlasPulse,reduceMotion]);
 
   const localDuplicateGroups = useMemo(() => {
     const local=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
@@ -3773,7 +3798,7 @@ function Client() {
     const dot=(node.kind==='genre'?18:node.kind==='author'?7:node.kind==='work'?4:5.5)/zoom;
     const genreHub=node.kind==='genre';
     return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>setAtlasNodeId(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
-      {(selected||genreHub)?<View pointerEvents="none" style={{position:'absolute',width:(selected?58:38)/zoom,height:(selected?58:38)/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:selected?.22:.12}}/>:null}
+      {selected?<Animated.View pointerEvents="none" style={{position:'absolute',width:58/zoom,height:58/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.14,.30]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.94,1.16]})}]}}/>:genreHub?<View pointerEvents="none" style={{position:'absolute',width:38/zoom,height:38/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:.12}}/>:null}
       <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:colour,borderWidth:genreHub?1/zoom:0,borderColor:genreHub?'rgba(255,255,255,.55)':'transparent',boxShadow:selected?'0px 0px 22px '+colour:genreHub?'0px 0px 12px '+colour:'none'}}/>
       {(selected||genreHub||zoom>.60)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
         <Text numberOfLines={2} style={{paddingHorizontal:genreHub?7/zoom:0,paddingVertical:genreHub?3/zoom:0,borderRadius:999,borderWidth:genreHub?StyleSheet.hairlineWidth:0,borderColor:genreHub?colour:'transparent',backgroundColor:genreHub?(p.paper==='#000000'?'rgba(7,17,29,.82)':'rgba(255,255,255,.86)'):'transparent',textAlign:'center',fontSize:(genreHub?11.5:11)/zoom,lineHeight:(genreHub?15:14)/zoom,color:genreHub?colour:(selected?p.ink:p.muted),fontWeight:selected||genreHub?'600':'400'}}>{node.label}</Text>
@@ -3799,12 +3824,23 @@ function Client() {
   }
 
   function selectAtlasBreakdown(next:'Genre'|'Format'|'Published year'){
-    if(next===atlasBreakdown)return;
     if(reduceMotion){setAtlasBreakdown(next);atlasBreakdownAnim.setValue(1);return;}
-    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:140,useNativeDriver:true}).start(()=>{
+    if(next===atlasBreakdown){
+      atlasBreakdownAnim.stopAnimation();
+      atlasBreakdownAnim.setValue(.90);
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:true}).start();
+      return;
+    }
+    if(!atlasBreakdown){
       setAtlasBreakdown(next);
       atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:190,mass:.7,useNativeDriver:true}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
+      return;
+    }
+    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:150,useNativeDriver:true}).start(()=>{
+      setAtlasBreakdown(next);
+      atlasBreakdownAnim.setValue(0);
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
     });
   }
 
@@ -3816,9 +3852,10 @@ function Client() {
     const nodeMap=new Map(atlasUniverse.nodes.map(node=>[node.id,node]));
     const ringSize=Math.min(width-(width>=600?48:28),width>=940?720:width>=600?620:520);
     const viewHeight=ringSize;
+    const breakdownMode=atlasBreakdown||'Genre';
     const breakdownCounts=new Map<string,number>();
-    for(const work of atlasUniverseWorks){const label=atlasBreakdown==='Genre'?(work.genre||'Unclassified'):atlasBreakdown==='Format'?work.format:work.publishedYear?String(work.publishedYear):'Not recorded';breakdownCounts.set(label,(breakdownCounts.get(label)||0)+1);}
-    const rawBreakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:atlasBreakdown==='Genre'?genreColour(label):atlasBreakdown==='Format'?['#62AFC1','#5F8FE3','#8C68D8','#69B99B','#98A6B9'][index%5]:['#98A6B9','#778BC2','#62AFC1','#7BA8A1','#B68B62'][index%5]}));
+    for(const work of atlasUniverseWorks){const label=breakdownMode==='Genre'?(work.genre||'Unclassified'):breakdownMode==='Format'?work.format:work.publishedYear?String(work.publishedYear):'Not recorded';breakdownCounts.set(label,(breakdownCounts.get(label)||0)+1);}
+    const rawBreakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:breakdownMode==='Genre'?genreColour(label):breakdownMode==='Format'?['#62AFC1','#5F8FE3','#8C68D8','#69B99B','#98A6B9'][index%5]:['#98A6B9','#778BC2','#62AFC1','#7BA8A1','#B68B62'][index%5]}));
     const visibleBreakdown=rawBreakdown.slice(0,7);
     const overflowBreakdown=rawBreakdown.slice(7);
     const overflowCount=overflowBreakdown.reduce((sum,item)=>sum+item.count,0);
@@ -3865,6 +3902,7 @@ function Client() {
               <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color="#2F8B86" size={Math.max(680,ringSize*1.35)} strength={.72}/></View>
               <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
                 <DataRing size={ringSize} items={atlasRingItems} ink={p.ink} muted={p.muted} track={p.line} thickness={22}/>
+                {atlasBreakdown?<Animated.View style={[styles.atlasSelectedRingPulse,{width:ringSize-8,height:ringSize-8,borderRadius:(ringSize-8)/2,borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.10,.28]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.995,1.018]})}]}]}/>:null}
                 <View style={[styles.atlasInnerRing,{width:ringSize-42,height:ringSize-42,borderRadius:(ringSize-42)/2,borderColor:p.line}]}/>
               </View>
 
@@ -3880,14 +3918,17 @@ function Client() {
               </View>
 
               <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Genre'}} accessibilityLabel="Show genre breakdown" onPress={()=>selectAtlasBreakdown('Genre')} style={[styles.atlasRingControl,styles.atlasRingControlGenre,{borderColor:atlasBreakdown==='Genre'?'#E2736B':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                {atlasBreakdown==='Genre'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#E2736B',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.16,.42]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.10]})}]}]}/>:null}
                 <UiIcon name="bookOpen" color={atlasBreakdown==='Genre'?'#E2736B':p.muted} size={19}/>
                 <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Genre'?'#E2736B':p.muted}]}>GENRE</Text>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Format'}} accessibilityLabel="Show format breakdown" onPress={()=>selectAtlasBreakdown('Format')} style={[styles.atlasRingControl,styles.atlasRingControlFormat,{borderColor:atlasBreakdown==='Format'?'#62AFC1':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                {atlasBreakdown==='Format'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#62AFC1',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.16,.42]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.10]})}]}]}/>:null}
                 <UiIcon name="layers" color={atlasBreakdown==='Format'?'#62AFC1':p.muted} size={19}/>
                 <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Format'?'#62AFC1':p.muted}]}>FORMAT</Text>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Published year'}} accessibilityLabel="Show publication year breakdown" onPress={()=>selectAtlasBreakdown('Published year')} style={[styles.atlasRingControl,styles.atlasRingControlYear,{borderColor:atlasBreakdown==='Published year'?'#A78BC7':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                {atlasBreakdown==='Published year'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.16,.42]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.10]})}]}]}/>:null}
                 <UiIcon name="calendar" color={atlasBreakdown==='Published year'?'#A78BC7':p.muted} size={19}/>
                 <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Published year'?'#A78BC7':p.muted}]}>YEAR</Text>
               </Pressable>
@@ -3897,12 +3938,12 @@ function Client() {
             <AtlasInspector/>
           </View>
 
-          <Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
+          {atlasBreakdown?<Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
             <View style={styles.atlasBreakdownHandle}><View style={[styles.atlasBreakdownHandleBar,{backgroundColor:p.muted}]}/></View>
             <View style={styles.atlasBreakdownHeader}>
-              <View style={[styles.atlasBreakdownBadge,{borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',backgroundColor:p.card}]}>
+              <Animated.View style={[styles.atlasBreakdownBadge,{borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',backgroundColor:p.card,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.84,1]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.98,1.05]})}]}]}>
                 <UiIcon name={atlasBreakdown==='Genre'?'bookOpen':atlasBreakdown==='Format'?'layers':'calendar'} color={atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7'} size={22}/>
-              </View>
+              </Animated.View>
               <View style={{flex:1,minWidth:0}}>
                 <Text style={[styles.atlasBreakdownTitle,{color:p.ink}]}>{atlasBreakdown==='Published year'?'Year':atlasBreakdown}</Text>
                 <Text style={[styles.atlasBreakdownSubtitle,{color:p.muted}]}>Breakdown of your library</Text>
@@ -3915,7 +3956,7 @@ function Client() {
                   <View style={[styles.atlasBreakdownDot,{backgroundColor:item.color}]}/>
                   <Text numberOfLines={1} style={[styles.atlasBreakdownName,{color:p.ink}]}>{item.label}</Text>
                   <View style={[styles.atlasBreakdownTrack,{backgroundColor:p.card}]}>
-                    <View style={[styles.atlasBreakdownFill,{width:(percent+'%') as any,backgroundColor:item.color}]}/>
+                    <Animated.View style={[styles.atlasBreakdownFill,{width:(percent+'%') as any,backgroundColor:item.color,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.84,1]})}]}/>
                   </View>
                   <Text style={[styles.atlasBreakdownCount,{color:p.ink}]}>{item.count}</Text>
                   <Text style={[styles.atlasBreakdownPercent,{color:p.muted}]}>{percent}%</Text>
@@ -3924,8 +3965,8 @@ function Client() {
               {!breakdown.length?<Text style={[styles.meta,{color:p.muted}]}>Add books to reveal your library’s patterns.</Text>:null}
             </View>
             {atlasBreakdown==='Published year'?<Text style={[styles.atlasBreakdownNote,{color:p.muted}]}>Dates come from recorded metadata. Books without a verified publication date are grouped as not recorded.</Text>:null}
-          </Animated.View>
-          <Text style={[styles.atlasHint,{color:p.muted}]}>Pinch, pan and explore</Text>
+          </Animated.View>:null}
+          <Text style={[styles.atlasHint,{color:p.muted}]}>{atlasBreakdown?'Pinch, pan and explore':'Choose Genre, Format or Year to reveal the library breakdown'}</Text>
         </>}
       </ScrollView>
     );
@@ -5254,6 +5295,8 @@ const styles = StyleSheet.create({
   atlasConstellationGlow: {position:'absolute',left:0,right:0,top:0,bottom:0,alignItems:'center',justifyContent:'center'},
   atlasRingLayer: {position:'absolute',left:0,top:0,alignItems:'center',justifyContent:'center',zIndex:1},
   atlasInnerRing: {position:'absolute',borderWidth:StyleSheet.hairlineWidth,opacity:.55},
+  atlasSelectedRingPulse: {position:'absolute',borderWidth:1.5},
+  atlasRingControlPulse: {position:'absolute',left:-5,right:-5,top:-5,bottom:-5,borderRadius:30,borderWidth:1.25},
   atlasRingControl: {position:'absolute',zIndex:30,minWidth:72,minHeight:48,borderRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,shadowColor:'#000',shadowOpacity:.12,shadowRadius:10,shadowOffset:{width:0,height:4},elevation:8},
   atlasRingControlGenre: {left:2,top:'42%'},
   atlasRingControlFormat: {right:2,top:'42%'},
