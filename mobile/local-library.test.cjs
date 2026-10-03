@@ -75,7 +75,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyLocalSortCopies, previewLocalSort, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {applyLocalSortCopies, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
 const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
 
 const books = [
@@ -333,6 +333,10 @@ assert.equal(previews[0].state, 'review');
   });
   assert.equal(checkpointResult.copied.length,1);
   assert.equal(checkpointCalls,1);
+
+  const beforeSourceRemovalDeletes=saf.deleted.length;
+  await removeLocalFolderSource({id:root,uri:root,name:'Books',status:'Ready',itemCount:1});
+  assert.equal(saf.deleted.length,beforeSourceRemovalDeletes,'Android source removal must never delete the linked user folder');
 
   const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
   assert.equal(removed.copied.length, 1);
