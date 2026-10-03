@@ -490,7 +490,12 @@ async function createTargetFile(rootUri: string, relativePath: string) {
     dir = await ensureDirectory(dir, part);
   }
   const children = await StorageAccessFramework.readDirectoryAsync(dir);
-  const collision = children.some(child => lastPathPart(child).localeCompare(filename, undefined, {sensitivity:'accent'}) === 0);
+  const wantedStem = filename.replace(/\.[^.]+$/, '');
+  const collision = children.some(child => {
+    const childName = lastPathPart(child);
+    return childName.localeCompare(filename, undefined, {sensitivity:'accent'}) === 0
+      || childName.localeCompare(wantedStem, undefined, {sensitivity:'accent'}) === 0;
+  });
   if (collision) throw Error('Destination already exists: ' + filename);
   const dot = filename.lastIndexOf('.');
   const name = dot > 0 ? filename.slice(0, dot) : filename;
