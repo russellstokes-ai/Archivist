@@ -3245,7 +3245,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
+    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:'transparent',borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
   function Player({embedded=false}:{embedded?:boolean}={}) {
@@ -4766,7 +4766,7 @@ function Client() {
 
   return (
     <SafeAreaView style={[styles.screen,{backgroundColor:p.paper==='#000000'?'#07151C':'#F5F8F7'}]}><AmbientGlow color={p.paper==='#000000'?'#2F8B86':'#9BCFCB'} size={Math.max(1500,width*2.2)} strength={p.paper==='#000000'?.95:.34}/>
-      {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger}]}>
+      {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger,backgroundColor:p.paper==='#000000'?'#241416':'#FFF5F5'}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
           <UiIcon name="close" color={p.danger} size={18}/>
@@ -4866,8 +4866,8 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:24,paddingBottom:20,gap:6},
-  libraryRailFold: {width:164,paddingHorizontal:12,paddingTop:20},
+  libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:10,paddingBottom:20,gap:6,backgroundColor:'transparent'},
+  libraryRailFold: {width:164,paddingHorizontal:12,paddingTop:10},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
@@ -4920,7 +4920,7 @@ const styles = StyleSheet.create({
   favouriteTextAction: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
 
   error: {paddingHorizontal: 16, paddingVertical: 8},
-  errorBanner: {marginHorizontal:18,marginTop:4,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,flexDirection:'row',alignItems:'center'},
+  errorBanner: {position:'absolute',left:18,right:18,top:62,zIndex:70,elevation:10,borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,flexDirection:'row',alignItems:'center',shadowColor:'#000',shadowOpacity:.10,shadowRadius:8,shadowOffset:{width:0,height:3}},
   errorDismiss: {width:44,height:44,alignItems:'center',justifyContent:'center'},
   grid: {paddingBottom: 110},
   empty: {fontSize: 15, lineHeight: 22},
@@ -5349,7 +5349,7 @@ const styles = StyleSheet.create({
   visibilityToggle: {width:40,height:24,borderRadius:12,padding:3,alignItems:'flex-start',justifyContent:'center'},
   visibilityThumb: {width:18,height:18,borderRadius:9,shadowColor:'#000',shadowOpacity:.14,shadowRadius:2,shadowOffset:{width:0,height:1},elevation:2},
   orderButton: {width:44,height:44,alignItems:'center',justifyContent:'center'},
-  libraryTwoPane: {flex:1,flexDirection:'row'},
+  libraryTwoPane: {flex:1,flexDirection:'row',backgroundColor:'transparent'},
   libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10,gap:14},
   libraryMainFold: {paddingHorizontal:24,paddingTop:10,gap:16},
   libraryMainWide: {paddingHorizontal:28,paddingTop:10,gap:18},
