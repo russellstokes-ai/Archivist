@@ -6147,7 +6147,7 @@ function Client() {
         <PageHeader title="Settings" subtitle="Your library, privacy, accessibility and server."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
-          <View style={styles.settingsColumn}>
+          <View style={[styles.settingsColumn,phoneLayout&&styles.settingsColumnPhone]}>
             <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>LIBRARY & DATA</Text>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
@@ -6226,7 +6226,7 @@ function Client() {
             </View>
           </View>
 
-          <View style={styles.settingsColumn}>
+          <View style={[styles.settingsColumn,phoneLayout&&styles.settingsColumnPhone]}>
             <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>SERVER & ACCESS</Text>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
@@ -6763,6 +6763,7 @@ const styles = StyleSheet.create({
   settingsColumns: {gap:20},
   settingsColumnsWide: {flexDirection:'row',alignItems:'flex-start',gap:32},
   settingsColumn: {flex:1,minWidth:0,gap:20},
+  settingsColumnPhone: {flexGrow:0,flexShrink:0,flexBasis:'auto',width:'100%'},
   settingsColumnKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.6,paddingBottom:2},
   settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
   settingsSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
