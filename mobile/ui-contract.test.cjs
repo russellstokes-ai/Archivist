@@ -113,6 +113,12 @@ const atlasSource=source.slice(atlasStart,atlasEnd);
 assert.ok(atlasSource.includes('atlasRingItems') && atlasSource.includes("label:'Genre'") && atlasSource.includes("label:'Format'") && atlasSource.includes("label:'Year'"), 'Atlas must use the approved three-way ring');
 assert.ok(atlasSource.includes("selectAtlasBreakdown('Genre')") && atlasSource.includes("selectAtlasBreakdown('Format')") && atlasSource.includes("selectAtlasBreakdown('Published year')"), 'Atlas ring controls must switch the breakdown');
 assert.ok(atlasSource.includes('atlasBreakdownAnim') && atlasSource.includes('Animated.View') && atlasSource.includes('translateY'), 'Atlas breakdown transition is missing');
+assert.ok(source.includes("useState<'Genre'|'Format'|'Published year'|null>(null)"), 'Atlas breakdown must be hidden on initial open');
+assert.ok(atlasSource.includes("{atlasBreakdown?<Animated.View") && atlasSource.includes("Choose Genre, Format or Year to reveal the library breakdown"), 'Atlas breakdown should appear only after a ring control is pressed');
+assert.ok(source.includes('const atlasPulse=useRef(new Animated.Value(0)).current') && source.includes('const atlasPulseLoop=Animated.loop'), 'Atlas selected-state pulse animation is missing');
+assert.ok(source.includes('atlasRingControlPulse') && source.includes('atlasSelectedRingPulse'), 'Atlas ring controls and ring chart need selected pulse feedback');
+assert.ok(source.includes('opacity:atlasPulse.interpolate') && source.includes('node.id===atlasNodeId'), 'Atlas selected nodes need slow glow feedback');
+
 assert.ok(atlasSource.includes('Breakdown of your library') && atlasSource.includes('atlasBreakdownTrack') && atlasSource.includes('atlasBreakdownPercent'), 'Atlas breakdown sheet must match the approved concept');
 assert.ok(atlasSource.includes('atlasConstellationStage') && atlasSource.includes('atlasRingControlGenre') && atlasSource.includes('atlasRingControlFormat') && atlasSource.includes('atlasRingControlYear'), 'Atlas ring controls must sit around the constellation');
 assert.ok(source.includes("node.kind==='genre'?18") && source.includes("boxShadow:selected?'0px 0px 22px '"), 'Atlas genre hubs must be visually prominent and luminous');
