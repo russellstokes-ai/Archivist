@@ -35,12 +35,21 @@ console.log('PASS: no placeholder UI markers and every visible mobile button/tab
 assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats tab is not wired');
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
+assert.ok(source.includes('function Rewards()'), 'Rewards screen is not implemented');
+assert.ok(source.includes('function ProfileAvatarButton(') && source.includes('function ProfileMenu()'), 'Persistent profile avatar/menu is missing');
+assert.ok(source.includes("const profileAvatarKey = 'archivist.profileAvatar.v1'"), 'Custom avatar persistence is missing');
+assert.ok(source.includes('function PageHeader('), 'Shared standard page header is missing');
+for (const title of ['Shelf','Library','Atlas','Reader Stats','Profile','Rewards','Settings']) {
+  assert.ok(source.includes('title="'+title+'"'), 'Standard page title missing: '+title);
+}
+assert.equal(source.includes("style={styles.logoSmall}>Archivist</Text>"),false,'Generic Archivist chrome should not replace page-specific titles');
+
 
 const statsStart=source.indexOf('function Insights(){');
 const statsEnd=source.indexOf('function Profile()',statsStart);
 assert.ok(statsStart>=0 && statsEnd>statsStart, 'Reader Stats function bounds are missing');
 const statsSource=source.slice(statsStart,statsEnd);
-assert.ok(statsSource.includes('>Reader Stats</Text>'), 'Reader Stats title is missing');
+assert.ok(statsSource.includes('title="Reader Stats"') && statsSource.includes('subtitle="Your reading journey."'), 'Reader Stats standard title or subtitle is missing');
 assert.equal(statsSource.includes("['Overview','Time','Books','Genres','Formats','Places']"),false,'Reader Stats should not expose redundant top section filters');
 assert.ok(statsSource.includes('readerStatsRhythmMode') && statsSource.includes("['Time','Day','Month']"), 'Reader Stats rhythm modes are not wired');
 assert.ok(statsSource.includes('cycleStatsPeriod') && statsSource.includes('readerStatsYear'), 'Reader Stats period selector is not functional');
