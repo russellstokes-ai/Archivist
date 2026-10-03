@@ -323,6 +323,10 @@ export async function scanLocalFolders(
 }
 
 export function previewLocalSort(books: LocalBook[], template: string): LocalSortPreview[] {
+  return previewLocalSortToRoot(books, template);
+}
+
+export function previewLocalSortToRoot(books: LocalBook[], template: string, destinationRootUri?: string): LocalSortPreview[] {
   const destinations = new Map<string, number>();
   const previews = books.map(book => {
     const filename = fileNameFromUri(book.uri);
@@ -335,7 +339,7 @@ export function previewLocalSort(books: LocalBook[], template: string): LocalSor
       asset: book.id,
       title: book.title,
       sourceUri: book.uri,
-      rootUri: rootUriFromFileUri(book.uri),
+      rootUri: destinationRootUri || rootUriFromFileUri(book.uri),
       relativePath: target,
       from,
       to: target,
@@ -345,19 +349,30 @@ export function previewLocalSort(books: LocalBook[], template: string): LocalSor
   return previews.map(preview => preview.state === 'review' ? preview : destinations.get(preview.to)! > 1 ? {...preview, state: 'conflict'} : preview);
 }
 
-export async function applyLocalSortCopies(previews: LocalSortPreview[]): Promise<LocalSortApplyResult> {
+export async function applyLocalSortCopies(
+  previews: LocalSortPreview[],
+  onCheckpoint?: (result: LocalSortApplyResult) => void | Promise<void>,
+): Promise<LocalSortApplyResult> {
   const copied: LocalSortApplyResult['copied'] = [];
   const failed: LocalSortApplyResult['failed'] = [];
   for (const preview of previews) {
     if (preview.state !== 'ready') continue;
     try {
       const target = await createTargetFile(preview.rootUri, preview.relativePath);
+      const sourceInfo = await getInfoAsync(preview.sourceUri).catch(() => null);
       await StorageAccessFramework.copyAsync({from: preview.sourceUri, to: target});
       const verification = await getInfoAsync(target);
       if (!verification.exists) throw Error('Destination verification failed after copy');
+      if (sourceInfo?.exists && typeof sourceInfo.size === 'number' && sourceInfo.size > 0
+        && typeof verification.size === 'number' && verification.size !== sourceInfo.size) {
+        await StorageAccessFramework.deleteAsync(target).catch(() => undefined);
+        throw Error('Destination size verification failed after copy');
+      }
       copied.push({id: preview.id, title: preview.title, uri: target});
+      await onCheckpoint?.({copied: copied.slice(), failed: failed.slice()});
     } catch (e) {
       failed.push({id: preview.id, title: preview.title, error: (e as Error).message});
+      await onCheckpoint?.({copied: copied.slice(), failed: failed.slice()});
     }
   }
   return {copied, failed};
@@ -426,6 +441,9 @@ async function createTargetFile(rootUri: string, relativePath: string) {
   for (const part of parts) {
     dir = await ensureDirectory(dir, part);
   }
+  const children = await StorageAccessFramework.readDirectoryAsync(dir);
+  const collision = children.some(child => lastPathPart(child).localeCompare(filename, undefined, {sensitivity:'accent'}) === 0);
+  if (collision) throw Error('Destination already exists: ' + filename);
   const dot = filename.lastIndexOf('.');
   const name = dot > 0 ? filename.slice(0, dot) : filename;
   const ext = dot > 0 ? filename.slice(dot + 1).toLowerCase() : '';
