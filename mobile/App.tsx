@@ -30,8 +30,10 @@ import * as SecureStore from 'expo-secure-store';
 import {useFonts} from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
-import {copyAsync, documentDirectory, makeDirectoryAsync} from 'expo-file-system/legacy';
+import {copyAsync, documentDirectory, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
@@ -843,6 +845,7 @@ function Client() {
   const [privacyBackupText,setPrivacyBackupText]=useState('');
   const [privacyRestoreText,setPrivacyRestoreText]=useState('');
   const [privacyDataNotice,setPrivacyDataNotice]=useState('');
+  const [privacyManualBackupOpen,setPrivacyManualBackupOpen]=useState(false);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,string>>(shelfFormatChoiceKey).then(value=>{if(live&&value&&typeof value==='object')setShelfFormatChoice(value)}).catch(()=>undefined);return()=>{live=false;};},[]);
   const loadCancel = useRef<(() => void) | null>(null);
   const controller = useMemo(() => new Playback(
@@ -6248,7 +6251,7 @@ function Client() {
     </View>;
   }
 
-  function createPrivacyBackup(){
+  function privacyBackupJSON(){
     const snapshot={
       archivistBackup:1,
       createdAt:new Date().toISOString(),
@@ -6272,14 +6275,40 @@ function Client() {
       localWorkProgress,
       localAudioCompleted,
     };
-    setPrivacyBackupText(JSON.stringify(snapshot,null,2));
-    setPrivacyDataNotice('Backup snapshot created locally. Server credentials and access keys are never included.');
+    return JSON.stringify(snapshot,null,2);
   }
 
-  async function restorePrivacyBackup(){
+  function createPrivacyBackup(){
+    const text=privacyBackupJSON();
+    setPrivacyBackupText(text);
+    setPrivacyDataNotice('Backup JSON created locally. Server credentials and access keys are never included.');
+  }
+
+  async function savePrivacyBackupFile(){
     setPrivacyDataNotice('');
     try{
-      const raw=JSON.parse(privacyRestoreText);
+      const text=privacyBackupJSON();
+      setPrivacyBackupText(text);
+      if(!documentDirectory)throw Error('Archivist storage is unavailable.');
+      const directory=documentDirectory+'backups/';
+      await makeDirectoryAsync(directory,{intermediates:true});
+      const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+      const uri=directory+'Archivist-backup-'+stamp+'.json';
+      await writeAsStringAsync(uri,text);
+      if(await Sharing.isAvailableAsync()){
+        await Sharing.shareAsync(uri,{mimeType:'application/json',dialogTitle:'Save Archivist backup'});
+        setPrivacyDataNotice('Backup file created. Server credentials and access keys were not included.');
+      }else{
+        setPrivacyManualBackupOpen(true);
+        setPrivacyDataNotice('Backup created locally. File sharing is unavailable here, so the JSON backup is shown below.');
+      }
+    }catch(e){setPrivacyDataNotice('Backup could not be created: '+(e as Error).message);}
+  }
+
+  async function restorePrivacyBackupText(text:string){
+    setPrivacyDataNotice('');
+    try{
+      const raw=JSON.parse(text);
       if(!raw||raw.archivistBackup!==1)throw Error('This is not an Archivist backup snapshot.');
       if(raw.theme==='system'||raw.theme==='light'||raw.theme==='dark')await chooseTheme(raw.theme);
       if(raw.accessibility&&typeof raw.accessibility==='object')await saveAccessibilityPreferences({reduceMotion:!!raw.accessibility.reduceMotion,highContrast:!!raw.accessibility.highContrast,largeText:!!raw.accessibility.largeText});
@@ -6293,15 +6322,31 @@ function Client() {
       if(Array.isArray(raw.readerBookmarks)){const value=sanitizeReaderBookmarks(raw.readerBookmarks);setReaderBookmarks(value);await setPersistedJSON(readerBookmarksKey,value);}
       if(Array.isArray(raw.readerAnnotations)){const value=sanitizeReaderAnnotations(raw.readerAnnotations);setReaderAnnotations(value);await setPersistedJSON(readerAnnotationsKey,value);}
       if(raw.localPreferences&&typeof raw.localPreferences==='object'){setLocalPreferences(raw.localPreferences);await setPersistedJSON(localPreferencesKey,raw.localPreferences);}
-      if(raw.ritualDays&&typeof raw.ritualDays==='object'){const value=Object.fromEntries(Object.entries(raw.ritualDays).filter(([key,value])=>/^\d{4}-\d{2}-\d{2}$/.test(key)&&Number.isFinite(Number(value))).map(([key,value])=>[key,Math.max(0,Math.min(60,Number(value)))]));setRitualDays(value);await setPersistedJSON('archivist.dailyRitual.v1',value);}
+      if(raw.ritualDays&&typeof raw.ritualDays==='object'){setRitualDays(raw.ritualDays);await setPersistedJSON(ritualDaysKey,raw.ritualDays);}
       if(raw.localReadingProgress&&typeof raw.localReadingProgress==='object'){setLocalReadingProgress(raw.localReadingProgress);await setPersistedJSON(localReadingProgressKey,raw.localReadingProgress);}
       if(raw.localReadingComplete&&typeof raw.localReadingComplete==='object'){setLocalReadingComplete(raw.localReadingComplete);await setPersistedJSON(localReadingCompleteKey,raw.localReadingComplete);}
       if(raw.localReadingCurrentComplete&&typeof raw.localReadingCurrentComplete==='object'){setLocalReadingCurrentComplete(raw.localReadingCurrentComplete);await setPersistedJSON(localReadingCurrentCompleteKey,raw.localReadingCurrentComplete);}
       if(raw.localWorkProgress&&typeof raw.localWorkProgress==='object'){setLocalWorkProgress(raw.localWorkProgress);await setPersistedJSON(localWorkProgressKey,raw.localWorkProgress);}
       if(raw.localAudioCompleted&&typeof raw.localAudioCompleted==='object'){setLocalAudioCompleted(raw.localAudioCompleted);await setPersistedJSON(localAudioCompletedKey,raw.localAudioCompleted);}
-      setPrivacyDataNotice('Backup restored. Server credentials remain unchanged.');
-      setPrivacyRestoreText('');
-    }catch(e){setPrivacyDataNotice((e as Error).message||'Backup could not be restored.');}
+      setPrivacyDataNotice('Backup restored. Server credentials and access keys were left unchanged.');
+    }catch(e){setPrivacyDataNotice('Backup could not be restored: '+(e as Error).message);}
+  }
+
+  async function restorePrivacyBackup(){
+    await restorePrivacyBackupText(privacyRestoreText);
+  }
+
+  async function restorePrivacyBackupFile(){
+    setPrivacyDataNotice('');
+    try{
+      const result=await DocumentPicker.getDocumentAsync({type:'application/json',copyToCacheDirectory:true,multiple:false});
+      if(result.canceled||!result.assets?.length)return;
+      const asset=result.assets[0];
+      if(asset.size&&asset.size>5*1024*1024)throw Error('Backup file is larger than the 5 MB safety limit.');
+      const text=await readAsStringAsync(asset.uri);
+      setPrivacyRestoreText(text);
+      await restorePrivacyBackupText(text);
+    }catch(e){setPrivacyDataNotice('Backup could not be restored: '+(e as Error).message);}
   }
 
   function Settings() {
@@ -6384,12 +6429,18 @@ function Client() {
               <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>External metadata network access</Text><Text style={[styles.meta,{color:p.muted}]}>Off in this build. Scanning uses local/embedded metadata and connected Archivist server data.</Text></View><Text style={[styles.settingsStateLabel,{color:p.sage}]}>OFF</Text></View>
               <View style={styles.settingsSubgroup}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Backup & restore</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>Create a portable JSON snapshot of reading history and non-sensitive app settings, or paste one back to restore it.</Text>
-                <View style={styles.settingsInlineActions}><Button label="Create backup snapshot" tone="quiet" onPress={createPrivacyBackup}/>{privacyBackupText?<Pressable accessibilityRole="button" onPress={()=>setPrivacyBackupText('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide</Text></Pressable>:null}</View>
-                {privacyBackupText?<Text selectable style={[styles.settingsBackupText,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}>{privacyBackupText}</Text>:null}
-                <TextInput accessibilityLabel="Paste Archivist backup snapshot" multiline value={privacyRestoreText} onChangeText={setPrivacyRestoreText} placeholder="Paste backup JSON here" placeholderTextColor={p.muted} style={[styles.settingsRestoreInput,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}/>
-                <Button label="Restore backup snapshot" disabled={!privacyRestoreText.trim()} onPress={()=>void restorePrivacyBackup()}/>
-                {privacyDataNotice?<Text style={[styles.meta,{color:privacyDataNotice.includes('could not')||privacyDataNotice.includes('not an')?p.danger:p.sage}]}>{privacyDataNotice}</Text>:null}
+                <Text style={[styles.meta,{color:p.muted}]}>Save a portable backup file of reading history and non-sensitive app settings, or restore one from Files. Server credentials and access keys are never included.</Text>
+                <View style={styles.settingsInlineActions}>
+                  <Button label="Save backup file" tone="quiet" onPress={()=>void savePrivacyBackupFile()}/>
+                  <Button label="Restore from file" tone="quiet" onPress={()=>void restorePrivacyBackupFile()}/>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityState={{expanded:privacyManualBackupOpen}} onPress={()=>{setPrivacyManualBackupOpen(value=>!value);if(!privacyManualBackupOpen&&!privacyBackupText)createPrivacyBackup();}} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>{privacyManualBackupOpen?'Hide manual JSON backup':'Manual JSON backup'}</Text></Pressable>
+                {privacyManualBackupOpen?<>
+                  {privacyBackupText?<Text selectable style={[styles.settingsBackupText,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}>{privacyBackupText}</Text>:null}
+                  <TextInput accessibilityLabel="Paste Archivist backup snapshot" multiline value={privacyRestoreText} onChangeText={setPrivacyRestoreText} placeholder="Paste backup JSON here" placeholderTextColor={p.muted} style={[styles.settingsRestoreInput,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}/>
+                  <Button label="Restore pasted JSON" disabled={!privacyRestoreText.trim()} onPress={()=>void restorePrivacyBackup()}/>
+                </>:null}
+                {privacyDataNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:privacyDataNotice.includes('could not')||privacyDataNotice.includes('not an')?p.danger:p.sage}]}>{privacyDataNotice}</Text>:null}
               </View>
             </View>
           </View>
