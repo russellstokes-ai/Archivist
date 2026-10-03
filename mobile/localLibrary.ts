@@ -106,6 +106,7 @@ export type LocalScanResult = {
   truncatedReason?: 'book-limit' | 'entry-limit';
   identified: number;
   review: number;
+  entriesVisited: number;
 };
 
 const supported = new Map<string, string>([
@@ -374,6 +375,7 @@ export async function scanLocalFolders(
     truncatedReason,
     identified: books.length - review,
     review,
+    entriesVisited,
   };
 }
 
