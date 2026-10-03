@@ -11,6 +11,10 @@ console.log('PASS: Android startup configuration matches current Expo production
 const appPkg=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8'));
 assert.equal(appPkg.dependencies?.['expo-asset'],'~55.0.20','Expo SDK 55 standalone audio builds require the matching expo-asset dependency.');
 assert.equal(appPkg.dependencies?.['expo-file-system'],'~55.0.26','Use the Expo SDK 55 file-system native module.');
+assert.equal(appPkg.dependencies?.['react-native-unarchive'],'^1.1.0','Cross-platform CBR extraction dependency must remain installed.');
+assert.equal(appPkg.dependencies?.['expo-build-properties'],'~55.0.18','Use the Expo SDK 55 build-properties plugin.');
+const buildProps=(app.expo.plugins||[]).find(plugin=>Array.isArray(plugin)&&plugin[0]==='expo-build-properties');
+assert.equal(buildProps?.[1]?.ios?.deploymentTarget,'15.5','iOS deployment target must satisfy native CBR archive dependencies.');
 const manifest=fs.readFileSync(path.join(__dirname,'android','app','src','main','AndroidManifest.xml'),'utf8');
 assert.equal(manifest.includes('android.permission.RECORD_AUDIO'),false,'Archivist playback does not request microphone access.');
 assert.equal(manifest.includes('android.permission.POST_NOTIFICATIONS'),true,'Background media controls require Android 13+ notification permission declaration.');
