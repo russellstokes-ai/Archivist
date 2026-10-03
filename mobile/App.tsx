@@ -563,6 +563,9 @@ function Client() {
   const [atlasNodeId,setAtlasNodeId]=useState('');
   const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
   const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number;moved:boolean}|null>(null);
+  const atlasTransformGeneration=useRef(0);
+  const atlasGestureFrame=useRef<number|null>(null);
+  const atlasPendingTransform=useRef<{x:number;y:number;scale:number}|null>(null);
   const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
   const [duplicateScope,setDuplicateScope]=useState<'local'|'server'>('local');
   const [duplicateLoading,setDuplicateLoading]=useState(false);
@@ -655,6 +658,7 @@ function Client() {
   const [lastPlaying,setLastPlaying]=useState<Book|null>(null);
   const tabTransition=useRef(new Animated.Value(1)).current;
   const liveModeTransition=useRef(new Animated.Value(1)).current;
+  const shelfSkeletonPulse=useRef(new Animated.Value(.45)).current;
   const player = useAudioPlayer(null);
   const audio = useAudioPlayerStatus(player);
   const sessionRef = useRef(session);
@@ -834,6 +838,18 @@ function Client() {
     Animated.timing(liveModeTransition,{toValue:1,duration:180,useNativeDriver:true}).start();
     return()=>liveModeTransition.stopAnimation();
   },[liveMode,liveModeTransition,reduceMotion]);
+
+  useEffect(()=>{
+    shelfSkeletonPulse.stopAnimation();
+    shelfSkeletonPulse.setValue(.45);
+    if(reduceMotion||!appActive||!shelfLoading)return;
+    const loop=Animated.loop(Animated.sequence([
+      Animated.timing(shelfSkeletonPulse,{toValue:.72,duration:760,useNativeDriver:true}),
+      Animated.timing(shelfSkeletonPulse,{toValue:.45,duration:760,useNativeDriver:true}),
+    ]));
+    loop.start();
+    return()=>{loop.stop();shelfSkeletonPulse.setValue(.45);};
+  },[appActive,reduceMotion,shelfLoading,shelfSkeletonPulse]);
 
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
@@ -2912,9 +2928,9 @@ function Client() {
       else if(remote)void saveServerPreference(remote,{...personal,favourite:!personal.favourite});
       close();
     };
-    return <Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={close}>
-      <Pressable style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
-        <Pressable accessibilityViewIsModal={true} accessibilityLabel={'Actions for '+work.title} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close actions" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
+        <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Actions for '+work.title} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
           <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
           <View style={styles.sheetHeader}>
             <View style={{flex:1,minWidth:0}}>
@@ -2991,7 +3007,7 @@ function Client() {
       if(remote&&owner&&matchingServerSources.length===1){void sourceAction('/api/sources/'+matchingServerSources[0].id+'/scan');close();return;}
       openServerManagement();
     };
-    return <Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={close}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
       <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
         <ScrollView contentContainerStyle={styles.workDetailsScroll}>
           <View accessibilityViewIsModal={true} accessibilityLabel={'Work details for '+work.title} style={[styles.workDetailsSheet,{backgroundColor:p.paper,borderColor:p.line}]}>
@@ -3089,7 +3105,7 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    return <Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={()=>{if(!busy){setEditing(null);setEditingUris([])}}}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>{if(!busy){setEditing(null);setEditingUris([])}}}>
       <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
         <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
           <View accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
@@ -3142,7 +3158,7 @@ function Client() {
   function OrganisationPanel(){
     if(!organisationModal)return null;
     const close=()=>{setOrganisationModal(null);setOrganisationName('');setCollectionTarget(null);setRenameTarget(null)};
-    return <Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={close}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
       <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled">
         <View accessibilityViewIsModal={true} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
           <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
@@ -3185,7 +3201,7 @@ function Client() {
     if(!shelfManageOpen)return null;
     const move=(index:number,direction:-1|1)=>{const target=index+direction;if(target<0||target>=shelfSections.length)return;const next=[...shelfSections];[next[index],next[target]]=[next[target],next[index]];void saveShelfSections(next)};
     const toggle=(id:ShelfSectionId)=>void saveShelfSections(shelfSections.map(item=>item.id===id?{...item,visible:!item.visible}:item));
-    return <Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={()=>setShelfManageOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setShelfManageOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
       <View accessibilityViewIsModal={true} accessibilityLabel="Customise Shelf" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
         <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Customise Shelf</Text>
         <Text style={[styles.meta,{color:p.muted}]}>Choose what appears and arrange it around the way you use your library.</Text>
@@ -3501,7 +3517,7 @@ function Client() {
         {!session&&!recoverableSession&&!shelfServerPromptHidden?<Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/>:null}
       </View>:null}
 
-      {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><View key={i} style={[styles.skeletonCard,{backgroundColor:p.card}]}/>)}</View>:null}
+      {shelfLoading?<View style={styles.skeletonRow}>{[0,1,2,3].map(i=><Animated.View key={i} style={[styles.skeletonCard,{backgroundColor:p.card,opacity:reduceMotion?.45:shelfSkeletonPulse}]}/>)}</View>:null}
       {shelfSections.filter(item=>item.id!=='continue').map(section)}
 
       <View style={[styles.shelfBrowseBand,{borderTopColor:p.line,borderBottomColor:p.line}]}>
@@ -3621,16 +3637,16 @@ function Client() {
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
       <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/><LibraryManagementPanel/>
-      {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
-        <Pressable style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibrarySourcesOpen(false)}>
-          <Pressable accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
+      {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibrarySourcesOpen(false)}>
+          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
             <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
             <View style={styles.sheetHeader}><View style={{flex:1}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Sources & folders</Text><Text style={[styles.meta,{color:p.muted}]}>Choose where the catalogue is physically stored.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close sources and folders" onPress={()=>setLibrarySourcesOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable></View>
             <ScrollView contentContainerStyle={styles.librarySourceSheetBody}><LibrarySourceNavigator compact/></ScrollView>
           </Pressable>
         </Pressable>
       </Modal>:null}
-      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll}><View accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
+      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll}><View accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.filterWrap}>{([
           ['title','Title'],
           ['author','Author'],
@@ -3899,7 +3915,7 @@ function Client() {
   function ReaderTools(){
     if(!reading)return null;const workKey=readerWorkKey(reading);const bookmarks=workReaderBookmarks(readerBookmarks,workKey);const annotations=workReaderAnnotations(readerAnnotations,workKey);
     const updateScale=(delta:number)=>void persistReaderAppearance({...readerAppearance,scale:Math.max(.78,Math.min(1.5,readerAppearance.scale+delta))});
-    return <Modal transparent animationType={reduceMotion?'none':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled"><View accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled"><View accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
       <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
       <View style={styles.readerSheetHeader}>
         <View style={{flex:1}}>
@@ -4107,11 +4123,24 @@ function Client() {
     );
   }
 
+  function scheduleAtlasTransform(next:{x:number;y:number;scale:number}){
+    atlasPendingTransform.current=next;
+    if(atlasGestureFrame.current!==null)return;
+    atlasGestureFrame.current=requestAnimationFrame(()=>{
+      atlasGestureFrame.current=null;
+      const pending=atlasPendingTransform.current;
+      atlasPendingTransform.current=null;
+      if(pending)setAtlasTransform(pending);
+    });
+  }
+
   function animateAtlasTransform(target:{x:number;y:number;scale:number},duration=420){
+    const generation=++atlasTransformGeneration.current;
     if(reduceMotion){setAtlasTransform(target);return;}
     const start={...atlasTransform};
     const started=Date.now();
     const frame=()=>{
+      if(generation!==atlasTransformGeneration.current)return;
       const raw=Math.min(1,(Date.now()-started)/duration);
       const t=1-Math.pow(1-raw,3);
       setAtlasTransform({
@@ -4153,7 +4182,8 @@ function Client() {
       if(gesture.mode!=='pinch'){atlasGestureStart(event);return;}
       const nextScale=Math.max(.18,Math.min(2.25,gesture.baseScale*(distance/gesture.distance)));
       const ratio=nextScale/gesture.baseScale;
-      setAtlasTransform({x:gesture.focusX-(gesture.focusX-gesture.baseX)*ratio,y:gesture.focusY-(gesture.focusY-gesture.baseY)*ratio,scale:nextScale});
+      ++atlasTransformGeneration.current;
+      scheduleAtlasTransform({x:gesture.focusX-(gesture.focusX-gesture.baseX)*ratio,y:gesture.focusY-(gesture.focusY-gesture.baseY)*ratio,scale:nextScale});
       return;
     }
     if(gesture.mode==='pinch')return;
@@ -4161,7 +4191,8 @@ function Client() {
     const dx=(point.locationX||0)-gesture.startX,dy=(point.locationY||0)-gesture.startY;
     if(Math.hypot(dx,dy)>7)gesture.moved=true;
     if(!gesture.moved)return;
-    setAtlasTransform(current=>({...current,x:gesture.baseX+dx,y:gesture.baseY+dy}));
+    ++atlasTransformGeneration.current;
+    scheduleAtlasTransform({x:gesture.baseX+dx,y:gesture.baseY+dy,scale:gesture.baseScale});
   }
 
   function atlasSelectNearestNodeAt(viewX:number,viewY:number){
@@ -4550,9 +4581,9 @@ function Client() {
       canvas:darkStats?'#07111D':'#F7F7F5',
       panel:darkStats?'#0B1725':'#FFFFFF',
       panelRaised:darkStats?'#0E1C2C':'#FAFAF8',
-      line:darkStats?'#26364A':'#D9D7D0',
+      line:accessibilityPrefs.highContrast?(darkStats?'#526274':'#B5B1A7'):(darkStats?'#26364A':'#D9D7D0'),
       ink:darkStats?'#F3F0E8':'#111316',
-      muted:darkStats?'#A9B4C5':'#68717D',
+      muted:accessibilityPrefs.highContrast?(darkStats?'#D5DDE8':'#414852'):(darkStats?'#A9B4C5':'#68717D'),
       gold:darkStats?'#E3BC67':'#A67C2E',
       goldSoft:darkStats?'#8F7446':'#E6D7B6',
       blue:darkStats?'#8FB5D1':'#6C8EA8',
@@ -5425,7 +5456,7 @@ function Client() {
     const localDuplicateCount=localDuplicateGroups.reduce((sum,group)=>sum+group.items.length,0);
     const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
     const openReview=()=>{clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
-    return <Modal transparent animationType={reduceMotion?'none':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
       <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.libraryManageScroll}>
           <View accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]}>
@@ -5706,7 +5737,7 @@ function Client() {
               </View>
               <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Reduced motion</Text><Text style={[styles.meta,{color:p.muted}]}>Disables decorative pulses, page motion and overlay transitions. Device Reduce Motion is always respected.</Text></View><Toggle label="Reduced motion" value={accessibilityPrefs.reduceMotion} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,reduceMotion:!accessibilityPrefs.reduceMotion})}/></View>
               <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Increased contrast</Text><Text style={[styles.meta,{color:p.muted}]}>Strengthens secondary text and interface dividers in both themes.</Text></View><Toggle label="Increased contrast" value={accessibilityPrefs.highContrast} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,highContrast:!accessibilityPrefs.highContrast})}/></View>
-              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Larger interface text</Text><Text style={[styles.meta,{color:p.muted}]}>Increases shared headings and Settings/Profile labels while continuing to respect device font scaling.</Text></View><Toggle label="Larger interface text" value={accessibilityPrefs.largeText} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,largeText:!accessibilityPrefs.largeText})}/></View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Larger interface text</Text><Text style={[styles.meta,{color:p.muted}]}>Increases key interface headings and navigation labels while continuing to respect device font scaling.</Text></View><Toggle label="Larger interface text" value={accessibilityPrefs.largeText} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,largeText:!accessibilityPrefs.largeText})}/></View>
             </View>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
