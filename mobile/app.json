@@ -3,6 +3,7 @@
     "name": "Archivist",
     "slug": "archivist",
     "version": "0.9.3",
+    "extra": {"router": {"origin": "https://f0d86f2330.sandbox.draftbit.dev:5100"}},
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
