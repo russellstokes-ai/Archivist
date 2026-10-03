@@ -1,4 +1,4 @@
-# Archivist 0.9.2 — Testing Readiness
+# Archivist 0.9.2 â€” Testing Readiness
 
 **Candidate branch:** `dev/archivist-work`  
 **Candidate mobile commit:** `77842e1f`  
@@ -76,7 +76,7 @@ Current runtime candidate `77842e1f` is the crafted UI sweep head. Its Mobile ch
 
 ## Sprint status
 
-- **Sprint 1–4:** durable foundations/player/reader/offline work complete in the recovered development branch.
+- **Sprint 1â€“4:** durable foundations/player/reader/offline work complete in the recovered development branch.
 - **Sprint 5:** Atlas complete and CI-proven.
 - **Sprint 6:** Insights, family and organisation complete and CI-proven.
 - **Sprint 7:** core server/resilience/ecosystem scope complete and CI-proven.
@@ -115,7 +115,7 @@ Do not call 0.9.2 a production store release until the physical checks above pas
 
 Do not merge `dev/archivist-work` to `main` solely because CI is green; merge only after the user approves the physical testing candidate.
 
-## 2026-10-02 completion pass — burst 1
+## 2026-10-02 completion pass â€” burst 1
 
 IMPLEMENTED
 - All mobile CI workflows invoke `npm test`; the runner discovers every maintained root-level `*.test.cjs` suite and reports all failures.
@@ -137,7 +137,7 @@ BLOCKED / REMAINING
 - No final APK or server release produced. Existing JS sleep tests do not establish native background sleep-timer reliability.
 - Font metrics, enlarged text, first viewport and Fold reflow require actual native screen review before the next visual sprint is accepted.
 
-## 2026-10-02 completion pass — burst 2
+## 2026-10-02 completion pass â€” burst 2
 
 IMPLEMENTED
 - Rebuilt the server presentation with the shared bundled editorial face, white/black canvases, Sage selection, desktop navigation rail, phone navigation and 2/4/5-column catalogue compositions.
@@ -163,11 +163,29 @@ BLOCKED / REMAINING
 - Native app visual acceptance and the other engineering work listed in burst 1 remain outstanding.
 - Explicit user gate: do not build any APK until both app and server UI are finished and verified. No APK built or workflow dispatched; no changes pushed or merged.
 
-### 2 October — award and preview burst
+### 2 October â€” award and preview burst
 Mobile award catalogue expanded from 7 to 69, with device-local daily ritual tracking and category filters. Reward overlay now follows theme and reduced-motion preference. Profile/streak boundary tests and all 20 mobile suites pass; TypeScript check passes. Browser adapter captures cover 13 mobile views in light/dark phone/Fold and server Library, Atlas and settings. Native timing, background activity, cross-device/server award parity and competitor count remain unverified. Overall UI is not complete and no APK was built.
 
-### 2 October — Living Book, Atlas and atmosphere
+### 2 October â€” Living Book, Atlas and atmosphere
 Implemented three-page skip animations, ivory-page Living Book, restrained teal glow and gold reward fireworks. Browser motion checks passed for exactly three leaves, forward/reverse, seeks, rapid taps and reduced motion. Mobile 20-suite gate/typecheck passed. Server Atlas now uses a connected SVG graph and canonical relationship inspection; browser tests pass for zoom/search/selection. All three server web copies match. Browser previews use fixtures; native transforms, native playback and real-server acceptance remain outstanding. No APK built.
 
-### 2 October � authorised testing build 0.9.3
+### 2 October — authorised testing build 0.9.3
 User explicitly authorised APK build, download publication and GitHub server update. This supersedes the earlier no-APK instruction. Version 0.9.3 / Android code 93 includes the saved Living Book, Atlas ring, profile statistics and 143 award milestones. Mobile typecheck, all 20 suites and browser navigation passed before packaging. Native physical-device acceptance, server publication-year ingestion and server sorting parity remain open; this is a testing release, not a commercial-readiness assertion.
+
+
+## 2026-10-03 — UI polish Sprints 4–6
+
+### Implemented and source-verified
+- **Sprint 4 — Profile:** richer identity hero with Archivist level ring/title, derived reading traits, reading snapshot, personal bests, current goals, milestone highlights, and persistent level-aware profile chrome.
+- **Profile avatar:** initials remain the working local fallback; rendering now supports a persisted photoUri when present. A native photo picker is **not** claimed complete because the current mobile package does not include an image-picker dependency.
+- **Sprint 5 — Settings:** rebuilt around the six approved areas only: Library & Metadata; Offline & Storage; Privacy & Data; Server & Family; Accessibility; About Archivist.
+- **Privacy & Data:** local-first messaging plus local JSON backup/restore for non-sensitive reading/app data; server credentials and access keys are excluded.
+- **Accessibility:** persistent Reduced Motion, Increased Contrast and Larger Interface Text preferences; effective Reduced Motion also respects the device setting and remains the master switch for decorative motion.
+- **About:** app version/build context, platform, connected-server state and diagnostics. Server version is shown as unavailable when the current server API does not report one.
+- **Sprint 6 — source QA:** no missing styles references found; phone/Fold page shells retain the shared responsive gutters; Profile/Rewards/Settings remain aligned at the same 980px max width; the six Settings area labels are present and stale top-level headings are absent; theme-aware halo and reduced-motion paths remain wired.
+- UI contract updated to lock the richer Profile, six-section Settings structure, local backup/restore, persistent accessibility preferences, progression ring, Rewards progression/trophies, Atlas nearest-node selection and floating inspector.
+
+### Still requires runtime proof
+- Draftbit visual confirmation on phone-width and Fold-width layouts in both light and dark themes.
+- Native typecheck/test execution for these latest commits has **not** been observed from GitHub Actions on this branch; do not mark CI passed.
+- Native photo picking is not implemented until an image-picker dependency is added and verified without breaking the Draftbit/mobile dependency lock.

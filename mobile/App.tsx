@@ -33,7 +33,7 @@ import {reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
-import {Achievement, achievementsFor, clampProgress, localDay, streakStats, VerifiedProfileStats} from './profileStats';
+import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {possibleLocalDuplicateGroups} from './duplicates';
@@ -170,7 +170,8 @@ type Tab = 'shelf' | 'library' | 'now' | 'player' | 'reader' | 'atlas' | 'insigh
 type ShelfSectionId = 'continue' | 'formats' | 'favourites' | 'smart' | 'collections' | 'series' | 'library';
 type ShelfSectionPref = {id:ShelfSectionId;title:string;visible:boolean};
 type ThemeMode = 'system' | 'light' | 'dark';
-type ProfileAvatarConfig = {initials:string;color:string};
+type AccessibilityPreferences = {reduceMotion:boolean;highContrast:boolean;largeText:boolean};
+type ProfileAvatarConfig = {initials:string;color:string;photoUri?:string};
 type Palette = {
   ink: string;
   paper: string;
@@ -187,6 +188,7 @@ type Palette = {
 
 const storageKey = 'archivist.session';
 const themeKey = 'archivist.theme';
+const accessibilityPreferencesKey = 'archivist.accessibility.v1';
 const localFoldersKey = 'archivist.localFolders';
 const localProgressKey = 'archivist.localProgress';
 const localReadingProgressKey = 'archivist.localReadingProgress';
@@ -230,18 +232,18 @@ function validateServer(raw: string) {
   return checkServer(raw, __DEV__);
 }
 
-function palette(mode: ThemeMode, system: string | null | undefined): Palette {
+function palette(mode: ThemeMode, system: string | null | undefined, highContrast=false): Palette {
   const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
   return {
-    ink: dark ? '#F5F5F5' : '#111111',
-    paper: dark ? '#000000' : '#FFFFFF',
-    muted: dark ? '#A0A0A0' : '#6B6B6B',
-    line: dark ? '#252525' : '#E8E8E8',
-    card: dark ? '#111111' : '#F7F7F7',
-    raised: dark ? '#181818' : '#FFFFFF',
-    sage: '#47736F',
-    gold: '#B99A68',
-    ivory: '#FFFFFF',
+    ink: dark ? '#F5F5F5' : '#171410',
+    paper: dark ? '#000000' : '#FBFAF7',
+    muted: dark ? (highContrast?'#C7C7C7':'#A0A0A0') : (highContrast?'#4D463D':'#6D675E'),
+    line: dark ? (highContrast?'#4A4A4A':'#252525') : (highContrast?'#C6B9A5':'#E3DDD2'),
+    card: dark ? '#111111' : '#F4F0E8',
+    raised: dark ? '#181818' : '#FFFDF9',
+    sage: dark ? '#47736F' : '#557B76',
+    gold: dark ? '#B99A68' : '#A67A2F',
+    ivory: dark ? '#FFFFFF' : '#FFFDF7',
     danger: dark ? '#DE8585' : '#A94F4F',
     dangerSoft: dark ? '#351F20' : '#F4E1DF',
   };
@@ -501,7 +503,12 @@ function Client() {
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const [theme, setTheme] = useState<ThemeMode>('system');
-  const p = useMemo(() => palette(theme, systemScheme), [theme, systemScheme]);
+  const [accessibilityPrefs,setAccessibilityPrefs]=useState<AccessibilityPreferences>({reduceMotion:false,highContrast:false,largeText:false});
+  const p = useMemo(() => palette(theme, systemScheme,accessibilityPrefs.highContrast), [theme, systemScheme,accessibilityPrefs.highContrast]);
+  const darkMode=p.paper==='#000000';
+  const ambientHaloColor=darkMode?'#2F8B86':'#C99A43';
+  const ambientHaloStrength=darkMode?.95:.48;
+  const interfaceHaloColor=darkMode?null:p.gold;
   const [session, setSession] = useState<Session | null>(null);
   const [recoverableSession, setRecoverableSession] = useState<Session | null>(null);
   const [server, setServer] = useState('');
@@ -535,7 +542,7 @@ function Client() {
   const [atlasSearch,setAtlasSearch]=useState('');
   const [atlasNodeId,setAtlasNodeId]=useState('');
   const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
-  const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number}|null>(null);
+  const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number;moved:boolean}|null>(null);
   const [duplicatePanelOpen,setDuplicatePanelOpen]=useState(false);
   const [duplicateScope,setDuplicateScope]=useState<'local'|'server'>('local');
   const [duplicateLoading,setDuplicateLoading]=useState(false);
@@ -633,7 +640,8 @@ function Client() {
   const [chapterOverrides,setChapterOverrides]=useState<ChapterOverrideMap>({});
   const [chapterEditIndex,setChapterEditIndex]=useState<number|null>(null);
   const [chapterEditTitle,setChapterEditTitle]=useState('');
-  const [reduceMotion,setReduceMotion]=useState(false);
+  const [systemReduceMotion,setSystemReduceMotion]=useState(false);
+  const reduceMotion=systemReduceMotion||accessibilityPrefs.reduceMotion;
   const [appActive,setAppActive]=useState(AppState.currentState==='active');
   useEffect(()=>{
     interfacePulse.stopAnimation();interfacePulse.setValue(0);
@@ -700,6 +708,9 @@ function Client() {
   const [offlineStorageBusy,setOfflineStorageBusy]=useState(false);
   const [offlineBusyId,setOfflineBusyId]=useState<number|null>(null);
   const [offlineProgress,setOfflineProgress]=useState('');
+  const [privacyBackupText,setPrivacyBackupText]=useState('');
+  const [privacyRestoreText,setPrivacyRestoreText]=useState('');
+  const [privacyDataNotice,setPrivacyDataNotice]=useState('');
   const loadCancel = useRef<(() => void) | null>(null);
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
@@ -773,7 +784,7 @@ function Client() {
 
 
   useEffect(()=>{
-    const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduceMotion);
+    const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setSystemReduceMotion);
     return()=>subscription.remove();
   },[]);
 
@@ -935,6 +946,7 @@ function Client() {
     : combinedProfileStats;
 
   const profileAchievements = useMemo(() => profileStats ? achievementsFor({...profileStats,bestStreak:ritual.bestStreak,activeDays:ritual.activeDays}) : [], [profileStats,ritual.bestStreak,ritual.activeDays]);
+  const profileProgression = useMemo(() => profileStats ? progressionFor({...profileStats,bestStreak:ritual.bestStreak,activeDays:ritual.activeDays}) : null, [profileStats,ritual.bestStreak,ritual.activeDays]);
   const insightWorks=useMemo(()=>sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter(work=>matchesSource(work.source,sourceFilter)),[allUnifiedWorks,sourceFilter,sourceWorks]);
   const insightSummary=useMemo(()=>buildInsights(insightWorks,readerAnnotations,sourceFilter==='local'||sourceFilter==='downloaded'?[]:serverActivity,insightGoal),[insightGoal,insightWorks,readerAnnotations,serverActivity,sourceFilter]);
 
@@ -1175,6 +1187,9 @@ function Client() {
     SecureStore.getItemAsync(themeKey).then(value => {
       if (value === 'system' || value === 'light' || value === 'dark') setTheme(value);
     }).catch(() => undefined);
+    getPersistedJSON<AccessibilityPreferences>(accessibilityPreferencesKey).then(value => {
+      if(value&&typeof value==='object')setAccessibilityPrefs({reduceMotion:!!value.reduceMotion,highContrast:!!value.highContrast,largeText:!!value.largeText});
+    }).catch(()=>undefined);
     getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
     }).catch(() => undefined);
@@ -1234,10 +1249,10 @@ function Client() {
     getPersistedJSON<ReaderAnnotation[]>(readerAnnotationsKey).then(value=>setReaderAnnotations(sanitizeReaderAnnotations(value))).catch(()=>undefined);
     getPersistedJSON<ReaderAppearance>(readerAppearanceKey).then(value=>setReaderAppearance(sanitizeReaderAppearance(value))).catch(()=>undefined);
     getPersistedJSON(insightGoalKey).then(value=>{const goal=sanitizeInsightGoal(value);setInsightGoal(goal);setGoalDraft({completed:String(goal.completedTarget),annotations:String(goal.annotationTarget)});}).catch(()=>undefined);
-    getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F')});}).catch(()=>undefined);
+    getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F'),photoUri:typeof value.photoUri==='string'?value.photoUri:undefined});}).catch(()=>undefined);
     getPersistedJSON<Book>(lastReadingKey).then(value=>{if(value&&typeof value==='object')setLastReading(value);}).catch(()=>undefined);
     getPersistedJSON<Book>(lastPlayingKey).then(value=>{if(value&&typeof value==='object')setLastPlaying(value);}).catch(()=>undefined);
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
+    AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
     }).catch(() => undefined);
@@ -1470,6 +1485,11 @@ function Client() {
   async function chooseTheme(next: ThemeMode) {
     setTheme(next);
     await SecureStore.setItemAsync(themeKey, next);
+  }
+
+  async function saveAccessibilityPreferences(next:AccessibilityPreferences){
+    setAccessibilityPrefs(next);
+    await setPersistedJSON(accessibilityPreferencesKey,next);
   }
 
   async function refreshSourcesAndShelf() {
@@ -2924,7 +2944,7 @@ function Client() {
   const avatarInitials=(profileAvatar.initials||String(profileStats?.name||'Reader').trim().split(/\s+/).map(part=>part[0]||'').join('').slice(0,2)||'R').toUpperCase();
 
   async function saveProfileAvatar(next:ProfileAvatarConfig){
-    const cleaned={initials:String(next.initials||'').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase(),color:avatarColours.includes(next.color)?next.color:'#47736F'};
+    const cleaned={initials:String(next.initials||'').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase(),color:avatarColours.includes(next.color)?next.color:'#47736F',photoUri:typeof next.photoUri==='string'&&next.photoUri.trim()?next.photoUri.trim():undefined};
     setProfileAvatar(cleaned);
     try{await setPersistedJSON(profileAvatarKey,cleaned);}catch(e){setError((e as Error).message);}
   }
@@ -2944,19 +2964,30 @@ function Client() {
 
   function ProfileAvatarButton({size=42}:{size?:number}={}){
     const avatarColor=profileAvatar.color||'#47736F';
-    return <View style={[styles.profileAvatarButtonWrap,{width:size,height:size}]}>
-      {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:size/2,backgroundColor:avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[.36,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.42]})}]}]}/>:null}
-      <Pressable accessibilityRole="button" accessibilityLabel={profileMenuOpen?'Close profile menu':'Open profile menu'} accessibilityState={{expanded:profileMenuOpen}} onPress={profileMenuOpen?()=>closeProfileMenu():openProfileMenu} style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:avatarColor}]}>
-        <Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>
+    const ringSize=size+10;
+    const level=profileProgression?.overall.level||1;
+    const levelProgress=profileProgression?.overall.progress||0;
+    const ringItems:ChartItem[]=[
+      {label:'Level progress',count:Math.max(.001,levelProgress),color:p.gold},
+      {label:'Remaining',count:Math.max(.001,1-levelProgress),color:darkMode?'#2A2A2A':'#D8CDBA'},
+    ];
+    return <View style={[styles.profileAvatarButtonWrap,{width:ringSize,height:ringSize}]}>
+      {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:ringSize/2,backgroundColor:interfaceHaloColor||avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.36:.28,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.38]})}]}]}/>:null}
+      <View pointerEvents="none" style={styles.profileAvatarLevelRing}><DataRing size={ringSize} items={ringItems} ink={p.ink} muted={p.muted} track={p.line} thickness={3} opacity={1}/></View>
+      <Pressable accessibilityRole="button" accessibilityLabel={profileMenuOpen?'Close profile menu':'Open profile menu'} accessibilityState={{expanded:profileMenuOpen}} onPress={profileMenuOpen?()=>closeProfileMenu():openProfileMenu} style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:avatarColor,overflow:'hidden'}]}>
+        {profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={{width:size,height:size}}/>:<Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>}
       </Pressable>
+      <View pointerEvents="none" style={[styles.profileAvatarLevelBadge,{backgroundColor:darkMode?'#0B1725':'#FFF8E9',borderColor:p.gold}]}>
+        <Text style={[styles.profileAvatarLevelText,{color:p.gold}]}>{level}</Text>
+      </View>
     </View>;
   }
 
   function PageHeader({title,subtitle}:{title:string;subtitle:string}){
     return <View style={styles.standardPageHeader}>
       <View style={styles.standardPageHeaderCopy}>
-        <Text maxFontSizeMultiplier={1.15} style={[styles.standardPageTitle,{color:p.ink}]}>{title}</Text>
-        <Text maxFontSizeMultiplier={1.2} style={[styles.standardPageSubtitle,{color:p.muted}]}>{subtitle}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={[styles.standardPageTitle,accessibilityPrefs.largeText&&styles.standardPageTitleLarge,{color:p.ink}]}>{title}</Text>
+        <Text maxFontSizeMultiplier={1.35} style={[styles.standardPageSubtitle,accessibilityPrefs.largeText&&styles.standardPageSubtitleLarge,{color:p.muted}]}>{subtitle}</Text>
       </View>
     </View>;
   }
@@ -2977,8 +3008,8 @@ function Client() {
         <Animated.View pointerEvents="box-none" style={[styles.profileMenuBackdropLayer,{opacity:profileMenuAnim}]}><Pressable accessibilityRole="button" accessibilityLabel="Close profile menu" onPress={()=>closeProfileMenu()} style={styles.profileMenuBackdrop}/></Animated.View>
         <Animated.View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
           <View style={styles.profileMenuIdentity}>
-            <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text></View>
-            <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>{unlocked} reward{unlocked===1?'':'s'} unlocked</Text></View>
+            <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileMenuAvatarImage}/>:<Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text>}</View>
+            <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>Level {profileProgression?.overall.level||1} · {profileProgression?.overall.title||'Reader'} · {unlocked} unlocked</Text></View>
           </View>
           {menuItems.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>closeProfileMenu(()=>setActiveTab(item.id))} style={({pressed})=>[styles.profileMenuItem,{borderTopColor:p.line,opacity:pressed?0.72:1}]}>
             <View style={[styles.profileMenuIcon,{backgroundColor:item.tone+'20',borderColor:item.tone+'55'}]}><UiIcon name={item.icon} color={item.tone} size={18}/></View>
@@ -3369,7 +3400,7 @@ function Client() {
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
+            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               {current.author?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>By {current.author}</Text>:null}
@@ -3758,11 +3789,11 @@ function Client() {
     if(touches.length>=2){
       const [a,b]=touches;
       const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
-      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:Math.max(1,Math.hypot(dx,dy)),focusX:(a.locationX+b.locationX)/2,focusY:(a.locationY+b.locationY)/2};
+      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:Math.max(1,Math.hypot(dx,dy)),focusX:(a.locationX+b.locationX)/2,focusY:(a.locationY+b.locationY)/2,moved:true};
       return;
     }
     const point=touches[0]||event.nativeEvent;
-    atlasGesture.current={mode:'pan',startX:point.locationX||0,startY:point.locationY||0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:0,focusX:0,focusY:0};
+    atlasGesture.current={mode:'pan',startX:point.locationX||0,startY:point.locationY||0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:0,focusX:0,focusY:0,moved:false};
   }
 
   function atlasGestureMove(event:any){
@@ -3780,7 +3811,31 @@ function Client() {
     }
     if(gesture.mode==='pinch')return;
     const point=touches[0]||event.nativeEvent;
-    setAtlasTransform(current=>({...current,x:gesture.baseX+(point.locationX-gesture.startX),y:gesture.baseY+(point.locationY-gesture.startY)}));
+    const dx=(point.locationX||0)-gesture.startX,dy=(point.locationY||0)-gesture.startY;
+    if(Math.hypot(dx,dy)>7)gesture.moved=true;
+    if(!gesture.moved)return;
+    setAtlasTransform(current=>({...current,x:gesture.baseX+dx,y:gesture.baseY+dy}));
+  }
+
+  function atlasSelectNearestNodeAt(viewX:number,viewY:number){
+    const candidates=atlasUniverse.nodes.filter(atlasNodeVisible);
+    let nearest:AtlasUniverseNode|null=null,nearestDistance=Infinity;
+    for(const node of candidates){
+      const x=atlasTransform.x+node.x*atlasTransform.scale;
+      const y=atlasTransform.y+node.y*atlasTransform.scale;
+      const distance=Math.hypot(x-viewX,y-viewY);
+      if(distance<nearestDistance){nearest=node;nearestDistance=distance;}
+    }
+    const selectionRadius=foldLayout?30:26;
+    if(nearest&&nearestDistance<=selectionRadius)selectAtlasNode(nearest.id);
+  }
+
+  function atlasGestureEnd(event:any){
+    const gesture=atlasGesture.current;
+    atlasGesture.current=null;
+    if(!gesture||gesture.mode!=='pan'||gesture.moved)return;
+    const point=event.nativeEvent;
+    atlasSelectNearestNodeAt(point.locationX||0,point.locationY||0);
   }
 
   function atlasNodeColor(node:AtlasUniverseNode){
@@ -3816,13 +3871,13 @@ function Client() {
     const colour=atlasNodeColor(node);
     const dot=(node.kind==='genre'?18:node.kind==='author'?7:node.kind==='work'?4:5.5)/zoom;
     const genreHub=node.kind==='genre';
-    return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>selectAtlasNode(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
+    return <View pointerEvents="none" style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
       {selected?<Animated.View pointerEvents="none" style={{position:'absolute',width:58/zoom,height:58/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.34,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.38]})}]}}/>:genreHub?<View pointerEvents="none" style={{position:'absolute',width:38/zoom,height:38/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:.12}}/>:null}
       <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:colour,borderWidth:genreHub?1/zoom:0,borderColor:genreHub?'rgba(255,255,255,.55)':'transparent',boxShadow:selected?'0px 0px 22px '+colour:genreHub?'0px 0px 12px '+colour:'none'}}/>
       {(selected||genreHub||zoom>.60)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
         <Text numberOfLines={2} style={{paddingHorizontal:genreHub?7/zoom:0,paddingVertical:genreHub?3/zoom:0,borderRadius:999,borderWidth:genreHub?StyleSheet.hairlineWidth:0,borderColor:genreHub?colour:'transparent',backgroundColor:genreHub?(p.paper==='#000000'?'rgba(7,17,29,.82)':'rgba(255,255,255,.86)'):'transparent',textAlign:'center',fontSize:(genreHub?11.5:11)/zoom,lineHeight:(genreHub?15:14)/zoom,color:genreHub?colour:(selected?p.ink:p.muted),fontWeight:selected||genreHub?'600':'400'}}>{node.label}</Text>
       </View>:null}
-    </Pressable>;
+    </View>;
   }
 
   function selectAtlasNode(nextId:string){
@@ -3831,26 +3886,26 @@ function Client() {
     if(nextId===atlasNodeId){
       atlasInspectorAnim.stopAnimation();
       atlasInspectorAnim.setValue(.92);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:19,stiffness:210,mass:.68,useNativeDriver:false}).start();
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:19,stiffness:210,mass:.68,useNativeDriver:true}).start();
       return;
     }
     if(!atlasNodeId){
       setAtlasNodeId(nextId);
       atlasInspectorAnim.setValue(0);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:false}).start();
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
       return;
     }
-    Animated.timing(atlasInspectorAnim,{toValue:0,duration:115,useNativeDriver:false}).start(()=>{
+    Animated.timing(atlasInspectorAnim,{toValue:0,duration:130,useNativeDriver:true}).start(()=>{
       setAtlasNodeId(nextId);
       atlasInspectorAnim.setValue(0);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:false}).start();
+      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
     });
   }
 
   function dismissAtlasNode(){
     if(!atlasNodeId)return;
     if(reduceMotion){atlasInspectorAnim.setValue(0);setAtlasNodeId('');return;}
-    Animated.timing(atlasInspectorAnim,{toValue:0,duration:160,useNativeDriver:false}).start(()=>setAtlasNodeId(''));
+    Animated.timing(atlasInspectorAnim,{toValue:0,duration:170,useNativeDriver:true}).start(()=>setAtlasNodeId(''));
   }
 
   function focusAtlasNode(nodeId:string){
@@ -3867,15 +3922,28 @@ function Client() {
     const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
-    return <View style={[styles.atlasInspector,{backgroundColor:foldLayout?p.paper:p.raised},foldLayout?styles.atlasInspectorWide:styles.atlasInspectorMobile,foldLayout&&{borderLeftColor:p.line}]}>
-      <View style={styles.sectionHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.playerEyebrow,{color:p.sage}]}>{node.kind.toUpperCase()}</Text><Text numberOfLines={2} style={[styles.sectionTitle,{color:p.ink,marginTop:2}]}>{node.label}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Atlas inspector" onPress={dismissAtlasNode} style={styles.iconButton}><UiIcon name="close" color={p.muted} size={17}/></Pressable></View>
-      {node.subtitle?<Text style={[styles.meta,{color:p.muted}]}>{node.subtitle}</Text>:null}
-      <Text style={[styles.meta,{color:p.muted}]}>{connected} connection{connected===1?'':'s'}{node.source?' · '+sourceLabel(node.source as WorkSource):''}</Text>
-      <View style={styles.toolRow}>
-        {work?<Button label="Open" onPress={()=>openUnifiedWork(work)}/>:null}
-        {node.relationKind&&node.relationValue?<Button label="Explore" onPress={()=>setAtlasFocus({kind:node.relationKind as AtlasKind,value:node.relationValue!})}/>:null}
-        {collection?<Button label="Open collection" onPress={()=>openCollection(collection)}/>:null}
+    const accent=atlasNodeColor(node);
+    const icon:UiIconName=node.kind==='series'?'layers':node.kind==='collection'?'shelf':node.kind==='author'?'bookmark':node.kind==='note'?'bookmark':'bookOpen';
+    return <View style={[styles.atlasInspector,{backgroundColor:p.paper==='#000000'?'rgba(9,20,29,.96)':'rgba(255,252,245,.97)',borderColor:p.line}]}>
+      <View pointerEvents="none" style={[styles.atlasInspectorAccent,{backgroundColor:accent}]}/>
+      <View style={styles.atlasInspectorHeader}>
+        <View style={[styles.atlasInspectorIcon,{backgroundColor:p.card,borderColor:accent}]}><UiIcon name={icon} color={accent} size={19}/></View>
+        <View style={{flex:1,minWidth:0}}>
+          <Text style={[styles.atlasInspectorKicker,{color:accent}]}>{node.kind.toUpperCase()}</Text>
+          <Text numberOfLines={2} style={[styles.atlasInspectorTitle,{color:p.ink}]}>{node.label}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close Atlas details" onPress={dismissAtlasNode} style={styles.atlasInspectorClose}><UiIcon name="close" color={p.muted} size={17}/></Pressable>
       </View>
+      {node.subtitle?<Text numberOfLines={2} style={[styles.atlasInspectorSubtitle,{color:p.muted}]}>{node.subtitle}</Text>:null}
+      <View style={styles.atlasInspectorMetaRow}>
+        <View style={[styles.atlasInspectorMetaChip,{backgroundColor:p.card}]}><Text style={[styles.atlasInspectorMetaText,{color:p.ink}]}>{connected} connection{connected===1?'':'s'}</Text></View>
+        {node.source?<View style={[styles.atlasInspectorMetaChip,{backgroundColor:p.card}]}><Text style={[styles.atlasInspectorMetaText,{color:p.muted}]}>{sourceLabel(node.source as WorkSource)}</Text></View>:null}
+      </View>
+      {(work||node.relationKind&&node.relationValue||collection)?<View style={styles.atlasInspectorActions}>
+        {work?<Button label="Open" tone="quiet" onPress={()=>openUnifiedWork(work)}/>:null}
+        {node.relationKind&&node.relationValue?<Button label="Explore" tone="quiet" onPress={()=>setAtlasFocus({kind:node.relationKind as AtlasKind,value:node.relationValue!})}/>:null}
+        {collection?<Button label="Open collection" tone="quiet" onPress={()=>openCollection(collection)}/>:null}
+      </View>:null}
     </View>;
   }
 
@@ -3989,8 +4057,8 @@ function Client() {
             <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:'transparent'}]}
               onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
               onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
-              onResponderRelease={()=>{atlasGesture.current=null}} onResponderTerminate={()=>{atlasGesture.current=null}}>
-              <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color="#2F8B86" size={Math.max(680,ringSize*1.35)} strength={.72}/></View>
+              onResponderRelease={atlasGestureEnd} onResponderTerminate={()=>{atlasGesture.current=null}}>
+              <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color={ambientHaloColor} size={Math.max(680,ringSize*1.35)} strength={darkMode?.72:.52}/></View>
               <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
                 <DataRing size={ringSize} items={atlasRingItems} ink={p.ink} muted={p.muted} track={p.line} thickness={22}/>
                 {atlasBreakdown?<Animated.View style={[styles.atlasSelectedRingPulse,{width:ringSize-8,height:ringSize-8,borderRadius:(ringSize-8)/2,borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.22,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.035]})}]}]}/>:null}
@@ -4026,9 +4094,15 @@ function Client() {
 
               {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
-            {atlasNodeId?<Animated.View style={[styles.atlasInspectorReveal,{height:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[0,foldLayout?220:188]}),opacity:atlasInspectorAnim,transform:[{translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})}]}]}>
-              <AtlasInspector/>
-            </Animated.View>:null}
+            {atlasNodeId?<Animated.View style={[
+              styles.atlasInspectorReveal,
+              foldLayout?styles.atlasInspectorRevealWide:styles.atlasInspectorRevealMobile,
+              {opacity:atlasInspectorAnim,transform:[
+                {translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[foldLayout?-8:18,0]})},
+                {translateX:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[foldLayout?18:0,0]})},
+                {scale:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[.96,1]})},
+              ]}
+            ]}><AtlasInspector/></Animated.View>:null}
           </View>
 
           {atlasBreakdown?<Animated.View style={[styles.atlasBreakdownReveal,{maxHeight:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[0,520]}),opacity:atlasBreakdownAnim}]}>
@@ -4609,17 +4683,54 @@ function Client() {
 
   function Profile() {
     const stats=profileStats;
+    const overall=profileProgression?.overall||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:'Reader'};
+    const identityRing:ChartItem[]=[
+      {label:'Level progress',count:Math.max(.001,overall.progress),color:p.gold},
+      {label:'Remaining',count:Math.max(.001,1-overall.progress),color:darkMode?'#29303A':'#D8CDBA'},
+    ];
+    const traits:string[]=[];
+    const readDone=stats?.completedReading||0,listenDone=stats?.completedAudio||0;
+    if(listenDone>readDone*1.35&&listenDone>=3)traits.push('Audio-first');
+    else if(readDone>listenDone*1.35&&readDone>=3)traits.push('Page-led');
+    else if(readDone>0&&listenDone>0)traits.push('Mixed-format reader');
+    if((stats?.series||0)>=10)traits.push('Series keeper');
+    if(ritual.bestStreak>=14)traits.push('Ritual reader');
+    if((stats?.favourites||0)>=10)traits.push('Selective curator');
+    if((stats?.formats||0)>=3)traits.push('Format explorer');
+    if(!traits.length)traits.push('Building your archive');
+    const profileTraits=traits.slice(0,4);
+    const personalBests=[
+      {label:'Best streak',value:ritual.bestStreak+' days',icon:'flame' as UiIconName},
+      {label:'Active days',value:String(ritual.activeDays),icon:'calendar' as UiIconName},
+      {label:'Listening',value:Math.round(insightSummary.listeningSeconds/3600)+' hr',icon:'play' as UiIconName},
+      {label:'Avg rating',value:(stats?.averageRating||0)>0?(stats?.averageRating||0).toFixed(1)+'/10':'—',icon:'insights' as UiIconName},
+    ];
+    const goals=[
+      {label:'Works completed',value:insightSummary.completedGoal.value,target:insightSummary.completedGoal.target,progress:insightSummary.completedGoal.progress,icon:'bookOpen' as UiIconName,tone:p.sage},
+      {label:'Annotations',value:insightSummary.annotationGoal.value,target:insightSummary.annotationGoal.target,progress:insightSummary.annotationGoal.progress,icon:'bookmark' as UiIconName,tone:p.gold},
+    ];
+    const highlightedAchievements=[
+      ...(recentAchievementId?profileAchievements.filter(item=>item.id===recentAchievementId):[]),
+      ...profileAchievements.filter(item=>item.unlocked&&item.id!==recentAchievementId).sort((a,b)=>b.target-a.target),
+    ].slice(0,3);
     const profileLinks=[
-      {id:'rewards' as Tab,label:'Rewards',copy:profileAchievements.filter(item=>item.unlocked).length+' unlocked',icon:'target' as UiIconName,tone:'#E3BC67'},
-      {id:'settings' as Tab,label:'Settings',copy:'App, library and server',icon:'settings' as UiIconName,tone:'#7AA7E8'},
+      {id:'rewards' as Tab,label:'Rewards',copy:'Level '+overall.level+' · '+(profileProgression?.unlockedAchievements||0)+' unlocked',icon:'target' as UiIconName,tone:'#E3BC67'},
+      {id:'settings' as Tab,label:'Settings',copy:'Library, privacy and server',icon:'settings' as UiIconName,tone:'#7AA7E8'},
     ];
     return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
       <PageHeader title="Profile" subtitle="Your identity and reading life."/>
-      <View style={[styles.profileIdentityHero,{borderBottomColor:p.line}]}>
-        <View style={[styles.profileIdentityAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text></View>
-        <View style={{flex:1,minWidth:0}}>
+
+      <View style={[styles.profileIdentityHero,styles.profileIdentityHeroRich,{borderBottomColor:p.line}]}>
+        <View style={styles.profileIdentityRing}>
+          <DataRing size={112} items={identityRing} ink={p.ink} muted={p.muted} track={p.line} thickness={6} opacity={1}/>
+          <View style={[styles.profileIdentityAvatar,styles.profileIdentityAvatarRing,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileIdentityAvatarImage}/>:<Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text>}</View>
+          <View style={[styles.profileIdentityLevelBadge,{backgroundColor:darkMode?'#0B1725':'#FFF8E9',borderColor:p.gold}]}><Text style={[styles.profileIdentityLevelText,{color:p.gold}]}>L{overall.level}</Text></View>
+        </View>
+        <View style={styles.profileIdentityCopy}>
+          <Text style={[styles.profileIdentityKicker,{color:p.gold}]}>{overall.title.toUpperCase()}</Text>
           <Text style={[styles.profileIdentityName,{color:p.ink}]}>{stats?.name||'Reader'}</Text>
           <Text style={[styles.pageSubtitle,{color:p.muted}]}>{stats?.works||0} works · {stats?.completed||0} completed · {ritual.currentStreak} day streak</Text>
+          <View style={styles.profileTraitRow}>{profileTraits.map(trait=><View key={trait} style={[styles.profileTraitChip,{backgroundColor:p.card,borderColor:p.line}]}><Text style={[styles.profileTraitText,{color:p.ink}]}>{trait}</Text></View>)}</View>
         </View>
       </View>
 
@@ -4636,8 +4747,34 @@ function Client() {
       </View>
 
       <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>PERSONAL BESTS</Text>
+        <View style={styles.profileBestGrid}>{personalBests.map(item=><View key={item.label} style={[styles.profileBestCard,{borderColor:p.line}]}>
+          <View style={[styles.profileBestIcon,{backgroundColor:p.card}]}><UiIcon name={item.icon} color={p.gold} size={17}/></View>
+          <Text style={[styles.profileBestValue,{color:p.ink}]}>{item.value}</Text>
+          <Text style={[styles.profileBestLabel,{color:p.muted}]}>{item.label}</Text>
+        </View>)}</View>
+      </View>
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>CURRENT GOALS</Text>
+        <View style={styles.profileGoalGrid}>{goals.map(goal=><View key={goal.label} style={[styles.profileGoalCard,{borderColor:p.line}]}>
+          <View style={styles.profileGoalTop}><View style={[styles.profileBestIcon,{backgroundColor:p.card}]}><UiIcon name={goal.icon} color={goal.tone} size={17}/></View><Text style={[styles.profileGoalValue,{color:p.ink}]}>{goal.value} / {goal.target}</Text></View>
+          <Text style={[styles.profileGoalLabel,{color:p.muted}]}>{goal.label}</Text>
+          <View style={[styles.profileGoalTrack,{backgroundColor:p.line}]}><View style={[styles.profileGoalFill,{backgroundColor:goal.tone,width:(Math.round(goal.progress*100)+'%') as any}]}/></View>
+        </View>)}</View>
+      </View>
+
+      {highlightedAchievements.length?<View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
+        <View style={styles.profileSectionHeadingRow}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>{recentAchievementId?'RECENT MILESTONES':'MILESTONE HIGHLIGHTS'}</Text><Pressable accessibilityRole="button" onPress={()=>setActiveTab('rewards')}><Text style={[styles.meta,{color:p.gold,fontWeight:'700'}]}>View all</Text></Pressable></View>
+        <View style={styles.profileMilestoneList}>{highlightedAchievements.map(item=><View key={item.id} style={[styles.profileMilestoneRow,{borderBottomColor:p.line}]}>
+          <View style={[styles.profileMilestoneMedal,{borderColor:p.gold,backgroundColor:p.card}]}><UiIcon name={item.id.includes('streak')?'flame':item.id.includes('audio')||item.id.includes('listener')?'play':item.id.includes('series')?'layers':'target'} color={p.gold} size={18}/></View>
+          <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{item.description}</Text></View>
+        </View>)}</View>
+      </View>:null}
+
+      <View style={[styles.profileHubSection,{borderTopColor:p.line}]}>
         <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>AVATAR</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. This stays on this device.</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Choose up to two initials and an accent. Profile-photo support is prepared for the native picker pass; initials remain the reliable local fallback.</Text>
         <View style={styles.profileAvatarEditor}>
           <TextInput accessibilityLabel="Avatar initials" value={profileAvatar.initials} maxLength={2} autoCapitalize="characters" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>
           <View style={styles.profileAvatarPalette}>
@@ -4662,83 +4799,163 @@ function Client() {
     const visible=profileAchievements
       .filter(item=>awardCategory==='All'||(item.category||'Other')===awardCategory)
       .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
-    const unlocked=profileAchievements.filter(item=>item.unlocked).length;
-    const total=profileAchievements.length;
-    const completion=total?Math.round(unlocked/total*100):0;
     const locked=profileAchievements.filter(item=>!item.unlocked).sort((a,b)=>clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
-    const nearest=locked[0]||null;
-    const inProgress=visible.filter(item=>!item.unlocked);
-    const completedRewards=visible.filter(item=>item.unlocked);
-    const renderReward=(item:Achievement)=>{
+    const nextUp=locked.slice(0,3);
+    const recent=recentAchievementId?profileAchievements.find(item=>item.id===recentAchievementId):null;
+    const overall=profileProgression?.overall||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:'Reader'};
+    const xpIntoLevel=Math.max(0,overall.xp-overall.levelStartXp);
+    const xpForLevel=Math.max(1,overall.nextLevelXp-overall.levelStartXp);
+    const pathSpecs=[
+      {id:'Reading' as const,icon:'bookOpen' as UiIconName,tone:p.sage},
+      {id:'Listening' as const,icon:'play' as UiIconName,tone:darkMode?'#86A9C4':'#66859B'},
+      {id:'Library' as const,icon:'shelf' as UiIconName,tone:p.gold},
+      {id:'Ritual' as const,icon:'flame' as UiIconName,tone:darkMode?'#D58B68':'#A65F42'},
+    ];
+    const milestones=[
+      {level:5,title:'Explorer',icon:'atlas' as UiIconName},
+      {level:10,title:'Collector',icon:'library' as UiIconName},
+      {level:15,title:'Curator',icon:'target' as UiIconName},
+      {level:25,title:'Archivist',icon:'shelf' as UiIconName},
+      {level:40,title:'Senior',icon:'layers' as UiIconName},
+      {level:60,title:'Master',icon:'insights' as UiIconName},
+    ];
+    const nextMilestoneIndex=Math.max(0,milestones.findIndex(item=>overall.level<item.level));
+    const rewardIcon=(item:Achievement):UiIconName=>{
+      const id=item.id;
+      if(id.includes('streak')||id.includes('daily-spark'))return 'flame';
+      if(id.includes('days'))return 'calendar';
+      if(id.includes('listener')||id.includes('audio'))return 'play';
+      if(id.includes('reader')||id.includes('reading')||id.includes('finish'))return 'bookOpen';
+      if(id.includes('series'))return 'layers';
+      if(id.includes('format')||id.includes('balance'))return 'atlas';
+      if(id.includes('rating'))return 'insights';
+      if(id.includes('favourite'))return 'bookmark';
+      if(id.includes('collection')||id.includes('shelf')||id.includes('archive')||id.includes('curator'))return 'shelf';
+      if(id.includes('active-stack')||id.includes('starter'))return 'library';
+      return 'target';
+    };
+    const rewardTone=(item:Achievement)=>{
+      const category=item.category||'Other';
+      if(category==='Reading')return p.sage;
+      if(category==='Listening')return darkMode?'#86A9C4':'#66859B';
+      if(category==='Daily ritual')return darkMode?'#D58B68':'#A65F42';
+      if(category==='Library')return p.gold;
+      return darkMode?'#A78BC7':'#806B9A';
+    };
+    const renderTrophy=(item:Achievement)=>{
       const progress=Math.round(clampProgress(item.progress,item.target)*100);
-      const recent=recentAchievementId===item.id;
-      const tone=item.unlocked?p.gold:p.sage;
-      return <View key={item.id} style={[styles.profileAchievementRow,{borderBottomColor:p.line}]}>
-        <View style={styles.rewardBadgeWrap}>
-          {recent?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:tone,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[.42,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.48]})}]}]}/>:null}
-          <View style={[styles.profileAchievementBadge,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}><Text style={[styles.profileAchievementInitial,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'✓':Math.min(99,progress)}</Text></View>
+      const recentItem=recentAchievementId===item.id;
+      const tone=rewardTone(item);
+      const icon=rewardIcon(item);
+      return <View key={item.id} style={[styles.rewardTrophyCard,width>=760&&styles.rewardTrophyCardWide,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}>
+        <View style={styles.rewardTrophyTop}>
+          <View style={styles.rewardMedalWrap}>
+            {recentItem?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:darkMode?tone:p.gold,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.42:.30,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.52]})}]}]}/>:null}
+            <View style={[styles.rewardRibbon,styles.rewardRibbonLeft,{backgroundColor:item.unlocked?tone:p.line}]}/>
+            <View style={[styles.rewardRibbon,styles.rewardRibbonRight,{backgroundColor:item.unlocked?tone:p.line}]}/>
+            <View style={[styles.rewardMedal,{borderColor:item.unlocked?tone:p.line,backgroundColor:item.unlocked?(darkMode?'#151412':'#FFF9EC'):p.card}]}>
+              <UiIcon name={icon} color={item.unlocked?tone:p.muted} size={22}/>
+            </View>
+          </View>
+          <View style={{alignItems:'flex-end',gap:3}}>
+            {recentItem?<Text style={[styles.rewardRecent,{color:p.gold}]}>RECENT</Text>:null}
+            <Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'UNLOCKED':progress+'%'}</Text>
+          </View>
         </View>
-        <View style={{flex:1,minWidth:0,gap:5}}>
-          <View style={styles.rewardTitleRow}><Text style={[styles.achievementTitle,{color:p.ink,flex:1}]}>{item.title}</Text>{recent?<Text style={[styles.rewardRecent,{color:p.gold}]}>RECENT</Text>:<Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'Unlocked':progress+'%'}</Text>}</View>
-          <Text style={[styles.meta,{color:p.muted}]}>{item.description}</Text>
-          <View style={[styles.achievementTrack,{backgroundColor:p.line}]}><View style={[styles.achievementFill,{backgroundColor:tone,width:(progress+'%') as any}]}/></View>
-        </View>
+        <Text numberOfLines={2} style={[styles.rewardTrophyTitle,{color:p.ink}]}>{item.title}</Text>
+        <Text numberOfLines={2} style={[styles.rewardTrophyCopy,{color:p.muted}]}>{item.description}</Text>
+        <View style={[styles.rewardTrophyTrack,{backgroundColor:p.line}]}><View style={[styles.rewardTrophyFill,{backgroundColor:item.unlocked?tone:p.muted,width:(progress+'%') as any}]}/></View>
       </View>;
     };
+    const overallRing:ChartItem[]=[
+      {label:'Level progress',count:Math.max(.001,overall.progress),color:p.gold},
+      {label:'Remaining',count:Math.max(.001,1-overall.progress),color:darkMode?'#29303A':'#D8CDBA'},
+    ];
+
     return <ScrollView contentContainerStyle={[styles.profileHubScreen,width>=600&&styles.profileHubScreenFold,width>=940&&styles.profileHubScreenWide]}>
-      <PageHeader title="Rewards" subtitle="Milestones from your reading life."/>
-      <View style={[styles.rewardsSummary,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <View style={[styles.rewardsSummaryEmblem,{borderColor:p.gold,backgroundColor:p.card}]}>
-          <View style={[styles.rewardsSummarySpark,styles.rewardsSummarySparkTop,{backgroundColor:p.gold}]}/>
-          <View style={[styles.rewardsSummarySpark,styles.rewardsSummarySparkRight,{backgroundColor:p.gold}]}/>
-          <Text style={[styles.rewardsSummaryValue,{color:p.gold}]}>{unlocked}</Text>
-          <Text style={[styles.rewardsSummaryOf,{color:p.muted}]}>of {total}</Text>
+      <PageHeader title="Rewards" subtitle="Build your archive. Keep your reading life moving."/>
+
+      <View style={[styles.rewardsLevelHero,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <View style={styles.rewardsHeroRing}>
+          <DataRing size={118} items={overallRing} ink={p.ink} muted={p.muted} track={p.line} thickness={7} opacity={1}/>
+          <View pointerEvents="none" style={styles.rewardsHeroRingCenter}>
+            <Text style={[styles.rewardsHeroLevelLabel,{color:p.muted}]}>LEVEL</Text>
+            <Text style={[styles.rewardsHeroLevel,{color:p.gold}]}>{overall.level}</Text>
+          </View>
         </View>
-        <View style={styles.rewardsSummaryCopy}>
-          <Text style={[styles.bookTitle,{color:p.ink}]}>Your reward cabinet</Text>
-          <Text style={[styles.meta,{color:p.muted}]}>{completion}% complete · {Math.max(0,total-unlocked)} still to discover</Text>
-          <View style={[styles.rewardsCompletionTrack,{backgroundColor:p.line}]}><View style={[styles.rewardsCompletionFill,{backgroundColor:p.gold,width:(completion+'%') as any}]}/></View>
+        <View style={styles.rewardsHeroCopy}>
+          <Text style={[styles.rewardsHeroTitle,{color:p.ink}]}>{overall.title}</Text>
+          <Text style={[styles.rewardsHeroMeta,{color:p.muted}]}>{xpIntoLevel.toLocaleString()} / {xpForLevel.toLocaleString()} XP to Level {overall.level+1}</Text>
+          <View style={[styles.rewardsCompletionTrack,{backgroundColor:p.line}]}><View style={[styles.rewardsCompletionFill,{backgroundColor:p.gold,width:(Math.round(overall.progress*100)+'%') as any}]}/></View>
+          <Text style={[styles.rewardsHeroFootnote,{color:p.muted}]}>{profileProgression?.unlockedAchievements||0} achievements unlocked · progression rewards reading, listening, curation and consistency.</Text>
         </View>
       </View>
-      {nearest?<View style={[styles.rewardsNearest,{borderBottomColor:p.line}]}>
-        <View style={[styles.rewardsNearestIcon,{backgroundColor:p.card}]}><UiIcon name="target" color={p.sage} size={18}/></View>
-        <View style={{flex:1,minWidth:0}}><Text style={[styles.rewardsNearestKicker,{color:p.muted}]}>NEXT MILESTONE</Text><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{nearest.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{Math.round(clampProgress(nearest.progress,nearest.target)*100)}% complete</Text></View>
+
+      <View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}>
+          <View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Your progression</Text><Text style={[styles.meta,{color:p.muted}]}>Four paths grow independently as your habits change.</Text></View>
+        </View>
+        <View style={styles.rewardsPathGrid}>
+          {pathSpecs.map(spec=>{
+            const path=profileProgression?.paths[spec.id]||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:spec.id};
+            const ring:ChartItem[]=[{label:'Progress',count:Math.max(.001,path.progress),color:spec.tone},{label:'Remaining',count:Math.max(.001,1-path.progress),color:p.line}];
+            return <View key={spec.id} style={[styles.rewardsPathCard,{borderColor:p.line}]}>
+              <View style={styles.rewardsPathTop}>
+                <View style={styles.rewardsPathRing}><DataRing size={52} items={ring} ink={p.ink} muted={p.muted} track={p.line} thickness={4} opacity={1}/><View pointerEvents="none" style={styles.rewardsPathIcon}><UiIcon name={spec.icon} color={spec.tone} size={18}/></View></View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.rewardsPathName,{color:p.ink}]}>{spec.id}</Text><Text numberOfLines={1} style={[styles.rewardsPathTitle,{color:p.muted}]}>{path.title}</Text></View>
+                <Text style={[styles.rewardsPathLevel,{color:spec.tone}]}>L{path.level}</Text>
+              </View>
+              <View style={[styles.rewardsPathTrack,{backgroundColor:p.line}]}><View style={[styles.rewardsPathFill,{backgroundColor:spec.tone,width:(Math.round(path.progress*100)+'%') as any}]}/></View>
+            </View>;
+          })}
+        </View>
+      </View>
+
+      <View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Milestones</Text><Text style={[styles.meta,{color:p.muted}]}>The long view of your Archivist journey.</Text></View></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rewardsMilestoneRail}>
+          {milestones.map((milestone,index)=>{
+            const complete=overall.level>=milestone.level;
+            const current=!complete&&(nextMilestoneIndex===index||nextMilestoneIndex<0&&index===milestones.length-1);
+            return <View key={milestone.level} style={styles.rewardsMilestoneItem}>
+              {index>0?<View pointerEvents="none" style={[styles.rewardsMilestoneLine,{backgroundColor:complete?p.gold:p.line}]}/>:null}
+              <View style={[styles.rewardsMilestoneMedal,{borderColor:complete||current?p.gold:p.line,backgroundColor:complete?p.card:'transparent'},current&&styles.rewardsMilestoneCurrent]}>
+                <UiIcon name={milestone.icon} color={complete||current?p.gold:p.muted} size={19}/>
+              </View>
+              <Text style={[styles.rewardsMilestoneLevel,{color:complete?p.gold:p.ink}]}>Level {milestone.level}</Text>
+              <Text numberOfLines={1} style={[styles.rewardsMilestoneTitle,{color:p.muted}]}>{milestone.title}</Text>
+            </View>;
+          })}
+        </ScrollView>
+      </View>
+
+      {nextUp.length?<View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Next up</Text><Text style={[styles.meta,{color:p.muted}]}>Closest achievements to your next unlocks.</Text></View></View>
+        <View style={styles.rewardsNextGrid}>
+          {nextUp.map(item=>{
+            const progress=Math.round(clampProgress(item.progress,item.target)*100),tone=rewardTone(item);
+            return <View key={item.id} style={[styles.rewardsNextCard,{borderColor:p.line}]}>
+              <View style={[styles.rewardsNextIcon,{backgroundColor:p.card}]}><UiIcon name={rewardIcon(item)} color={tone} size={20}/></View>
+              <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{progress}% complete</Text></View>
+              <Text style={[styles.rewardsNextPercent,{color:tone}]}>{progress}%</Text>
+            </View>;
+          })}
+        </View>
       </View>:null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
-        {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card,borderColor:p.gold}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
-      </ScrollView>
-      {inProgress.length?<View style={styles.rewardsSection}><View style={styles.rewardsSectionHeader}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>IN PROGRESS</Text><Text style={[styles.rewardsSectionCount,{color:p.muted}]}>{inProgress.length}</Text></View><View style={styles.profileAchievementList}>{inProgress.map(renderReward)}</View></View>:null}
-      {completedRewards.length?<View style={styles.rewardsSection}><View style={styles.rewardsSectionHeader}><Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>UNLOCKED</Text><Text style={[styles.rewardsSectionCount,{color:p.gold}]}>{completedRewards.length}</Text></View><View style={styles.profileAchievementList}>{completedRewards.map(renderReward)}</View></View>:null}
+
+      {recent?<View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Recently earned</Text><Text style={[styles.meta,{color:p.muted}]}>Your newest achievement.</Text></View></View>
+        <View style={styles.rewardsRecentSpotlight}>{renderTrophy(recent)}</View>
+      </View>:null}
+
+      <View style={styles.rewardsSection}>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Trophy cabinet</Text><Text style={[styles.meta,{color:p.muted}]}>Every milestone has its own mark.</Text></View></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
+          {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card,borderColor:p.gold}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
+        </ScrollView>
+        <View style={styles.rewardTrophyGrid}>{visible.map(renderTrophy)}</View>
+      </View>
     </ScrollView>;
-  }
-
-  async function refreshDuplicateCandidates() {
-    if(!session || !owner)return;
-    setDuplicateLoading(true);setError('');
-    try{
-      const groups=await request(session,'/api/duplicate-candidates') as DuplicateCandidateGroup[];
-      setServerDuplicateGroups(groups);
-      setDuplicateResults({});
-    }catch(e){setError((e as Error).message);}
-    finally{setDuplicateLoading(false);}
-  }
-
-  async function openDuplicateReview() {
-    setDuplicatePanelOpen(true);
-    if(session && owner)await refreshDuplicateCandidates();
-  }
-
-  async function verifyDuplicateGroup(group:DuplicateCandidateGroup) {
-    if(!session || !owner || group.items.length<2)return;
-    setDuplicateLoading(true);setError('');
-    try{
-      const result=await request(
-        session,'/api/duplicate-candidates/verify','POST',
-        {ids:group.items.map(item=>item.id)},300000,
-      ) as DuplicateVerification;
-      setDuplicateResults(current=>({...current,[String(group.size)]:result}));
-    }catch(e){setError((e as Error).message);}
-    finally{setDuplicateLoading(false);}
   }
 
   function DuplicateReviewPanel() {
@@ -4868,133 +5085,198 @@ function Client() {
     </View>;
   }
 
+  function createPrivacyBackup(){
+    const snapshot={
+      archivistBackup:1,
+      createdAt:new Date().toISOString(),
+      appVersion:'0.9.3',
+      theme,
+      accessibility:accessibilityPrefs,
+      profileAvatar,
+      insightGoal,
+      readerAppearance,
+      smartShelves,
+      collections,
+      shelfSections,
+      playerBookmarks,
+      readerBookmarks,
+      readerAnnotations,
+      localPreferences,
+      ritualDays,
+      localReadingProgress,
+      localReadingComplete,
+      localReadingCurrentComplete,
+      localWorkProgress,
+      localAudioCompleted,
+    };
+    setPrivacyBackupText(JSON.stringify(snapshot,null,2));
+    setPrivacyDataNotice('Backup snapshot created locally. Server credentials and access keys are never included.');
+  }
+
+  async function restorePrivacyBackup(){
+    setPrivacyDataNotice('');
+    try{
+      const raw=JSON.parse(privacyRestoreText);
+      if(!raw||raw.archivistBackup!==1)throw Error('This is not an Archivist backup snapshot.');
+      if(raw.theme==='system'||raw.theme==='light'||raw.theme==='dark')await chooseTheme(raw.theme);
+      if(raw.accessibility&&typeof raw.accessibility==='object')await saveAccessibilityPreferences({reduceMotion:!!raw.accessibility.reduceMotion,highContrast:!!raw.accessibility.highContrast,largeText:!!raw.accessibility.largeText});
+      if(raw.profileAvatar&&typeof raw.profileAvatar==='object')await saveProfileAvatar({initials:String(raw.profileAvatar.initials||''),color:String(raw.profileAvatar.color||'#47736F'),photoUri:typeof raw.profileAvatar.photoUri==='string'?raw.profileAvatar.photoUri:undefined});
+      if(raw.insightGoal){const value=sanitizeInsightGoal(raw.insightGoal);setInsightGoal(value);setGoalDraft({completed:String(value.completedTarget),annotations:String(value.annotationTarget)});await setPersistedJSON(insightGoalKey,value);}
+      if(raw.readerAppearance){const value=sanitizeReaderAppearance(raw.readerAppearance);setReaderAppearance(value);await setPersistedJSON(readerAppearanceKey,value);}
+      if(Array.isArray(raw.smartShelves)){const value=sanitizeSmartShelves(raw.smartShelves);setSmartShelves(value);await setPersistedJSON(smartShelvesKey,value);}
+      if(Array.isArray(raw.collections)){const value=sanitizeCollections(raw.collections);setCollections(value);await setPersistedJSON(collectionsKey,value);}
+      if(Array.isArray(raw.shelfSections)){const allowed=new Set(defaultShelfSections.map(item=>item.id));const value=raw.shelfSections.filter((item:any)=>item&&allowed.has(item.id)).map((item:any)=>({id:item.id,title:String(item.title||''),visible:item.visible!==false}));if(value.length){setShelfSections(value);await setPersistedJSON(shelfSectionsKey,value);}}
+      if(Array.isArray(raw.playerBookmarks)){const value=sanitizeBookmarks(raw.playerBookmarks);setPlayerBookmarks(value);await setPersistedJSON(playerBookmarksKey,value);}
+      if(Array.isArray(raw.readerBookmarks)){const value=sanitizeReaderBookmarks(raw.readerBookmarks);setReaderBookmarks(value);await setPersistedJSON(readerBookmarksKey,value);}
+      if(Array.isArray(raw.readerAnnotations)){const value=sanitizeReaderAnnotations(raw.readerAnnotations);setReaderAnnotations(value);await setPersistedJSON(readerAnnotationsKey,value);}
+      if(raw.localPreferences&&typeof raw.localPreferences==='object'){setLocalPreferences(raw.localPreferences);await setPersistedJSON(localPreferencesKey,raw.localPreferences);}
+      if(raw.ritualDays&&typeof raw.ritualDays==='object'){const value=Object.fromEntries(Object.entries(raw.ritualDays).filter(([key,value])=>/^\d{4}-\d{2}-\d{2}$/.test(key)&&Number.isFinite(Number(value))).map(([key,value])=>[key,Math.max(0,Math.min(60,Number(value)))]));setRitualDays(value);await setPersistedJSON('archivist.dailyRitual.v1',value);}
+      if(raw.localReadingProgress&&typeof raw.localReadingProgress==='object'){setLocalReadingProgress(raw.localReadingProgress);await setPersistedJSON(localReadingProgressKey,raw.localReadingProgress);}
+      if(raw.localReadingComplete&&typeof raw.localReadingComplete==='object'){setLocalReadingComplete(raw.localReadingComplete);await setPersistedJSON(localReadingCompleteKey,raw.localReadingComplete);}
+      if(raw.localReadingCurrentComplete&&typeof raw.localReadingCurrentComplete==='object'){setLocalReadingCurrentComplete(raw.localReadingCurrentComplete);await setPersistedJSON(localReadingCurrentCompleteKey,raw.localReadingCurrentComplete);}
+      if(raw.localWorkProgress&&typeof raw.localWorkProgress==='object'){setLocalWorkProgress(raw.localWorkProgress);await setPersistedJSON(localWorkProgressKey,raw.localWorkProgress);}
+      if(raw.localAudioCompleted&&typeof raw.localAudioCompleted==='object'){setLocalAudioCompleted(raw.localAudioCompleted);await setPersistedJSON(localAudioCompletedKey,raw.localAudioCompleted);}
+      setPrivacyDataNotice('Backup restored. Server credentials remain unchanged.');
+      setPrivacyRestoreText('');
+    }catch(e){setPrivacyDataNotice((e as Error).message||'Backup could not be restored.');}
+  }
+
   function Settings() {
     const connected=!!session;
+    const settingsTitleStyle=accessibilityPrefs.largeText?{fontSize:16.5,lineHeight:22}:undefined;
+    const Toggle=({value,onPress,label}:{value:boolean;onPress:()=>void;label:string})=><Pressable accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{checked:value}} onPress={onPress} style={[styles.settingsToggle,{backgroundColor:value?p.gold:p.line,justifyContent:value?'flex-end':'flex-start'}]}><View style={[styles.settingsToggleKnob,{backgroundColor:darkMode?'#FFFFFF':'#FFFDF9'}]}/></Pressable>;
+    const localStorageText=offlineStorage?formatBytes(offlineStorage.actualBytes||offlineStorage.trackedBytes):'Not measured';
     return (
       <ScrollView contentContainerStyle={[styles.settingsScreen,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]}>
-        <PageHeader title="Settings" subtitle="Your app, library and account."/>
+        <PageHeader title="Settings" subtitle="Your library, privacy, accessibility and server."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
           <View style={styles.settingsColumn}>
-            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>APP & LIBRARY</Text>
+            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>LIBRARY & DATA</Text>
+
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>APPEARANCE</Text>
-              <View style={styles.settingsRow}>
-                <View style={{flex:1}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>Theme</Text>
-                  <Text style={[styles.meta,{color:p.muted}]}>Follow the device or choose a fixed appearance.</Text>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
+              <View style={styles.settingsStatusPanel}>
+                <View style={[styles.settingsStatusIcon,{backgroundColor:p.card}]}><UiIcon name="library" color={p.sage} size={18}/></View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Local-first metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist reads embedded, sidecar, folder and connected-server metadata. No background internet metadata lookup is enabled.</Text></View>
+              </View>
+
+              <View style={styles.settingsSubgroup}>
+                <View style={styles.settingsSubgroupHeading}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Local folders</Text><Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder{localFolders.length===1?'':'s'} · {localBooks.length} files</Text></View>
+                {localFolders.map(folder=><View key={folder.uri} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{folder.name}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{folder.uri}</Text></View>
+                </View>)}
+                <View style={styles.settingsInlineActions}>
+                  <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
+                  {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
                 </View>
+                {localFolderNotice?<Text style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
-              <View style={styles.segment}>
-                {(['system','light','dark'] as ThemeMode[]).map(mode=>(
-                  <Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}>
-                    <Text style={{color:theme===mode?p.sage:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text>
-                    <View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.sage,opacity:theme===mode?1:0}]}/>
-                  </Pressable>
-                ))}
+
+              <View style={styles.settingsSubgroup}>
+                <View style={styles.settingsRow}>
+                  <View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Duplicate review</Text><Text style={[styles.meta,{color:p.muted}]}>Find possible copies without deleting or changing files.</Text></View>
+                  {(!session||owner)?<Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Review</Text></Pressable>:null}
+                </View>
+                <DuplicateReviewPanel/>
               </View>
+
+              <LocalSortingPanel/>
+
+              {owner?<View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server source folders</Text>
+                {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View>
+                  <View style={styles.settingsRowActions}><Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void removeSource(source.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable></View>
+                </View>)}
+                <View style={styles.settingsAddFolder}><TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Button label="Add server folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/></View>
+              </View>:null}
+
+              {owner?<View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server safe sorting</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>Preview moves before Archivist applies them. Unresolved moves remain blocked for review.</Text>
+                <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
+                <View style={styles.settingsInlineActions}><Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Preview matching</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Preview all</Text></Pressable></View>
+                <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
+                {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+              </View>:null}
             </View>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY HEALTH</Text>
-              <View style={styles.settingsRow}>
-                <View style={{flex:1}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>Duplicate review</Text>
-                  <Text style={[styles.meta,{color:p.muted}]}>Find possible copies without deleting or changing files.</Text>
-                </View>
-                {(!session||owner)?<Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Review</Text></Pressable>:null}
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>OFFLINE & STORAGE</Text>
+              <View style={styles.settingsStatusPanel}>
+                <View style={[styles.settingsStatusIcon,{backgroundColor:p.card}]}><UiIcon name="layers" color={p.gold} size={18}/></View>
+                <View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{localStorageText} stored offline</Text><Text style={[styles.meta,{color:p.muted}]}>{offlineStorage?.items||0} complete download{offlineStorage?.items===1?'':'s'} · {offlineStorage?.incompleteWorks||0} incomplete</Text></View>
               </View>
-              <DuplicateReviewPanel/>
+              <OfflineDownloadsPanel/>
             </View>
 
-            <LocalSortingPanel/>
-            <OfflineDownloadsPanel/>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>PRIVACY & DATA</Text>
+              <View style={[styles.settingsPrivacyHero,{backgroundColor:p.card,borderColor:p.line}]}>
+                <View style={[styles.settingsPrivacyMark,{borderColor:p.gold}]}><UiIcon name="bookmark" color={p.gold} size={20}/></View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Local-first · private by default</Text><Text style={[styles.meta,{color:p.muted}]}>Reading history, profile settings and local library state stay on this device unless you explicitly connect an Archivist server. Backup snapshots never include server credentials.</Text></View>
+              </View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>External metadata network access</Text><Text style={[styles.meta,{color:p.muted}]}>Off in this build. Scanning uses local/embedded metadata and connected Archivist server data.</Text></View><Text style={[styles.settingsStateLabel,{color:p.sage}]}>OFF</Text></View>
+              <View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Backup & restore</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>Create a portable JSON snapshot of reading history and non-sensitive app settings, or paste one back to restore it.</Text>
+                <View style={styles.settingsInlineActions}><Button label="Create backup snapshot" tone="quiet" onPress={createPrivacyBackup}/>{privacyBackupText?<Pressable accessibilityRole="button" onPress={()=>setPrivacyBackupText('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide</Text></Pressable>:null}</View>
+                {privacyBackupText?<Text selectable style={[styles.settingsBackupText,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}>{privacyBackupText}</Text>:null}
+                <TextInput accessibilityLabel="Paste Archivist backup snapshot" multiline value={privacyRestoreText} onChangeText={setPrivacyRestoreText} placeholder="Paste backup JSON here" placeholderTextColor={p.muted} style={[styles.settingsRestoreInput,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}/>
+                <Button label="Restore backup snapshot" disabled={!privacyRestoreText.trim()} onPress={()=>void restorePrivacyBackup()}/>
+                {privacyDataNotice?<Text style={[styles.meta,{color:privacyDataNotice.includes('could not')||privacyDataNotice.includes('not an')?p.danger:p.sage}]}>{privacyDataNotice}</Text>:null}
+              </View>
+            </View>
           </View>
 
           <View style={styles.settingsColumn}>
-            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>SERVER & FAMILY</Text>
+            <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>SERVER & ACCESS</Text>
+
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SERVER</Text>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SERVER & FAMILY</Text>
               <View style={styles.settingsRow}>
                 <View style={[styles.settingsStatusDot,{backgroundColor:connected?p.sage:recoverableSession?p.danger:p.line}]}/>
-                <View style={{flex:1,minWidth:0}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>{connected?'Connected':recoverableSession?'Server offline':'No server connected'}</Text>
-                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{connected?session?.server:recoverableSession?.server||'Archivist works fully with the library on this device.'}</Text>
-                </View>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{connected?'Connected':recoverableSession?'Server offline':'No server connected'}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{connected?session?.server:recoverableSession?.server||'Archivist works fully with the library on this device.'}</Text></View>
               </View>
+              {recoverableSession&&!session?<View style={styles.settingsInlineActions}><Pressable accessibilityRole="button" onPress={()=>void retrySavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{busy?'Retrying…':'Retry server'}</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void forgetSavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Forget</Text></Pressable></View>:null}
+              {!session&&!recoverableSession?(serverPanelOpen?<ServerConnect/>:<Pressable accessibilityRole="button" onPress={()=>setServerPanelOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Add server</Text></Pressable>):null}
 
-              {recoverableSession&&!session?<View style={styles.settingsInlineActions}>
-                <Pressable accessibilityRole="button" onPress={()=>void retrySavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Retrying…':'Retry server'}</Text></Pressable>
-                <Pressable accessibilityRole="button" onPress={()=>void forgetSavedServer()} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Forget</Text></Pressable>
+              {owner?<View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Family users</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>Family users can browse, read, listen, rate, favourite and download. Only Admin manages files, metadata, users and server settings.</Text>
+                <View style={styles.settingsAddRow}><TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?0.38:1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{busy?'Creating…':'Add user'}</Text></Pressable></View>
+                {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>User access key — shown once</Text><Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text><Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide key</Text></Pressable></View>:null}
+                {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{user.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text></View>{!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Revoke</Text></Pressable>:null}</View>)}
               </View>:null}
 
-              {!session&&!recoverableSession?(serverPanelOpen?<ServerConnect/>:<Pressable accessibilityRole="button" onPress={()=>setServerPanelOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Add server</Text></Pressable>):null}
+              {session?<Pressable accessibilityRole="button" onPress={()=>void signOut()} style={styles.settingsDangerRow}><Text style={{color:p.danger,fontWeight:'700'}}>Sign out</Text></Pressable>:null}
             </View>
 
-            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FAMILY USERS</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Users can browse, read, listen, rate, favourite and download. Only Admin can manage files, metadata, users or server settings.</Text>
-              <View style={styles.settingsAddRow}>
-                <TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
-                <Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?.38:1}]}><Text style={{color:p.sage,fontWeight:'600'}}>{busy?'Creating…':'Add user'}</Text></Pressable>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ACCESSIBILITY</Text>
+              <View style={styles.settingsSubgroup}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Colour theme</Text>
+                <View style={styles.segment}>{(['system','light','dark'] as ThemeMode[]).map(mode=><Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:theme===mode}} onPress={()=>void chooseTheme(mode)} style={[styles.segmentItem,{backgroundColor:theme===mode?p.card:'transparent'}]}><Text style={{color:theme===mode?p.gold:p.muted,fontWeight:theme===mode?'700':'500'}}>{mode[0].toUpperCase()+mode.slice(1)}</Text><View pointerEvents="none" style={[styles.segmentMarker,{backgroundColor:p.gold,opacity:theme===mode?1:0}]}/></Pressable>)}</View>
               </View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Reduced motion</Text><Text style={[styles.meta,{color:p.muted}]}>Disables decorative pulses, page motion and overlay transitions. Device Reduce Motion is always respected.</Text></View><Toggle label="Reduced motion" value={accessibilityPrefs.reduceMotion} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,reduceMotion:!accessibilityPrefs.reduceMotion})}/></View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Increased contrast</Text><Text style={[styles.meta,{color:p.muted}]}>Strengthens secondary text and interface dividers in both themes.</Text></View><Toggle label="Increased contrast" value={accessibilityPrefs.highContrast} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,highContrast:!accessibilityPrefs.highContrast})}/></View>
+              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Larger interface text</Text><Text style={[styles.meta,{color:p.muted}]}>Increases shared headings and Settings/Profile labels while continuing to respect device font scaling.</Text></View><Toggle label="Larger interface text" value={accessibilityPrefs.largeText} onPress={()=>void saveAccessibilityPreferences({...accessibilityPrefs,largeText:!accessibilityPrefs.largeText})}/></View>
+            </View>
 
-              {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}>
-                <Text style={[styles.bookTitle,{color:p.ink}]}>User access key — shown once</Text>
-                <Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text>
-                <Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Hide key</Text></Pressable>
-              </View>:null}
-
-              {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
-                <View style={{flex:1}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>{user.name}</Text>
-                  <Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text>
-                </View>
-                {!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Revoke</Text></Pressable>:null}
-              </View>)}
-            </View>:null}
-
-            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SOURCE FOLDERS</Text>
-              {sources.map(s=><View key={s.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
-                <View style={{flex:1,minWidth:0}}>
-                  <Text style={[styles.bookTitle,{color:p.ink}]}>{s.space}</Text>
-                  <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{s.path}</Text>
-                  <Text style={[styles.meta,{color:s.status==='ok'?p.sage:p.muted}]}>{s.status}</Text>
-                </View>
-                <View style={styles.settingsRowActions}>
-                  <Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+s.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Scan</Text></Pressable>
-                  <Pressable accessibilityRole="button" onPress={()=>void removeSource(s.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'600'}}>Remove</Text></Pressable>
-                </View>
-              </View>)}
-              <View style={styles.settingsAddFolder}>
-                <TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
-                <TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
-                <Button label="Add folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ABOUT ARCHIVIST</Text>
+              <View style={styles.settingsAboutHero}><View style={[styles.settingsAboutMark,{borderColor:p.gold,backgroundColor:p.card}]}><Text style={[styles.settingsAboutMarkText,{color:p.gold}]}>A</Text></View><View style={{flex:1}}><Text style={[styles.settingsAboutTitle,{color:p.ink}]}>Archivist</Text><Text style={[styles.meta,{color:p.muted}]}>Private media library · Android-first</Text></View></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>App version</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>0.9.3</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Platform</Text><Text style={[styles.settingsInfoValue,{color:p.ink}]}>{Platform.OS}</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server</Text><Text numberOfLines={1} style={[styles.settingsInfoValue,{color:connected?p.sage:p.muted,maxWidth:'62%'}]}>{connected?session?.server:'Not connected'}</Text></View>
+              <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server version</Text><Text style={[styles.settingsInfoValue,{color:p.muted}]}>{connected?'Not reported by server':'—'}</Text></View>
+              <View style={[styles.settingsDiagnostics,{backgroundColor:p.card,borderColor:p.line}]}>
+                <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Diagnostics</Text>
+                <Text selectable style={[styles.settingsDiagnosticText,{color:p.muted}]}>Local folders: {localFolders.length}\nLocal files: {localBooks.length}\nServer works: {serverWorks.length}\nOffline stored: {localStorageText}\nTheme: {theme}\nReduce motion: {reduceMotion?'on':'off'}\nHigh contrast: {accessibilityPrefs.highContrast?'on':'off'}\nLarge text: {accessibilityPrefs.largeText?'on':'off'}</Text>
               </View>
-            </View>:null}
-
-            {owner?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SAFE FILE SORTING</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist verifies data before removing originals; unresolved moves block scans until applied or reviewed.</Text>
-              <View style={styles.segment}>
-                {[
-                  ['author-title','Author / Title'],
-                  ['author-series-title','Author / Series / Title'],
-                  ['format-author-title','Format / Author / Title'],
-                ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
-              </View>
-              <View style={styles.settingsInlineActions}>
-                <Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'600'}}>Preview matching</Text></Pressable>
-                <Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'600'}}>Preview all</Text></Pressable>
-              </View>
-              <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
-              {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
-            </View>:null}
-
-            {session?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Pressable accessibilityRole="button" onPress={()=>void signOut()} style={styles.settingsDangerRow}><Text style={{color:p.danger,fontWeight:'600'}}>Sign out</Text></Pressable>
-            </View>:null}
+              <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -5049,7 +5331,7 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen,{backgroundColor:p.paper==='#000000'?'#07151C':'#F5F8F7'}]}><AmbientGlow color={p.paper==='#000000'?'#2F8B86':'#9BCFCB'} size={Math.max(1500,width*2.2)} strength={p.paper==='#000000'?.95:.34}/>
+    <SafeAreaView style={[styles.screen,{backgroundColor:darkMode?'#07151C':'#FBFAF7'}]}><AmbientGlow color={ambientHaloColor} size={Math.max(1500,width*2.2)} strength={ambientHaloStrength}/>
       {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger,backgroundColor:p.paper==='#000000'?'#241416':'#FFF5F5'}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
@@ -5100,7 +5382,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:p.paper==='#000000'?'#07111D':'#F7F7F5',borderTopColor:p.paper==='#000000'?'#26364A':'#D9D7D0'}]}>
+      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,{backgroundColor:darkMode?'#07111D':'#FBF8F1',borderTopColor:darkMode?'#26364A':'#DDD3C1'}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
@@ -5108,7 +5390,7 @@ function Client() {
           return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,centre&&styles.tabCenter]}>
             <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:accent,opacity:selected?1:0}]}/>
             {centre?<View style={[styles.tabCenterOrb,{backgroundColor:selected?p.sage:p.card,borderColor:selected?p.sage:p.line}]}><UiIcon name={tab.icon} color={selected?'#FFFFFF':p.ink} size={25}/></View>:<UiIcon name={tab.icon} color={selected?accent:p.muted} size={22}/>}
-            <Text style={[styles.tabText,centre&&styles.tabCenterText,{color:selected?accent:p.muted}]}>{tab.label}</Text>
+            <Text style={[styles.tabText,centre&&styles.tabCenterText,accessibilityPrefs.largeText&&styles.tabTextLarge,{color:selected?accent:p.muted}]}>{tab.label}</Text>
           </Pressable>;
         })}
       </View>:null}
@@ -5370,6 +5652,7 @@ const styles = StyleSheet.create({
   tabCenter: {paddingTop:1},
   tabCenterOrb: {width:46,height:46,borderRadius:23,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',marginTop:-10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:4},
   tabCenterText: {marginTop:-2},
+  tabTextLarge: {fontSize:11.5,lineHeight:14},
   liveHub: {flex:1,width:'100%'},
   liveHubTop: {minHeight:62,paddingHorizontal:18,paddingTop:10,paddingBottom:8,paddingRight:76,flexDirection:'row',alignItems:'center',justifyContent:'center'},
   liveHubSegment: {flex:1,maxWidth:320,height:44,borderRadius:22,borderWidth:StyleSheet.hairlineWidth,padding:3,flexDirection:'row',alignItems:'center'},
@@ -5399,6 +5682,26 @@ const styles = StyleSheet.create({
   settingsColumnKicker: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.6,paddingBottom:2},
   settingsSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
   settingsSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
+  settingsSubgroup: {gap:10,paddingTop:4},
+  settingsSubgroupHeading: {flexDirection:'row',alignItems:'baseline',justifyContent:'space-between',gap:12},
+  settingsSubgroupTitle: {fontSize:13,lineHeight:18,fontWeight:'700'},
+  settingsStatusPanel: {flexDirection:'row',alignItems:'center',gap:12,paddingVertical:4},
+  settingsStatusIcon: {width:40,height:40,borderRadius:20,alignItems:'center',justifyContent:'center',flexShrink:0},
+  settingsPrivacyHero: {borderWidth:StyleSheet.hairlineWidth,borderRadius:18,padding:14,flexDirection:'row',alignItems:'center',gap:12},
+  settingsPrivacyMark: {width:42,height:42,borderRadius:21,borderWidth:1.25,alignItems:'center',justifyContent:'center',flexShrink:0},
+  settingsStateLabel: {fontSize:10,lineHeight:13,fontWeight:'800',letterSpacing:1.1},
+  settingsBackupText: {borderWidth:StyleSheet.hairlineWidth,borderRadius:12,padding:12,fontFamily:Platform.OS==='ios'?'Menlo':'monospace',fontSize:9.5,lineHeight:14,maxHeight:220},
+  settingsRestoreInput: {minHeight:104,borderWidth:StyleSheet.hairlineWidth,borderRadius:12,padding:12,textAlignVertical:'top',fontFamily:Platform.OS==='ios'?'Menlo':'monospace',fontSize:10,lineHeight:15},
+  settingsToggle: {width:46,height:26,borderRadius:13,padding:3,flexDirection:'row',alignItems:'center',flexShrink:0},
+  settingsToggleKnob: {width:20,height:20,borderRadius:10,shadowColor:'#000',shadowOpacity:.12,shadowRadius:3,shadowOffset:{width:0,height:1},elevation:2},
+  settingsAboutHero: {flexDirection:'row',alignItems:'center',gap:12,paddingVertical:2},
+  settingsAboutMark: {width:48,height:48,borderRadius:14,borderWidth:1.25,alignItems:'center',justifyContent:'center'},
+  settingsAboutMarkText: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500'},
+  settingsAboutTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:25,fontWeight:'500'},
+  settingsInfoRow: {minHeight:42,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:14},
+  settingsInfoValue: {fontSize:11,lineHeight:15,fontWeight:'600',textAlign:'right'},
+  settingsDiagnostics: {borderWidth:StyleSheet.hairlineWidth,borderRadius:14,padding:12,gap:7},
+  settingsDiagnosticText: {fontFamily:Platform.OS==='ios'?'Menlo':'monospace',fontSize:9.5,lineHeight:15},
   settingsRow: {minHeight:46,flexDirection:'row',alignItems:'center',gap:12},
   settingsStatusDot: {width:8,height:8,borderRadius:4},
   settingsTextAction: {minHeight:44,paddingHorizontal:2,alignItems:'center',justifyContent:'center'},
@@ -5455,7 +5758,9 @@ const styles = StyleSheet.create({
   atlasRingControlFormat: {right:2,top:'42%'},
   atlasRingControlYear: {bottom:2,alignSelf:'center'},
   atlasRingControlLabel: {fontSize:8,lineHeight:11,fontWeight:'700',letterSpacing:1.05},
-  atlasInspectorReveal: {width:'100%',overflow:'hidden'},
+  atlasInspectorReveal: {position:'absolute',zIndex:42,elevation:14},
+  atlasInspectorRevealMobile: {left:10,right:10,bottom:10},
+  atlasInspectorRevealWide: {right:14,top:64,width:310,maxWidth:'42%'},
   atlasBreakdownReveal: {width:'100%',overflow:'hidden'},
   atlasBreakdownSheet: {borderWidth:StyleSheet.hairlineWidth,borderRadius:28,paddingHorizontal:18,paddingBottom:18,paddingTop:8,gap:13,shadowColor:'#000',shadowOpacity:.12,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:5},
   atlasBreakdownHandle: {height:8,alignItems:'center',justifyContent:'center'},
@@ -5502,9 +5807,18 @@ const styles = StyleSheet.create({
   atlasFindButton: {height:46,paddingHorizontal:16,borderRadius:12,alignItems:'center',justifyContent:'center'},
   atlasFindText: {color:'#FFFFFF',fontSize:14,fontWeight:'600'},
   atlasClusterNotice: {position:'absolute',left:10,bottom:10,maxWidth:320,borderWidth:0,borderRadius:0,paddingHorizontal:6,paddingVertical:4,opacity:.88},
-  atlasInspector: {borderWidth:0,padding:14,gap:8,zIndex:25},
-  atlasInspectorMobile: {width:'100%',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'rgba(127,127,127,.18)',borderRadius:0},
-  atlasInspectorWide: {width:'100%',minHeight:0,alignSelf:'stretch',borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,paddingHorizontal:18},
+  atlasInspector: {borderWidth:StyleSheet.hairlineWidth,borderRadius:22,padding:16,gap:11,overflow:'hidden',shadowColor:'#000',shadowOpacity:.18,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:14},
+  atlasInspectorAccent: {position:'absolute',left:0,top:0,bottom:0,width:3},
+  atlasInspectorHeader: {flexDirection:'row',alignItems:'center',gap:11},
+  atlasInspectorIcon: {width:38,height:38,borderRadius:19,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center',flexShrink:0},
+  atlasInspectorKicker: {fontSize:9,lineHeight:12,fontWeight:'800',letterSpacing:1.25},
+  atlasInspectorTitle: {fontFamily:'ArchivistEditorial',fontSize:19,lineHeight:24,fontWeight:'500',marginTop:1},
+  atlasInspectorSubtitle: {fontSize:11,lineHeight:16},
+  atlasInspectorClose: {width:38,height:38,borderRadius:19,alignItems:'center',justifyContent:'center',flexShrink:0},
+  atlasInspectorMetaRow: {flexDirection:'row',flexWrap:'wrap',gap:7},
+  atlasInspectorMetaChip: {minHeight:28,borderRadius:14,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
+  atlasInspectorMetaText: {fontSize:9.5,lineHeight:13,fontWeight:'600'},
+  atlasInspectorActions: {flexDirection:'row',flexWrap:'wrap',gap:8,paddingTop:2},
 
   atlasScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:100,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
   atlasScreenFold: {paddingHorizontal:24,paddingTop:10},
@@ -5555,7 +5869,9 @@ const styles = StyleSheet.create({
   standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',paddingRight:58},
   standardPageHeaderCopy: {flex:1,minWidth:0},
   standardPageTitle: {fontFamily:'ArchivistEditorial',fontSize:32,lineHeight:39,fontWeight:'500',letterSpacing:-.32},
+  standardPageTitleLarge: {fontSize:36,lineHeight:43},
   standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
+  standardPageSubtitleLarge: {fontSize:16,lineHeight:23},
   pageHeaderToolbar: {minHeight:42,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end',paddingRight:58},
   pageHeaderToolbarStart: {justifyContent:'flex-start'},
   pageHeaderToolbarCenter: {justifyContent:'center'},
@@ -5563,14 +5879,18 @@ const styles = StyleSheet.create({
   globalProfileCorner: {position:'absolute',top:10,zIndex:80,elevation:12},
   profileAvatarButtonWrap: {position:'relative',alignItems:'center',justifyContent:'center',flexShrink:0},
   profileAvatarHalo: {position:'absolute',left:0,right:0,top:0,bottom:0},
+  profileAvatarLevelRing: {position:'absolute',left:0,top:0},
   profileAvatarButton: {alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:StyleSheet.hairlineWidth,borderColor:'rgba(255,255,255,.16)',shadowColor:'#000',shadowOpacity:.08,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:5},
   profileAvatarInitials: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontWeight:'600',letterSpacing:.2},
+  profileAvatarLevelBadge: {position:'absolute',right:-1,bottom:-1,minWidth:17,height:17,borderRadius:9,borderWidth:1,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
+  profileAvatarLevelText: {fontSize:8,lineHeight:10,fontWeight:'800',fontVariant:['tabular-nums']},
   profileMenuLayer: {flex:1,position:'relative'},
   profileMenuBackdropLayer: {position:'absolute',left:0,right:0,top:0,bottom:0},
   profileMenuBackdrop: {position:'absolute',left:0,right:0,top:0,bottom:0,backgroundColor:'rgba(0,0,0,.28)'},
   profileMenu: {position:'absolute',right:14,top:58,width:300,maxWidth:'88%',borderRadius:18,borderWidth:StyleSheet.hairlineWidth,padding:10,shadowColor:'#000',shadowOpacity:.2,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:10},
   profileMenuIdentity: {flexDirection:'row',alignItems:'center',gap:11,padding:8,paddingBottom:12},
   profileMenuAvatar: {width:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center'},
+  profileMenuAvatarImage: {width:'100%',height:'100%'},
   profileMenuAvatarText: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontSize:17,fontWeight:'600'},
   profileMenuName: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:22,fontWeight:'500'},
   profileMenuMeta: {fontSize:10.5,lineHeight:14,marginTop:2},
@@ -5582,9 +5902,36 @@ const styles = StyleSheet.create({
   profileHubScreenFold: {paddingHorizontal:24,paddingTop:10},
   profileHubScreenWide: {paddingHorizontal:28,paddingTop:10},
   profileIdentityHero: {flexDirection:'row',alignItems:'center',gap:16,paddingTop:8,paddingBottom:18,borderBottomWidth:StyleSheet.hairlineWidth},
+  profileIdentityHeroRich: {alignItems:'center',gap:18},
+  profileIdentityRing: {width:112,height:112,position:'relative',alignItems:'center',justifyContent:'center',flexShrink:0},
   profileIdentityAvatar: {width:82,height:82,borderRadius:41,alignItems:'center',justifyContent:'center'},
+  profileIdentityAvatarRing: {position:'absolute',width:78,height:78,borderRadius:39},
+  profileIdentityLevelBadge: {position:'absolute',right:2,bottom:4,minWidth:28,height:22,borderRadius:11,borderWidth:1,alignItems:'center',justifyContent:'center',paddingHorizontal:6},
+  profileIdentityLevelText: {fontSize:9.5,lineHeight:12,fontWeight:'800',fontVariant:['tabular-nums']},
   profileIdentityAvatarText: {color:'#FFFFFF',fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500'},
+  profileIdentityAvatarImage: {width:'100%',height:'100%'},
+  profileIdentityCopy: {flex:1,minWidth:0,gap:4},
+  profileIdentityKicker: {fontSize:9,lineHeight:12,fontWeight:'800',letterSpacing:1.3},
   profileIdentityName: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,fontWeight:'500'},
+  profileTraitRow: {flexDirection:'row',flexWrap:'wrap',gap:7,marginTop:6},
+  profileTraitChip: {minHeight:28,borderRadius:14,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
+  profileTraitText: {fontSize:9.5,lineHeight:13,fontWeight:'600'},
+  profileBestGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
+  profileBestCard: {width:'47%',minWidth:135,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:12,gap:5},
+  profileBestIcon: {width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center'},
+  profileBestValue: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:24,fontWeight:'500'},
+  profileBestLabel: {fontSize:9.5,lineHeight:13},
+  profileGoalGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
+  profileGoalCard: {width:'47%',minWidth:150,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:12,gap:7},
+  profileGoalTop: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},
+  profileGoalValue: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:22,fontWeight:'500',fontVariant:['tabular-nums']},
+  profileGoalLabel: {fontSize:10,lineHeight:14},
+  profileGoalTrack: {height:5,borderRadius:3,overflow:'hidden'},
+  profileGoalFill: {height:'100%',borderRadius:3},
+  profileSectionHeadingRow: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  profileMilestoneList: {gap:0},
+  profileMilestoneRow: {minHeight:62,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:11,paddingVertical:9},
+  profileMilestoneMedal: {width:40,height:40,borderRadius:20,borderWidth:1.25,alignItems:'center',justifyContent:'center'},
   profileHubSection: {borderTopWidth:StyleSheet.hairlineWidth,paddingTop:16,gap:12},
   profileHubSectionTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.45},
   profileInitialInput: {width:86,minHeight:44,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,textAlign:'center'},
@@ -5598,29 +5945,60 @@ const styles = StyleSheet.create({
   profileSnapshotLabel: {fontSize:10,lineHeight:14,marginTop:2},
   profileHubLink: {minHeight:64,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:StyleSheet.hairlineWidth},
   profileHubLinkIcon: {width:36,height:36,borderRadius:18,alignItems:'center',justifyContent:'center'},
-  rewardsSummary: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:18,flexDirection:'row',alignItems:'center',gap:18},
-  rewardsSummaryEmblem: {width:72,height:72,borderRadius:36,borderWidth:1.5,alignItems:'center',justifyContent:'center',position:'relative'},
-  rewardsSummarySpark: {position:'absolute',width:5,height:5,borderRadius:3},
-  rewardsSummarySparkTop: {top:7,right:12},
-  rewardsSummarySparkRight: {right:6,bottom:18,width:3,height:3},
-  rewardsSummaryValue: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:34,fontWeight:'500'},
-  rewardsSummaryOf: {fontSize:9.5,lineHeight:12,fontWeight:'600'},
-  rewardsSummaryCopy: {flex:1,minWidth:0,gap:5},
-  rewardsCompletionTrack: {height:5,borderRadius:3,overflow:'hidden',marginTop:3},
+  rewardsLevelHero: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:20,flexDirection:'row',alignItems:'center',gap:20},
+  rewardsHeroRing: {width:118,height:118,position:'relative',alignItems:'center',justifyContent:'center',flexShrink:0},
+  rewardsHeroRingCenter: {position:'absolute',left:0,right:0,top:0,bottom:0,alignItems:'center',justifyContent:'center'},
+  rewardsHeroLevelLabel: {fontSize:8.5,lineHeight:11,fontWeight:'800',letterSpacing:1.4},
+  rewardsHeroLevel: {fontFamily:'ArchivistEditorial',fontSize:34,lineHeight:38,fontWeight:'500',fontVariant:['tabular-nums']},
+  rewardsHeroCopy: {flex:1,minWidth:0,gap:7},
+  rewardsHeroTitle: {fontFamily:'ArchivistEditorial',fontSize:26,lineHeight:32,fontWeight:'500',letterSpacing:-.2},
+  rewardsHeroMeta: {fontSize:11,lineHeight:16,fontWeight:'600',fontVariant:['tabular-nums']},
+  rewardsHeroFootnote: {fontSize:9.5,lineHeight:14,maxWidth:520},
+  rewardsCompletionTrack: {height:6,borderRadius:3,overflow:'hidden',marginTop:2},
   rewardsCompletionFill: {height:'100%',borderRadius:3},
-  rewardsNearest: {borderBottomWidth:StyleSheet.hairlineWidth,paddingBottom:16,flexDirection:'row',alignItems:'center',gap:12},
-  rewardsNearestIcon: {width:40,height:40,borderRadius:20,alignItems:'center',justifyContent:'center'},
-  rewardsNearestKicker: {fontSize:8.5,lineHeight:11,fontWeight:'700',letterSpacing:1.2,marginBottom:2},
+  rewardsSection: {gap:12,paddingTop:4},
+  rewardsSectionHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12},
+  rewardsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.12},
+  rewardsPathGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
+  rewardsPathCard: {width:'48%',minWidth:150,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:12,gap:10},
+  rewardsPathTop: {flexDirection:'row',alignItems:'center',gap:9},
+  rewardsPathRing: {width:52,height:52,alignItems:'center',justifyContent:'center',position:'relative',flexShrink:0},
+  rewardsPathIcon: {position:'absolute',left:0,right:0,top:0,bottom:0,alignItems:'center',justifyContent:'center'},
+  rewardsPathName: {fontSize:12.5,lineHeight:17,fontWeight:'700'},
+  rewardsPathTitle: {fontSize:9.5,lineHeight:13,marginTop:1},
+  rewardsPathLevel: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:22,fontWeight:'500'},
+  rewardsPathTrack: {height:4,borderRadius:2,overflow:'hidden'},
+  rewardsPathFill: {height:'100%',borderRadius:2},
+  rewardsMilestoneRail: {paddingVertical:4,paddingRight:18,gap:0},
+  rewardsMilestoneItem: {width:108,alignItems:'center',position:'relative',gap:4},
+  rewardsMilestoneLine: {position:'absolute',height:1,left:-54,right:54,top:25},
+  rewardsMilestoneMedal: {width:50,height:50,borderRadius:25,borderWidth:1.25,alignItems:'center',justifyContent:'center'},
+  rewardsMilestoneCurrent: {borderWidth:2,transform:[{scale:1.06}]},
+  rewardsMilestoneLevel: {fontSize:9.5,lineHeight:13,fontWeight:'700',marginTop:3},
+  rewardsMilestoneTitle: {fontSize:9,lineHeight:12,maxWidth:100,textAlign:'center'},
+  rewardsNextGrid: {gap:0,borderTopWidth:StyleSheet.hairlineWidth},
+  rewardsNextCard: {minHeight:66,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:11,paddingVertical:10},
+  rewardsNextIcon: {width:40,height:40,borderRadius:20,alignItems:'center',justifyContent:'center'},
+  rewardsNextPercent: {fontSize:11,lineHeight:15,fontWeight:'800',fontVariant:['tabular-nums']},
+  rewardsRecentSpotlight: {maxWidth:460},
   rewardsCategories: {gap:6,paddingRight:12},
   rewardsCategory: {minHeight:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',paddingHorizontal:13,alignItems:'center',justifyContent:'center'},
-  rewardsSection: {gap:4},
-  rewardsSectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingTop:4},
-  rewardsSectionCount: {fontSize:11,lineHeight:15,fontWeight:'700',fontVariant:['tabular-nums']},
-  rewardBadgeWrap: {width:48,height:48,alignItems:'center',justifyContent:'center',position:'relative'},
-  rewardPulseHalo: {position:'absolute',width:44,height:44,borderRadius:22},
-  rewardTitleRow: {flexDirection:'row',alignItems:'center',gap:8},
+  rewardTrophyGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
+  rewardTrophyCard: {width:'48%',minWidth:148,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:18,padding:13,gap:7,minHeight:188},
+  rewardTrophyCardWide: {width:'31%',minWidth:190},
+  rewardTrophyTop: {flexDirection:'row',alignItems:'flex-start',justifyContent:'space-between',gap:10},
+  rewardMedalWrap: {width:58,height:60,alignItems:'center',justifyContent:'flex-start',position:'relative'},
+  rewardPulseHalo: {position:'absolute',top:0,width:48,height:48,borderRadius:24},
+  rewardRibbon: {position:'absolute',top:38,width:13,height:20,borderBottomLeftRadius:2,borderBottomRightRadius:2},
+  rewardRibbonLeft: {left:14,transform:[{rotate:'8deg'}]},
+  rewardRibbonRight: {right:14,transform:[{rotate:'-8deg'}]},
+  rewardMedal: {width:48,height:48,borderRadius:24,borderWidth:1.5,alignItems:'center',justifyContent:'center',zIndex:2},
   rewardRecent: {fontSize:8.5,lineHeight:11,fontWeight:'800',letterSpacing:1.1},
-  rewardProgressLabel: {fontSize:9.5,lineHeight:13,fontWeight:'700',fontVariant:['tabular-nums']},
+  rewardProgressLabel: {fontSize:9,lineHeight:12,fontWeight:'800',fontVariant:['tabular-nums']},
+  rewardTrophyTitle: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:20,fontWeight:'500'},
+  rewardTrophyCopy: {fontSize:9.5,lineHeight:14,flexGrow:1},
+  rewardTrophyTrack: {height:4,borderRadius:2,overflow:'hidden',marginTop:2},
+  rewardTrophyFill: {height:'100%',borderRadius:2},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
   headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:8,alignItems:'center',justifyContent:'center'},

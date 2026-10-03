@@ -5,7 +5,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {achievementsFor,clampProgress} = require('./profileStats.ts');
+const {achievementsFor,clampProgress,progressionFor,levelFromXp} = require('./profileStats.ts');
 
 const base = {
   name:'Local library',owner:true,works:1,formats:1,series:0,
@@ -26,6 +26,19 @@ assert.equal(clampProgress(20,10),1);
 assert.equal(clampProgress(-1,10),0);
 
 console.log('PASS: Profile achievements derive only from verified statistics');
+const emptyProgression=progressionFor(base);
+assert.equal(emptyProgression.overall.level>=1,true);
+assert.equal(emptyProgression.paths.Reading.level,1);
+assert.equal(emptyProgression.paths.Listening.level,1);
+assert.equal(levelFromXp(0).progress,0);
+const activeProgression=progressionFor({...base,works:400,series:24,formats:4,startedReading:45,completedReading:30,startedAudio:20,completedAudio:12,rated:40,favourites:25,bestStreak:60,activeDays:180});
+assert.equal(activeProgression.overall.level>emptyProgression.overall.level,true);
+assert.equal(activeProgression.paths.Reading.level>1,true);
+assert.equal(activeProgression.paths.Listening.level>1,true);
+assert.equal(activeProgression.paths.Library.level>1,true);
+assert.equal(activeProgression.paths.Ritual.level>1,true);
+assert.equal(activeProgression.overall.progress>=0&&activeProgression.overall.progress<=1,true);
+console.log('PASS: Archivist levels and four progression paths derive from verified statistics');
 const {streakStats,localDay}=require('./profileStats.ts');
 assert.equal(new Set(achievementsFor(base).map(a=>a.id)).size,achievementsFor(base).length);
 assert.equal(achievementsFor(base).length,143);
