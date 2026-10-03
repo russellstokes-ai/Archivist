@@ -3782,6 +3782,7 @@ function Client() {
     const point=touches[0]||event.nativeEvent;
     const dx=(point.locationX||0)-gesture.startX,dy=(point.locationY||0)-gesture.startY;
     if(Math.hypot(dx,dy)>7)gesture.moved=true;
+    if(!gesture.moved)return;
     setAtlasTransform(current=>({...current,x:gesture.baseX+dx,y:gesture.baseY+dy}));
   }
 
@@ -3863,7 +3864,7 @@ function Client() {
       Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
       return;
     }
-    Animated.timing(atlasInspectorAnim,{toValue:0,duration:115,useNativeDriver:false}).start(()=>{
+    Animated.timing(atlasInspectorAnim,{toValue:0,duration:130,useNativeDriver:true}).start(()=>{
       setAtlasNodeId(nextId);
       atlasInspectorAnim.setValue(0);
       Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
@@ -3873,7 +3874,7 @@ function Client() {
   function dismissAtlasNode(){
     if(!atlasNodeId)return;
     if(reduceMotion){atlasInspectorAnim.setValue(0);setAtlasNodeId('');return;}
-    Animated.timing(atlasInspectorAnim,{toValue:0,duration:160,useNativeDriver:false}).start(()=>setAtlasNodeId(''));
+    Animated.timing(atlasInspectorAnim,{toValue:0,duration:170,useNativeDriver:true}).start(()=>setAtlasNodeId(''));
   }
 
   function focusAtlasNode(nodeId:string){
@@ -3920,19 +3921,19 @@ function Client() {
     if(next===atlasBreakdown){
       atlasBreakdownAnim.stopAnimation();
       atlasBreakdownAnim.setValue(.90);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:true}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:false}).start();
       return;
     }
     if(!atlasBreakdown){
       setAtlasBreakdown(next);
       atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
       return;
     }
     Animated.timing(atlasBreakdownAnim,{toValue:0,duration:150,useNativeDriver:false}).start(()=>{
       setAtlasBreakdown(next);
       atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:true}).start();
+      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
     });
   }
 
