@@ -1,0 +1,79 @@
+name: Android Auto native check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mobile/android/**'
+      - 'mobile/plugins/withAndroidAuto.js'
+      - 'mobile/androidAuto.ts'
+      - 'mobile/android-auto.test.cjs'
+      - 'mobile/App.tsx'
+      - '.github/workflows/android-auto-check.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: android-auto-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android build packages
+        run: |
+          sdkmanager --install \
+            'platform-tools' \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;27.1.12297006' \
+            'cmake;3.22.1'
+          yes | sdkmanager --licenses >/dev/null
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: |
+          npm ci
+          node harden-forge.cjs
+
+      - name: Typecheck and Android Auto catalogue tests
+        working-directory: mobile
+        run: |
+          npm run typecheck
+          node android-auto.test.cjs
+
+      - name: Compile native Android Auto foundation
+        working-directory: mobile/android
+        run: ./gradlew :app:compileReleaseKotlin --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
+
+      - name: Verify merged manifest exposes Android Auto
+        working-directory: mobile/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST=$(find app/build/intermediates/merged_manifest -name AndroidManifest.xml -print | head -n 1)
+          test -f "$MANIFEST"
+          grep -F 'com.google.android.gms.car.application' "$MANIFEST"
+          grep -F 'app.archivist.reader.ArchivistAutoService' "$MANIFEST"
+          grep -F 'androidx.media3.session.MediaLibraryService' "$MANIFEST"
+          grep -F 'android.media.browse.MediaBrowserService' "$MANIFEST"
