@@ -29,6 +29,22 @@ export type Achievement = {
   category?: string;
 };
 
+export type ProgressionPathId = 'Reading'|'Listening'|'Library'|'Ritual';
+export type ProgressionLevel = {
+  level:number;
+  xp:number;
+  levelStartXp:number;
+  nextLevelXp:number;
+  progress:number;
+  title:string;
+};
+export type ArchivistProgression = {
+  overall:ProgressionLevel;
+  paths:Record<ProgressionPathId,ProgressionLevel>;
+  totalXp:number;
+  unlockedAchievements:number;
+};
+
 function achievement(id: string, title: string, description: string, progress: number, target: number): Achievement {
   return {id,title,description,progress:Math.max(0,progress),target,unlocked:progress>=target};
 }
@@ -86,3 +102,65 @@ export function clampProgress(progress: number, target: number) {
   if (target <= 0) return 1;
   return Math.max(0,Math.min(1,progress/target));
 }
+
+function progressionFloor(level:number){
+  const step=Math.max(0,Math.floor(level)-1);
+  return Math.round(step*260+70*Math.pow(step,1.72));
+}
+
+function overallTitle(level:number){
+  if(level>=60)return 'Master Archivist';
+  if(level>=40)return 'Senior Archivist';
+  if(level>=25)return 'Archivist';
+  if(level>=15)return 'Curator';
+  if(level>=10)return 'Collector';
+  if(level>=5)return 'Explorer';
+  return 'Reader';
+}
+
+function pathTitle(path:ProgressionPathId,level:number){
+  const bands=level>=25?3:level>=12?2:level>=5?1:0;
+  const titles:Record<ProgressionPathId,string[]> = {
+    Reading:['Page Turner','Story Keeper','Deep Reader','Literary Scholar'],
+    Listening:['Listener','Story Listener','Audio Voyager','Master Listener'],
+    Library:['Collector','Shelf Keeper','Curator','Archive Keeper'],
+    Ritual:['Starter','Steady Reader','Ritual Keeper','Reading Constant'],
+  };
+  return titles[path][bands];
+}
+
+export function levelFromXp(rawXp:number,title=(level:number)=>overallTitle(level)):ProgressionLevel{
+  const xp=Math.max(0,Math.round(Number.isFinite(rawXp)?rawXp:0));
+  let level=1;
+  while(level<999&&xp>=progressionFloor(level+1))level++;
+  const levelStartXp=progressionFloor(level);
+  const nextLevelXp=progressionFloor(level+1);
+  return {level,xp,levelStartXp,nextLevelXp,progress:clampProgress(xp-levelStartXp,nextLevelXp-levelStartXp),title:title(level)};
+}
+
+export function progressionFor(stats:VerifiedProfileStats):ArchivistProgression{
+  const readingXp=Math.round(Math.max(0,stats.completedReading)*160+Math.max(0,stats.startedReading)*28);
+  const listeningXp=Math.round(Math.max(0,stats.completedAudio)*160+Math.max(0,stats.startedAudio)*28);
+  const libraryXp=Math.round(
+    Math.sqrt(Math.max(0,stats.works))*140+
+    Math.max(0,stats.series)*34+
+    Math.max(0,stats.formats)*100+
+    Math.max(0,stats.favourites||0)*8+
+    Math.max(0,stats.rated||0)*6
+  );
+  const ritualXp=Math.round(Math.max(0,stats.activeDays||0)*40+Math.max(0,stats.bestStreak||0)*55);
+  const unlockedAchievements=achievementsFor(stats).filter(item=>item.unlocked).length;
+  const totalXp=readingXp+listeningXp+libraryXp+ritualXp+unlockedAchievements*30;
+  return {
+    overall:levelFromXp(totalXp,overallTitle),
+    paths:{
+      Reading:levelFromXp(readingXp,level=>pathTitle('Reading',level)),
+      Listening:levelFromXp(listeningXp,level=>pathTitle('Listening',level)),
+      Library:levelFromXp(libraryXp,level=>pathTitle('Library',level)),
+      Ritual:levelFromXp(ritualXp,level=>pathTitle('Ritual',level)),
+    },
+    totalXp,
+    unlockedAchievements,
+  };
+}
+
