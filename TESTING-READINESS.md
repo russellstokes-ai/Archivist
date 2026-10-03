@@ -1,4 +1,4 @@
-# Archivist 0.9.2 â€” Testing Readiness
+# Archivist 0.9.3 — Testing Readiness
 
 ## 2026-10-03 — Final polish Sprint 1: Library recovery states
 
@@ -53,9 +53,11 @@ Active branch: `design/draftbit-universal-phone`. The user's current instruction
 - Android Auto target is native cover art plus standard media controls; native integration and car testing remain outstanding.
 - Atlas interaction/performance and deterministic comic focus remain subsequent sprints, not completed by this player checkpoint.
 
-**Candidate branch:** `design/hig-refresh`  
-**Candidate mobile commit:** `81526e38548620a4bc076d11ca0495478fb9a763`  
+**Active mobile branch:** `design/draftbit-universal-phone`  
+**Locked Fold/open reference:** `design/hig-refresh`  
 **Target:** universal iOS + Android local app + optional Home Assistant/Docker server.
+
+Current branch ownership and the approved UI state are recorded in `CURRENT-UI-HANDOFF.md`.
 
 This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
 
@@ -125,7 +127,7 @@ Do not substitute a `main` APK or any pre-`77842e1f` runtime when reviewing this
 - 0.9.0 version-aligned Mobile checks: commit `ffe9e545`, run `36908772223`.
 - Sprint 8 native-control polish: commit `c6e5776a`, run `36908101785`.
 
-Current runtime candidate `77842e1f` is the crafted UI sweep head. Its Mobile checks are the engineering gate; physical screenshot/device review remains the visual gate.
+Historical crafted UI sweep head was `77842e1f`. The active universal-mobile candidate has moved on substantially; use the current `design/draftbit-universal-phone` head plus `CURRENT-UI-HANDOFF.md` rather than treating that historical commit as the present runtime candidate.
 
 ## Sprint status
 
@@ -135,7 +137,7 @@ Current runtime candidate `77842e1f` is the crafted UI sweep head. Its Mobile ch
 - **Sprint 7:** core server/resilience/ecosystem scope complete and CI-proven.
 - **Sprint 8:** source/UI/release sweep complete; final candidate CI/APK plus physical acceptance remain.
 
-## 0.9.2 Android test artifact
+## Historical 0.9.2 Android test artifact
 
 The `Android Test APK` workflow produces an optimized release variant signed with the repository debug key:
 
@@ -164,7 +166,7 @@ Use `MOBILE-TESTING.md` and record results for:
 
 ## Release boundary
 
-Do not call 0.9.2 a production store release until the physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
+Do not call the current 0.9.3 candidate a production store release until the relevant physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
 
 Do not merge `dev/archivist-work` to `main` solely because CI is green; merge only after the user approves the physical testing candidate.
 
