@@ -402,8 +402,11 @@ func pathMetadata(relative, format string) metadataCandidate {
 		if len(parts) >= 4 {
 			m.Author = normalizeAuthor(parts[len(parts)-4])
 			m.Series = cleanMetadata(parts[len(parts)-3])
-			if number, _ := seriesPositionFromLabel(parts[len(parts)-2]); number > 0 {
-				m.SeriesNumber = number
+			bookFolder := cleanMetadata(parts[len(parts)-2])
+			if bits := strings.SplitN(bookFolder, " - ", 2); len(bits) == 2 {
+				if number, ok := seriesPositionFromLabel(bits[0]); ok && number > 0 {
+					m.SeriesNumber = number
+				}
 			}
 			confidence = 72
 		} else if len(parts) >= 3 {
