@@ -78,6 +78,14 @@ type Book = {
   series: string;
   genre?: string;
   publishedYear?: number;
+  seriesNumber?: number;
+  narrator?: string;
+  publisher?: string;
+  isbn?: string;
+  asin?: string;
+  language?: string;
+  description?: string;
+  metadataConflicts?: Array<{field?: string;values?: unknown[]}>;
   format: string;
   space: string;
   available: boolean;
@@ -746,8 +754,16 @@ function Client() {
   const [editTitle,setEditTitle]=useState('');
   const [editAuthor,setEditAuthor]=useState('');
   const [editSeries,setEditSeries]=useState('');
+  const [editSeriesNumber,setEditSeriesNumber]=useState('');
   const [editGenre,setEditGenre]=useState('');
   const [editYear,setEditYear]=useState('');
+  const [editNarrator,setEditNarrator]=useState('');
+  const [editPublisher,setEditPublisher]=useState('');
+  const [editISBN,setEditISBN]=useState('');
+  const [editASIN,setEditASIN]=useState('');
+  const [editLanguage,setEditLanguage]=useState('');
+  const [editDescription,setEditDescription]=useState('');
+  const [editAdvancedOpen,setEditAdvancedOpen]=useState(false);
   const [editCoverUri,setEditCoverUri]=useState('');
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
@@ -2702,8 +2718,16 @@ function Client() {
     setEditTitle(item.title);
     setEditAuthor(item.author || '');
     setEditSeries(item.series || '');
+    setEditSeriesNumber(item.seriesNumber === undefined ? '' : String(item.seriesNumber));
     setEditGenre(item.genre || '');
     setEditYear(item.publishedYear ? String(item.publishedYear) : '');
+    setEditNarrator(item.narrator || '');
+    setEditPublisher(item.publisher || '');
+    setEditISBN(item.isbn || '');
+    setEditASIN(item.asin || '');
+    setEditLanguage(item.language || '');
+    setEditDescription(item.description || '');
+    setEditAdvancedOpen(false);
     setEditCoverUri(item.coverUri || '');
   }
 
@@ -3169,18 +3193,21 @@ function Client() {
     const targets=editingUris.length?editingUris:(editing.uri?[editing.uri]:[]);
     const save=()=>{
       const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
+      const seriesNumberText=editSeriesNumber.trim();
+      const seriesNumber=seriesNumberText!==''&&Number.isFinite(Number(seriesNumberText))?Number(seriesNumberText):undefined;
       const yearText=editYear.trim();
       const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
+      const narrator=editNarrator.trim(),publisher=editPublisher.trim(),isbn=editISBN.trim(),asin=editASIN.trim(),language=editLanguage.trim(),description=editDescription.trim();
       const coverUri=editCoverUri.trim();
       if(!title)return;
       setBusy(true);setError('');
       if(editing.source==='server'){
         if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
-        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,genre})
-          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);})
+        request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description})
+          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
-        const override:LocalMetadataOverride={title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||undefined};
+        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
         const next={...localMetadataOverrides};
         for(const uri of targets)next[uri]=override;
         setLocalMetadataOverrides(next);
@@ -3188,7 +3215,7 @@ function Client() {
           .then(()=>{
             setLocalBooks(old=>{
               const wanted=new Set(targets);
-              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,genre,publishedYear,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
+              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const,metadataConflicts:[]}:b);
               void setPersistedJSON(localCatalogKey,updated);
               return updated;
             });
@@ -3218,17 +3245,29 @@ function Client() {
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
+            <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
+            {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <TextInput accessibilityLabel="Series number" keyboardType="decimal-pad" value={editSeriesNumber} onChangeText={setEditSeriesNumber} placeholder="Series number (for example 2 or 2.5)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
-            {localEdit?<TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+            <TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <Button label={editAdvancedOpen?'Hide additional details':'Additional details'} tone="quiet" onPress={()=>setEditAdvancedOpen(value=>!value)}/>
+            {editAdvancedOpen?<View style={styles.settingsSubgroup}>
+              {editing.format==='Audio'?<TextInput accessibilityLabel="Narrator" value={editNarrator} onChangeText={setEditNarrator} placeholder="Narrator" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
+              <TextInput accessibilityLabel="Publisher" value={editPublisher} onChangeText={setEditPublisher} placeholder="Publisher" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="ISBN" autoCapitalize="characters" autoCorrect={false} value={editISBN} onChangeText={setEditISBN} placeholder="ISBN" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="ASIN" autoCapitalize="characters" autoCorrect={false} value={editASIN} onChangeText={setEditASIN} placeholder="ASIN" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="Language" autoCapitalize="none" value={editLanguage} onChangeText={setEditLanguage} placeholder="Language" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+              <TextInput accessibilityLabel="Description" multiline value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:96,textAlignVertical:'top'}]}/>
+            </View>:null}
             {localEdit?<View style={styles.metadataCoverEditor}>
               <View style={styles.metadataCoverPreview}><Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
               <View style={{flex:1,gap:6}}><Text style={[styles.bookTitle,{color:p.ink}]}>Cover artwork</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist normally finds companion cover files during scanning. Paste a local/content/HTTPS image URI only when you want a manual override.</Text></View>
             </View>:null}
             {localEdit?<TextInput accessibilityLabel="Cover image URI" autoCapitalize="none" autoCorrect={false} value={editCoverUri} onChangeText={setEditCoverUri} placeholder="Cover image URI (optional)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
-            {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan; this editor changes textual metadata only.</Text>:null}
+            {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
             <Button label="Save details" disabled={busy||!editTitle.trim()} onPress={save}/>
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
             <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>{setEditing(null);setEditingUris([])}}/>
@@ -3732,7 +3771,14 @@ function Client() {
     const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
     const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
     const maintenanceMode=reviewOnly||!!metadataGapFilter;
-    const maintenanceTitle=reviewOnly?'Metadata review':metadataGapFilter==='author'?'Missing authors':metadataGapFilter==='series'?'Missing series':metadataGapFilter==='genre'?'Missing genres':'Missing device covers';
+    const maintenanceTitle=reviewOnly?'Metadata review'
+      :metadataGapFilter==='incomplete'?'Missing metadata'
+      :metadataGapFilter==='conflicts'?'Metadata conflicts'
+      :metadataGapFilter==='seriesNumber'?'Series order needs attention'
+      :metadataGapFilter==='author'?'Missing authors'
+      :metadataGapFilter==='series'?'Missing series'
+      :metadataGapFilter==='genre'?'Missing genres'
+      :'Missing device covers';
     const MaintenanceList=()=>maintenanceMode?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} in this maintenance view</Text></View><Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>:null}{serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}</View>:null;
     const main=<View style={[styles.libraryMain,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
@@ -3824,6 +3870,9 @@ function Client() {
         <Text style={[styles.filterLabel,{color:p.muted}]}>GENRE</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}><Pressable accessibilityRole="button" accessibilityState={{selected:!genreFilter}} onPress={()=>setGenreFilter('')} style={[styles.filterChip,{backgroundColor:!genreFilter?p.card:'transparent'}]}><Text style={{color:p.ink}}>Any</Text></Pressable>{genreOptions.map(value=><Pressable key={value} accessibilityRole="button" accessibilityState={{selected:genreFilter===value}} onPress={()=>setGenreFilter(value)} style={[styles.filterChip,{backgroundColor:genreFilter===value?p.card:'transparent'}]}><Text style={{color:p.ink}}>{value}</Text></Pressable>)}</ScrollView>
         <Text style={[styles.filterLabel,{color:p.muted}]}>METADATA GAPS</Text><View style={styles.filterWrap}>{([
           ['','Any metadata'],
+          ['incomplete','Any missing details'],
+          ['conflicts','Conflicts'],
+          ['seriesNumber','Series order'],
           ['author','Missing author'],
           ['series','Missing series'],
           ['genre','Missing genre'],
@@ -5612,9 +5661,10 @@ function Client() {
 
   function LibraryManagementPanel(){
     if(!libraryManageOpen)return null;
-    const gaps=metadataGapCounts(allUnifiedWorks);
+    const gaps=metadataGapCounts(reviewAssetPool);
     const reviewCount=reviewAssetPool.filter(item=>item.needsReview).length;
     const localDuplicateCount=localDuplicateGroups.reduce((sum,group)=>sum+group.items.length,0);
+    const localDuplicateGroupCount=localDuplicateGroups.length;
     const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
     const openReview=()=>{clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
@@ -5627,13 +5677,14 @@ function Client() {
               <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" onPress={()=>setLibraryManageOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
             </View>
 
+            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEEDS ATTENTION</Text>
             <View style={styles.libraryHealthGrid}>
               {[
-                ['Needs review',reviewCount],
-                ['Missing author',gaps.author],
-                ['Missing series',gaps.series],
-                ['Missing genre',gaps.genre],
-              ].map(([label,value])=><View key={String(label)} style={[styles.libraryHealthMetric,{borderColor:p.line}]}><Text style={[styles.libraryHealthValue,{color:Number(value)>0?p.gold:p.sage}]}>{value}</Text><Text style={[styles.libraryHealthLabel,{color:p.muted}]}>{label}</Text></View>)}
+                {label:'Missing metadata',value:gaps.incomplete,onPress:()=>openGap('incomplete')},
+                {label:'Conflicts',value:gaps.conflicts,onPress:()=>openGap('conflicts')},
+                {label:'Possible duplicates',value:localDuplicateGroupCount,onPress:()=>void openDuplicateReview()},
+                {label:'Series order',value:gaps.seriesNumber,onPress:()=>openGap('seriesNumber')},
+              ].map(item=><Pressable key={item.label} accessibilityRole="button" accessibilityLabel={item.label+', '+item.value} onPress={item.onPress} style={({pressed})=>[styles.libraryHealthMetric,{borderColor:p.line,opacity:pressed?.72:1}]}><Text style={[styles.libraryHealthValue,{color:item.value>0?p.gold:p.sage}]}>{item.value}</Text><Text style={[styles.libraryHealthLabel,{color:p.muted}]}>{item.label}</Text></Pressable>)}
             </View>
 
             <View style={[styles.libraryManageSection,{borderTopColor:p.line}]}>
@@ -5646,6 +5697,8 @@ function Client() {
               {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}><ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/><View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found · {scanProgress.review} review</Text></View></View>:null}
               <View style={styles.libraryRepairList}>
                 <Pressable accessibilityRole="button" onPress={openReview} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Review uncertain metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Open the exact files Archivist could not identify confidently.</Text></View><Text style={[styles.libraryRepairCount,{color:reviewCount?p.gold:p.muted}]}>{reviewCount}</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={()=>openGap('conflicts')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Resolve metadata conflicts</Text><Text style={[styles.meta,{color:p.muted}]}>Compare fields where embedded, sidecar or folder evidence disagrees.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.conflicts?p.gold:p.muted}]}>{gaps.conflicts}</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={()=>openGap('seriesNumber')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Check series order</Text><Text style={[styles.meta,{color:p.muted}]}>Find series with no position or conflicting series evidence.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.seriesNumber?p.gold:p.muted}]}>{gaps.seriesNumber}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('author')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Fill missing authors</Text><Text style={[styles.meta,{color:p.muted}]}>Filter to unresolved author fields for quick editing.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.author?p.gold:p.muted}]}>{gaps.author}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('series')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Fill missing series</Text><Text style={[styles.meta,{color:p.muted}]}>Show files with no series metadata.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.series?p.gold:p.muted}]}>{gaps.series}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('genre')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Fill missing genres</Text><Text style={[styles.meta,{color:p.muted}]}>Show files with no genre metadata.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.genre?p.gold:p.muted}]}>{gaps.genre}</Text></Pressable>
