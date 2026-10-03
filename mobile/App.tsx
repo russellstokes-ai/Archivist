@@ -522,6 +522,9 @@ function Client() {
   const [goalDraft,setGoalDraft]=useState({completed:String(defaultInsightGoal.completedTarget),annotations:String(defaultInsightGoal.annotationTarget)});
   const [readerStatsPeriod,setReaderStatsPeriod]=useState<'Day'|'Week'|'Month'>('Week');
   const [profileMenuOpen,setProfileMenuOpen]=useState(false);
+  const [profileMenuMounted,setProfileMenuMounted]=useState(false);
+  const profileMenuAnim=useRef(new Animated.Value(0)).current;
+  const interfacePulse=useRef(new Animated.Value(0)).current;
   const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
@@ -556,6 +559,7 @@ function Client() {
   const [ritualToday,setRitualToday]=useState(localDay());
   const ritual=useMemo(()=>streakStats(ritualDays,ritualToday),[ritualDays,ritualToday]);
   const [achievementCelebration,setAchievementCelebration]=useState<Achievement|null>(null);
+  const [recentAchievementId,setRecentAchievementId]=useState<string|null>(null);
   const [ratingPrompt,setRatingPrompt]=useState<RatingPrompt|null>(null);
   const achievementBaseline=useRef<{key:string;ids:Set<string>}|null>(null);
   const [query, setQuery] = useState('');
@@ -631,6 +635,13 @@ function Client() {
   const [chapterEditTitle,setChapterEditTitle]=useState('');
   const [reduceMotion,setReduceMotion]=useState(false);
   const [appActive,setAppActive]=useState(AppState.currentState==='active');
+  useEffect(()=>{
+    interfacePulse.stopAnimation();interfacePulse.setValue(0);
+    if(reduceMotion||!appActive)return;
+    const loop=Animated.loop(Animated.timing(interfacePulse,{toValue:1,duration:1800,useNativeDriver:true}),{resetBeforeIteration:true});
+    loop.start();
+    return()=>{loop.stop();interfacePulse.setValue(0);};
+  },[appActive,interfacePulse,reduceMotion]);
   const bookOpenAnim=useRef(new Animated.Value(0)).current;
   const pageTurnAnim=useRef(new Animated.Value(0)).current;
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
@@ -885,10 +896,7 @@ function Client() {
     atlasPulse.stopAnimation();
     atlasPulse.setValue(0);
     if(reduceMotion||activeTab!=='atlas'||(!atlasNodeId&&!atlasBreakdown))return;
-    const atlasPulseLoop=Animated.loop(Animated.sequence([
-      Animated.timing(atlasPulse,{toValue:1,duration:1450,useNativeDriver:true}),
-      Animated.timing(atlasPulse,{toValue:0,duration:1450,useNativeDriver:true}),
-    ]));
+    const atlasPulseLoop=Animated.loop(Animated.timing(atlasPulse,{toValue:1,duration:1800,useNativeDriver:true}),{resetBeforeIteration:true});
     atlasPulseLoop.start();
     return ()=>{atlasPulseLoop.stop();atlasPulse.setValue(0);};
   },[activeTab,atlasBreakdown,atlasNodeId,atlasPulse,reduceMotion]);
@@ -943,11 +951,13 @@ function Client() {
     achievementBaseline.current={key,ids:unlocked};
     if(!newly)return;
     setAchievementCelebration(newly);
+    setRecentAchievementId(newly.id);
     const timer=setTimeout(()=>setAchievementCelebration(null),1900);
     return()=>clearTimeout(timer);
   },[profileAchievements,profileStats,ritualReady,session,sourceFilter]);
 
   useEffect(()=>{if(!achievementCelebration)return;const timer=setTimeout(()=>setAchievementCelebration(null),3200);return()=>clearTimeout(timer);},[achievementCelebration]);
+  useEffect(()=>{if(!recentAchievementId)return;const timer=setTimeout(()=>setRecentAchievementId(null),15000);return()=>clearTimeout(timer);},[recentAchievementId]);
 
   const availabilityMatches = (available: boolean) =>
     availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
@@ -2919,15 +2929,27 @@ function Client() {
     try{await setPersistedJSON(profileAvatarKey,cleaned);}catch(e){setError((e as Error).message);}
   }
 
+  function openProfileMenu(){
+    setProfileMenuMounted(true);setProfileMenuOpen(true);profileMenuAnim.stopAnimation();
+    if(reduceMotion){profileMenuAnim.setValue(1);return;}
+    profileMenuAnim.setValue(0);
+    Animated.spring(profileMenuAnim,{toValue:1,damping:20,stiffness:220,mass:.68,useNativeDriver:true}).start();
+  }
+
+  function closeProfileMenu(after?:()=>void){
+    setProfileMenuOpen(false);profileMenuAnim.stopAnimation();
+    if(reduceMotion){profileMenuAnim.setValue(0);setProfileMenuMounted(false);after?.();return;}
+    Animated.timing(profileMenuAnim,{toValue:0,duration:180,useNativeDriver:true}).start(()=>{setProfileMenuMounted(false);after?.();});
+  }
+
   function ProfileAvatarButton({size=42}:{size?:number}={}){
-    return <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Open profile menu"
-      accessibilityState={{expanded:profileMenuOpen}}
-      onPress={()=>setProfileMenuOpen(true)}
-      style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:profileAvatar.color||'#47736F'}]}>
-      <Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>
-    </Pressable>;
+    const avatarColor=profileAvatar.color||'#47736F';
+    return <View style={[styles.profileAvatarButtonWrap,{width:size,height:size}]}>
+      {profileMenuOpen?<Animated.View pointerEvents="none" style={[styles.profileAvatarHalo,{borderRadius:size/2,backgroundColor:avatarColor,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[.36,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.42]})}]}]}/>:null}
+      <Pressable accessibilityRole="button" accessibilityLabel={profileMenuOpen?'Close profile menu':'Open profile menu'} accessibilityState={{expanded:profileMenuOpen}} onPress={profileMenuOpen?()=>closeProfileMenu():openProfileMenu} style={[styles.profileAvatarButton,{width:size,height:size,borderRadius:size/2,backgroundColor:avatarColor}]}>
+        <Text maxFontSizeMultiplier={1.1} style={[styles.profileAvatarInitials,{fontSize:Math.max(13,size*.36)}]}>{avatarInitials}</Text>
+      </Pressable>
+    </View>;
   }
 
   function PageHeader({title,subtitle}:{title:string;subtitle:string}){
@@ -2945,27 +2967,25 @@ function Client() {
 
   function ProfileMenu(){
     const unlocked=profileAchievements.filter(item=>item.unlocked).length;
-    return <Modal transparent visible={profileMenuOpen} animationType="fade" onRequestClose={()=>setProfileMenuOpen(false)}>
+    const menuItems=[
+      {id:'profile' as Tab,label:'Profile',copy:'Identity, avatar and reading summary',icon:'bookmark' as UiIconName,tone:'#54C6B8'},
+      {id:'rewards' as Tab,label:'Rewards',copy:'Milestones and achievements',icon:'target' as UiIconName,tone:'#E3BC67'},
+      {id:'settings' as Tab,label:'Settings',copy:'App, library and server',icon:'settings' as UiIconName,tone:'#7AA7E8'},
+    ];
+    return <Modal transparent visible={profileMenuMounted} animationType="none" onRequestClose={()=>closeProfileMenu()}>
       <View style={styles.profileMenuLayer}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close profile menu" onPress={()=>setProfileMenuOpen(false)} style={styles.profileMenuBackdrop}/>
-        <View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line}]}>
+        <Animated.View pointerEvents="box-none" style={[styles.profileMenuBackdropLayer,{opacity:profileMenuAnim}]}><Pressable accessibilityRole="button" accessibilityLabel="Close profile menu" onPress={()=>closeProfileMenu()} style={styles.profileMenuBackdrop}/></Animated.View>
+        <Animated.View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
           <View style={styles.profileMenuIdentity}>
             <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F'}]}><Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text></View>
-            <View style={{flex:1,minWidth:0}}>
-              <Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text>
-              <Text style={[styles.profileMenuMeta,{color:p.muted}]}>{unlocked} reward{unlocked===1?'':'s'} unlocked</Text>
-            </View>
+            <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>{unlocked} reward{unlocked===1?'':'s'} unlocked</Text></View>
           </View>
-          {[
-            {id:'profile' as Tab,label:'Profile',copy:'Identity, avatar and reading summary',icon:'bookmark' as UiIconName},
-            {id:'rewards' as Tab,label:'Rewards',copy:'Milestones and achievements',icon:'target' as UiIconName},
-            {id:'settings' as Tab,label:'Settings',copy:'App, library and server',icon:'settings' as UiIconName},
-          ].map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>{setProfileMenuOpen(false);setActiveTab(item.id)}} style={[styles.profileMenuItem,{borderTopColor:p.line}]}>
-            <View style={[styles.profileMenuIcon,{backgroundColor:p.card}]}><UiIcon name={item.icon} color={p.sage} size={18}/></View>
+          {menuItems.map(item=><Pressable key={item.id} accessibilityRole="button" onPress={()=>closeProfileMenu(()=>setActiveTab(item.id))} style={({pressed})=>[styles.profileMenuItem,{borderTopColor:p.line,opacity:pressed?.72:1}]}>
+            <View style={[styles.profileMenuIcon,{backgroundColor:item.tone+'20',borderColor:item.tone+'55'}]}><UiIcon name={item.icon} color={item.tone} size={18}/></View>
             <View style={{flex:1,minWidth:0}}><Text style={[styles.profileMenuItemTitle,{color:p.ink}]}>{item.label}</Text><Text style={[styles.profileMenuItemCopy,{color:p.muted}]}>{item.copy}</Text></View>
-            <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={p.muted} size={15}/></View>
+            <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={item.tone} size={15}/></View>
           </Pressable>)}
-        </View>
+        </Animated.View>
       </View>
     </Modal>;
   }
@@ -3797,7 +3817,7 @@ function Client() {
     const dot=(node.kind==='genre'?18:node.kind==='author'?7:node.kind==='work'?4:5.5)/zoom;
     const genreHub=node.kind==='genre';
     return <Pressable accessibilityRole="button" accessibilityLabel={node.kind+' '+node.label} onPress={()=>selectAtlasNode(node.id)} style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
-      {selected?<Animated.View pointerEvents="none" style={{position:'absolute',width:58/zoom,height:58/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.14,.30]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.94,1.16]})}]}}/>:genreHub?<View pointerEvents="none" style={{position:'absolute',width:38/zoom,height:38/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:.12}}/>:null}
+      {selected?<Animated.View pointerEvents="none" style={{position:'absolute',width:58/zoom,height:58/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.34,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.38]})}]}}/>:genreHub?<View pointerEvents="none" style={{position:'absolute',width:38/zoom,height:38/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:.12}}/>:null}
       <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:colour,borderWidth:genreHub?1/zoom:0,borderColor:genreHub?'rgba(255,255,255,.55)':'transparent',boxShadow:selected?'0px 0px 22px '+colour:genreHub?'0px 0px 12px '+colour:'none'}}/>
       {(selected||genreHub||zoom>.60)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
         <Text numberOfLines={2} style={{paddingHorizontal:genreHub?7/zoom:0,paddingVertical:genreHub?3/zoom:0,borderRadius:999,borderWidth:genreHub?StyleSheet.hairlineWidth:0,borderColor:genreHub?colour:'transparent',backgroundColor:genreHub?(p.paper==='#000000'?'rgba(7,17,29,.82)':'rgba(255,255,255,.86)'):'transparent',textAlign:'center',fontSize:(genreHub?11.5:11)/zoom,lineHeight:(genreHub?15:14)/zoom,color:genreHub?colour:(selected?p.ink:p.muted),fontWeight:selected||genreHub?'600':'400'}}>{node.label}</Text>
@@ -3973,7 +3993,7 @@ function Client() {
               <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color="#2F8B86" size={Math.max(680,ringSize*1.35)} strength={.72}/></View>
               <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
                 <DataRing size={ringSize} items={atlasRingItems} ink={p.ink} muted={p.muted} track={p.line} thickness={22}/>
-                {atlasBreakdown?<Animated.View style={[styles.atlasSelectedRingPulse,{width:ringSize-8,height:ringSize-8,borderRadius:(ringSize-8)/2,borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.10,.28]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.995,1.018]})}]}]}/>:null}
+                {atlasBreakdown?<Animated.View style={[styles.atlasSelectedRingPulse,{width:ringSize-8,height:ringSize-8,borderRadius:(ringSize-8)/2,borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.22,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.035]})}]}]}/>:null}
                 <View style={[styles.atlasInnerRing,{width:ringSize-42,height:ringSize-42,borderRadius:(ringSize-42)/2,borderColor:p.line}]}/>
               </View>
 
@@ -3988,20 +4008,20 @@ function Client() {
                 <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.min(2.25,atlasTransform.scale+.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
               </View>
 
-              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Genre'}} accessibilityLabel="Show genre breakdown" onPress={()=>selectAtlasBreakdown('Genre')} style={[styles.atlasRingControl,styles.atlasRingControlGenre,{borderColor:atlasBreakdown==='Genre'?'#E2736B':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
-                {atlasBreakdown==='Genre'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#E2736B',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.16,.42]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.10]})}]}]}/>:null}
-                <UiIcon name="bookOpen" color={atlasBreakdown==='Genre'?'#E2736B':p.muted} size={19}/>
-                <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Genre'?'#E2736B':p.muted}]}>GENRE</Text>
+              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Genre'}} accessibilityLabel="Show genre breakdown" onPress={()=>selectAtlasBreakdown('Genre')} style={[styles.atlasRingControl,styles.atlasRingControlGenre,{borderColor:atlasBreakdown==='Genre'?'#E2736B':'#8F5753',backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                {atlasBreakdown==='Genre'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#FF9A92',backgroundColor:'rgba(255,154,146,.14)',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.48,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.26]})}]}]}/>:null}
+                <UiIcon name="bookOpen" color="#E2736B" size={19}/>
+                <Text style={[styles.atlasRingControlLabel,{color:'#E2736B'}]}>GENRE</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Format'}} accessibilityLabel="Show format breakdown" onPress={()=>selectAtlasBreakdown('Format')} style={[styles.atlasRingControl,styles.atlasRingControlFormat,{borderColor:atlasBreakdown==='Format'?'#62AFC1':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
-                {atlasBreakdown==='Format'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#62AFC1',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.16,.42]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.10]})}]}]}/>:null}
-                <UiIcon name="layers" color={atlasBreakdown==='Format'?'#62AFC1':p.muted} size={19}/>
-                <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Format'?'#62AFC1':p.muted}]}>FORMAT</Text>
+              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Format'}} accessibilityLabel="Show format breakdown" onPress={()=>selectAtlasBreakdown('Format')} style={[styles.atlasRingControl,styles.atlasRingControlFormat,{borderColor:atlasBreakdown==='Format'?'#62AFC1':'#466F78',backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                {atlasBreakdown==='Format'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#88D7E8',backgroundColor:'rgba(136,215,232,.14)',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.48,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.26]})}]}]}/>:null}
+                <UiIcon name="layers" color="#62AFC1" size={19}/>
+                <Text style={[styles.atlasRingControlLabel,{color:'#62AFC1'}]}>FORMAT</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Published year'}} accessibilityLabel="Show publication year breakdown" onPress={()=>selectAtlasBreakdown('Published year')} style={[styles.atlasRingControl,styles.atlasRingControlYear,{borderColor:atlasBreakdown==='Published year'?'#A78BC7':p.line,backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
-                {atlasBreakdown==='Published year'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.16,.42]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.10]})}]}]}/>:null}
-                <UiIcon name="calendar" color={atlasBreakdown==='Published year'?'#A78BC7':p.muted} size={19}/>
-                <Text style={[styles.atlasRingControlLabel,{color:atlasBreakdown==='Published year'?'#A78BC7':p.muted}]}>YEAR</Text>
+              <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Published year'}} accessibilityLabel="Show publication year breakdown" onPress={()=>selectAtlasBreakdown('Published year')} style={[styles.atlasRingControl,styles.atlasRingControlYear,{borderColor:atlasBreakdown==='Published year'?'#A78BC7':'#6F6086',backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
+                {atlasBreakdown==='Published year'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#C7A6EE',backgroundColor:'rgba(199,166,238,.14)',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.48,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.26]})}]}]}/>:null}
+                <UiIcon name="calendar" color="#A78BC7" size={19}/>
+                <Text style={[styles.atlasRingControlLabel,{color:'#A78BC7'}]}>YEAR</Text>
               </Pressable>
 
               {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
@@ -4015,7 +4035,7 @@ function Client() {
             <Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
             <View style={styles.atlasBreakdownHandle}><View style={[styles.atlasBreakdownHandleBar,{backgroundColor:p.muted}]}/></View>
             <View style={styles.atlasBreakdownHeader}>
-              <Animated.View style={[styles.atlasBreakdownBadge,{borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',backgroundColor:p.card,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.84,1]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.98,1.05]})}]}]}>
+              <Animated.View style={[styles.atlasBreakdownBadge,{borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',backgroundColor:p.card}]}>
                 <UiIcon name={atlasBreakdown==='Genre'?'bookOpen':atlasBreakdown==='Format'?'layers':'calendar'} color={atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7'} size={22}/>
               </Animated.View>
               <View style={{flex:1,minWidth:0}}>
@@ -4030,7 +4050,7 @@ function Client() {
                   <View style={[styles.atlasBreakdownDot,{backgroundColor:item.color}]}/>
                   <Text numberOfLines={1} style={[styles.atlasBreakdownName,{color:p.ink}]}>{item.label}</Text>
                   <View style={[styles.atlasBreakdownTrack,{backgroundColor:p.card}]}>
-                    <Animated.View style={[styles.atlasBreakdownFill,{width:(percent+'%') as any,backgroundColor:item.color,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.84,1]})}]}/>
+                    <Animated.View style={[styles.atlasBreakdownFill,{width:(percent+'%') as any,backgroundColor:item.color}]}/>
                   </View>
                   <Text style={[styles.atlasBreakdownCount,{color:p.ink}]}>{item.count}</Text>
                   <Text style={[styles.atlasBreakdownPercent,{color:p.muted}]}>{percent}%</Text>
@@ -5504,9 +5524,12 @@ const styles = StyleSheet.create({
   pageHeaderToolbarCenter: {justifyContent:'center'},
   pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},
   globalProfileCorner: {position:'absolute',top:10,zIndex:80,elevation:12},
+  profileAvatarButtonWrap: {position:'relative',alignItems:'center',justifyContent:'center',flexShrink:0},
+  profileAvatarHalo: {position:'absolute',left:0,right:0,top:0,bottom:0},
   profileAvatarButton: {alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:StyleSheet.hairlineWidth,borderColor:'rgba(255,255,255,.16)',shadowColor:'#000',shadowOpacity:.08,shadowRadius:8,shadowOffset:{width:0,height:3},elevation:5},
   profileAvatarInitials: {color:'#FFFFFF',fontFamily:'sans-serif-medium',fontWeight:'600',letterSpacing:.2},
   profileMenuLayer: {flex:1,position:'relative'},
+  profileMenuBackdropLayer: {position:'absolute',left:0,right:0,top:0,bottom:0},
   profileMenuBackdrop: {position:'absolute',left:0,right:0,top:0,bottom:0,backgroundColor:'rgba(0,0,0,.28)'},
   profileMenu: {position:'absolute',right:14,top:58,width:300,maxWidth:'88%',borderRadius:18,borderWidth:StyleSheet.hairlineWidth,padding:10,shadowColor:'#000',shadowOpacity:.2,shadowRadius:20,shadowOffset:{width:0,height:8},elevation:10},
   profileMenuIdentity: {flexDirection:'row',alignItems:'center',gap:11,padding:8,paddingBottom:12},
@@ -5515,7 +5538,7 @@ const styles = StyleSheet.create({
   profileMenuName: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:22,fontWeight:'500'},
   profileMenuMeta: {fontSize:10.5,lineHeight:14,marginTop:2},
   profileMenuItem: {minHeight:58,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:8,paddingVertical:7},
-  profileMenuIcon: {width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center'},
+  profileMenuIcon: {width:34,height:34,borderRadius:17,borderWidth:StyleSheet.hairlineWidth,alignItems:'center',justifyContent:'center'},
   profileMenuItemTitle: {fontSize:13,lineHeight:18,fontWeight:'600'},
   profileMenuItemCopy: {fontSize:9.5,lineHeight:13,marginTop:1},
   profileHubScreen: {paddingHorizontal:18,paddingTop:10,paddingBottom:126,gap:20,width:'100%',maxWidth:980,alignSelf:'center'},
