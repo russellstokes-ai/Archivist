@@ -283,3 +283,19 @@ The bottom navigation has five primary destinations in this order: Shelf, Librar
 - The current/recent audio and reading targets are persisted so a cold app start can offer direct resume from the Now screen.
 - Reader features such as comic speech-bubble focus, zoom, reading position, reader tools and appearance remain available inside Now / Reader.
 - The persistent profile avatar remains visible at the top right of the Now screen and every other navigable page.
+
+
+### Approved Live Player motion and transport
+
+The canonical Player reference image remains the visual acceptance target for Now / Player.
+
+- The hero is a physical open book, not a generic cover card. The actual metadata cover is the closed/front cover when available.
+- Play opens the book smoothly; pause closes it smoothly. While audio is actively playing, page turns occur subtly and periodically.
+- Short rewind/forward actions animate three pages. The primary short transport is **15 seconds back** and **30 seconds forward**.
+- The outer transport controls move by chapter when chapter data exists; otherwise they fall back to a 60-second jump. Those larger jumps animate five pages.
+- The transport row has five controls: previous chapter/fallback, 15s back, large play/pause, 30s forward, next chapter/fallback.
+- The Now / Player background uses one continuous subtle teal ambient halo, matching the approved Stats lighting language without introducing a visible seam.
+- Player identity remains editorial: large serif title, quiet author/byline, series metadata, chapter/progress and time remaining beneath the book.
+- The Now page itself does not add a redundant page title above the Player / Reader switch.
+- Reader remains the full Archivist reader. Comics support pinch zoom and robust touch double-tap. Double-tap first attempts local speech-bubble focus; if no bubble is detected it falls back to focused image zoom.
+- These behaviors are functional requirements, not decorative mock states, and must remain covered by mobile tests.
