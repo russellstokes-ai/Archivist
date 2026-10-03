@@ -3645,7 +3645,8 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={styles.libraryRailContent} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
+    const libraryFolderRailWidth=layoutTier==='fold'?96:110;
+    return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{width:libraryFolderRailWidth,minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0,backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={[styles.libraryRailContent,{width:'100%'}]} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
   function LiveMediaEmpty({mode,lastTitle,onResume}:{mode:'player'|'reader';lastTitle?:string;onResume?:()=>void}) {
@@ -5869,13 +5870,13 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:132,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:6,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
-  libraryRailFold: {width:112,paddingHorizontal:4,paddingTop:8},
-  libraryRailContent: {paddingBottom:28},
+  libraryRail: {width:110,minWidth:110,maxWidth:110,flexBasis:110,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
+  libraryRailFold: {width:96,minWidth:96,maxWidth:96,flexBasis:96,paddingHorizontal:3,paddingTop:8},
+  libraryRailContent: {paddingBottom:28,width:'100%'},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
-  librarySourceTree: {gap:3},
+  librarySourceTree: {gap:3,width:'100%',minWidth:0},
   libraryTreeGroupLabel: {fontSize:8,lineHeight:10,fontWeight:'800',letterSpacing:1.15,marginTop:13,marginBottom:2,paddingHorizontal:5},
   libraryTreeChildren: {paddingLeft:4,gap:1},
   libraryTreeRow: {minHeight:38,borderRadius:9,paddingHorizontal:4,paddingVertical:4,flexDirection:'row',alignItems:'center',gap:5},
