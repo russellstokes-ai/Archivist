@@ -1,4 +1,4 @@
-import {decodedPathParts} from './libraryIntelligence';
+import {decodedPathParts, logicalWorkKey} from './libraryIntelligence';
 import {LocalBook} from './localLibrary';
 
 export type LocalWork = {
@@ -11,6 +11,8 @@ export type LocalWork = {
   series: string;
   genre: string;
   publishedYear?: number;
+  seriesNumber?: number;
+  logicalWorkKey?: string;
   format: string;
   space: string;
   available: boolean;
@@ -53,6 +55,8 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       series,
       genre,
       publishedYear: tracks.find(item=>item.publishedYear)?.publishedYear,
+      seriesNumber: tracks.find(item=>item.seriesNumber !== undefined)?.seriesNumber,
+      logicalWorkKey: logicalWorkKey({title,author,series,seriesNumber:tracks.find(item=>item.seriesNumber !== undefined)?.seriesNumber}),
       format: first.format,
       space: first.space,
       available: tracks.some(item => item.available),
