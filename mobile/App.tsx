@@ -1743,6 +1743,17 @@ function Client() {
     } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
   }
 
+  function confirmRemoveSource(source:{id:number;space:string;path:string}){
+    Alert.alert(
+      'Remove server folder from Archivist?',
+      'Archivist will remove this source from its catalogue. The media files on the server are not deleted.',
+      [
+        {text:'Cancel',style:'cancel'},
+        {text:'Remove',style:'destructive',onPress:()=>void removeSource(source.id)},
+      ],
+    );
+  }
+
 
   function describeBatch(result: MoveBatchResult, success: string) {
     const firstError = result.items.find(item => item.error)?.error;
@@ -6318,7 +6329,7 @@ function Client() {
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server source folders</Text>
                 {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View>
-                  <View style={styles.settingsRowActions}><Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void removeSource(source.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable></View>
+                  <View style={styles.settingsRowActions}><Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Remove server folder '+source.space} onPress={()=>confirmRemoveSource(source)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable></View>
                 </View>)}
                 <View style={styles.settingsAddFolder}><TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Button label="Add server folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/></View>
               </View>:null}
