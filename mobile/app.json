@@ -32,15 +32,23 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FBFAF7",
+          "image": "./assets/icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "dark": {
+            "image": "./assets/icon.png",
+            "backgroundColor": "#07151C"
+          }
+        }
+      ],
       "./plugins/withCleartextTraffic"
     ],
     "updates": {
       "enabled": false
-    },
-    "splash": {
-      "image": "./assets/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#07151C"
     }
   }
 }
