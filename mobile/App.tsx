@@ -95,6 +95,9 @@ async function persistPickedProfilePhoto(uri:string,fileName?:string|null) {
 
 const appVersion=Constants.expoConfig?.version||'0.9.3';
 const platformLabel=Platform.OS==='ios'?'iOS':Platform.OS==='android'?'Android':'Web';
+const addLocalFolderLabel=Platform.OS==='ios'?'Import folder':'Add device folder';
+const addLocalFolderShortLabel=Platform.OS==='ios'?'Import folder':'Add a folder';
+const rescanLocalFoldersLabel=Platform.OS==='ios'?'Rescan imported folders':'Rescan device folders';
 function audioStatusError(status:unknown){
   if(!status||typeof status!=='object'||!('error' in status))return undefined;
   const value=(status as {error?:unknown}).error;
@@ -2751,9 +2754,9 @@ function Client() {
       <View style={styles.libraryTreeChildren}>
         {localFolders.map(folder=><Row key={folder.id||folder.uri} label={folder.name} count={localFolderCount(folder)} detail={folder.status||undefined} active={selected('local',folder.name,true)} onPress={()=>choose('local',folder.name,true)} icon="bookOpen"/>)}
         {sourceCounts.downloaded>0?<Row label="Offline downloads" count={sourceCounts.downloaded} detail="Saved from Archivist Server" active={selected('downloaded')} onPress={()=>choose('downloaded')} icon="bookmark"/>:null}
-        {!localFolders.length&&sourceCounts.downloaded===0?<Text style={[styles.libraryTreeEmpty,{color:p.muted}]}>No device folders added.</Text>:null}
+        {!localFolders.length&&sourceCounts.downloaded===0?<Text style={[styles.libraryTreeEmpty,{color:p.muted}]}>{Platform.OS==='ios'?'No imported folders yet.':'No device folders added.'}</Text>:null}
       </View>
-      <Pressable accessibilityRole="button" onPress={()=>{if(compact)setLibrarySourcesOpen(false);void addLocalFolder();}} style={styles.libraryTreeAdd}><UiIcon name="plus" color={p.sage} size={15}/><Text style={[styles.libraryTreeAddText,{color:p.sage}]}>Add device folder</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={()=>{if(compact)setLibrarySourcesOpen(false);void addLocalFolder();}} style={styles.libraryTreeAdd}><UiIcon name="plus" color={p.sage} size={15}/><Text style={[styles.libraryTreeAddText,{color:p.sage}]}>{addLocalFolderLabel}</Text></Pressable>
 
       {session||recoverableSession?<>
         <Text style={[styles.libraryTreeGroupLabel,{color:p.muted}]}>ARCHIVIST SERVER</Text>
@@ -2782,7 +2785,7 @@ function Client() {
           <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Choose where your media lives</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} device folder${localFolders.length===1?'':'s'} added` : shelfServerPromptHidden ? 'Add a Books, Comics or Audiobooks folder. Server prompts are hidden on Shelf.' : 'Add a device folder or connect an Archivist Server. You can add the other later.'}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} ${Platform.OS==='ios'?'imported':'device'} folder${localFolders.length===1?'':'s'} added` : shelfServerPromptHidden ? (Platform.OS==='ios'?'Import a Books, Comics or Audiobooks folder from Files. Server prompts are hidden on Shelf.':'Add a Books, Comics or Audiobooks folder. Server prompts are hidden on Shelf.') : (Platform.OS==='ios'?'Import a folder from Files or connect an Archivist Server. You can add the other later.':'Add a device folder or connect an Archivist Server. You can add the other later.')}</Text>
           </View>
         </View>
 
@@ -2803,7 +2806,7 @@ function Client() {
         </View>
 
         {!hasFolder?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label={localScanning?'Scanning…':'Add a folder'} disabled={localScanning} onPress={()=>void addLocalFolder()}/></View>
+          <View style={styles.shelfSetupAction}><Button label={localScanning?'Scanning…':addLocalFolderShortLabel} disabled={localScanning} onPress={()=>void addLocalFolder()}/></View>
           {!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
         </View>:null}
         {!hasFolder&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
@@ -3914,7 +3917,7 @@ function Client() {
     const hasConfiguredSource=localFolders.length>0||!!session||!!recoverableSession;
     const showStandaloneEmpty=!base.length&&!shelfLoading&&(onboardingDone||hasConfiguredSource);
     const emptyCopy=recoverableSession&&!session
-      ? 'Your saved Archivist Server is currently offline. Add a device folder or retry the server from Settings.'
+      ? (Platform.OS==='ios'?'Your saved Archivist Server is currently offline. Import a folder from Files or retry the server from Settings.':'Your saved Archivist Server is currently offline. Add a device folder or retry the server from Settings.')
       : hasConfiguredSource
         ? 'Your connected sources do not contain any works yet. Add or scan a folder, or check your Archivist Server.'
         : 'Add media from this device or connect an Archivist Server to begin.';
@@ -3962,7 +3965,7 @@ function Client() {
         <ArchivistLogo size={46}/>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Your Shelf is waiting</Text>
         <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{emptyCopy}</Text>
-        {!localFolders.length?<Button label="Add a folder" onPress={()=>void addLocalFolder()}/>:null}
+        {!localFolders.length?<Button label={addLocalFolderShortLabel} onPress={()=>void addLocalFolder()}/>:null}
         {!session&&!recoverableSession&&!shelfServerPromptHidden?<Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/>:null}
       </View>:null}
 
@@ -4040,7 +4043,7 @@ function Client() {
         copy='Reconnect your saved server, or choose content stored on this device.';
       }else if(noConfiguredSources&&!hasFilter){
         title='Your Library is waiting';
-        copy='Add a folder from this device or connect an Archivist Server to start building your library.';
+        copy=Platform.OS==='ios'?'Import a folder from Files or connect an Archivist Server to start building your library.':'Add a folder from this device or connect an Archivist Server to start building your library.';
       }else if(!hasFilter&&selectedFolder){
         title='This folder is empty';
         copy='No supported works are indexed in this folder yet. Rescan it after adding files, or choose another folder.';
@@ -4049,7 +4052,7 @@ function Client() {
         copy='Download a server title to keep it available on this device.';
       }else if(!hasFilter&&sourceFilter==='local'){
         title='Nothing stored here yet';
-        copy='Add or rescan a device folder, or choose another source.';
+        copy=Platform.OS==='ios'?'Import or rescan a local folder, or choose another source.':'Add or rescan a device folder, or choose another source.';
       }else if(!hasFilter&&sourceFilter==='server'){
         title='Nothing on this server yet';
         copy='Add or scan a server folder, or choose another source.';
@@ -4063,7 +4066,7 @@ function Client() {
         <Text style={[styles.meta,{color:p.muted,textAlign:'center'}]}>{copy}</Text>
         {hasFilter?<Button label="Clear filters & search" tone="quiet" onPress={clearLibraryFilters}/>:null}
         {selectedServerOffline?<Button label="Server settings" tone="quiet" onPress={()=>setActiveTab('settings')}/>:null}
-        {!hasFilter&&(noConfiguredSources||sourceFilter==='local'||selectedFolder)?<Button label="Add device folder" tone="quiet" onPress={()=>void addLocalFolder()}/>:null}
+        {!hasFilter&&(noConfiguredSources||sourceFilter==='local'||selectedFolder)?<Button label={addLocalFolderLabel} tone="quiet" onPress={()=>void addLocalFolder()}/>:null}
         {!hasFilter&&!noConfiguredSources?<Button label="Choose source or folder" tone="quiet" onPress={()=>setLibrarySourcesOpen(true)}/>:null}
         {!hasFilter&&noConfiguredSources?<Button label="Connect Archivist Server" tone="quiet" onPress={connectServerFromShelf}/>:null}
       </View>;
@@ -6040,8 +6043,8 @@ function Client() {
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SCAN & REPAIR</Text>
               <Text style={[styles.meta,{color:p.muted}]}>Rescanning refreshes embedded, sidecar and folder-derived details and covers. Anything still uncertain stays in review rather than being guessed.</Text>
               <View style={styles.toolRow}>
-                <Button label={localScanning?'Scanning…':'Rescan device folders'} disabled={localScanning||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
-                <Button label="Add device folder" tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
+                <Button label={localScanning?'Scanning…':rescanLocalFoldersLabel} disabled={localScanning||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
+                <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
                 <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
