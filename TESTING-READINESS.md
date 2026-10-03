@@ -243,3 +243,47 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Real server-folder scan / duplicate verification / safe-sort smoke against the user's Archivist Server.
 - No destructive automatic metadata fill or duplicate deletion was introduced; uncertain values remain reviewable by design.
 
+## 2026-10-03 — Draftbit Sprints 5–7: work details, branding & integrated QA
+
+### Sprint 5 — Work details, metadata & covers
+- Added a polished Work Details sheet for every unified work with artwork, title/author/series, format/genre/year, reading state, rating, location, availability, file/edition counts and metadata provenance.
+- Work actions now expose Work Details without cluttering the Library cards.
+- Local grouped works can edit metadata across every track in the work rather than only the first file.
+- Manual local overrides now support publication year and cover URI and survive rescans.
+- Manual audiobook titles take precedence over folder-derived group names.
+- The metadata editor includes cover preview, optional manual cover URI and a **Use scanned metadata & cover** action that removes manual overrides and rescans.
+- Server cover management remains scan-driven; the app does not pretend it can write arbitrary remote cover art when the server API does not support that safely.
+- Work Details routes server Admin users into the Library management workflow for metadata/scan work and retains download/favourite/collection actions.
+
+### Sprint 6 — Canonical Archivist logo & splash
+- Added a shared in-app `ArchivistLogo` component using the canonical `mobile/assets/icon.png`.
+- Replaced visible generic “A” branding in empty states, fallback covers and About with the canonical logo. User initials remain user identity, not app branding.
+- The font-loading launch screen now uses the canonical logo and Archivist wordmark.
+- Android app/adaptive icon and splash all use the same canonical asset.
+- Expo SDK 57 splash configuration uses the supported `expo-splash-screen` config plugin with light and dark backgrounds and `contain` sizing.
+- Added and locked `expo-splash-screen ~57.0.9`; Expo Doctor validates the final configuration.
+
+### Sprint 7 — Integrated QA & lock
+- Added `sprint-5-7-contract.test.cjs` to lock Work Details, grouped metadata/cover editing, canonical branding/splash, core screen presence, Fold responsive paths, themes, reduced motion and retention of Sprint 4 Library management.
+- Extended local-library tests for manual cover/year overrides.
+- Extended grouped-work tests so manual audiobook titles remain stable.
+- Brand sweep found no remaining visible generic “A” marks; only obsolete unused style names remain and do not render.
+- Core app surfaces remain present: Shelf, Library, Now/Player/Reader, Atlas, Reader Stats, Profile, Rewards and Settings.
+- Existing phone/Fold responsive styles, light/dark/system themes and reduced-motion support remain wired.
+
+### Automated evidence
+- Final Mobile Checks run `37135925849` on commit `4185c9e21fbf93c3fa3e0c6eb443f2ae2ac56cb7`: **passed**.
+- Dependency installation: passed.
+- Expo Doctor: passed.
+- TypeScript: passed.
+- Mobile tests: **23/23 suites passed**, including `library-maintenance.test.cjs` and `sprint-5-7-contract.test.cjs`.
+
+### Runtime acceptance we will check next
+- Draftbit **Sync → Preview** on phone-width and Fold/open-width layouts.
+- Light and dark modes for Shelf, Library, Work Details, Manage Library, Player/Reader, Atlas, Stats, Profile/Rewards and Settings.
+- Work Details sheet scrolling, keyboard behaviour and action-sheet transitions on a real Android device.
+- Real grouped audiobook edit/rescan and local cover override/revert using Android Storage Access Framework folders.
+- Native release-build splash appearance; development clients do not constitute final splash visual acceptance.
+- Real Archivist Server metadata/source scan and remote cover refresh.
+- No physical Galaxy Fold or Home Assistant/server runtime acceptance is claimed by this checkpoint.
+
