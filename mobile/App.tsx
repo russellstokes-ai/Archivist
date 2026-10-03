@@ -5691,8 +5691,8 @@ function Client() {
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Duplicate review</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
               {session
-                ? 'Candidates share the same byte size. Verification reads each file and compares SHA-256; nothing is changed or deleted.'
-                : 'Local candidates share the same normalized title, author, series and format. They are possible duplicates, not byte-verified.'}
+                ? 'Possible server duplicates share the same byte size. Verification reads each file and compares SHA-256; nothing is changed or deleted.'
+                : 'Archivist separates possible duplicate copies from alternate formats and different editions. None of these categories deletes or changes files.'}
             </Text>
           </View>
           <Button label="Close" tone="quiet" onPress={()=>setDuplicatePanelOpen(false)} />
@@ -5704,7 +5704,7 @@ function Client() {
           {serverDuplicateGroups.map(group=>{
             const result=duplicateResults[String(group.size)];
             return <View key={group.size} style={[styles.duplicateGroup,{borderColor:p.line}]}>
-              <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items.length} candidates · {formatBytes(group.size)}</Text>
+              <Text style={[styles.bookTitle,{color:p.ink}]}>Possible duplicate · {group.items.length} candidates · {formatBytes(group.size)}</Text>
               <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
               {group.items.map(item=><Text key={item.id} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.title} — {item.path}</Text>)}
               {!result?<Button label="Verify exact duplicates" tone="quiet" disabled={duplicateLoading} onPress={()=>void verifyDuplicateGroup(group)} />:null}
@@ -5720,11 +5720,39 @@ function Client() {
             </View>;
           })}
         </> : <>
-          {!localDuplicateGroups.length?<Text style={[styles.empty,{color:p.muted}]}>No metadata-match duplicate candidates found.</Text>:null}
-          {localDuplicateGroups.map(group=><View key={group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
-            <Text style={[styles.bookTitle,{color:p.ink}]}>{group.items[0].title} · {group.items.length} possible copies</Text>
+          {!localDuplicateGroups.length&&!localAlternateFormatGroups.length&&!localDifferentEditionGroups.length?<Text style={[styles.empty,{color:p.muted}]}>No duplicate, alternate-format or edition relationships need review.</Text>:null}
+
+          {localDuplicateGroups.length?<Text style={[styles.settingsSectionTitle,{color:p.muted}]}>POSSIBLE DUPLICATES</Text>:null}
+          {localDuplicateGroups.map(group=><View key={'duplicate-'+group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Possible duplicate · {group.items[0].title}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
-            {group.items.map(item=><Text key={item.uri} numberOfLines={2} style={[styles.meta,{color:p.ink}]}>• {item.uri}</Text>)}
+            {group.items.map(item=><View key={item.uri} style={[styles.sourceRow,{borderColor:p.line}]}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'700'}]}>{item.format}{item.isbn?' · ISBN '+item.isbn:item.asin?' · ASIN '+item.asin:''}</Text>
+              <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.uri}</Text>
+            </View>)}
+            <Text style={[styles.meta,{color:p.muted}]}>Review only. Archivist will not choose a copy to remove.</Text>
+          </View>)}
+
+          {localAlternateFormatGroups.length?<Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ALTERNATE FORMATS</Text>:null}
+          {localAlternateFormatGroups.map(group=><View key={'format-'+group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Alternate format · {group.items[0].title}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+            {group.items.map(item=><View key={item.uri} style={[styles.sourceRow,{borderColor:p.line}]}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'700'}]}>{item.format}</Text>
+              <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.uri}</Text>
+            </View>)}
+            <Text style={[styles.meta,{color:p.sage}]}>Kept together as formats of the same work; not a deletion candidate.</Text>
+          </View>)}
+
+          {localDifferentEditionGroups.length?<Text style={[styles.settingsSectionTitle,{color:p.muted}]}>DIFFERENT EDITIONS</Text>:null}
+          {localDifferentEditionGroups.map(group=><View key={'edition-'+group.key} style={[styles.duplicateGroup,{borderColor:p.line}]}>
+            <Text style={[styles.bookTitle,{color:p.ink}]}>Different edition · {group.items[0].title}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{group.reason}</Text>
+            {group.items.map(item=><View key={item.uri} style={[styles.sourceRow,{borderColor:p.line}]}>
+              <Text style={[styles.meta,{color:p.ink,fontWeight:'700'}]}>{item.format}{item.isbn?' · ISBN '+item.isbn:item.asin?' · ASIN '+item.asin:' · Identifier unavailable'}</Text>
+              <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{item.uri}</Text>
+            </View>)}
+            <Text style={[styles.meta,{color:p.sage}]}>Kept as separate editions under the same logical work.</Text>
           </View>)}
         </>}
       </View>
