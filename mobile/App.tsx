@@ -31,7 +31,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
@@ -1936,65 +1936,92 @@ function Client() {
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
 
+  const scanFrame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+
+  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[]) {
+    setScanProgress({phase:'checking-duplicates',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
+    await scanFrame();
+    localRelationClassification(result.books);
+    setScanProgress({phase:'preparing',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
+    await scanFrame();
+
+    const summary=reconcileScan(previousLocal,result.books);
+    setScanResultSummary(summary);
+    setLocalFolders(result.folders);
+    setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
+    setLocalMovePreviews([]);
+    setLocalMoveSelection([]);
+    setSpaces([...new Set(result.books.map(book=>book.space))]);
+
+    const reconciledHistory=localSortHistory.map(item=>item.complete===false?{...item,complete:true}:item);
+    const historyChanged=reconciledHistory.some((item,index)=>item.complete!==localSortHistory[index]?.complete);
+    if(historyChanged)setLocalSortHistory(reconciledHistory);
+
+    await Promise.all([
+      setPersistedJSON(localFoldersKey,result.folders),
+      setPersistedJSON(localCatalogKey,result.books),
+      historyChanged?setPersistedJSON(localSortHistoryKey,reconciledHistory):Promise.resolve(),
+    ]);
+    setRescanPromptOpen(false);
+    setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
+    await scanFrame();
+    return summary;
+  }
+
+  function scanNotice(result:LocalScanResult) {
+    const limitNotice=result.truncatedReason==='entry-limit'
+      ? ' · scan safety limit reached'
+      : result.truncated
+        ? ' · library safety limit reached'
+        : '';
+    return `${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`;
+  }
+
   async function addLocalFolder() {
     setError('');
     setLocalFolderNotice('');
+    setScanResultSummary(null);
     setLocalScanning(true);
     try {
-      const picked = await pickLocalFolder();
-      if (!picked) {
+      const picked=await pickLocalFolder();
+      if(!picked){
         setLocalFolderNotice('Folder selection cancelled.');
         return;
       }
-      const folders = localFolders.some(folder => folder.uri === picked.uri) ? localFolders : [...localFolders, picked];
-      setScanProgress({phase: 'discovering', currentFolder: picked.name, entriesVisited: 0, found: 0, review: 0});
-      const previousLocal = localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result = await scanLocalFolders(folders, setScanProgress, localMetadataOverrides, previousLocal);
-      setLocalFolders(result.folders);
-      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
-      setLocalMovePreviews([]);
-      setSpaces([...new Set(result.books.map(book => book.space))]);
-      await Promise.all([
-        setPersistedJSON(localFoldersKey, result.folders),
-        setPersistedJSON(localCatalogKey, result.books),
-      ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
-      if (result.books.length && celebrationEligible) {
+      const folders=localFolders.some(folder=>folder.uri===picked.uri)?localFolders:[...localFolders,picked];
+      setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
+      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const result=await scanLocalFolders(folders,setScanProgress,localMetadataOverrides,previousLocal);
+      await finaliseLocalScan(result,previousLocal);
+      setLocalFolderNotice(scanNotice(result));
+      if(result.books.length&&celebrationEligible){
         setCelebrating(true);
         setCelebrationEligible(false);
-        void SecureStore.setItemAsync(firstLibraryCelebratedKey, '1');
-        setTimeout(() => setCelebrating(false), 1900);
+        void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1');
+        setTimeout(()=>setCelebrating(false),1900);
       }
-    } catch (e) {
+    }catch(e){
       setError((e as Error).message);
-    } finally {
+    }finally{
       setLocalScanning(false);
       setScanProgress(null);
     }
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides) {
-    if (!localFolders.length) return;
+    if(!localFolders.length)return;
     setError('');
+    setScanResultSummary(null);
     setLocalScanning(true);
-    try {
-      setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
-      const previousLocal = localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result = await scanLocalFolders(localFolders, setScanProgress, overrides, previousLocal);
-      setLocalFolders(result.folders);
-      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
-      setLocalMovePreviews([]);
-      setSpaces([...new Set(result.books.map(book => book.space))]);
-      await Promise.all([
-        setPersistedJSON(localFoldersKey, result.folders),
-        setPersistedJSON(localCatalogKey, result.books),
-      ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
-    } catch (e) {
+    try{
+      setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
+      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const result=await scanLocalFolders(localFolders,setScanProgress,overrides,previousLocal);
+      await finaliseLocalScan(result,previousLocal);
+      setLocalFolderNotice(scanNotice(result));
+    }catch(e){
       setError((e as Error).message);
-    } finally {
+    }finally{
       setLocalScanning(false);
       setScanProgress(null);
     }
