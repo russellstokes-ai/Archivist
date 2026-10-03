@@ -145,6 +145,7 @@ assert.ok(shelfSource.includes('const recommendationLimit=foldLayout?5:3') && sh
 
 assert.ok(source.includes('async function removeLocalFolder(folder:LocalFolder)') && source.includes('confirmRemoveLocalFolder(folder)') && source.includes("accessibilityLabel={'Remove local folder '+folder.name}") && source.includes("The original Files/iCloud folder was not changed."), 'Local folder removal must be explicit, accessible and non-destructive');
 assert.ok(source.includes('function confirmRemoveSource(source:') && source.includes('The media files on the server are not deleted.') && source.includes("accessibilityLabel={'Remove server folder '+source.space}"), 'Server source removal must be confirmed and explicitly non-destructive');
+assert.ok(source.includes('function confirmRemoveServerDownload(downloaded:OfflineServerWork)') && source.includes('The original files on your Archivist Server are not changed.') && source.includes('function confirmDiscardPartialDownload(checkpoint:OfflineDownloadCheckpoint)'), 'Offline removal must be confirmed and explicitly local-only');
 const libraryStart=source.indexOf('function Library(){');
 const libraryEnd=source.indexOf('function Player(',libraryStart);
 assert.ok(libraryStart>=0 && libraryEnd>libraryStart,'Library function bounds are missing');
