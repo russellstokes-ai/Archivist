@@ -32,7 +32,7 @@ for (const route of [
 
 console.log('PASS: no placeholder UI markers and every visible mobile button/tab is wired');
 
-assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Insights['"]/, 'Insights tab is not wired');
+assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats tab is not wired');
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
 assert.ok(source.includes("function Profile()"), 'Profile screen is not implemented');
 
