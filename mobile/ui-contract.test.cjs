@@ -256,6 +256,9 @@ assert.ok(source.includes("kind=\"rating\""), 'Atlas rating relationship is miss
 assert.ok(source.includes("kind=\"favourite\""), 'Atlas favourite relationship is missing');
 assert.match(source,/>\s*FAMILY USERS\s*<\/Text>/i, 'Admin family-user management is missing');
 assert.ok(source.includes('User · whole library'), 'Family user UI must use simple whole-library User semantics');
+assert.ok(source.includes('function confirmRotateFamilyUserKey(user:HouseholdUser)') && source.includes("accessibilityLabel={'Reissue access key for '+user.name}") && source.includes('Their current access key and signed-in sessions will stop working immediately.'), 'Family users must support confirmed access-key reissue');
+assert.ok(source.includes('function confirmRevokeFamilyUser(user:HouseholdUser)') && source.includes("accessibilityLabel={'Revoke '+user.name}") && source.includes('Their reading history and profile data remain on the server.'), 'Family-user revocation must be confirmed and explain data retention');
+assert.ok(source.includes("newUserKeyOwner?'Access key for '+newUserKeyOwner+' — shown once'"), 'One-time family access keys must identify their user');
 assert.equal(source.includes('Change library access'),false,'Mobile UI must not expose per-library User permissions');
 assert.ok(source.includes("profile.admin ?? profile.owner"), 'Mobile must understand new Admin role while remaining compatible with older servers');
 
