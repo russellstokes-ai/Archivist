@@ -1,5 +1,6 @@
 export type Session = {server: string; token: string};
 export type SetupStatus = {configured: boolean};
+export type HealthStatus = {ok: boolean; version: string};
 export class RequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
@@ -32,7 +33,7 @@ export function validateServer(raw: string, development = false): string {
   return u.origin;
 }
 export async function request(session: Session, path: string, method = 'GET', data?: unknown, timeoutMs = 15000) {
-  if (!path.startsWith('/api/') && !['/session', '/logout', '/setup/status'].includes(path)) throw Error('Invalid API path');
+  if (!path.startsWith('/api/') && !['/session', '/logout', '/setup/status', '/healthz'].includes(path)) throw Error('Invalid API path');
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), Math.max(1000, Math.min(timeoutMs, 300000)));
   try {
@@ -57,6 +58,11 @@ export async function setupStatus(server: string): Promise<SetupStatus> {
   const result = await request({server, token: ''}, '/setup/status') as SetupStatus;
   if (typeof result.configured !== 'boolean') throw Error('This address did not return Archivist setup status.');
   return result;
+}
+export async function healthStatus(server: string): Promise<HealthStatus> {
+  const result = await request({server, token: ''}, '/healthz') as Partial<HealthStatus>;
+  if (result.ok !== true) throw Error('This address did not return Archivist health status.');
+  return {ok:true,version:typeof result.version==='string'&&result.version.trim()?result.version.trim():'Unknown'};
 }
 export function readerNavigationAllowed(raw: string, server: string): boolean {
   try { const u = new URL(raw); return u.origin === server && ['/reader.html', '/'].includes(u.pathname); } catch { return false; }
