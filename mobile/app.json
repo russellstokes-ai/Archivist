@@ -57,6 +57,9 @@
     ],
     "updates": {
       "enabled": false
+    },
+    "web": {
+      "bundler": "metro"
     }
   }
 }
