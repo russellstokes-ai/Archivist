@@ -2,6 +2,16 @@
 
 This branch is the durable development workspace for Archivist.
 
+## Draftbit workflow
+
+- Draftbit is the primary interactive environment for Archivist mobile development and visual review.
+- Connected repository: `russellstokes-ai/Archivist`
+- Active development branch: `design/hig-refresh`
+- App folder: `mobile`
+- GitHub remains the committed source of truth.
+- After each reviewable UI stage, sync the connected Draftbit app and review it in Preview.
+- Keep app work off `main` until the approved merge/release step.
+
 Rules:
 - Do not develop directly on `main`.
 - The preserved Work-session source remains untouched.
