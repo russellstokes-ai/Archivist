@@ -11,6 +11,7 @@
     "test": "node run-tests.cjs"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~57.0.16",
     "expo": "57.0.24",
     "expo-asset": "~57.0.18",
     "expo-audio": "57.0.5",
@@ -20,8 +21,10 @@
     "expo-system-ui": "~57.0.4",
     "jszip": "^3.10.1",
     "react": "19.2.3",
+    "react-dom": "^19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
+    "react-native-web": "^0.21.3",
     "react-native-webview": "13.16.1"
   },
   "devDependencies": {
