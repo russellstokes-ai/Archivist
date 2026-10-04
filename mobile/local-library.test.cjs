@@ -77,7 +77,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, previewLocalSort, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
 const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
 
 const books = [
@@ -179,6 +179,32 @@ previews = previewLocalSort([{...books[0], needsReview: true}], 'author-title');
 assert.equal(previews[0].state, 'review');
 
 (async () => {
+  const organisationRoot='content://root/tree/primary:Books/document/primary:Books';
+  const organisedAuthor=organisationRoot+'%2FFrank%20Herbert';
+  const organisedTitle=organisedAuthor+'%2FDune';
+  const organisedFile=organisedTitle+'%2FDune.epub';
+  saf.dirs.set(organisationRoot,[organisedAuthor]);
+  saf.dirs.set(organisedAuthor,[organisedTitle]);
+  saf.dirs.set(organisedTitle,[organisedFile]);
+
+  let safePreview=await previewLocalSortSafely([{...books[0],rootUri:organisationRoot}],'author-title');
+  assert.equal(safePreview[0].state,'conflict','existing destination must be caught during preview, not Apply');
+  assert.match(safePreview[0].reason,/Destination already exists/);
+
+  safePreview=await previewLocalSortSafely([{
+    ...books[0],uri:organisedFile,rootUri:organisationRoot,
+  }],'author-title');
+  assert.equal(safePreview[0].state,'same');
+  assert.equal(safePreview[0].reason,'Already matches the selected layout.');
+
+  const otherRoot='content://root/tree/primary:Other/document/primary:Other';
+  const differentRoots=previewLocalSort([
+    {...books[0],id:81,rootUri:organisationRoot},
+    {...books[0],id:82,rootUri:otherRoot,uri:'content://root/document/primary:Other%2FDune.epub'},
+  ],'author-title');
+  assert.equal(differentRoots.every(item=>item.state==='ready'),true,'same relative target in different library roots must not be a conflict');
+
+
   const root = 'content://root/tree/primary:Books/document/primary:Books';
   const file = root + '%2FMystery.epub';
   const sidecar = root + '%2FMystery.opf';
