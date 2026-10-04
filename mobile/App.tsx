@@ -961,6 +961,7 @@ function Client() {
   const [privacyDataNotice,setPrivacyDataNotice]=useState('');
   const [privacyManualBackupOpen,setPrivacyManualBackupOpen]=useState(false);
   const [metadataSettings,setMetadataSettings]=useState<MetadataSettings>(defaultMetadataSettings);
+  const metadataSettingsRef=useRef<MetadataSettings>(defaultMetadataSettings);
   const [metadataSettingsReady,setMetadataSettingsReady]=useState(false);
   const [googleBooksConfigured,setGoogleBooksConfigured]=useState(false);
   const [metronConfigured,setMetronConfigured]=useState(false);
@@ -1533,8 +1534,8 @@ function Client() {
       if(value&&typeof value==='object')setAccessibilityPrefs({reduceMotion:!!value.reduceMotion,highContrast:!!value.highContrast,largeText:!!value.largeText});
     }).catch(()=>undefined);
     getPersistedJSON<MetadataSettings>(metadataSettingsKey)
-      .then(value=>setMetadataSettings(sanitizeMetadataSettings(value)))
-      .catch(()=>setMetadataSettings(defaultMetadataSettings))
+      .then(value=>{const next=sanitizeMetadataSettings(value);metadataSettingsRef.current=next;setMetadataSettings(next);})
+      .catch(()=>{metadataSettingsRef.current=defaultMetadataSettings;setMetadataSettings(defaultMetadataSettings);})
       .finally(()=>setMetadataSettingsReady(true));
     SecureStore.getItemAsync(googleBooksApiKeyKey).then(value=>setGoogleBooksConfigured(!!value?.trim())).catch(()=>undefined);
     SecureStore.getItemAsync(metronTokenKey).then(value=>setMetronConfigured(!!value?.trim())).catch(()=>undefined);
@@ -1841,12 +1842,13 @@ function Client() {
   },[activeTab,offlineWorks]);
 
   async function persistMetadataSettings(next:MetadataSettings){
+    metadataSettingsRef.current=next;
     setMetadataSettings(next);
     await setPersistedJSON(metadataSettingsKey,next);
   }
 
   async function updateMetadataSettings(mutator:(current:MetadataSettings)=>MetadataSettings){
-    const next=sanitizeMetadataSettings(mutator(metadataSettings));
+    const next=sanitizeMetadataSettings(mutator(metadataSettingsRef.current));
     await persistMetadataSettings(next);
   }
 
@@ -1908,7 +1910,7 @@ function Client() {
     try{
       await clearMetadataCaches(false);
       await rescanLocalFolders(localMetadataOverrides,true);
-      setMetadataSettingsNotice('Metadata and cover refresh complete.');
+      setMetadataSettingsNotice(metadataSettings.onlineEnabled?'Local refresh complete · online enrichment continues in the background.':'Local metadata and cover refresh complete.');
     }catch(e){
       setMetadataSettingsNotice('Metadata refresh could not complete: '+(e as Error).message);
     }
@@ -6789,6 +6791,7 @@ function Client() {
       profileAvatar:{initials:profileAvatar.initials,color:profileAvatar.color},
       insightGoal,
       readerAppearance,
+      metadataSettings,
       smartShelves,
       collections,
       shelfSections,
@@ -6843,6 +6846,7 @@ function Client() {
       if(raw.profileAvatar&&typeof raw.profileAvatar==='object')await saveProfileAvatar({initials:String(raw.profileAvatar.initials||''),color:String(raw.profileAvatar.color||'#47736F')});
       if(raw.insightGoal){const value=sanitizeInsightGoal(raw.insightGoal);setInsightGoal(value);setGoalDraft({completed:String(value.completedTarget),annotations:String(value.annotationTarget)});await setPersistedJSON(insightGoalKey,value);}
       if(raw.readerAppearance){const value=sanitizeReaderAppearance(raw.readerAppearance);setReaderAppearance(value);await setPersistedJSON(readerAppearanceKey,value);}
+      if(raw.metadataSettings&&typeof raw.metadataSettings==='object')await persistMetadataSettings(sanitizeMetadataSettings(raw.metadataSettings));
       if(Array.isArray(raw.smartShelves)){const value=sanitizeSmartShelves(raw.smartShelves);setSmartShelves(value);await setPersistedJSON(smartShelvesKey,value);}
       if(Array.isArray(raw.collections)){const value=sanitizeCollections(raw.collections);setCollections(value);await setPersistedJSON(collectionsKey,value);}
       if(Array.isArray(raw.shelfSections)){const allowed=new Set(defaultShelfSections.map(item=>item.id));const value=raw.shelfSections.filter((item:any)=>item&&allowed.has(item.id)).map((item:any)=>({id:item.id,title:String(item.title||''),visible:item.visible!==false}));if(value.length){setShelfSections(value);await setPersistedJSON(shelfSectionsKey,value);}}
