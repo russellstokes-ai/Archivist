@@ -87,6 +87,12 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'16:9 settings overflow');
     assert.ok(await page.locator('main').evaluate(node=>node.getBoundingClientRect().width)>=1500,'16:9 settings should use wide desktop canvas');
     if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'settings-16x9.png'),fullPage:true,animations:'disabled'});
+    for(const tabName of ['Organisation','Household','Server']){
+      await page.getByRole('tab',{name:tabName,exact:true}).click();
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'16:9 '+tabName+' settings overflow');
+    }
+    await page.getByRole('tab',{name:'Organisation',exact:true}).click();
+    if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'organisation-16x9.png'),fullPage:true,animations:'disabled'});
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'settings overflow');
     if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'settings-phone.png'),fullPage:true,animations:'disabled'});
@@ -100,6 +106,11 @@ const server=http.createServer((req,res)=>{
     await page.locator('#nav [data-page="atlas"]').click();
     await page.locator('.universe-node').first().waitFor();
     assert.ok(await page.locator('.universe-edge').count()>0,'Atlas contains connected edges');
+    await page.setViewportSize({width:1920,height:1080});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'16:9 Atlas overflow');
+    const atlasColumns=await page.locator('.atlas-space').evaluate(node=>getComputedStyle(node).gridTemplateColumns.split(' ').length);
+    assert.equal(atlasColumns,2,'16:9 Atlas keeps graph and inspector side by side');
+    if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'atlas-16x9.png'),fullPage:true,animations:'disabled'});
     await page.locator('#atlas-in').click();
     assert.ok((await page.locator('#atlas-camera').getAttribute('transform')).includes('scale(1.2)'),'Atlas zoom');
     await page.locator('#atlas-fit').click();
