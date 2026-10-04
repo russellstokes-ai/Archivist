@@ -10,7 +10,7 @@ Module._load=function(request,parent,isMain){
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,file);
-const {parseID3v2Base64,parseID3v1Base64}=require('./audioMetadata.ts');
+const {parseID3v2Base64,parseID3v1Base64,parseMP4MetadataBase64}=require('./audioMetadata.ts');
 
 function syncsafe(n){return [(n>>21)&127,(n>>14)&127,(n>>7)&127,n&127]}
 function textFrame(id,value){
@@ -53,6 +53,29 @@ const partTag=Buffer.concat([Buffer.from('ID3'),Buffer.from([3,0,0,...syncsafe(p
 const partFields=parseID3v2Base64(partTag.toString('base64'));
 assert.equal(partFields.title,'Dune');
 assert.equal(partFields.author,'Frank Herbert');
+
+function mp4Atom(type,payload){
+  const t=Buffer.isBuffer(type)?type:Buffer.from(type,'latin1');
+  const size=Buffer.alloc(4);size.writeUInt32BE(8+payload.length);
+  return Buffer.concat([size,t,payload]);
+}
+function mp4TextAtom(type,value){
+  return mp4Atom(type,mp4Atom('data',Buffer.concat([Buffer.alloc(8),Buffer.from(value,'utf8')])));
+}
+const mp4=Buffer.concat([
+  mp4TextAtom(Buffer.from([0xa9,0x6e,0x61,0x6d]),'Part 36'),
+  mp4TextAtom(Buffer.from([0xa9,0x61,0x6c,0x62]),'Dune'),
+  mp4TextAtom(Buffer.from([0xa9,0x41,0x52,0x54]),'Frank Herbert'),
+  mp4TextAtom(Buffer.from([0xa9,0x67,0x65,0x6e]),'Science Fiction'),
+  mp4TextAtom(Buffer.from([0xa9,0x64,0x61,0x79]),'1965'),
+  mp4TextAtom(Buffer.from([0xa9,0x67,0x72,0x70]),'Dune'),
+]);
+const mp4Fields=parseMP4MetadataBase64(mp4.toString('base64'));
+assert.equal(mp4Fields.title,'Dune');
+assert.equal(mp4Fields.author,'Frank Herbert');
+assert.equal(mp4Fields.genre,'Science Fiction');
+assert.equal(mp4Fields.publishedYear,1965);
+assert.equal(mp4Fields.series,'Dune');
 
 const id3v1=Buffer.alloc(128);id3v1.write('TAG',0);id3v1.write('Foundation',3);id3v1.write('Isaac Asimov',33);id3v1.write('1951',93);
 const old=parseID3v1Base64(id3v1.toString('base64'));
