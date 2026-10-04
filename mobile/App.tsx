@@ -6178,7 +6178,7 @@ function Client() {
 
               {owner?<View style={styles.settingsSubgroup}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server source folders</Text>
-                {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line},layoutTier==='compact'&&{alignItems:'flex-start',flexWrap:'wrap'}]}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View>
                   <View style={[styles.settingsRowActions,layoutTier==='compact'&&{width:'100%',justifyContent:'flex-start'}]}><Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void removeSource(source.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable></View>
                 </View>)}
@@ -6191,7 +6191,7 @@ function Client() {
                 <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
                 <View style={styles.settingsInlineActions}><Pressable accessibilityRole="button" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Preview matching</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void previewLibrary(true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Preview all</Text></Pressable></View>
                 <Button label="Apply pending safe moves" disabled={busy} onPress={()=>void applySortBatch()}/>
-                {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+                {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
               </View>:null}
             </View>
 
