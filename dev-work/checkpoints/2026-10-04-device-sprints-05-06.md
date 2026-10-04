@@ -46,3 +46,42 @@ The locked Shelf, Library, Player, Atlas and Comic Focus visual language was not
 ## Runtime boundary
 
 Physical-device acceptance should still use a representative messy real library with mixed EPUB/PDF/comic/audio structures and confirm actual cover/metadata availability. Automated checks prove the resolver and scan contracts, not the quality of every third-party file's embedded metadata.
+
+
+## Sprint 6 commercial cover + metadata expansion
+
+Added after the initial identity-resolver checkpoint because real-device feedback showed that metadata correctness and cover completeness are release-critical.
+
+### Mobile/local library
+- The resolver now publishes the chosen metadata fields instead of retaining a weaker sequentially-applied candidate.
+- Generic audiobook labels such as `Part 36`, `Track 03` and numbered chapter filenames cannot overwrite a stronger book-folder identity.
+- Numbered multi-track audio uses sibling context; indexed book folders can provide clean title + series position.
+- Placeholder tags such as `Unknown Artist`, `Unknown`, `Untitled` and `Unclassified` are discarded when better evidence exists.
+- EPUB OPF parsing now recovers normal `dc:identifier` ISBN/ASIN values and EPUB 3 collection/group-position series metadata.
+- MP3 metadata uses album identity when the track title is generic and can fall back to album artist.
+- M4A/M4B metadata now reads standard MP4/iTunes title, album, artist, genre, date and grouping fields from bounded head/tail chunks.
+- Embedded covers now recover from:
+  - EPUB manifest/cover-image metadata;
+  - CBZ/ZIP cover or natural first image;
+  - MP3 ID3 APIC artwork;
+  - M4A/M4B `covr` artwork;
+  - Android PDF first-page rendering through the existing trusted Archivist native PDF reader;
+  - Android CBR first image through the existing bounded native RAR reader.
+- Embedded/generated covers are persisted under Archivist app-private cover storage and reused when the source file is unchanged.
+- Existing exact-name/folder artwork and manual cover overrides remain higher priority than generated fallback artwork.
+
+### Archivist Server / Home Assistant
+- Server audiobook path inference now resolves track-like filenames to the containing book rather than exposing the part/chapter label as the work title.
+- Generic/placeholder embedded audio fields are suppressed when folder evidence is stronger.
+- M4A/M4B metadata support mirrors the mobile bounded MP4 parser.
+- MP3 metadata now uses album/album-artist fallbacks for generic track tags.
+- Server cover endpoints now extract embedded MP3 APIC and M4A/M4B `covr` artwork after checking external artwork.
+- Root server and packaged Home Assistant sources remain byte-for-byte synchronized.
+
+### Automated proof
+- Server checks run `37219317364`: **PASS** — root tests, packaged tests, ARM64 compile, JavaScript syntax, UI/package contracts, source parity and HA Docker smoke test.
+- Mobile checks run `37219394733`: **PASS** — dependency install, Expo Doctor, TypeScript, all maintained mobile suites, version consistency and Expo web export.
+- iOS native compile for the same executable mobile head is still running at the time of this documentation commit; no iOS runtime-complete claim is made until that gate finishes.
+
+### Remaining truth boundary
+This materially raises cover/metadata recovery but does not pretend that every malformed or metadata-empty file can be identified offline. Archivist remains private/local-first: it does not silently contact internet metadata services. Files with no trustworthy local identity stay in the review workflow instead of being guessed.
