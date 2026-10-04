@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
-import {applyLocalMetadata, applyResolvedLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey, sanitizeDiscoveredMetadata} from './libraryIntelligence';
+import {applyLocalMetadata, applyResolvedLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, isGenericMediaTitle, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey, sanitizeDiscoveredMetadata} from './libraryIntelligence';
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
 import {extractAudioMetadata} from './audioMetadata';
@@ -318,9 +318,10 @@ export async function scanLocalFolders(
     const artworkByStem = new Map<string, string>();
     let genericCover = '';
     let genericCoverRank = 99;
-    const genericBookLevelFilesAllowed = supportedFiles.length === 1 || (
-      supportedFiles.length > 1 && supportedFiles.every(child => supported.get(extension(child)) === 'Audio')
-    );
+    const multiTrackAudioFolder = supportedFiles.length > 1
+      && supportedFiles.every(child => supported.get(extension(child)) === 'Audio')
+      && supportedFiles.every(child => isGenericMediaTitle(fileStem(child),'Audio',supportedFiles.length));
+    const genericBookLevelFilesAllowed = supportedFiles.length === 1 || multiTrackAudioFolder;
     for (const child of children) {
       const ext = extension(child);
       const stem = fileStem(child).toLowerCase();
