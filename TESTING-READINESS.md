@@ -1,5 +1,20 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-04 — Device polish Sprint 12: FINAL RELEASE GATE GREEN
+
+- Final release source: `6bc68362f1ab48e24ff47aa684bbbd1bd3c7e468`.
+- Release identity: **Archivist 0.9.4 test build 5**, Android versionCode **95**.
+- **PASS Mobile:** run `37229417563`.
+- **PASS Android native:** run `37229417463`.
+- **PASS iOS:** run `37229417437`, including full Simulator compile.
+- **PASS Android Test APK:** run `37229417444`, including release lint/build, package/version/permission/signature/ABI/alignment verification and successful Android emulator launch smoke.
+- Published release tag: `v0.9.4-testing.5`.
+- APK: `Archivist-0.9.4-test-5.apk`.
+- APK SHA-256: `e6915b85f57cd86ea7da9436d5ac7ecc5f189bd85f5119cbbe726a73dfe9603f`.
+- Sprint 12 introduced no product/UI redesign; it is the final regression/release checkpoint.
+- Remaining acceptance is physical-device testing, not another planned development sprint.
+- Full checkpoint: `dev-work/checkpoints/2026-10-04-device-sprint-12.md`.
+
 ## 2026-10-04 — Device polish Sprint 11: Shelf controls & Smart Shelves GREEN
 
 - **Arrange** now remains the Shelf structure control and also links directly to **New Smart Shelf** plus **Manage Smart Shelves & collections**.
