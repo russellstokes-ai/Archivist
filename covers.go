@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"image"
 	"image/jpeg"
@@ -17,6 +18,7 @@ import (
 )
 
 const coverReadLimit = 24 << 20
+const audioCoverChunk = 4 << 20
 
 func safeImageData(data []byte) ([]byte, string, error) {
 	if len(data) == 0 || len(data) > coverReadLimit {
@@ -124,6 +126,82 @@ func archiveCover(root, rel, format string) ([]byte,string,error) {
 	return nil,"",errors.New("cover not found")
 }
 
+func audioEmbeddedCover(root, rel string) ([]byte,string,error) {
+	r,err:=os.OpenRoot(root)
+	if err!=nil{return nil,"",err}
+	defer r.Close()
+	f,err:=r.Open(rel)
+	if err!=nil{return nil,"",err}
+	defer f.Close()
+	info,err:=f.Stat()
+	if err!=nil||!info.Mode().IsRegular(){return nil,"",errors.New("cover unavailable")}
+	ext:=strings.ToLower(filepath.Ext(rel))
+	read:=func(offset,length int64)[]byte{
+		if length<=0{return nil}
+		if _,e:=f.Seek(offset,io.SeekStart);e!=nil{return nil}
+		buf:=make([]byte,length);n,_:=io.ReadFull(f,buf);return buf[:n]
+	}
+	length:=int64(audioCoverChunk)
+	if info.Size()<length{length=info.Size()}
+	head:=read(0,length)
+	var imageData []byte
+	switch ext {
+	case ".mp3":
+		imageData=id3EmbeddedPicture(head)
+	case ".m4a",".m4b":
+		imageData=mp4Data(head,[]byte{'c','o','v','r'})
+		if len(imageData)==0&&info.Size()>length{
+			tailLength:=int64(audioCoverChunk);if info.Size()<tailLength{tailLength=info.Size()}
+			imageData=mp4Data(read(info.Size()-tailLength,tailLength),[]byte{'c','o','v','r'})
+		}
+	default:
+		return nil,"",errors.New("cover unavailable")
+	}
+	if len(imageData)==0{return nil,"",errors.New("cover unavailable")}
+	return safeImageData(imageData)
+}
+
+func id3EmbeddedPicture(data []byte) []byte {
+	if len(data)<10||string(data[:3])!="ID3"||(data[3]!=3&&data[3]!=4){return nil}
+	version:=data[3]
+	end:=10+synchsafeID3(data[6:10]);if end>len(data){end=len(data)}
+	var fallback []byte
+	for offset:=10;offset+10<=end;{
+		id:=string(data[offset:offset+4])
+		if strings.Trim(id,"\x00 ")==""{break}
+		frameSize:=0
+		if version==4{frameSize=synchsafeID3(data[offset+4:offset+8])}else{frameSize=int(binary.BigEndian.Uint32(data[offset+4:offset+8]))}
+		if frameSize<=0||offset+10+frameSize>end{break}
+		if id=="APIC"{
+			frame:=data[offset+10:offset+10+frameSize]
+			if image,pictureType:=parseAPICPicture(frame);len(image)>0{
+				if pictureType==3{return image}
+				if fallback==nil{fallback=image}
+			}
+		}
+		offset+=10+frameSize
+	}
+	return fallback
+}
+
+func parseAPICPicture(frame []byte)([]byte,byte){
+	if len(frame)<6{return nil,0}
+	encoding:=frame[0]
+	cursor:=1
+	mimeEnd:=bytes.IndexByte(frame[cursor:],0);if mimeEnd<0{return nil,0};cursor+=mimeEnd+1
+	if cursor>=len(frame){return nil,0}
+	pictureType:=frame[cursor];cursor++
+	if encoding==1||encoding==2{
+		found:=-1
+		for i:=cursor;i+1<len(frame);i+=2{if frame[i]==0&&frame[i+1]==0{found=i;break}}
+		if found<0{return nil,0};cursor=found+2
+	}else{
+		descriptionEnd:=bytes.IndexByte(frame[cursor:],0);if descriptionEnd<0{return nil,0};cursor+=descriptionEnd+1
+	}
+	if cursor>=len(frame)||len(frame)-cursor>coverReadLimit{return nil,0}
+	return frame[cursor:],pictureType
+}
+
 func (a *app) assetCover(id string) ([]byte,string,error) {
 	var root, rel, format string
 	err:=a.db.QueryRow(`SELECT s.path,a.relative_path,a.format
@@ -131,6 +209,7 @@ func (a *app) assetCover(id string) ([]byte,string,error) {
 		WHERE a.id=? AND a.available=1`,id).Scan(&root,&rel,&format)
 	if err!=nil{return nil,"",err}
 	if data,mime,e:=externalCover(root,rel);e==nil{return data,mime,nil}
+	if format=="Audio" { if data,mime,e:=audioEmbeddedCover(root,rel);e==nil{return data,mime,nil} }
 	if format=="Comic" || format=="Ebook" {
 		if data,mime,e:=archiveCover(root,rel,format);e==nil{return data,mime,nil}
 	}
@@ -145,6 +224,7 @@ func (a *app) workCover(id string) ([]byte,string,error) {
 		WHERE w.id=? AND a.available=1 ORDER BY e.id,ea.position LIMIT 1`,id).Scan(&root,&rel,&format)
 	if err!=nil{return nil,"",err}
 	if data,mime,e:=externalCover(root,rel);e==nil{return data,mime,nil}
+	if format=="Audio" { if data,mime,e:=audioEmbeddedCover(root,rel);e==nil{return data,mime,nil} }
 	if format=="Comic" || format=="Ebook" {
 		if data,mime,e:=archiveCover(root,rel,format);e==nil{return data,mime,nil}
 	}
