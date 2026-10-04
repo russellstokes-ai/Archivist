@@ -1,7 +1,7 @@
-# Archivist 0.9.2 â€” Testing Readiness
+# Archivist 0.9.4 — Testing Readiness
 
-**Candidate branch:** `design/hig-refresh`  
-**Candidate mobile commit:** `81526e38548620a4bc076d11ca0495478fb9a763`  
+**Candidate branch:** `polish/final-release-sweep-20261004`  
+**Candidate mobile commit:** `4d64f21ad64f63fe863f1bbd73418f620ff590ea`  
 **Target:** universal iOS + Android local app + optional Home Assistant/Docker server.
 
 This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
@@ -82,13 +82,13 @@ Current runtime candidate `77842e1f` is the crafted UI sweep head. Its Mobile ch
 - **Sprint 7:** core server/resilience/ecosystem scope complete and CI-proven.
 - **Sprint 8:** source/UI/release sweep complete; final candidate CI/APK plus physical acceptance remain.
 
-## 0.9.2 Android test artifact
+## 0.9.4 Android test artifact
 
 The `Android Test APK` workflow produces an optimized release variant signed with the repository debug key:
 
-- artifact: `Archivist-0.9.2-Test-APK`
-- APK: `Archivist-0.9.2-test.apk`
-- checksum: `Archivist-0.9.2-test.apk.sha256`
+- artifact: `Archivist-0.9.4-Test-APK`
+- APK: `Archivist-0.9.4-test.apk`
+- checksum: `Archivist-0.9.4-test.apk.sha256`
 
 The workflow runs dependency/Expo checks, TypeScript, behavioural tests, Android lint, release assembly, package/permission/signature/alignment/ABI verification and emulator launch.
 
@@ -111,7 +111,7 @@ Use `MOBILE-TESTING.md` and record results for:
 
 ## Release boundary
 
-Do not call 0.9.2 a production store release until the physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
+Do not call 0.9.4 a production store release until the physical checks above pass. Production Google Play publication additionally needs a private signing key, AAB workflow, Play Console testing/policy review, screenshots/store listing and final privacy/legal review.
 
 Do not merge `dev/archivist-work` to `main` solely because CI is green; merge only after the user approves the physical testing candidate.
 
@@ -319,3 +319,41 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Sprint 10 regression-lock commit: `8ae43e2be602049bbbe13c2f9d4626f96b0d1540`.
 - No GitHub Actions run is attached to these latest commits yet, so dependency install, Expo Doctor, TypeScript and full mobile-suite execution are **not claimed** for this checkpoint.
 - Remaining acceptance is runtime visual/interaction verification in Draftbit Preview plus real-device image selection/rescan behaviour on iOS/Android and Fold layouts.
+
+
+## 2026-10-04 — final polish and 0.9.4 candidate gate
+
+### Scope
+- Atlas was intentionally not modified in this stream; newer Atlas work remains owned by the separate Astra lane and must be integrated/revalidated before Atlas-specific visual acceptance is claimed.
+- Fixed compact Settings server-source/folder layout collisions without changing the locked reference StyleSheet.
+- Bounded stacked server-folder inputs, compact family-user controls and long-name/accessibility rows so long content and larger interface text can wrap rather than overlap.
+- First-run/server setup now prevents an empty-key connection attempt, uses one consistent global error surface, and announces connection/status changes accessibly.
+- Added polite live-region feedback for scans, local-folder work, safe organisation and backup/restore status; global errors announce assertively.
+- Hardened Library-management long-content rows and scan feedback with the same edge-state rules.
+- Added a scoped final-polish regression so a matching control elsewhere cannot falsely satisfy the Settings contract.
+- Added mobile/server endpoint and semantic parity regression covering catalogue, activity, profiles, sources, preferences, file moves, auth/logout action headers and asset access.
+- Home Assistant package version is aligned to mobile 0.9.4 and the package test now derives the expected version from mobile metadata.
+- Canonical root Go/module source and the Home Assistant packaged copy were hash-compared; the only stale packaged test was synchronized.
+
+### Security/release audit
+- The release-only dependency audit surfaced GHSA-vfj7-8cjw-p6xm in transitive Expo/Metro build tooling (braces 3.0.3).
+- Upstream currently has no patched braces release. Archivist therefore adds a local 128-level nesting guard to parsing and the public compile/expand AST walkers before build.
+- The mitigation is fail-closed and regression-tested with normal brace expansion plus deeply nested string and AST inputs. The audit permits the advisory only after those regressions pass.
+
+### Automated evidence
+- Mobile Checks run 37190197715: **passed** on the 0.9.4 candidate stream.
+- Dependency install + local dependency hardening: passed.
+- Expo Doctor: passed.
+- TypeScript: passed.
+- Mobile tests: passed, including final release polish and server/mobile parity suites.
+- Server Checks run 37189824076: **passed**.
+- Root server tests, packaged-server tests, Raspberry Pi ARM64 compile, web syntax, UI wiring, Home Assistant package contract, packaged source parity and add-on smoke test: passed.
+- Android Test APK run 37190197679: release audit has passed; final APK/lint/signature/emulator publication evidence is added only after the run completes successfully.
+
+### Physical acceptance still required
+- Closed/open Galaxy Fold transition, compact phone layout, keyboard/inset behaviour and larger device font scaling.
+- Long server URLs, paths, family names and long media metadata on-device.
+- Server-offline Retry/Forget flow while local content remains usable.
+- Local-only, server-only and local+server onboarding routes.
+- Home Assistant install/update on the target Pi and real remote HTTPS/Tailscale access.
+- Atlas-specific acceptance after the Astra lane is integrated.
