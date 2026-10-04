@@ -108,12 +108,12 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     series = '';
     confidence = author ? 'medium' : 'low';
     reviewReason = author ? '' : 'Audiobook author could not be identified confidently.';
-  } else if (dirs.length >= 3 && equivalent(parent, stem)) {
+  } else if (!genericAudioTrack && dirs.length >= 3 && equivalent(parent, stem)) {
     author = greatGrandparent;
     series = grandparent;
     confidence = author && series ? 'high' : 'medium';
     reviewReason = confidence === 'high' ? '' : 'Folder layout was only partly identifiable.';
-  } else if (dirs.length >= 2 && sensibleFolder(parent, stem) && sensibleFolder(grandparent, stem)) {
+  } else if (!genericAudioTrack && dirs.length >= 2 && sensibleFolder(parent, stem) && sensibleFolder(grandparent, stem)) {
     author = grandparent;
     series = parent;
     confidence = 'high';
