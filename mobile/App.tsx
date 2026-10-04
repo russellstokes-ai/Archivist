@@ -150,7 +150,7 @@ type Book = {
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
   coverCandidates?: string[];
-  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'legacy';
+  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'online' | 'legacy';
   localWorkKey?: string;
   serverWorkId?: number;
   source?: WorkSource;
