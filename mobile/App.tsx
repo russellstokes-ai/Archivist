@@ -687,9 +687,15 @@ function Client() {
   const [serverBooksLoadingMore, setServerBooksLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
+  useEffect(()=>{
+    if(!localFolderNotice||localScanning)return;
+    const timer=setTimeout(()=>setLocalFolderNotice(''),8000);
+    return()=>clearTimeout(timer);
+  },[localFolderNotice,localScanning]);
   const [localScanning, setLocalScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
   const scanCommitGate=useRef(new ScanCommitGate()).current;
+  const autoLocalScanAttempted=useRef(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
@@ -1740,9 +1746,13 @@ function Client() {
   },[localAudioCompleted,localWorkProgress]);
 
   useEffect(() => {
-    if (restoring || !localFoldersReady || !localOverridesReady || !localCatalogReady || !localFolders.length || localBooks.length || localScanning) return;
+    const pendingFolder=localFolders.some(folder=>folder.status==='Scanning…'||folder.status==='Ready to scan');
+    const needsInitialCatalogue=localBooks.length===0;
+    if(restoring||!localFoldersReady||!localOverridesReady||!localCatalogReady||!localFolders.length||localScanning||autoLocalScanAttempted.current)return;
+    if(!needsInitialCatalogue&&!pendingFolder)return;
+    autoLocalScanAttempted.current=true;
     void rescanLocalFolders();
-  }, [localBooks.length, localCatalogReady, localFolders, localFoldersReady, localOverridesReady, localScanning, restoring]);
+  },[localBooks.length,localCatalogReady,localFolders,localFoldersReady,localOverridesReady,localScanning,restoring]);
 
   useEffect(()=>{
     if(activeTab!=='settings')return;
@@ -2132,6 +2142,7 @@ function Client() {
   const scanFrame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
 
   const beginLocalScan=()=>{
+    autoLocalScanAttempted.current=true;
     const generation=scanCommitGate.begin();
     setLocalScanning(true);
     setScanResultSummary(null);
@@ -3078,14 +3089,22 @@ function Client() {
   }
 
   function LocalScanStatus(){
-    if(!localScanning||!scanProgress)return null;
-    const copy=scanStatusCopy({...scanProgress,publishedCount:localBooks.length});
+    if(localScanning&&scanProgress){
+      const copy=scanStatusCopy({...scanProgress,publishedCount:localBooks.length});
+      return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+        <View style={{flex:1,minWidth:0,gap:2}}>
+          <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{copy.title}</Text>
+          <Text numberOfLines={3} style={[styles.scanBannerDetail,{color:p.muted}]}>{copy.detail}</Text>
+          <View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:`${scanPhaseStep(scanProgress.phase)*20}%` as `${number}%`}]} /></View>
+        </View>
+      </View>;
+    }
+    if(!localFolderNotice)return null;
     return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-      <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
-      <View style={{flex:1,minWidth:0,gap:2}}>
-        <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{copy.title}</Text>
-        <Text numberOfLines={3} style={[styles.scanBannerDetail,{color:p.muted}]}>{copy.detail}</Text>
-        <View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:`${scanPhaseStep(scanProgress.phase)*20}%` as `${number}%`}]} /></View>
+      <View style={{flex:1,minWidth:0}}>
+        <Text style={[styles.scanBannerTitle,{color:p.ink}]}>Library status</Text>
+        <Text numberOfLines={3} style={[styles.scanBannerDetail,{color:p.muted}]}>{localFolderNotice}</Text>
       </View>
     </View>;
   }
