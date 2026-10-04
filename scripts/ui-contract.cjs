@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
 const html = fs.readFileSync('web/index.html','utf8');
-const jsFiles = ['web/app.js','web/catalogue.js','web/filemoves.js','web/organise.js','web/household.js','web/playback.js','web/reader.js'];
+const jsFiles = ['web/app.js','web/catalogue.js','web/filemoves.js','web/organise.js','web/household.js','web/playback.js','web/experience.js','web/reader.js'];
 const source = jsFiles.map(file => fs.readFileSync(file,'utf8')).join('\n');
 
 for (const banned of ['Coming soon','Not implemented','TODO','FIXME','cover-initials','function initials(']) {
