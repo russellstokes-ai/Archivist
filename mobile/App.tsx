@@ -687,12 +687,12 @@ function Client() {
   const [serverBooksLoadingMore, setServerBooksLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
+  const [localScanning, setLocalScanning] = useState(false);
   useEffect(()=>{
     if(!localFolderNotice||localScanning)return;
     const timer=setTimeout(()=>setLocalFolderNotice(''),8000);
     return()=>clearTimeout(timer);
   },[localFolderNotice,localScanning]);
-  const [localScanning, setLocalScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
   const scanCommitGate=useRef(new ScanCommitGate()).current;
   const autoLocalScanAttempted=useRef(false);
