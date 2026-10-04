@@ -248,13 +248,13 @@ func TestConflictingHighConfidenceMetadataNeedsReview(t *testing.T) {
 	}
 }
 
-func TestAdvancedScanExtensionsMatchMobileLibrary(t *testing.T) {
-	for _, name := range []string{"book.cbr", "audio.aac", "audio.opus"} {
-		if got := kind(name); got == "" {
-			t.Fatalf("%s was not recognised by the server scanner", name)
+func TestAdvancedAudioScanExtensionsMatchMobileLibrary(t *testing.T) {
+	for _, name := range []string{"audio.aac", "audio.opus"} {
+		if got := kind(name); got != "Audio" {
+			t.Fatalf("%s classification=%q, want Audio", name, got)
 		}
 	}
-	if kind("book.cbr") != "Comic" || kind("audio.aac") != "Audio" || kind("audio.opus") != "Audio" {
-		t.Fatalf("advanced extension classification mismatch")
+	if got := kind("book.cbr"); got != "" {
+		t.Fatalf("CBR remains intentionally unsupported until the server reader can decode RAR, kind=%q", got)
 	}
 }
