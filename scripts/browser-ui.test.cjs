@@ -55,13 +55,17 @@ const server=http.createServer((req,res)=>{
     await page.evaluate(()=>document.fonts.ready);
     assert.equal(await page.locator('.book').count(),9);
     const bindings=await page.locator('.cover').evaluateAll(nodes=>nodes.map(n=>n.dataset.binding));
-    for(const [name,width,height,theme] of [['desktop-dark',1440,1100,'dark'],['phone-dark',390,844,'dark'],['fold-light',720,950,'light'],['desktop-light',1440,1100,'light']]){
+    for(const [name,width,height,theme] of [['desktop-dark',1440,1100,'dark'],['desktop-16x9-dark',1920,1080,'dark'],['desktop-qhd-light',2560,1440,'light'],['phone-dark',390,844,'dark'],['fold-light',720,950,'light'],['desktop-light',1440,1100,'light']]){
       await page.setViewportSize({width,height});await page.selectOption('#theme',theme);
       await page.mouse.move(0,0);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,name+' horizontal overflow');
       const columns=await page.locator('#books').evaluate(n=>getComputedStyle(n).gridTemplateColumns.split(' ').length);
-      assert.equal(columns,width<600?2:width<1200?4:5,name+' catalogue columns');
+      assert.equal(columns,width<600?2:width<1200?4:width<1600?5:6,name+' catalogue columns');
       assert.equal(await page.locator('.cover-fallback').evaluateAll(nodes=>nodes.every(node=>node.querySelector('strong').getBoundingClientRect().bottom<=node.querySelector('.cover-imprint').getBoundingClientRect().top)),true,name+' fallback title overlaps imprint');
+      if(width>=1600){
+        const mainWidth=await page.locator('main').evaluate(node=>node.getBoundingClientRect().width);
+        assert.ok(mainWidth>=1500,name+' should use the large 16:9 canvas, got '+mainWidth);
+      }
       if(screenshotDir){fs.mkdirSync(screenshotDir,{recursive:true});await page.screenshot({path:path.join(screenshotDir,name+'.png'),fullPage:true,animations:'disabled'})}
     }
     await page.getByRole('button',{name:'Audio 3',exact:true}).click();
@@ -79,6 +83,10 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('#books').getAttribute('aria-busy'),'true');
     await page.waitForFunction(()=>document.querySelector('#books').getAttribute('aria-busy')==='false');delayBooks=0;
     await page.getByRole('button',{name:'Settings',exact:true}).click();
+    await page.setViewportSize({width:1920,height:1080});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'16:9 settings overflow');
+    assert.ok(await page.locator('main').evaluate(node=>node.getBoundingClientRect().width)>=1500,'16:9 settings should use wide desktop canvas');
+    if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'settings-16x9.png'),fullPage:true,animations:'disabled'});
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'settings overflow');
     if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'settings-phone.png'),fullPage:true,animations:'disabled'});
@@ -101,6 +109,6 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('#atlas-inspector button').count(),2,'canonical author relationships');
     assert.ok(await page.locator('.universe-edge.connected').count()>0,'selected edges highlighted');
     assert.deepEqual(errors,[],'uncaught browser errors');
-    console.log('PASS: responsive phone/Fold/desktop layouts, both themes, stable fallback covers, live filtering, empty state, failed request/retry, loading, settings and folder modal.');
+    console.log('PASS: responsive phone/Fold/desktop/16:9 layouts, both themes, stable fallback covers, live filtering, empty state, failed request/retry, loading, settings and folder modal.');
   }finally{await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>server.close());
