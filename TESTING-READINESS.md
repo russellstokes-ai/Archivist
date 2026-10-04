@@ -686,3 +686,44 @@ Executed locally with Node 24 / Expo 55 dependencies:
 Runtime preview uses a synthetic local 160-work catalogue, not user media. Web preview exposes the pre-existing SecureStore getValueWithKeyAsync warning; no native storage acceptance is claimed. Native Android/iOS/Fold multi-touch, interrupted gestures, light/dark/Reduced Motion, large text, real server catalogues, frame pacing and long-session memory remain open acceptance gates. Minority category drill-down and dense-library information hierarchy also require further UX review. Do not mark Atlas final or the complete test app assembled from this checkpoint alone.
 
 Preview interaction evidence: chart open/close and fixed-control bounds passed at 320px and 390px. The subsequent 600px resize sequence timed out with another element intercepting Fit; a retry also timed out waiting for the genre control to stabilize. These failures are unresolved, and are NOT waived as passing Fold/responsive QA. Render screenshots at 390px and 720px were inspected; the initially clipped zoom toolbar was moved outside the circular clipping mask and the export/typecheck/UI contract rerun successfully. Book/author inspector browser assertions were not reached after the timeouts.
+
+
+## 2026-10-04 — Build 6 Sprints 4–5: metadata settings, Settings refinement and cold launch
+
+Combined executable/tested head: `a9bcf1ae0ef5061412d39ce5241fc8e1e64ffdcd`.
+
+### Sprint 4 — holistic metadata configuration
+- Added one persisted metadata settings model for books + comics.
+- Online metadata, automatic enrichment and confident auto-apply have explicit controls.
+- Open Library is the zero-setup book provider; Google Books is an optional secure-key fallback; Metron is the secure-token comic provider.
+- Google Books API key and Metron token use native SecureStore and are never included in backups.
+- Provider preferences do participate in backup/restore.
+- Initial auto-scan waits for provider settings hydration.
+- Explicit Refresh metadata & covers clears book + comic provider caches, then rescans with forced online enrichment when online metadata is enabled.
+- High-confidence auto-apply can be disabled without losing candidates; they move to Needs Attention instead.
+- Rapid toggle changes use the latest in-memory settings snapshot.
+- Sprint 4-only Mobile run `37239888111`: PASS.
+
+### Sprint 5 — Settings refinement
+- Renamed Privacy & Data to Data.
+- Removed the privacy warning card.
+- Removed obsolete External metadata network access OFF copy.
+- Removed the redundant Local-first metadata explainer.
+- Removed the duplicate metadata refresh action.
+- Kept one concise backup/restore area and one canonical Metadata refresh/cache surface.
+
+### Sprint 5 — branded cold launch
+- Removed the old module-start 1100 ms timer implementation.
+- Native splash now hands off only after the branded React layer has had two render frames.
+- Canonical Archivist logo/wordmark then holds for 1600 ms and fades for 380 ms into the already-mounted app.
+- Launch sequence is one-shot per mount and respects Reduced Motion.
+
+### Final combined automated evidence
+- **PASS Mobile** run `37240206121`: Expo Doctor, TypeScript, **47/47 mobile suites**, version consistency, production web bundle.
+- **PASS iOS** run `37240206154`: Expo Doctor, TypeScript, project generation, CocoaPods, complete Simulator compile.
+
+### Remaining acceptance
+- Real Google Books/Metron credential use and enrichment against representative user libraries.
+- Android release APK/emulator cold-start validation.
+- Physical Fold cold-start timing/visual quality and Settings layout interaction.
+- Durable app-private download/cache of online cover image bytes remains part of the later metadata/cover refinement/release work.
