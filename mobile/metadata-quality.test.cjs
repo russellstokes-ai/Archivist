@@ -80,4 +80,16 @@ assert.equal(published.author,'Frank Herbert');
 assert.equal(published.genre,'Science Fiction');
 assert.equal(published.needsReview,false);
 
+const scanSource=fs.readFileSync(__dirname+'/localLibrary.ts','utf8');
+assert.match(scanSource,/inferLocalBookMetadata\(child, format, \{siblingMediaCount:/,'scan must provide sibling context for multi-track audiobook identity');
+assert.match(scanSource,/sanitizeDiscoveredMetadata\(embeddedRawFields, format, identity\.title/,'scan must reject low-quality embedded placeholders');
+assert.match(scanSource,/identity = applyResolvedLocalMetadata\(identity, resolvedMetadata\)/,'scan must publish the resolver result rather than only recording provenance');
+
+const genreOnly=inferLocalBookMetadata(
+  'content://root/document/primary:Books%2FScience%20Fiction%2FDune%2FDune%20Messiah.epub',
+  'EPUB',
+);
+assert.equal(genreOnly.genre,'Science Fiction');
+assert.notEqual(genreOnly.author,'Science Fiction');
+
 console.log('PASS: Sprint 6 rejects track placeholders, uses folder hierarchy, infers safe genres and publishes resolved identity');
