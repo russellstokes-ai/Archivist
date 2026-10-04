@@ -1,0 +1,17 @@
+const fs=require('fs');
+const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
+const assert=(v,m)=>{if(!v)throw Error(m)};
+const arrangeStart=app.indexOf('function ShelfManagePanel()');
+const arrangeEnd=app.indexOf('const avatarColours',arrangeStart);
+const arrange=app.slice(arrangeStart,arrangeEnd);
+assert(arrange.includes('New Smart Shelf'),'Arrange exposes Smart Shelf creation');
+assert(arrange.includes('Manage Smart Shelves & collections'),'Arrange integrates shelf and collection management');
+assert(app.includes('smartShelfPresets().map'),'Smart Shelf quick starts are foregrounded');
+assert(app.includes("beginSmartShelf(true)"),'Library Save as Smart Shelf carries current filters through the shared entry path');
+assert(app.includes("actionSheetStable: {height:'76%',minHeight:360,maxHeight:680,overflow:'hidden'}"),'sheet geometry remains fixed to prevent menu reflow jumping');
+const organisationStart=app.indexOf('function OrganisationPanel()');
+const organisationEnd=app.indexOf('function ShelfManagePanel()',organisationStart);
+const organisation=app.slice(organisationStart,organisationEnd);
+assert(organisation.includes('styles.actionSheetStable'),'Smart Shelf organisation stays inside the stable-height sheet');
+assert(organisation.includes("smartShelfAdvanced?'Simple setup':'Advanced rules'"),'advanced rules remain secondary to simple setup');
+console.log('PASS: Sprint 11 Shelf controls integration contract');
