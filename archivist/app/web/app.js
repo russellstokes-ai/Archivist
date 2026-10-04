@@ -76,7 +76,7 @@ async function openWork(work){
     const editions=[...new Set(tracks.map(t=>t.edition))];
     if(editions.length===1){
       const edition=editions[0],selected=tracks.filter(t=>t.edition===edition),format=selected[0]?.format;
-      if(format==='Audio'){await openAudiobook(work.title,tracks,edition);return}
+      if(format==='Audio'){await openAudiobook(work.title,tracks,edition,undefined,work);return}
       if(selected.length===1){window.open('./reader.html?asset='+selected[0].id,'_blank','noopener');return}
     }
     const content=$('work-detail-content');content.replaceChildren();
@@ -87,7 +87,7 @@ async function openWork(work){
       const selected=tracks.filter(t=>t.edition===edition),format=selected[0]?.format||'Edition';
       const block=element('div');block.className='edition-card';block.append(element('strong',format+' edition'),element('p',selected.length+' file'+(selected.length===1?'':'s')));
       if(format==='Audio'){
-        const play=element('button','Play audiobook');play.className='primary';play.onclick=()=>{hideOverlay('work-detail');openAudiobook(work.title,tracks,edition)};block.append(play);
+        const play=element('button','Play audiobook');play.className='primary';play.onclick=()=>{hideOverlay('work-detail');openAudiobook(work.title,tracks,edition,undefined,work)};block.append(play);
       }else{
         for(const item of selected){
           const open=element('button','Open '+item.title);open.disabled=!item.available;open.onclick=()=>{hideOverlay('work-detail');window.open('./reader.html?asset='+item.id,'_blank','noopener')};block.append(open);
@@ -241,9 +241,14 @@ function showSettings(name){
   if(name==='server')loadConfig().catch(e=>message(e.message));
 }
 function show(next){
-  page=next;for(const p of ['library','atlas','settings'])$(p).hidden=p!==next;
+  page=next;document.body.dataset.page=next;
+  for(const p of ['shelf','library','now','atlas','insights','settings'])$(p).hidden=p!==next;
   document.querySelectorAll('[data-page]').forEach(b=>b.setAttribute('aria-current',b.dataset.page===next?'page':'false'));
-  message('');if(next==='atlas'){loadLibrarySummary().catch(e=>message(e.message));loadAtlasUniverse().catch(e=>{$('atlas-map-status').textContent=e.message;});}if(next==='settings')showSettings('library');
+  message('');
+  if(next==='shelf'&&window.loadShelfExperience)window.loadShelfExperience().catch(e=>message(e.message));
+  if(next==='atlas'){loadLibrarySummary().catch(e=>message(e.message));loadAtlasUniverse().catch(e=>{$('atlas-map-status').textContent=e.message;});}
+  if(next==='insights'&&window.loadInsightsExperience)window.loadInsightsExperience().catch(e=>message(e.message));
+  if(next==='settings')showSettings('library');
 }
 
 async function start(){
@@ -251,7 +256,7 @@ async function start(){
   await loadSources();await loadLibrarySummary();await loadBooks(false);
   $('setup').hidden=true;$('unlock').hidden=true;$('nav').hidden=false;
   document.querySelector('[data-page="settings"]').hidden=!currentProfile.owner;
-  show('library');window.dispatchEvent(new Event('archivist-ready'))
+  show('shelf');window.dispatchEvent(new Event('archivist-ready'))
 }
 async function boot(){try{await start()}catch(e){try{const setup=await api('./setup/status');$('setup').hidden=setup.configured;$('unlock').hidden=!setup.configured}catch(err){message(err.message)}}}
 
@@ -276,6 +281,7 @@ $('space').onchange=()=>loadBooks(false).catch(e=>message(e.message));
 $('load-more').onclick=()=>loadBooks(true).catch(e=>message(e.message));
 $('clear-library-filter').onclick=()=>{libraryFormat='';$('search').value='';$('space').value='';loadBooks(false).catch(e=>message(e.message))};
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>show(b.dataset.page));
+document.querySelector('[data-now-library]')?.addEventListener('click',()=>show('library'));
 document.querySelectorAll('[data-settings]').forEach(b=>{
   b.onclick=()=>showSettings(b.dataset.settings);
   b.onkeydown=event=>{
