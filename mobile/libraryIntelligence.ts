@@ -51,7 +51,7 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
   const dirs = [...rawDirs];
   while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
   const inferredGenre = inferGenreFromDirectories(dirs);
-  const semanticDirs = dirs.filter((value,index) => !(index < dirs.length - 2 && canonicalGenre(value)));
+  const semanticDirs = dirs.filter((value,index) => !(index < dirs.length - 1 && canonicalGenre(value)));
   const parent = cleanLabel(semanticDirs[semanticDirs.length - 1] || '');
   const grandparent = cleanLabel(semanticDirs[semanticDirs.length - 2] || '');
   const greatGrandparent = cleanLabel(semanticDirs[semanticDirs.length - 3] || '');
