@@ -1,16 +1,16 @@
-# Archivist 0.9.2 mobile acceptance
+# Archivist 0.9.4 mobile acceptance
 
 This is the hands-on checklist for the installable Android testing APK. Automated CI is necessary but does not replace real-device acceptance.
 
 ## Testing APK
 
-Run **Actions → Android Test APK → Run workflow** on `dev/archivist-work`.
+Run **Actions → Android Test APK → Run workflow** and choose the candidate branch recorded in `TESTING-READINESS.md`.
 
 Successful output:
 
-- artifact: `Archivist-0.9.2-Test-APK`
-- APK: `Archivist-0.9.2-test.apk`
-- checksum: `Archivist-0.9.2-test.apk.sha256`
+- artifact: `Archivist-0.9.4-Test-APK`
+- APK: `Archivist-0.9.4-test.apk`
+- checksum: `Archivist-0.9.4-test.apk.sha256`
 
 The APK is an optimized release variant signed with the repository debug key. It is for testing only.
 
@@ -32,6 +32,12 @@ Test both closed and open states without restarting the app:
 6. Bottom navigation, mini-player and modal sheets respect safe areas.
 7. The keyboard does not hide metadata, Smart Shelf or server fields.
 8. Light, dark and system themes retain readable contrast.
+
+9. Settings has no overlapping rows/fields in compact mode; server-folder fields remain vertically bounded.
+10. Test long server URLs, folder paths and family-user names at normal and larger interface text.
+11. With device font scaling increased, Accessibility rows, counts and actions wrap without clipping.
+12. Server-offline recovery clearly offers Retry/Forget while the local library remains usable.
+13. First-run onboarding works for local-only, server-only and local+server choices without blocking access to the Shelf.
 
 ## Playback acceptance
 
@@ -71,7 +77,7 @@ With local folders, a connected server and downloaded server content:
 
 On the intended Pi/Home Assistant system:
 
-- install/update Archivist 0.9.2 and restart it;
+- install/update Archivist 0.9.4 and restart it;
 - confirm database/catalogue persistence;
 - add multiple folders through the browser;
 - enable a watched source and verify scheduled refresh;
