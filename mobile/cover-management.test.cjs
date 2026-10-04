@@ -103,6 +103,23 @@ assert.deepEqual(
 
   const cleanup=[];
   let mismatchTarget='';
+  const collisionCopies=[];
+  const collisionTarget=await persistManualCover('file:///source2.jpg','source2.jpg',1000,{
+    documentDirectory:'file:///app/Documents/',
+    async makeDirectoryAsync(){},
+    async copyAsync(copy){collisionCopies.push(copy);},
+    async getInfoAsync(uri){
+      if(uri==='file:///source2.jpg')return {exists:true,size:1000};
+      if(uri==='file:///app/Documents/covers/manual-cover-77.jpg')return {exists:true,size:1000};
+      if(uri==='file:///app/Documents/covers/manual-cover-77-1.jpg')return {exists:collisionCopies.length>0,size:1000};
+      return {exists:false};
+    },
+    async deleteAsync(){},
+    now:()=>77,
+  });
+  assert.equal(collisionTarget,'file:///app/Documents/covers/manual-cover-77-1.jpg','manual covers must never overwrite an existing timestamp path');
+  assert.deepEqual(collisionCopies,[{from:'file:///source2.jpg',to:collisionTarget}]);
+
   await assert.rejects(
     ()=>persistManualCover('file:///source.jpg','source.jpg',1000,{
       documentDirectory:'file:///app/Documents/',
