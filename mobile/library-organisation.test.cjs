@@ -5,6 +5,7 @@ const works=[
  {source:'local',canonicalKey:'local:a',title:'Alpha',author:'A',series:'S',genre:'Fantasy',format:'EPUB',space:'Main',available:true,readingState:'in-progress',rating:8,favourite:true},
  {source:'server',canonicalKey:'server:b',title:'Beta',author:'B',series:'',genre:'History',format:'Audio',space:'Server',available:true,readingState:'not-started',rating:0,favourite:false},
  {source:'server',canonicalKey:'server:c',title:'Gamma',author:'C',series:'S2',genre:'Fantasy',format:'Audio',space:'Server',available:false,readingState:'finished',rating:10,favourite:false},
+ {source:'downloaded',canonicalKey:'downloaded:d',title:'Delta',author:'D',series:'',genre:'Science Fiction',format:'EPUB',space:'Offline',available:true,readingState:'not-started',rating:7,favourite:false},
 ];
 const shelf={id:'s',name:'Fav fantasy',source:'all',format:'',author:'',series:'',genre:'Fantasy',space:'',readingState:'',minimumRating:6,favouriteOnly:true,availableOnly:false,sort:'rating',createdAt:''};
 assert(x.applySmartShelf(works,shelf).map(w=>w.title).join(',')==='Alpha','legacy smart shelf filtering');
@@ -28,4 +29,12 @@ const sanitized=x.sanitizeRuleGroup({kind:'group',mode:'any',children:[{kind:'ru
 assert(sanitized.mode==='any'&&sanitized.children.length===1,'rule sanitization');
 let c={id:'c',name:'C',canonicalKeys:[],createdAt:''};c=x.toggleCollectionWork(c,'server:b');assert(c.canonicalKeys[0]==='server:b','collection add');c=x.toggleCollectionWork(c,'server:b');assert(c.canonicalKeys.length===0,'collection remove');
 assert(x.collectionWorks(works,{...c,canonicalKeys:['local:a']})[0].title==='Alpha','collection membership');
-console.log('PASS: nested Smart Shelf rules and collection organisation');
+const presets=x.smartShelfPresets();
+assert(presets.map(p=>p.id).join(',')==='currently-reading,not-started,favourites,highly-rated,downloaded','preset order is stable and human-readable');
+const presetTitles=id=>{const preset=presets.find(p=>p.id===id);return x.applySmartShelf(works,{...shelf,source:'all',format:'',author:'',series:'',genre:'',space:'',readingState:'',minimumRating:0,favouriteOnly:false,availableOnly:false,sort:preset.sort,rules:preset.rules}).map(w=>w.title).join(',');};
+assert(presetTitles('currently-reading')==='Alpha','currently reading preset');
+assert(presetTitles('not-started')==='Beta,Delta','not started preset');
+assert(presetTitles('favourites')==='Alpha','favourites preset');
+assert(presetTitles('highly-rated')==='Gamma,Alpha','highly rated preset');
+assert(presetTitles('downloaded')==='Delta','offline preset');
+console.log('PASS: nested Smart Shelf rules, presets and collection organisation');
