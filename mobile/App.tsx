@@ -25,7 +25,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaProvider, SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import {useFonts} from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -110,9 +110,11 @@ function audioStatusError(status:unknown){
   return typeof value==='string'&&value.trim()?value:undefined;
 }
 const nativeSplashEnabled=Platform.OS==='android'||Platform.OS==='ios';
+const nativeSplashStartedAt=Date.now();
+const nativeSplashMinimumMs=1100;
 if(nativeSplashEnabled){
   void SplashScreen.preventAutoHideAsync().catch(()=>undefined);
-  SplashScreen.setOptions({duration:350,fade:true});
+  SplashScreen.setOptions({duration:480,fade:true});
 }
 
 
@@ -589,6 +591,7 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
 
 function Client() {
   const systemScheme = useColorScheme();
+  const safeArea=useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
@@ -4858,6 +4861,7 @@ function Client() {
   function atlasSelectNearestNodeAt(viewX:number,viewY:number){
     const id=atlasNearest(atlasUniverse.nodes,atlasTransformRef.current,{x:viewX,y:viewY},atlasDiameter,foldLayout?30:26);
     if(id)selectAtlasNode(id);
+    else if(atlasNodeId||atlasBreakdown)dismissAtlasNode();
   }
   function atlasGestureEnd(event:any){
     const gesture=atlasGesture.current;atlasGesture.current=null;setAtlasInteracting(false);
@@ -6586,7 +6590,7 @@ function Client() {
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
-      <View pointerEvents="box-none" style={[styles.globalProfileCorner,phoneLayout&&styles.globalProfileCornerPhone,{right:width>=940?28:width>=600?24:narrowPhone?12:16}]}>
+      <View pointerEvents="box-none" style={[styles.globalProfileCorner,phoneLayout&&styles.globalProfileCornerPhone,{top:safeArea.top+(phoneLayout?8:10),right:width>=940?28:width>=600?24:narrowPhone?12:16}]}>
         <ProfileAvatarButton size={42}/>
       </View>
       <Animated.View style={[styles.tabBody,{
@@ -6663,7 +6667,9 @@ export default function App() {
   const system = useColorScheme();
   useEffect(()=>{
     if(!nativeSplashEnabled||(!fontsLoaded&&!fontError))return;
-    void SplashScreen.hideAsync().catch(()=>undefined);
+    const remaining=Math.max(0,nativeSplashMinimumMs-(Date.now()-nativeSplashStartedAt));
+    const timer=setTimeout(()=>{void SplashScreen.hideAsync().catch(()=>undefined);},remaining);
+    return()=>clearTimeout(timer);
   },[fontsLoaded,fontError]);
   if (!fontsLoaded && !fontError) return nativeSplashEnabled?null:<View accessibilityLabel="Opening Archivist" style={[styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7'}]}><ArchivistLogo size={88}/><Text style={[styles.brandLaunchWordmark,{color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text><ActivityIndicator color={system==='dark'?'#B99A68':'#47736F'} /></View>;
   return <SafeAreaProvider><Client /></SafeAreaProvider>;
