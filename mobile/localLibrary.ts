@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
-import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey} from './libraryIntelligence';
+import {applyLocalMetadata, applyResolvedLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey, sanitizeDiscoveredMetadata} from './libraryIntelligence';
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
 import {extractAudioMetadata} from './audioMetadata';
@@ -300,6 +300,7 @@ export async function scanLocalFolders(
       const ext = extension(child);
       return !!ext && supported.has(ext);
     });
+    const audioSiblingCount = supportedFiles.filter(child => supported.get(extension(child)) === 'Audio').length;
     const sidecarByStem = new Map<string, string>();
     let genericSidecar = '';
     const artworkByStem = new Map<string, string>();
@@ -347,19 +348,21 @@ export async function scanLocalFolders(
           metadataStarted = true;
           report('reading-metadata', space);
         }
-        let identity = inferLocalBookMetadata(child, format);
+        let identity = inferLocalBookMetadata(child, format, {siblingMediaCount: format === 'Audio' ? audioSiblingCount : 1});
         const evidence: MetadataCandidate[] = [{
           source: 'path' as const,
           confidence: identity.confidence,
           fields: {
             title: identity.title, author: identity.author, series: identity.series, seriesNumber: identity.seriesNumber,
-            genre: identity.genre, publishedYear: identity.publishedYear,
+            genre: identity.genre, publishedYear: identity.publishedYear, narrator: identity.narrator, publisher: identity.publisher,
+            isbn: identity.isbn, asin: identity.asin, language: identity.language, description: identity.description,
           },
         }];
 
         const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
         if (sidecarUri) {
-          const fields = await cachedSidecarFields(sidecarUri);
+          const rawFields = await cachedSidecarFields(sidecarUri);
+          const fields = sanitizeDiscoveredMetadata(rawFields, format, identity.title, format === 'Audio' ? audioSiblingCount : 1);
           if (Object.keys(fields).length) {
             evidence.push({source:'sidecar' as const, confidence:'high' as const, fields});
             identity = applyLocalMetadata(identity, fields, 'sidecar');
@@ -372,11 +375,12 @@ export async function scanLocalFolders(
         const previous = previousByUri.get(child);
         const unchanged = !!previous && fileSize !== undefined && previous.fileSize === fileSize
           && modificationTime !== undefined && previous.modificationTime === modificationTime;
-        const embeddedFields = unchanged && previous?.embeddedMetadata
+        const embeddedRawFields = unchanged && previous?.embeddedMetadata
           ? previous.embeddedMetadata
           : format === 'Audio'
             ? await extractAudioMetadata(child, ext, {size:fileSize})
             : await extractEmbeddedMetadata(child, ext, {exists:fileInfo?.exists,size:fileSize});
+        const embeddedFields = sanitizeDiscoveredMetadata(embeddedRawFields, format, identity.title, format === 'Audio' ? audioSiblingCount : 1);
         if (Object.keys(embeddedFields).length) {
           evidence.push({source:'embedded' as const, confidence:'high' as const, fields:embeddedFields});
           identity = applyLocalMetadata(identity, embeddedFields, 'embedded');
@@ -388,6 +392,8 @@ export async function scanLocalFolders(
           identity = applyLocalMetadata(identity, override, 'manual');
         }
         const resolvedMetadata = resolveMetadataCandidates(evidence);
+        identity = applyResolvedLocalMetadata(identity, resolvedMetadata);
+        if (override) identity = applyLocalMetadata(identity, override, 'manual');
 
         const coverCandidates = [
           artworkByStem.get(fileStem(child).toLowerCase()),
