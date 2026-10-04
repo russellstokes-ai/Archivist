@@ -41,7 +41,11 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   zip.file('001.jpg', Buffer.from([1, 2, 3]));
   files.set('comic.cbz', await zip.generateAsync({type: 'base64'}));
   const comic = await buildLocalReaderDocument('comic.cbz', 'Comic', 'Comic');
-  assert(comic.html.includes('data:image/jpeg;base64'));
+  assert(!comic.html.includes('data:image/jpeg;base64'),'comic HTML must not embed the whole archive');
+  assert.equal(comic.pageCount,1);
+  assert.equal((await comic.loadPage(0)).base64,'AQID');
+  assert(comic.html.includes('reader-page-request'));
+  assert(comic.html.includes('__archivistSetComicPage'));
   assert(comic.html.includes('comic-page'));
   assert(comic.html.includes('comic-page active'));
   assert(comic.html.includes('reader-page-sound') || comic.html.includes('archivist-reader-sound'));
@@ -54,7 +58,7 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
 
   files.set('legacy.cbr','AA==');
   const cbr=await buildLocalReaderDocument('legacy.cbr','Comic','Legacy CBR');
-  assert(cbr.html.includes('data:image/jpeg;base64,AQID'),'CBR should use native archive bridge');
+  assert.equal((await cbr.loadPage(0)).base64,'AQID','CBR should use native archive bridge without embedding all pages in WebView');
 
   function tarEntry(name, bytes){
     const header=Buffer.alloc(512);Buffer.from(name).copy(header,0,0,Math.min(100,name.length));
@@ -67,7 +71,7 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   const cbtBytes=Buffer.concat([tarEntry('001.jpg',[1,2,3]),Buffer.alloc(1024)]);
   files.set('local.cbt',cbtBytes.toString('base64'));
   const cbt=await buildLocalReaderDocument('local.cbt','Comic','Local CBT');
-  assert(cbt.html.includes('data:image/jpeg;base64,AQID'),'CBT tar archive should decode locally');
+  assert.equal((await cbt.loadPage(0)).base64,'AQID','CBT tar archive should decode locally without embedding all pages in WebView');
 
   const pdf = await buildLocalReaderDocument('file.pdf', 'PDF', 'PDF');
   assert.equal(pdf.uri, 'file.pdf');
