@@ -19,10 +19,10 @@ import (
 const metadataXMLLimit = 2 << 20
 
 var (
-	asinQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ASIN\\s*[:#-]?\\s*([A-Z0-9]{10})\\s*\\]`)
-	isbnQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ISBN(?:-1[03])?\\s*[:#-]?\\s*([-0-9Xx ]{10,20})\\s*\\]`)
+	asinQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ASIN\\s*[-:#]?\\s*([A-Z0-9]{10})\\s*\\]`)
+	isbnQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ISBN(-10|-13)?\\s*[-:#]?\\s*([-0-9Xx ]{10,20})\\s*\\]`)
 	narratorQualifierRE = regexp.MustCompile(`\\{([^{}]{2,100})\\}`)
-	yearQualifierRE = regexp.MustCompile(`\\(\\s*((?:19|20)\\d{2})\\s*\\)`)
+	yearQualifierRE = regexp.MustCompile(`\\(\\s*((19|20)\\d{2})\\s*\\)`)
 )
 
 type embeddedMetadata struct {
