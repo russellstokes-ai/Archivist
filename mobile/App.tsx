@@ -6880,7 +6880,7 @@ function Client() {
   function Settings() {
     const connected=!!session;
     const settingsTitleStyle=accessibilityPrefs.largeText?{fontSize:16.5,lineHeight:22}:undefined;
-    const Toggle=({value,onPress,label}:{value:boolean;onPress:()=>void;label:string})=><Pressable accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{checked:value}} hitSlop={{top:9,bottom:9,left:0,right:0}} onPress={onPress} style={[styles.settingsToggle,{backgroundColor:value?p.gold:p.line,justifyContent:value?'flex-end':'flex-start'}]}><View style={[styles.settingsToggleKnob,{backgroundColor:darkMode?'#FFFFFF':'#FFFDF9'}]}/></Pressable>;
+    const Toggle=({value,onPress,label,disabled=false}:{value:boolean;onPress:()=>void;label:string;disabled?:boolean})=><Pressable accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{checked:value,disabled}} disabled={disabled} hitSlop={{top:9,bottom:9,left:0,right:0}} onPress={onPress} style={[styles.settingsToggle,{backgroundColor:value?p.gold:p.line,justifyContent:value?'flex-end':'flex-start',opacity:disabled?.42:1}]}><View style={[styles.settingsToggleKnob,{backgroundColor:darkMode?'#FFFFFF':'#FFFDF9'}]}/></Pressable>;
     const localStorageText=offlineStorage?formatBytes(offlineStorage.actualBytes||offlineStorage.trackedBytes):'Not measured';
     return (
       <ScrollView contentContainerStyle={[styles.settingsScreen,phoneLayout&&styles.settingsScreenPhone,narrowPhone&&styles.settingsScreenNarrow,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
@@ -6899,6 +6899,68 @@ function Client() {
               </View>
 
               <View style={styles.settingsSubgroup}>
+                <View style={styles.settingsSubgroupHeading}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Books and comics</Text></View>
+                  <Toggle label="Online metadata" value={metadataSettings.onlineEnabled} onPress={()=>void updateMetadataSettings(current=>({...current,onlineEnabled:!current.onlineEnabled}))}/>
+                </View>
+
+                <View style={styles.settingsRow}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Automatic enrichment</Text><Text style={[styles.meta,{color:p.muted}]}>Fill gaps after a local scan.</Text></View>
+                  <Toggle label="Automatic metadata enrichment" disabled={!metadataSettings.onlineEnabled} value={metadataSettings.automaticEnrichment} onPress={()=>void updateMetadataSettings(current=>({...current,automaticEnrichment:!current.automaticEnrichment}))}/>
+                </View>
+                <View style={styles.settingsRow}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Apply confident matches</Text><Text style={[styles.meta,{color:p.muted}]}>Uncertain matches always stay in Needs Attention.</Text></View>
+                  <Toggle label="Apply high confidence metadata matches" disabled={!metadataSettings.onlineEnabled} value={metadataSettings.applyHighConfidence} onPress={()=>void updateMetadataSettings(current=>({...current,applyHighConfidence:!current.applyHighConfidence}))}/>
+                </View>
+
+                <View style={styles.settingsSubgroupHeading}>
+                  <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>BOOKS</Text>
+                  <Toggle label="Book metadata providers" disabled={!metadataSettings.onlineEnabled} value={metadataSettings.books.enabled} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,enabled:!current.books.enabled}}))}/>
+                </View>
+                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Open Library</Text><Text style={[styles.meta,{color:p.sage}]}>Ready · no setup</Text></View>
+                  <Toggle label="Open Library" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={metadataSettings.books.openLibrary} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,openLibrary:!current.books.openLibrary}}))}/>
+                </View>
+                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Google Books</Text><Text style={[styles.meta,{color:googleBooksConfigured?p.sage:p.muted}]}>{googleBooksConfigured?'Configured':'Optional fallback'}</Text></View>
+                  {googleBooksConfigured?<Toggle label="Google Books" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={metadataSettings.books.googleBooks} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,googleBooks:!current.books.googleBooks}}))}/>:null}
+                  <Pressable accessibilityRole="button" onPress={()=>setMetadataCredentialEditor(metadataCredentialEditor==='google'?'':'google')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{googleBooksConfigured?'Manage':'Configure'}</Text></Pressable>
+                </View>
+                {metadataCredentialEditor==='google'?<View style={styles.settingsAddFolder}>
+                  <TextInput accessibilityLabel="Google Books API key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={googleBooksKeyDraft} onChangeText={setGoogleBooksKeyDraft} placeholder={googleBooksConfigured?'Enter a replacement API key':'Google Books API key'} placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                  <View style={styles.settingsInlineActions}>
+                    <Button label={googleBooksConfigured?'Replace key':'Save key'} disabled={!googleBooksKeyDraft.trim()} onPress={()=>void saveMetadataCredential('google')}/>
+                    {googleBooksConfigured?<Button label="Remove" tone="quiet" onPress={()=>void removeMetadataCredential('google')}/>:null}
+                    <Button label="Cancel" tone="quiet" onPress={()=>{setMetadataCredentialEditor('');setGoogleBooksKeyDraft('')}}/>
+                  </View>
+                </View>:null}
+
+                <View style={styles.settingsSubgroupHeading}>
+                  <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>COMICS</Text>
+                  <Toggle label="Comic metadata providers" disabled={!metadataSettings.onlineEnabled} value={metadataSettings.comics.enabled} onPress={()=>void updateMetadataSettings(current=>({...current,comics:{...current.comics,enabled:!current.comics.enabled}}))}/>
+                </View>
+                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Metron</Text><Text style={[styles.meta,{color:metronConfigured?p.sage:p.muted}]}>{metronConfigured?'Configured':'Token required'}</Text></View>
+                  {metronConfigured?<Toggle label="Metron" disabled={!metadataSettings.onlineEnabled||!metadataSettings.comics.enabled} value={metadataSettings.comics.metron} onPress={()=>void updateMetadataSettings(current=>({...current,comics:{...current.comics,metron:!current.comics.metron}}))}/>:null}
+                  <Pressable accessibilityRole="button" onPress={()=>setMetadataCredentialEditor(metadataCredentialEditor==='metron'?'':'metron')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{metronConfigured?'Manage':'Configure'}</Text></Pressable>
+                </View>
+                {metadataCredentialEditor==='metron'?<View style={styles.settingsAddFolder}>
+                  <TextInput accessibilityLabel="Metron API token" secureTextEntry autoCapitalize="none" autoCorrect={false} value={metronTokenDraft} onChangeText={setMetronTokenDraft} placeholder={metronConfigured?'Enter a replacement token':'Metron API token'} placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/>
+                  <View style={styles.settingsInlineActions}>
+                    <Button label={metronConfigured?'Replace token':'Save token'} disabled={!metronTokenDraft.trim()} onPress={()=>void saveMetadataCredential('metron')}/>
+                    {metronConfigured?<Button label="Remove" tone="quiet" onPress={()=>void removeMetadataCredential('metron')}/>:null}
+                    <Button label="Cancel" tone="quiet" onPress={()=>{setMetadataCredentialEditor('');setMetronTokenDraft('')}}/>
+                  </View>
+                </View>:null}
+
+                <View style={styles.settingsInlineActions}>
+                  <Pressable accessibilityRole="button" disabled={localScanning||!localFolders.length} onPress={()=>void refreshAllMetadataAndCovers()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Refreshing…':'Refresh metadata & covers'}</Text></Pressable>
+                  <Pressable accessibilityRole="button" onPress={()=>void clearMetadataCaches()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Clear metadata cache</Text></Pressable>
+                </View>
+                {metadataSettingsNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:metadataSettingsNotice.includes('could not')?p.danger:p.sage}]}>{metadataSettingsNotice}</Text>:null}
+              </View>
+
+              <View style={styles.settingsSubgroup}>
                 <View style={styles.settingsSubgroupHeading}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Local folders</Text><Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder{localFolders.length===1?'':'s'} · {localBooks.length} files</Text></View>
                 {localFolders.map(folder=><View key={folder.uri} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{folder.name}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{folder.uri}</Text></View>
@@ -6906,7 +6968,7 @@ function Client() {
                 </View>)}
                 <View style={styles.settingsInlineActions}>
                   <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
-                  {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders(localMetadataOverrides,true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
+                  {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void refreshAllMetadataAndCovers()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
                 </View>
                 {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
