@@ -15,6 +15,9 @@ on:
 permissions:
   contents: write
 
+env:
+  TEST_BUILD: '5'
+
 concurrency:
   group: android-apk-${{ github.ref }}
   cancel-in-progress: true
@@ -161,17 +164,17 @@ jobs:
         run: |
           set -euo pipefail
           APK="${{ steps.release_apk.outputs.path }}"
-          OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test.apk"
+          OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk"
           cp "$APK" "$OUT"
           sha256sum "$OUT" > "$OUT.sha256"
 
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: Archivist-${{ steps.app_version.outputs.version }}-Test-APK
+          name: Archivist-${{ steps.app_version.outputs.version }}-Test-${{ env.TEST_BUILD }}-APK
           path: |
-            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test.apk
-            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test.apk.sha256
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -194,12 +197,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.app_version.outputs.version }}
+          TEST_BUILD: ${{ env.TEST_BUILD }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v${VERSION}-testing"
+          TAG="v${VERSION}-testing.${TEST_BUILD}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "Archivist $VERSION testing build" --notes "Android testing APK with verified signature, package checks and emulator launch. Uses the repository test signing key. Physical-device acceptance remains outstanding."
+            gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "Archivist $VERSION test build ${TEST_BUILD}" --notes "Archivist $VERSION test build ${TEST_BUILD}. Android testing APK with verified signature, package checks and emulator launch. Uses the repository test signing key. Physical-device acceptance remains outstanding."
           fi
-          gh release upload "$TAG" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test.apk" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test.apk.sha256" --clobber
+          gh release upload "$TAG" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test-${TEST_BUILD}.apk" "mobile/android/app/build/outputs/apk/Archivist-${VERSION}-test-${TEST_BUILD}.apk.sha256" --clobber
 
