@@ -414,15 +414,17 @@ export async function scanLocalFolders(
 
         const coverCandidates = [
           artworkByStem.get(fileStem(child).toLowerCase()),
-          artworkByStem.get('cover'),
-          artworkByStem.get('front'),
-          artworkByStem.get('frontcover'),
-          artworkByStem.get('front-cover'),
-          artworkByStem.get('bookcover'),
-          artworkByStem.get('book-cover'),
-          artworkByStem.get('folder'),
-          artworkByStem.get('coverart'),
-          artworkByStem.get('artwork'),
+          ...(genericBookLevelFilesAllowed ? [
+            artworkByStem.get('cover'),
+            artworkByStem.get('front'),
+            artworkByStem.get('frontcover'),
+            artworkByStem.get('front-cover'),
+            artworkByStem.get('bookcover'),
+            artworkByStem.get('book-cover'),
+            artworkByStem.get('folder'),
+            artworkByStem.get('coverart'),
+            artworkByStem.get('artwork'),
+          ] : []),
         ].filter((value,index,all): value is string => !!value && all.indexOf(value)===index);
         const discoveredCoverUri = coverCandidates[0] || genericCover || undefined;
         if(genericCover && !coverCandidates.includes(genericCover))coverCandidates.push(genericCover);
