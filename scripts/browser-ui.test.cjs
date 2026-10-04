@@ -93,6 +93,7 @@ const server=http.createServer((req,res)=>{
     }
     await page.getByRole('tab',{name:'Organisation',exact:true}).click();
     if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'organisation-16x9.png'),fullPage:true,animations:'disabled'});
+    await page.getByRole('tab',{name:'Library & storage',exact:true}).click();
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'settings overflow');
     if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,'settings-phone.png'),fullPage:true,animations:'disabled'});
