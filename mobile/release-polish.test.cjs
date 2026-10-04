@@ -4,6 +4,16 @@ const path=require('node:path');
 
 const source=fs.readFileSync(path.join(__dirname,'App.tsx'),'utf8');
 
+const settingsStart=source.indexOf('  function Settings() {');
+const settingsEnd=source.indexOf('\n  function CurrentTab()',settingsStart);
+assert.ok(settingsStart>=0&&settingsEnd>settingsStart,'Settings block missing');
+const settings=source.slice(settingsStart,settingsEnd);
+
+const libraryManagementStart=source.indexOf('  function LibraryManagementPanel(){');
+const libraryManagementEnd=source.indexOf('\n  function ',libraryManagementStart+10);
+assert.ok(libraryManagementStart>=0&&libraryManagementEnd>libraryManagementStart,'Library management block missing');
+const libraryManagement=source.slice(libraryManagementStart,libraryManagementEnd);
+
 assert.ok(
   source.includes("disabled={busy || !server.trim() || !key.trim()}"),
   'Server Connect must stay disabled until both server address and access key are present'
@@ -82,6 +92,19 @@ assert.ok(
 assert.ok(
   source.includes("style={{color:p.ink,fontWeight:'700',flex:1,minWidth:0}}"),
   'Organisation preview titles must wrap instead of colliding with long statuses'
+);
+
+assert.ok(
+  settings.includes("layoutTier==='compact'&&{alignItems:'flex-start',flexWrap:'wrap'}"),
+  'Settings server source rows must wrap on compact phones rather than only Library-management rows'
+);
+assert.ok(
+  settings.includes('{moveStatus?<Text accessibilityLiveRegion="polite"'),
+  'Settings safe-organisation status must be announced'
+);
+assert.ok(
+  libraryManagement.includes("layoutTier==='compact'&&{alignItems:'flex-start',flexWrap:'wrap'}"),
+  'Library-management server source rows must remain compact-safe'
 );
 
 console.log('PASS: final release polish protects compact Settings, onboarding wrapping and live edge-state accessibility');
