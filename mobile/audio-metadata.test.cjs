@@ -44,6 +44,16 @@ assert.equal(fields.series,'Dune');
 assert.equal(fields.seriesNumber,1);
 assert.equal(fields.asin,'B000000001');
 
+const partFrames=Buffer.concat([
+  textFrame('TIT2','Part 36'),
+  textFrame('TALB','Dune'),
+  textFrame('TPE1','Frank Herbert'),
+]);
+const partTag=Buffer.concat([Buffer.from('ID3'),Buffer.from([3,0,0,...syncsafe(partFrames.length)]),partFrames]);
+const partFields=parseID3v2Base64(partTag.toString('base64'));
+assert.equal(partFields.title,'Dune');
+assert.equal(partFields.author,'Frank Herbert');
+
 const id3v1=Buffer.alloc(128);id3v1.write('TAG',0);id3v1.write('Foundation',3);id3v1.write('Isaac Asimov',33);id3v1.write('1951',93);
 const old=parseID3v1Base64(id3v1.toString('base64'));
 assert.equal(old.title,'Foundation');assert.equal(old.author,'Isaac Asimov');assert.equal(old.publishedYear,1951);
