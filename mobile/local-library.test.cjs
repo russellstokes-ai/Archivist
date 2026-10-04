@@ -75,7 +75,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyLocalSortCopies, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
 const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
 
 const books = [
@@ -257,6 +257,51 @@ assert.equal(previews[0].state, 'review');
   assert.equal(hugeScan.books.length,1);
   assert.equal(infoReads.includes(hugeBook),true);
   assert.equal(fileReads.includes(hugeBook),false);
+
+  // Sprint 7 publishes the catalogue before expensive embedded-cover recovery.
+  const coverRoot='content://root/tree/primary:Books/document/primary:CoverEnrichment';
+  const coverBook=coverRoot+'%2FCovered.epub';
+  const JSZip=require('jszip');
+  const coverZip=new JSZip();
+  coverZip.file('META-INF/container.xml','<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>');
+  coverZip.file('OEBPS/content.opf','<package><metadata><dc:title>Covered</dc:title><dc:creator>Cover Author</dc:creator><meta name="cover" content="front"/></metadata><manifest><item id="front" href="front.jpg" media-type="image/jpeg"/></manifest></package>');
+  coverZip.file('OEBPS/front.jpg',Buffer.from([0xff,0xd8,0xff,0xe0,1,2,3,0xff,0xd9]));
+  const coverBase64=await coverZip.generateAsync({type:'base64'});
+  saf.dirs.set(coverRoot,[coverBook]);
+  fileInfo.set(coverBook,{exists:true,size:Math.floor(coverBase64.length*3/4),modificationTime:77});
+  fileText.set(coverBook,coverBase64);
+  const deferredCoverScan=await scanLocalFolders(
+    [{id:coverRoot,uri:coverRoot,name:'CoverEnrichment',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    [],
+    {deferEmbeddedCovers:true},
+  );
+  assert.equal(deferredCoverScan.books.length,1);
+  assert.equal(deferredCoverScan.books[0].title,'Covered');
+  assert.equal(deferredCoverScan.books[0].author,'Cover Author');
+  assert.equal(deferredCoverScan.books[0].coverUri,undefined,'primary catalogue must not wait for embedded cover extraction');
+
+  let coverBatches=0;
+  const enrichedCoverScan=await enrichLocalBookCovers(deferredCoverScan.books,{
+    batchSize:1,
+    onBatch(){coverBatches+=1;},
+  });
+  assert.equal(enrichedCoverScan.updated,1);
+  assert.equal(coverBatches,1);
+  assert.match(enrichedCoverScan.books[0].coverUri,/^data:image\/jpeg;base64,/);
+
+  const manualCoverCurrent=[{...deferredCoverScan.books[0],title:'User title',coverUri:'file:///manual-cover.jpg'}];
+  const protectedMerge=applyCoverEnrichment(manualCoverCurrent,enrichedCoverScan.books);
+  assert.equal(protectedMerge[0].coverUri,'file:///manual-cover.jpg','background cover recovery must never replace an existing/manual cover');
+  assert.equal(protectedMerge[0].title,'User title','cover enrichment must never roll metadata back');
+  assert.equal(protectedMerge[0].uri,coverBook);
+  assert.deepEqual(protectedMerge.map(item=>item.uri),manualCoverCurrent.map(item=>item.uri),'cover enrichment must preserve catalogue order');
+
+  const blankCurrent=[{...deferredCoverScan.books[0],title:'Stable title'}];
+  const filledMerge=applyCoverEnrichment(blankCurrent,enrichedCoverScan.books);
+  assert.equal(filledMerge[0].title,'Stable title');
+  assert.equal(filledMerge[0].coverUri,enrichedCoverScan.books[0].coverUri);
 
   // Deeply nested libraries have no arbitrary folder-depth limit.
   const deepRoot='content://root/tree/primary:Books/document/primary:Deep';
