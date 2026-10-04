@@ -24,6 +24,21 @@ assert(sparse.series.includes('Amazing Spider-Man'));
 assert(sparse.issueNumbers.includes('1'));
 assert(sparse.years.includes(2018));
 
+const pureIssue=buildComicLookupHints({
+  format:'Comic',
+  uri:'content://root/document/primary:Comics%2FMarvel%2FAmazing%20Spider-Man%20(2018)%2F001.cbz',
+});
+assert(pureIssue.series.includes('Amazing Spider-Man'));
+assert(pureIssue.issueNumbers.includes('1'));
+assert(pureIssue.years.includes(2018));
+
+const issueLeadingTitle=buildComicLookupHints({
+  format:'Comic',
+  uri:'content://root/document/primary:Comics%2FDC%2FSandman%2F001%20-%20Sleep%20of%20the%20Just.cbz',
+});
+assert(issueLeadingTitle.series.includes('Sandman'));
+assert(issueLeadingTitle.issueNumbers.includes('1'));
+
 const strong=scoreOnlineComicCandidate(
   {format:'Comic',series:'Amazing Spider-Man',comicIssueNumber:'1',comicVolume:5,publishedYear:2018},
   {provider:'metron',providerId:'50',fields:{series:'Amazing Spider-Man',comicIssueNumber:'1',comicVolume:5,publishedYear:2018},coverUri:'https://static.metron.cloud/1.jpg',query:'q'},
@@ -64,7 +79,7 @@ assert.equal(protectedMerged.coverUri,'https://static.metron.cloud/sandman.jpg')
 (async()=>{
   const calls=[];
   const fetcher=async(url,init)=>{
-    calls.push({url,auth:init?.headers?.Authorization});
+    calls.push({url,auth:init?.headers?.Authorization,userAgent:init?.headers?.['User-Agent']});
     if(url.includes('/api/issue/?'))return {ok:true,status:200,json:async()=>({results:[{
       id:50,
       series:{id:15,name:'Amazing Spider-Man',volume:5,year_began:2018},
@@ -122,6 +137,7 @@ assert.equal(protectedMerged.coverUri,'https://static.metron.cloud/sandman.jpg')
   assert.equal(result.best.fields.comicPageCount,32);
   assert.equal(result.best.fields.comicExternalIds.comicVine,676020);
   assert(calls.every(call=>call.auth==='Bearer metron-test-token'));
+  assert(calls.every(call=>/^Archivist\//.test(call.userAgent)));
 
   const unconfigured=await lookupOnlineComic(input,{fetcher,cache:{}});
   assert.equal(unconfigured.status,'unconfigured');

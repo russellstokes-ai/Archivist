@@ -176,10 +176,12 @@ function parseStem(value:string){
     title=clean(raw.slice((named.index||0)+named[0].length)).replace(/^[-:]+/,'').trim();
   }else{
     const issueIndex=dashed.findIndex(part=>/^#?0*\d+(?:\.\d+)?[A-Za-z]?$/.test(part));
-    if(issueIndex>0){
+    if(issueIndex>=0){
       issue=normalizeComicIssueNumber(dashed[issueIndex]);
       series=dashed.slice(0,issueIndex).join(' - ');
       title=dashed.slice(issueIndex+1).join(' - ');
+    }else if(/^#?0*\d+(?:\.\d+)?[A-Za-z]?$/.test(raw)){
+      issue=normalizeComicIssueNumber(raw);
     }else{
       const withoutYear=raw.replace(/\((?:18|19|20)\d{2}\)/g,' ').replace(/\b(?:v|vol(?:ume)?\.?)[\s._-]*\d{1,3}\b/ig,' ').trim();
       const trailing=withoutYear.match(/^(.*?)\s+[._-]?\s*(0*\d{1,4}(?:\.\d+)?[A-Za-z]?)$/);
@@ -376,7 +378,7 @@ async function fetchJson(fetcher:FetchLike,url:string,token:string,timeoutMs:num
   const controller=typeof AbortController!=='undefined'?new AbortController():undefined;
   const timer=controller?setTimeout(()=>controller.abort(),timeoutMs):undefined;
   try{
-    const response=await fetcher(url,{headers:{Accept:'application/json',Authorization:'Bearer '+token},signal:controller?.signal});
+    const response=await fetcher(url,{headers:{Accept:'application/json',Authorization:'Bearer '+token,'User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'},signal:controller?.signal});
     if(response.status===429){
       const error:any=new Error('Metron rate limit reached');error.code='rate-limited';throw error;
     }
@@ -391,12 +393,12 @@ async function searchMetron(fetcher:FetchLike,plan:QueryPlan,token:string,timeou
   const results=Array.isArray(json?.results)?json.results:Array.isArray(json)?json:[];
   return results.slice(0,25).map((item:any)=>rawCandidate(item,query));
 }
-async function hydrateCandidate(fetcher:FetchLike,candidate:OnlineComicCandidate,token:string,timeoutMs:number){
+async function hydrateCandidate(fetcher:FetchLike,input:ComicLookupInput,candidate:OnlineComicCandidate,token:string,timeoutMs:number){
   if(!candidate.providerId)return candidate;
   try{
     const detail=await fetchJson(fetcher,'https://metron.cloud/api/issue/'+encodeURIComponent(candidate.providerId)+'/',token,timeoutMs);
     const raw=rawCandidate(detail,candidate.query);
-    return scoreOnlineComicCandidate({...candidate.fields,format:'Comic'},raw);
+    return scoreOnlineComicCandidate(input,raw);
   }catch(error:any){
     if(error?.code==='rate-limited')throw error;
     return candidate;
@@ -441,7 +443,7 @@ export async function lookupOnlineComic(input:ComicLookupInput,options:OnlineCom
     if(hydrate.length){
       const detailed:typeof raw=[];
       for(const candidate of hydrate){
-        const hydrated=await hydrateCandidate(fetcher,candidate,token,timeoutMs);
+        const hydrated=await hydrateCandidate(fetcher,input,candidate,token,timeoutMs);
         detailed.push({provider:'metron',providerId:hydrated.providerId,fields:hydrated.fields,coverUri:hydrated.coverUri||candidate.coverUri,query:hydrated.query});
       }
       const hydratedIds=new Set(detailed.map(item=>item.providerId));
