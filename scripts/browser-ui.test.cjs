@@ -51,6 +51,7 @@ const server=http.createServer((req,res)=>{
       return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
     });
     await page.goto('http://127.0.0.1:'+server.address().port);
+    await page.getByRole('button',{name:'Library',exact:true}).click();
     await page.locator('.book').first().waitFor();
     await page.evaluate(()=>document.fonts.ready);
     assert.equal(await page.locator('.book').count(),9);
@@ -82,6 +83,11 @@ const server=http.createServer((req,res)=>{
     delayBooks=400;await page.fill('#search','Earthsea');await page.locator('.skeleton').first().waitFor();
     assert.equal(await page.locator('#books').getAttribute('aria-busy'),'true');
     await page.waitForFunction(()=>document.querySelector('#books').getAttribute('aria-busy')==='false');delayBooks=0;
+    await page.getByRole('button',{name:'Shelf',exact:true}).click();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Shelf overflow');
+    await page.getByRole('button',{name:'Stats',exact:true}).click();
+    await page.locator('#insights-metrics').waitFor();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Stats overflow');
     await page.getByRole('button',{name:'Settings',exact:true}).click();
     await page.setViewportSize({width:1920,height:1080});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'16:9 settings overflow');
