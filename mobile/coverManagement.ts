@@ -21,9 +21,10 @@ export function pickedCoverAsset(result:PickerCoverResult|null|undefined){
 }
 
 export function verifiedCoverSize(reported:number|undefined,info:CoverFileInfo|null|undefined){
-  if(Number.isFinite(reported)&&Number(reported)>=0)return Number(reported);
-  if(info?.exists&&Number.isFinite(info.size)&&Number(info.size)>=0)return Number(info.size);
-  return undefined;
+  const sizes:number[]=[];
+  if(Number.isFinite(reported)&&Number(reported)>=0)sizes.push(Number(reported));
+  if(info?.exists&&Number.isFinite(info.size)&&Number(info.size)>=0)sizes.push(Number(info.size));
+  return sizes.length?Math.max(...sizes):undefined;
 }
 
 export function coverSizeError(size:number|undefined){
