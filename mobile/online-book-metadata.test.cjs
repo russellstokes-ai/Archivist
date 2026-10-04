@@ -17,6 +17,13 @@ const exact=scoreOnlineBookCandidate({title:'Anything',isbn:'9780441172719',form
 assert.equal(exact.confidence,'high');
 assert.equal(exact.exactIdentifier,true);
 
+
+const isbn10Against13Preferred=scoreOnlineBookCandidate({title:'Dune',isbn:'0441172717',format:'EPUB'},{
+  provider:'openlibrary',providerId:'/works/OL1W',fields:{title:'Dune',author:'Frank Herbert',isbn:'9780441172719'},identifiers:['0441172717','9780441172719'],coverUri:'https://x/cover.jpg',exactIdentifier:false,query:'isbn'
+});
+assert.equal(isbn10Against13Preferred.exactIdentifier,true);
+assert.equal(isbn10Against13Preferred.confidence,'high');
+
 const strong=scoreOnlineBookCandidate({title:'Project Hail Mary',author:'Andy Weir',format:'EPUB'},{
   provider:'openlibrary',providerId:'/works/OL2W',fields:{title:'Project Hail Mary',author:'Andy Weir'},exactIdentifier:false,query:'title'
 });
