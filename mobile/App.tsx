@@ -3577,10 +3577,37 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>{if(!busy&&!coverPicking){setEditing(null);setEditingUris([]);setEditPickedCover(null)}}}>
+    const closeEditor=()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null)};
+    const editorDirty=
+      editTitle!==editing.title||
+      editAuthor!==(editing.author||'')||
+      editSeries!==(editing.series||'')||
+      editSeriesNumber!==(editing.seriesNumber===undefined?'':String(editing.seriesNumber))||
+      editGenre!==(editing.genre||'')||
+      editYear!==(editing.publishedYear?String(editing.publishedYear):'')||
+      editNarrator!==(editing.narrator||'')||
+      editPublisher!==(editing.publisher||'')||
+      editISBN!==(editing.isbn||'')||
+      editASIN!==(editing.asin||'')||
+      editLanguage!==(editing.language||'')||
+      editDescription!==(editing.description||'')||
+      !!editPickedCover||
+      editCoverUri!==(editing.coverUri||'');
+    const requestEditorClose=()=>{
+      if(busy||coverPicking)return;
+      if(editorDirty){
+        Alert.alert('Discard changes?','Your metadata or cover changes have not been saved.',[
+          {text:'Keep editing',style:'cancel'},
+          {text:'Discard',style:'destructive',onPress:closeEditor},
+        ]);
+        return;
+      }
+      closeEditor();
+    };
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestEditorClose}>
       <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-        <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
-          <View accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={styles.modalBackdrop} onPress={requestEditorClose}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA & COVER</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
@@ -3632,9 +3659,9 @@ function Client() {
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
             <Button label="Save details" disabled={busy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
-            <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null)}}/>
-          </View>
-        </ScrollView></View>
+            <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={requestEditorClose}/>
+          </Pressable>
+        </ScrollView></Pressable>
       </KeyboardAvoidingView>
     </Modal>;
   }
@@ -3652,6 +3679,17 @@ function Client() {
     const hasFields=!!(bulkAuthor.trim()||bulkSeries.trim()||bulkGenre.trim()||bulkNarrator.trim());
     const hasChange=hasFields||bulkSequential;
     const close=()=>{if(!busy)setBulkEditOpen(false);};
+    const requestClose=()=>{
+      if(busy)return;
+      if(hasChange){
+        Alert.alert('Discard bulk changes?','The values you entered have not been applied.',[
+          {text:'Keep editing',style:'cancel'},
+          {text:'Discard',style:'destructive',onPress:close},
+        ]);
+        return;
+      }
+      close();
+    };
     const save=async()=>{
       if(!hasChange||!editable.length||busy)return;
       if(serverBlocked){setError('Server metadata can only be changed by an Archivist Server admin.');return;}
@@ -3709,10 +3747,10 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestClose}>
       <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-        <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
-          <View accessibilityViewIsModal={true} accessibilityLabel={'Bulk edit '+selectedWorks.length+' selected works'} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close bulk metadata editor" style={styles.modalBackdrop} onPress={requestClose}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Bulk edit '+selectedWorks.length+' selected works'} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.playerEyebrow,{color:p.sage}]}>BULK METADATA</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit {selectedWorks.length} selected work{selectedWorks.length===1?'':'s'}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Only fields you enter are changed. Leave a field blank to keep each work's existing value. Setting one author name also consolidates selected author-name variants.</Text>
@@ -3725,9 +3763,9 @@ function Client() {
             <Button label={bulkSequential?'Sequential series numbering: on':'Number series sequentially'} tone="quiet" onPress={()=>setBulkSequential(value=>!value)}/>
             {bulkSequential?<><Text style={[styles.meta,{color:p.muted}]}>Numbers follow the works' current Library order.</Text><TextInput accessibilityLabel="Starting series number" keyboardType="decimal-pad" value={bulkSeriesStart} onChangeText={setBulkSeriesStart} placeholder="Start at 1" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/></>:null}
             <Button label={'Apply to '+editable.length+' work'+(editable.length===1?'':'s')} disabled={busy||serverBlocked||!editable.length||!hasChange} onPress={()=>void save()}/>
-            <Button label="Cancel" tone="quiet" disabled={busy} onPress={close}/>
-          </View>
-        </ScrollView></View>
+            <Button label="Cancel" tone="quiet" disabled={busy} onPress={requestClose}/>
+          </Pressable>
+        </ScrollView></Pressable>
       </KeyboardAvoidingView>
     </Modal>;
   }
