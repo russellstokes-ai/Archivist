@@ -29,8 +29,9 @@ assert.deepEqual(
   {uri:'file:///cover.jpg',fileName:'cover.jpg',fileSize:123},
 );
 
-assert.equal(verifiedCoverSize(123,{exists:true,size:456}),123,'picker-reported size takes precedence');
+assert.equal(verifiedCoverSize(123,{exists:true,size:456}),456,'safety must use the largest verified size rather than trusting smaller picker metadata');
 assert.equal(verifiedCoverSize(undefined,{exists:true,size:456}),456);
+assert.match(coverSizeError(verifiedCoverSize(1,{exists:true,size:MAX_MANUAL_COVER_BYTES+1})),/smaller than 25 MB/,'filesystem size must defeat understated picker metadata');
 assert.equal(verifiedCoverSize(undefined,{exists:false,size:456}),undefined);
 
 assert.deepEqual(
