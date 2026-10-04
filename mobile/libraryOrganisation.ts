@@ -60,6 +60,24 @@ export function smartShelfRule(field:SmartShelfField='genre',operator:SmartShelf
   return {kind:'rule',field,operator,value};
 }
 
+export type SmartShelfPreset = {
+  id:'currently-reading'|'not-started'|'favourites'|'highly-rated'|'downloaded';
+  label:string;
+  description:string;
+  sort:SmartShelfDefinition['sort'];
+  rules:SmartShelfRuleGroup;
+};
+
+export function smartShelfPresets():SmartShelfPreset[] {
+  return [
+    {id:'currently-reading',label:'Currently reading',description:'Works you have already started.',sort:'progress',rules:{kind:'group',mode:'all',children:[smartShelfRule('readingState','equals','in-progress')]}},
+    {id:'not-started',label:'Not started',description:'Unread and unplayed works ready for later.',sort:'title',rules:{kind:'group',mode:'all',children:[smartShelfRule('readingState','equals','not-started')]}},
+    {id:'favourites',label:'Favourites',description:'Everything you have marked as a favourite.',sort:'rating',rules:{kind:'group',mode:'all',children:[smartShelfRule('favourite','is-true','')]}},
+    {id:'highly-rated',label:'Highly rated',description:'Works rated 8 or above.',sort:'rating',rules:{kind:'group',mode:'all',children:[smartShelfRule('rating','at-least','8')]}},
+    {id:'downloaded',label:'Available offline',description:'Server works saved on this device.',sort:'title',rules:{kind:'group',mode:'all',children:[smartShelfRule('source','equals','downloaded')]}},
+  ];
+}
+
 function sanitizeRule(raw:any,depth=0):SmartShelfRule|SmartShelfRuleGroup|null {
   if(!raw||typeof raw!=='object'||depth>4)return null;
   if(raw.kind==='group'){
