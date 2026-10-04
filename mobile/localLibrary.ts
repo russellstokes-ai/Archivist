@@ -4,6 +4,7 @@ import {applyLocalMetadata, applyResolvedLocalMetadata, inferLocalBookMetadata, 
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
 import {extractAudioMetadata} from './audioMetadata';
+import {discoverEmbeddedCover} from './coverDiscovery';
 
 export type LocalBook = {
   id: number;
@@ -404,7 +405,15 @@ export async function scanLocalFolders(
         ].filter((value,index,all): value is string => !!value && all.indexOf(value)===index);
         const discoveredCoverUri = coverCandidates[0] || genericCover || undefined;
         if(genericCover && !coverCandidates.includes(genericCover))coverCandidates.push(genericCover);
-        const coverUri = override?.coverUri?.trim() || discoveredCoverUri;
+        let embeddedCoverUri: string | undefined;
+        if(!discoveredCoverUri&&!override?.coverUri?.trim()){
+          const reusable = unchanged && previous?.coverUri && (/\/covers\/embedded-/i.test(previous.coverUri)||previous.coverUri.startsWith('data:image/'))
+            ? previous.coverUri
+            : undefined;
+          embeddedCoverUri = reusable || await discoverEmbeddedCover(child, ext, {size:fileSize,modificationTime});
+          if(embeddedCoverUri&&!coverCandidates.includes(embeddedCoverUri))coverCandidates.push(embeddedCoverUri);
+        }
+        const coverUri = override?.coverUri?.trim() || discoveredCoverUri || embeddedCoverUri;
         if (identity.needsReview) review += 1;
         books.push({
           id: books.length + 1,
