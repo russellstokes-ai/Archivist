@@ -53,7 +53,7 @@ import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
-import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
+import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PLAYER_MOTION_TIMING, PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
@@ -1305,6 +1305,15 @@ function Client() {
 
   async function persistSmartShelves(next:SmartShelfDefinition[]){setSmartShelves(next);await setPersistedJSON(smartShelvesKey,next);}
   async function persistCollections(next:LibraryCollection[]){setCollections(next);await setPersistedJSON(collectionsKey,next);}
+  function currentSmartShelfRules(){
+    return legacyRules({source:sourceFilter,format:formatFilter,author:authorFilter,series:seriesFilter,genre:genreFilter,space,readingState:readingFilter,minimumRating:ratingFilter,favouriteOnly,availableOnly:availabilityFilter==='available'});
+  }
+  function beginSmartShelf(useCurrentFilters=false){
+    setOrganisationName('');
+    setSmartShelfRules(useCurrentFilters?currentSmartShelfRules():emptySmartShelfRules());
+    setSmartShelfAdvanced(false);
+    setOrganisationModal('smart-shelf');
+  }
   function clearLibraryFilters(){setQuery('');setSpace('');setLibraryFolderExact(false);setFormatFilter('');setLibraryFormatFamily('');setAuthorFilter('');setSeriesFilter('');setGenreFilter('');setReadingFilter('');setRatingFilter(0);setFavouriteOnly(false);setUnknownAuthorOnly(false);setAvailabilityFilter('all');setCollectionFilter('');setMetadataGapFilter('');}
   function openSmartShelf(shelf:SmartShelfDefinition){clearLibraryFilters();setSourceFilter(shelf.source);setSpace(shelf.space);setFormatFilter(shelf.format);setAuthorFilter(shelf.author);setSeriesFilter(shelf.series);setGenreFilter(shelf.genre);setReadingFilter(shelf.readingState);setRatingFilter(shelf.minimumRating);setFavouriteOnly(shelf.favouriteOnly);setAvailabilityFilter(shelf.availableOnly?'available':'all');setLibrarySort(shelf.sort);setActiveTab('library');}
   function openCollection(collection:LibraryCollection){clearLibraryFilters();setSourceFilter('all');setCollectionFilter(collection.id);setActiveTab('library');}
@@ -3939,8 +3948,11 @@ function Client() {
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Save Smart Shelf</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Start with the filters you are using now, or build nested ALL / ANY rules for a shelf that updates itself.</Text>
             <TextInput accessibilityLabel="Smart Shelf name" value={organisationName} onChangeText={setOrganisationName} placeholder="Shelf name" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line}]}/>
-            <View style={styles.toolRow}><Button label="Use current filters" tone="quiet" onPress={()=>setSmartShelfRules(legacyRules({source:sourceFilter,format:formatFilter,author:authorFilter,series:seriesFilter,genre:genreFilter,space,readingState:readingFilter,minimumRating:ratingFilter,favouriteOnly,availableOnly:availabilityFilter==='available'}))}/><Button label={smartShelfAdvanced?'Simple':'Advanced rules'} tone="quiet" onPress={()=>setSmartShelfAdvanced(value=>!value)}/></View>
-            {smartShelfAdvanced?<SmartRuleGroupEditor group={smartShelfRules}/>:<Text style={[styles.meta,{color:p.muted}]}>{smartShelfRules.children.length?smartShelfRules.children.length+' rule'+(smartShelfRules.children.length===1?'':'s')+' configured.':'No advanced rules yet; current filters will be used.'}</Text>}
+            <Text style={[styles.filterLabel,{color:p.muted}]}>QUICK START</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Choose a plain-language starting point, use the filters you already set, or open Advanced rules when you need more control.</Text>
+            <View style={styles.filterWrap}>{smartShelfPresets().map(preset=><Pressable key={preset.id} accessibilityRole="button" accessibilityLabel={'Use '+preset.label+' Smart Shelf preset'} onPress={()=>{setSmartShelfRules(preset.rules);setOrganisationName(current=>current.trim()?current:preset.label);setSmartShelfAdvanced(false)}} style={[styles.filterChip,{backgroundColor:p.card}]}><Text style={{color:p.ink,fontWeight:'600'}}>{preset.label}</Text></Pressable>)}</View>
+            <View style={styles.toolRow}><Button label="Use current filters" tone="quiet" onPress={()=>{setSmartShelfRules(currentSmartShelfRules());setSmartShelfAdvanced(false)}}/><Button label={smartShelfAdvanced?'Simple setup':'Advanced rules'} tone="quiet" onPress={()=>setSmartShelfAdvanced(value=>!value)}/></View>
+            {smartShelfAdvanced?<SmartRuleGroupEditor group={smartShelfRules}/>:<Text style={[styles.meta,{color:p.muted}]}>{smartShelfRules.children.length?smartShelfRules.children.length+' rule'+(smartShelfRules.children.length===1?'':'s')+' ready. You can save now or fine-tune with Advanced rules.':'Pick a quick start above or use your current Library filters.'}</Text>}
             <Button label="Save Smart Shelf" disabled={!organisationName.trim()} onPress={()=>void createSmartShelf()}/>
           </>:null}
           {organisationModal==='new-collection'?<>
@@ -3985,6 +3997,10 @@ function Client() {
           <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' up'} disabled={index===0} onPress={()=>move(index,-1)} style={styles.orderButton}><UiIcon name="chevronUp" color={index===0?p.muted:p.ink} size={17}/></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={'Move '+item.title+' down'} disabled={index===shelfSections.length-1} onPress={()=>move(index,1)} style={styles.orderButton}><UiIcon name="chevronDown" color={index===shelfSections.length-1?p.muted:p.ink} size={17}/></Pressable>
         </View>)}
+        <View style={styles.toolRow}>
+          <Button label="New Smart Shelf" tone="quiet" onPress={()=>{setShelfManageOpen(false);beginSmartShelf(false)}}/>
+          <Button label="Manage Smart Shelves & collections" tone="quiet" onPress={()=>{setShelfManageOpen(false);setOrganisationModal('manage')}}/>
+        </View>
         <Button label="Done" onPress={()=>setShelfManageOpen(false)}/>
       </Pressable>
     </Pressable></Modal>;
@@ -4389,7 +4405,7 @@ function Client() {
 
       <View style={[styles.shelfUtilityRow,{borderTopColor:p.line}]}>
         <Pressable accessibilityRole="button" onPress={()=>openLibraryBrowse({})} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Browse all Library</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={()=>{setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>New Smart Shelf</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>beginSmartShelf(false)} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>New Smart Shelf</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('manage')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Manage collections</Text></Pressable>
       </View>
 
@@ -4577,7 +4593,7 @@ function Client() {
           ['genre','Missing genre'],
           ['cover','Missing device cover'],
         ] as Array<[MetadataGapFilter,string]>).map(([gap,label])=><Pressable key={gap||'all-metadata'} accessibilityRole="button" accessibilityState={{selected:metadataGapFilter===gap}} onPress={()=>{setReviewOnly(false);setMetadataGapFilter(gap)}} style={[styles.filterChip,{backgroundColor:metadataGapFilter===gap?p.card:'transparent'}]}><Text style={{color:metadataGapFilter===gap?p.sage:p.muted,fontWeight:'600'}}>{label}</Text></Pressable>)}</View>
-        <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
+        <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);beginSmartShelf(true)}}/>
       </ScrollView></Pressable></Pressable></Modal>:null}
     </View>;
     const libraryFolderRailWidth=layoutTier==='fold'?136:160;
