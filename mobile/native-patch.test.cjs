@@ -17,7 +17,8 @@ assert.equal(appPkg.dependencies?.['expo-build-properties'],'~55.0.18','Use the 
 const buildProps=(appConfig.expo.plugins||[]).find(plugin=>Array.isArray(plugin)&&plugin[0]==='expo-build-properties');
 assert.equal(buildProps?.[1]?.ios?.deploymentTarget,'15.5','iOS deployment target must satisfy native CBR archive dependencies.');
 const manifest=fs.readFileSync(path.join(__dirname,'android','app','src','main','AndroidManifest.xml'),'utf8');
-assert.equal(manifest.includes('android.permission.RECORD_AUDIO'),false,'Archivist playback does not request microphone access.');
+const microphoneDecl=manifest.split(/\r?\n/).find(line=>line.includes('android.permission.RECORD_AUDIO'));
+assert.equal(!microphoneDecl||microphoneDecl.includes('tools:node="remove"'),true,'Archivist playback must not request microphone access; an explicit manifest removal is allowed.');
 assert.equal(manifest.includes('android.permission.POST_NOTIFICATIONS'),true,'Background media controls require Android 13+ notification permission declaration.');
 assert.equal(manifest.includes('android:usesCleartextTraffic="true"'),true,'Android must permit HTTP transport after Archivist validates that the server is a private LAN or Tailscale address.');
 const appGradle=fs.readFileSync(path.join(__dirname,'android','app','build.gradle'),'utf8');
