@@ -70,3 +70,49 @@ func TestEditMetadataAuthorSeriesSearchAndRescan(t *testing.T) {
 		t.Fatalf("rescan lost manual provenance: %s", w.Body.String())
 	}
 }
+
+
+func TestBooksMetadataGapFiltersAndRichSearch(t *testing.T) {
+	a := fixture(t)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Unknown.epub"), []byte("book"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Dune.epub"), []byte("book"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Dune.json"), []byte(`{"title":"Dune","author":"Frank Herbert","series":"Dune","seriesNumber":1,"genre":"Science Fiction","publishedYear":1965,"publisher":"Chilton","isbn":"9780441172719","language":"en","description":"Arrakis."}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.addSource("Family", root); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.scan(1); err != nil {
+		t.Fatal(err)
+	}
+	handler := a.routes()
+	get := func(path string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("GET", path, nil)
+		r.AddCookie(&http.Cookie{Name: "archivist_session", Value: "test-key"})
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w
+	}
+
+	w := get("/api/books?q=9780441172719")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"title":"Dune"`) {
+		t.Fatalf("identifier search: %d %s", w.Code, w.Body.String())
+	}
+	w = get("/api/books?metadataGap=author")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"title":"Unknown"`) || strings.Contains(w.Body.String(), `"title":"Dune"`) {
+		t.Fatalf("author gap filter: %d %s", w.Code, w.Body.String())
+	}
+	w = get("/api/books?metadataGap=identifier")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"title":"Unknown"`) || strings.Contains(w.Body.String(), `"title":"Dune"`) {
+		t.Fatalf("identifier gap filter: %d %s", w.Code, w.Body.String())
+	}
+	w = get("/api/books?metadataGap=not-real")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid metadata gap status=%d body=%s", w.Code, w.Body.String())
+	}
+}
