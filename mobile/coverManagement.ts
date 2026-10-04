@@ -10,6 +10,16 @@ export type CoverFileOps={
   now?:()=>number;
 };
 
+export type PickerCoverAsset={uri:string;fileName?:string|null;fileSize?:number};
+export type PickerCoverResult={canceled?:boolean;assets?:PickerCoverAsset[]|null};
+
+export function pickedCoverAsset(result:PickerCoverResult|null|undefined){
+  if(!result||result.canceled||!Array.isArray(result.assets)||result.assets.length!==1)return null;
+  const asset=result.assets[0];
+  if(!asset||typeof asset.uri!=='string'||!asset.uri.trim())return null;
+  return asset;
+}
+
 export function verifiedCoverSize(reported:number|undefined,info:CoverFileInfo|null|undefined){
   if(Number.isFinite(reported)&&Number(reported)>=0)return Number(reported);
   if(info?.exists&&Number.isFinite(info.size)&&Number(info.size)>=0)return Number(info.size);
