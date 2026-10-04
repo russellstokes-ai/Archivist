@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -76,7 +77,7 @@ class ArchivistAutoService : MediaLibraryService() {
       val item = resolveItem(mediaId)
       return Futures.immediateFuture(
         if (item != null) LibraryResult.ofItem(item, null)
-        else LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+        else LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
       )
     }
 
