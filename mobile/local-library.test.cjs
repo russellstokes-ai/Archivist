@@ -290,6 +290,20 @@ assert.equal(previews[0].state, 'review');
   );
   assert.equal(preciseScan.books[0].coverUri,preciseArtwork,'same-stem artwork should be trusted immediately');
 
+  const namedCoverRoot='content://root/tree/primary:Books/document/primary:NamedCover';
+  const namedCoverBook=namedCoverRoot+'%2FNovel.epub';
+  const namedBookCover=namedCoverRoot+'%2Fbook-cover.jpg';
+  saf.dirs.set(namedCoverRoot,[namedCoverBook,namedBookCover]);
+  fileInfo.set(namedCoverBook,{exists:true,size:32,modificationTime:1});
+  const namedCoverScan=await scanLocalFolders(
+    [{id:namedCoverRoot,uri:namedCoverRoot,name:'NamedCover',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    [],
+    {deferEmbeddedCovers:true},
+  );
+  assert.equal(namedCoverScan.books[0].coverUri,namedBookCover,'trusted book-level artwork names should fill a single-work folder');
+
   // Sprint 7 publishes the catalogue before expensive embedded-cover recovery.
   const coverRoot='content://root/tree/primary:Books/document/primary:CoverEnrichment';
   const coverBook=coverRoot+'%2FCovered.epub';
