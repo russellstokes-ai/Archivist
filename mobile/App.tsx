@@ -64,7 +64,7 @@ import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from '.
 import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanPhaseStep} from './scanFeedback';
 import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
-import {inspectPickedCover, persistManualCover, rankLocalCoverCandidates} from './coverManagement';
+import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -3677,8 +3677,8 @@ function Client() {
       setCoverPicking(true);setError('');
       try{
         const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:false,quality:1,selectionLimit:1});
-        if(result.canceled||!result.assets?.length)return;
-        const asset=result.assets[0];
+        const asset=pickedCoverAsset(result);
+        if(!asset)return;
         const inspection=await inspectPickedCover(asset.uri,asset.fileSize,{getInfoAsync});
         if(inspection.error){setError(inspection.error);return;}
         setEditPickedCover({uri:asset.uri,fileName:asset.fileName,fileSize:inspection.size});
