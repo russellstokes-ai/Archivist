@@ -57,6 +57,7 @@ import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasB
 import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
+import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PLAYER_MOTION_TIMING, PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
@@ -283,6 +284,8 @@ const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
 const onlineBookMetadataCacheKey = 'archivist.onlineBookMetadataCache.v1';
 const onlineComicMetadataCacheKey = 'archivist.onlineComicMetadataCache.v1';
+const metadataSettingsKey = 'archivist.metadata.settings.v1';
+const googleBooksApiKeyKey = 'archivist.metadata.googleBooks.apiKey.v1';
 const metronTokenKey = 'archivist.metadata.metron.token.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
@@ -957,6 +960,14 @@ function Client() {
   const [privacyRestoreText,setPrivacyRestoreText]=useState('');
   const [privacyDataNotice,setPrivacyDataNotice]=useState('');
   const [privacyManualBackupOpen,setPrivacyManualBackupOpen]=useState(false);
+  const [metadataSettings,setMetadataSettings]=useState<MetadataSettings>(defaultMetadataSettings);
+  const [metadataSettingsReady,setMetadataSettingsReady]=useState(false);
+  const [googleBooksConfigured,setGoogleBooksConfigured]=useState(false);
+  const [metronConfigured,setMetronConfigured]=useState(false);
+  const [googleBooksKeyDraft,setGoogleBooksKeyDraft]=useState('');
+  const [metronTokenDraft,setMetronTokenDraft]=useState('');
+  const [metadataCredentialEditor,setMetadataCredentialEditor]=useState<'google'|'metron'|''>('');
+  const [metadataSettingsNotice,setMetadataSettingsNotice]=useState('');
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,string>>(shelfFormatChoiceKey).then(value=>{if(live&&value&&typeof value==='object')setShelfFormatChoice(value)}).catch(()=>undefined);return()=>{live=false;};},[]);
   const loadCancel = useRef<(() => void) | null>(null);
   const controller = useMemo(() => new Playback(
@@ -1521,6 +1532,12 @@ function Client() {
     getPersistedJSON<AccessibilityPreferences>(accessibilityPreferencesKey).then(value => {
       if(value&&typeof value==='object')setAccessibilityPrefs({reduceMotion:!!value.reduceMotion,highContrast:!!value.highContrast,largeText:!!value.largeText});
     }).catch(()=>undefined);
+    getPersistedJSON<MetadataSettings>(metadataSettingsKey)
+      .then(value=>setMetadataSettings(sanitizeMetadataSettings(value)))
+      .catch(()=>setMetadataSettings(defaultMetadataSettings))
+      .finally(()=>setMetadataSettingsReady(true));
+    SecureStore.getItemAsync(googleBooksApiKeyKey).then(value=>setGoogleBooksConfigured(!!value?.trim())).catch(()=>undefined);
+    SecureStore.getItemAsync(metronTokenKey).then(value=>setMetronConfigured(!!value?.trim())).catch(()=>undefined);
     getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
     }).catch(() => undefined).finally(()=>setLocalFoldersReady(true));
@@ -1812,16 +1829,90 @@ function Client() {
   useEffect(() => {
     const pendingFolder=localFolders.some(folder=>folder.status==='Scanning…'||folder.status==='Ready to scan');
     const needsInitialCatalogue=localBooks.length===0;
-    if(restoring||!localFoldersReady||!localOverridesReady||!localCatalogReady||!localFolders.length||localScanning||autoLocalScanAttempted.current)return;
+    if(restoring||!localFoldersReady||!localOverridesReady||!localCatalogReady||!metadataSettingsReady||!localFolders.length||localScanning||autoLocalScanAttempted.current)return;
     if(!needsInitialCatalogue&&!pendingFolder)return;
     autoLocalScanAttempted.current=true;
     void rescanLocalFolders();
-  },[localBooks.length,localCatalogReady,localFolders,localFoldersReady,localOverridesReady,localScanning,restoring]);
+  },[localBooks.length,localCatalogReady,localFolders,localFoldersReady,localOverridesReady,localScanning,metadataSettingsReady,restoring]);
 
   useEffect(()=>{
     if(activeTab!=='settings')return;
     void refreshOfflineStorage();
   },[activeTab,offlineWorks]);
+
+  async function persistMetadataSettings(next:MetadataSettings){
+    setMetadataSettings(next);
+    await setPersistedJSON(metadataSettingsKey,next);
+  }
+
+  async function updateMetadataSettings(mutator:(current:MetadataSettings)=>MetadataSettings){
+    const next=sanitizeMetadataSettings(mutator(metadataSettings));
+    await persistMetadataSettings(next);
+  }
+
+  async function saveMetadataCredential(provider:'google'|'metron'){
+    const draft=(provider==='google'?googleBooksKeyDraft:metronTokenDraft).trim();
+    if(!draft)return;
+    try{
+      if(provider==='google'){
+        await SecureStore.setItemAsync(googleBooksApiKeyKey,draft);
+        setGoogleBooksConfigured(true);
+        setGoogleBooksKeyDraft('');
+        await updateMetadataSettings(current=>({...current,books:{...current.books,enabled:true,googleBooks:true}}));
+        setMetadataSettingsNotice('Google Books is configured.');
+      }else{
+        await SecureStore.setItemAsync(metronTokenKey,draft);
+        setMetronConfigured(true);
+        setMetronTokenDraft('');
+        await updateMetadataSettings(current=>({...current,comics:{...current.comics,enabled:true,metron:true}}));
+        setMetadataSettingsNotice('Metron is configured.');
+      }
+      setMetadataCredentialEditor('');
+    }catch(e){
+      setMetadataSettingsNotice('Could not save provider credentials: '+(e as Error).message);
+    }
+  }
+
+  async function removeMetadataCredential(provider:'google'|'metron'){
+    try{
+      if(provider==='google'){
+        await SecureStore.deleteItemAsync(googleBooksApiKeyKey);
+        setGoogleBooksConfigured(false);
+        setGoogleBooksKeyDraft('');
+        await updateMetadataSettings(current=>({...current,books:{...current.books,googleBooks:false}}));
+        setMetadataSettingsNotice('Google Books configuration removed.');
+      }else{
+        await SecureStore.deleteItemAsync(metronTokenKey);
+        setMetronConfigured(false);
+        setMetronTokenDraft('');
+        await updateMetadataSettings(current=>({...current,comics:{...current.comics,metron:false}}));
+        setMetadataSettingsNotice('Metron configuration removed.');
+      }
+      setMetadataCredentialEditor('');
+    }catch(e){
+      setMetadataSettingsNotice('Could not remove provider credentials: '+(e as Error).message);
+    }
+  }
+
+  async function clearMetadataCaches(showNotice=true){
+    await Promise.all([
+      setPersistedJSON(onlineBookMetadataCacheKey,{}),
+      setPersistedJSON(onlineComicMetadataCacheKey,{}),
+    ]);
+    if(showNotice)setMetadataSettingsNotice('Metadata cache cleared.');
+  }
+
+  async function refreshAllMetadataAndCovers(){
+    if(localScanning||!localFolders.length)return;
+    setMetadataSettingsNotice('Refreshing metadata and covers…');
+    try{
+      await clearMetadataCaches(false);
+      await rescanLocalFolders(localMetadataOverrides,true);
+      setMetadataSettingsNotice('Metadata and cover refresh complete.');
+    }catch(e){
+      setMetadataSettingsNotice('Metadata refresh could not complete: '+(e as Error).message);
+    }
+  }
 
   async function chooseTheme(next: ThemeMode) {
     setTheme(next);
@@ -2227,7 +2318,7 @@ function Client() {
     setScanProgress(null);
   };
 
-  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[], generation:number) {
+  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[], generation:number, forceOnline=false) {
     if(!scanCommitGate.isCurrent(generation))return null;
     setScanProgress({phase:'checking-duplicates',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
@@ -2260,31 +2351,41 @@ function Client() {
     setRescanPromptOpen(false);
     setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
-    if(scanCommitGate.isCurrent(generation))void enrichPublishedLocalLibrary(result.books,generation);
+    if(scanCommitGate.isCurrent(generation))void enrichPublishedLocalLibrary(result.books,generation,forceOnline);
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
 
-  async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number){
+  async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false){
     await enrichPublishedLocalCovers(baseBooks,generation);
     if(!scanCommitGate.isCurrent(generation))return;
+    if(!metadataSettings.onlineEnabled||(!metadataSettings.automaticEnrichment&&!forceOnline))return;
     const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
     if(!scanCommitGate.isCurrent(generation))return;
     const latest=Array.isArray(stored)?stored:baseBooks;
-    await enrichPublishedLocalBookMetadata(latest,generation);
+    if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
+      await enrichPublishedLocalBookMetadata(latest,generation);
+    }
     if(!scanCommitGate.isCurrent(generation))return;
     const afterBooks=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
     if(!scanCommitGate.isCurrent(generation))return;
-    await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation);
+    if(metadataSettings.comics.enabled&&metadataSettings.comics.metron){
+      await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation);
+    }
   }
 
   async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number){
     if(!baseBooks.some(book=>book.format==='EPUB'||book.format==='PDF')||!scanCommitGate.isCurrent(generation))return;
     const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
     if(!scanCommitGate.isCurrent(generation))return;
-    const googleBooksApiKey=String((Constants.expoConfig?.extra as any)?.googleBooksApiKey||'').trim()||undefined;
+    const googleBooksApiKey=metadataSettings.books.googleBooks
+      ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
+      : undefined;
+    if(!metadataSettings.books.openLibrary&&!googleBooksApiKey)return;
     const enriched=await enrichLocalBookMetadataOnline(baseBooks,{
       cache,
       googleBooksApiKey,
+      openLibraryEnabled:metadataSettings.books.openLibrary,
+      applyHighConfidence:metadataSettings.applyHighConfidence,
       batchSize:4,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
@@ -2313,6 +2414,7 @@ function Client() {
 
   async function enrichPublishedLocalComicMetadata(baseBooks:LocalBook[],generation:number){
     if(!baseBooks.some(book=>book.format==='Comic')||!scanCommitGate.isCurrent(generation))return;
+    if(!metadataSettings.comics.metron)return;
     const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim();
     if(!token||!scanCommitGate.isCurrent(generation))return;
     const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
@@ -2320,6 +2422,7 @@ function Client() {
     const enriched=await enrichLocalComicMetadataOnline(baseBooks,{
       token,
       cache,
+      applyHighConfidence:metadataSettings.applyHighConfidence,
       batchSize:3,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
@@ -2434,7 +2537,7 @@ function Client() {
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
       const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,refreshMetadata});
-      const summary=await finaliseLocalScan(result,previousLocal,generation);
+      const summary=await finaliseLocalScan(result,previousLocal,generation,refreshMetadata);
       if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
     }catch(e){
