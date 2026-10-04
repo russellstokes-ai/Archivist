@@ -1,3 +1,5 @@
+import type {MetadataResolution} from './metadataResolution';
+
 export type IdentificationConfidence = 'high' | 'medium' | 'low';
 
 export type LocalIdentity = {
@@ -35,7 +37,11 @@ export type LocalMetadataFields = {
   description?: string;
 };
 
-export function inferLocalBookMetadata(uri: string, format: string): LocalIdentity {
+export type LocalMetadataContext = {
+  siblingMediaCount?: number;
+};
+
+export function inferLocalBookMetadata(uri: string, format: string, context: LocalMetadataContext = {}): LocalIdentity {
   const parts = decodedPathParts(uri);
   const filename = parts[parts.length - 1] || 'Untitled';
   const rawStem = cleanLabel(filename.replace(/\.[^.]+$/, ''));
@@ -44,15 +50,17 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   const rawDirs = parts.slice(0, -1).filter(Boolean).map(cleanLabel);
   const dirs = [...rawDirs];
   while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
-  const parent = cleanLabel(dirs[dirs.length - 1] || '');
-  const grandparent = cleanLabel(dirs[dirs.length - 2] || '');
-  const greatGrandparent = cleanLabel(dirs[dirs.length - 3] || '');
+  const inferredGenre = inferGenreFromDirectories(dirs);
+  const semanticDirs = dirs.filter((value,index) => !(index < dirs.length - 2 && canonicalGenre(value)));
+  const parent = cleanLabel(semanticDirs[semanticDirs.length - 1] || '');
+  const grandparent = cleanLabel(semanticDirs[semanticDirs.length - 2] || '');
+  const greatGrandparent = cleanLabel(semanticDirs[semanticDirs.length - 3] || '');
 
   let title = stem || 'Untitled';
   let author = '';
   let series = '';
   let seriesNumber: number | undefined;
-  let genre = '';
+  let genre = inferredGenre;
   let narrator = qualifiers.narrator;
   let isbn = qualifiers.isbn;
   let asin = qualifiers.asin;
@@ -60,15 +68,19 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   let confidence: IdentificationConfidence = 'low';
   let reviewReason = 'Could not confidently identify author and series from the file path.';
 
-  const genericAudioTrack = format === 'Audio' && genericAudioTrackTitle(stem);
+  const genericAudioTrack = format === 'Audio' && (
+    genericAudioTrackTitle(stem) || ((context.siblingMediaCount || 0) > 1 && numberedAudioTrackTitle(stem))
+  );
+  const indexedParent = indexedFolderLabel(parent);
   if (genericAudioTrack && sensibleFolder(parent, stem)) {
-    title = parent;
-    if (dirs.length >= 3) {
+    title = indexedParent?.title || parent;
+    seriesNumber = indexedParent?.index ?? seriesNumber;
+    if (semanticDirs.length >= 3) {
       author = greatGrandparent;
       series = grandparent;
       confidence = author ? 'high' : 'medium';
       reviewReason = author ? '' : 'Audiobook title came from its folder; author still needs review.';
-    } else if (dirs.length >= 2) {
+    } else if (semanticDirs.length >= 2) {
       author = grandparent;
       confidence = author ? 'high' : 'medium';
       reviewReason = author ? '' : 'Audiobook title came from its folder; author still needs review.';
@@ -98,22 +110,29 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     title = dashed.slice(1).join(' - ');
     confidence = 'medium';
     reviewReason = 'Author and title inferred from filename.';
-  } else if (!genericAudioTrack && format === 'Audio' && dirs.length >= 3) {
+  } else if (!genericAudioTrack && indexedParent && semanticDirs.length >= 3 && equivalent(indexedParent.title, stem) && looksAuthorLike(greatGrandparent)) {
+    author = greatGrandparent;
+    series = grandparent;
+    seriesNumber = indexedParent.index;
+    title = stem;
+    confidence = 'high';
+    reviewReason = '';
+  } else if (!genericAudioTrack && format === 'Audio' && semanticDirs.length >= 3) {
     author = greatGrandparent;
     series = grandparent;
     confidence = author ? 'high' : 'medium';
     reviewReason = author ? '' : 'Audiobook folders were only partly identifiable.';
-  } else if (!genericAudioTrack && format === 'Audio' && dirs.length >= 2) {
+  } else if (!genericAudioTrack && format === 'Audio' && semanticDirs.length >= 2) {
     author = grandparent;
     series = '';
     confidence = author ? 'medium' : 'low';
     reviewReason = author ? '' : 'Audiobook author could not be identified confidently.';
-  } else if (!genericAudioTrack && dirs.length >= 3 && equivalent(parent, stem)) {
+  } else if (!genericAudioTrack && semanticDirs.length >= 3 && equivalent(parent, stem)) {
     author = greatGrandparent;
     series = grandparent;
     confidence = author && series ? 'high' : 'medium';
     reviewReason = confidence === 'high' ? '' : 'Folder layout was only partly identifiable.';
-  } else if (!genericAudioTrack && dirs.length >= 2 && sensibleFolder(parent, stem) && sensibleFolder(grandparent, stem)) {
+  } else if (!genericAudioTrack && semanticDirs.length >= 2 && sensibleFolder(parent, stem) && sensibleFolder(grandparent, stem)) {
     author = grandparent;
     series = parent;
     confidence = 'high';
@@ -161,6 +180,71 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
     reviewReason: needsReview ? reviewReason : '',
     coverShape: format === 'Audio' ? 'square' : 'portrait',
     metadataSource: 'path',
+  };
+}
+
+export function isGenericMediaTitle(value: string, format = 'Audio', siblingMediaCount = 1) {
+  const clean = cleanLabel(value);
+  if (!clean) return true;
+  if (/^(?:untitled|unknown(?: title)?|n\/?a|none|null)$/i.test(clean)) return true;
+  if (format !== 'Audio') return false;
+  return genericAudioTrackTitle(clean) || (siblingMediaCount > 1 && numberedAudioTrackTitle(clean));
+}
+
+export function sanitizeDiscoveredMetadata(
+  fields: LocalMetadataFields,
+  format: string,
+  fallbackTitle: string,
+  siblingMediaCount = 1,
+): LocalMetadataFields {
+  const out: LocalMetadataFields = {...fields};
+  const placeholder = (value: unknown) => /^(?:unknown(?: author| artist| genre| series)?|unclassified|n\/?a|none|null|untitled)$/i.test(cleanLabel(String(value ?? '')));
+  if (out.title && (placeholder(out.title) || (isGenericMediaTitle(out.title, format, siblingMediaCount) && !isGenericMediaTitle(fallbackTitle, format, siblingMediaCount)))) delete out.title;
+  if (out.author && placeholder(out.author)) delete out.author;
+  if (out.series && placeholder(out.series)) delete out.series;
+  if (out.genre && placeholder(out.genre)) delete out.genre;
+  if (out.genre) out.genre = canonicalGenre(out.genre) || cleanLabel(out.genre);
+  return compactFields(out);
+}
+
+export function applyResolvedLocalMetadata(base: LocalIdentity, resolution: MetadataResolution): LocalIdentity {
+  const fields = resolution.fields;
+  const title = cleanLabel(fields.title || '') || base.title;
+  const author = fields.author === undefined ? base.author : normalizeAuthorName(fields.author);
+  const series = fields.series === undefined ? base.series : cleanLabel(fields.series);
+  const genre = fields.genre === undefined ? base.genre : (canonicalGenre(fields.genre) || cleanLabel(fields.genre));
+  const importantConflict = resolution.conflicts.some(conflict => ['title','author','series','seriesNumber','isbn','asin'].includes(String(conflict.field)));
+  const keyConfidence = [resolution.confidence.title, resolution.confidence.author].filter(Boolean);
+  let confidence: IdentificationConfidence = base.confidence;
+  if (!author || !title || title === 'Untitled') confidence = 'low';
+  else if (keyConfidence.includes('low')) confidence = 'low';
+  else if (keyConfidence.includes('medium')) confidence = 'medium';
+  else if (keyConfidence.length >= 2) confidence = 'high';
+  const needsReview = confidence === 'low' || importantConflict || title === 'Untitled' || !author;
+  const provenance = resolution.provenance.title || resolution.provenance.author;
+  const metadataSource = provenance === 'manual' || provenance === 'embedded' || provenance === 'sidecar' || provenance === 'path'
+    ? provenance
+    : base.metadataSource;
+  return {
+    ...base,
+    title,
+    author,
+    series,
+    seriesNumber: fields.seriesNumber ?? base.seriesNumber,
+    genre,
+    publishedYear: fields.publishedYear ?? base.publishedYear,
+    narrator: cleanOptional(fields.narrator) ?? base.narrator,
+    publisher: cleanOptional(fields.publisher) ?? base.publisher,
+    isbn: normalizeIdentifier(fields.isbn) ?? base.isbn,
+    asin: normalizeIdentifier(fields.asin) ?? base.asin,
+    language: cleanOptional(fields.language) ?? base.language,
+    description: cleanOptional(fields.description) ?? base.description,
+    confidence,
+    needsReview,
+    reviewReason: needsReview
+      ? (!author ? 'Author could not be identified confidently.' : importantConflict ? 'Conflicting metadata needs review.' : base.reviewReason || 'Metadata needs review.')
+      : '',
+    metadataSource,
   };
 }
 
@@ -422,6 +506,44 @@ function genericAudioTrackTitle(value: string) {
   const clean = cleanLabel(value);
   return /^(?:(?:part|pt|track|chapter|ch|disc|disk|cd)\s*[-_.:#]?\s*)?\d{1,4}(?:\s*(?:of|\/|-)\s*\d{1,4})?$/i.test(clean)
     || /^(?:part|pt|track|chapter|ch|disc|disk|cd)\s*[-_.:#]?\s*\d{1,4}(?:\s*(?:of|\/|-)\s*\d{1,4})?(?:\s*[-_.:]\s*(?:part|track|chapter)?\s*\d{0,4})?$/i.test(clean);
+}
+
+function numberedAudioTrackTitle(value: string) {
+  return /^\s*\d{1,4}\s*[-._:]\s*\S.+$/.test(cleanLabel(value));
+}
+
+function indexedFolderLabel(value: string) {
+  const clean = cleanLabel(value);
+  const match = clean.match(/^(?:(?:book|bk|vol(?:ume)?)\s*)?#?\s*(\d+(?:\.\d+)?)\s*[-._:]\s*(.+)$/i);
+  if (!match) return undefined;
+  const index = numericIndex(match[1]);
+  const title = cleanLabel(match[2]);
+  return index === undefined || !title ? undefined : {index,title};
+}
+
+const genreAliases: Record<string,string> = {
+  'fiction':'Fiction','literary fiction':'Literary Fiction','science fiction':'Science Fiction','sci fi':'Science Fiction','scifi':'Science Fiction',
+  'fantasy':'Fantasy','romance':'Romance','mystery':'Mystery','crime':'Crime','thriller':'Thriller','horror':'Horror','adventure':'Adventure',
+  'historical fiction':'Historical Fiction','classics':'Classics','young adult':'Young Adult','ya':'Young Adult','children':'Children','childrens':'Children',
+  'non fiction':'Non-fiction','nonfiction':'Non-fiction','biography':'Biography','autobiography':'Autobiography','memoir':'Memoir','history':'History',
+  'business':'Business','economics':'Economics','finance':'Finance','self help':'Self-help','selfhelp':'Self-help','psychology':'Psychology',
+  'philosophy':'Philosophy','science':'Science','technology':'Technology','travel':'Travel','humor':'Humour','humour':'Humour','poetry':'Poetry',
+  'comics':'Comics','graphic novels':'Graphic Novels','graphic novel':'Graphic Novels'
+};
+
+function canonicalGenre(value: unknown) {
+  const key = cleanLabel(String(value ?? '')).toLowerCase().replace(/[&_\/-]+/g,' ').replace(/\s+/g,' ').trim();
+  return genreAliases[key];
+}
+
+function inferGenreFromDirectories(dirs: string[]) {
+  for (let index=0; index<dirs.length; index+=1) {
+    const genre = canonicalGenre(dirs[index]);
+    if (!genre) continue;
+    if (index === dirs.length - 1 && index > 0 && looksAuthorLike(dirs[index - 1])) continue;
+    return genre;
+  }
+  return '';
 }
 
 function looksAuthorLike(value: string) {
