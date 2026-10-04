@@ -197,7 +197,7 @@ function compact<T extends Record<string,any>>(fields:T):T{
   for(const [key,value] of Object.entries(fields))if(value!==undefined&&value!==null&&String(value).trim()!=='')out[key]=value;
   return out;
 }
-function openLibraryIdentifiers(doc:any){return unique((Array.isArray(doc?.isbn)?doc.isbn:[]).map(normalizeIsbn).filter(Boolean));}
+function openLibraryIdentifiers(doc:any):string[]{const values:any[]=Array.isArray(doc?.isbn)?doc.isbn:[];return unique<string>(values.map(value=>normalizeIsbn(value)).filter(value=>!!value));}
 function openLibraryFields(doc:any):OnlineBookFields{
   const isbns=openLibraryIdentifiers(doc);
   return compact({
@@ -206,7 +206,7 @@ function openLibraryFields(doc:any):OnlineBookFields{
     publisher:firstString(doc?.publisher),isbn:isbns.find((value:string)=>value.length===13)||isbns[0],language:firstString(doc?.language),description:firstString(doc?.first_sentence),
   });
 }
-function googleIdentifiers(item:any){return unique((Array.isArray(item?.volumeInfo?.industryIdentifiers)?item.volumeInfo.industryIdentifiers:[]).map((entry:any)=>normalizeIsbn(entry?.identifier)).filter(Boolean));}
+function googleIdentifiers(item:any):string[]{const values:any[]=Array.isArray(item?.volumeInfo?.industryIdentifiers)?item.volumeInfo.industryIdentifiers:[];return unique<string>(values.map(entry=>normalizeIsbn(entry?.identifier)).filter(value=>!!value));}
 function googleFields(item:any):OnlineBookFields{
   const info=item?.volumeInfo||{};
   const ids=googleIdentifiers(item);
