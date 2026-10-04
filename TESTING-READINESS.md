@@ -1,5 +1,19 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-04 — Device polish Sprint 11: Shelf controls & Smart Shelves GREEN
+
+- **Arrange** now remains the Shelf structure control and also links directly to **New Smart Shelf** plus **Manage Smart Shelves & collections**.
+- Smart Shelf creation now foregrounds plain-language presets: **Currently reading**, **Not started**, **Favourites**, **Highly rated**, and **Available offline**.
+- Presets use the same underlying rule model, so **Advanced rules** remains available for fine tuning rather than competing with simple setup.
+- Library **Save as Smart Shelf** carries current filters through the shared creation flow.
+- Organisation remains inside the existing fixed-height sheet, preventing the old conditional-content layout jump from moving the underlying page.
+- No Shelf content, recommendation, Library catalogue, Player, Reader, Atlas, Stats, profile, bottom-nav or Fold redesign was introduced.
+- **PASS Mobile:** run `37228382695` — dependencies, Expo Doctor, TypeScript, all maintained tests, version consistency and Expo web bundle.
+- **PASS iOS:** run `37228382631` — dependencies, Expo Doctor, TypeScript, native project generation, CocoaPods and full iOS Simulator compile.
+- Executable/test head: `0af64e0987d2f9c281e4da475a8ef744696587eb`.
+- Full checkpoint: `dev-work/checkpoints/2026-10-04-device-sprint-11.md`.
+- Real-device phone/Fold visual and interaction acceptance remains open.
+
 ## 2026-10-04 — Device polish Sprint 10: phone UI alignment fixes GREEN
 
 - Real-device phone finding: Library **All / Audio / Comic / …** format row was vertically clipped; Fold was not affected.
