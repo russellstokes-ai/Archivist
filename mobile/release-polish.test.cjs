@@ -72,8 +72,16 @@ assert.ok(
   'Global error banner must announce errors assertively'
 );
 assert.ok(
-  source.includes('{localScanning&&scanProgress?<View accessibilityLiveRegion="polite"'),
-  'Shelf scan progress must announce state changes without stealing focus'
+  (source.match(/\{localScanning&&scanProgress\?<View accessibilityLiveRegion="polite"/g)||[]).length>=2,
+  'Shelf and Library-management scan progress must both announce state changes without stealing focus'
+);
+assert.ok(
+  source.includes('style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1,minWidth:0}}>'),
+  'Library repair rows must allow long translated/scaled copy to shrink beside counts'
+);
+assert.ok(
+  source.includes("style={{color:p.ink,fontWeight:'700',flex:1,minWidth:0}}"),
+  'Organisation preview titles must wrap instead of colliding with long statuses'
 );
 
 console.log('PASS: final release polish protects compact Settings, onboarding wrapping and live edge-state accessibility');
