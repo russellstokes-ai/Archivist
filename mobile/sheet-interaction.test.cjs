@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const ts=require('typescript');
+const vm=require('node:vm');
+const source=fs.readFileSync(__dirname+'/sheetInteraction.ts','utf8');
+const out=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+const mod={exports:{}};vm.runInNewContext(`(function(module,exports){${out}\n})(mod,mod.exports)`,{mod,module:mod,exports:mod.exports});
+const {shouldCaptureSheetDismiss,shouldDismissSheet}=mod.exports;
+assert.equal(shouldCaptureSheetDismiss({dx:2,dy:18,vy:.1}),true);
+assert.equal(shouldCaptureSheetDismiss({dx:20,dy:12,vy:.1}),false);
+assert.equal(shouldCaptureSheetDismiss({dx:0,dy:-20,vy:-.5}),false);
+assert.equal(shouldDismissSheet({dx:0,dy:57,vy:.1}),true);
+assert.equal(shouldDismissSheet({dx:0,dy:20,vy:.71}),true);
+assert.equal(shouldDismissSheet({dx:0,dy:40,vy:.4}),false);
+console.log('sheet-interaction.test.cjs passed');
