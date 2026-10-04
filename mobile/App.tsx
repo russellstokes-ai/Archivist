@@ -3459,10 +3459,10 @@ function Client() {
       openServerManagement();
     };
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
-      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
-        <ScrollView contentContainerStyle={styles.workDetailsScroll}>
-          <View accessibilityViewIsModal={true} accessibilityLabel={'Work details for '+work.title} style={[styles.workDetailsSheet,{backgroundColor:p.paper,borderColor:p.line}]}>
-            <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close work details" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
+        <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Work details for '+work.title} style={[styles.workDetailsSheet,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
+          <DismissSheetHandle onDismiss={close} foldLayout={foldLayout}/>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.workDetailsInner}>
             <View style={styles.sheetHeader}>
               <View><Text style={[styles.playerEyebrow,{color:p.sage}]}>WORK DETAILS</Text><Text style={[styles.meta,{color:p.muted}]}>{sourceLabel(work.source)}</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel="Close work details" onPress={close} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
@@ -3504,9 +3504,9 @@ function Client() {
               {downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{close();confirmRemoveServerDownload(downloaded);}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null ? .45 : 1}]}><UiIcon name="close" color={p.danger} size={18}/><Text style={[styles.workDetailsActionText,{color:p.danger}]}>Remove download</Text></Pressable>:null}
             </View>
             {local&&local.tracks.length>1?<View style={[styles.workDetailsTrackSummary,{borderTopColor:p.line}]}><Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FILES IN THIS WORK</Text>{local.tracks.slice(0,8).map((track,index)=><View key={track.uri} style={styles.workDetailsTrackRow}><Text numberOfLines={1} style={[styles.meta,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{track.format}</Text></View>)}{local.tracks.length>8?<Text style={[styles.meta,{color:p.muted}]}>+ {local.tracks.length-8} more files</Text>:null}</View>:null}
-          </View>
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
     </Modal>;
   }
 
@@ -3757,10 +3757,22 @@ function Client() {
   function OrganisationPanel(){
     if(!organisationModal)return null;
     const close=()=>{setOrganisationModal(null);setOrganisationName('');setCollectionTarget(null);setRenameTarget(null)};
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close organisation panel" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
+    const requestClose=()=>{
+      const formMode=organisationModal==='smart-shelf'||organisationModal==='new-collection';
+      const hasDraft=!!organisationName.trim()||(organisationModal==='smart-shelf'&&smartShelfRules.children.length>0);
+      if(formMode&&hasDraft){
+        Alert.alert('Discard changes?','Your unfinished '+(organisationModal==='smart-shelf'?'Smart Shelf':'collection')+' has not been saved.',[
+          {text:'Keep editing',style:'cancel'},
+          {text:'Discard',style:'destructive',onPress:close},
+        ]);
+        return;
+      }
+      close();
+    };
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestClose}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close organisation panel" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={requestClose}>
         <Pressable accessible={false} accessibilityViewIsModal={true} style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
-          <DismissSheetHandle onDismiss={close} foldLayout={foldLayout}/>
+          <DismissSheetHandle onDismiss={requestClose} foldLayout={foldLayout}/>
           <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}>
           {organisationModal==='smart-shelf'?<>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Save Smart Shelf</Text>
@@ -3791,7 +3803,7 @@ function Client() {
               {!smartShelves.length&&!collections.length?<Text style={[styles.meta,{color:p.muted}]}>Nothing to manage yet.</Text>:null}
             </>}
           </>:null}
-          <Button label="Close" tone="quiet" onPress={close}/>
+          <Button label="Close" tone="quiet" onPress={requestClose}/>
           </ScrollView>
         </Pressable>
       </Pressable>
@@ -4643,8 +4655,7 @@ function Client() {
   function ReaderTools(){
     if(!reading)return null;const workKey=readerWorkKey(reading);const bookmarks=workReaderBookmarks(readerBookmarks,workKey);const annotations=workReaderAnnotations(readerAnnotations,workKey);
     const updateScale=(delta:number)=>void persistReaderAppearance({...readerAppearance,scale:Math.max(.78,Math.min(1.5,readerAppearance.scale+delta))});
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}><View accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
-      <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Reader tools" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setReaderToolsOpen(false)}><Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}><DismissSheetHandle onDismiss={()=>setReaderToolsOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}>
       <View style={styles.readerSheetHeader}>
         <View style={{flex:1}}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text>
@@ -4695,7 +4706,7 @@ function Client() {
         </View>):<Text style={[styles.meta,{color:p.muted}]}>No bookmarks yet.</Text>}
       </View>
       <View style={[styles.readerToolBlock,{borderTopColor:p.line}]}><Text style={[styles.filterLabel,{color:p.muted,marginTop:0}]}>HIGHLIGHTS & NOTES</Text>{readerSelection?<><Text numberOfLines={4} style={[styles.readerQuote,{color:p.ink,borderColor:p.line}]}>{readerSelection}</Text><View style={styles.toolRow}><Button label="Highlight" tone="quiet" onPress={()=>void saveCurrentReaderAnnotation('highlight')}/></View><TextInput accessibilityLabel="Note for selected text" value={readerNote} onChangeText={setReaderNote} placeholder="Add a note to this selection" placeholderTextColor={p.muted} multiline style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:72}]}/><Button label="Save note" disabled={!readerNote.trim()} onPress={()=>void saveCurrentReaderAnnotation('note')}/></>:<Text style={[styles.meta,{color:p.muted}]}>Select text in the book to highlight it or attach a note.</Text>}{annotations.map(item=><View key={item.id} style={[styles.readerSavedRow,{borderColor:p.line}]}><View style={{flex:1}}><Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.text}</Text><Text style={[styles.meta,{color:p.muted}]}>Page {item.page+1} · {item.kind}{item.note?` · ${item.note}`:''}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={'Remove '+item.kind+' on page '+(item.page+1)} hitSlop={6} onPress={()=>void persistReaderAnnotations(readerAnnotations.filter(saved=>saved.id!==item.id))}><Text style={{color:p.muted,fontWeight:'800'}}>Remove</Text></Pressable></View>)}</View>
-    </View></ScrollView></View></Modal>;
+    </ScrollView></Pressable></Pressable></Modal>;
   }
 
   function Reader({embedded=false}:{embedded?:boolean}={}) {
@@ -6868,7 +6879,8 @@ const styles = StyleSheet.create({
   metadataCoverEditor: {flexDirection:'row',alignItems:'center',gap:14},
   metadataCoverPreview: {width:74},
   workDetailsScroll: {flexGrow:1,justifyContent:'flex-end',paddingTop:42},
-  workDetailsSheet: {width:'100%',maxWidth:760,alignSelf:'center',maxHeight:'94%',borderTopLeftRadius:24,borderTopRightRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:18,paddingBottom:28,gap:16},
+  workDetailsInner: {paddingBottom:10,gap:16},
+  workDetailsSheet: {width:'100%',maxWidth:760,alignSelf:'center',height:'88%',maxHeight:760,overflow:'hidden',borderTopLeftRadius:24,borderTopRightRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:18,paddingBottom:28,gap:16},
   workDetailsHero: {flexDirection:'row',gap:18,alignItems:'flex-start'},
   workDetailsHeroFold: {gap:24},
   workDetailsCover: {width:126,aspectRatio:2/3,overflow:'hidden',borderRadius:12,flexShrink:0},
