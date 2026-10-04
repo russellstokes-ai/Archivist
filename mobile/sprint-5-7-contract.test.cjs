@@ -26,8 +26,8 @@ assert.equal(splashPlugin[1]?.dark?.image,'./assets/icon.png','Dark splash must 
 assert.equal(config.expo.android?.adaptiveIcon?.foregroundImage,'./assets/icon.png','Android adaptive icon must use the canonical logo');
 assert.ok(fs.existsSync('assets/icon.png'),'Canonical icon asset is missing');
 assert.ok(source.includes("import * as SplashScreen from 'expo-splash-screen'"),'Native splash handoff controller is missing');
-assert.ok(source.includes('const nativeSplashMinimumMs=1100') && source.includes('Math.max(0,nativeSplashMinimumMs-(Date.now()-nativeSplashStartedAt))') && source.includes('SplashScreen.hideAsync()') && source.includes('SplashScreen.setOptions({duration:480,fade:true})'), 'Native splash must remain visible for a deliberate minimum period and fade into the app');
-assert.ok(source.includes("SplashScreen.hideAsync()") && source.includes("nativeSplashEnabled?null"),'Native launch must avoid showing the fallback wordmark before fonts are ready');
+assert.ok(source.includes('const brandedLaunchHoldMs=1600') && source.includes('const brandedLaunchFadeMs=380') && source.includes('SplashScreen.hideAsync()') && source.includes('SplashScreen.setOptions({duration:180,fade:true})'), 'Native splash must hand off into a deliberately visible branded launch layer');
+assert.ok(source.includes('launchSequenceStarted.current') && source.includes('requestAnimationFrame(()=>') && source.includes('brandLaunchVisible?<Animated.View') && source.includes('AccessibilityInfo.isReduceMotionEnabled()'), 'Cold launch must render the branded layer before hiding native splash, avoid replay and respect Reduced Motion');
 
 
 for(const page of ['Shelf','Library','LiveHub','Atlas','Insights','Profile','Rewards','Settings']){

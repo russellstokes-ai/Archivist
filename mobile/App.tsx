@@ -119,11 +119,11 @@ function audioStatusError(status:unknown){
   return typeof value==='string'&&value.trim()?value:undefined;
 }
 const nativeSplashEnabled=Platform.OS==='android'||Platform.OS==='ios';
-const nativeSplashStartedAt=Date.now();
-const nativeSplashMinimumMs=1100;
+const brandedLaunchHoldMs=1600;
+const brandedLaunchFadeMs=380;
 if(nativeSplashEnabled){
   void SplashScreen.preventAutoHideAsync().catch(()=>undefined);
-  SplashScreen.setOptions({duration:480,fade:true});
+  SplashScreen.setOptions({duration:180,fade:true});
 }
 
 
@@ -6884,7 +6884,7 @@ function Client() {
     const localStorageText=offlineStorage?formatBytes(offlineStorage.actualBytes||offlineStorage.trackedBytes):'Not measured';
     return (
       <ScrollView contentContainerStyle={[styles.settingsScreen,phoneLayout&&styles.settingsScreenPhone,narrowPhone&&styles.settingsScreenNarrow,width>=600&&styles.settingsScreenFold,width>=940&&styles.settingsScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
-        <PageHeader title="Settings" subtitle="Your library, privacy, accessibility and server."/>
+        <PageHeader title="Settings" subtitle="Your library, data, accessibility and server."/>
 
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
           <View style={[styles.settingsColumn,phoneLayout&&styles.settingsColumnPhone]}>
@@ -6893,11 +6893,6 @@ function Client() {
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
-              <View style={styles.settingsStatusPanel}>
-                <View style={[styles.settingsStatusIcon,{backgroundColor:p.card}]}><UiIcon name="library" color={p.sage} size={18}/></View>
-                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Local-first metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist reads embedded, sidecar, folder and connected-server metadata. No background internet metadata lookup is enabled.</Text></View>
-              </View>
-
               <View style={styles.settingsSubgroup}>
                 <View style={styles.settingsSubgroupHeading}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Books and comics</Text></View>
@@ -6968,7 +6963,6 @@ function Client() {
                 </View>)}
                 <View style={styles.settingsInlineActions}>
                   <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
-                  {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void refreshAllMetadataAndCovers()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
                 </View>
                 {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
@@ -7012,15 +7006,10 @@ function Client() {
             </View>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>PRIVACY & DATA</Text>
-              <View style={[styles.settingsPrivacyHero,{backgroundColor:p.card,borderColor:p.line}]}>
-                <View style={[styles.settingsPrivacyMark,{borderColor:p.gold}]}><UiIcon name="bookmark" color={p.gold} size={20}/></View>
-                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Local-first · private by default</Text><Text style={[styles.meta,{color:p.muted}]}>Reading history, profile settings and local library state stay on this device unless you explicitly connect an Archivist server. Backup snapshots never include server credentials.</Text></View>
-              </View>
-              <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>External metadata network access</Text><Text style={[styles.meta,{color:p.muted}]}>Archivist does not contact external metadata services. Scanning uses local and embedded metadata plus your connected Archivist Server.</Text></View><Text style={[styles.settingsStateLabel,{color:p.sage}]}>OFF</Text></View>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>DATA</Text>
               <View style={styles.settingsSubgroup}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Backup & restore</Text>
-                <Text style={[styles.meta,{color:p.muted}]}>Save a portable backup file of reading history and non-sensitive app settings, or restore one from Files. Server credentials and access keys are never included.</Text>
+                <Text style={[styles.meta,{color:p.muted}]}>Back up reading history and app settings. Credentials are never included.</Text>
                 <View style={styles.settingsInlineActions}>
                   <Button label="Save backup file" tone="quiet" onPress={()=>void savePrivacyBackupFile()}/>
                   <Button label="Restore from file" tone="quiet" onPress={()=>void restorePrivacyBackupFile()}/>
@@ -7219,14 +7208,52 @@ function Client() {
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ArchivistEditorial: require('./assets/fonts/LibreCaslonText.ttf')});
   const system = useColorScheme();
+  const [brandLaunchVisible,setBrandLaunchVisible]=useState(nativeSplashEnabled);
+  const brandLaunchOpacity=useRef(new Animated.Value(1)).current;
+  const launchSequenceStarted=useRef(false);
+
   useEffect(()=>{
-    if(!nativeSplashEnabled||(!fontsLoaded&&!fontError))return;
-    const remaining=Math.max(0,nativeSplashMinimumMs-(Date.now()-nativeSplashStartedAt));
-    const timer=setTimeout(()=>{void SplashScreen.hideAsync().catch(()=>undefined);},remaining);
-    return()=>clearTimeout(timer);
-  },[fontsLoaded,fontError]);
-  if (!fontsLoaded && !fontError) return nativeSplashEnabled?null:<View accessibilityLabel="Opening Archivist" style={[styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7'}]}><ArchivistLogo size={88}/><Text style={[styles.brandLaunchWordmark,{color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text><ActivityIndicator color={system==='dark'?'#B99A68':'#47736F'} /></View>;
-  return <SafeAreaProvider><Client /></SafeAreaProvider>;
+    if(!nativeSplashEnabled||(!fontsLoaded&&!fontError)||launchSequenceStarted.current)return;
+    launchSequenceStarted.current=true;
+    let cancelled=false;
+    let secondFrame=0;
+    let holdTimer:ReturnType<typeof setTimeout>|undefined;
+    const firstFrame=requestAnimationFrame(()=>{
+      secondFrame=requestAnimationFrame(()=>{
+        if(cancelled)return;
+        void SplashScreen.hideAsync().catch(()=>undefined);
+        holdTimer=setTimeout(()=>{
+          if(cancelled)return;
+          AccessibilityInfo.isReduceMotionEnabled().catch(()=>false).then(reduce=>{
+            if(cancelled)return;
+            if(reduce){setBrandLaunchVisible(false);return;}
+            Animated.timing(brandLaunchOpacity,{toValue:0,duration:brandedLaunchFadeMs,useNativeDriver:true}).start(({finished})=>{
+              if(finished&&!cancelled)setBrandLaunchVisible(false);
+            });
+          });
+        },brandedLaunchHoldMs);
+      });
+    });
+    return()=>{
+      cancelled=true;
+      cancelAnimationFrame(firstFrame);
+      if(secondFrame)cancelAnimationFrame(secondFrame);
+      if(holdTimer)clearTimeout(holdTimer);
+      brandLaunchOpacity.stopAnimation();
+    };
+  },[brandLaunchOpacity,fontError,fontsLoaded]);
+
+  if(!fontsLoaded&&!fontError){
+    return nativeSplashEnabled?null:<View accessibilityLabel="Opening Archivist" style={[styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7'}]}><ArchivistLogo size={88}/><Text style={[styles.brandLaunchWordmark,{color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text></View>;
+  }
+
+  return <SafeAreaProvider>
+    <Client />
+    {brandLaunchVisible?<Animated.View accessibilityLabel="Opening Archivist" pointerEvents="none" style={[StyleSheet.absoluteFillObject,styles.brandLaunch,{backgroundColor:system==='dark'?'#000000':'#FBFAF7',opacity:brandLaunchOpacity,zIndex:1000}]}>
+      <ArchivistLogo size={96}/>
+      <Text style={[styles.brandLaunchWordmark,{fontFamily:fontsLoaded?'ArchivistEditorial':'serif',color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text>
+    </Animated.View>:null}
+  </SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
