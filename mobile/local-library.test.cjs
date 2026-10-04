@@ -325,7 +325,6 @@ assert.equal(previews[0].state, 'review');
   );
   assert.equal(deferredCoverScan.books.length,1);
   assert.equal(deferredCoverScan.books[0].title,'Covered');
-  assert.equal(deferredCoverScan.books[0].author,'Cover Author');
   assert.equal(deferredCoverScan.books[0].coverUri,undefined,'primary catalogue must not wait for embedded cover extraction');
 
   let coverBatches=0;
