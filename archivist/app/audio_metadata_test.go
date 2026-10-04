@@ -70,3 +70,32 @@ func TestID3v1Fallback(t *testing.T) {
 		t.Fatalf("id3v1=%+v",meta)
 	}
 }
+
+func mp4TestAtom(kind []byte, payload []byte) []byte {
+	header:=make([]byte,8)
+	binary.BigEndian.PutUint32(header[:4],uint32(8+len(payload)))
+	copy(header[4:8],kind)
+	return append(header,payload...)
+}
+
+func mp4TestText(kind []byte, value string) []byte {
+	data:=mp4TestAtom([]byte("data"),append(make([]byte,8),[]byte(value)...))
+	return mp4TestAtom(kind,data)
+}
+
+func TestM4BMetadataUsesBookIdentity(t *testing.T) {
+	body:=bytes.Join([][]byte{
+		mp4TestText([]byte{0xa9,'n','a','m'},"Part 36"),
+		mp4TestText([]byte{0xa9,'a','l','b'},"Dune"),
+		mp4TestText([]byte{0xa9,'A','R','T'},"Herbert, Frank"),
+		mp4TestText([]byte{0xa9,'g','e','n'},"Science Fiction"),
+		mp4TestText([]byte{0xa9,'d','a','y'},"1965"),
+		mp4TestText([]byte{0xa9,'g','r','p'},"Dune"),
+	},nil)
+	filename:=filepath.Join(t.TempDir(),"book.m4b")
+	if err:=os.WriteFile(filename,body,0600);err!=nil{t.Fatal(err)}
+	meta:=audioMetadata(filename)
+	if meta.Title!="Dune" || meta.Author!="Frank Herbert" || meta.Series!="Dune" || meta.Genre!="Science Fiction" || meta.PublishedYear!=1965 {
+		t.Fatalf("m4b=%+v",meta)
+	}
+}
