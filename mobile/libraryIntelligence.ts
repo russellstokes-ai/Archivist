@@ -60,32 +60,50 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   let confidence: IdentificationConfidence = 'low';
   let reviewReason = 'Could not confidently identify author and series from the file path.';
 
+  const genericAudioTrack = format === 'Audio' && genericAudioTrackTitle(stem);
+  if (genericAudioTrack && sensibleFolder(parent, stem)) {
+    title = parent;
+    if (dirs.length >= 3) {
+      author = greatGrandparent;
+      series = grandparent;
+      confidence = author ? 'high' : 'medium';
+      reviewReason = author ? '' : 'Audiobook title came from its folder; author still needs review.';
+    } else if (dirs.length >= 2) {
+      author = grandparent;
+      confidence = author ? 'high' : 'medium';
+      reviewReason = author ? '' : 'Audiobook title came from its folder; author still needs review.';
+    } else {
+      confidence = 'medium';
+      reviewReason = 'Audiobook title came from its folder; author still needs review.';
+    }
+  }
+
   const dashed = stem.split(/\s+-\s+/).map(cleanLabel).filter(Boolean);
-  if (dashed.length >= 4 && looksIndex(dashed[2])) {
+  if (!genericAudioTrack && dashed.length >= 4 && looksIndex(dashed[2])) {
     author = dashed[0];
     series = dashed[1];
     seriesNumber = numericIndex(dashed[2]);
     title = dashed.slice(3).join(' - ');
     confidence = 'high';
     reviewReason = '';
-  } else if (dashed.length >= 3 && looksIndex(dashed[1])) {
+  } else if (!genericAudioTrack && dashed.length >= 3 && looksIndex(dashed[1])) {
     author = dashed[0];
     seriesNumber = numericIndex(dashed[1]);
     title = dashed.slice(2).join(' - ');
     series = sensibleFolder(parent, title) ? parent : '';
     confidence = 'medium';
     reviewReason = series ? '' : 'Title and author inferred from filename; series was not clear.';
-  } else if (dashed.length >= 2 && !looksIndex(dashed[0])) {
+  } else if (!genericAudioTrack && dashed.length >= 2 && !looksIndex(dashed[0])) {
     author = dashed[0];
     title = dashed.slice(1).join(' - ');
     confidence = 'medium';
     reviewReason = 'Author and title inferred from filename.';
-  } else if (format === 'Audio' && dirs.length >= 3) {
+  } else if (!genericAudioTrack && format === 'Audio' && dirs.length >= 3) {
     author = greatGrandparent;
     series = grandparent;
     confidence = author ? 'high' : 'medium';
     reviewReason = author ? '' : 'Audiobook folders were only partly identifiable.';
-  } else if (format === 'Audio' && dirs.length >= 2) {
+  } else if (!genericAudioTrack && format === 'Audio' && dirs.length >= 2) {
     author = grandparent;
     series = '';
     confidence = author ? 'medium' : 'low';
@@ -398,6 +416,12 @@ function isLibraryRoot(value: string) {
 
 function looksIndex(value: string) {
   return /^#?\d+(?:\.\d+)?$/.test(value.trim());
+}
+
+function genericAudioTrackTitle(value: string) {
+  const clean = cleanLabel(value);
+  return /^(?:(?:part|pt|track|chapter|ch|disc|disk|cd)\s*[-_.:#]?\s*)?\d{1,4}(?:\s*(?:of|\/|-)\s*\d{1,4})?$/i.test(clean)
+    || /^(?:part|pt|track|chapter|ch|disc|disk|cd)\s*[-_.:#]?\s*\d{1,4}(?:\s*(?:of|\/|-)\s*\d{1,4})?(?:\s*[-_.:]\s*(?:part|track|chapter)?\s*\d{0,4})?$/i.test(clean);
 }
 
 function looksAuthorLike(value: string) {
