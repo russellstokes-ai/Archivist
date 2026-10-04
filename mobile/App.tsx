@@ -40,7 +40,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, pickLocalFolder, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {persistAndroidAutoLibrary} from './androidAuto';
@@ -2190,7 +2190,28 @@ function Client() {
     setRescanPromptOpen(false);
     setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
+    if(scanCommitGate.isCurrent(generation))void enrichPublishedLocalCovers(result.books,generation);
     return scanCommitGate.isCurrent(generation)?summary:null;
+  }
+
+  async function enrichPublishedLocalCovers(baseBooks:LocalBook[],generation:number){
+    if(!baseBooks.some(book=>!book.coverUri)||!scanCommitGate.isCurrent(generation))return;
+    const enriched=await enrichLocalBookCovers(baseBooks,{
+      batchSize:4,
+      shouldContinue:()=>scanCommitGate.isCurrent(generation),
+      onBatch:(batch)=>{
+        if(!scanCommitGate.isCurrent(generation))return;
+        setLocalBooks(current=>applyCoverEnrichment(current,batch));
+      },
+    }).catch(()=>null);
+    if(!enriched?.updated||!scanCommitGate.isCurrent(generation))return;
+
+    setLocalBooks(current=>applyCoverEnrichment(current,enriched.books));
+    const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
+    if(!scanCommitGate.isCurrent(generation))return;
+    const currentStored=Array.isArray(stored)?stored:baseBooks;
+    const patched=applyCoverEnrichment(currentStored,enriched.books);
+    if(patched!==currentStored)await setPersistedJSON(localCatalogKey,patched).catch(()=>undefined);
   }
 
   function scanNotice(result:LocalScanResult) {
@@ -2223,7 +2244,7 @@ function Client() {
       }
       setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal);
+      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal,{deferEmbeddedCovers:true});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
@@ -2254,7 +2275,7 @@ function Client() {
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal);
+      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
@@ -2295,7 +2316,7 @@ function Client() {
       const nextOverrides=Object.fromEntries(Object.entries(localMetadataOverrides).filter(([uri])=>!removedUris.has(uri)));
       setLocalMetadataOverrides(nextOverrides);
       await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
-      const result=await scanLocalFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal);
+      const result=await scanLocalFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal,{deferEmbeddedCovers:true});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       if(sourceFilter==='local'&&space===folder.name&&libraryFolderExact){
