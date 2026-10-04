@@ -19,10 +19,10 @@ import (
 const metadataXMLLimit = 2 << 20
 
 var (
-	asinQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ASIN\\s*[-:#]?\\s*([A-Z0-9]{10})\\s*\\]`)
-	isbnQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ISBN(-10|-13)?\\s*[-:#]?\\s*([-0-9Xx ]{10,20})\\s*\\]`)
-	narratorQualifierRE = regexp.MustCompile(`\\{([^{}]{2,100})\\}`)
-	yearQualifierRE = regexp.MustCompile(`\\(\\s*((19|20)\\d{2})\\s*\\)`)
+	asinQualifierRE = regexp.MustCompile(`(?i)\[\s*ASIN\s*[-:#]?\s*([A-Z0-9]{10})\s*\]`)
+	isbnQualifierRE = regexp.MustCompile(`(?i)\[\s*ISBN(-10|-13)?\s*[-:#]?\s*([-0-9Xx ]{10,20})\s*\]`)
+	narratorQualifierRE = regexp.MustCompile(`\{([^{}]{2,100})\}`)
+	yearQualifierRE = regexp.MustCompile(`\(\s*((19|20)\d{2})\s*\)`)
 )
 
 type embeddedMetadata struct {
@@ -399,19 +399,19 @@ func sidecarMetadata(filename string) embeddedMetadata {
 
 func filenameQualifiers(value string) (stem, narrator, isbn, asin string, publishedYear int) {
 	stem = value
-	if match := asinQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
+	if match := asinQualifierRE.FindStringSubmatch(stem); len(match) >= 2 {
 		asin = normalizeIdentifier(match[1])
 		stem = asinQualifierRE.ReplaceAllString(stem, "")
 	}
-	if match := isbnQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
-		isbn = normalizeIdentifier(match[1])
+	if match := isbnQualifierRE.FindStringSubmatch(stem); len(match) >= 3 {
+		isbn = normalizeIdentifier(match[2])
 		stem = isbnQualifierRE.ReplaceAllString(stem, "")
 	}
-	if match := narratorQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
+	if match := narratorQualifierRE.FindStringSubmatch(stem); len(match) >= 2 {
 		narrator = cleanMetadata(match[1])
 		stem = narratorQualifierRE.ReplaceAllString(stem, "")
 	}
-	if match := yearQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
+	if match := yearQualifierRE.FindStringSubmatch(stem); len(match) >= 2 {
 		publishedYear = yearFromText(match[1])
 		stem = yearQualifierRE.ReplaceAllString(stem, "")
 	}
