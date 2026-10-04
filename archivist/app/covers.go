@@ -103,14 +103,20 @@ func genericFolderArtworkAllowed(root *os.Root, dirRel string) bool {
 	if err!=nil{return false}
 	mediaCount:=0
 	allAudio:=true
+	audioTrackLike:=true
 	for _,entry:=range entries{
 		if entry.IsDir(){continue}
 		ext:=strings.ToLower(filepath.Ext(entry.Name()))
 		if !coverMediaExtension(ext){continue}
 		mediaCount++
-		if !coverAudioExtension(ext){allAudio=false}
+		if !coverAudioExtension(ext){
+			allAudio=false
+			continue
+		}
+		stem:=strings.TrimSuffix(entry.Name(),filepath.Ext(entry.Name()))
+		if !genericAudioTrackLabel(stem)&&!leadingNumberedAudioTrack(stem){audioTrackLike=false}
 	}
-	return mediaCount==1 || (mediaCount>1&&allAudio)
+	return mediaCount==1 || (mediaCount>1&&allAudio&&audioTrackLike)
 }
 
 func coverMediaExtension(ext string) bool {
