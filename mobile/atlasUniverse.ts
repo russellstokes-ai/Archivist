@@ -39,6 +39,7 @@ export type AtlasUniverseNode = {
   collectionId?:string;
   coverUri?:string;
   source?:string;
+  genre?:string;
   subtitle?:string;
 };
 
@@ -104,16 +105,20 @@ export function buildAtlasUniverse(
   inputWorks:AtlasUniverseWork[],
   collections:AtlasUniverseCollection[]=[],
   annotations:AtlasUniverseAnnotation[]=[],
-  maxWorks=72,
+  maxWorks=120,
+  priorityKeys:string[]=[],
 ):AtlasUniverse {
   const works=[...inputWorks].sort((a,b)=>(a.canonicalKey||a.key).localeCompare(b.canonicalKey||b.key)||a.title.localeCompare(b.title));
-  const genreCounts=counts(works.map(work=>work.genre||'Other'));
-  const genreTop=genreCounts.slice(0,10);
+  if(!works.length)return {width:WIDTH,height:HEIGHT,nodes:[],edges:[],hiddenWorks:0};
+  const genreCounts=counts(works.map(work=>work.genre.trim()||'Unclassified'));
+  const genreTop=genreCounts.slice(0,24);
+  const overflowGenres=genreCounts.slice(24);
+  const priority=new Set(priorityKeys);
   const allowedGenres=new Set(genreTop.map(([name])=>name));
   const workScore=(work:AtlasUniverseWork)=>hash((work.canonicalKey||work.key)+'|'+work.title);
   const visibleWorks=works
     .map(work=>({work,score:workScore(work)}))
-    .sort((a,b)=>a.score-b.score)
+    .sort((a,b)=>Number(priority.has(b.work.key)||priority.has(b.work.canonicalKey||''))-Number(priority.has(a.work.key)||priority.has(a.work.canonicalKey||''))||a.score-b.score)
     .slice(0,Math.max(12,maxWorks))
     .map(item=>item.work);
 
@@ -129,16 +134,16 @@ export function buildAtlasUniverse(
     edgeIds.add(id); edges.push({id,from,to,kind});
   };
 
-  const genres=genreTop.length?genreTop:[['Library',visibleWorks.length] as [string,number]];
+  const genres=genreTop.length?[...genreTop,...(overflowGenres.length?[['Other genres',overflowGenres.reduce((sum,item)=>sum+item[1],0)] as [string,number]]:[])]:[['Library',visibleWorks.length] as [string,number]];
   genres.forEach(([name,count],index)=>{
     const angle=-Math.PI/2+(Math.PI*2*index/Math.max(1,genres.length));
     const radius=genres.length<=3?235:305+jitter('genre:'+name,-28,28);
-    add({id:'genre:'+name,kind:'genre',label:name,x:CX+Math.cos(angle)*radius,y:CY+Math.sin(angle)*radius,count,relationKind:'genre',relationValue:name==='Other'?'':name,subtitle:count+' works'});
+    add({id:'genre:'+name,kind:'genre',label:name,x:CX+Math.cos(angle)*radius,y:CY+Math.sin(angle)*radius,count,relationKind:name==='Other genres'?undefined:'genre',relationValue:name==='Unclassified'?'':name,subtitle:count+' works'});
   });
 
   const genreNodeFor=(work:AtlasUniverseWork)=>{
-    const raw=work.genre.trim()||'Other';
-    const name=allowedGenres.has(raw)?raw:(byId.has('genre:Other')?'Other':genres[hash(raw)%genres.length][0]);
+    const raw=work.genre.trim()||'Unclassified';
+    const name=allowedGenres.has(raw)?raw:'Other genres';
     return byId.get('genre:'+name)!;
   };
 
@@ -150,14 +155,14 @@ export function buildAtlasUniverse(
     const id='work:'+(work.canonicalKey||work.key);
     const node=add({
       id,kind:'work',label:work.title,x:hub.x+Math.cos(angle)*radius,y:hub.y+Math.sin(angle)*radius,
-      count:1,workKey:work.key,coverUri:work.coverUri,source:work.source,
+      count:1,workKey:work.key,coverUri:work.coverUri,source:work.source,genre:work.genre.trim()||'Unclassified',
       subtitle:[work.author,work.series,work.format].filter(Boolean).slice(0,2).join(' · '),
     });
     edge(hub.id,node.id,'genre');
   }
 
   const workNodeByIdentity=(work:AtlasUniverseWork)=>byId.get('work:'+(work.canonicalKey||work.key));
-  const authorCounts=counts(visibleWorks.map(work=>work.author)).slice(0,16);
+  const authorCounts=counts(works.map(work=>work.author)).filter(([author])=>visibleWorks.some(work=>work.author===author));
   for(const [author,count] of authorCounts) {
     const related=visibleWorks.filter(work=>work.author===author).map(workNodeByIdentity).filter(Boolean) as AtlasUniverseNode[];
     const c=centroid(related);
@@ -166,7 +171,7 @@ export function buildAtlasUniverse(
     for(const target of related)edge(node.id,target.id,'author');
   }
 
-  const seriesCounts=counts(visibleWorks.map(work=>work.series)).slice(0,14);
+  const seriesCounts=counts(works.map(work=>work.series)).filter(([series])=>visibleWorks.some(work=>work.series===series));
   for(const [series,count] of seriesCounts) {
     const related=visibleWorks.filter(work=>work.series===series).map(workNodeByIdentity).filter(Boolean) as AtlasUniverseNode[];
     const c=centroid(related);
@@ -225,3 +230,4 @@ export function buildAtlasUniverse(
 
   return {width:WIDTH,height:HEIGHT,nodes,edges,hiddenWorks:Math.max(0,works.length-visibleWorks.length)};
 }
+

@@ -177,11 +177,11 @@ const atlasStart=source.indexOf('function Atlas()');
 const atlasEnd=source.indexOf('async function saveInsightGoals()',atlasStart);
 assert.ok(atlasStart>=0 && atlasEnd>atlasStart, 'Atlas function bounds are missing');
 const atlasSource=source.slice(atlasStart,atlasEnd);
-assert.ok(atlasSource.includes('atlasRingItems') && atlasSource.includes("label:'Genre'") && atlasSource.includes("label:'Format'") && atlasSource.includes("label:'Year'"), 'Atlas must use the approved three-way ring');
+assert.ok(atlasSource.includes('<AtlasChartRing') && source.includes('atlasChartGroups'), 'Atlas must use three fixed data-backed chart sectors');
 assert.ok(atlasSource.includes("selectAtlasBreakdown('Genre')") && atlasSource.includes("selectAtlasBreakdown('Format')") && atlasSource.includes("selectAtlasBreakdown('Published year')"), 'Atlas ring controls must switch the breakdown');
 assert.ok(atlasSource.includes('atlasBreakdownAnim') && atlasSource.includes('Animated.View') && atlasSource.includes('translateY'), 'Atlas breakdown transition is missing');
 assert.ok(source.includes("useState<'Genre'|'Format'|'Published year'|null>(null)"), 'Atlas breakdown must be hidden on initial open');
-assert.ok(atlasSource.includes("{atlasBreakdown?<Animated.View") && atlasSource.includes("Choose Genre, Format or Year to reveal the library breakdown"), 'Atlas breakdown should appear only after a ring control is pressed');
+assert.ok(atlasSource.includes('{(atlasBreakdown||atlasNodeId)?<Animated.View') && atlasSource.includes('Choose Genre, Format or Year to reveal the library breakdown'), 'Shared Atlas details window must remain hidden until a chart or node is selected');
 assert.ok(source.includes('const atlasPulse=useRef(new Animated.Value(0)).current') && source.includes('const atlasPulseLoop=Animated.loop'), 'Atlas selected-state pulse animation is missing');
 assert.ok(source.includes('atlasRingControlPulse') && source.includes('atlasSelectedRingPulse'), 'Atlas ring controls and ring chart need selected pulse feedback');
 assert.ok(source.includes("outputRange:[.48,0]") && source.includes("outputRange:[1,1.26]") && source.includes("borderColor:'#FF9A92'") && source.includes("borderColor:'#88D7E8'") && source.includes("borderColor:'#C7A6EE'"), 'Atlas selected controls must radiate a brighter colour-matched halo that expands and fades out');
@@ -189,10 +189,10 @@ assert.ok(atlasSource.includes('color="#E2736B"') && atlasSource.includes('color
 assert.ok(atlasSource.includes('>Universe Stats</Text>') && atlasSource.includes("label:'Nodes'") && atlasSource.includes("label:'Connections'") && atlasSource.includes("label:'Constellations'") && atlasSource.includes("label:'Bridges'") && atlasSource.includes("label:'Series'") && atlasSource.includes("label:'Collections'") && atlasSource.includes("label:'Authors'") && atlasSource.includes("label:'Genres'"), 'Atlas Universe Stats must expose all eight approved metrics');
 assert.ok(source.includes("atlasUniverseStat: {width:'50%',minHeight:92") && source.includes("atlasUniverseStatWide: {width:'25%',minHeight:94") && source.includes("atlasUniverseStatCopy: {fontSize:9,lineHeight:13,marginTop:1,minHeight:26}"), 'Atlas Universe Stats must use the aligned 2-column phone / 4-column wide grid');
 assert.ok(atlasSource.includes('Most connected') && atlasSource.includes('Largest constellation') && atlasSource.includes('Deepest series'), 'Atlas Universe Highlights are incomplete');
-assert.ok(source.includes('atlasInspectorAnim') && source.includes('atlasInspectorRevealMobile') && source.includes('atlasInspectorRevealWide') && source.includes("outputRange:[.96,1]"), 'Atlas selected-node details must expand into a floating responsive inspector');
-assert.ok(source.includes('function atlasSelectNearestNodeAt(') && source.includes('nearestDistance') && source.includes('selectionRadius') && source.includes('onResponderRelease={atlasGestureEnd}'), 'Atlas taps must resolve to the nearest visible node instead of overlapping node Pressables');
+assert.ok(source.includes('showAtlasPanel(') && atlasSource.includes('atlasNodeId?AtlasInspector():') && source.includes('atlasPanelGeneration'), 'Node details must use the shared rounded panel and reject stale transition callbacks');
+assert.ok(source.includes('function atlasSelectNearestNodeAt(') && source.includes('atlasNearest(atlasUniverse.nodes') && source.includes('onResponderRelease={atlasGestureEnd}'), 'Atlas taps must resolve to the nearest visible node instead of overlapping node Pressables');
 assert.equal(atlasSource.includes('onPress={()=>selectAtlasNode(node.id)}'),false,'Atlas graph nodes must not own competing overlapping Pressables');
-assert.ok(source.includes('atlasInspectorAccent') && source.includes('atlasInspectorMetaChip') && source.includes("backgroundColor:p.paper==='#000000'?'rgba(9,20,29,.96)':'rgba(255,252,245,.97)'"), 'Atlas inspector must use the themed floating detail-card treatment rather than a flat black bar');
+assert.ok(source.includes('atlasInspectorAccent') && source.includes('atlasInspectorMetaChip') && atlasSource.includes('styles.atlasBreakdownSheet'), 'Atlas inspector must retain the approved rounded shared detail-window treatment');
 assert.ok(source.includes('atlasBreakdownReveal') && source.includes('maxHeight:atlasBreakdownAnim.interpolate'), 'Atlas breakdown must expand in and push Universe Stats down');
 assert.ok(atlasSource.includes('focusAtlasNode(item.node.id)'), 'Atlas Universe Highlights must navigate back into the graph');
 assert.ok(atlasSource.includes('bridgeNodeIds') && atlasSource.includes("genres.size>1"), 'Atlas Bridges must represent real cross-genre connectors');
@@ -202,7 +202,7 @@ assert.ok(source.includes('opacity:atlasPulse.interpolate') && source.includes('
 assert.ok(atlasSource.includes('Breakdown of your library') && atlasSource.includes('atlasBreakdownTrack') && atlasSource.includes('atlasBreakdownPercent'), 'Atlas breakdown sheet must match the approved concept');
 assert.ok(atlasSource.includes('atlasConstellationStage') && atlasSource.includes('atlasRingControlGenre') && atlasSource.includes('atlasRingControlFormat') && atlasSource.includes('atlasRingControlYear'), 'Atlas ring controls must sit around the constellation');
 assert.ok(source.includes("node.kind==='genre'?18") && source.includes("boxShadow:selected?'0px 0px 22px '"), 'Atlas genre hubs must be visually prominent and luminous');
-assert.ok(source.includes('const atlasRingItems:ChartItem[]'), 'Atlas ring chart is missing');
+assert.ok(source.includes('<AtlasChartRing') && source.includes('groups={atlasChartGroups}'), 'Atlas ring must use real library distributions');
 assert.ok(source.includes("genreColours=[") || fs.readFileSync('LibraryCharts.tsx','utf8').includes("genreColours=["), 'Atlas genre palette is missing');
 
 assert.ok(source.includes("function AtlasRelationshipView()"), 'Atlas relationship view is not implemented');

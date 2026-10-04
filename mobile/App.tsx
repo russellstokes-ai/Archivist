@@ -46,6 +46,8 @@ import {persistAndroidAutoLibrary} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
+import {AtlasChartRing} from './AtlasChartRing';
+import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasBreakdown as makeAtlasBreakdown, atlasSummary, atlasGenrePalette} from './atlasInteraction';
 import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
@@ -630,9 +632,16 @@ function Client() {
   const atlasInspectorAnim=useRef(new Animated.Value(0)).current;
   const atlasPulse=useRef(new Animated.Value(0)).current;
   const [atlasSearch,setAtlasSearch]=useState('');
+  const [atlasSearchMessage,setAtlasSearchMessage]=useState('');
+  const [atlasPriorityKeys,setAtlasPriorityKeys]=useState<string[]>([]);
+  const atlasPendingFocus=useRef('');
+  const [atlasInteracting,setAtlasInteracting]=useState(false);
+  const atlasTouchOrigin=useRef({x:0,y:0});
+  const atlasPanelGeneration=useRef(0);
   const [atlasNodeId,setAtlasNodeId]=useState('');
   const [atlasTransform,setAtlasTransform]=useState({x:0,y:0,scale:.62});
   const atlasGesture=useRef<{mode:'pan'|'pinch';startX:number;startY:number;baseX:number;baseY:number;baseScale:number;distance:number;focusX:number;focusY:number;moved:boolean}|null>(null);
+  const atlasTransformRef=useRef(atlasTransform);
   const atlasTransformGeneration=useRef(0);
   const atlasGestureFrame=useRef<number|null>(null);
   const atlasPendingTransform=useRef<{x:number;y:number;scale:number}|null>(null);
@@ -1042,17 +1051,47 @@ function Client() {
   const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
   const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
-  const atlasUniverse=useMemo(()=>buildAtlasUniverse(atlasUniverseWorks,collections,readerAnnotations),[atlasUniverseWorks,collections,readerAnnotations]);
+  const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>work.genre),genreColour),[sourceWorks]);
+  const atlasGenreColor=(name:string)=>atlasGenreColors.get(name.trim()||'Unclassified')||genreColour(name);
+  const atlasRingSize=Math.min(width-(width>=940?56:width>=600?48:width<360?28:32),width>=940?720:width>=600?620:520);
+  const atlasDiameter=Math.max(1,atlasRingSize-64);
+  const atlasUniverse=useMemo(()=>buildAtlasUniverse(atlasUniverseWorks,collections,readerAnnotations,120,atlasPriorityKeys),[atlasUniverseWorks,collections,readerAnnotations,atlasPriorityKeys]);
+  const atlasNodeMap=useMemo(()=>new Map(atlasUniverse.nodes.map(node=>[node.id,node])),[atlasUniverse]);
+  const atlasAdjacency=useMemo(()=>{
+    const map=new Map<string,Set<string>>();
+    for(const edge of atlasUniverse.edges){
+      for(const [a,b] of [[edge.from,edge.to],[edge.to,edge.from]]){const set=map.get(a)||new Set<string>();set.add(b);map.set(a,set);}
+    }
+    return map;
+  },[atlasUniverse]);
+  const atlasConnected=useMemo(()=>atlasAdjacency.get(atlasNodeId)||new Set<string>(),[atlasAdjacency,atlasNodeId]);
+  const atlasLabelIds=useMemo(()=>atlasLabels(atlasUniverse.nodes,atlasTransform,atlasDiameter,atlasNodeId,atlasConnected),[atlasUniverse,atlasTransform,atlasDiameter,atlasNodeId,atlasConnected]);
+  const atlasChartGroups=useMemo(()=>[
+    makeAtlasBreakdown(atlasUniverseWorks,work=>work.format||'Not recorded',name=>genreColours[Array.from(name).reduce((sum,c)=>sum+c.charCodeAt(0),0)%genreColours.length]),
+    makeAtlasBreakdown(atlasUniverseWorks,work=>work.publishedYear?String(work.publishedYear):'Not recorded',name=>['#98A6B9','#778BC2','#62AFC1','#7BA8A1','#B68B62'][Array.from(name).reduce((sum,c)=>sum+c.charCodeAt(0),0)%5]),
+    makeAtlasBreakdown(atlasUniverseWorks,work=>work.genre.trim()||'Unclassified',atlasGenreColor),
+  ],[atlasUniverseWorks,atlasGenreColors]);
   useEffect(()=>{
     if(activeTab!=='atlas')return;
-    const viewWidth=Math.min(width-48,480),viewHeight=viewWidth;
-    const scale=Math.max(.18,Math.min(1.08,Math.min(viewWidth/atlasUniverse.width,viewHeight/atlasUniverse.height)*.78));
-    setAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
-  },[activeTab,width,foldLayout,atlasUniverse.width,atlasUniverse.height]);
+    ++atlasTransformGeneration.current;
+    const next=atlasFit(atlasUniverse.nodes,atlasDiameter);
+    atlasTransformRef.current=next;setAtlasTransform(next);
+  },[activeTab,atlasDiameter,atlasUniverseWorks]);
+  useEffect(()=>{
+    const id=atlasPendingFocus.current;
+    if(id&&atlasNodeMap.has(id)){atlasPendingFocus.current='';focusAtlasNode(id);}
+  },[atlasUniverse]);
+  useEffect(()=>()=>{
+    ++atlasTransformGeneration.current;++atlasPanelGeneration.current;
+    if(atlasGestureFrame.current!==null)cancelAnimationFrame(atlasGestureFrame.current);
+  },[]);
   const atlasSelectedNode=useMemo(()=>atlasUniverse.nodes.find(node=>node.id===atlasNodeId)||null,[atlasNodeId,atlasUniverse]);
 
   useEffect(()=>{
     if(activeTab!=='atlas'){
+      ++atlasTransformGeneration.current;++atlasPanelGeneration.current;
+      if(atlasGestureFrame.current!==null)cancelAnimationFrame(atlasGestureFrame.current);
+      atlasGestureFrame.current=null;atlasPendingTransform.current=null;atlasGesture.current=null;setAtlasInteracting(false);
       setAtlasBreakdown(null);
       setAtlasNodeId('');
       atlasBreakdownAnim.stopAnimation();
@@ -1068,11 +1107,11 @@ function Client() {
   useEffect(()=>{
     atlasPulse.stopAnimation();
     atlasPulse.setValue(0);
-    if(reduceMotion||activeTab!=='atlas'||(!atlasNodeId&&!atlasBreakdown))return;
+    if(reduceMotion||!appActive||activeTab!=='atlas'||(!atlasNodeId&&!atlasBreakdown))return;
     const atlasPulseLoop=Animated.loop(Animated.timing(atlasPulse,{toValue:1,duration:1800,useNativeDriver:true}),{resetBeforeIteration:true});
     atlasPulseLoop.start();
     return ()=>{atlasPulseLoop.stop();atlasPulse.setValue(0);};
-  },[activeTab,atlasBreakdown,atlasNodeId,atlasPulse,reduceMotion]);
+  },[activeTab,appActive,atlasBreakdown,atlasNodeId,atlasPulse,reduceMotion]);
 
   const localRelations = useMemo(() => {
     const local=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
@@ -4752,185 +4791,155 @@ function Client() {
   }
 
   function scheduleAtlasTransform(next:{x:number;y:number;scale:number}){
-    atlasPendingTransform.current=next;
+    const bounded=atlasConstrain(next,atlasUniverse.nodes,atlasDiameter);
+    atlasTransformRef.current=bounded;atlasPendingTransform.current=bounded;
     if(atlasGestureFrame.current!==null)return;
     atlasGestureFrame.current=requestAnimationFrame(()=>{
       atlasGestureFrame.current=null;
-      const pending=atlasPendingTransform.current;
-      atlasPendingTransform.current=null;
+      const pending=atlasPendingTransform.current;atlasPendingTransform.current=null;
       if(pending)setAtlasTransform(pending);
     });
   }
 
   function animateAtlasTransform(target:{x:number;y:number;scale:number},duration=420){
     const generation=++atlasTransformGeneration.current;
-    if(reduceMotion){setAtlasTransform(target);return;}
-    const start={...atlasTransform};
-    const started=Date.now();
+    const start={...atlasTransformRef.current},started=Date.now();
+    if(reduceMotion){scheduleAtlasTransform(target);return;}
     const frame=()=>{
       if(generation!==atlasTransformGeneration.current)return;
-      const raw=Math.min(1,(Date.now()-started)/duration);
-      const t=1-Math.pow(1-raw,3);
-      setAtlasTransform({
-        x:start.x+(target.x-start.x)*t,
-        y:start.y+(target.y-start.y)*t,
-        scale:start.scale+(target.scale-start.scale)*t,
-      });
+      const raw=Math.min(1,(Date.now()-started)/duration),t=1-Math.pow(1-raw,3);
+      scheduleAtlasTransform({x:start.x+(target.x-start.x)*t,y:start.y+(target.y-start.y)*t,scale:start.scale+(target.scale-start.scale)*t});
       if(raw<1)requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
   }
 
-  function atlasResetView(){
-    const viewWidth=Math.min(width-48,480);
-    const viewHeight=viewWidth;
-    const scale=Math.max(.18,Math.min(1.08,Math.min(viewWidth/atlasUniverse.width,viewHeight/atlasUniverse.height)*.78));
-    animateAtlasTransform({x:(viewWidth-atlasUniverse.width*scale)/2,y:(viewHeight-atlasUniverse.height*scale)/2,scale});
+  function atlasResetView(){animateAtlasTransform(atlasFit(atlasUniverse.nodes,atlasDiameter));}
+  function atlasZoomStep(factor:number){
+    const centre={x:atlasDiameter/2,y:atlasDiameter/2},base=atlasTransformRef.current;
+    animateAtlasTransform(atlasZoomAt(base,centre,centre,base.scale*factor),180);
   }
-
-  function atlasGestureStart(event:any){
-    const touches=event.nativeEvent.touches||[];
-    if(touches.length>=2){
-      const [a,b]=touches;
-      const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
-      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:Math.max(1,Math.hypot(dx,dy)),focusX:(a.locationX+b.locationX)/2,focusY:(a.locationY+b.locationY)/2,moved:true};
-      return;
+  function atlasTouchPoints(event:any){
+    return Array.from(event.nativeEvent.touches||[]).map((touch:any)=>({x:touch.pageX-atlasTouchOrigin.current.x,y:touch.pageY-atlasTouchOrigin.current.y}));
+  }
+  function atlasBeginTouches(points:Array<{x:number;y:number}>,moved=false){
+    const base=atlasTransformRef.current;
+    if(points.length>=2){
+      const [a,b]=points;
+      atlasGesture.current={mode:'pinch',startX:0,startY:0,baseX:base.x,baseY:base.y,baseScale:base.scale,distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),focusX:(a.x+b.x)/2,focusY:(a.y+b.y)/2,moved:true};
+    }else if(points.length){
+      atlasGesture.current={mode:'pan',startX:points[0].x,startY:points[0].y,baseX:base.x,baseY:base.y,baseScale:base.scale,distance:0,focusX:0,focusY:0,moved};
     }
-    const point=touches[0]||event.nativeEvent;
-    atlasGesture.current={mode:'pan',startX:point.locationX||0,startY:point.locationY||0,baseX:atlasTransform.x,baseY:atlasTransform.y,baseScale:atlasTransform.scale,distance:0,focusX:0,focusY:0,moved:false};
   }
-
+  function atlasGestureStart(event:any){
+    ++atlasTransformGeneration.current;setAtlasInteracting(true);
+    const n=event.nativeEvent;
+    atlasTouchOrigin.current={x:n.pageX-n.locationX,y:n.pageY-n.locationY};
+    atlasBeginTouches(atlasTouchPoints(event));
+  }
   function atlasGestureMove(event:any){
     const gesture=atlasGesture.current;if(!gesture)return;
-    const touches=event.nativeEvent.touches||[];
-    if(touches.length>=2){
-      const [a,b]=touches;
-      const dx=a.locationX-b.locationX,dy=a.locationY-b.locationY;
-      const distance=Math.max(1,Math.hypot(dx,dy));
-      if(gesture.mode!=='pinch'){atlasGestureStart(event);return;}
-      const nextScale=Math.max(.18,Math.min(2.25,gesture.baseScale*(distance/gesture.distance)));
-      const ratio=nextScale/gesture.baseScale;
-      ++atlasTransformGeneration.current;
-      scheduleAtlasTransform({x:gesture.focusX-(gesture.focusX-gesture.baseX)*ratio,y:gesture.focusY-(gesture.focusY-gesture.baseY)*ratio,scale:nextScale});
-      return;
+    const points=atlasTouchPoints(event);
+    if(points.length>=2){
+      if(gesture.mode!=='pinch'){atlasBeginTouches(points,true);return;}
+      const [a,b]=points,centre={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+      const scale=gesture.baseScale*Math.hypot(a.x-b.x,a.y-b.y)/gesture.distance;
+      scheduleAtlasTransform(atlasZoomAt({x:gesture.baseX,y:gesture.baseY,scale:gesture.baseScale},{x:gesture.focusX,y:gesture.focusY},centre,scale));
+    }else if(points.length){
+      if(gesture.mode==='pinch'){atlasBeginTouches(points,true);return;}
+      const dx=points[0].x-gesture.startX,dy=points[0].y-gesture.startY;
+      if(Math.hypot(dx,dy)>7)gesture.moved=true;
+      if(gesture.moved)scheduleAtlasTransform({x:gesture.baseX+dx,y:gesture.baseY+dy,scale:gesture.baseScale});
     }
-    if(gesture.mode==='pinch')return;
-    const point=touches[0]||event.nativeEvent;
-    const dx=(point.locationX||0)-gesture.startX,dy=(point.locationY||0)-gesture.startY;
-    if(Math.hypot(dx,dy)>7)gesture.moved=true;
-    if(!gesture.moved)return;
-    ++atlasTransformGeneration.current;
-    scheduleAtlasTransform({x:gesture.baseX+dx,y:gesture.baseY+dy,scale:gesture.baseScale});
   }
-
   function atlasSelectNearestNodeAt(viewX:number,viewY:number){
-    const candidates=atlasUniverse.nodes.filter(atlasNodeVisible);
-    let nearest:AtlasUniverseNode|null=null,nearestDistance=Infinity;
-    for(const node of candidates){
-      const x=atlasTransform.x+node.x*atlasTransform.scale;
-      const y=atlasTransform.y+node.y*atlasTransform.scale;
-      const distance=Math.hypot(x-viewX,y-viewY);
-      if(distance<nearestDistance){nearest=node;nearestDistance=distance;}
-    }
-    const selectionRadius=foldLayout?30:26;
-    if(nearest&&nearestDistance<=selectionRadius)selectAtlasNode(nearest.id);
+    const id=atlasNearest(atlasUniverse.nodes,atlasTransformRef.current,{x:viewX,y:viewY},atlasDiameter,foldLayout?30:26);
+    if(id)selectAtlasNode(id);
   }
-
   function atlasGestureEnd(event:any){
-    const gesture=atlasGesture.current;
-    atlasGesture.current=null;
+    const gesture=atlasGesture.current;atlasGesture.current=null;setAtlasInteracting(false);
     if(!gesture||gesture.mode!=='pan'||gesture.moved)return;
-    const point=event.nativeEvent;
-    atlasSelectNearestNodeAt(point.locationX||0,point.locationY||0);
+    const n=event.nativeEvent;
+    atlasSelectNearestNodeAt(n.pageX-atlasTouchOrigin.current.x,n.pageY-atlasTouchOrigin.current.y);
   }
 
   function atlasNodeColor(node:AtlasUniverseNode){
-    if(node.kind==='genre')return genreColour(node.label);
-    const linked=atlasUniverse.edges.find(edge=>edge.to===node.id&&edge.kind==='genre');
-    const hub=linked&&atlasUniverse.nodes.find(item=>item.id===linked.from);
-    if(hub)return genreColour(hub.label);
+    if(node.kind==='genre')return node.label==='Other genres'?p.muted:atlasGenreColor(node.label);
+    if(node.genre)return atlasGenreColor(node.genre);
     if(node.kind==='author')return p.ink;
-    if(node.kind==='note')return p.raised;
-    if(node.kind==='series'||node.kind==='collection')return p.card;
-    return p.paper;
+    return p.muted;
   }
-
   function atlasNodeVisible(node:AtlasUniverseNode){return true;}
-
   function atlasSearchGo(){
     const q=atlasSearch.trim().toLowerCase();if(!q)return;
-    const node=atlasUniverse.nodes.find(item=>item.label.toLowerCase().includes(q)||item.subtitle?.toLowerCase().includes(q));
-    if(!node)return;
-    focusAtlasNode(node.id);
+    const match=atlasUniverse.nodes.find(item=>item.label.toLowerCase()===q)||atlasUniverse.nodes.find(item=>item.label.toLowerCase().includes(q));
+    if(match){setAtlasSearchMessage('');focusAtlasNode(match.id);return;}
+    const work=atlasUniverseWorks.find(item=>[item.title,item.author,item.series,item.genre].some(text=>text.toLowerCase().includes(q)));
+    if(work){
+      atlasPendingFocus.current='work:'+(work.canonicalKey||work.key);
+      setAtlasPriorityKeys(keys=>[work.key,...keys.filter(key=>key!==work.key)].slice(0,12));
+      setAtlasSearchMessage('');
+    }else setAtlasSearchMessage('No matching title, author, series, collection or tag in this library.');
   }
 
   function AtlasEdgeView({from,to,kind}:{from:AtlasUniverseNode;to:AtlasUniverseNode;kind:string}){
     const dx=to.x-from.x,dy=to.y-from.y,length=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI;
-    return <View pointerEvents="none" style={[styles.atlasUniverseEdge,{left:from.x,top:from.y,width:length,height:1/atlasTransform.scale,opacity:atlasNodeId?(from.id===atlasNodeId||to.id===atlasNodeId?.65:.08):.3,backgroundColor:atlasNodeColor(from),transformOrigin:'left center',transform:[{rotateZ:angle+'deg'}]}]}/>;
+    return <View key={from.id+'|'+to.id+'|'+kind} pointerEvents="none" style={[styles.atlasUniverseEdge,{left:from.x,top:from.y,width:length,height:1/atlasTransform.scale,opacity:atlasNodeId?(from.id===atlasNodeId||to.id===atlasNodeId?.65:.08):.3,backgroundColor:atlasNodeColor(from),transformOrigin:'left center',transform:[{rotateZ:angle+'deg'}]}]}/>;
   }
 
   function AtlasUniverseNodeView({node}:{node:AtlasUniverseNode}){
     if(!atlasNodeVisible(node))return null;
     const selected=node.id===atlasNodeId;
-    const connected=!atlasNodeId||selected||atlasUniverse.edges.some(edge=>(edge.from===atlasNodeId&&edge.to===node.id)||(edge.to===atlasNodeId&&edge.from===node.id));
+    const connected=!atlasNodeId||selected||atlasConnected.has(node.id);
     const zoom=atlasTransform.scale,hit=48/zoom;
     const colour=atlasNodeColor(node);
     const dot=(node.kind==='genre'?18:node.kind==='author'?7:node.kind==='work'?4:5.5)/zoom;
     const genreHub=node.kind==='genre';
-    return <View pointerEvents="none" style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
+    return <View key={node.id} pointerEvents="none" style={{position:'absolute',left:node.x-hit/2,top:node.y-hit/2,width:hit,height:hit,alignItems:'center',justifyContent:'center',opacity:connected?1:.20}}>
       {selected?<Animated.View pointerEvents="none" style={{position:'absolute',width:58/zoom,height:58/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.34,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.38]})}]}}/>:genreHub?<View pointerEvents="none" style={{position:'absolute',width:38/zoom,height:38/zoom,borderRadius:40/zoom,backgroundColor:colour,opacity:.12}}/>:null}
       <View style={{width:dot,height:dot,borderRadius:dot/2,backgroundColor:colour,borderWidth:genreHub?1/zoom:0,borderColor:genreHub?'rgba(255,255,255,.55)':'transparent',boxShadow:selected?'0px 0px 22px '+colour:genreHub?'0px 0px 12px '+colour:'none'}}/>
-      {(selected||genreHub||zoom>.60)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
+      {atlasLabelIds.has(node.id)?<View pointerEvents="none" style={{position:'absolute',top:hit/2+(genreHub?13:10)/zoom,left:(hit-150/zoom)/2,width:150/zoom,minWidth:150/zoom,alignItems:'center'}}>
         <Text numberOfLines={2} style={{paddingHorizontal:genreHub?7/zoom:0,paddingVertical:genreHub?3/zoom:0,borderRadius:999,borderWidth:genreHub?StyleSheet.hairlineWidth:0,borderColor:genreHub?colour:'transparent',backgroundColor:genreHub?(p.paper==='#000000'?'rgba(7,17,29,.82)':'rgba(255,255,255,.86)'):'transparent',textAlign:'center',fontSize:(genreHub?11.5:11)/zoom,lineHeight:(genreHub?15:14)/zoom,color:genreHub?colour:(selected?p.ink:p.muted),fontWeight:selected||genreHub?'600':'400'}}>{node.label}</Text>
       </View>:null}
     </View>;
   }
 
-  function selectAtlasNode(nextId:string){
-    if(!nextId)return;
-    if(reduceMotion){setAtlasNodeId(nextId);atlasInspectorAnim.setValue(1);return;}
-    if(nextId===atlasNodeId){
-      atlasInspectorAnim.stopAnimation();
-      atlasInspectorAnim.setValue(.92);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:19,stiffness:210,mass:.68,useNativeDriver:true}).start();
-      return;
-    }
-    if(!atlasNodeId){
-      setAtlasNodeId(nextId);
-      atlasInspectorAnim.setValue(0);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
-      return;
-    }
-    Animated.timing(atlasInspectorAnim,{toValue:0,duration:130,useNativeDriver:true}).start(()=>{
-      setAtlasNodeId(nextId);
-      atlasInspectorAnim.setValue(0);
-      Animated.spring(atlasInspectorAnim,{toValue:1,damping:20,stiffness:185,mass:.72,useNativeDriver:true}).start();
-    });
+  function showAtlasPanel(nodeId:string,breakdown:'Genre'|'Format'|'Published year'|null){
+    const generation=++atlasPanelGeneration.current;
+    atlasBreakdownAnim.stopAnimation();
+    const apply=()=>{
+      if(generation!==atlasPanelGeneration.current)return;
+      setAtlasNodeId(nodeId);setAtlasBreakdown(breakdown);
+      atlasBreakdownAnim.setValue(reduceMotion?1:0);
+      if(!reduceMotion)Animated.timing(atlasBreakdownAnim,{toValue:1,duration:260,easing:Easing.out(Easing.cubic),useNativeDriver:false}).start();
+    };
+    if(reduceMotion||(!atlasNodeId&&!atlasBreakdown)){apply();return;}
+    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:120,useNativeDriver:false}).start(({finished})=>{if(finished)apply();});
   }
-
+  function selectAtlasNode(nextId:string){if(atlasNodeMap.has(nextId))showAtlasPanel(nextId,null);}
   function dismissAtlasNode(){
-    if(!atlasNodeId)return;
-    if(reduceMotion){atlasInspectorAnim.setValue(0);setAtlasNodeId('');return;}
-    Animated.timing(atlasInspectorAnim,{toValue:0,duration:170,useNativeDriver:true}).start(()=>setAtlasNodeId(''));
+    const generation=++atlasPanelGeneration.current;atlasBreakdownAnim.stopAnimation();
+    const clear=()=>{if(generation===atlasPanelGeneration.current){setAtlasNodeId('');setAtlasBreakdown(null);}};
+    if(reduceMotion){atlasBreakdownAnim.setValue(0);clear();return;}
+    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:170,useNativeDriver:false}).start(({finished})=>{if(finished)clear();});
   }
-
   function focusAtlasNode(nodeId:string){
-    const node=atlasUniverse.nodes.find(item=>item.id===nodeId);
-    if(!node)return;
+    const node=atlasNodeMap.get(nodeId);if(!node)return;
     selectAtlasNode(nodeId);
-    const viewWidth=Math.max(286,Math.min(1244,width-36)),viewHeight=width>=900?620:foldLayout?580:500;
-    const scale=Math.max(.82,atlasTransform.scale);
-    animateAtlasTransform({scale,x:viewWidth/2-node.x*scale,y:viewHeight/2-node.y*scale});
+    const scale=Math.max(.82,atlasTransformRef.current.scale);
+    animateAtlasTransform({scale,x:atlasDiameter/2-node.x*scale,y:atlasDiameter/2-node.y*scale});
   }
 
   function AtlasInspector(){
     const node=atlasSelectedNode;if(!node)return null;
-    const work=node.kind==='work'?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
+    const work=node.workKey?atlasUniverseWorks.find(item=>item.key===node.workKey):undefined;
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
-    const connected=atlasUniverse.edges.filter(edge=>edge.from===node.id||edge.to===node.id).length;
+    const connected=atlasAdjacency.get(node.id)?.size||0;
+    const neighbours=[...(atlasAdjacency.get(node.id)||[])].map(id=>atlasNodeMap.get(id)!).filter(Boolean).sort((a,b)=>a.label.localeCompare(b.label));
+    const relatedWorks=node.kind==='author'?atlasUniverseWorks.filter(item=>item.author===node.label):node.kind==='series'?atlasUniverseWorks.filter(item=>item.series===node.label):node.kind==='genre'?atlasUniverseWorks.filter(item=>(item.genre.trim()||'Unclassified')===node.label):[];
     const accent=atlasNodeColor(node);
     const icon:UiIconName=node.kind==='series'?'layers':node.kind==='collection'?'shelf':node.kind==='author'?'bookmark':node.kind==='note'?'bookmark':'bookOpen';
-    return <View style={[styles.atlasInspector,{backgroundColor:p.paper==='#000000'?'rgba(9,20,29,.96)':'rgba(255,252,245,.97)',borderColor:p.line}]}>
+    return <View style={{gap:11,paddingTop:4}}>
       <View pointerEvents="none" style={[styles.atlasInspectorAccent,{backgroundColor:accent}]}/>
       <View style={styles.atlasInspectorHeader}>
         <View style={[styles.atlasInspectorIcon,{backgroundColor:p.card,borderColor:accent}]}><UiIcon name={icon} color={accent} size={19}/></View>
@@ -4942,9 +4951,15 @@ function Client() {
       </View>
       {node.subtitle?<Text numberOfLines={2} style={[styles.atlasInspectorSubtitle,{color:p.muted}]}>{node.subtitle}</Text>:null}
       <View style={styles.atlasInspectorMetaRow}>
-        <View style={[styles.atlasInspectorMetaChip,{backgroundColor:p.card}]}><Text style={[styles.atlasInspectorMetaText,{color:p.ink}]}>{connected} connection{connected===1?'':'s'}</Text></View>
+        <View style={[styles.atlasInspectorMetaChip,{backgroundColor:p.card}]}><Text style={[styles.atlasInspectorMetaText,{color:p.ink}]}>{connected} visible connection{connected===1?'':'s'}</Text></View>
         {node.source?<View style={[styles.atlasInspectorMetaChip,{backgroundColor:p.card}]}><Text style={[styles.atlasInspectorMetaText,{color:p.muted}]}>{sourceLabel(node.source as WorkSource)}</Text></View>:null}
       </View>
+      {work?<Text style={[styles.atlasInspectorSubtitle,{color:p.muted}]}>{[work.format,work.publishedYear,work.readingState.replace(/-/g,' '),work.rating?ratingLabel(work.rating):''].filter(Boolean).join(' · ')}</Text>:null}
+      {relatedWorks.length?<View style={{gap:2}}><Text style={[styles.atlasInspectorKicker,{color:p.muted}]}>{relatedWorks.length} WORKS IN YOUR LIBRARY</Text>{relatedWorks.slice(0,5).map(item=><Pressable key={item.key} accessibilityRole="button" accessibilityLabel={'Show '+item.title+' in Atlas'} onPress={()=>{
+        const id='work:'+(item.canonicalKey||item.key);
+        if(atlasNodeMap.has(id))focusAtlasNode(id);else{atlasPendingFocus.current=id;setAtlasPriorityKeys(keys=>[item.key,...keys.filter(key=>key!==item.key)].slice(0,12));}
+      }} style={{minHeight:44,justifyContent:'center',borderBottomWidth:StyleSheet.hairlineWidth,borderColor:p.line}}><Text numberOfLines={2} style={{color:p.ink,fontSize:13}}>{item.title}</Text></Pressable>)}</View>:null}
+      {!relatedWorks.length&&neighbours.length?<View style={{gap:2}}><Text style={[styles.atlasInspectorKicker,{color:p.muted}]}>CONNECTED IN YOUR UNIVERSE</Text>{neighbours.slice(0,5).map(item=><Pressable key={item.id} accessibilityRole="button" accessibilityLabel={'Explore '+item.label} onPress={()=>focusAtlasNode(item.id)} style={{minHeight:44,justifyContent:'center'}}><Text numberOfLines={2} style={{color:p.ink,fontSize:13}}>{item.label}</Text></Pressable>)}</View>:null}
       {(work||node.relationKind&&node.relationValue||collection)?<View style={styles.atlasInspectorActions}>
         {work?<Button label="Open" tone="quiet" onPress={()=>openUnifiedWork(work)}/>:null}
         {node.relationKind&&node.relationValue?<Button label="Explore" tone="quiet" onPress={()=>setAtlasFocus({kind:node.relationKind as AtlasKind,value:node.relationValue!})}/>:null}
@@ -4953,26 +4968,7 @@ function Client() {
     </View>;
   }
 
-  function selectAtlasBreakdown(next:'Genre'|'Format'|'Published year'){
-    if(reduceMotion){setAtlasBreakdown(next);atlasBreakdownAnim.setValue(1);return;}
-    if(next===atlasBreakdown){
-      atlasBreakdownAnim.stopAnimation();
-      atlasBreakdownAnim.setValue(.90);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:18,stiffness:210,mass:.65,useNativeDriver:false}).start();
-      return;
-    }
-    if(!atlasBreakdown){
-      setAtlasBreakdown(next);
-      atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
-      return;
-    }
-    Animated.timing(atlasBreakdownAnim,{toValue:0,duration:150,useNativeDriver:false}).start(()=>{
-      setAtlasBreakdown(next);
-      atlasBreakdownAnim.setValue(0);
-      Animated.spring(atlasBreakdownAnim,{toValue:1,damping:19,stiffness:185,mass:.72,useNativeDriver:false}).start();
-    });
-  }
+  function selectAtlasBreakdown(next:'Genre'|'Format'|'Published year'){showAtlasPanel('',next);}
 
   function Atlas() {
     if(atlasFocus)return <AtlasRelationshipView />;
@@ -4980,21 +4976,10 @@ function Client() {
     const renderedIds=new Set(renderedNodes.map(node=>node.id));
     const renderedEdges=atlasUniverse.edges.filter(edge=>renderedIds.has(edge.from)&&renderedIds.has(edge.to));
     const nodeMap=new Map(atlasUniverse.nodes.map(node=>[node.id,node]));
-    const ringSize=Math.min(width-(width>=600?48:28),width>=940?720:width>=600?620:520);
+    const ringSize=atlasRingSize;
     const viewHeight=ringSize;
-    const breakdownMode=atlasBreakdown||'Genre';
-    const breakdownCounts=new Map<string,number>();
-    for(const work of atlasUniverseWorks){const label=breakdownMode==='Genre'?(work.genre||'Unclassified'):breakdownMode==='Format'?work.format:work.publishedYear?String(work.publishedYear):'Not recorded';breakdownCounts.set(label,(breakdownCounts.get(label)||0)+1);}
-    const rawBreakdown:ChartItem[]=[...breakdownCounts].sort((a,b)=>b[1]-a[1]).map(([label,count],index)=>({label,count,color:breakdownMode==='Genre'?genreColour(label):breakdownMode==='Format'?['#62AFC1','#5F8FE3','#8C68D8','#69B99B','#98A6B9'][index%5]:['#98A6B9','#778BC2','#62AFC1','#7BA8A1','#B68B62'][index%5]}));
-    const visibleBreakdown=rawBreakdown.slice(0,7);
-    const overflowBreakdown=rawBreakdown.slice(7);
-    const overflowCount=overflowBreakdown.reduce((sum,item)=>sum+item.count,0);
-    const breakdown:ChartItem[]=overflowCount?[...visibleBreakdown,{label:'Other',count:overflowCount,color:p.muted}]:visibleBreakdown;
-    const atlasRingItems:ChartItem[]=[
-      {label:'Genre',count:1,color:atlasBreakdown==='Genre'?'#E2736B':'#7A4D50'},
-      {label:'Format',count:1,color:atlasBreakdown==='Format'?'#62AFC1':'#385F78'},
-      {label:'Year',count:1,color:atlasBreakdown==='Published year'?'#A78BC7':'#5A526F'},
-    ];
+    const rawBreakdown=atlasChartGroups[atlasBreakdown==='Format'?0:atlasBreakdown==='Published year'?1:2];
+    const breakdown=atlasSummary(rawBreakdown);
 
     const universeDegrees=new Map<string,number>();
     const workGenre=new Map<string,string>();
@@ -5033,7 +5018,7 @@ function Client() {
       {label:'Genres',value:new Set(atlasUniverseWorks.map(work=>String(work.genre||'').trim()).filter(Boolean)).size,copy:'recorded genres'},
     ];
     return (
-      <ScrollView contentContainerStyle={[styles.atlasScreen,phoneLayout&&styles.atlasScreenPhone,narrowPhone&&styles.atlasScreenNarrow,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
+      <ScrollView scrollEnabled={!atlasInteracting} contentContainerStyle={[styles.atlasScreen,phoneLayout&&styles.atlasScreenPhone,narrowPhone&&styles.atlasScreenNarrow,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
         <PageHeader
           title="Atlas"
           subtitle="Characters, stories and ideas — your reading universe."
@@ -5061,28 +5046,35 @@ function Client() {
             <Pressable accessibilityRole="button" accessibilityLabel="Find in Atlas" onPress={atlasSearchGo} style={styles.atlasSearchButton}><UiIcon name="search" color={p.ink} size={20}/></Pressable>
           </View>
 
+          {atlasSearchMessage?<Text accessibilityRole="alert" style={[styles.meta,{color:p.muted}]}>{atlasSearchMessage}</Text>:null}
+              <View style={[styles.atlasViewportTools,{position:'relative',right:0,top:0,alignSelf:'flex-end'}]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><UiIcon name="fit" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>atlasZoomStep(1/1.3)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>atlasZoomStep(1.3)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
+              </View>
           <View style={styles.atlasConstellationStage}>
-            <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:'transparent'}]}
-              onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
-              onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
-              onResponderRelease={atlasGestureEnd} onResponderTerminate={()=>{atlasGesture.current=null}}>
+            <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:'transparent'}]}>
               <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color={ambientHaloColor} size={Math.max(680,ringSize*1.35)} strength={darkMode?.72:.52}/></View>
               <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
-                <DataRing size={ringSize} items={atlasRingItems} ink={p.ink} muted={p.muted} track={p.line} thickness={22}/>
-                {atlasBreakdown?<Animated.View style={[styles.atlasSelectedRingPulse,{width:ringSize-8,height:ringSize-8,borderRadius:(ringSize-8)/2,borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.22,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.035]})}]}]}/>:null}
+                <AtlasChartRing size={ringSize} groups={atlasChartGroups} selected={atlasBreakdown==='Format'?0:atlasBreakdown==='Published year'?1:atlasBreakdown==='Genre'?2:-1} pulse={atlasPulse} track={p.line} reduceMotion={reduceMotion}/>
+
                 <View style={[styles.atlasInnerRing,{width:ringSize-42,height:ringSize-42,borderRadius:(ringSize-42)/2,borderColor:p.line}]}/>
               </View>
 
-              <View style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
-                {renderedEdges.map(edge=>{const from=nodeMap.get(edge.from),to=nodeMap.get(edge.to);return from&&to?<AtlasEdgeView key={edge.id} from={from} to={to} kind={edge.kind}/>:null})}
-                {renderedNodes.map(node=><AtlasUniverseNodeView key={node.id} node={node}/>)}
+              <View collapsable={false} style={{position:'absolute',left:32,top:32,width:atlasDiameter,height:atlasDiameter,borderRadius:atlasDiameter/2,overflow:'hidden',zIndex:2,...(Platform.OS==='web'?{touchAction:'none',userSelect:'none'} as any:{})}}
+                onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
+                onResponderTerminationRequest={()=>false}
+                onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
+                onResponderStart={event=>{if(event.nativeEvent.touches.length>=2)atlasBeginTouches(atlasTouchPoints(event),true);}}
+                onResponderEnd={event=>{if(event.nativeEvent.touches.length)atlasBeginTouches(atlasTouchPoints(event),true);}}
+                onResponderRelease={atlasGestureEnd} onResponderTerminate={()=>{atlasGesture.current=null;setAtlasInteracting(false);}}>
+                <View pointerEvents="none" style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
+                  {renderedEdges.map(edge=>{const from=nodeMap.get(edge.from),to=nodeMap.get(edge.to);return from&&to?AtlasEdgeView({from,to,kind:edge.kind}):null;})}
+                  {renderedNodes.map(node=>AtlasUniverseNodeView({node}))}
+                </View>
               </View>
 
-              <View style={styles.atlasViewportTools}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Fit Atlas" onPress={atlasResetView} style={[styles.atlasToolButton,{backgroundColor:p.raised}]}><UiIcon name="fit" color={p.ink} size={18}/></Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.max(.18,atlasTransform.scale-.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomOut" color={p.ink} size={18}/></Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={()=>animateAtlasTransform({...atlasTransform,scale:Math.min(2.25,atlasTransform.scale+.15)},180)} style={[styles.iconButton,styles.atlasZoomButton,{backgroundColor:p.raised}]}><UiIcon name="zoomIn" color={p.ink} size={18}/></Pressable>
-              </View>
+
 
               <Pressable accessibilityRole="button" accessibilityState={{selected:atlasBreakdown==='Genre'}} accessibilityLabel="Show genre breakdown" onPress={()=>selectAtlasBreakdown('Genre')} style={[styles.atlasRingControl,styles.atlasRingControlGenre,{borderColor:atlasBreakdown==='Genre'?'#E2736B':'#8F5753',backgroundColor:p.paper==='#000000'?'rgba(25,29,38,.92)':'rgba(255,255,255,.94)'}]}>
                 {atlasBreakdown==='Genre'?<Animated.View pointerEvents="none" style={[styles.atlasRingControlPulse,{borderColor:'#FF9A92',backgroundColor:'rgba(255,154,146,.14)',opacity:atlasPulse.interpolate({inputRange:[0,1],outputRange:[.48,0]}),transform:[{scale:atlasPulse.interpolate({inputRange:[0,1],outputRange:[1,1.26]})}]}]}/>:null}
@@ -5100,31 +5092,24 @@ function Client() {
                 <Text style={[styles.atlasRingControlLabel,{color:'#A78BC7'}]}>YEAR</Text>
               </Pressable>
 
-              {atlasUniverse.hiddenWorks?<View style={[styles.atlasClusterNotice,{backgroundColor:p.paper}]}><Text style={[styles.meta,{color:p.muted}]}>A stable sample is shown for smooth navigation · {atlasUniverse.hiddenWorks} more works remain available through search and clusters.</Text></View>:null}
             </View>
-            {atlasNodeId?<Animated.View style={[
-              styles.atlasInspectorReveal,
-              foldLayout?styles.atlasInspectorRevealWide:styles.atlasInspectorRevealMobile,
-              {opacity:atlasInspectorAnim,transform:[
-                {translateY:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[foldLayout?-8:18,0]})},
-                {translateX:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[foldLayout?18:0,0]})},
-                {scale:atlasInspectorAnim.interpolate({inputRange:[0,1],outputRange:[.96,1]})},
-              ]}
-            ]}><AtlasInspector/></Animated.View>:null}
           </View>
+          {atlasUniverse.hiddenWorks?<Text style={[styles.meta,{color:p.muted}]}>{atlasUniverse.hiddenWorks} additional works · Search the full library or select a cluster to explore.</Text>:null}
 
-          {atlasBreakdown?<Animated.View style={[styles.atlasBreakdownReveal,{maxHeight:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[0,520]}),opacity:atlasBreakdownAnim}]}>
+          {(atlasBreakdown||atlasNodeId)?<Animated.View style={[styles.atlasBreakdownReveal,{maxHeight:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[0,900]}),opacity:atlasBreakdownAnim}]}>
             <Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
             <View style={styles.atlasBreakdownHandle}><View style={[styles.atlasBreakdownHandleBar,{backgroundColor:p.muted}]}/></View>
+            {atlasNodeId?AtlasInspector():<>
             <View style={styles.atlasBreakdownHeader}>
               <Animated.View style={[styles.atlasBreakdownBadge,{borderColor:atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7',backgroundColor:p.card}]}>
                 <UiIcon name={atlasBreakdown==='Genre'?'bookOpen':atlasBreakdown==='Format'?'layers':'calendar'} color={atlasBreakdown==='Genre'?'#E2736B':atlasBreakdown==='Format'?'#62AFC1':'#A78BC7'} size={22}/>
               </Animated.View>
               <View style={{flex:1,minWidth:0}}>
-                <Text style={[styles.atlasBreakdownTitle,{color:p.ink}]}>{atlasBreakdown==='Published year'?'Year':atlasBreakdown}</Text>
+                <Text style={[styles.atlasBreakdownTitle,{color:p.ink,paddingRight:34}]}>{atlasBreakdown==='Published year'?'Year':atlasBreakdown}</Text>
                 <Text style={[styles.atlasBreakdownSubtitle,{color:p.muted}]}>Breakdown of your library</Text>
               </View>
             </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close Atlas chart details" onPress={dismissAtlasNode} style={{position:'absolute',right:12,top:18,width:44,height:44,alignItems:'center',justifyContent:'center'}}><UiIcon name="close" color={p.muted} size={19}/></Pressable>
             <View style={styles.atlasBreakdownRows}>
               {breakdown.map(item=>{
                 const percent=Math.round(item.count/Math.max(1,atlasUniverseWorks.length)*100);
@@ -5141,6 +5126,7 @@ function Client() {
               {!breakdown.length?<Text style={[styles.meta,{color:p.muted}]}>Add books to reveal your library’s patterns.</Text>:null}
             </View>
             {atlasBreakdown==='Published year'?<Text style={[styles.atlasBreakdownNote,{color:p.muted}]}>Dates come from recorded metadata. Books without a verified publication date are grouped as not recorded.</Text>:null}
+            </>}
             </Animated.View>
           </Animated.View>:null}
 

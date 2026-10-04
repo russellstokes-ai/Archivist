@@ -554,3 +554,25 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Sprint 10 regression-lock commit: `8ae43e2be602049bbbe13c2f9d4626f96b0d1540`.
 - No GitHub Actions run is attached to these latest commits yet, so dependency install, Expo Doctor, TypeScript and full mobile-suite execution are **not claimed** for this checkpoint.
 - Remaining acceptance is runtime visual/interaction verification in Draftbit Preview plus real-device image selection/rescan behaviour on iOS/Android and Fold layouts.
+
+
+## Atlas interaction checkpoint — 4 October 2026
+
+Scope: active `design/draftbit-universal-phone`; locked `design/hig-refresh` untouched. Preserve all later iOS, Player, Android Auto and Comic Focus changes. This is an implementation checkpoint, not final production acceptance.
+
+Implemented:
+- Circular inner-only gesture surface with centroid-anchored pinch, bounded pan, two-to-one-finger rebasing, fit and zoom controls outside the clipping mask. Outer charts and app chrome do not receive graph transforms.
+- One rounded contextual reveal for charts and selected works/authors/relationships, cancel-safe transitions and full-library search promotion into the bounded graph sample.
+- Actual genre/format/year proportions around the fixed ring, restrained genre colours, collision-filtered labels and adjacency lookup caching.
+- Honest minority-genre grouping, full-library author/series counts and deterministic 120-work sampling. Search includes works beyond the visible sample.
+- Existing below-600dp Settings content-height and centred metric-cell fixes verified and retained.
+
+Executed locally with Node 24 / Expo 55 dependencies:
+- TypeScript: passed.
+- All 33 mobile test suites: passed, including Atlas interaction, original Atlas, UI/Fold contract, Player transport and Comic Focus.
+- Expo production web export: passed (845 modules).
+- Atlas pure geometry tests: eight viewport widths 320–1200, pinch anchoring, hit testing, pan constraints, palette determinism, proportional chart totals and a 2,000-work catalogue. Graph construction approximately 13ms on this host; NOT native frame-time evidence.
+
+Runtime preview uses a synthetic local 160-work catalogue, not user media. Web preview exposes the pre-existing SecureStore getValueWithKeyAsync warning; no native storage acceptance is claimed. Native Android/iOS/Fold multi-touch, interrupted gestures, light/dark/Reduced Motion, large text, real server catalogues, frame pacing and long-session memory remain open acceptance gates. Minority category drill-down and dense-library information hierarchy also require further UX review. Do not mark Atlas final or the complete test app assembled from this checkpoint alone.
+
+Preview interaction evidence: chart open/close and fixed-control bounds passed at 320px and 390px. The subsequent 600px resize sequence timed out with another element intercepting Fit; a retry also timed out waiting for the genre control to stabilize. These failures are unresolved, and are NOT waived as passing Fold/responsive QA. Render screenshots at 390px and 720px were inspected; the initially clipped zoom toolbar was moved outside the circular clipping mask and the export/typecheck/UI contract rerun successfully. Book/author inspector browser assertions were not reached after the timeouts.
