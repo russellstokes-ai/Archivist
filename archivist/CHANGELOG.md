@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.4 — final polish testing candidate
+
+- Aligns the Home Assistant package version with the 0.9.4 mobile testing candidate.
+- Adds no database or media-schema migration; existing `/data` state and configured sources are retained.
+- Mobile/server endpoint parity is covered by the release regression suite.
+- Physical Fold/phone, Home Assistant and remote-access acceptance remain device checks.
+
+
 ## 0.9.3 — UI testing release
 
 - Updated library and connected Atlas presentation with shared typography and teal atmosphere.
