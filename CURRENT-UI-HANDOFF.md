@@ -2,9 +2,28 @@
 
 **Status:** Canonical UI/development handoff. Read this before changing Archivist mobile UI.
 
-**Last consolidated:** 2026-10-03
+**Last consolidated:** 2026-10-04
 
 This file exists so approved UI decisions and current development state do not depend on ChatGPT/Draftbit conversation history.
+
+## 2026-10-04 final-integration checkpoint
+
+For the first complete test build, read `FIRST-COMPLETE-TEST-BUILD-HANDOFF.md` before merging or rebuilding anything.
+
+Durable signature-feature handoffs:
+- Live Player / Now: `mobile/LIVE-PLAYER-HANDOFF.md`
+- Atlas: `mobile/ATLAS-HANDOFF.md`
+- Comic Focus / double-tap speech-bubble zoom: `COMIC-SPEECH-FOCUS.md`
+
+Recovery snapshots created before final integration:
+- `recovery/chat-universal-mobile-20261004` — recent universal-mobile/chat work
+- `recovery/server-polish-20261004` — later server 0.9.4 metadata/organisation/16:9 polish
+- `recovery/locked-ui-reference-20261004` — approved locked Fold/open UI reference
+
+The active mobile and later server-polish branches have diverged. Do not treat either one alone as the complete final product. The universal-mobile branch is the mobile integration base; server-specific 0.9.4 work must be brought across deliberately, and Astra's final Atlas commit must be recorded before the first complete test app is assembled.
+
+The Home Assistant add-on currently on repository `main` is version 0.9.3. The later 0.9.4 server-polish work is not yet the main-branch downloadable add-on.
+
 
 ## Repository and branch ownership
 
