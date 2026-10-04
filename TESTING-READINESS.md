@@ -1,5 +1,20 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-04 — Device polish Sprint 10: phone UI alignment fixes GREEN
+
+- Real-device phone finding: Library **All / Audio / Comic / …** format row was vertically clipped; Fold was not affected.
+- Fix is explicitly phone-only (`phoneLayout < 600`): dedicated 50 px non-shrinking format ScrollView/content rail while retaining the shared 44 px tab target.
+- Fold/wide Library format-tab path remains unchanged.
+- Shelf **Arrange** and Atlas **List / Universe** now share the same compact icon + short-label secondary-action treatment.
+- Shelf/Atlas secondary actions align to the true page content edge; the obsolete 58 px toolbar avatar inset was removed because the toolbar sits below the avatar.
+- No Shelf content, Library card, Atlas graph, Player/Reader/Stats, navigation or Fold source-rail redesign.
+- **PASS Mobile:** run `37225781141` — Expo Doctor, TypeScript, all maintained tests/UI contracts, version consistency and Expo web bundle.
+- **PASS iOS:** run `37225781246` — Expo Doctor, TypeScript, iOS generation, CocoaPods and full iOS Simulator compile.
+- Executable/test head: `59d4418bc3e53da64cd742689b7ba13f7a7d187b`.
+- Full checkpoint: `dev-work/checkpoints/2026-10-04-device-sprint-10.md`.
+- Real-device acceptance still needs the same phone class rechecked for unclipped tabs and the Fold view visually confirmed unchanged.
+
+
 ## 2026-10-04 — Device polish Sprint 9: Cover Management GREEN
 
 - Existing locked **METADATA & COVER** editor retained; no navigation or general UI redesign.
