@@ -153,7 +153,7 @@ type Book = {
   originServer?: string;
 };
 type RatingPrompt = {title:string;localWorkKey?:string;serverWorkId?:number};
-type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
+type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; status?: 'ready'|'review'|'conflict'|'same'; from?: string; to?: string; title?: string; author?: string; series?: string; seriesNumber?: number; format?: string; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
 type ServerWork = {
   id: number;
   title: string;
@@ -1856,6 +1856,11 @@ function Client() {
 
 
   function describeBatch(result: MoveBatchResult, success: string) {
+    const ready=result.items.filter(item=>item.status==='ready'||(!item.status&&!!item.move)).length;
+    const review=result.items.filter(item=>item.status==='review'||(!item.status&&!!item.error&&item.error.toLowerCase().includes('review metadata'))).length;
+    const same=result.items.filter(item=>item.status==='same').length;
+    const conflicts=result.items.filter(item=>item.status==='conflict'||(!item.status&&!item.move&&!item.error?.toLowerCase().includes('review metadata'))).length;
+    if(success==='ready to move')return `${ready} ready and selected; ${review} review recommended; ${conflicts} conflicts; ${same} already organised.`;
     const firstError = result.items.find(item => item.error)?.error;
     return `${result.ok} ${success}; ${result.failed} need review${firstError ? ': ' + firstError : ''}`;
   }
@@ -1893,7 +1898,7 @@ function Client() {
     try{
       const result=await previewAssetIDs(assetIds);
       setServerMovePreviews(result.items);
-      setServerMoveSelection(result.items.flatMap(item=>item.move?.id?[item.move.id]:[]));
+      setServerMoveSelection(result.items.flatMap(item=>(item.status==='ready'||(!item.status&&item.move))&&item.move?.id?[item.move.id]:[]));
       setMoveStatus(assetIds.length?describeBatch(result,'ready to move'):'No matching files to preview.');
     }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
@@ -1906,7 +1911,7 @@ function Client() {
       if(!ids.length){setServerMovePreviews([]);setServerMoveSelection([]);setMoveStatus('No files to preview.');return;}
       const result=await previewAssetIDs(ids);
       setServerMovePreviews(result.items);
-      setServerMoveSelection(result.items.flatMap(item=>item.move?.id?[item.move.id]:[]));
+      setServerMoveSelection(result.items.flatMap(item=>(item.status==='ready'||(!item.status&&item.move))&&item.move?.id?[item.move.id]:[]));
       setMoveStatus(describeBatch(result,'ready to move'));
     }catch(e){setError((e as Error).message);setMoveStatus('');}finally{setBusy(false);}
   }
@@ -6451,31 +6456,41 @@ function Client() {
               {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable></View>)}
               <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
               <View style={styles.toolRow}><Button label="Preview" tone="quiet" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)}/><Button label={'Apply selected'+(serverMoveSelection.length?' ('+serverMoveSelection.length+')':'')} disabled={busy||serverMoveSelection.length===0} onPress={()=>void applySortBatch()}/></View>
-              {serverMovePreviews.some(item=>!!item.move)?<View style={styles.toolRow}>
-                <Button label="Select all Ready" tone="quiet" onPress={()=>setServerMoveSelection(serverMovePreviews.flatMap(item=>item.move?.id?[item.move.id]:[]))}/>
+              {serverMovePreviews.some(item=>item.status==='ready'||(!item.status&&!!item.move))?<View style={styles.toolRow}>
+                <Button label="Select all Ready" tone="quiet" onPress={()=>setServerMoveSelection(serverMovePreviews.flatMap(item=>(item.status==='ready'||(!item.status&&item.move))&&item.move?.id?[item.move.id]:[]))}/>
                 <Button label="Clear selection" tone="quiet" onPress={()=>setServerMoveSelection([])}/>
               </View>:null}
               {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
               {serverMovePreviews.slice(0,20).map((item,index)=>{
                 const move=item.move;
                 const asset=serverBooks.find(book=>book.id===item.asset);
-                const selected=!!move&&serverMoveSelection.includes(move.id);
-                const review=!!item.error&&item.error.toLowerCase().includes('review metadata');
-                const status=move?'Ready':review?'Review recommended':'Conflict';
-                const statusColor=move?p.sage:review?p.muted:p.danger;
+                const state=item.status||(move?'ready':item.error?.toLowerCase().includes('review metadata')?'review':'conflict');
+                const selectable=state==='ready'&&!!move;
+                const selected=selectable&&serverMoveSelection.includes(move!.id);
+                const status=state==='ready'?'Ready':state==='review'?'Review recommended':state==='same'?'Already organised':'Conflict';
+                const statusColor=state==='conflict'?p.danger:state==='ready'?p.sage:p.muted;
+                const from=item.from||move?.from;
+                const to=item.to||move?.to;
+                const title=item.title||asset?.title||('File '+item.asset);
+                const author=item.author||asset?.author||'';
+                const seriesName=item.series||asset?.series||'';
+                const seriesNumber=item.seriesNumber??asset?.seriesNumber;
+                const format=item.format||asset?.format||'';
                 return <Pressable
                   key={move?.id||'server-preview-'+item.asset+'-'+index}
                   accessibilityRole="button"
-                  accessibilityState={{selected,disabled:!move}}
-                  disabled={!move}
+                  accessibilityLabel={title+', '+status+(selectable?(selected?', selected':', not selected'):'')}
+                  accessibilityState={{selected,disabled:!selectable}}
+                  disabled={!selectable}
                   onPress={()=>move&&setServerMoveSelection(current=>current.includes(move.id)?current.filter(id=>id!==move.id):[...current,move.id])}
                   style={({pressed})=>[styles.sourceRow,{borderColor:selected?p.sage:p.line,opacity:pressed?.72:1}]}>
                   <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,alignItems:'baseline'}}>
-                    <Text style={{color:p.ink,fontWeight:'700',flex:1}}>{asset?.title||('File '+item.asset)}</Text>
+                    <Text style={{color:p.ink,fontWeight:'700',flex:1}}>{title}</Text>
                     <Text style={{color:statusColor,fontWeight:'700'}}>{selected?'✓ ':''}{status}</Text>
                   </View>
-                  {move?<><Text style={[styles.meta,{color:p.muted}]}>Current</Text><Text numberOfLines={2} style={{color:p.ink}}>{move.from}</Text><Text style={[styles.meta,{color:p.muted}]}>Proposed</Text><Text numberOfLines={2} style={{color:p.ink}}>{move.to}</Text></>:null}
-                  {asset?<Text numberOfLines={3} style={[styles.meta,{color:p.muted}]}>Metadata used · {[asset.author?'Author: '+asset.author:'',asset.series?'Series: '+asset.series+(asset.seriesNumber!==undefined?' #'+asset.seriesNumber:''):'',asset.format?'Format: '+asset.format:''].filter(Boolean).join(' · ')}</Text>:null}
+                  {from?<><Text style={[styles.meta,{color:p.muted}]}>Current</Text><Text numberOfLines={2} style={{color:p.ink}}>{from}</Text></>:null}
+                  {to?<><Text style={[styles.meta,{color:p.muted}]}>Proposed</Text><Text numberOfLines={2} style={{color:state==='conflict'?p.danger:p.ink}}>{to}</Text></>:null}
+                  <Text numberOfLines={3} style={[styles.meta,{color:p.muted}]}>Metadata used · {[author?'Author: '+author:'',seriesName?'Series: '+seriesName+(seriesNumber!==undefined?' #'+seriesNumber:''):'',format?'Format: '+format:''].filter(Boolean).join(' · ')||'No additional metadata'}</Text>
                   {item.error?<Text style={[styles.meta,{color:statusColor}]}>{item.error}</Text>:null}
                 </Pressable>;
               })}
