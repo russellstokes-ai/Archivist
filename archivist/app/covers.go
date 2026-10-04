@@ -68,19 +68,22 @@ func readLimited(f *os.File) ([]byte,error) {
 func externalCover(root, rel string) ([]byte,string,error) {
 	dirRel := filepath.Dir(rel)
 	base := strings.TrimSuffix(filepath.Base(rel),filepath.Ext(rel))
-	names := []string{
-		"cover.jpg","cover.jpeg","cover.png","cover.webp",
-		"front.jpg","front.jpeg","front.png","front.webp",
-		"front-cover.jpg","front-cover.jpeg","front-cover.png","front-cover.webp",
-		"book-cover.jpg","book-cover.jpeg","book-cover.png","book-cover.webp",
-		"folder.jpg","folder.jpeg","folder.png","folder.webp",
-		"coverart.jpg","coverart.jpeg","coverart.png","coverart.webp",
-		"artwork.jpg","artwork.jpeg","artwork.png","artwork.webp",
-		base+".jpg",base+".jpeg",base+".png",base+".webp",
-	}
 	r, err := os.OpenRoot(root)
 	if err != nil { return nil,"",err }
 	defer r.Close()
+
+	names := []string{base+".jpg",base+".jpeg",base+".png",base+".webp"}
+	if genericFolderArtworkAllowed(r,dirRel) {
+		names=append(names,
+			"cover.jpg","cover.jpeg","cover.png","cover.webp",
+			"front.jpg","front.jpeg","front.png","front.webp",
+			"front-cover.jpg","front-cover.jpeg","front-cover.png","front-cover.webp",
+			"book-cover.jpg","book-cover.jpeg","book-cover.png","book-cover.webp",
+			"folder.jpg","folder.jpeg","folder.png","folder.webp",
+			"coverart.jpg","coverart.jpeg","coverart.png","coverart.webp",
+			"artwork.jpg","artwork.jpeg","artwork.png","artwork.webp",
+		)
+	}
 	for _, name := range names {
 		candidate := filepath.Join(dirRel,name)
 		f, openErr := r.Open(candidate)
@@ -90,6 +93,42 @@ func externalCover(root, rel string) ([]byte,string,error) {
 		if thumb,mime,thumbErr:=safeImageData(data);thumbErr==nil{return thumb,mime,nil}
 	}
 	return nil,"",errors.New("cover not found")
+}
+
+func genericFolderArtworkAllowed(root *os.Root, dirRel string) bool {
+	dir,err:=root.Open(dirRel)
+	if err!=nil{return false}
+	defer dir.Close()
+	entries,err:=dir.ReadDir(-1)
+	if err!=nil{return false}
+	mediaCount:=0
+	allAudio:=true
+	for _,entry:=range entries{
+		if entry.IsDir(){continue}
+		ext:=strings.ToLower(filepath.Ext(entry.Name()))
+		if !coverMediaExtension(ext){continue}
+		mediaCount++
+		if !coverAudioExtension(ext){allAudio=false}
+	}
+	return mediaCount==1 || (mediaCount>1&&allAudio)
+}
+
+func coverMediaExtension(ext string) bool {
+	switch ext {
+	case ".epub",".pdf",".cbz",".cbr",".cbt",".zip",".mp3",".m4a",".m4b",".aac",".ogg",".opus",".flac":
+		return true
+	default:
+		return false
+	}
+}
+
+func coverAudioExtension(ext string) bool {
+	switch ext {
+	case ".mp3",".m4a",".m4b",".aac",".ogg",".opus",".flac":
+		return true
+	default:
+		return false
+	}
 }
 
 func archiveCover(root, rel, format string) ([]byte,string,error) {
