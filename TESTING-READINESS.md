@@ -2,6 +2,7 @@
 
 **Candidate branch:** `polish/final-release-sweep-20261004`  
 **Candidate mobile commit:** `4d64f21ad64f63fe863f1bbd73418f620ff590ea`  
+**Candidate server/UI source includes through:** `40515f07da838dd891314a133764c8f5c543c5a3`  
 **Target:** universal iOS + Android local app + optional Home Assistant/Docker server.
 
 This file is the authoritative testing handoff. Historical Pack notes are superseded by the durable Sprint checkpoints under `dev-work/checkpoints/`.
@@ -58,8 +59,8 @@ Do not substitute a `main` APK or any pre-`77842e1f` runtime when reviewing this
 | Watched server folders | Persisted/bounded scheduler tested | Actual HDD wake/standby behaviour |
 | Backup/restore | SQLite snapshot/staged restore tested | Disposable real HA restore |
 | OPDS | Feed/auth/profile filtering tested | Compatible reader smoke |
-| Home Assistant package | Server CI, ARM64 compile, Docker smoke | Pi 4B install/update/restart |
-| Android test APK | Workflow available; do not treat artifact as visual approval | Build only after final CI; install on Galaxy Fold for acceptance |
+| Home Assistant package | Advanced metadata/organisation, 16:9 desktop layout, Server CI, ARM64 compile and Docker smoke green | Pi 4B install/update/restart |
+| Android test APK | 0.9.4 verified APK built, signed, aligned, emulator-launched and published | Install on Galaxy Fold for physical acceptance |
 | Google Play production | Not a 0.9 testing gate | Private signing + AAB + Play Console |
 
 ## Automated evidence already green
@@ -71,6 +72,11 @@ Do not substitute a `main` APK or any pre-`77842e1f` runtime when reviewing this
 - Sprint 7 package/UI follow-up: Server checks remained green, including run `36908976778`.
 - 0.9.0 version-aligned Mobile checks: commit `ffe9e545`, run `36908772223`.
 - Sprint 8 native-control polish: commit `c6e5776a`, run `36908101785`.
+- 0.9.4 mobile final-polish gate: commit `e1a48b6`, run `37189929464` — 31/31 mobile suites passed.
+- 0.9.4 Android test APK: commit `4d64f21a`, run `37190197679` — dependency audit, typecheck/tests, lint, release build, signature/alignment/ABI checks and emulator launch passed; prerelease `v0.9.4-testing` published.
+- Advanced server/HA library-management gate: run `37193599143` — root/package tests, ARM64 compile, UI/package/parity checks and HA container smoke passed.
+- 16:9 server responsive source gate: run `37194278022` — server/HA checks and live add-on smoke passed after wide-layout sync.
+- Full 16:9 Chromium acceptance: commit `f7e24084`, Core CI run `37194518361` — Library, Organisation, Household, Server and Atlas tested at wide desktop sizes; server, mobile and browser jobs all passed.
 
 Current runtime candidate `77842e1f` is the crafted UI sweep head. Its Mobile checks are the engineering gate; physical screenshot/device review remains the visual gate.
 
@@ -357,3 +363,27 @@ User explicitly authorised APK build, download publication and GitHub server upd
 - Local-only, server-only and local+server onboarding routes.
 - Home Assistant install/update on the target Pi and real remote HTTPS/Tailscale access.
 - Atlas-specific acceptance after the Astra lane is integrated.
+
+## 2026-10-04 — final polish, locked UI and large-screen server checkpoint
+
+### UI lock
+- The approved mobile UI from 3 October remains **locked**. Do not change mobile layout, styling, typography, colours, spacing, wording placement or Atlas presentation unless the user explicitly unlocks a specific target.
+- The only visual change authorised in this checkpoint is server-only responsive use of large 16:9 displays. Existing component styling and visual language remain unchanged.
+
+### Server library-management parity
+- Server metadata scanning now matches the app's advanced local evidence model: embedded metadata, sidecars and filename/folder structure merge into one record with confidence and conflict review.
+- Filename intelligence includes author, title, series, series sequence, narrator, year, ISBN and ASIN where present.
+- The Home Assistant Organisation workspace exposes metadata gaps/conflicts, full rich editing, bulk changes and sequential series numbering.
+- Safe organisation remains preview-first with collision detection, journalled recovery, cross-filesystem copy fallback and hash verification. Duplicate candidates can be SHA-256 verified before action.
+- Manual metadata corrections remain protected across rescans. CBR remains deliberately excluded from the server catalogue until the server reader has safe RAR decoding; CBZ/ZIP and CBT remain supported.
+
+### 16:9 server acceptance
+- At >=1600px the server uses a wider bounded canvas instead of stopping at the previous 1280px desktop width.
+- Library uses six columns on wide desktop; navigation, player alignment and Atlas graph/inspector sizing follow the same approved design language.
+- Chromium regression now covers 1920x1080 and 2560x1440 in addition to phone/Fold/1440px checks.
+- Captured 1920x1080 Library, Settings, Organisation and Atlas views were visually inspected after the automated pass. No horizontal overflow or layout collision was observed.
+
+### Release state
+- 0.9.4 Android testing APK exists in prerelease `v0.9.4-testing`; physical Galaxy Fold acceptance is still required.
+- The completed 0.9.4 Home Assistant/server candidate is still on `polish/final-release-sweep-20261004`, not yet promoted to the repository default `main`. Do not claim a normal HA repository install will deliver 0.9.4 until promotion is explicitly approved.
+- Atlas-specific mobile work remains owned by the separate Astra stream; this polish stream did not modify it.
