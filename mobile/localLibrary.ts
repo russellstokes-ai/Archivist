@@ -507,6 +507,25 @@ export async function scanLocalFolders(
 }
 
 
+export function applyCoverEnrichment<T extends {uri?:string;coverUri?:string;coverCandidates?:string[]}>(
+  current: T[],
+  enriched: Array<{uri?:string;coverUri?:string;coverCandidates?:string[]}>,
+): T[] {
+  const patches=new Map(enriched.filter(item=>item.uri&&item.coverUri).map(item=>[item.uri!,item]));
+  let changed=false;
+  const next=current.map(item=>{
+    if(!item.uri||item.coverUri)return item;
+    const patch=patches.get(item.uri);
+    if(!patch?.coverUri)return item;
+    const candidates=[...(item.coverCandidates||[])];
+    for(const candidate of patch.coverCandidates||[])if(candidate&&!candidates.includes(candidate))candidates.push(candidate);
+    if(!candidates.includes(patch.coverUri))candidates.push(patch.coverUri);
+    changed=true;
+    return {...item,coverUri:patch.coverUri,coverCandidates:candidates};
+  });
+  return changed?next:current;
+}
+
 export async function enrichLocalBookCovers(
   books: LocalBook[],
   options: {
