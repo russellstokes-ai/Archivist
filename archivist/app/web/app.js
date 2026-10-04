@@ -365,8 +365,24 @@ async function loadAtlasUniverse(){
     const inspector=$('atlas-inspector');inspector.replaceChildren(element('small',n.kind.toUpperCase()),element('h2',n.label));
     if(n.work){inspector.append(element('p',[n.work.author,n.work.series,n.work.format].filter(Boolean).join(' · ')));const button=element('button','Open book');button.onclick=()=>openWork(n.work);inspector.append(button);return;}
     const loading=element('p','Finding connections…');inspector.append(loading);
-    try{const data=await api('./api/atlas-relationships?'+new URLSearchParams({kind:n.kind,value:n.label}));if(requestVersion!==selectionVersion)return;loading.textContent=(data.workCount||0)+' connected works';for(const work of (data.works||[]).slice(0,30)){const button=element('button',work.title);button.onclick=()=>openWork(work);inspector.append(button);}}
-    catch(e){if(requestVersion===selectionVersion)loading.textContent=e.message;}
+    try{
+      const data=await api('./api/atlas-relationships?'+new URLSearchParams({kind:n.kind,value:n.label}));if(requestVersion!==selectionVersion)return;
+      loading.textContent=(data.workCount||0)+' connected works';
+      const relationGroups=[['Authors','author',data.authors],['Series','series',data.series],['Genres','genre',data.genres],['Formats','format',data.formats],['Folders','space',data.spaces],['Reading','reading',data.reading],['Ratings','rating',data.ratings],['Favourites','favourite',data.favourites]];
+      for(const [title,kind,items] of relationGroups){
+        if(!Array.isArray(items)||!items.length||kind===n.kind)continue;
+        const group=element('section');group.className='atlas-relation-group';group.append(element('h3',title));const chips=element('div');chips.className='atlas-relation-chips';
+        for(const item of items.slice(0,8)){
+          const chip=element('button',item.name+' · '+item.count);chip.className='atlas-relation-chip';
+          const target=byId.get(kind+':'+item.name);
+          if(target)chip.onclick=()=>select(target);else chip.disabled=true;
+          chips.append(chip);
+        }
+        group.append(chips);inspector.append(group);
+      }
+      const worksHeading=element('h3','Works');inspector.append(worksHeading);
+      for(const work of (data.works||[]).slice(0,30)){const button=element('button',work.title);button.onclick=()=>openWork(work);inspector.append(button);}
+    }catch(e){if(requestVersion===selectionVersion)loading.textContent=e.message;}
   }
   for(const n of nodes){const g=make('g',{class:'universe-node '+n.kind,transform:`translate(${n.x} ${n.y})`,tabindex:0,role:'button','aria-label':n.kind+' '+n.label});g.append(make('circle',{r:22,class:'node-target'}),make('circle',{r:n.kind==='work'?4.5:8,class:'node-dot'}));const label=make('text',{y:23,'text-anchor':'middle'});label.textContent=n.label.length>30?n.label.slice(0,29)+'…':n.label;if(n.kind==='work'&&nodes.some(other=>other!==n&&Math.abs(other.y-n.y)<24&&Math.abs(other.x-n.x)<145))label.classList.add('crowded-label');const title=make('title',{});title.textContent=n.label;g.append(label,title);g.onclick=()=>{if(!dragged)void select(n);};g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();void select(n);}};camera.append(g);nodeEls.push({node:n,el:g});}
   const apply=()=>camera.setAttribute('transform',`translate(${transform.x} ${transform.y}) scale(${transform.k})`);
@@ -380,5 +396,37 @@ async function loadAtlasUniverse(){
   svg.onpointerup=svg.onpointercancel=e=>{pointers.delete(e.pointerId);};
   $('atlas-search').oninput=e=>{const q=e.target.value.trim().toLowerCase();nodeEls.forEach(({node,el})=>el.style.opacity=!q||node.label.toLowerCase().includes(q)?'1':'.12');};
   $('atlas-search').onkeydown=e=>{if(e.key==='Enter'){const q=e.target.value.trim().toLowerCase(),n=nodes.find(n=>n.label.toLowerCase().includes(q));if(n){void select(n);transform={x:550-n.x*1.4,y:380-n.y*1.4,k:1.4};apply();}}};
+  const degree=new Map();for(const edge of edges){degree.set(edge.from.id,(degree.get(edge.from.id)||0)+1);degree.set(edge.to.id,(degree.get(edge.to.id)||0)+1)}
+  const mostConnected=[...nodes].filter(n=>n.kind!=='work').sort((a,b)=>(degree.get(b.id)||0)-(degree.get(a.id)||0))[0];
+  const stats=$('atlas-stats');stats.replaceChildren();
+  const statTitle=element('div');statTitle.className='atlas-stats-heading';statTitle.append(element('div','Universe Stats'),element('span',(summaryData?.total||works.length)+' works'));stats.append(statTitle);
+  const statGrid=element('div');statGrid.className='atlas-stat-grid';
+  const authors=nodes.filter(n=>n.kind==='author').length,seriesCount=nodes.filter(n=>n.kind==='series').length,genres=nodes.filter(n=>n.kind==='genre').length;
+  for(const [label,value,copy] of [['Connections',edges.length,'Relationships shown'],['Authors',authors,'Connected creators'],['Series',seriesCount,'Series constellations'],['Genres',genres,'Genre clusters']]){const card=element('article');card.append(element('strong',String(value)),element('span',label),element('small',copy));statGrid.append(card)}
+  stats.append(statGrid);
+  const highlights=element('div');highlights.className='atlas-highlights';
+  const largestGenre=(summaryData?.genres||[])[0],deepestSeries=(summaryData?.series||[])[0];
+  for(const item of [
+    {label:'Most connected',value:mostConnected?.label||'—',meta:mostConnected?(degree.get(mostConnected.id)||0)+' links':'No relationships yet',node:mostConnected},
+    {label:'Largest constellation',value:largestGenre?.name||'—',meta:largestGenre?largestGenre.count+' works':'No genres yet',node:largestGenre?byId.get('genre:'+largestGenre.name):null},
+    {label:'Deepest series',value:deepestSeries?.name||'—',meta:deepestSeries?deepestSeries.count+' works':'No series yet',node:deepestSeries?byId.get('series:'+deepestSeries.name):null},
+  ]){
+    const row=element('button');row.className='atlas-highlight';row.disabled=!item.node;row.append(element('span',item.label),element('strong',item.value),element('small',item.meta));if(item.node)row.onclick=()=>select(item.node);highlights.append(row);
+  }
+  stats.append(highlights);
+  const breakdown=$('atlas-breakdown'),breakdownList=$('atlas-breakdown-list');
+  function renderBreakdown(){
+    const kind=breakdown.value;breakdownList.replaceChildren();nodeEls.forEach(({el})=>el.style.opacity='1');
+    if(!kind)return;
+    const items=kind==='genre'?(summaryData?.genres||[]):kind==='format'?(summaryData?.formats||[]):(summaryData?.series||[]);
+    for(const item of items.slice(0,16)){
+      const button=element('button',item.name+' · '+item.count);button.className='atlas-breakdown-chip';
+      button.onclick=()=>{
+        if(kind==='format'){nodeEls.forEach(({node,el})=>el.style.opacity=node.kind!=='work'||node.work?.format===item.name?'1':'.10');return}
+        const target=byId.get(kind+':'+item.name);if(target)select(target);
+      };breakdownList.append(button);
+    }
+  }
+  breakdown.onchange=renderBreakdown;renderBreakdown();
   $('atlas-map-status').textContent=works.length?`${works.length} works shown${summaryData?.total>works.length?' of '+summaryData.total:''} · drag to pan · pinch or scroll to zoom`:'Add books to begin your reading universe.';
 }
