@@ -1,5 +1,28 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-04 — Build 6 Sprint 2: online book metadata enrichment GREEN
+
+- Tested executable head: `869a58df3364991d018c554277421cb734f2eb33`.
+- Local scanning remains offline-first and publishes immediately; online book enrichment runs afterwards without blocking Shelf/Library.
+- Open Library is the zero-configuration primary book provider; optional Google Books fallback is implemented when an API key is configured.
+- Matching uses ISBN-10/13, title, author, series, publication year, filename and decoded folder structure, including sparse `Author / Title` and `Author / Series / 03 - Title` layouts.
+- Manual, embedded and sidecar metadata remain protected; high-confidence unique online results fill weak/missing fields, while ambiguous matches are retained for review.
+- Provider results are cached and Open Library calls are throttled; work/edition identities are recomputed after accepted enrichment.
+- **PASS Mobile:** run `37237039848` — Expo Doctor, TypeScript, **43/43 suites**, version consistency and web bundle.
+- **PASS iOS:** run `37237039929` — Expo Doctor, TypeScript, iOS generation, CocoaPods and full Simulator compile.
+- Live-provider testing against a large real library remains open for Build 6 device acceptance.
+- Full checkpoint: `dev-work/checkpoints/2026-10-04-build6-sprint-02-online-books.md`.
+
+## 2026-10-04 — Build 6 Sprint 1: Astra blocker integration GREEN
+
+- Astra blocker bundle integrated on the Test 5 lineage.
+- Android fullscreen native bridge defect found by CI and fixed at `7184d87ae0d70eeba1348f387283cd876ce9e216`.
+- **PASS Mobile:** run `37236065381`.
+- **PASS Android native:** run `37236065446` — native contract tests, Kotlin compile and merged manifest.
+- Later Build 6 iOS run `37237039929` confirms the same native integration still generates and compiles successfully after Sprint 2 TypeScript-only work.
+- Physical device visual/interaction acceptance remains open.
+- Full checkpoint: `dev-work/checkpoints/2026-10-04-build6-sprint-01-astra-blockers.md`.
+
 ## 2026-10-04 — Device polish Sprint 12: FINAL RELEASE GATE GREEN
 
 - Final release source: `6bc68362f1ab48e24ff47aa684bbbd1bd3c7e468`.
