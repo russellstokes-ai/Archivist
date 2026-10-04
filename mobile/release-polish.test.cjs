@@ -44,6 +44,16 @@ assert.ok(
   source.includes("layoutTier==='compact'&&{flex:0,width:'100%'}"),
   'Family-user input must take a bounded full-width compact row'
 );
+assert.ok(
+  source.includes("householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line},layoutTier==='compact'&&{alignItems:'flex-start'}]}><View style={{flex:1,minWidth:0}}>"),
+  'Long family-user names must shrink and wrap without colliding with their action'
+);
+for (const label of ['Reduced motion','Increased contrast','Larger interface text']) {
+  assert.ok(
+    source.includes('<View style={styles.settingsRow}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>'+label+'</Text>'),
+    label+' copy must remain shrinkable beside its switch at large text sizes'
+  );
+}
 
 assert.ok(
   source.includes('{localFolderNotice?<Text accessibilityLiveRegion="polite"'),
