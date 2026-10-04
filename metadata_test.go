@@ -82,6 +82,9 @@ func TestAudioPathMetadataAvoidsTreatingBookAsSeries(t *testing.T) {
 	if meta.Author != "Frank Herbert" {
 		t.Fatalf("author=%q", meta.Author)
 	}
+	if meta.Title != "Dune" {
+		t.Fatalf("generic track became title: %q", meta.Title)
+	}
 	if meta.Series != "" {
 		t.Fatalf("book folder incorrectly treated as series: %q", meta.Series)
 	}
@@ -208,5 +211,23 @@ func TestPathMetadataInfersSeriesPositions(t *testing.T) {
 	audio := metadataFor("/missing/01 - Opening.mp3", filepath.Join("Frank Herbert", "Dune", "02 - Dune Messiah", "01 - Opening.mp3"), "Audio")
 	if audio.Author != "Frank Herbert" || audio.Series != "Dune" || audio.SeriesNumber != 2 {
 		t.Fatalf("numbered audiobook folder=%+v", audio)
+	}
+}
+
+func TestAudioMetadataRejectsGenericEmbeddedTrackTitle(t *testing.T) {
+	root:=t.TempDir()
+	bookDir:=filepath.Join(root,"Frank Herbert","Dune")
+	if err:=os.MkdirAll(bookDir,0700);err!=nil{t.Fatal(err)}
+	frames:=bytes.Join([][]byte{
+		id3TextFrame("TIT2","Part 36"),
+		id3TextFrame("TPE1","Frank Herbert"),
+	},nil)
+	tag:=append([]byte{'I','D','3',3,0,0},id3Syncsafe(len(frames))...)
+	tag=append(tag,frames...)
+	filename:=filepath.Join(bookDir,"Part 36.mp3")
+	if err:=os.WriteFile(filename,tag,0600);err!=nil{t.Fatal(err)}
+	meta:=metadataFor(filename,filepath.Join("Frank Herbert","Dune","Part 36.mp3"),"Audio")
+	if meta.Title!="Dune"||meta.Author!="Frank Herbert" {
+		t.Fatalf("resolved audiobook=%+v",meta)
 	}
 }
