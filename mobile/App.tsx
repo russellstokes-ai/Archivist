@@ -4320,7 +4320,9 @@ function Client() {
       contentContainerStyle={[styles.shelfContent,phoneLayout&&styles.shelfContentPhone,narrowPhone&&styles.shelfContentNarrow,width>=600&&styles.shelfContentFold,width>=940&&styles.shelfContentWide]}>
       <PageHeader title="Shelf" subtitle={shelfGreeting+' Pick up where you left off.'}/>
       <PageToolbar>
-        <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}><Text style={{color:p.muted,fontWeight:'600'}}>Arrange</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
+          <UiIcon name="settings" color={p.sage} size={17}/><Text style={[styles.headerActionText,{color:p.sage}]}>Arrange</Text>
+        </Pressable>
       </PageToolbar>
 
       <OnboardingGuide/>
@@ -4511,7 +4513,7 @@ function Client() {
             <UiIcon name={libraryView==='grid'?'list':'grid'} color={p.muted} size={21}/>
           </Pressable>
         </View>
-        {formatOptions.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryFormatTabs}>
+        {formatOptions.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.libraryFormatScroll,phoneLayout&&styles.libraryFormatScrollPhone]} contentContainerStyle={[styles.libraryFormatTabs,phoneLayout&&styles.libraryFormatTabsPhone]}>
           <Pressable accessibilityRole="button" accessibilityState={{selected:!formatFilter&&!libraryFormatFamily}} onPress={()=>{setFormatFilter('');setLibraryFormatFamily('')}} style={styles.libraryFormatTab}>
             <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:!formatFilter&&!libraryFormatFamily?p.ink:p.muted,fontWeight:!formatFilter&&!libraryFormatFamily?'700':'500'}]}>All</Text>
             <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:!formatFilter&&!libraryFormatFamily?1:0}]}/>
@@ -5282,7 +5284,9 @@ function Client() {
           subtitle="Characters, stories and ideas — your reading universe."
         />
         <PageToolbar>
-          <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}><UiIcon name={atlasListMode?'atlas':'list'} color={p.muted} size={22}/></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'} onPress={()=>setAtlasListMode(value=>!value)} style={styles.headerAction}>
+            <UiIcon name={atlasListMode?'atlas':'list'} color={p.sage} size={17}/><Text style={[styles.headerActionText,{color:p.sage}]}>{atlasListMode?'Universe':'List'}</Text>
+          </Pressable>
         </PageToolbar>
 
         {atlasListMode?<SourceSwitcher/>:null}
@@ -7508,7 +7512,7 @@ const styles = StyleSheet.create({
   standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
   standardPageSubtitlePhone: {fontSize:13,lineHeight:18},
   standardPageSubtitleLarge: {fontSize:16,lineHeight:23},
-  pageHeaderToolbar: {minHeight:42,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end',paddingRight:58},
+  pageHeaderToolbar: {minHeight:44,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end'},
   pageHeaderToolbarStart: {justifyContent:'flex-start'},
   pageHeaderToolbarCenter: {justifyContent:'center'},
   pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},
@@ -7643,7 +7647,8 @@ const styles = StyleSheet.create({
   rewardTrophyFill: {height:'100%',borderRadius:2},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
-  headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:8,alignItems:'center',justifyContent:'center'},
+  headerAction: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:4,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7},
+  headerActionText: {fontSize:12.5,lineHeight:17,fontWeight:'700'},
   sectionHeader: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   sectionLink: {minHeight:44,paddingHorizontal:4,alignItems:'center',justifyContent:'center'},
   curatedRow: {gap:18,paddingRight:24},
@@ -7749,7 +7754,10 @@ const styles = StyleSheet.create({
   libraryUtilityButton: {width:44,height:44,borderRadius:10,alignItems:'center',justifyContent:'center',position:'relative'},
   libraryFilterCount: {position:'absolute',right:3,top:2,minWidth:16,height:16,borderRadius:8,alignItems:'center',justifyContent:'center',paddingHorizontal:3},
   libraryFilterCountText: {color:'#FFFFFF',fontSize:9,fontWeight:'700'},
+  libraryFormatScroll: {flexGrow:0},
+  libraryFormatScrollPhone: {height:50,minHeight:50,maxHeight:50,flexShrink:0},
   libraryFormatTabs: {gap:22,paddingRight:18,minHeight:42,paddingVertical:1,alignItems:'stretch'},
+  libraryFormatTabsPhone: {height:50,minHeight:50,paddingVertical:3,alignItems:'stretch'},
   libraryFormatTab: {minHeight:44,justifyContent:'center',position:'relative'},
   libraryFormatText: {fontSize:13,lineHeight:18},
   libraryFormatMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
