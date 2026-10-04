@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import {NativeModules} from 'react-native';
 import {
   documentDirectory,
   EncodingType,
@@ -26,7 +27,24 @@ export async function discoverEmbeddedCover(
   const ext=extension.toLowerCase();
   let cover:DiscoveredCover|undefined;
   try{
-    if(ext==='epub'||ext==='cbz'||ext==='zip'){
+    if(ext==='pdf'){
+      const module=NativeModules?.ArchivistArchive;
+      if(!module?.renderPdfPage)return undefined;
+      const result=await module.renderPdfPage(uri,0,480);
+      const base64=String(result?.base64||'');
+      if(!base64||Math.floor(base64.length*3/4)>maxCoverBytes)return undefined;
+      cover={base64,mimeType:'image/png',extension:'png'};
+    }else if(ext==='cbr'){
+      const module=NativeModules?.ArchivistArchive;
+      if(!module?.readRarImages)return undefined;
+      const pages=await module.readRarImages(uri,1,maxCoverBytes,maxCoverBytes);
+      const first=Array.isArray(pages)?pages[0]:undefined;
+      const base64=String(first?.base64||'');
+      const mimeType=String(first?.mime||'image/jpeg');
+      if(!base64||Math.floor(base64.length*3/4)>maxCoverBytes)return undefined;
+      const extension=mimeType.includes('png')?'png':mimeType.includes('webp')?'webp':mimeType.includes('gif')?'gif':'jpg';
+      cover={base64,mimeType,extension};
+    }else if(ext==='epub'||ext==='cbz'||ext==='zip'){
       if(typeof info?.size==='number'&&info.size>maxArchiveBytes)return undefined;
       const base64=await readAsStringAsync(uri,{encoding:EncodingType.Base64});
       cover=await extractArchiveCoverFromBase64(base64,ext);
