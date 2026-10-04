@@ -116,3 +116,26 @@ func TestBooksMetadataGapFiltersAndRichSearch(t *testing.T) {
 		t.Fatalf("invalid metadata gap status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+
+func TestBooksMetadataConflictFilter(t *testing.T) {
+	a := fixture(t)
+	root := t.TempDir()
+	book := filepath.Join(root, "Conflict.epub")
+	writeZipFixture(t, book, map[string]string{
+		"META-INF/container.xml": "<container><rootfiles><rootfile full-path=\"OPS/content.opf\"/></rootfiles></container>",
+		"OPS/content.opf": "<package><metadata><title>Embedded Title</title><creator>Ursula Le Guin</creator></metadata></package>",
+	})
+	if err := os.WriteFile(filepath.Join(root, "Conflict.opf"), []byte("<package><metadata><title>Sidecar Title</title><creator>Ursula Le Guin</creator></metadata></package>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.addSource("Family", root); err != nil { t.Fatal(err) }
+	if err := a.scan(1); err != nil { t.Fatal(err) }
+	r := httptest.NewRequest("GET", "/api/books?metadataGap=conflicts", nil)
+	r.AddCookie(&http.Cookie{Name: "archivist_session", Value: "test-key"})
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"needsReview":true`) || !strings.Contains(w.Body.String(), "Metadata sources disagree") {
+		t.Fatalf("conflict filter: %d %s", w.Code, w.Body.String())
+	}
+}
