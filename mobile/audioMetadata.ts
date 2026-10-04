@@ -1,5 +1,5 @@
 import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
-import {LocalMetadataFields, publicationYear} from './libraryIntelligence';
+import {isGenericMediaTitle, LocalMetadataFields, publicationYear} from './libraryIntelligence';
 
 const maxID3v2Bytes=256*1024;
 
@@ -32,6 +32,7 @@ export function parseID3v2Base64(base64:string):LocalMetadataFields{
   const tagSize=synchsafe(bytes,6);
   const end=Math.min(bytes.length,10+tagSize);
   const fields:LocalMetadataFields={};
+  let album='';
   let offset=10;
   while(offset+10<=end){
     const id=ascii(bytes,offset,4);
@@ -58,7 +59,9 @@ export function parseID3v2Base64(base64:string):LocalMetadataFields{
         const value=decodeTextFrame(data).trim();
         if(value){
           if(id==='TIT2')fields.title=value;
+          else if(id==='TALB')album=value;
           else if(id==='TPE1')fields.author=value;
+          else if(id==='TPE2'&&!fields.author)fields.author=value;
           else if(id==='TDRC'||id==='TYER')fields.publishedYear=publicationYear(value);
           else if(id==='TCON')fields.genre=value.replace(/^\((\d+)\)$/,'$1');
           else if(id==='TPUB')fields.publisher=value;
@@ -68,6 +71,7 @@ export function parseID3v2Base64(base64:string):LocalMetadataFields{
     }
     offset+=10+frameSize;
   }
+  if(album&&(!fields.title||isGenericMediaTitle(fields.title,'Audio',2)))fields.title=album;
   return compact(fields);
 }
 
