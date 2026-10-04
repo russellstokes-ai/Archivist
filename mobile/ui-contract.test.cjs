@@ -89,8 +89,11 @@ assert.ok(source.includes('Clear filters & search') && source.includes('Choose s
 assert.equal(source.includes('function PageHeader({title,subtitle,action}'),false,'PageHeader must not place page actions beside the profile avatar');
 assert.equal(source.includes('action={<Pressable'),false,'Primary page actions must not sit beside the profile avatar');
 assert.ok(source.includes('function PageToolbar('), 'Secondary page controls must move into the standard toolbar below the header');
+assert.ok(source.includes("pageHeaderToolbar: {minHeight:44,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end'}"), 'Page actions must align to the same right content edge rather than float inward beneath the avatar');
 assert.ok(source.includes('title="Reader Stats"') && source.includes("(['Day','Week','Month'] as const)") && source.includes("accessibilityLabel={'Show '+label.toLowerCase()+' reading data'}"), 'Stats Day / Week / Month controls must remain compact and separate from the avatar');
 assert.ok(source.includes('title="Atlas"') && source.includes("accessibilityLabel={atlasListMode?'Show Atlas universe':'Show Atlas list'}"), 'Atlas view control must remain available below the title');
+assert.ok(source.includes('<UiIcon name="settings" color={p.sage} size={17}/><Text style={[styles.headerActionText,{color:p.sage}]}>Arrange</Text>'), 'Shelf Arrange must use the shared icon + label page-action treatment');
+assert.ok(source.includes("<UiIcon name={atlasListMode?'atlas':'list'} color={p.sage} size={17}/><Text style={[styles.headerActionText,{color:p.sage}]}>{atlasListMode?'Universe':'List'}</Text>"), 'Atlas view control must use the same icon + label page-action treatment');
 
 for (const title of ['Shelf','Library','Atlas','Reader Stats','Profile','Rewards','Settings']) {
   assert.ok(source.includes('title="'+title+'"'), 'Standard page title missing: '+title);
@@ -163,6 +166,9 @@ assert.ok(source.includes('function LibrarySourceNavigator(') && source.includes
 assert.ok(source.includes('label="Offline downloads"') && source.includes('label="On Archivist Server"') && source.includes('label="On this device"'), 'Library source navigator must expose physical storage locations');
 assert.ok(source.includes('libraryFolderExact?item.source===sourceFilter:matchesSource(item.source,sourceFilter)') && source.includes('setLibraryFolderExact(exact)'), 'Specific Library folders must use exact source filtering without changing broad On this device semantics');
 assert.ok(librarySource.includes('setLibrarySourcesOpen(true)') && librarySource.includes('>SOURCES & FOLDERS</Text>') && librarySource.includes('<LibrarySourceNavigator compact/>'), 'Phone Library must open the shared Sources & folders navigator');
+assert.ok(librarySource.includes('style={[styles.libraryFormatScroll,phoneLayout&&styles.libraryFormatScrollPhone]}') && librarySource.includes('contentContainerStyle={[styles.libraryFormatTabs,phoneLayout&&styles.libraryFormatTabsPhone]}'), 'Phone Library format tabs must use the dedicated non-clipping rail');
+assert.ok(source.includes("libraryFormatScrollPhone: {height:50,minHeight:50,maxHeight:50,flexShrink:0}") && source.includes("libraryFormatTabsPhone: {height:50,minHeight:50,paddingVertical:3,alignItems:'stretch'}"), 'Phone Library format rail must reserve enough height for 44px tabs and text');
+assert.ok(source.includes("const phoneLayout = width < 600") && source.includes("const foldLayout = width >= 600"), 'Phone-only Library tab fix must not apply to Fold layout');
 assert.ok(source.includes('return wide?<View style={styles.libraryTwoPane}') && source.includes('<LibrarySourceNavigator/></ScrollView>{main}</View>:main;'), 'Fold/wide Library must use the persistent source/folder rail');
 assert.equal(librarySource.includes('<SourceSwitcher/>'),false,'Library must not fall back to the old horizontal source switcher');
 assert.equal(librarySource.includes('<LibrarySwitcher/>'),false,'Library must not fall back to the old horizontal space switcher');
