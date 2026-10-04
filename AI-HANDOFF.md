@@ -4,14 +4,18 @@
 
 ## Read first
 
-Before changing mobile UI, architecture, release scope or product wording, read these files in order:
+Before changing mobile UI, architecture, release scope, integration state or product wording, read these files in order:
 
-1. `CURRENT-UI-HANDOFF.md`
-2. `PROJECT-CONSTANTS.md`
-3. `DESIGN-STANDARD.md`
-4. `mobile/FOLD-REFERENCE-LOCK.md`
-5. `TESTING-READINESS.md`
-6. `MOBILE-TESTING.md`
+1. `FIRST-COMPLETE-TEST-BUILD-HANDOFF.md`
+2. `CURRENT-UI-HANDOFF.md`
+3. `mobile/ATLAS-HANDOFF.md`
+4. `mobile/LIVE-PLAYER-HANDOFF.md`
+5. `COMIC-SPEECH-FOCUS.md`
+6. `PROJECT-CONSTANTS.md`
+7. `DESIGN-STANDARD.md`
+8. `mobile/FOLD-REFERENCE-LOCK.md`
+9. `TESTING-READINESS.md`
+10. `MOBILE-TESTING.md`
 
 If older files conflict with `CURRENT-UI-HANDOFF.md`, the current UI handoff wins.
 
@@ -21,6 +25,7 @@ If older files conflict with `CURRENT-UI-HANDOFF.md`, the current UI handoff win
 - GitHub is the committed source of truth.
 - Active universal-mobile / Draftbit branch: `design/draftbit-universal-phone`
 - App folder: `mobile`
+- Recovery snapshots: `recovery/chat-universal-mobile-20261004`, `recovery/server-polish-20261004`, and `recovery/locked-ui-reference-20261004`.
 - Pre-migration universal-phone branch: `design/universal-phone`
 - Locked Fold/open visual reference: `design/hig-refresh`
 - Do not use `main` as the active UI workspace.
