@@ -227,10 +227,10 @@ export function scoreOnlineBookCandidate(input:BookLookupInput,candidate:Omit<On
   }
   const titleScores=hints.titles.map(title=>similarity(title,candidate.fields.title));
   const titleScore=titleScores.length?Math.max(...titleScores):0;
-  if(titleScore){score+=titleScore*46;if(titleScore>=.88)reasons.push('strong title match');}
+  if(titleScore){score+=titleScore*50;if(titleScore>=.88)reasons.push('strong title match');}
   const authorScores=hints.authors.map(author=>authorSimilarity(author,candidate.fields.author));
   const authorScore=authorScores.length?Math.max(...authorScores):0;
-  if(authorScore){score+=authorScore*28;if(authorScore>=.72)reasons.push('author match');}
+  if(authorScore){score+=authorScore*32;if(authorScore>=.72)reasons.push('author match');}
   if(hints.series.length&&candidate.fields.series){
     const seriesScore=Math.max(...hints.series.map(series=>similarity(series,candidate.fields.series)));
     score+=seriesScore*10;if(seriesScore>=.8)reasons.push('series match');
