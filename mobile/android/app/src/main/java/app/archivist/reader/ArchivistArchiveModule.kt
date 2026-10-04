@@ -35,7 +35,7 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
   @ReactMethod
   fun setReaderFullscreen(enabled: Boolean) {
     UiThreadUtil.runOnUiThread {
-      val window = currentActivity?.window ?: return@runOnUiThread
+      val window = context.currentActivity?.window ?: return@runOnUiThread
       if (Build.VERSION.SDK_INT >= 30) {
         window.insetsController?.let { controller ->
           if (enabled) {
