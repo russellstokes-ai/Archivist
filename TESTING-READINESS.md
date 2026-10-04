@@ -1,5 +1,20 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-04 — Build 6 Sprint 3: online comic metadata enrichment GREEN
+
+- Tested executable head: `1dcc30fb1b621c4233f1ff54677d1d235ce23bc5`.
+- Comic scanning now preserves rich ComicInfo fields including distinct issue/volume, creator roles, arcs, characters, teams, universes, IDs, dates and page count.
+- ComicInfo `Volume` no longer overwrites `Number` as issue order.
+- Metron issue enrichment supports sparse filenames/folders, issue/volume/year/publisher evidence, UPC/SKU and provider/external IDs.
+- Matching is conservative: wrong-issue candidates are strongly rejected; only high-confidence exact-ID or exact-issue + strong-series matches auto-apply; ambiguous results remain review items.
+- Manual, embedded and sidecar metadata plus existing selected covers remain protected.
+- Metron bearer credentials are read from native SecureStore and are not embedded in source or persisted in catalogue files.
+- Provider configuration UI is intentionally deferred to Sprint 4 so books + comics receive one coherent Settings/Data setup.
+- **PASS Mobile:** run `37238680951` — Expo Doctor, TypeScript, **44/44 suites**, version consistency and web bundle.
+- **PASS iOS:** run `37238680942` — Expo Doctor, TypeScript, iOS generation, CocoaPods and full Simulator compile.
+- Live Metron/large real-library and physical-device acceptance remain open.
+- Full checkpoint: `dev-work/checkpoints/2026-10-04-build6-sprint-03-online-comics.md`.
+
 ## 2026-10-04 — Build 6 Sprint 2: online book metadata enrichment GREEN
 
 - Tested executable head: `869a58df3364991d018c554277421cb734f2eb33`.
