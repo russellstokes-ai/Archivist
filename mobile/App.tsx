@@ -2143,7 +2143,13 @@ function Client() {
         setLocalFolderNotice('Folder selection cancelled.');
         return;
       }
-      const folders=localFolders.some(folder=>folder.uri===picked.uri)?localFolders:[...localFolders,picked];
+      const exists=localFolders.some(folder=>folder.uri===picked.uri);
+      const stagedFolder:LocalFolder={...picked,status:'Scanning…'};
+      const folders=exists?localFolders:[...localFolders,stagedFolder];
+      if(!exists){
+        setLocalFolders(folders);
+        await setPersistedJSON(localFoldersKey,folders);
+      }
       setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
       const result=await scanLocalFolders(folders,setScanProgress,localMetadataOverrides,previousLocal);
@@ -4347,7 +4353,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    const libraryFolderRailWidth=layoutTier==='fold'?112:132;
+    const libraryFolderRailWidth=layoutTier==='fold'?136:160;
     return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{width:libraryFolderRailWidth,minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0,backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={[styles.libraryRailContent,{width:'100%'}]} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
@@ -6143,9 +6149,9 @@ function Client() {
     const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
     const openReview=()=>{clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
-      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}>
-        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} contentContainerStyle={styles.libraryManageScroll}>
-          <View accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibraryManageOpen(false)}>
+        <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
+          <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} style={styles.libraryManageBodyScroll} contentContainerStyle={styles.libraryManageBody}>
             <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
             <View style={styles.sheetHeader}>
               <View style={{flex:1,minWidth:0}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Manage Library</Text><Text style={[styles.meta,{color:p.muted}]}>Scan, repair metadata and organise safely. Archivist previews file changes before applying them.</Text></View>
@@ -6237,9 +6243,9 @@ function Client() {
               })}
               {serverMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {serverMovePreviews.length} proposed changes.</Text>:null}
             </View>:null}
-          </View>
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
     </Modal>;
   }
 
@@ -6651,7 +6657,7 @@ function Client() {
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
           const accent=tab.id==='insights'?p.gold:p.sage;
-          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else setActiveTab(tab.id)}} style={[styles.tab,phoneLayout&&styles.tabPhone,narrowPhone&&styles.tabNarrow,centre&&styles.tabCenter]}>
+          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else{if(tab.id==='library'){setReviewOnly(false);setMetadataGapFilter('');}setActiveTab(tab.id)}}} style={[styles.tab,phoneLayout&&styles.tabPhone,narrowPhone&&styles.tabNarrow,centre&&styles.tabCenter]}>
             <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:accent,opacity:selected?1:0}]}/>
             {centre?<View style={[styles.tabCenterOrb,{backgroundColor:selected?p.sage:p.card,borderColor:selected?p.sage:p.line}]}><UiIcon name={tab.icon} color={selected?'#FFFFFF':p.ink} size={25}/></View>:<UiIcon name={tab.icon} color={selected?accent:p.muted} size={22}/>}
             <Text style={[styles.tabText,phoneLayout&&styles.tabTextPhone,narrowPhone&&styles.tabTextNarrow,centre&&styles.tabCenterText,accessibilityPrefs.largeText&&styles.tabTextLarge,{color:selected?accent:p.muted}]}>{tab.label}</Text>
@@ -6704,8 +6710,8 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:132,minWidth:132,maxWidth:132,flexBasis:132,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
-  libraryRailFold: {width:112,minWidth:112,maxWidth:112,flexBasis:112,paddingHorizontal:3,paddingTop:8},
+  libraryRail: {width:160,minWidth:160,maxWidth:160,flexBasis:160,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
+  libraryRailFold: {width:136,minWidth:136,maxWidth:136,flexBasis:136,paddingHorizontal:3,paddingTop:8},
   libraryRailContent: {paddingBottom:28,width:'100%'},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
@@ -6729,7 +6735,9 @@ const styles = StyleSheet.create({
   libraryManageAction: {minHeight:44,flexDirection:'row',alignItems:'center',gap:7,paddingHorizontal:4},
   libraryManageActionText: {fontSize:12.5,lineHeight:17,fontWeight:'700'},
   libraryManageScroll: {flexGrow:1,justifyContent:'flex-end',paddingTop:48},
-  libraryManageSheet: {width:'100%',maxWidth:860,alignSelf:'center',maxHeight:'94%',borderTopLeftRadius:24,borderTopRightRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:18,paddingBottom:28,gap:16},
+  libraryManageBodyScroll: {width:'100%',flexShrink:1},
+  libraryManageBody: {paddingBottom:12,gap:16},
+  libraryManageSheet: {width:'100%',maxWidth:860,alignSelf:'center',height:'90%',maxHeight:760,borderTopLeftRadius:24,borderTopRightRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:18,paddingTop:10,paddingBottom:18,overflow:'hidden'},
   libraryHealthGrid: {flexDirection:'row',flexWrap:'wrap',gap:8},
   libraryHealthMetric: {minWidth:120,flexGrow:1,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:2},
   libraryHealthValue: {fontFamily:'ArchivistEditorial',fontSize:25,lineHeight:30,fontWeight:'500'},
