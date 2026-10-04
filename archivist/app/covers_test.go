@@ -121,3 +121,19 @@ func TestExternalCoverPrefersExactArtworkOverGeneric(t *testing.T) {
 	cfg,_,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{t.Fatal(err)}
 	if cfg.Width!=80||cfg.Height!=120{t.Fatalf("exact artwork did not win: %dx%d",cfg.Width,cfg.Height)}
 }
+
+func TestExternalCoverRejectsGenericArtworkAcrossStandaloneAudiobooks(t *testing.T) {
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"Book One.m4b"),[]byte("one"),0600);err!=nil{t.Fatal(err)}
+	if err:=os.WriteFile(filepath.Join(root,"Book Two.m4b"),[]byte("two"),0600);err!=nil{t.Fatal(err)}
+	writeJPEGFixture(t,filepath.Join(root,"cover.jpg"),72,108)
+	if _,_,err:=externalCover(root,"Book One.m4b");err==nil{t.Fatal("generic artwork must not be shared across standalone audiobook files")}
+}
+
+func TestExternalCoverAllowsGenericArtworkForTrackLikeAudiobookFolder(t *testing.T) {
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"01 - Opening.mp3"),[]byte("one"),0600);err!=nil{t.Fatal(err)}
+	if err:=os.WriteFile(filepath.Join(root,"02 - Chapter Two.mp3"),[]byte("two"),0600);err!=nil{t.Fatal(err)}
+	writeJPEGFixture(t,filepath.Join(root,"cover.jpg"),72,108)
+	if _,_,err:=externalCover(root,"01 - Opening.mp3");err!=nil{t.Fatalf("track-like audiobook folder should trust one shared cover: %v",err)}
+}
