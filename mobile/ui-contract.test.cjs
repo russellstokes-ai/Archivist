@@ -366,7 +366,6 @@ for(const name of ['atlasUniverseStatPhone','statsDetailMetricPhone','profileSna
 {
   const organisationSource=source;
   assert.ok(organisationSource.includes('previewLocalSortSafely'),'Local organisation must preflight destinations before selection');
-  assert.ok(organisationSource.includes("item.state==='ready'").toString ? true : true);
   assert.ok(organisationSource.includes('Select all Ready'),'Local organisation preview must expose Select all Ready');
   assert.ok(organisationSource.includes('Clear selection'),'Organisation preview must expose Clear selection');
   assert.ok(organisationSource.includes('Review recommended'),'Organisation preview must distinguish Review recommended');
