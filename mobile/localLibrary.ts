@@ -112,6 +112,16 @@ export type LocalScanResult = {
   entriesVisited: number;
 };
 
+export type LocalScanOptions = {
+  deferEmbeddedCovers?: boolean;
+};
+
+export type LocalCoverEnrichmentResult = {
+  books: LocalBook[];
+  attempted: number;
+  updated: number;
+};
+
 const supported = new Map<string, string>([
   ['epub', 'EPUB'],
   ['pdf', 'PDF'],
@@ -252,6 +262,7 @@ export async function scanLocalFolders(
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
   previousBooks: LocalBook[] = [],
+  options: LocalScanOptions = {},
 ): Promise<LocalScanResult> {
   const books: LocalBook[] = [];
   let skipped = 0;
@@ -410,7 +421,10 @@ export async function scanLocalFolders(
           const reusable = unchanged && previous?.coverUri && (/\/covers\/embedded-/i.test(previous.coverUri)||previous.coverUri.startsWith('data:image/'))
             ? previous.coverUri
             : undefined;
-          embeddedCoverUri = reusable || await discoverEmbeddedCover(child, ext, {size:fileSize,modificationTime});
+          embeddedCoverUri = reusable;
+          if(!embeddedCoverUri&&!options.deferEmbeddedCovers){
+            embeddedCoverUri = await discoverEmbeddedCover(child, ext, {size:fileSize,modificationTime});
+          }
           if(embeddedCoverUri&&!coverCandidates.includes(embeddedCoverUri))coverCandidates.push(embeddedCoverUri);
         }
         const coverUri = override?.coverUri?.trim() || discoveredCoverUri || embeddedCoverUri;
@@ -490,6 +504,55 @@ export async function scanLocalFolders(
     review,
     entriesVisited,
   };
+}
+
+
+export async function enrichLocalBookCovers(
+  books: LocalBook[],
+  options: {
+    shouldContinue?: () => boolean;
+    batchSize?: number;
+    onBatch?: (books: LocalBook[], progress: {attempted:number;updated:number}) => void | Promise<void>;
+  } = {},
+): Promise<LocalCoverEnrichmentResult> {
+  const shouldContinue=options.shouldContinue || (()=>true);
+  const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize || 6)));
+  let next=books.slice();
+  let attempted=0;
+  let updated=0;
+  let pendingSinceBatch=0;
+
+  for(let index=0;index<next.length;index+=1){
+    if(!shouldContinue())break;
+    const book=next[index];
+    if(book.coverUri)continue;
+    const ext=extension(book.uri);
+    if(!['epub','pdf','cbz','cbr','cbt','zip','mp3','m4a','m4b'].includes(ext))continue;
+
+    attempted+=1;
+    pendingSinceBatch+=1;
+    const info=await getInfoAsync(book.uri).catch(()=>null);
+    if(!shouldContinue())break;
+    const fileSize=info&&'size' in info&&typeof info.size==='number'?info.size:book.fileSize;
+    const modificationTime=info&&'modificationTime' in info&&typeof info.modificationTime==='number'?info.modificationTime:book.modificationTime;
+    const coverUri=await discoverEmbeddedCover(book.uri,ext,{size:fileSize,modificationTime});
+    if(!shouldContinue())break;
+    if(coverUri){
+      const candidates=[...(book.coverCandidates||[])];
+      if(!candidates.includes(coverUri))candidates.push(coverUri);
+      next[index]={...book,coverUri,coverCandidates:candidates};
+      updated+=1;
+    }
+    if(pendingSinceBatch>=batchSize){
+      pendingSinceBatch=0;
+      await options.onBatch?.(next.slice(),{attempted,updated});
+    }
+  }
+
+  if(pendingSinceBatch>0&&shouldContinue()){
+    await options.onBatch?.(next.slice(),{attempted,updated});
+  }
+  return {books:next,attempted,updated};
 }
 
 export function previewLocalSort(books: LocalBook[], template: string): LocalSortPreview[] {
