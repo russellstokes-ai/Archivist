@@ -290,6 +290,22 @@ assert.equal(previews[0].state, 'review');
   );
   assert.equal(preciseScan.books[0].coverUri,preciseArtwork,'same-stem artwork should be trusted immediately');
 
+  const multiBookAudioRoot='content://root/tree/primary:Audiobooks/document/primary:SeparateBooks';
+  const multiBookAudioA=multiBookAudioRoot+'%2FBook%20One.m4b';
+  const multiBookAudioB=multiBookAudioRoot+'%2FBook%20Two.m4b';
+  const multiBookAudioCover=multiBookAudioRoot+'%2Fcover.jpg';
+  saf.dirs.set(multiBookAudioRoot,[multiBookAudioA,multiBookAudioB,multiBookAudioCover]);
+  fileInfo.set(multiBookAudioA,{exists:true,size:32,modificationTime:1});
+  fileInfo.set(multiBookAudioB,{exists:true,size:32,modificationTime:1});
+  const separateAudioScan=await scanLocalFolders(
+    [{id:multiBookAudioRoot,uri:multiBookAudioRoot,name:'SeparateBooks',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    [],
+    {deferEmbeddedCovers:true},
+  );
+  assert.equal(separateAudioScan.books.every(book=>!book.coverUri),true,'generic artwork must not be shared across several standalone audiobook files');
+
   const namedCoverRoot='content://root/tree/primary:Books/document/primary:NamedCover';
   const namedCoverBook=namedCoverRoot+'%2FNovel.epub';
   const namedBookCover=namedCoverRoot+'%2Fbook-cover.jpg';
