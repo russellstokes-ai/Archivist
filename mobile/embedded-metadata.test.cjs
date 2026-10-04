@@ -17,7 +17,7 @@ const {extractEmbeddedMetadataFromBase64}=require('./embeddedMetadata.ts');
 (async()=>{
   const epub=new JSZip();
   epub.file('META-INF/container.xml','<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>');
-  epub.file('OEBPS/content.opf','<package><metadata><dc:title>Dune</dc:title><dc:creator>Herbert, Frank</dc:creator><dc:publisher>Chilton</dc:publisher><dc:language>en</dc:language><meta name="calibre:series" content="Dune"/><meta name="calibre:series_index" content="1"/></metadata></package>');
+  epub.file('OEBPS/content.opf','<package><metadata><dc:title>Dune</dc:title><dc:creator>Herbert, Frank</dc:creator><dc:publisher>Chilton</dc:publisher><dc:language>en</dc:language><dc:identifier>urn:isbn:9780441172719</dc:identifier><meta property="belongs-to-collection">Dune</meta><meta property="group-position">1</meta></metadata></package>');
   let fields=await extractEmbeddedMetadataFromBase64(await epub.generateAsync({type:'base64'}),'epub');
   assert.equal(fields.title,'Dune');
   assert.equal(fields.author,'Frank Herbert');
@@ -25,6 +25,7 @@ const {extractEmbeddedMetadataFromBase64}=require('./embeddedMetadata.ts');
   assert.equal(fields.seriesNumber,1);
   assert.equal(fields.publisher,'Chilton');
   assert.equal(fields.language,'en');
+  assert.equal(fields.isbn,'9780441172719');
 
   const comic=new JSZip();
   comic.file('ComicInfo.xml','<ComicInfo><Title>Preludes &amp; Nocturnes</Title><Series>Sandman</Series><Number>1</Number><Writer>Neil Gaiman</Writer><Publisher>DC</Publisher><Genre>Fantasy</Genre></ComicInfo>');
