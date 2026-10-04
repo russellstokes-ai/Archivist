@@ -3149,8 +3149,8 @@ function Client() {
       ? (localPreferences[local.key] || {rating:0,favourite:false})
       : server ? (serverPreferences[server.id] || {rating:0,favourite:false,state:'finished' as ReadingState}) : {rating:0,favourite:false};
     return <Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRatingPrompt(null)}>
-      <View style={styles.ratingPromptBackdrop}>
-      <View accessibilityViewIsModal={true} accessibilityLabel={'Rate '+ratingPrompt.title} style={[styles.ratingPromptCard,{backgroundColor:p.card,borderColor:p.line}]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close rating prompt" style={styles.ratingPromptBackdrop} onPress={()=>setRatingPrompt(null)}>
+      <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Rate '+ratingPrompt.title} style={[styles.ratingPromptCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
         <Text style={[styles.playerEyebrow,{color:p.sage}]}>FINISHED</Text>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>How was it?</Text>
         <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{ratingPrompt.title}</Text>
@@ -3170,8 +3170,8 @@ function Client() {
         />
         <Button label="Done" onPress={()=>setRatingPrompt(null)} />
         <Button label="Not now" tone="quiet" onPress={()=>setRatingPrompt(null)} />
-      </View>
-      </View>
+      </Pressable>
+      </Pressable>
     </Modal>;
   }
 
@@ -6676,14 +6676,14 @@ function Client() {
       <FormatPickerPanel/>
       <RatingPromptPanel />
       {rescanPromptOpen?<Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRescanPromptOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View accessibilityViewIsModal={true} accessibilityLabel="Library may be out of date" style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close rescan prompt" style={styles.modalBackdrop} onPress={()=>setRescanPromptOpen(false)}>
+          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library may be out of date" style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Library may be out of date</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Some files changed while Archivist was organising your library. Rescan to make sure everything is correctly indexed.</Text>
             <Button label="Rescan" disabled={localScanning||!localFolders.length} onPress={()=>{setRescanPromptOpen(false);void rescanLocalFolders();}}/>
             <Button label="Not now" tone="quiet" onPress={()=>setRescanPromptOpen(false)}/>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>:null}
       {playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
