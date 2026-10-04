@@ -399,6 +399,20 @@ func pathMetadata(relative, format string) metadataCandidate {
 		// Common layouts:
 		// Author / Book / 01 - Chapter.mp3
 		// Author / Series / Book / 01 - Chapter.mp3
+		trackLike := len(parts) >= 3 && (genericAudioTrackLabel(base) || leadingNumberedAudioTrack(base))
+		if trackLike {
+			bookFolder := cleanMetadata(parts[len(parts)-2])
+			if bits := strings.SplitN(bookFolder, " - ", 2); len(bits) == 2 {
+				if number, ok := seriesPositionFromLabel(bits[0]); ok && number > 0 {
+					m.SeriesNumber = number
+					m.Title = cleanMetadata(bits[1])
+				} else {
+					m.Title = bookFolder
+				}
+			} else if bookFolder != "" {
+				m.Title = bookFolder
+			}
+		}
 		if len(parts) >= 4 {
 			m.Author = normalizeAuthor(parts[len(parts)-4])
 			m.Series = cleanMetadata(parts[len(parts)-3])
@@ -445,6 +459,52 @@ func pathMetadata(relative, format string) metadataCandidate {
 		}
 	}
 	return metadataCandidate{embeddedMetadata: m, source: "path", confidence: confidence}
+}
+
+func genericAudioTrackLabel(value string) bool {
+	value = strings.ToLower(cleanMetadata(value))
+	prefixes := []string{"part","pt","track","chapter","ch","disc","disk","cd"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(value,prefix) {
+			rest := strings.TrimSpace(strings.TrimLeft(strings.TrimPrefix(value,prefix)," ._:#-"))
+			if rest != "" { value = rest }
+			break
+		}
+	}
+	normalized := strings.NewReplacer(" of "," ","/"," ","-"," ","_"," ",":"," ").Replace(value)
+	fields := strings.Fields(normalized)
+	if len(fields)==0 { return false }
+	for _, field := range fields {
+		if _, ok := seriesPositionFromLabel(field); !ok { return false }
+	}
+	return true
+}
+
+func leadingNumberedAudioTrack(value string) bool {
+	value = cleanMetadata(value)
+	for _, separator := range []string{" - ",". ","_ ",": "} {
+		if index := strings.Index(value,separator); index > 0 {
+			_, ok := seriesPositionFromLabel(strings.TrimSpace(value[:index]))
+			return ok && strings.TrimSpace(value[index+len(separator):])!=""
+		}
+	}
+	return false
+}
+
+func sanitizeAudioDiscovered(meta embeddedMetadata, path metadataCandidate) embeddedMetadata {
+	placeholder := func(value string) bool {
+		value = strings.ToLower(cleanMetadata(value))
+		switch value {
+		case "unknown","unknown artist","unknown author","unknown genre","unknown series","unclassified","untitled","n/a","none","null":
+			return true
+		}
+		return false
+	}
+	if placeholder(meta.Title) || (genericAudioTrackLabel(meta.Title) && !genericAudioTrackLabel(path.Title)) { meta.Title="" }
+	if placeholder(meta.Author) { meta.Author="" }
+	if placeholder(meta.Series) { meta.Series="" }
+	if placeholder(meta.Genre) { meta.Genre="" }
+	return meta
 }
 
 func mergeMetadata(candidates ...metadataCandidate) identifiedMetadata {
@@ -603,7 +663,7 @@ func metadataForWithCache(filename, relative, format string, cache *sidecarScanC
 	var embedded embeddedMetadata
 	switch format {
 	case "Audio":
-		embedded = audioMetadata(filename)
+		embedded = sanitizeAudioDiscovered(audioMetadata(filename), pathCandidate)
 	case "Ebook":
 		embedded = epubMetadata(filename)
 	case "Comic":
