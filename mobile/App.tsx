@@ -16,6 +16,7 @@ import {
   Modal,
   NativeModules,
   Platform,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -587,6 +588,29 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
       </Animated.View>
     </View>
   );
+}
+
+function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayout:boolean}) {
+  const dismissRef=useRef(onDismiss);
+  dismissRef.current=onDismiss;
+  const pan=useRef(PanResponder.create({
+    onMoveShouldSetPanResponder:(_,gesture)=>!foldLayout&&gesture.dy>8&&Math.abs(gesture.dy)>Math.abs(gesture.dx),
+    onPanResponderRelease:(_,gesture)=>{
+      if(gesture.dy>56||gesture.vy>.7)dismissRef.current();
+    },
+    onPanResponderTerminate:()=>undefined,
+  })).current;
+  if(foldLayout)return null;
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel="Close sheet"
+    accessibilityHint="Tap or swipe down to close"
+    hitSlop={4}
+    onPress={onDismiss}
+    style={styles.sheetDismissHandleHit}
+    {...pan.panHandlers}>
+    <View pointerEvents="none" style={styles.sheetHandle}/>
+  </Pressable>;
 }
 
 function Client() {
@@ -3025,15 +3049,21 @@ function Client() {
   }
 
   function RawAssetCard({item}: {item: Book}) {
+    const detail=[item.format,item.space,item.author,item.series,item.genre].filter(Boolean).join(' · ');
     return (
-      <View style={styles.book}>
-        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
-          <Cover book={item} />
-          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
-          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
-          <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}{item.genre ? ' · '+item.genre : ''}</Text>
+      <View style={[styles.maintenanceAssetCard,{borderBottomColor:p.line}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)} style={styles.maintenanceAssetMain}>
+          <View style={styles.maintenanceAssetCover}><Cover book={item}/></View>
+          <View style={styles.maintenanceAssetCopy}>
+            <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
+            <View style={styles.maintenanceAssetStatusRow}>
+              {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:10.5,fontWeight:'700'}}>Needs review</Text></View> : null}
+              <Text numberOfLines={1} style={[styles.maintenanceAssetMeta,{color:p.muted}]}>{detail}</Text>
+            </View>
+            {item.reviewReason?<Text numberOfLines={2} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
+          </View>
         </Pressable>
-        {(item.source!=='server' || owner) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
+        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={styles.maintenanceAssetEdit}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
       </View>
     );
   }
@@ -4257,7 +4287,7 @@ function Client() {
       </View>;
     };
 
-    const MaintenanceList=()=>maintenanceMode?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} in this maintenance view</Text></View><Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>:null}{serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}</View>:null;
+    const MaintenanceList=()=>maintenanceMode?<View style={styles.reviewQueue}><View style={[styles.maintenanceHeader,phoneLayout&&styles.maintenanceHeaderPhone]}><View style={{flex:1,minWidth:0}}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} · review only what Archivist could not resolve confidently</Text></View><Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>:null}{serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}</View>:null;
     const main=<View style={[styles.libraryMain,phoneLayout&&styles.libraryMainPhone,narrowPhone&&styles.libraryMainNarrow,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
         <PageHeader title="Library" subtitle="Every book. In its place."/>
@@ -7472,6 +7502,7 @@ const styles = StyleSheet.create({
   sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',justifyContent:'flex-end',padding:12},
   sheetBackdropFold: {justifyContent:'center',alignItems:'flex-end',padding:0},
   sheetScroll: {flexGrow:1,justifyContent:'flex-end'},
+  sheetDismissHandleHit: {width:72,minHeight:30,alignSelf:'center',alignItems:'center',justifyContent:'center',marginTop:-4,marginBottom:2},
   sheetHandle: {width:36,height:3,borderRadius:2,backgroundColor:'#9aa9a6',alignSelf:'center',marginBottom:6,opacity:.5},
   sheetHandleFold: {display:'none'},
   sheetHeader: {flexDirection:'row',alignItems:'flex-start',gap:12,marginBottom:4},
@@ -7518,6 +7549,16 @@ const styles = StyleSheet.create({
   selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   selectionCount: {fontSize:13,fontWeight:'900'},
   reviewQueue: {gap:10,paddingBottom:10},
+  maintenanceHeader: {flexDirection:'row',alignItems:'center',gap:12,paddingBottom:4},
+  maintenanceHeaderPhone: {alignItems:'flex-start',flexWrap:'wrap'},
+  maintenanceAssetCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8},
+  maintenanceAssetMain: {flexDirection:'row',alignItems:'flex-start',gap:12,minWidth:0},
+  maintenanceAssetCover: {width:58,aspectRatio:.68,borderRadius:6,overflow:'hidden',flexShrink:0},
+  maintenanceAssetCopy: {flex:1,minWidth:0,gap:5},
+  maintenanceAssetStatusRow: {flexDirection:'row',alignItems:'center',gap:7,minWidth:0},
+  maintenanceAssetMeta: {fontSize:11,lineHeight:15,flex:1,minWidth:0},
+  maintenanceAssetReason: {fontSize:11.5,lineHeight:16},
+  maintenanceAssetEdit: {minHeight:38,alignSelf:'flex-end',justifyContent:'center',paddingHorizontal:4},
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
   filterChip: {borderWidth:0,borderRadius:9,minHeight:44,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
