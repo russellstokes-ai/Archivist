@@ -31,3 +31,17 @@ assert.equal(appConfig.expo?.android?.permissions?.includes('android.permission.
 assert.equal(appConfig.expo?.plugins?.includes('./plugins/withCleartextTraffic'),true,'Expo config must register the private-server transport plugin.');
 const cleartextPlugin=fs.readFileSync(path.join(__dirname,'plugins','withCleartextTraffic.js'),'utf8');
 assert.equal(cleartextPlugin.includes("android:usesCleartextTraffic"),true,'The Expo plugin must preserve private-server HTTP support on future native regeneration.');
+
+
+const autoDescriptor=fs.readFileSync(path.join(__dirname,'android','app','src','main','res','xml','automotive_app_desc.xml'),'utf8');
+const autoService=fs.readFileSync(path.join(__dirname,'android','app','src','main','java','app','archivist','reader','ArchivistAutoService.kt'),'utf8');
+assert.equal(manifest.includes('com.google.android.gms.car.application'),true,'Android Auto metadata must be declared.');
+assert.equal(manifest.includes('android:name=".ArchivistAutoService"'),true,'Archivist MediaLibraryService must be declared.');
+assert.equal(manifest.includes('androidx.media3.session.MediaLibraryService'),true,'Media3 library service action must be exported for Android Auto.');
+assert.equal(manifest.includes('android.media.browse.MediaBrowserService'),true,'Legacy MediaBrowserService action must remain for Android Auto compatibility.');
+assert.equal(autoDescriptor.includes('<uses name="media"/>'),true,'Android automotive descriptor must advertise media support.');
+assert.equal(appGradle.includes('androidx.media3:media3-session:1.8.0'),true,'Android Auto must use the Media3 version aligned with Expo Audio SDK 55.');
+assert.equal(appGradle.includes('androidx.media3:media3-exoplayer:1.8.0'),true,'Android Auto playback requires Media3 ExoPlayer.');
+assert.equal(autoService.includes('class ArchivistAutoService : MediaLibraryService()'),true,'Android Auto service must implement MediaLibraryService.');
+assert.equal(autoService.includes('onGetLibraryRoot')&&autoService.includes('onGetChildren')&&autoService.includes('onAddMediaItems'),true,'Android Auto service must browse and resolve playable media items.');
+console.log('PASS: Android Auto native service and discovery contract are present');
