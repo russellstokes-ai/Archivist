@@ -99,7 +99,7 @@ async function persistPickedProfilePhoto(uri:string,fileName?:string|null) {
   return target;
 }
 
-const appVersion=Constants.expoConfig?.version||'0.9.3';
+const appVersion=Constants.expoConfig?.version||'0.9.4';
 const platformLabel=Platform.OS==='ios'?'iOS':Platform.OS==='android'?'Android':'Web';
 const addLocalFolderLabel=Platform.OS==='ios'?'Import folder':'Add device folder';
 const addLocalFolderShortLabel=Platform.OS==='ios'?'Import folder':'Add a folder';
