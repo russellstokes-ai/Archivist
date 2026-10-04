@@ -28,3 +28,5 @@ assert.ok(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,b
 assert.ok(source.includes('const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey)'),'final enrichment persistence must merge with the latest persisted catalogue so user edits are not rolled back');
 
 console.log('PASS: Sprint 5/7 scan/catalogue integration contracts');
+
+assert.ok(source.includes('if(forceOnline)await enrichment')&&source.includes('else void enrichment'),'explicit refresh must wait for full online enrichment while automatic scans remain non-blocking');

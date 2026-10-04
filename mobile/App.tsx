@@ -2353,7 +2353,11 @@ function Client() {
     setRescanPromptOpen(false);
     setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
-    if(scanCommitGate.isCurrent(generation))void enrichPublishedLocalLibrary(result.books,generation,forceOnline);
+    if(scanCommitGate.isCurrent(generation)){
+      const enrichment=enrichPublishedLocalLibrary(result.books,generation,forceOnline);
+      if(forceOnline)await enrichment;
+      else void enrichment;
+    }
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
 
