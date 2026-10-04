@@ -234,7 +234,7 @@ assert.ok(source.includes('accessibilityLabel="Series number"') && source.includ
 assert.ok(source.includes('Manual edits are protected from future rescans.') && source.includes('metadataSource:\'manual\''), 'Metadata editor must expose provenance and preserve manual-edit semantics');
 assert.ok(source.includes("import * as ImagePicker from 'expo-image-picker'") && source.includes('Choose image from device'), 'Cover editor must use the system image picker instead of a raw URI-only workflow');
 assert.ok(source.includes('Other local artwork') && source.includes('rankLocalCoverCandidates') && source.includes('localCoverCandidates.map'), 'Cover editor must expose ranked local cover alternatives');
-assert.ok(source.includes('persistPickedCover(') && source.includes("documentDirectory+'covers/'"), 'Picked cover artwork must be copied into Archivist app storage before it becomes a manual override');
+assert.ok(source.includes('persistPickedCover(') && coverManagementSource.includes("documentDirectory+'covers/'") && coverManagementSource.includes('persistManualCover('), 'Picked cover artwork must be copied into Archivist app storage before it becomes a manual override');
 assert.ok(source.includes('Manual cover · protected from rescans') && source.includes('Use scanned metadata & cover'), 'Manual cover protection and scanned-cover restore controls are missing');
 assert.equal(source.includes('requestMediaLibraryPermissionsAsync'),false,'Cover selection must rely on the privacy-preserving system picker and must not request broad photo-library permission');
 assert.ok(source.includes("selectionLimit:1") && source.includes('inspectPickedCover(asset.uri,asset.fileSize'), 'Cover picker must remain single-select and verify selected artwork before preview');
