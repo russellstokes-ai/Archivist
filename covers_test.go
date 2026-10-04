@@ -103,3 +103,21 @@ func TestExternalCoverRecognizesFrontCoverArtwork(t *testing.T) {
 	cfg,_,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{t.Fatal(err)}
 	if cfg.Width!=72||cfg.Height!=108{t.Fatalf("cover dimensions=%dx%d",cfg.Width,cfg.Height)}
 }
+
+func TestExternalCoverRejectsAmbiguousGenericArtwork(t *testing.T) {
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"Alpha.epub"),[]byte("a"),0600);err!=nil{t.Fatal(err)}
+	if err:=os.WriteFile(filepath.Join(root,"Beta.epub"),[]byte("b"),0600);err!=nil{t.Fatal(err)}
+	writeJPEGFixture(t,filepath.Join(root,"cover.jpg"),72,108)
+	if _,_,err:=externalCover(root,"Alpha.epub");err==nil{t.Fatal("ambiguous generic artwork must not be assigned across unrelated books")}
+}
+
+func TestExternalCoverPrefersExactArtworkOverGeneric(t *testing.T) {
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"Book.epub"),[]byte("book"),0600);err!=nil{t.Fatal(err)}
+	writeJPEGFixture(t,filepath.Join(root,"cover.jpg"),70,105)
+	writeJPEGFixture(t,filepath.Join(root,"Book.jpg"),80,120)
+	data,_,err:=externalCover(root,"Book.epub");if err!=nil{t.Fatal(err)}
+	cfg,_,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{t.Fatal(err)}
+	if cfg.Width!=80||cfg.Height!=120{t.Fatalf("exact artwork did not win: %dx%d",cfg.Width,cfg.Height)}
+}
