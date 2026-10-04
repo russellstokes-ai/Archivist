@@ -100,9 +100,17 @@ type fileMove struct {
 }
 
 type fileMoveBatchItem struct {
-	Asset int64     `json:"asset,omitempty"`
-	Move  *fileMove `json:"move,omitempty"`
-	Error string    `json:"error,omitempty"`
+	Asset        int64     `json:"asset,omitempty"`
+	Move         *fileMove `json:"move,omitempty"`
+	Status       string    `json:"status,omitempty"`
+	From         string    `json:"from,omitempty"`
+	To           string    `json:"to,omitempty"`
+	Title        string    `json:"title,omitempty"`
+	Author       string    `json:"author,omitempty"`
+	Series       string    `json:"series,omitempty"`
+	SeriesNumber float64   `json:"seriesNumber,omitempty"`
+	Format       string    `json:"format,omitempty"`
+	Error        string    `json:"error,omitempty"`
 }
 
 type fileMoveBatchResult struct {
@@ -205,80 +213,79 @@ func (a *app) previewMoveTemplateBatch(assets []int64, template string) fileMove
 	if len(assets) == 0 {
 		rows, e := a.db.Query(`SELECT id FROM assets WHERE available=1 ORDER BY id LIMIT 500`)
 		if e != nil {
-			return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Error: e.Error()}}}
+			return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Status:"conflict",Error: e.Error()}}}
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var id int64
 			if e = rows.Scan(&id); e != nil {
-				return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Error: e.Error()}}}
+				return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Status:"conflict",Error: e.Error()}}}
 			}
 			assets = append(assets, id)
 		}
 	}
 	type candidate struct {
-		asset  int64
-		target string
+		item fileMoveBatchItem
+		root string
 	}
 	candidates := []candidate{}
-	seen := map[string]int64{}
+	counts := map[string]int{}
 	out := fileMoveBatchResult{}
 	for _, asset := range assets {
-		var title, author, series, format, current string
+		var root,title,author,series,format,current string
 		var seriesNumber float64
 		var needsReview bool
-		if e := a.db.QueryRow(`SELECT title,author,series,series_number,format,relative_path,needs_review FROM assets WHERE id=? AND available=1`, asset).Scan(&title, &author, &series, &seriesNumber, &format, &current, &needsReview); e != nil {
-			out.Items = append(out.Items, fileMoveBatchItem{Asset: asset, Error: e.Error()})
+		if e := a.db.QueryRow(`SELECT s.path,a.title,a.author,a.series,a.series_number,a.format,a.relative_path,a.needs_review
+			FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.id=? AND a.available=1`, asset).
+			Scan(&root,&title,&author,&series,&seriesNumber,&format,&current,&needsReview); e != nil {
+			out.Items = append(out.Items, fileMoveBatchItem{Asset:asset,Status:"conflict",Error:e.Error()})
 			out.Failed++
+			continue
+		}
+		_, _ = a.db.Exec("UPDATE file_moves SET state='cancelled' WHERE asset=? AND state='preview'", asset)
+		target, e := sortTemplatePathWithSeriesNumber(template, title, author, series, format, current, seriesNumber)
+		item:=fileMoveBatchItem{
+			Asset:asset,From:current,To:target,Title:title,Author:author,Series:series,
+			SeriesNumber:seriesNumber,Format:format,
+		}
+		if e != nil {
+			item.Status="conflict"; item.Error=e.Error()
+			out.Items=append(out.Items,item);out.Failed++;continue
+		}
+		if filepath.Clean(current)==filepath.Clean(target) {
+			item.Status="same"
+			out.Items=append(out.Items,item)
 			continue
 		}
 		if needsReview {
-			out.Items = append(out.Items, fileMoveBatchItem{Asset: asset, Error: "review metadata before organising this file"})
-			out.Failed++
-			continue
+			item.Status="review";item.Error="review metadata before organising this file"
+			out.Items=append(out.Items,item);out.Failed++;continue
 		}
-		target, e := sortTemplatePathWithSeriesNumber(template, title, author, series, format, current, seriesNumber)
-		if e != nil {
-			out.Items = append(out.Items, fileMoveBatchItem{Asset: asset, Error: e.Error()})
-			out.Failed++
-			continue
-		}
-		key := strings.ToLower(target)
-		if prior, ok := seen[key]; ok {
-			out.Items = append(out.Items, fileMoveBatchItem{Asset: asset, Error: "template destination duplicates asset " + strconv.FormatInt(prior, 10)})
-			out.Failed++
-			continue
-		}
-		seen[key] = asset
-		candidates = append(candidates, candidate{asset, target})
+		key:=strings.ToLower(filepath.Clean(root))+"|"+strings.ToLower(filepath.Clean(target))
+		counts[key]++
+		candidates=append(candidates,candidate{item:item,root:root})
 	}
 	for _, c := range candidates {
-		m, e := a.previewMove(c.asset, c.target)
-		if e != nil {
-			out.Items = append(out.Items, fileMoveBatchItem{Asset: c.asset, Error: e.Error()})
-			out.Failed++
-			continue
+		key:=strings.ToLower(filepath.Clean(c.root))+"|"+strings.ToLower(filepath.Clean(c.item.To))
+		if counts[key]>1 {
+			c.item.Status="conflict"
+			c.item.Error="more than one file would use this destination"
+			out.Items=append(out.Items,c.item);out.Failed++;continue
 		}
-		out.Items = append(out.Items, fileMoveBatchItem{Asset: c.asset, Move: &m})
-		out.OK++
+		m,e:=a.previewMove(c.item.Asset,c.item.To)
+		if e!=nil {
+			c.item.Status="conflict";c.item.Error=e.Error()
+			out.Items=append(out.Items,c.item);out.Failed++;continue
+		}
+		c.item.Status="ready";c.item.Move=&m
+		out.Items=append(out.Items,c.item);out.OK++
 	}
 	return out
 }
 
 func (a *app) applyMoveBatch(ids []string) fileMoveBatchResult {
 	if len(ids) == 0 {
-		rows, e := a.db.Query(`SELECT id FROM file_moves WHERE state IN ('preview','applying','linked') ORDER BY rowid ASC LIMIT 500`)
-		if e != nil {
-			return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Error: e.Error()}}}
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if e = rows.Scan(&id); e != nil {
-				return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Error: e.Error()}}}
-			}
-			ids = append(ids, id)
-		}
+		return fileMoveBatchResult{Failed:1,Items:[]fileMoveBatchItem{{Status:"conflict",Error:"select at least one ready move"}}}
 	}
 	out := fileMoveBatchResult{}
 	for _, id := range ids {
