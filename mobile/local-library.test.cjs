@@ -150,6 +150,21 @@ const audioPath = inferLocalBookMetadata(
 );
 assert.equal(audioPath.author, 'Frank Herbert');
 assert.equal(audioPath.series, '');
+const genericPart = inferLocalBookMetadata(
+  'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2FPart%2036.mp3',
+  'Audio',
+);
+assert.equal(genericPart.title, 'Dune');
+assert.equal(genericPart.author, 'Frank Herbert');
+assert.equal(genericPart.needsReview, false);
+const genericChapter = inferLocalBookMetadata(
+  'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%20Saga%2FDune%2FChapter%2001.mp3',
+  'Audio',
+);
+assert.equal(genericChapter.title, 'Dune');
+assert.equal(genericChapter.author, 'Frank Herbert');
+assert.equal(genericChapter.series, 'Dune Saga');
+
 let previews = previewLocalSort(books.slice(0, 2), 'format-author-title');
 assert.equal(previews[0].to, 'EPUB/Frank Herbert/Dune/Dune.epub');
 assert.equal(previews[1].to, 'Comic/Frank Herbert/Dune/Dune.cbz');
