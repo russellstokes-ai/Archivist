@@ -210,3 +210,51 @@ func TestPathMetadataInfersSeriesPositions(t *testing.T) {
 		t.Fatalf("numbered audiobook folder=%+v", audio)
 	}
 }
+
+
+func TestFilenameQualifiersMatchMobileScanner(t *testing.T) {
+	meta := metadataFor(
+		"/missing/Frank Herbert - Dune - 02 - Dune Messiah {Simon Vance} [ASIN B012345678] [ISBN 9780441172696] (1969).epub",
+		filepath.Join("Frank Herbert", "Dune", "Frank Herbert - Dune - 02 - Dune Messiah {Simon Vance} [ASIN B012345678] [ISBN 9780441172696] (1969).epub"),
+		"Ebook",
+	)
+	if meta.Title != "Dune Messiah" || meta.Author != "Frank Herbert" || meta.Series != "Dune" || meta.SeriesNumber != 2 {
+		t.Fatalf("identity=%+v", meta)
+	}
+	if meta.Narrator != "Simon Vance" || meta.ASIN != "B012345678" || meta.ISBN != "9780441172696" || meta.PublishedYear != 1969 {
+		t.Fatalf("filename qualifiers=%+v", meta)
+	}
+	if meta.NeedsReview {
+		t.Fatalf("well-structured filename should not need review: %+v", meta)
+	}
+}
+
+func TestConflictingHighConfidenceMetadataNeedsReview(t *testing.T) {
+	root := t.TempDir()
+	book := filepath.Join(root, "book.epub")
+	writeZipFixture(t, book, map[string]string{
+		"META-INF/container.xml": "<container><rootfiles><rootfile full-path=\"OPS/content.opf\"/></rootfiles></container>",
+		"OPS/content.opf": "<package><metadata><title>Embedded Title</title><creator>Ursula Le Guin</creator></metadata></package>",
+	})
+	if err := os.WriteFile(filepath.Join(root, "book.opf"), []byte("<package><metadata><title>Sidecar Title</title><creator>Ursula Le Guin</creator></metadata></package>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	meta := metadataFor(book, filepath.Join("Ursula Le Guin", "Earthsea", "book.epub"), "Ebook")
+	if !meta.NeedsReview || !strings.Contains(meta.ReviewReason, "title") {
+		t.Fatalf("high-confidence disagreement should be reviewable: %+v", meta)
+	}
+	if !strings.Contains(meta.Source, "sidecar") || !strings.Contains(meta.Source, "embedded") {
+		t.Fatalf("source provenance=%q", meta.Source)
+	}
+}
+
+func TestAdvancedScanExtensionsMatchMobileLibrary(t *testing.T) {
+	for _, name := range []string{"book.cbr", "audio.aac", "audio.opus"} {
+		if got := kind(name); got == "" {
+			t.Fatalf("%s was not recognised by the server scanner", name)
+		}
+	}
+	if kind("book.cbr") != "Comic" || kind("audio.aac") != "Audio" || kind("audio.opus") != "Audio" {
+		t.Fatalf("advanced extension classification mismatch")
+	}
+}
