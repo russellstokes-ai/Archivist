@@ -4,6 +4,7 @@ const ts=require('typescript');
 const Module=require('node:module');
 const load=Module._load;
 Module._load=function(request,parent,isMain){
+  if(request==='react-native')return {NativeModules:{}};
   if(request==='expo-file-system/legacy')return {
     documentDirectory:null,
     EncodingType:{Base64:'base64'},
