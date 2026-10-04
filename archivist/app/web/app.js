@@ -83,6 +83,19 @@ async function openWork(work){
     content.append(element('span',work.format));content.firstChild.className='eyebrow';
     content.append(element('h2',work.title));
     if(work.author)content.append(element('p',work.author+(work.series?' · '+work.series:'')));
+    const personal=element('div');personal.className='work-personal';
+    const favourite=element('button',work.favourite?'★ Favourite':'☆ Favourite');favourite.type='button';favourite.setAttribute('aria-pressed',work.favourite?'true':'false');
+    const rating=element('select');rating.setAttribute('aria-label','Personal rating');rating.add(new Option('No rating','0'));
+    for(let i=1;i<=10;i++)rating.add(new Option((i/2).toFixed(i%2?1:0)+' ★',String(i)));rating.value=String(work.rating||0);
+    async function savePersonal(nextFavourite=work.favourite,nextRating=Number(rating.value)||0){
+      try{
+        const saved=await api('./api/works/'+work.id+'/preference','PUT',{rating:nextRating,favourite:!!nextFavourite});
+        work.rating=saved.rating;work.favourite=saved.favourite;rating.value=String(saved.rating||0);favourite.textContent=saved.favourite?'★ Favourite':'☆ Favourite';favourite.setAttribute('aria-pressed',saved.favourite?'true':'false');
+        message('Personal rating saved.');if(window.loadShelfExperience)window.loadShelfExperience().catch(()=>{});
+      }catch(e){message(e.message)}
+    }
+    favourite.onclick=()=>savePersonal(!work.favourite,Number(rating.value)||0);rating.onchange=()=>savePersonal(work.favourite,Number(rating.value)||0);
+    personal.append(favourite,rating);content.append(personal);
     for(const edition of editions){
       const selected=tracks.filter(t=>t.edition===edition),format=selected[0]?.format||'Edition';
       const block=element('div');block.className='edition-card';block.append(element('strong',format+' edition'),element('p',selected.length+' file'+(selected.length===1?'':'s')));
