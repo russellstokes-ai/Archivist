@@ -92,3 +92,14 @@ func TestAudioEmbeddedCoverReadsM4BArtwork(t *testing.T) {
 	cfg,_,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{t.Fatal(err)}
 	if cfg.Width!=64||cfg.Height!=96{t.Fatalf("cover dimensions=%dx%d",cfg.Width,cfg.Height)}
 }
+
+func TestExternalCoverRecognizesFrontCoverArtwork(t *testing.T) {
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"Book.epub"),[]byte("not-an-epub"),0600);err!=nil{t.Fatal(err)}
+	writeJPEGFixture(t,filepath.Join(root,"front-cover.jpg"),72,108)
+	data,mime,err:=externalCover(root,"Book.epub")
+	if err!=nil{t.Fatal(err)}
+	if mime!="image/jpeg"{t.Fatalf("mime=%q",mime)}
+	cfg,_,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{t.Fatal(err)}
+	if cfg.Width!=72||cfg.Height!=108{t.Fatalf("cover dimensions=%dx%d",cfg.Width,cfg.Height)}
+}
