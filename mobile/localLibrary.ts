@@ -52,6 +52,7 @@ export type LocalSortPreview = {
   from: string;
   to: string;
   state: 'ready' | 'same' | 'conflict' | 'review';
+  reason?: string;
   metadataSummary?: string;
 };
 
@@ -596,19 +597,24 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
   const previews = books.map(book => {
     const filename = fileNameFromUri(book.uri);
     const target = targetPath(book, filename, template);
+    const rootUri = destinationRootUri || book.rootUri || rootUriFromFileUri(book.uri);
     const from = displayPath(book.uri);
-    const count = destinations.get(target) || 0;
-    destinations.set(target, count + 1);
+    const currentRelative = relativePathWithinRoot(book.uri, rootUri);
+    const destinationKey = normalizePathKey(rootUri)+'|'+normalizePathKey(target);
+    const count = destinations.get(destinationKey) || 0;
+    destinations.set(destinationKey, count + 1);
+    const same = normalizePathKey(currentRelative) === normalizePathKey(target);
     return {
       id: `local-${book.id}`,
       asset: book.id,
       title: book.title,
       sourceUri: book.uri,
-      rootUri: destinationRootUri || book.rootUri || rootUriFromFileUri(book.uri),
+      rootUri,
       relativePath: target,
       from,
       to: target,
-      state: book.needsReview ? 'review' as const : from.endsWith(target) ? 'same' as const : 'ready' as const,
+      state: book.needsReview ? 'review' as const : same ? 'same' as const : 'ready' as const,
+      reason: book.needsReview ? (book.reviewReason || 'Review metadata before organising this file.') : same ? 'Already matches the selected layout.' : undefined,
       metadataSummary: [
         book.author ? 'Author: '+book.author : '',
         book.series ? 'Series: '+book.series+(book.seriesNumber !== undefined ? ' #'+book.seriesNumber : '') : '',
@@ -616,7 +622,34 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
       ].filter(Boolean).join(' · '),
     };
   });
-  return previews.map(preview => preview.state === 'review' ? preview : destinations.get(preview.to)! > 1 ? {...preview, state: 'conflict'} : preview);
+  return previews.map(preview => {
+    if(preview.state === 'review' || preview.state === 'same') return preview;
+    const key=normalizePathKey(preview.rootUri)+'|'+normalizePathKey(preview.to);
+    return destinations.get(key)! > 1
+      ? {...preview, state:'conflict' as const, reason:'More than one file would use this destination.'}
+      : preview;
+  });
+}
+
+export async function previewLocalSortSafely(
+  books: LocalBook[],
+  template: string,
+  destinationRootUri?: string,
+): Promise<LocalSortPreview[]> {
+  const previews=previewLocalSortToRoot(books,template,destinationRootUri);
+  const cache=new Map<string,string[]>();
+  const checked:LocalSortPreview[]=[];
+  for(const preview of previews){
+    if(preview.state!=='ready'){
+      checked.push(preview);
+      continue;
+    }
+    const preflight=await inspectLocalSortDestination(preview.rootUri,preview.relativePath,cache);
+    checked.push(preflight.exists
+      ? {...preview,state:'conflict',reason:preflight.reason || 'Destination already exists.'}
+      : preview);
+  }
+  return checked;
 }
 
 export async function applyLocalSortCopies(
@@ -701,6 +734,53 @@ function fileNameFromUri(uri: string) {
 
 function fileStem(uri: string) {
   return fileNameFromUri(uri).replace(/\.[^.]+$/, '');
+}
+
+function normalizePathKey(value:string){
+  return decodeUriPart(value).replace(/\\/g,'/').replace(/\/+/g,'/').replace(/^\.\//,'').replace(/\/$/,'').toLocaleLowerCase();
+}
+
+function relativePathWithinRoot(uri:string,rootUri:string){
+  const full=displayPath(uri).replace(/\\/g,'/').replace(/^\/+|\/+$/g,'');
+  const root=displayPath(rootUri).replace(/\\/g,'/').replace(/^\/+|\/+$/g,'');
+  if(!root)return full;
+  const fullKey=full.toLocaleLowerCase(),rootKey=root.toLocaleLowerCase();
+  if(fullKey===rootKey)return '';
+  if(fullKey.startsWith(rootKey+'/'))return full.slice(root.length+1);
+  return full;
+}
+
+async function inspectLocalSortDestination(rootUri:string,relativePath:string,cache:Map<string,string[]>){
+  const parts=relativePath.split('/').filter(Boolean);
+  if(!parts.length)return {exists:true,reason:'Missing destination file name.'};
+  const filename=parts.pop()!;
+  let dir=rootUri;
+  for(const part of parts){
+    let children=cache.get(dir);
+    if(!children){
+      try{children=await listDirectoryEntries(dir);}
+      catch{return {exists:true,reason:'Destination folder cannot be inspected safely.'};}
+      cache.set(dir,children);
+    }
+    const child=children.find(value=>lastPathPart(value).localeCompare(part,undefined,{sensitivity:'accent'})===0);
+    if(!child)return {exists:false};
+    dir=child;
+  }
+  let children=cache.get(dir);
+  if(!children){
+    try{children=await listDirectoryEntries(dir);}
+    catch{return {exists:true,reason:'Destination folder cannot be inspected safely.'};}
+    cache.set(dir,children);
+  }
+  const wantedStem=filename.replace(/\.[^.]+$/,'');
+  const collision=children.some(child=>{
+    const childName=lastPathPart(child);
+    return childName.localeCompare(filename,undefined,{sensitivity:'accent'})===0
+      || childName.localeCompare(wantedStem,undefined,{sensitivity:'accent'})===0;
+  });
+  return collision
+    ? {exists:true,reason:'Destination already exists: '+filename}
+    : {exists:false};
 }
 
 async function createTargetFile(rootUri: string, relativePath: string) {
