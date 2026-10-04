@@ -137,7 +137,7 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
     series = parent;
     confidence = 'high';
     reviewReason = '';
-  } else {
+  } else if (!genericAudioTrack) {
     const numbered = stem.match(/^\s*(\d+(?:\.\d+)?)\s*[-._:]\s*(.+)$/);
     if (numbered && sensibleFolder(parent, stem)) {
       series = parent;
