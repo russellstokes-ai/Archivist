@@ -220,7 +220,7 @@ func kind(path string) string {
 		return "Ebook"
 	case ".pdf":
 		return "PDF"
-	case ".cbz", ".cbr", ".zip", ".cbt":
+	case ".cbz", ".zip", ".cbt":
 		return "Comic"
 	}
 	return ""
