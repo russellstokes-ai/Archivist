@@ -54,7 +54,7 @@ import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibilit
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
-import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {PLAYER_MOTION_TIMING, PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
@@ -940,6 +940,13 @@ function Client() {
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
   const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
+  const [playerVisualPlaying,setPlayerVisualPlaying]=useState(false);
+  useEffect(()=>{
+    if(!playbackVisible||reduceMotion){setPlayerVisualPlaying(false);return;}
+    if(playbackIsPlaying){setPlayerVisualPlaying(true);return;}
+    const timer=setTimeout(()=>setPlayerVisualPlaying(false),PLAYER_MOTION_TIMING.pauseGraceMs);
+    return()=>clearTimeout(timer);
+  },[playbackIsPlaying,playbackVisible,reduceMotion]);
   useEffect(()=>{if(!playbackVisible||!playbackIsPlaying||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,playbackIsPlaying,reduceMotion]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>(ritualDaysKey).then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
@@ -997,11 +1004,11 @@ function Client() {
   },[appActive,reduceMotion,shelfLoading,shelfSkeletonPulse]);
 
   useEffect(()=>{
-    const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
+    const motion=playerMotionState({playing:playerVisualPlaying,visible:playbackVisible,reduceMotion});
     bookOpenAnim.stopAnimation();
     Animated.timing(bookOpenAnim,{
       toValue:motion==='closed'?0:1,
-      duration:reduceMotion?0:motion==='closed'?360:760,
+      duration:reduceMotion?0:motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs,
       easing:Easing.inOut(Easing.cubic),
       useNativeDriver:true,
     }).start();
@@ -1014,13 +1021,19 @@ function Client() {
 
     pageTurnAnim.setValue(0);
     const loop=Animated.loop(Animated.sequence([
-      Animated.timing(pageTurnAnim,{toValue:1,duration:1350,easing:Easing.inOut(Easing.cubic),useNativeDriver:true}),
+      Animated.delay(PLAYER_MOTION_TIMING.firstTurnDelayMs),
+      Animated.timing(pageTurnAnim,{
+        toValue:1,
+        duration:PLAYER_MOTION_TIMING.pageTurnMs,
+        easing:Easing.bezier(.22,.72,.2,1),
+        useNativeDriver:true,
+      }),
       Animated.timing(pageTurnAnim,{toValue:0,duration:0,useNativeDriver:true}),
-      Animated.delay(7600),
+      Animated.delay(PLAYER_MOTION_TIMING.pageRestMs),
     ]));
     loop.start();
     return()=>{loop.stop();pageTurnAnim.stopAnimation();};
-  },[bookOpenAnim,pageTurnAnim,playbackIsPlaying,playbackVisible,reduceMotion]);
+  },[bookOpenAnim,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
