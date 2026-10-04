@@ -880,6 +880,7 @@ function Client() {
   useEffect(()=>{if(!libraryManageOpen&&scanResultSummary)setScanResultSummary(null);},[libraryManageOpen,scanResultSummary]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
+  const [localFoldersReady,setLocalFoldersReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
   const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
@@ -1452,7 +1453,7 @@ function Client() {
     }).catch(()=>undefined);
     getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(()=>setLocalFoldersReady(true));
     getPersistedJSON<Book[]>(localCatalogKey).then(saved => {
       if (!Array.isArray(saved)) return;
       const normalized=saved.map(book=>({...book,genre:book.genre || ''}));
@@ -1739,9 +1740,9 @@ function Client() {
   },[localAudioCompleted,localWorkProgress]);
 
   useEffect(() => {
-    if (restoring || !localOverridesReady || !localCatalogReady || !localFolders.length || localBooks.length || localScanning) return;
+    if (restoring || !localFoldersReady || !localOverridesReady || !localCatalogReady || !localFolders.length || localBooks.length || localScanning) return;
     void rescanLocalFolders();
-  }, [localBooks.length, localCatalogReady, localFolders, localOverridesReady, localScanning, restoring]);
+  }, [localBooks.length, localCatalogReady, localFolders, localFoldersReady, localOverridesReady, localScanning, restoring]);
 
   useEffect(()=>{
     if(activeTab!=='settings')return;
@@ -2173,7 +2174,7 @@ function Client() {
     setLocalBooks(nextBooks);
     setLocalMovePreviews([]);
     setLocalMoveSelection([]);
-    setSpaces([...new Set(result.books.map(book=>book.space))]);
+    setSpaces([...new Set([...result.books.map(book=>book.space),...sources.map(source=>source.space)].filter(Boolean))]);
     if(historyChanged)setLocalSortHistory(reconciledHistory);
     setRescanPromptOpen(false);
     setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
@@ -4244,7 +4245,7 @@ function Client() {
     };
 
     const hasConfiguredSource=localFolders.length>0||!!session||!!recoverableSession;
-    const showStandaloneEmpty=!base.length&&!shelfLoading&&(onboardingDone||hasConfiguredSource);
+    const showStandaloneEmpty=!base.length&&!shelfLoading&&!localScanning&&(onboardingDone||hasConfiguredSource);
     const emptyCopy=recoverableSession&&!session
       ? (Platform.OS==='ios'?'Your saved Archivist Server is currently offline. Import a folder from Files or retry the server from Settings.':'Your saved Archivist Server is currently offline. Add a device folder or retry the server from Settings.')
       : hasConfiguredSource
@@ -4474,7 +4475,7 @@ function Client() {
         contentContainerStyle={libraryView==='grid'?styles.unifiedGrid:styles.unifiedList}
         columnWrapperStyle={columns>1?styles.unifiedGridRow:undefined}
         renderItem={({item})=><UnifiedWorkCard work={item} list={libraryView==='list'}/>} 
-        ListEmptyComponent={!shelfLoading?<LibraryEmptyState/>:null}
+        ListEmptyComponent={!shelfLoading&&!localScanning?<LibraryEmptyState/>:null}
         onScroll={e=>{libraryScrollOffset.current=e.nativeEvent.contentOffset.y}}
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
@@ -6737,7 +6738,7 @@ function Client() {
     return Settings();
   }
 
-  if (restoring) {
+  if (restoring||!localFoldersReady||!localCatalogReady||!localOverridesReady) {
     return (
       <SafeAreaView style={[styles.screen,{backgroundColor:p.paper}]}>
         <View style={styles.restoreScreen}>
@@ -6755,7 +6756,7 @@ function Client() {
             </View>
             <View style={styles.restoreFooter}>
               <ActivityIndicator accessibilityLabel="Opening Archivist library" color={p.sage}/>
-              <Text style={[styles.meta,{color:p.muted}]}>Opening your library…</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Opening your library and restoring your catalogue…</Text>
             </View>
           </View>
         </View>
