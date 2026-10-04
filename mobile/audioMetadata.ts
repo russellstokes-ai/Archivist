@@ -2,23 +2,38 @@ import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
 import {isGenericMediaTitle, LocalMetadataFields, publicationYear} from './libraryIntelligence';
 
 const maxID3v2Bytes=256*1024;
+const maxMP4MetadataBytes=4*1024*1024;
 
 export async function extractAudioMetadata(
   uri:string,
   extension:string,
   info?:{size?:number},
 ):Promise<LocalMetadataFields>{
-  if(extension.toLowerCase()!=='mp3')return {};
+  const ext=extension.toLowerCase();
   try{
     const size=typeof info?.size==='number'?info.size:undefined;
-    const firstLength=size===undefined?maxID3v2Bytes:Math.min(maxID3v2Bytes,size);
-    const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length:firstLength});
-    let fields=parseID3v2Base64(head);
-    if((!fields.title||!fields.author||!fields.publishedYear)&&size!==undefined&&size>=128){
-      const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-128),length:128});
-      fields={...parseID3v1Base64(tail),...fields};
+    if(ext==='mp3'){
+      const firstLength=size===undefined?maxID3v2Bytes:Math.min(maxID3v2Bytes,size);
+      const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length:firstLength});
+      let fields=parseID3v2Base64(head);
+      if((!fields.title||!fields.author||!fields.publishedYear)&&size!==undefined&&size>=128){
+        const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-128),length:128});
+        fields={...parseID3v1Base64(tail),...fields};
+      }
+      return fields;
     }
-    return fields;
+    if(ext==='m4a'||ext==='m4b'){
+      const readLength=size===undefined?maxMP4MetadataBytes:Math.min(size,maxMP4MetadataBytes);
+      const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length:readLength});
+      let fields=parseMP4MetadataBase64(head);
+      if(size!==undefined&&size>readLength){
+        const tailLength=Math.min(size,maxMP4MetadataBytes);
+        const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-tailLength),length:tailLength});
+        fields=mergeFields(fields,parseMP4MetadataBase64(tail));
+      }
+      return fields;
+    }
+    return {};
   }catch{
     return {};
   }
@@ -73,6 +88,56 @@ export function parseID3v2Base64(base64:string):LocalMetadataFields{
   }
   if(album&&(!fields.title||isGenericMediaTitle(fields.title,'Audio',2)))fields.title=album;
   return compact(fields);
+}
+
+export function parseMP4MetadataBase64(base64:string):LocalMetadataFields{
+  const bytes=base64Bytes(base64);
+  if(bytes.length<16)return {};
+  const title=mp4Text(bytes,'©nam');
+  const album=mp4Text(bytes,'©alb');
+  const artist=mp4Text(bytes,'©ART')||mp4Text(bytes,'aART');
+  const albumArtist=mp4Text(bytes,'aART');
+  const genre=mp4Text(bytes,'©gen');
+  const date=mp4Text(bytes,'©day');
+  const grouping=mp4Text(bytes,'©grp');
+  const fields:LocalMetadataFields={};
+  const chosenTitle=title&&isGenericMediaTitle(title,'Audio',2)&&album?album:title||album;
+  if(chosenTitle)fields.title=chosenTitle;
+  if(artist||albumArtist)fields.author=artist||albumArtist;
+  if(genre)fields.genre=genre;
+  if(grouping)fields.series=grouping;
+  const year=publicationYear(date);
+  if(year)fields.publishedYear=year;
+  return compact(fields);
+}
+
+function mp4Text(bytes:Uint8Array,name:string){
+  const payload=mp4Data(bytes,name);
+  if(!payload?.length)return '';
+  return utf8(payload).replace(/\0/g,' ').trim();
+}
+
+function mp4Data(bytes:Uint8Array,name:string){
+  for(let i=4;i+4<=bytes.length;i++){
+    if(ascii(bytes,i,4)!==name)continue;
+    const parentStart=i-4;
+    const parentSize=bigEndian32(bytes,parentStart);
+    if(parentSize<16)continue;
+    const parentEnd=Math.min(bytes.length,parentStart+parentSize);
+    for(let j=i+4;j+16<=parentEnd;j++){
+      if(ascii(bytes,j,4)!=='data')continue;
+      const dataStart=j-4;
+      const dataSize=bigEndian32(bytes,dataStart);
+      if(dataSize<16||dataStart+dataSize>parentEnd)continue;
+      const payloadStart=j+12;
+      return bytes.slice(payloadStart,dataStart+dataSize);
+    }
+  }
+  return undefined;
+}
+
+function mergeFields(primary:LocalMetadataFields,fallback:LocalMetadataFields){
+  return compact({...fallback,...primary});
 }
 
 export function parseID3v1Base64(base64:string):LocalMetadataFields{
