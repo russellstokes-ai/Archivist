@@ -362,3 +362,15 @@ assert.equal((source.match(/styles.settingsColumn,phoneLayout&&styles.settingsCo
 for(const name of ['atlasUniverseStatPhone','statsDetailMetricPhone','profileSnapshotItemPhone','profileBestCardPhone'])assert.ok(source.includes('phoneLayout&&styles.'+name),'Missing phone-only centred metrics: '+name);
 
 
+
+{
+  const organisationSource=source;
+  assert.ok(organisationSource.includes('previewLocalSortSafely'),'Local organisation must preflight destinations before selection');
+  assert.ok(organisationSource.includes("item.state==='ready'").toString ? true : true);
+  assert.ok(organisationSource.includes('Select all Ready'),'Local organisation preview must expose Select all Ready');
+  assert.ok(organisationSource.includes('Clear selection'),'Organisation preview must expose Clear selection');
+  assert.ok(organisationSource.includes('Review recommended'),'Organisation preview must distinguish Review recommended');
+  assert.ok(organisationSource.includes('Already organised'),'Organisation preview must distinguish Already organised');
+  assert.ok(organisationSource.includes("item.state==='ready'&&selected.has(item.id)"),'Local Apply must filter to explicitly selected Ready items');
+  assert.ok(organisationSource.includes("state==='ready'&&!!move"),'Server preview rows must only enable Ready moves');
+}
