@@ -34,7 +34,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
-import {copyAsync, documentDirectory, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
+import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
@@ -64,6 +64,7 @@ import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from '.
 import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanPhaseStep} from './scanFeedback';
 import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
+import {inspectPickedCover, persistManualCover, rankLocalCoverCandidates} from './coverManagement';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -80,15 +81,14 @@ import {
   removeOfflineWork,
 } from './offlineLibrary';
 
-async function persistPickedCover(uri:string,fileName?:string|null) {
-  if(!documentDirectory)return uri;
-  const directory=documentDirectory+'covers/';
-  await makeDirectoryAsync(directory,{intermediates:true});
-  const candidate=(fileName||uri.split('?')[0].split('/').pop()||'cover.jpg').toLowerCase();
-  const extension=(candidate.match(/\.([a-z0-9]{2,5})$/)?.[1]||'jpg').replace(/[^a-z0-9]/g,'')||'jpg';
-  const target=directory+'manual-cover-'+Date.now()+'.'+extension;
-  await copyAsync({from:uri,to:target});
-  return target;
+async function persistPickedCover(uri:string,fileName?:string|null,fileSize?:number) {
+  return persistManualCover(uri,fileName||undefined,fileSize,{
+    documentDirectory,
+    makeDirectoryAsync,
+    copyAsync,
+    getInfoAsync,
+    deleteAsync,
+  });
 }
 
 async function persistPickedProfilePhoto(uri:string,fileName?:string|null) {
@@ -872,7 +872,7 @@ function Client() {
   const [editDescription,setEditDescription]=useState('');
   const [editAdvancedOpen,setEditAdvancedOpen]=useState(false);
   const [editCoverUri,setEditCoverUri]=useState('');
-  const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null}|null>(null);
+  const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null;fileSize?:number}|null>(null);
   const [coverPicking,setCoverPicking]=useState(false);
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
@@ -3645,7 +3645,7 @@ function Client() {
       let coverUri=editCoverUri.trim();
       if(!title)return;
       if(localEdit&&editPickedCover){
-        try{coverUri=await persistPickedCover(editPickedCover.uri,editPickedCover.fileName);}
+        try{coverUri=await persistPickedCover(editPickedCover.uri,editPickedCover.fileName,editPickedCover.fileSize);}
         catch(e){setError('Could not save the selected cover: '+(e as Error).message);return;}
       }
       setBusy(true);setError('');
@@ -3679,8 +3679,9 @@ function Client() {
         const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:false,quality:1,selectionLimit:1});
         if(result.canceled||!result.assets?.length)return;
         const asset=result.assets[0];
-        if(asset.fileSize&&asset.fileSize>25*1024*1024){setError('Choose a cover image smaller than 25 MB.');return;}
-        setEditPickedCover({uri:asset.uri,fileName:asset.fileName});
+        const inspection=await inspectPickedCover(asset.uri,asset.fileSize,{getInfoAsync});
+        if(inspection.error){setError(inspection.error);return;}
+        setEditPickedCover({uri:asset.uri,fileName:asset.fileName,fileSize:inspection.size});
         setEditCoverUri(asset.uri);
       }catch(e){setError((e as Error).message);}
       finally{setCoverPicking(false);}
@@ -3714,6 +3715,7 @@ function Client() {
       editDescription!==(editing.description||'')||
       !!editPickedCover||
       editCoverUri!==(editing.coverUri||'');
+    const localCoverCandidates=rankLocalCoverCandidates(editing.coverUri,editing.coverCandidates);
     const requestEditorClose=()=>{
       if(busy||coverPicking)return;
       if(editorDirty){
@@ -3759,10 +3761,10 @@ function Client() {
                   <Button label={coverPicking?'Opening photos…':'Choose image from device'} tone="quiet" disabled={coverPicking||busy} onPress={()=>void chooseCoverFromDevice()}/>
                 </View>
               </View>
-              {editing.coverCandidates?.length?<View style={{gap:6}}>
+              {localCoverCandidates.length?<View style={{gap:6}}>
                 <Text style={[styles.meta,{color:p.muted}]}>Other local artwork</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:10,paddingVertical:2}}>
-                  {editing.coverCandidates.map((uri,index)=>{
+                  {localCoverCandidates.map((uri,index)=>{
                     const selected=!editPickedCover&&editCoverUri===uri;
                     return <Pressable
                       key={uri}
