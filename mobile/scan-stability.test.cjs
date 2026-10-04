@@ -21,6 +21,8 @@ assert.ok(source.includes('{deferEmbeddedCovers:true}'),'app scans must publish 
 assert.ok(source.includes('void enrichPublishedLocalLibrary(result.books,generation)'),'successful catalogue publication must start background library enrichment without blocking scan completion');
 assert.ok(source.includes('await enrichPublishedLocalCovers(baseBooks,generation)'),'background library enrichment must preserve local cover recovery as its first stage');
 assert.ok(source.includes('await enrichPublishedLocalBookMetadata(latest,generation)'),'background library enrichment must continue into online book metadata after the latest persisted cover state');
+assert.ok(source.includes('await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation)'),'comic enrichment must run after books against the latest persisted catalogue');
+assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron credentials must come from secure storage rather than app source or persisted catalogue files');
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'stale enrichment must stop when a newer scan begins');
 assert.ok(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),'background enrichment must patch the current catalogue rather than replace it');
 assert.ok(source.includes('const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey)'),'final enrichment persistence must merge with the latest persisted catalogue so user edits are not rolled back');

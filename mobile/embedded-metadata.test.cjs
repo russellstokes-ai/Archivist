@@ -28,13 +28,21 @@ const {extractEmbeddedMetadataFromBase64}=require('./embeddedMetadata.ts');
   assert.equal(fields.isbn,'9780441172719');
 
   const comic=new JSZip();
-  comic.file('ComicInfo.xml','<ComicInfo><Title>Preludes &amp; Nocturnes</Title><Series>Sandman</Series><Number>1</Number><Writer>Neil Gaiman</Writer><Publisher>DC</Publisher><Genre>Fantasy</Genre></ComicInfo>');
+  comic.file('ComicInfo.xml','<ComicInfo><Title>Preludes &amp; Nocturnes</Title><Series>Sandman</Series><Number>1</Number><Volume>2</Volume><Writer>Neil Gaiman</Writer><Penciller>Sam Kieth</Penciller><Publisher>DC</Publisher><Genre>Fantasy</Genre><Year>1989</Year><Month>1</Month><Day>1</Day><StoryArc>Preludes &amp; Nocturnes</StoryArc><Characters>Dream, John Constantine</Characters><Teams>The Endless</Teams><PageCount>32</PageCount></ComicInfo>');
   fields=await extractEmbeddedMetadataFromBase64(await comic.generateAsync({type:'base64'}),'cbz');
   assert.equal(fields.title,'Preludes & Nocturnes');
   assert.equal(fields.series,'Sandman');
   assert.equal(fields.seriesNumber,1);
   assert.equal(fields.author,'Neil Gaiman');
   assert.equal(fields.publisher,'DC');
+  assert.equal(fields.comicIssueNumber,'1');
+  assert.equal(fields.comicVolume,2);
+  assert.equal(fields.seriesNumber,1,'ComicInfo Number is the issue order; Volume must not overwrite it');
+  assert.deepEqual(fields.comicCreators,[{name:'Neil Gaiman',roles:['Writer']},{name:'Sam Kieth',roles:['Penciller']}]);
+  assert.deepEqual(fields.comicStoryArcs,['Preludes & Nocturnes']);
+  assert.deepEqual(fields.comicCharacters,['Dream','John Constantine']);
+  assert.equal(fields.comicPageCount,32);
+  assert.equal(fields.comicCoverDate,'1989-01-01');
 
-  console.log('PASS: embedded EPUB and ComicInfo metadata are extracted without media rendering');
+  console.log('PASS: embedded EPUB and rich ComicInfo metadata are extracted without media rendering');
 })().catch(error=>{console.error(error);process.exitCode=1});

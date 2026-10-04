@@ -35,6 +35,20 @@ export type LocalMetadataFields = {
   asin?: string;
   language?: string;
   description?: string;
+  comicIssueNumber?: string;
+  comicVolume?: number;
+  comicCreators?: Array<{name:string;roles:string[]}>;
+  comicStoryArcs?: string[];
+  comicCharacters?: string[];
+  comicTeams?: string[];
+  comicUniverses?: string[];
+  comicUpc?: string;
+  comicSku?: string;
+  comicVineId?: number;
+  comicGcdId?: number;
+  comicStoreDate?: string;
+  comicCoverDate?: string;
+  comicPageCount?: number;
 };
 
 export type LocalMetadataContext = {
@@ -289,7 +303,9 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
   const author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer', 'Writer']);
 
   let series = xmlValue(text, ['series', 'Series']);
-  let seriesNumber = numberValue(xmlValue(text, ['seriesindex', 'series_index', 'number', 'Number', 'volume', 'Volume']));
+  const comicIssueNumber = cleanOptional(xmlValue(text, ['number', 'Number']));
+  const comicVolume = numberValue(xmlValue(text, ['volume', 'Volume']));
+  let seriesNumber = numberValue(xmlValue(text, ['seriesindex', 'series_index'])) ?? numberValue(comicIssueNumber);
   const genre = xmlValue(text, ['dc:subject', 'subject', 'genre', 'Genre']);
   const narrator = xmlValue(text, ['narrator', 'Narrator']);
   const publisher = xmlValue(text, ['dc:publisher', 'publisher', 'Publisher']);
@@ -312,6 +328,18 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
   }
   const language = xmlValue(text, ['dc:language', 'language', 'Language']);
   const description = xmlValue(text, ['dc:description', 'description', 'Description', 'summary', 'Summary', 'comments', 'Comments']);
+  const comicCreators = comicCreatorsFromXml(text);
+  const comicStoryArcs = splitMetadataList(xmlValue(text,['storyarc','StoryArc']));
+  const comicCharacters = splitMetadataList(xmlValue(text,['characters','Characters']));
+  const comicTeams = splitMetadataList(xmlValue(text,['teams','Teams']));
+  const comicUniverses = splitMetadataList(xmlValue(text,['universes','Universes','universe','Universe']));
+  const comicUpc = cleanOptional(xmlValue(text,['upc','UPC','gtin','GTIN']));
+  const comicSku = cleanOptional(xmlValue(text,['sku','SKU']));
+  const comicPageCount = numberValue(xmlValue(text,['pagecount','PageCount']));
+  const comicVineId = numberValue(xmlValue(text,['comicvineid','ComicVineId','cv_id']));
+  const comicGcdId = numberValue(xmlValue(text,['gcdid','GCDId','gcd_id']));
+  const comicStoreDate = cleanOptional(xmlValue(text,['storedate','StoreDate']));
+  const comicCoverDate = comicDateFromXml(text);
   if (!series && ext === 'opf') {
     const calibre = text.match(/<meta\b[^>]*name\s*=\s*["']calibre:series["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
       || text.match(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']calibre:series["'][^>]*>/i);
@@ -345,6 +373,20 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     asin: normalizeIdentifier(asin),
     language: cleanOptional(language),
     description: cleanOptional(description),
+    comicIssueNumber,
+    comicVolume,
+    comicCreators: comicCreators.length ? comicCreators : undefined,
+    comicStoryArcs: comicStoryArcs.length ? comicStoryArcs : undefined,
+    comicCharacters: comicCharacters.length ? comicCharacters : undefined,
+    comicTeams: comicTeams.length ? comicTeams : undefined,
+    comicUniverses: comicUniverses.length ? comicUniverses : undefined,
+    comicUpc,
+    comicSku,
+    comicVineId,
+    comicGcdId,
+    comicStoreDate,
+    comicCoverDate,
+    comicPageCount,
   });
 }
 
@@ -377,6 +419,69 @@ function xmlValue(text: string, tags: string[]) {
   }
   return '';
 }
+function splitMetadataList(value: unknown): string[] {
+  return String(value ?? '')
+    .split(/\s*[,;|]\s*/)
+    .map(item => cleanLabel(item))
+    .filter((item,index,all) => !!item && all.indexOf(item)===index);
+}
+
+function comicCreatorsFromXml(text:string):Array<{name:string;roles:string[]}> {
+  const roleTags:Array<[string,string[]]> = [
+    ['Writer',['writer','Writer']],
+    ['Penciller',['penciller','Penciller']],
+    ['Inker',['inker','Inker']],
+    ['Colorist',['colorist','Colorist','colourist','Colourist']],
+    ['Letterer',['letterer','Letterer']],
+    ['Cover Artist',['coverartist','CoverArtist']],
+    ['Editor',['editor','Editor']],
+    ['Translator',['translator','Translator']],
+  ];
+  const byName=new Map<string,{name:string;roles:string[]}>();
+  for(const [role,tags] of roleTags){
+    const names=splitMetadataList(xmlValue(text,tags));
+    for(const name of names){
+      const key=name.toLowerCase();
+      const current=byName.get(key)||{name,roles:[]};
+      if(!current.roles.includes(role))current.roles.push(role);
+      byName.set(key,current);
+    }
+  }
+  return [...byName.values()];
+}
+
+function comicDateFromXml(text:string){
+  const year=numberValue(xmlValue(text,['year','Year']));
+  const month=numberValue(xmlValue(text,['month','Month']));
+  const day=numberValue(xmlValue(text,['day','Day']));
+  if(!year||year<1000||year>9999)return undefined;
+  return String(year)+'-'+String(month||1).padStart(2,'0')+'-'+String(day||1).padStart(2,'0');
+}
+
+function jsonStringList(value:unknown):string[]|undefined {
+  const values=Array.isArray(value)?value:String(value??'').split(/\s*[,;|]\s*/);
+  const clean=values.map(item=>cleanLabel(String(item??''))).filter((item,index,all)=>!!item&&all.indexOf(item)===index);
+  return clean.length?clean:undefined;
+}
+
+function jsonComicCreators(metadata:any):Array<{name:string;roles:string[]}>|undefined {
+  const direct=metadata?.comicCreators ?? metadata?.creators;
+  if(Array.isArray(direct)){
+    const values=direct.flatMap((entry:any)=>{
+      if(typeof entry==='string')return splitMetadataList(entry).map(name=>({name,roles:[]}));
+      const name=cleanLabel(String(entry?.name??entry?.creator?.name??''));
+      if(!name)return [];
+      const rawRoles=entry?.roles??entry?.role??[];
+      const roles=(Array.isArray(rawRoles)?rawRoles:[rawRoles]).map((role:any)=>cleanLabel(String(role?.name??role??''))).filter(Boolean);
+      return [{name,roles}];
+    });
+    return values.length?values:undefined;
+  }
+  const writer=String(metadata?.writer??metadata?.Writer??'');
+  const values=splitMetadataList(writer).map(name=>({name,roles:['Writer']}));
+  return values.length?values:undefined;
+}
+
 
 function stripXml(value: string) {
   return decodeXml(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
@@ -466,6 +571,20 @@ function parseJsonSidecar(text: string): LocalMetadataFields {
       asin: normalizeIdentifier(pick('asin','ASIN')),
       language: pick('language') || undefined,
       description: pick('description','summary','comments') || undefined,
+      comicIssueNumber: pick('comicIssueNumber','issueNumber','issue','number') || undefined,
+      comicVolume: numberValue(pick('comicVolume','volume')),
+      comicCreators: jsonComicCreators(metadata),
+      comicStoryArcs: jsonStringList(metadata?.comicStoryArcs ?? metadata?.storyArcs ?? metadata?.storyArc),
+      comicCharacters: jsonStringList(metadata?.comicCharacters ?? metadata?.characters),
+      comicTeams: jsonStringList(metadata?.comicTeams ?? metadata?.teams),
+      comicUniverses: jsonStringList(metadata?.comicUniverses ?? metadata?.universes),
+      comicUpc: pick('comicUpc','upc','gtin') || undefined,
+      comicSku: pick('comicSku','sku') || undefined,
+      comicVineId: numberValue(pick('comicVineId','cv_id')),
+      comicGcdId: numberValue(pick('comicGcdId','gcd_id')),
+      comicStoreDate: pick('comicStoreDate','storeDate') || undefined,
+      comicCoverDate: pick('comicCoverDate','coverDate') || undefined,
+      comicPageCount: numberValue(pick('comicPageCount','pageCount')),
     });
   } catch {
     return {};

@@ -43,8 +43,9 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import type {OnlineBookCache} from './onlineBookMetadata';
+import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {persistAndroidAutoLibrary} from './androidAuto';
@@ -281,6 +282,8 @@ const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
 const onlineBookMetadataCacheKey = 'archivist.onlineBookMetadataCache.v1';
+const onlineComicMetadataCacheKey = 'archivist.onlineComicMetadataCache.v1';
+const metronTokenKey = 'archivist.metadata.metron.token.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
@@ -2268,6 +2271,10 @@ function Client() {
     if(!scanCommitGate.isCurrent(generation))return;
     const latest=Array.isArray(stored)?stored:baseBooks;
     await enrichPublishedLocalBookMetadata(latest,generation);
+    if(!scanCommitGate.isCurrent(generation))return;
+    const afterBooks=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
+    if(!scanCommitGate.isCurrent(generation))return;
+    await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation);
   }
 
   async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number){
@@ -2299,6 +2306,45 @@ function Client() {
     if(enriched.matched||enriched.review){
       setLocalFolderNotice(current=>{
         const suffix=[enriched.matched?enriched.matched+' enriched online':'',enriched.review?enriched.review+' online matches need review':''].filter(Boolean).join(' · ');
+        return suffix?(current?current+' · ':'')+suffix:current;
+      });
+    }
+  }
+
+  async function enrichPublishedLocalComicMetadata(baseBooks:LocalBook[],generation:number){
+    if(!baseBooks.some(book=>book.format==='Comic')||!scanCommitGate.isCurrent(generation))return;
+    const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim();
+    if(!token||!scanCommitGate.isCurrent(generation))return;
+    const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
+    if(!scanCommitGate.isCurrent(generation))return;
+    const enriched=await enrichLocalComicMetadataOnline(baseBooks,{
+      token,
+      cache,
+      batchSize:3,
+      shouldContinue:()=>scanCommitGate.isCurrent(generation),
+      onBatch:async(batch,progress)=>{
+        if(!scanCommitGate.isCurrent(generation))return;
+        setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
+        await Promise.all([
+          setPersistedJSON(localCatalogKey,batch),
+          setPersistedJSON(onlineComicMetadataCacheKey,progress.cache),
+        ]).catch(()=>undefined);
+        await scanFrame();
+      },
+    }).catch(()=>null);
+    if(!enriched||!scanCommitGate.isCurrent(generation))return;
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],enriched.books).map(book=>({...book,source:'local' as const})));
+    await Promise.all([
+      setPersistedJSON(localCatalogKey,enriched.books),
+      setPersistedJSON(onlineComicMetadataCacheKey,enriched.cache),
+    ]).catch(()=>undefined);
+    if(enriched.matched||enriched.review||enriched.rateLimited){
+      setLocalFolderNotice(current=>{
+        const suffix=[
+          enriched.matched?enriched.matched+' comics enriched online':'',
+          enriched.review?enriched.review+' comic matches need review':'',
+          enriched.rateLimited?'comic lookup paused by provider rate limit':'',
+        ].filter(Boolean).join(' · ');
         return suffix?(current?current+' · ':'')+suffix:current;
       });
     }

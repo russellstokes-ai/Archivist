@@ -6,6 +6,7 @@ import {extractEmbeddedMetadata} from './embeddedMetadata';
 import {extractAudioMetadata} from './audioMetadata';
 import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
+import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
 
 export type LocalBook = {
   id: number;
@@ -43,6 +44,22 @@ export type LocalBook = {
   coverCandidates?: string[];
   onlineMetadataMatch?: OnlineBookCandidate;
   onlineMetadataAlternatives?: OnlineBookCandidate[];
+  comicIssueNumber?: string;
+  comicVolume?: number;
+  comicCreators?: Array<{name:string;roles:string[]}>;
+  comicStoryArcs?: string[];
+  comicCharacters?: string[];
+  comicTeams?: string[];
+  comicUniverses?: string[];
+  comicUpc?: string;
+  comicSku?: string;
+  comicExternalIds?: {metron?:number;comicVine?:number;gcd?:number};
+  comicStoreDate?: string;
+  comicCoverDate?: string;
+  comicPageCount?: number;
+  comicMetadataProvenance?: Partial<Record<string, MetadataSource>>;
+  onlineComicMetadataMatch?: OnlineComicCandidate;
+  onlineComicMetadataAlternatives?: OnlineComicCandidate[];
 };
 
 export type LocalSortPreview = {
@@ -134,6 +151,16 @@ export type LocalOnlineMetadataEnrichmentResult = {
   review: number;
   updated: number;
   cache: OnlineBookCache;
+};
+
+export type LocalOnlineComicMetadataEnrichmentResult = {
+  books: LocalBook[];
+  attempted: number;
+  matched: number;
+  review: number;
+  updated: number;
+  rateLimited: boolean;
+  cache: OnlineComicCache;
 };
 
 const supported = new Map<string, string>([
@@ -392,10 +419,12 @@ export async function scanLocalFolders(
           },
         }];
 
+        let sidecarFields:LocalMetadataFields={};
         const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
         if (sidecarUri) {
           const rawFields = await cachedSidecarFields(sidecarUri);
           const fields = sanitizeDiscoveredMetadata(rawFields, format, identity.title, format === 'Audio' ? audioSiblingCount : 1);
+          sidecarFields=fields;
           if (Object.keys(fields).length) {
             evidence.push({source:'sidecar' as const, confidence:'high' as const, fields});
             identity = applyLocalMetadata(identity, fields, 'sidecar');
@@ -427,6 +456,15 @@ export async function scanLocalFolders(
         const resolvedMetadata = resolveMetadataCandidates(evidence);
         identity = applyResolvedLocalMetadata(identity, resolvedMetadata);
         if (override) identity = applyLocalMetadata(identity, override, 'manual');
+
+        const comicFields:LocalMetadataFields=format==='Comic'?{...sidecarFields,...embeddedFields}:{};
+        const comicMetadataProvenance:Partial<Record<string,MetadataSource>>={};
+        if(format==='Comic'){
+          for(const key of ['comicIssueNumber','comicVolume','comicCreators','comicStoryArcs','comicCharacters','comicTeams','comicUniverses','comicUpc','comicSku','comicVineId','comicGcdId','comicStoreDate','comicCoverDate','comicPageCount']){
+            if((sidecarFields as any)[key]!==undefined)comicMetadataProvenance[key]='sidecar';
+            if((embeddedFields as any)[key]!==undefined)comicMetadataProvenance[key]='embedded';
+          }
+        }
 
         const coverCandidates = [
           artworkByStem.get(fileStem(child).toLowerCase()),
@@ -491,6 +529,20 @@ export async function scanLocalFolders(
           metadataSource: identity.metadataSource,
           coverUri,
           coverCandidates,
+          comicIssueNumber: comicFields.comicIssueNumber || (format==='Comic'&&identity.seriesNumber!==undefined?String(identity.seriesNumber):undefined),
+          comicVolume: comicFields.comicVolume,
+          comicCreators: comicFields.comicCreators,
+          comicStoryArcs: comicFields.comicStoryArcs,
+          comicCharacters: comicFields.comicCharacters,
+          comicTeams: comicFields.comicTeams,
+          comicUniverses: comicFields.comicUniverses,
+          comicUpc: comicFields.comicUpc,
+          comicSku: comicFields.comicSku,
+          comicExternalIds: format==='Comic'&&(comicFields.comicVineId||comicFields.comicGcdId)?{comicVine:comicFields.comicVineId,gcd:comicFields.comicGcdId}:undefined,
+          comicStoreDate: comicFields.comicStoreDate,
+          comicCoverDate: comicFields.comicCoverDate,
+          comicPageCount: comicFields.comicPageCount,
+          comicMetadataProvenance: format==='Comic'?comicMetadataProvenance:undefined,
         });
         if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
       } else {
@@ -682,6 +734,58 @@ export async function enrichLocalBookMetadataOnline(
   }
   if(pending&&shouldContinue())await options.onBatch?.(next.slice(),{attempted,matched,review,updated,cache});
   return {books:next,attempted,matched,review,updated,cache};
+}
+
+export async function enrichLocalComicMetadataOnline(
+  books:LocalBook[],
+  options:{
+    token?:string;
+    cache?:OnlineComicCache;
+    shouldContinue?:()=>boolean;
+    batchSize?:number;
+    onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;rateLimited:boolean;cache:OnlineComicCache})=>void|Promise<void>;
+  }={},
+):Promise<LocalOnlineComicMetadataEnrichmentResult>{
+  const shouldContinue=options.shouldContinue||(()=>true);
+  const batchSize=Math.max(1,Math.min(10,Math.trunc(options.batchSize||3)));
+  const cache:OnlineComicCache={...(options.cache||{})};
+  let next=books.slice();
+  let attempted=0,matched=0,review=0,updated=0,pending=0,rateLimited=false;
+
+  for(let index=0;index<next.length;index+=1){
+    if(!shouldContinue()||rateLimited)break;
+    const book=next[index];
+    if(!shouldLookupComicOnline(book))continue;
+    attempted+=1;pending+=1;
+    const result=await lookupOnlineComic(book,{token:options.token,cache});
+    if(!shouldContinue())break;
+    if(result.status==='rate-limited'){rateLimited=true;break;}
+    if(result.best){
+      const candidate=result.best;
+      if(result.autoApply){
+        let patch=mergeOnlineComicCandidate(book,candidate,true) as LocalBook;
+        patch={
+          ...patch,
+          workKey:logicalWorkKey(patch),
+          editionKey:editionKey(patch,patch.format),
+          onlineComicMetadataMatch:candidate,
+          onlineComicMetadataAlternatives:result.candidates.slice(1,5),
+        };
+        if(JSON.stringify(patch)!==JSON.stringify(book)){next[index]=patch;updated+=1;}
+        matched+=1;
+      }else if(result.status==='review'){
+        next[index]={...book,needsReview:true,reviewReason:'A possible online comic issue match needs review.',onlineComicMetadataMatch:candidate,onlineComicMetadataAlternatives:result.candidates.slice(1,5)};
+        review+=1;
+      }
+    }
+    if(pending>=batchSize){
+      pending=0;
+      await options.onBatch?.(next.slice(),{attempted,matched,review,updated,rateLimited,cache});
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  }
+  if(pending&&shouldContinue())await options.onBatch?.(next.slice(),{attempted,matched,review,updated,rateLimited,cache});
+  return {books:next,attempted,matched,review,updated,rateLimited,cache};
 }
 
 export function previewLocalSort(books: LocalBook[], template: string): LocalSortPreview[] {
