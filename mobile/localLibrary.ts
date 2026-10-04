@@ -330,7 +330,12 @@ export async function scanLocalFolders(
       }
       if (['jpg','jpeg','png','webp'].includes(ext)) {
         artworkByStem.set(stem, child);
-        const rank = stem === 'cover' ? 0 : stem === 'front' ? 1 : stem === 'folder' ? 2 : stem === 'coverart' ? 3 : 99;
+        const rank = stem === 'cover' ? 0
+          : stem === 'front' || stem === 'frontcover' || stem === 'front-cover' ? 1
+          : stem === 'bookcover' || stem === 'book-cover' ? 2
+          : stem === 'folder' ? 3
+          : stem === 'coverart' || stem === 'artwork' ? 4
+          : 99;
         if (genericBookLevelFilesAllowed && rank < genericCoverRank) {
           genericCover = child;
           genericCoverRank = rank;
@@ -411,8 +416,13 @@ export async function scanLocalFolders(
           artworkByStem.get(fileStem(child).toLowerCase()),
           artworkByStem.get('cover'),
           artworkByStem.get('front'),
+          artworkByStem.get('frontcover'),
+          artworkByStem.get('front-cover'),
+          artworkByStem.get('bookcover'),
+          artworkByStem.get('book-cover'),
           artworkByStem.get('folder'),
           artworkByStem.get('coverart'),
+          artworkByStem.get('artwork'),
         ].filter((value,index,all): value is string => !!value && all.indexOf(value)===index);
         const discoveredCoverUri = coverCandidates[0] || genericCover || undefined;
         if(genericCover && !coverCandidates.includes(genericCover))coverCandidates.push(genericCover);
