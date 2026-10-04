@@ -627,6 +627,9 @@ function Client() {
   const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
+  const [atlasShowAllCategories,setAtlasShowAllCategories]=useState(false);
+  const [atlasChartCategory,setAtlasChartCategory]=useState('');
+  const [atlasPanelHeight,setAtlasPanelHeight]=useState(900);
   const [atlasBreakdown,setAtlasBreakdown]=useState<'Genre'|'Format'|'Published year'|null>(null);
   const atlasBreakdownAnim=useRef(new Animated.Value(0)).current;
   const atlasInspectorAnim=useRef(new Animated.Value(0)).current;
@@ -4909,7 +4912,7 @@ function Client() {
     atlasBreakdownAnim.stopAnimation();
     const apply=()=>{
       if(generation!==atlasPanelGeneration.current)return;
-      setAtlasNodeId(nodeId);setAtlasBreakdown(breakdown);
+      setAtlasNodeId(nodeId);setAtlasBreakdown(breakdown);setAtlasShowAllCategories(false);setAtlasChartCategory('');
       atlasBreakdownAnim.setValue(reduceMotion?1:0);
       if(!reduceMotion)Animated.timing(atlasBreakdownAnim,{toValue:1,duration:260,easing:Easing.out(Easing.cubic),useNativeDriver:false}).start();
     };
@@ -4936,11 +4939,11 @@ function Client() {
     const collection=node.kind==='collection'?collections.find(item=>item.id===node.collectionId):undefined;
     const connected=atlasAdjacency.get(node.id)?.size||0;
     const neighbours=[...(atlasAdjacency.get(node.id)||[])].map(id=>atlasNodeMap.get(id)!).filter(Boolean).sort((a,b)=>a.label.localeCompare(b.label));
-    const relatedWorks=node.kind==='author'?atlasUniverseWorks.filter(item=>item.author===node.label):node.kind==='series'?atlasUniverseWorks.filter(item=>item.series===node.label):node.kind==='genre'?atlasUniverseWorks.filter(item=>(item.genre.trim()||'Unclassified')===node.label):[];
+    const relatedWorks=node.kind==='author'?atlasUniverseWorks.filter(item=>item.author===node.label):node.kind==='series'?atlasUniverseWorks.filter(item=>item.series===node.label):node.kind==='genre'?atlasUniverseWorks.filter(item=>node.label==='Other genres'?!atlasNodeMap.has('genre:'+(item.genre.trim()||'Unclassified')):(item.genre.trim()||'Unclassified')===node.label):[];
     const accent=atlasNodeColor(node);
     const icon:UiIconName=node.kind==='series'?'layers':node.kind==='collection'?'shelf':node.kind==='author'?'bookmark':node.kind==='note'?'bookmark':'bookOpen';
     return <View style={{gap:11,paddingTop:4}}>
-      <View pointerEvents="none" style={[styles.atlasInspectorAccent,{backgroundColor:accent}]}/>
+      <View pointerEvents="none" style={[styles.atlasInspectorAccent,{backgroundColor:accent,left:-18}]}/>
       <View style={styles.atlasInspectorHeader}>
         <View style={[styles.atlasInspectorIcon,{backgroundColor:p.card,borderColor:accent}]}><UiIcon name={icon} color={accent} size={19}/></View>
         <View style={{flex:1,minWidth:0}}>
@@ -4979,7 +4982,8 @@ function Client() {
     const ringSize=atlasRingSize;
     const viewHeight=ringSize;
     const rawBreakdown=atlasChartGroups[atlasBreakdown==='Format'?0:atlasBreakdown==='Published year'?1:2];
-    const breakdown=atlasSummary(rawBreakdown);
+    const breakdown=atlasShowAllCategories?rawBreakdown:atlasSummary(rawBreakdown);
+    const chartWorks=atlasChartCategory?atlasUniverseWorks.filter(work=>(atlasBreakdown==='Format'?(work.format||'Not recorded'):atlasBreakdown==='Published year'?(work.publishedYear?String(work.publishedYear):'Not recorded'):(work.genre.trim()||'Unclassified'))===atlasChartCategory):[];
 
     const universeDegrees=new Map<string,number>();
     const workGenre=new Map<string,string>();
@@ -5055,20 +5059,20 @@ function Client() {
           <View style={styles.atlasConstellationStage}>
             <View style={[styles.atlasViewport,{height:viewHeight,width:ringSize,alignSelf:'center',minHeight:viewHeight,flexBasis:'auto',flexShrink:0,backgroundColor:'transparent'}]}>
               <View pointerEvents="none" style={styles.atlasConstellationGlow}><AmbientGlow color={ambientHaloColor} size={Math.max(680,ringSize*1.35)} strength={darkMode?.72:.52}/></View>
-              <View pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
+              <View testID="atlas-chart-ring" pointerEvents="none" style={[styles.atlasRingLayer,{width:ringSize,height:ringSize}]}>
                 <AtlasChartRing size={ringSize} groups={atlasChartGroups} selected={atlasBreakdown==='Format'?0:atlasBreakdown==='Published year'?1:atlasBreakdown==='Genre'?2:-1} pulse={atlasPulse} track={p.line} reduceMotion={reduceMotion}/>
 
                 <View style={[styles.atlasInnerRing,{width:ringSize-42,height:ringSize-42,borderRadius:(ringSize-42)/2,borderColor:p.line}]}/>
               </View>
 
-              <View collapsable={false} style={{position:'absolute',left:32,top:32,width:atlasDiameter,height:atlasDiameter,borderRadius:atlasDiameter/2,overflow:'hidden',zIndex:2,...(Platform.OS==='web'?{touchAction:'none',userSelect:'none'} as any:{})}}
+              <View testID="atlas-gesture-surface" collapsable={false} style={{position:'absolute',left:32,top:32,width:atlasDiameter,height:atlasDiameter,borderRadius:atlasDiameter/2,overflow:'hidden',zIndex:2,...(Platform.OS==='web'?{touchAction:'none',userSelect:'none'} as any:{})}}
                 onStartShouldSetResponder={()=>true} onMoveShouldSetResponder={()=>true}
                 onResponderTerminationRequest={()=>false}
                 onResponderGrant={atlasGestureStart} onResponderMove={atlasGestureMove}
                 onResponderStart={event=>{if(event.nativeEvent.touches.length>=2)atlasBeginTouches(atlasTouchPoints(event),true);}}
                 onResponderEnd={event=>{if(event.nativeEvent.touches.length)atlasBeginTouches(atlasTouchPoints(event),true);}}
                 onResponderRelease={atlasGestureEnd} onResponderTerminate={()=>{atlasGesture.current=null;setAtlasInteracting(false);}}>
-                <View pointerEvents="none" style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
+                <View testID="atlas-graph-transform" pointerEvents="none" style={[styles.atlasUniverseCanvas,{width:atlasUniverse.width,height:atlasUniverse.height,left:atlasTransform.x,top:atlasTransform.y,transform:[{scale:atlasTransform.scale}],transformOrigin:'top left'} as any]}>
                   {renderedEdges.map(edge=>{const from=nodeMap.get(edge.from),to=nodeMap.get(edge.to);return from&&to?AtlasEdgeView({from,to,kind:edge.kind}):null;})}
                   {renderedNodes.map(node=>AtlasUniverseNodeView({node}))}
                 </View>
@@ -5096,8 +5100,8 @@ function Client() {
           </View>
           {atlasUniverse.hiddenWorks?<Text style={[styles.meta,{color:p.muted}]}>{atlasUniverse.hiddenWorks} additional works · Search the full library or select a cluster to explore.</Text>:null}
 
-          {(atlasBreakdown||atlasNodeId)?<Animated.View style={[styles.atlasBreakdownReveal,{maxHeight:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[0,900]}),opacity:atlasBreakdownAnim}]}>
-            <Animated.View style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
+          {(atlasBreakdown||atlasNodeId)?<Animated.View style={[styles.atlasBreakdownReveal,{maxHeight:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[0,atlasPanelHeight]}),opacity:atlasBreakdownAnim}]}>
+            <Animated.View onLayout={event=>{const next=Math.ceil(event.nativeEvent.layout.height);if(next>0&&Math.abs(next-atlasPanelHeight)>1)setAtlasPanelHeight(next);}} style={[styles.atlasBreakdownSheet,{borderColor:p.line,backgroundColor:p.paper==='#000000'?'rgba(11,23,37,.96)':'rgba(255,255,255,.96)',opacity:atlasBreakdownAnim,transform:[{translateY:atlasBreakdownAnim.interpolate({inputRange:[0,1],outputRange:[14,0]})}]}]}>
             <View style={styles.atlasBreakdownHandle}><View style={[styles.atlasBreakdownHandleBar,{backgroundColor:p.muted}]}/></View>
             {atlasNodeId?AtlasInspector():<>
             <View style={styles.atlasBreakdownHeader}>
@@ -5110,10 +5114,10 @@ function Client() {
               </View>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Close Atlas chart details" onPress={dismissAtlasNode} style={{position:'absolute',right:12,top:18,width:44,height:44,alignItems:'center',justifyContent:'center'}}><UiIcon name="close" color={p.muted} size={19}/></Pressable>
-            <View style={styles.atlasBreakdownRows}>
+            <ScrollView nestedScrollEnabled style={{maxHeight:340}} contentContainerStyle={styles.atlasBreakdownRows}>
               {breakdown.map(item=>{
                 const percent=Math.round(item.count/Math.max(1,atlasUniverseWorks.length)*100);
-                return <View key={item.label} style={styles.atlasBreakdownRow}>
+                return <Pressable key={item.label} accessibilityRole="button" accessibilityLabel={'Show '+item.label+' works'} onPress={()=>{if(item.label==='Other categories'&&!atlasShowAllCategories){setAtlasShowAllCategories(true);return;}setAtlasChartCategory(item.label);}} style={[styles.atlasBreakdownRow,{minHeight:44}]}>
                   <View style={[styles.atlasBreakdownDot,{backgroundColor:item.color}]}/>
                   <Text numberOfLines={1} style={[styles.atlasBreakdownName,{color:p.ink}]}>{item.label}</Text>
                   <View style={[styles.atlasBreakdownTrack,{backgroundColor:p.card}]}>
@@ -5121,10 +5125,12 @@ function Client() {
                   </View>
                   <Text style={[styles.atlasBreakdownCount,{color:p.ink}]}>{item.count}</Text>
                   <Text style={[styles.atlasBreakdownPercent,{color:p.muted}]}>{percent}%</Text>
-                </View>;
+                </Pressable>;
               })}
               {!breakdown.length?<Text style={[styles.meta,{color:p.muted}]}>Add books to reveal your library’s patterns.</Text>:null}
-            </View>
+            </ScrollView>
+            {rawBreakdown.length>7?<Pressable accessibilityRole="button" onPress={()=>setAtlasShowAllCategories(value=>!value)} style={{minHeight:44,justifyContent:'center'}}><Text style={{color:p.sage}}>{atlasShowAllCategories?'Show summary':'Show all '+rawBreakdown.length+' categories'}</Text></Pressable>:null}
+            {atlasChartCategory?<View style={{gap:8}}><Text style={[styles.atlasInspectorKicker,{color:p.muted}]}>{atlasChartCategory} · {chartWorks.length} works</Text><ScrollView nestedScrollEnabled style={{maxHeight:220}}>{chartWorks.map(item=><Pressable key={item.key} accessibilityRole="button" accessibilityLabel={'Show '+item.title+' in Atlas'} onPress={()=>{const id='work:'+(item.canonicalKey||item.key);if(atlasNodeMap.has(id))focusAtlasNode(id);else{atlasPendingFocus.current=id;setAtlasPriorityKeys(keys=>[item.key,...keys.filter(key=>key!==item.key)].slice(0,12));}}} style={{minHeight:44,justifyContent:'center'}}><Text style={{color:p.ink}}>{item.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{item.author}</Text></Pressable>)}</ScrollView></View>:null}
             {atlasBreakdown==='Published year'?<Text style={[styles.atlasBreakdownNote,{color:p.muted}]}>Dates come from recorded metadata. Books without a verified publication date are grouped as not recorded.</Text>:null}
             </>}
             </Animated.View>
@@ -7638,4 +7644,5 @@ const styles = StyleSheet.create({
   insightAchievement: {borderWidth:0,padding:11,minWidth:140,flexGrow:1},
 
 });
+
 

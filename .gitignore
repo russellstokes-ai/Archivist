@@ -21,3 +21,7 @@ mobile/ios/
 .DS_Store
 *.log
 coverage.out
+
+# Atlas exported-web acceptance artifacts
+mobile/dist-atlas/
+mobile/atlas-preview-results/

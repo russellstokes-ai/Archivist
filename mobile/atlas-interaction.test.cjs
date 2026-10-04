@@ -34,6 +34,7 @@ async function load(file){return import('data:text/javascript;base64,'+Buffer.fr
     assert.equal(x.atlasNearest([node],transform,{x:-1,y:-1},diameter),null);
     const constrained=x.atlasConstrain({x:1e8,y:-1e8,scale:2},graph.nodes,diameter);
     assert(constrained.x<1e8&&constrained.y> -1e8,'Pan must not lose the graph');
+    assert(graph.nodes.some(n=>Math.hypot(constrained.x+n.x*constrained.scale-diameter/2,constrained.y+n.y*constrained.scale-diameter/2)<diameter/2),'At least one node stays inside circular pan bounds');
   }
   assert.equal(x.atlasZoomAt({x:0,y:0,scale:1},{x:0,y:0},{x:0,y:0},100).scale,3.5);
   const slices=x.atlasBreakdown(works,w=>w.genre||'Unclassified',()=> '#47736F');

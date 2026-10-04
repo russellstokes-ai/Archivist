@@ -25,7 +25,13 @@ export function atlasConstrain(transform:AtlasTransform,nodes:AtlasPoint[],diame
   const margin=Math.min(48,diameter/4),scale=atlasScale(transform.scale);
   const minX=Math.min(...nodes.map(n=>n.x))*scale,maxX=Math.max(...nodes.map(n=>n.x))*scale;
   const minY=Math.min(...nodes.map(n=>n.y))*scale,maxY=Math.max(...nodes.map(n=>n.y))*scale;
-  return {scale,x:Math.max(margin-maxX,Math.min(diameter-margin-minX,transform.x)),y:Math.max(margin-maxY,Math.min(diameter-margin-minY,transform.y))};
+  const bounded={scale,x:Math.max(margin-maxX,Math.min(diameter-margin-minX,transform.x)),y:Math.max(margin-maxY,Math.min(diameter-margin-minY,transform.y))};
+  // A rectangular bound alone can leave every node outside a circular viewport.
+  const centre=diameter/2,radius=Math.max(1,centre-margin);
+  let nearest=nodes[0],distance=Infinity;
+  for(const node of nodes){const d=Math.hypot(bounded.x+node.x*scale-centre,bounded.y+node.y*scale-centre);if(d<distance){nearest=node;distance=d;}}
+  if(distance>radius){const dx=bounded.x+nearest.x*scale-centre,dy=bounded.y+nearest.y*scale-centre;const correction=1-radius/distance;bounded.x-=dx*correction;bounded.y-=dy*correction;}
+  return bounded;
 }
 
 export function atlasNearest(nodes:AtlasPlotNode[],transform:AtlasTransform,point:AtlasPoint,diameter:number,radius=26):string|null {

@@ -1,5 +1,14 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## Latest Atlas finishing evidence — 4 October 2026
+
+Implementation and exported-web checks completed; full report and reproduction: [mobile/ATLAS-ACCEPTANCE.md](mobile/ATLAS-ACCEPTANCE.md).
+
+All 33 suites, TypeScript and Expo web export passed. The browser matrix passed at 320/390/600/720/1200px, with light/dark and a Reduced Motion/enlarged-text case, plus a 2,000-book/40-genre case. These runs exercise charts, category drill-down, book/author details, synthetic pinch/pan/cancel and repeat resizing. The ring remains fixed during pinch. The earlier intercepted-click failure was traced to the existing web storage-warning banner; checks pass after explicitly dismissing it. See the acceptance report for the intermediate timing failure and final harness settings.
+
+This supersedes the earlier checkpoint's unresolved Atlas browser checks and missing minority-category drill-down. Final code adds expandable categories, content-measured panels, a non-overlapping accent and circular pan containment. Physical Android/iOS/Fold, real server catalogues, long-session/frame-pacing and native accessibility acceptance remain pending. No production/device approval is claimed. Locked Fold, Player and Comic Focus designs remain unchanged.
+
+
 ## 2026-10-04 — Comic shape-following mask sprint
 
 - Replaced envelope clipping with independent silhouette spans, exterior flood-fill to preserve enclosed lettering, and round outline dilation.
