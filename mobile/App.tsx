@@ -4636,8 +4636,8 @@ function Client() {
 
             {playerPanel?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setPlayerPanel(null)}>
               <Pressable accessibilityRole="button" accessibilityLabel="Close player options" style={modalSheetBackdrop} onPress={()=>setPlayerPanel(null)}>
-                <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Player options" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
-                  <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+                <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Player options" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
+                  <DismissSheetHandle onDismiss={()=>setPlayerPanel(null)} foldLayout={foldLayout}/>
                   <View style={styles.sheetHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Player options</Text><Text style={[styles.meta,{color:p.muted}]}>Playback controls without leaving Now Playing.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close player options" onPress={()=>setPlayerPanel(null)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable></View>
                   <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" style={styles.playerOptionsScroll} contentContainerStyle={styles.playerOptionsBody}>
                     {playerPanel==='speed' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
