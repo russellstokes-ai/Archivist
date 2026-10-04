@@ -38,6 +38,9 @@ assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
 assert.match(source,/\{id:\s*['"]now['"],\s*label:\s*['"]Now['"]/, 'Center Player/Reader live tab is not wired');
 assert.ok(source.includes('function LiveHub()'), 'Player/Reader live hub is missing');
+assert.ok(source.includes("liveMode==='player'?Player({embedded:true}):<Reader embedded/>"), 'Live Player must render directly so routine parent updates do not remount and reset its scroll/panel state');
+assert.equal(source.includes("liveMode==='player'?<Player embedded/>"),false,'Live Player must not use a remounting nested component boundary');
+assert.ok(source.includes('playerSeekPreview') && source.includes('visualPosition') && source.includes('setPlayerSeekPreview({key,seconds:target})'), 'Live Player seeks must hold an optimistic visual position until the native seek settles');
 assert.ok(source.includes('function LiveMediaEmpty(') && source.includes('if(embedded&&!current)return <LiveMediaEmpty mode="player"') && source.includes('if(!reading)return <LiveMediaEmpty mode="reader"') && source.includes("liveMediaEmpty: {flex:1"), 'Embedded Player and Reader empty states must use the identical shared layout');
 assert.ok(source.includes("(['player','reader'] as const)") && source.includes("setLiveMode(mode)"), 'Player/Reader live toggle is not functional');
 assert.ok(source.includes("setActiveTab('now')") && source.includes("setLiveMode('player')") && source.includes("setLiveMode('reader')"), 'Player and Reader launches must route through the live hub');
@@ -322,6 +325,7 @@ assert.ok(source.includes("function DismissSheetHandle") && source.includes("sho
 assert.ok(source.includes("actionSheetStable: {height:'76%',minHeight:360,maxHeight:680,overflow:'hidden'}"),'Dynamic mobile sheets must use a stable detent rather than jump as content changes');
 assert.ok(source.includes('accessibilityLabel="Close format or edition picker"') && source.includes('accessibilityLabel="Close format picker"'),'Format pickers must dismiss by tapping the scrim as well as Android Back');
 assert.ok(source.includes('accessibilityLabel="Player options" style={[styles.actionSheet,styles.actionSheetStable') && source.includes("<DismissSheetHandle onDismiss={()=>setPlayerPanel(null)}"),'Player options must use the standard stable dismissible sheet');
+assert.ok(source.includes('>AUDIO FILES</Text>') && source.includes("((serverPlayer?playback?.tracks:activeLocalWork?.tracks)?.length||0)>0"),'More must show useful audiobook structure even for a single-file audiobook');
 assert.ok(source.includes("Alert.alert('Discard changes?'") && source.includes("Alert.alert('Discard bulk changes?'"),'Editable metadata modals must protect unsaved work when dismissed');
 assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?136:160"),'Approved Library folder rail width fix regressed');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"),'Locked primary-page geometry changed');
