@@ -6938,6 +6938,8 @@ const styles = StyleSheet.create({
   playerToolValue: {fontSize:16,fontWeight:'700'},
   playerToolLabel: {fontSize:10,lineHeight:13,fontWeight:'500',marginTop:0},
   playerPanel: {borderWidth:0,borderRadius:16,padding:16,gap:12},
+  playerOptionsScroll: {width:'100%',maxHeight:'78%'},
+  playerOptionsBody: {paddingBottom:12,gap:8},
   playerPanelTitle: {fontSize:16,fontWeight:'900'},
   playerNotice: {borderWidth:0,borderRadius:12,padding:12},
   chapterRow: {flexDirection:'row',alignItems:'center',gap:10,padding:10,borderRadius:10},
