@@ -1,5 +1,7 @@
 name: Android native checks
 
+# Build 6 release gate: this workflow is intentionally triggered alongside APK validation.
+
 on:
   push:
     paths:
