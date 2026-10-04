@@ -65,6 +65,13 @@ assert.equal(strong.confidence,'high');
 assert.equal(strong.exactIssue,true);
 assert(strong.score>=90);
 
+const aliasMatch=scoreOnlineComicCandidate(
+  {format:'Comic',series:'Peter Parker Spider-Man',comicIssueNumber:'1'},
+  {provider:'metron',providerId:'52',fields:{series:'Peter Parker',comicSeriesAliases:['Peter Parker Spider-Man'],comicIssueNumber:'1'},query:'q'},
+);
+assert.equal(aliasMatch.exactIssue,true);
+assert(aliasMatch.seriesScore>=.99);
+
 const wrongIssue=scoreOnlineComicCandidate(
   {format:'Comic',series:'Amazing Spider-Man',comicIssueNumber:'1'},
   {provider:'metron',providerId:'51',fields:{series:'Amazing Spider-Man',comicIssueNumber:'12'},query:'q'},

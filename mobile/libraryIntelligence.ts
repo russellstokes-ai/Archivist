@@ -37,6 +37,7 @@ export type LocalMetadataFields = {
   description?: string;
   comicIssueNumber?: string;
   comicVolume?: number;
+  comicSeriesAliases?: string[];
   comicCreators?: Array<{name:string;roles:string[]}>;
   comicStoryArcs?: string[];
   comicCharacters?: string[];
@@ -300,7 +301,7 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
   const ext = extension.toLowerCase();
   if (ext === 'json') return parseJsonSidecar(text);
   const title = xmlValue(text, ['dc:title', 'title', 'Title']);
-  const author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer', 'Writer']);
+  let author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer', 'Writer']);
 
   let series = xmlValue(text, ['series', 'Series']);
   const comicIssueNumber = cleanOptional(xmlValue(text, ['number', 'Number']));
@@ -329,6 +330,11 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
   const language = xmlValue(text, ['dc:language', 'language', 'Language']);
   const description = xmlValue(text, ['dc:description', 'description', 'Description', 'summary', 'Summary', 'comments', 'Comments']);
   const comicCreators = comicCreatorsFromXml(text);
+  const comicSeriesAliases = splitMetadataList(xmlValue(text,['alternateseries','AlternateSeries']));
+  if(/<ComicInfo\b/i.test(text)){
+    const writers=comicCreators.filter(creator=>creator.roles.some(role=>/writer/i.test(role))).map(creator=>creator.name);
+    if(writers.length)author=writers.join(' & ');
+  }
   const comicStoryArcs = splitMetadataList(xmlValue(text,['storyarc','StoryArc']));
   const comicCharacters = splitMetadataList(xmlValue(text,['characters','Characters']));
   const comicTeams = splitMetadataList(xmlValue(text,['teams','Teams']));
@@ -375,6 +381,7 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     description: cleanOptional(description),
     comicIssueNumber,
     comicVolume,
+    comicSeriesAliases: comicSeriesAliases.length ? comicSeriesAliases : undefined,
     comicCreators: comicCreators.length ? comicCreators : undefined,
     comicStoryArcs: comicStoryArcs.length ? comicStoryArcs : undefined,
     comicCharacters: comicCharacters.length ? comicCharacters : undefined,
@@ -573,6 +580,7 @@ function parseJsonSidecar(text: string): LocalMetadataFields {
       description: pick('description','summary','comments') || undefined,
       comicIssueNumber: pick('comicIssueNumber','issueNumber','issue','number') || undefined,
       comicVolume: numberValue(pick('comicVolume','volume')),
+      comicSeriesAliases: jsonStringList(metadata?.comicSeriesAliases ?? metadata?.alternateSeries ?? metadata?.seriesAliases),
       comicCreators: jsonComicCreators(metadata),
       comicStoryArcs: jsonStringList(metadata?.comicStoryArcs ?? metadata?.storyArcs ?? metadata?.storyArc),
       comicCharacters: jsonStringList(metadata?.comicCharacters ?? metadata?.characters),

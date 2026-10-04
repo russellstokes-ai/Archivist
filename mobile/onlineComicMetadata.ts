@@ -16,6 +16,7 @@ export type OnlineComicFields={
   description?:string;
   comicIssueNumber?:string;
   comicVolume?:number;
+  comicSeriesAliases?:string[];
   comicCreators?:ComicCreator[];
   comicStoryArcs?:string[];
   comicCharacters?:string[];
@@ -268,7 +269,7 @@ function creatorCredits(value:any):ComicCreator[]|undefined{
 function primaryWriter(creators?:ComicCreator[]){
   if(!creators?.length)return undefined;
   const writers=creators.filter(creator=>creator.roles.some(role=>/writer|script|story/i.test(role))).map(creator=>creator.name);
-  return writers.length?writers.join(', '):undefined;
+  return writers.length?writers.join(' & '):undefined;
 }
 function issueSeries(item:any){
   return item?.series||{};
@@ -301,6 +302,7 @@ function issueFields(item:any,detail=false):OnlineComicFields{
     description:clean(item?.desc??item?.description)||undefined,
     comicIssueNumber:issueNumber||undefined,
     comicVolume:safeNumber(series?.volume??item?.volume),
+    comicSeriesAliases:listNames(series?.alt_names) || (Array.isArray(series?.alt_names)?series.alt_names.map((value:any)=>clean(value)).filter(Boolean):undefined),
     comicCreators:creators,
     comicStoryArcs:listNames(item?.arcs),
     comicCharacters:listNames(item?.characters),
@@ -346,7 +348,8 @@ export function scoreOnlineComicCandidate(input:ComicLookupInput,candidate:Omit<
     if(normalize(hints.sku)===normalize(candidate.fields.comicSku)){score+=75;exactIdentifier=true;reasons.push('SKU match');}
     else score-=40;
   }
-  const seriesScore=hints.series.length?Math.max(...hints.series.map(series=>similarity(series,candidate.fields.series))):0;
+  const candidateSeries=[candidate.fields.series,...(candidate.fields.comicSeriesAliases||[])].filter(Boolean);
+  const seriesScore=hints.series.length&&candidateSeries.length?Math.max(...hints.series.flatMap(series=>candidateSeries.map(candidateSeriesName=>similarity(series,candidateSeriesName)))):0;
   if(seriesScore){score+=seriesScore*48;if(seriesScore>=.88)reasons.push('strong series match');}
   const candidateIssue=normalizeComicIssueNumber(candidate.fields.comicIssueNumber);
   const exactIssue=!!candidateIssue&&hints.issueNumbers.includes(candidateIssue);
@@ -485,7 +488,7 @@ function canReplaceCommon(book:ComicLookupInput,field:keyof OnlineComicFields,ca
   return candidate.confidence==='high'&&(source==='path'||source==='online'||confidence==='low'||confidence==='medium'||!confidence);
 }
 const comicSpecificFields:Array<keyof OnlineComicFields>=[
-  'comicIssueNumber','comicVolume','comicCreators','comicStoryArcs','comicCharacters','comicTeams','comicUniverses',
+  'comicIssueNumber','comicVolume','comicSeriesAliases','comicCreators','comicStoryArcs','comicCharacters','comicTeams','comicUniverses',
   'comicUpc','comicSku','comicExternalIds','comicStoreDate','comicCoverDate','comicPageCount',
 ];
 const commonFields:Array<keyof OnlineComicFields>=['title','author','series','seriesNumber','genre','publishedYear','publisher','isbn','language','description'];
