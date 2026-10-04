@@ -214,13 +214,13 @@ func (a *app) addSource(space, path string) error {
 }
 func kind(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".mp3", ".m4b", ".m4a", ".ogg", ".flac", ".wav":
+	case ".mp3", ".m4b", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".wav":
 		return "Audio"
 	case ".epub":
 		return "Ebook"
 	case ".pdf":
 		return "PDF"
-	case ".cbz", ".zip", ".cbt":
+	case ".cbz", ".cbr", ".zip", ".cbt":
 		return "Comic"
 	}
 	return ""
@@ -626,6 +626,12 @@ func (a *app) routes() http.Handler {
 		series := strings.TrimSpace(r.URL.Query().Get("series"))
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		reviewOnly := r.URL.Query().Get("review") == "1"
+		metadataGap := strings.TrimSpace(r.URL.Query().Get("metadataGap"))
+		validMetadataGap := map[string]bool{"":true,"review":true,"author":true,"series":true,"genre":true,"seriesNumber":true,"identifier":true,"description":true,"incomplete":true}
+		if !validMetadataGap[metadataGap] {
+			fail(w,400,errors.New("invalid metadata-gap filter"))
+			return
+		}
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
 		availability := r.URL.Query().Get("availability")
 		if availability != "" && availability != "available" && availability != "unavailable" {
@@ -638,7 +644,7 @@ func (a *app) routes() http.Handler {
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.series_number,a.genre,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
-			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ?)
+			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ? OR a.narrator LIKE ? OR a.publisher LIKE ? OR a.isbn LIKE ? OR a.asin LIKE ?)
 			AND (?='' OR s.space=?)
 			AND (?='' OR a.format=?)
 			AND (?='' OR a.author=?)
@@ -646,10 +652,25 @@ func (a *app) routes() http.Handler {
 			AND (?='' OR a.genre=?)
 			AND (?=0 OR trim(a.author)='')
 			AND (?=0 OR a.needs_review=1)
+			AND (?='' OR
+				(?='review' AND a.needs_review=1) OR
+				(?='author' AND trim(a.author)='') OR
+				(?='series' AND trim(a.series)='') OR
+				(?='genre' AND trim(a.genre)='') OR
+				(?='seriesNumber' AND trim(a.series)<>'' AND a.series_number=0) OR
+				(?='identifier' AND trim(a.isbn)='' AND trim(a.asin)='') OR
+				(?='description' AND trim(a.description)='') OR
+				(?='incomplete' AND (
+					trim(a.title)='' OR trim(a.author)='' OR trim(a.genre)='' OR a.published_year=0 OR
+					(a.format='Audio' AND trim(a.narrator)='') OR trim(a.publisher)='' OR
+					(trim(a.isbn)='' AND trim(a.asin)='') OR trim(a.language)='' OR trim(a.description)=''
+				))
+			)
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
 			ORDER BY a.needs_review DESC,a.title,a.id LIMIT ? OFFSET ?`,
-			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
+			q, q, q, q, q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
+			metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap,
 			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
 		if e != nil {
 			fail(w, 500, e)
