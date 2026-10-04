@@ -43,7 +43,8 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import type {OnlineBookCache} from './onlineBookMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {persistAndroidAutoLibrary} from './androidAuto';
@@ -279,6 +280,7 @@ const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
+const onlineBookMetadataCacheKey = 'archivist.onlineBookMetadataCache.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
@@ -2255,8 +2257,51 @@ function Client() {
     setRescanPromptOpen(false);
     setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
-    if(scanCommitGate.isCurrent(generation))void enrichPublishedLocalCovers(result.books,generation);
+    if(scanCommitGate.isCurrent(generation))void enrichPublishedLocalLibrary(result.books,generation);
     return scanCommitGate.isCurrent(generation)?summary:null;
+  }
+
+  async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number){
+    await enrichPublishedLocalCovers(baseBooks,generation);
+    if(!scanCommitGate.isCurrent(generation))return;
+    const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
+    if(!scanCommitGate.isCurrent(generation))return;
+    const latest=Array.isArray(stored)?stored:baseBooks;
+    await enrichPublishedLocalBookMetadata(latest,generation);
+  }
+
+  async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number){
+    if(!baseBooks.some(book=>book.format==='EPUB'||book.format==='PDF')||!scanCommitGate.isCurrent(generation))return;
+    const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
+    if(!scanCommitGate.isCurrent(generation))return;
+    const googleBooksApiKey=String((Constants.expoConfig?.extra as any)?.googleBooksApiKey||'').trim()||undefined;
+    const enriched=await enrichLocalBookMetadataOnline(baseBooks,{
+      cache,
+      googleBooksApiKey,
+      batchSize:4,
+      shouldContinue:()=>scanCommitGate.isCurrent(generation),
+      onBatch:async(batch,progress)=>{
+        if(!scanCommitGate.isCurrent(generation))return;
+        setLocalBooks(current=>applyOnlineMetadataEnrichment(current,batch).map(book=>({...book,source:'local' as const})));
+        await Promise.all([
+          setPersistedJSON(localCatalogKey,batch),
+          setPersistedJSON(onlineBookMetadataCacheKey,progress.cache),
+        ]).catch(()=>undefined);
+        await scanFrame();
+      },
+    }).catch(()=>null);
+    if(!enriched||!scanCommitGate.isCurrent(generation))return;
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current,enriched.books).map(book=>({...book,source:'local' as const})));
+    await Promise.all([
+      setPersistedJSON(localCatalogKey,enriched.books),
+      setPersistedJSON(onlineBookMetadataCacheKey,enriched.cache),
+    ]).catch(()=>undefined);
+    if(enriched.matched||enriched.review){
+      setLocalFolderNotice(current=>{
+        const suffix=[enriched.matched?enriched.matched+' enriched online':'',enriched.review?enriched.review+' online matches need review':''].filter(Boolean).join(' · ');
+        return suffix?(current?current+' · ':'')+suffix:current;
+      });
+    }
   }
 
   async function enrichPublishedLocalCovers(baseBooks:LocalBook[],generation:number){
