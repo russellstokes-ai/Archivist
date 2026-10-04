@@ -6,7 +6,7 @@
 
 **Your library. Yours.**
 
-Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
+Archivist 0.9.4 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
 
 Local files remain useful without a server, and connecting a server later does not replace the phone library.
 
