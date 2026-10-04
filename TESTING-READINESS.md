@@ -1,5 +1,24 @@
 # Archivist 0.9.3 — Testing Readiness
 
+## 2026-10-04 — Device polish Sprint 9: Cover Management GREEN
+
+- Existing locked **METADATA & COVER** editor retained; no navigation or general UI redesign.
+- System image picker remains single-select and does not request broad photo-library permission.
+- Picker cancellation/error does not replace the saved cover.
+- Device-picked artwork is inspected before preview and copied into Archivist app-private storage before becoming a manual override.
+- 25 MB is enforced against the largest verified picker/filesystem size and rechecked on the durable copy.
+- Unknown-size images fail closed; failed/mismatched copies are cleaned up.
+- Manual-cover destination allocation is non-overwriting even if two saves share a timestamp.
+- Local cover alternatives are de-duplicated/ranked with the current scanned candidate first.
+- Manual cover overrides remain protected across rescans; **Use scanned metadata & cover** removes the override and restores scanner-selected metadata/artwork.
+- Behavioral suite added for cancellation, ranking, size enforcement, durable persistence, collision handling, cleanup and restore semantics.
+- **PASS Mobile:** run `37224583681` — dependencies, Expo Doctor, TypeScript, all maintained tests, version consistency, Expo web export.
+- **PASS iOS:** run `37224583776` — dependencies, Expo Doctor, TypeScript, native project generation, CocoaPods, full iOS Simulator compile.
+- Executable/test head: `503d199be16e51e88aad61441408912305d32381`.
+- Full checkpoint: `dev-work/checkpoints/2026-10-04-device-sprint-09.md`.
+- Physical Android/iOS/Fold picker, process-relaunch, real-provider >25 MB and visual/accessibility acceptance remain device gates.
+
+
 ## Latest Atlas finishing evidence — 4 October 2026
 
 Implementation and exported-web checks completed; full report and reproduction: [mobile/ATLAS-ACCEPTANCE.md](mobile/ATLAS-ACCEPTANCE.md).
