@@ -11,6 +11,10 @@ assert(hints.titles.includes('Dune'));
 assert(hints.authors.includes('Frank Herbert'));
 assert(hints.series.includes('Dune'));
 
+const simpleAuthorFolder=buildBookLookupHints({title:'Dune',author:'',format:'EPUB',uri:'content://root/document/primary:Books%2FFrank%20Herbert%2FDune.epub'});
+assert(simpleAuthorFolder.authors.includes('Frank Herbert'));
+assert.equal(simpleAuthorFolder.series.includes('Frank Herbert'),false);
+
 const exact=scoreOnlineBookCandidate({title:'Anything',isbn:'9780441172719',format:'EPUB'},{
   provider:'openlibrary',providerId:'/works/OL1W',fields:{title:'Dune',author:'Frank Herbert',isbn:'9780441172719'},coverUri:'https://x/cover.jpg',exactIdentifier:false,query:'isbn'
 });
@@ -51,6 +55,7 @@ assert.equal(sparseMerge.needsReview,false);
   assert.equal(result.autoApply,true);
   assert.equal(result.best.fields.author,'Frank Herbert');
   assert.equal(result.best.fields.genre,'Science Fiction');
+  assert.equal(result.best.fields.series,'Dune');
   assert.match(result.best.coverUri,/covers\.openlibrary\.org/);
   console.log('PASS: online book metadata handles sparse folders, strong matching, field protection, enrichment and covers');
 })().catch(error=>{console.error(error);process.exit(1);});
