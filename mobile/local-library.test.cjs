@@ -236,6 +236,16 @@ assert.equal(previews[0].state, 'review');
   assert.equal(scanned.books[0].coverUri, 'content://manual/MyCover.jpg');
   assert.deepEqual(scanned.books[0].coverCandidates, [cover, genericCover, frontCover]);
 
+  const restoredScan=await scanLocalFolders(
+    [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    scanned.books,
+  );
+  assert.equal(restoredScan.books[0].title,'The Dispossessed','removing the manual override must restore scanned metadata');
+  assert.equal(restoredScan.books[0].coverUri,cover,'removing the manual override must restore the highest-ranked scanned cover');
+  assert.equal(restoredScan.books[0].metadataSource,'sidecar');
+
   const dottedRoot='content://root/tree/primary:Books/document/primary:Books2';
   const dottedAuthor=dottedRoot+'%2FJ.R.R.%20Tolkien';
   const dottedBook=dottedAuthor+'%2FThe%20Hobbit.epub';
