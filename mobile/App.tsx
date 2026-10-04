@@ -2282,7 +2282,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        setLocalBooks(current=>applyOnlineMetadataEnrichment(current,batch).map(book=>({...book,source:'local' as const})));
+        setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
         await Promise.all([
           setPersistedJSON(localCatalogKey,batch),
           setPersistedJSON(onlineBookMetadataCacheKey,progress.cache),
@@ -2291,7 +2291,7 @@ function Client() {
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(current,enriched.books).map(book=>({...book,source:'local' as const})));
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],enriched.books).map(book=>({...book,source:'local' as const})));
     await Promise.all([
       setPersistedJSON(localCatalogKey,enriched.books),
       setPersistedJSON(onlineBookMetadataCacheKey,enriched.cache),
