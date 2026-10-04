@@ -5,6 +5,7 @@ import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCand
 import {extractEmbeddedMetadata} from './embeddedMetadata';
 import {extractAudioMetadata} from './audioMetadata';
 import {discoverEmbeddedCover} from './coverDiscovery';
+import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 
 export type LocalBook = {
   id: number;
@@ -37,9 +38,11 @@ export type LocalBook = {
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
-  metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual';
+  metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual' | 'online';
   coverUri?: string;
   coverCandidates?: string[];
+  onlineMetadataMatch?: OnlineBookCandidate;
+  onlineMetadataAlternatives?: OnlineBookCandidate[];
 };
 
 export type LocalSortPreview = {
@@ -122,6 +125,15 @@ export type LocalCoverEnrichmentResult = {
   books: LocalBook[];
   attempted: number;
   updated: number;
+};
+
+export type LocalOnlineMetadataEnrichmentResult = {
+  books: LocalBook[];
+  attempted: number;
+  matched: number;
+  review: number;
+  updated: number;
+  cache: OnlineBookCache;
 };
 
 const supported = new Map<string, string>([
@@ -589,6 +601,87 @@ export async function enrichLocalBookCovers(
     await options.onBatch?.(next.slice(),{attempted,updated});
   }
   return {books:next,attempted,updated};
+}
+
+export function applyOnlineMetadataEnrichment(current:LocalBook[],enriched:LocalBook[]):LocalBook[] {
+  const patches=new Map(enriched.filter(item=>!!item.uri).map(item=>[item.uri,item]));
+  let changed=false;
+  const next=current.map(item=>{
+    const patch=patches.get(item.uri);
+    if(!patch)return item;
+    if(JSON.stringify(patch)===JSON.stringify(item))return item;
+    const protectedFields=new Set(
+      Object.entries(item.metadataProvenance||{})
+        .filter(([,source])=>source==='manual')
+        .map(([field])=>field),
+    );
+    const merged:LocalBook={...patch};
+    for(const field of protectedFields){
+      if(field in item)(merged as any)[field]=(item as any)[field];
+      if(item.metadataProvenance?.[field])merged.metadataProvenance={...(merged.metadataProvenance||{}),[field]:item.metadataProvenance[field]};
+      if(item.metadataFieldConfidence?.[field])merged.metadataFieldConfidence={...(merged.metadataFieldConfidence||{}),[field]:item.metadataFieldConfidence[field]};
+    }
+    if(item.coverUri&&item.coverUri!==patch.coverUri){
+      merged.coverUri=item.coverUri;
+      merged.coverCandidates=[item.coverUri,...(patch.coverCandidates||[]).filter(value=>value!==item.coverUri)];
+    }
+    changed=true;
+    return merged;
+  });
+  return changed?next:current;
+}
+
+export async function enrichLocalBookMetadataOnline(
+  books:LocalBook[],
+  options:{
+    cache?:OnlineBookCache;
+    googleBooksApiKey?:string;
+    shouldContinue?:()=>boolean;
+    batchSize?:number;
+    onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;cache:OnlineBookCache})=>void|Promise<void>;
+  }={},
+):Promise<LocalOnlineMetadataEnrichmentResult>{
+  const shouldContinue=options.shouldContinue||(()=>true);
+  const batchSize=Math.max(1,Math.min(12,Math.trunc(options.batchSize||4)));
+  const cache:OnlineBookCache={...(options.cache||{})};
+  let next=books.slice();
+  let attempted=0,matched=0,review=0,updated=0,pending=0;
+
+  for(let index=0;index<next.length;index+=1){
+    if(!shouldContinue())break;
+    const book=next[index];
+    if(!shouldLookupBookOnline(book))continue;
+    attempted+=1;pending+=1;
+    const result=await lookupOnlineBook(book,{cache,googleBooksApiKey:options.googleBooksApiKey});
+    if(!shouldContinue())break;
+    if(result.best){
+      const candidate=result.best;
+      let patch:LocalBook;
+      if(result.autoApply){
+        patch=mergeOnlineBookCandidate(book,candidate,true);
+        patch={
+          ...patch,
+          workKey:logicalWorkKey(patch),
+          editionKey:editionKey(patch,patch.format),
+          metadataSource:(patch.metadataProvenance?.title==='online'||patch.metadataProvenance?.author==='online')?'online':patch.metadataSource,
+          onlineMetadataMatch:candidate,
+          onlineMetadataAlternatives:result.candidates.slice(1,5),
+        };
+        if(JSON.stringify(patch)!==JSON.stringify(book)){next[index]=patch;updated+=1;}
+        matched+=1;
+      }else if(result.status==='review'){
+        patch={...book,needsReview:true,reviewReason:'A possible online metadata match needs review.',onlineMetadataMatch:candidate,onlineMetadataAlternatives:result.candidates.slice(1,5)};
+        next[index]=patch;review+=1;
+      }
+    }
+    if(pending>=batchSize){
+      pending=0;
+      await options.onBatch?.(next.slice(),{attempted,matched,review,updated,cache});
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  }
+  if(pending&&shouldContinue())await options.onBatch?.(next.slice(),{attempted,matched,review,updated,cache});
+  return {books:next,attempted,matched,review,updated,cache};
 }
 
 export function previewLocalSort(books: LocalBook[], template: string): LocalSortPreview[] {
