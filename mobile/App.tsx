@@ -3758,9 +3758,10 @@ function Client() {
     if(!organisationModal)return null;
     const close=()=>{setOrganisationModal(null);setOrganisationName('');setCollectionTarget(null);setRenameTarget(null)};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
-      <View style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]}><ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
-        <View accessibilityViewIsModal={true} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}>
-          <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close organisation panel" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
+        <Pressable accessible={false} accessibilityViewIsModal={true} style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
+          <DismissSheetHandle onDismiss={close} foldLayout={foldLayout}/>
+          <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}>
           {organisationModal==='smart-shelf'?<>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Save Smart Shelf</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Start with the filters you are using now, or build nested ALL / ANY rules for a shelf that updates itself.</Text>
@@ -3791,8 +3792,9 @@ function Client() {
             </>}
           </>:null}
           <Button label="Close" tone="quiet" onPress={close}/>
-        </View>
-      </ScrollView></View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
     </Modal>;
   }
 
@@ -7498,6 +7500,8 @@ const styles = StyleSheet.create({
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
   cardPressed: {opacity:0.88},
   actionSheet: {width:'100%',maxWidth:620,borderWidth:0,borderTopLeftRadius:24,borderTopRightRadius:24,padding:18,gap:9,alignSelf:'center'},
+  actionSheetStable: {maxHeight:'88%',overflow:'hidden'},
+  sheetInnerScroll: {paddingBottom:8,gap:9},
   actionSheetFold: {width:420,maxWidth:420,height:'100%',borderTopLeftRadius:24,borderBottomLeftRadius:24,borderTopRightRadius:0,paddingHorizontal:22,paddingVertical:24,alignSelf:'flex-end'},
   sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',justifyContent:'flex-end',padding:12},
   sheetBackdropFold: {justifyContent:'center',alignItems:'flex-end',padding:0},
