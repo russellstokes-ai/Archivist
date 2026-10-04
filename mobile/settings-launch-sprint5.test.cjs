@@ -20,7 +20,7 @@ assert.equal(source.includes('>External metadata network access</Text>'),false,'
 assert.equal(source.includes('>Local-first metadata</Text>'),false,'redundant local-first metadata paragraph must be removed');
 assert.ok(source.includes('Back up reading history and app settings. Credentials are never included.'),'Data backup copy should remain concise and clear');
 
-const refreshCount=(source.match(/>Refresh metadata & covers<\/Text>/g)||[]).length;
+const refreshCount=(source.match(/Refresh metadata & covers/g)||[]).length;
 assert.equal(refreshCount,1,'Settings should expose one canonical metadata refresh action, not duplicates');
 
 console.log('PASS: Sprint 5 Settings declutter and reliable branded cold-launch handoff are locked');
