@@ -53,6 +53,7 @@ type FetchLike=(url:string,init?:any)=>Promise<FetchResponse>;
 export type OnlineBookLookupOptions={
   fetcher?:FetchLike;
   googleBooksApiKey?:string;
+  openLibraryEnabled?:boolean;
   cache?:OnlineBookCache;
   now?:()=>number;
   timeoutMs?:number;
@@ -348,9 +349,12 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
   const timeoutMs=Math.max(2500,Math.min(20000,options.timeoutMs||8000));
   const plans=queryPlans(input);const queried:string[]=[];const raw:Array<Omit<OnlineBookCandidate,'score'|'confidence'|'reasons'>>=[];
   try{
-    for(const plan of plans){
-      const found=await searchOpenLibrary(fetcher,plan,timeoutMs);queried.push('openlibrary:'+openLibraryQuery(plan));raw.push(...found);
-      const ranked=rankCandidates(input,raw);if(ranked[0]?.exactIdentifier||ranked[0]?.score>=88)break;if(raw.length>=18)break;
+    const openLibraryEnabled=options.openLibraryEnabled!==false;
+    if(openLibraryEnabled){
+      for(const plan of plans){
+        const found=await searchOpenLibrary(fetcher,plan,timeoutMs);queried.push('openlibrary:'+openLibraryQuery(plan));raw.push(...found);
+        const ranked=rankCandidates(input,raw);if(ranked[0]?.exactIdentifier||ranked[0]?.score>=88)break;if(raw.length>=18)break;
+      }
     }
     let ranked=rankCandidates(input,raw);
     if(options.googleBooksApiKey&&(!ranked[0]||ranked[0].confidence!=='high')){
@@ -359,7 +363,7 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
       }
     }
     ranked=rankCandidates(input,raw);
-    let best=ranked[0];if(best?.confidence==='high')best=await hydrateOpenLibrary(fetcher,best,timeoutMs);
+    let best=ranked[0];if(best?.provider==='openlibrary'&&best.confidence==='high')best=await hydrateOpenLibrary(fetcher,best,timeoutMs);
     if(best){const idx=ranked.findIndex(item=>item.provider===best.provider&&item.providerId===best.providerId);if(idx>=0)ranked[idx]=best;}
     const second=ranked[1];const margin=best?best.score-(second?.score||0):0;
     const autoApply=!!best&&best.confidence==='high'&&(best.exactIdentifier||margin>=7);

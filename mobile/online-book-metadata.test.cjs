@@ -57,5 +57,16 @@ assert.equal(sparseMerge.needsReview,false);
   assert.equal(result.best.fields.genre,'Science Fiction');
   assert.equal(result.best.fields.series,'Dune');
   assert.match(result.best.coverUri,/covers\.openlibrary\.org/);
-  console.log('PASS: online book metadata handles sparse folders, strong matching, field protection, enrichment and covers');
+  const googleOnlyCalls=[];
+  const googleOnlyFetcher=async(url)=>{
+    googleOnlyCalls.push(url);
+    if(url.includes('googleapis.com/books/v1/volumes'))return {ok:true,status:200,json:async()=>({items:[{id:'g1',volumeInfo:{title:'Dune',authors:['Frank Herbert'],publisher:'Ace',publishedDate:'1965',industryIdentifiers:[{type:'ISBN_13',identifier:'9780441172719'}],categories:['Science Fiction'],imageLinks:{thumbnail:'http://books.google.test/dune.jpg'}}}]})};
+    throw new Error('Open Library should not be called');
+  };
+  const googleOnly=await lookupOnlineBook({title:'Dune',author:'Frank Herbert',format:'EPUB'},{fetcher:googleOnlyFetcher,openLibraryEnabled:false,googleBooksApiKey:'test-key',cache:{}});
+  assert.equal(googleOnly.status,'matched');
+  assert.equal(googleOnly.best.provider,'googlebooks');
+  assert(googleOnlyCalls.every(url=>!url.includes('openlibrary.org')));
+
+  console.log('PASS: online book metadata handles sparse folders, provider controls, strong matching, field protection, enrichment and covers');
 })().catch(error=>{console.error(error);process.exit(1);});

@@ -690,6 +690,8 @@ export async function enrichLocalBookMetadataOnline(
   options:{
     cache?:OnlineBookCache;
     googleBooksApiKey?:string;
+    openLibraryEnabled?:boolean;
+    applyHighConfidence?:boolean;
     shouldContinue?:()=>boolean;
     batchSize?:number;
     onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;cache:OnlineBookCache})=>void|Promise<void>;
@@ -706,12 +708,12 @@ export async function enrichLocalBookMetadataOnline(
     const book=next[index];
     if(!shouldLookupBookOnline(book))continue;
     attempted+=1;pending+=1;
-    const result=await lookupOnlineBook(book,{cache,googleBooksApiKey:options.googleBooksApiKey});
+    const result=await lookupOnlineBook(book,{cache,googleBooksApiKey:options.googleBooksApiKey,openLibraryEnabled:options.openLibraryEnabled});
     if(!shouldContinue())break;
     if(result.best){
       const candidate=result.best;
       let patch:LocalBook;
-      if(result.autoApply){
+      if(result.autoApply&&options.applyHighConfidence!==false){
         patch=mergeOnlineBookCandidate(book,candidate,true);
         patch={
           ...patch,
@@ -723,7 +725,7 @@ export async function enrichLocalBookMetadataOnline(
         };
         if(JSON.stringify(patch)!==JSON.stringify(book)){next[index]=patch;updated+=1;}
         matched+=1;
-      }else if(result.status==='review'){
+      }else if(result.status==='review'||result.status==='matched'){
         patch={...book,needsReview:true,reviewReason:'A possible online metadata match needs review.',onlineMetadataMatch:candidate,onlineMetadataAlternatives:result.candidates.slice(1,5)};
         next[index]=patch;review+=1;
       }
@@ -743,6 +745,7 @@ export async function enrichLocalComicMetadataOnline(
   options:{
     token?:string;
     cache?:OnlineComicCache;
+    applyHighConfidence?:boolean;
     shouldContinue?:()=>boolean;
     batchSize?:number;
     onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;rateLimited:boolean;cache:OnlineComicCache})=>void|Promise<void>;
@@ -764,7 +767,7 @@ export async function enrichLocalComicMetadataOnline(
     if(result.status==='rate-limited'){rateLimited=true;break;}
     if(result.best){
       const candidate=result.best;
-      if(result.autoApply){
+      if(result.autoApply&&options.applyHighConfidence!==false){
         let patch=mergeOnlineComicCandidate(book,candidate,true) as LocalBook;
         patch={
           ...patch,
@@ -775,7 +778,7 @@ export async function enrichLocalComicMetadataOnline(
         };
         if(JSON.stringify(patch)!==JSON.stringify(book)){next[index]=patch;updated+=1;}
         matched+=1;
-      }else if(result.status==='review'){
+      }else if(result.status==='review'||result.status==='matched'){
         next[index]={...book,needsReview:true,reviewReason:'A possible online comic issue match needs review.',onlineComicMetadataMatch:candidate,onlineComicMetadataAlternatives:result.candidates.slice(1,5)};
         review+=1;
       }
