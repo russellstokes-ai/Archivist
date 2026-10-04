@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,13 @@ import (
 )
 
 const metadataXMLLimit = 2 << 20
+
+var (
+	asinQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ASIN\\s*[:#-]?\\s*([A-Z0-9]{10})\\s*\\]`)
+	isbnQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ISBN(?:-1[03])?\\s*[:#-]?\\s*([0-9Xx -]{10,20})\\s*\\]`)
+	narratorQualifierRE = regexp.MustCompile(`\\{([^{}]{2,100})\\}`)
+	yearQualifierRE = regexp.MustCompile(`\\(\\s*((?:19|20)\\d{2})\\s*\\)`)
+)
 
 type embeddedMetadata struct {
 	Title         string
@@ -389,11 +397,37 @@ func sidecarMetadata(filename string) embeddedMetadata {
 	return sidecarMetadataWithCache(filename, nil)
 }
 
+func filenameQualifiers(value string) (stem, narrator, isbn, asin string, publishedYear int) {
+	stem = value
+	if match := asinQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
+		asin = normalizeIdentifier(match[1])
+		stem = asinQualifierRE.ReplaceAllString(stem, "")
+	}
+	if match := isbnQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
+		isbn = normalizeIdentifier(match[1])
+		stem = isbnQualifierRE.ReplaceAllString(stem, "")
+	}
+	if match := narratorQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
+		narrator = cleanMetadata(match[1])
+		stem = narratorQualifierRE.ReplaceAllString(stem, "")
+	}
+	if match := yearQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
+		publishedYear = yearFromText(match[1])
+		stem = yearQualifierRE.ReplaceAllString(stem, "")
+	}
+	stem = cleanMetadata(stem)
+	return
+}
+
 func pathMetadata(relative, format string) metadataCandidate {
 	parts := strings.Split(filepath.ToSlash(relative), "/")
-	base := cleanMetadata(strings.TrimSuffix(filepath.Base(relative), filepath.Ext(relative)))
-	m := embeddedMetadata{Title: base}
+	rawBase := cleanMetadata(strings.TrimSuffix(filepath.Base(relative), filepath.Ext(relative)))
+	base, narrator, isbn, asin, publishedYear := filenameQualifiers(rawBase)
+	m := embeddedMetadata{Title: base, Narrator: narrator, ISBN: isbn, ASIN: asin, PublishedYear: publishedYear}
 	confidence := 35
+
+	dashed := strings.Split(base, " - ")
+	for i := range dashed { dashed[i] = cleanMetadata(dashed[i]) }
 
 	if format == "Audio" {
 		// Common layouts:
@@ -419,31 +453,54 @@ func pathMetadata(relative, format string) metadataCandidate {
 		return metadataCandidate{embeddedMetadata: m, source: "path", confidence: confidence}
 	}
 
-	if len(parts) >= 3 {
-		m.Author = cleanMetadata(parts[len(parts)-3])
-		m.Series = cleanMetadata(parts[len(parts)-2])
-		confidence = 72
-	} else if len(parts) >= 2 {
-		parent := cleanMetadata(parts[len(parts)-2])
-		if parent != "" {
+	parent := ""
+	if len(parts) >= 2 { parent = cleanMetadata(parts[len(parts)-2]) }
+	grandparent := ""
+	if len(parts) >= 3 { grandparent = cleanMetadata(parts[len(parts)-3]) }
+
+	parsedFilename := false
+	if len(dashed) >= 4 {
+		if number, ok := seriesPositionFromLabel(dashed[2]); ok {
+			m.Author = normalizeAuthor(dashed[0])
+			m.Series = dashed[1]
+			m.SeriesNumber = number
+			m.Title = cleanMetadata(strings.Join(dashed[3:], " - "))
+			confidence = 82
+			parsedFilename = true
+		}
+	}
+	if !parsedFilename && len(dashed) >= 3 {
+		if number, ok := seriesPositionFromLabel(dashed[1]); ok {
+			m.Author = normalizeAuthor(dashed[0])
+			m.SeriesNumber = number
+			m.Title = cleanMetadata(strings.Join(dashed[2:], " - "))
+			if parent != "" && !strings.EqualFold(parent, m.Title) { m.Series = parent }
+			confidence = 78
+		}
+	}
+
+	if m.Author == "" && m.Series == "" {
+		if len(parts) >= 3 {
+			m.Author = normalizeAuthor(grandparent)
+			m.Series = parent
+			confidence = 72
+		} else if parent != "" {
 			m.Series = parent
 			confidence = 52
 		}
 	}
-	if strings.Contains(base, " - ") {
-		bits := strings.SplitN(base, " - ", 2)
-		if len(bits) == 2 && cleanMetadata(bits[0]) != "" && cleanMetadata(bits[1]) != "" {
-			if number, ok := seriesPositionFromLabel(bits[0]); ok && m.Series != "" {
-				m.SeriesNumber = number
-				m.Title = cleanMetadata(bits[1])
-				if confidence < 76 { confidence = 76 }
-			} else {
-				m.Author = normalizeAuthor(bits[0])
-				m.Title = cleanMetadata(bits[1])
-				if confidence < 68 { confidence = 68 }
-			}
+	if len(dashed) >= 2 {
+		if number, indexed := seriesPositionFromLabel(dashed[0]); indexed && m.Series != "" {
+			m.SeriesNumber = number
+			m.Title = cleanMetadata(strings.Join(dashed[1:], " - "))
+			if confidence < 76 { confidence = 76 }
+		} else if m.Author == "" && cleanMetadata(dashed[0]) != "" && cleanMetadata(strings.Join(dashed[1:], " - ")) != "" {
+			m.Author = normalizeAuthor(dashed[0])
+			m.Title = cleanMetadata(strings.Join(dashed[1:], " - "))
+			if confidence < 68 { confidence = 68 }
 		}
 	}
+	if m.Title == "" { m.Title = "Untitled" }
 	return metadataCandidate{embeddedMetadata: m, source: "path", confidence: confidence}
 }
 
@@ -452,29 +509,41 @@ func mergeMetadata(candidates ...metadataCandidate) identifiedMetadata {
 	best := map[string]int{}
 	sources := []string{}
 	maxConfidence := 0
-	setString := func(field string, value string, confidence int, dst *string) {
+	type evidenceValue struct { value string; confidence int; source string }
+	evidence := map[string][]evidenceValue{}
+	record := func(field, value string, confidence int, source string) {
+		value = cleanMetadata(value)
+		if value == "" { return }
+		evidence[field] = append(evidence[field], evidenceValue{value:value, confidence:confidence, source:source})
+	}
+	setString := func(field string, value string, confidence int, source string, dst *string) {
+		record(field, value, confidence, source)
 		if value != "" && confidence > best[field] { *dst, best[field] = cleanMetadata(value), confidence }
 	}
-	setNumber := func(field string, value float64, confidence int, dst *float64) {
-		if value != 0 && confidence > best[field] { *dst, best[field] = value, confidence }
+	setNumber := func(field string, value float64, confidence int, source string, dst *float64) {
+		if value == 0 { return }
+		record(field, strconv.FormatFloat(value,'f',-1,64), confidence, source)
+		if confidence > best[field] { *dst, best[field] = value, confidence }
 	}
-	setYear := func(value int, confidence int) {
-		if value > 0 && confidence > best["year"] { result.PublishedYear, best["year"] = value, confidence }
+	setYear := func(value int, confidence int, source string) {
+		if value <= 0 { return }
+		record("publishedYear", strconv.Itoa(value), confidence, source)
+		if confidence > best["publishedYear"] { result.PublishedYear, best["publishedYear"] = value, confidence }
 	}
 	for _, candidate := range candidates {
 		if candidate.confidence <= 0 { continue }
-		setString("title", candidate.Title, candidate.confidence, &result.Title)
-		setString("author", candidate.Author, candidate.confidence, &result.Author)
-		setString("series", candidate.Series, candidate.confidence, &result.Series)
-		setNumber("seriesNumber", candidate.SeriesNumber, candidate.confidence, &result.SeriesNumber)
-		setString("genre", candidate.Genre, candidate.confidence, &result.Genre)
-		setYear(candidate.PublishedYear,candidate.confidence)
-		setString("narrator", candidate.Narrator, candidate.confidence, &result.Narrator)
-		setString("publisher", candidate.Publisher, candidate.confidence, &result.Publisher)
-		setString("isbn", candidate.ISBN, candidate.confidence, &result.ISBN)
-		setString("asin", candidate.ASIN, candidate.confidence, &result.ASIN)
-		setString("language", candidate.Language, candidate.confidence, &result.Language)
-		setString("description", candidate.Description, candidate.confidence, &result.Description)
+		setString("title", candidate.Title, candidate.confidence, candidate.source, &result.Title)
+		setString("author", candidate.Author, candidate.confidence, candidate.source, &result.Author)
+		setString("series", candidate.Series, candidate.confidence, candidate.source, &result.Series)
+		setNumber("seriesNumber", candidate.SeriesNumber, candidate.confidence, candidate.source, &result.SeriesNumber)
+		setString("genre", candidate.Genre, candidate.confidence, candidate.source, &result.Genre)
+		setYear(candidate.PublishedYear,candidate.confidence,candidate.source)
+		setString("narrator", candidate.Narrator, candidate.confidence, candidate.source, &result.Narrator)
+		setString("publisher", candidate.Publisher, candidate.confidence, candidate.source, &result.Publisher)
+		setString("isbn", candidate.ISBN, candidate.confidence, candidate.source, &result.ISBN)
+		setString("asin", candidate.ASIN, candidate.confidence, candidate.source, &result.ASIN)
+		setString("language", candidate.Language, candidate.confidence, candidate.source, &result.Language)
+		setString("description", candidate.Description, candidate.confidence, candidate.source, &result.Description)
 		if metadataPresent(candidate.embeddedMetadata) {
 			sources = append(sources, candidate.source)
 			if candidate.confidence > maxConfidence { maxConfidence = candidate.confidence }
@@ -485,7 +554,26 @@ func mergeMetadata(candidates ...metadataCandidate) identifiedMetadata {
 	result.Confidence = maxConfidence
 	result.Source = strings.Join(uniqueStrings(sources), "+")
 	if result.Source == "" { result.Source = "path" }
+
+	conflicting := []string{}
+	for _, field := range []string{"title","author","series","seriesNumber","isbn","asin"} {
+		values := evidence[field]
+		if len(values) < 2 { continue }
+		bestValue, bestScore := "", -1
+		for _, item := range values {
+			if item.confidence > bestScore { bestValue, bestScore = strings.ToLower(strings.TrimSpace(item.value)), item.confidence }
+		}
+		for _, item := range values {
+			if item.confidence >= bestScore-15 && strings.ToLower(strings.TrimSpace(item.value)) != bestValue {
+				conflicting = append(conflicting, field)
+				break
+			}
+		}
+	}
 	switch {
+	case len(conflicting) > 0:
+		result.NeedsReview = true
+		result.ReviewReason = "Metadata sources disagree on " + strings.Join(uniqueStrings(conflicting), ", ") + "."
 	case result.Title == "Untitled":
 		result.NeedsReview = true; result.ReviewReason = "Archivist could not determine a title."
 	case result.Confidence < 60:
