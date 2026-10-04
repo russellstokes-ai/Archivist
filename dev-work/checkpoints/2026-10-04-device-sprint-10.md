@@ -40,7 +40,8 @@ The mobile UI contract now verifies:
 
 ## Automated evidence
 - Mobile checks run `37225781141`: **PASS** — Expo Doctor, TypeScript, full maintained mobile/UI-contract suites, version consistency and Expo web bundle.
-- iOS checks run `37225781246`: in progress at checkpoint creation.
+- iOS checks run `37225781246`: **PASS** — dependency install, Expo Doctor, TypeScript, iOS project generation, CocoaPods and full iOS Simulator compile.
+- Executable/test head: `59d4418bc3e53da64cd742689b7ba13f7a7d187b`.
 
 ## Physical acceptance
 Recheck on the same phone/device class:
