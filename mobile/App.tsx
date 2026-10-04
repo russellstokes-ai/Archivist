@@ -25,7 +25,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaProvider, SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import {useFonts} from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -589,6 +589,7 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
 
 function Client() {
   const systemScheme = useColorScheme();
+  const safeArea=useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
@@ -3009,15 +3010,21 @@ function Client() {
   }
 
   function RawAssetCard({item}: {item: Book}) {
+    const detail=[item.format,item.space,item.author,item.series,item.genre].filter(Boolean).join(' · ');
     return (
-      <View style={styles.book}>
-        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
-          <Cover book={item} />
-          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
-          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
-          <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}{item.genre ? ' · '+item.genre : ''}</Text>
+      <View style={[styles.maintenanceAssetCard,{borderBottomColor:p.line}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)} style={styles.maintenanceAssetMain}>
+          <View style={styles.maintenanceAssetCover}><Cover book={item}/></View>
+          <View style={styles.maintenanceAssetCopy}>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
+            <View style={[styles.maintenanceAssetStatusRow,phoneLayout&&styles.maintenanceAssetStatusRowPhone]}>
+              {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:10.5,fontWeight:'700'}}>Needs review</Text></View> : null}
+              <Text maxFontSizeMultiplier={1.2} numberOfLines={phoneLayout?2:1} style={[styles.maintenanceAssetMeta,{color:p.muted}]}>{detail}</Text>
+            </View>
+            {item.reviewReason?<Text maxFontSizeMultiplier={1.2} numberOfLines={3} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
+          </View>
         </Pressable>
-        {(item.source!=='server' || owner) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
+        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
       </View>
     );
   }
@@ -3847,7 +3854,7 @@ function Client() {
     return <Modal transparent visible={profileMenuMounted} animationType="none" onRequestClose={()=>closeProfileMenu()}>
       <View style={styles.profileMenuLayer}>
         <Animated.View pointerEvents="box-none" style={[styles.profileMenuBackdropLayer,{opacity:profileMenuAnim}]}><Pressable accessibilityRole="button" accessibilityLabel="Close profile menu" onPress={()=>closeProfileMenu()} style={styles.profileMenuBackdrop}/></Animated.View>
-        <Animated.View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
+        <Animated.View style={[styles.profileMenu,{top:safeArea.top+56,backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
           <View style={styles.profileMenuIdentity}>
             <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileMenuAvatarImage}/>:<Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text>}</View>
             <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>Level {profileProgression?.overall.level||1} · {profileProgression?.overall.title||'Reader'} · {unlocked} unlocked</Text></View>
@@ -4241,7 +4248,22 @@ function Client() {
       </View>;
     };
 
-    const MaintenanceList=()=>maintenanceMode?<View style={styles.reviewQueue}><View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} in this maintenance view</Text></View><Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/></View>{visibleBooks.map(item=><RawAssetCard key={(item.source||'local')+'-'+item.id+'-'+(item.uri||'')} item={item}/>) }{!visibleBooks.length?<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>:null}{serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}</View>:null;
+    const MaintenanceList=()=>maintenanceMode?<FlatList
+      data={visibleBooks}
+      keyExtractor={item=>(item.source||'local')+'-'+item.id+'-'+(item.uri||'')}
+      renderItem={({item})=><RawAssetCard item={item}/>}
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      windowSize={7}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.reviewQueue}
+      ListHeaderComponent={<View style={[styles.maintenanceHeader,phoneLayout&&styles.maintenanceHeaderPhone]}>
+        <View style={{flex:1,minWidth:0}}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text maxFontSizeMultiplier={1.2} style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} · review only what Archivist could not resolve confidently</Text></View>
+        <Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/>
+      </View>}
+      ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>}
+      ListFooterComponent={serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}
+    />:null;
     const main=<View style={[styles.libraryMain,phoneLayout&&styles.libraryMainPhone,narrowPhone&&styles.libraryMainNarrow,(layoutTier==='fold'||wide)&&styles.libraryMainFold,wide&&styles.libraryMainWide]}>
       <View style={styles.libraryCatalogueHeader}>
         <PageHeader title="Library" subtitle="Every book. In its place."/>
@@ -4344,7 +4366,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    const libraryFolderRailWidth=layoutTier==='fold'?112:132;
+    const libraryFolderRailWidth=layoutTier==='fold'?136:160;
     return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{width:libraryFolderRailWidth,minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0,backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={[styles.libraryRailContent,{width:'100%'}]} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
@@ -4858,6 +4880,7 @@ function Client() {
   function atlasSelectNearestNodeAt(viewX:number,viewY:number){
     const id=atlasNearest(atlasUniverse.nodes,atlasTransformRef.current,{x:viewX,y:viewY},atlasDiameter,foldLayout?30:26);
     if(id)selectAtlasNode(id);
+    else if(atlasNodeId||atlasBreakdown)dismissAtlasNode();
   }
   function atlasGestureEnd(event:any){
     const gesture=atlasGesture.current;atlasGesture.current=null;setAtlasInteracting(false);
@@ -6586,7 +6609,7 @@ function Client() {
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
-      <View pointerEvents="box-none" style={[styles.globalProfileCorner,phoneLayout&&styles.globalProfileCornerPhone,{right:width>=940?28:width>=600?24:narrowPhone?12:16}]}>
+      <View pointerEvents="box-none" style={[styles.globalProfileCorner,phoneLayout&&styles.globalProfileCornerPhone,{top:safeArea.top+(phoneLayout?8:10),right:width>=940?28:width>=600?24:narrowPhone?12:16}]}>
         <ProfileAvatarButton size={42}/>
       </View>
       <Animated.View style={[styles.tabBody,{
@@ -6698,8 +6721,8 @@ const styles = StyleSheet.create({
   content: {paddingHorizontal:18,paddingTop:22,paddingBottom:120,gap:18,maxWidth:1120,width:'100%',alignSelf:'center'},
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
-  libraryRail: {width:132,minWidth:132,maxWidth:132,flexBasis:132,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
-  libraryRailFold: {width:112,minWidth:112,maxWidth:112,flexBasis:112,paddingHorizontal:3,paddingTop:8},
+  libraryRail: {width:160,minWidth:160,maxWidth:160,flexBasis:160,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
+  libraryRailFold: {width:136,minWidth:136,maxWidth:136,flexBasis:136,paddingHorizontal:3,paddingTop:8},
   libraryRailContent: {paddingBottom:28,width:'100%'},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
@@ -7485,6 +7508,18 @@ const styles = StyleSheet.create({
   selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   selectionCount: {fontSize:13,fontWeight:'900'},
   reviewQueue: {gap:10,paddingBottom:10},
+  maintenanceHeader: {flexDirection:'row',alignItems:'center',gap:12,paddingBottom:4},
+  maintenanceHeaderPhone: {alignItems:'flex-start',flexWrap:'wrap'},
+  maintenanceAssetCard: {borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8},
+  maintenanceAssetMain: {flexDirection:'row',alignItems:'flex-start',gap:12,minWidth:0},
+  maintenanceAssetCover: {width:58,aspectRatio:.68,borderRadius:6,overflow:'hidden',flexShrink:0},
+  maintenanceAssetCopy: {flex:1,minWidth:0,gap:5},
+  maintenanceAssetStatusRow: {flexDirection:'row',alignItems:'center',gap:7,minWidth:0},
+  maintenanceAssetStatusRowPhone: {alignItems:'flex-start',flexWrap:'wrap'},
+  maintenanceAssetMeta: {fontSize:11,lineHeight:15,flex:1,minWidth:0},
+  maintenanceAssetReason: {fontSize:11.5,lineHeight:16},
+  maintenanceAssetEdit: {minHeight:38,alignSelf:'flex-end',justifyContent:'center',paddingHorizontal:4},
+  maintenanceAssetEditPhone: {alignSelf:'flex-start',paddingHorizontal:0},
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
   filterChip: {borderWidth:0,borderRadius:9,minHeight:44,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
