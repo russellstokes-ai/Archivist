@@ -6905,6 +6905,7 @@ const styles = StyleSheet.create({
   metadataCoverEditor: {flexDirection:'row',alignItems:'center',gap:14},
   metadataCoverPreview: {width:74},
   workDetailsScroll: {flexGrow:1,justifyContent:'flex-end',paddingTop:42},
+  workDetailsInner: {paddingBottom:10,gap:16},
   workDetailsSheet: {width:'100%',maxWidth:760,alignSelf:'center',maxHeight:'94%',borderTopLeftRadius:24,borderTopRightRadius:24,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:18,paddingBottom:28,gap:16},
   workDetailsHero: {flexDirection:'row',gap:18,alignItems:'flex-start'},
   workDetailsHeroFold: {gap:24},
