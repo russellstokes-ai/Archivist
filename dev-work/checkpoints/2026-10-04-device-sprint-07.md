@@ -69,9 +69,15 @@ Added/extended tests verify:
 
 No locked Shelf, Library, Player, Atlas or Comic Focus layout was redesigned. Sprint 7 changes data arrival behaviour only: the catalogue remains stable while missing artwork fills in.
 
+## Automated evidence
+
+- Mobile checks run `37222248717` on executable head `9b0de1d06c9464b3e3f1ab9adcf5821b3d2a4eb1`: **PASS** — dependency install, Expo Doctor, TypeScript, all maintained mobile suites, version consistency and Expo web export.
+- Server checks run `37222181534` on server head `475888c7b19060a39856b81ee26e9a789591bc7f`: **PASS** — root/package tests, Raspberry Pi ARM64 compile, web/UI/package contracts, source parity and Home Assistant Docker smoke test.
+- iOS checks run `37222248588` for the same mobile executable head: native compile still running at this checkpoint. No iOS completion claim is made until it finishes.
+
 ## Acceptance boundary
 
-Automated Mobile, iOS and Server workflow results must be green before this sprint is marked complete. Physical acceptance still requires rescanning a representative real library and confirming:
+Physical acceptance still requires rescanning a representative real library and confirming:
 - materially fewer fallback covers;
 - no visibly incorrect shared artwork;
 - no Shelf/Library reordering or repopulation while covers arrive;
