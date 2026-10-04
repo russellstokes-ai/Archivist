@@ -3003,7 +3003,7 @@ function Client() {
       sourceFilter===nextSource&&space===nextSpace&&libraryFolderExact===exact;
     const localFolderCount=(folder:LocalFolder)=>sourceWorks.filter(work=>work.source==='local'&&work.space===folder.name).length;
     const serverFolderCount=(folder:{space:string})=>sourceWorks.filter(work=>work.source==='server'&&work.space===folder.space).length;
-    const Row=({label,count,detail,active,onPress,icon='library'}:{label:string;count?:number;detail?:string;active:boolean;onPress:()=>void;icon?:UiIconName})=><Pressable
+    const Row=({label,count,detail,detailTone,active,onPress,icon='library'}:{label:string;count?:number;detail?:string;detailTone?:string;active:boolean;onPress:()=>void;icon?:UiIconName})=><Pressable
       accessibilityRole="button"
       accessibilityState={{selected:active}}
       onPress={onPress}
@@ -3011,7 +3011,7 @@ function Client() {
       <View style={[styles.libraryTreeIcon,{backgroundColor:active?p.raised:'transparent'}]}><UiIcon name={icon} color={active?p.sage:p.muted} size={16}/></View>
       <View style={{flex:1,minWidth:0}}>
         <Text numberOfLines={1} style={[styles.libraryTreeLabel,{color:active?p.ink:p.muted,fontWeight:active?'700':'500'}]}>{label}</Text>
-        {detail?<Text numberOfLines={1} style={[styles.libraryTreeDetail,{color:p.muted}]}>{detail}</Text>:null}
+        {detail?<Text numberOfLines={1} style={[styles.libraryTreeDetail,{color:detailTone||p.muted}]}>{detail}</Text>:null}
       </View>
       {typeof count==='number'?<Text style={[styles.libraryTreeCount,{color:active?p.sage:p.muted}]}>{count}</Text>:null}
     </Pressable>;
@@ -3022,7 +3022,7 @@ function Client() {
       <Text style={[styles.libraryTreeGroupLabel,{color:p.muted}]}>ON THIS DEVICE</Text>
       <Row label="On this device" count={sourceCounts.local} active={selected('local')} onPress={()=>choose('local')} icon="shelf"/>
       <View style={styles.libraryTreeChildren}>
-        {localFolders.map(folder=><Row key={folder.id||folder.uri} label={folder.name} count={localFolderCount(folder)} detail={folder.status||undefined} active={selected('local',folder.name,true)} onPress={()=>choose('local',folder.name,true)} icon="bookOpen"/>)}
+        {localFolders.map(folder=><Row key={folder.id||folder.uri} label={folder.name} count={localFolderCount(folder)} detail={folder.status||undefined} detailTone={folder.status.startsWith('Scan failed')?p.danger:folder.status==='Scanning…'?p.sage:undefined} active={selected('local',folder.name,true)} onPress={()=>choose('local',folder.name,true)} icon="bookOpen"/>)}
         {sourceCounts.downloaded>0?<Row label="Offline downloads" count={sourceCounts.downloaded} detail="Saved from Archivist Server" active={selected('downloaded')} onPress={()=>choose('downloaded')} icon="bookmark"/>:null}
         {!localFolders.length&&sourceCounts.downloaded===0?<Text style={[styles.libraryTreeEmpty,{color:p.muted}]}>{Platform.OS==='ios'?'No imported folders yet.':'No device folders added.'}</Text>:null}
       </View>
