@@ -111,7 +111,7 @@ The UI contract verifies:
 ## Automated evidence
 
 - Mobile checks run `37224583681`: **PASS** — dependency install, Expo Doctor, TypeScript, all maintained behavioral/UI-contract suites including Sprint 9, version consistency and Expo web export.
-- iOS checks run `37224583776`: in progress at this checkpoint; dependencies, Expo Doctor, TypeScript and iOS project generation are green, with CocoaPods/native compile remaining.
+- iOS checks run `37224583776`: **PASS** — dependency install, Expo Doctor, TypeScript, iOS project generation, CocoaPods and full iOS Simulator compile.
 - Sprint 9 executable/test head: `503d199be16e51e88aad61441408912305d32381`.
 
 ## Physical acceptance boundary
