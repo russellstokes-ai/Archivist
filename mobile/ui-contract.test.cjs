@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const source = fs.readFileSync('App.tsx','utf8');
 const clientSource = ['App.tsx','connection.ts','queue.ts','playback.ts'].map(file => fs.readFileSync(file,'utf8')).join('\n');
 const livingBookSource = fs.readFileSync('LivingBookArtwork.tsx','utf8');
+const coverManagementSource = fs.readFileSync('coverManagement.ts','utf8');
 const lockedFoldStyles = fs.readFileSync('locked-fold-ui.styles.snapshot.txt','utf8');
 
 for (const banned of ['Coming soon','Not implemented','TODO','FIXME','Genre is currently represented by media format','coverInitials(']) {
@@ -232,13 +233,14 @@ assert.ok(source.includes("openGap('incomplete')") && source.includes("openGap('
 assert.ok(source.includes('accessibilityLabel="Series number"') && source.includes('accessibilityLabel="Narrator"') && source.includes('accessibilityLabel="Publisher"') && source.includes('accessibilityLabel="ISBN"') && source.includes('accessibilityLabel="ASIN"') && source.includes('accessibilityLabel="Language"') && source.includes('accessibilityLabel="Description"'), 'Rich metadata editor fields are incomplete');
 assert.ok(source.includes('Manual edits are protected from future rescans.') && source.includes('metadataSource:\'manual\''), 'Metadata editor must expose provenance and preserve manual-edit semantics');
 assert.ok(source.includes("import * as ImagePicker from 'expo-image-picker'") && source.includes('Choose image from device'), 'Cover editor must use the system image picker instead of a raw URI-only workflow');
-assert.ok(source.includes('Other local artwork') && source.includes('editing.coverCandidates.map'), 'Cover editor must expose ranked local cover alternatives');
+assert.ok(source.includes('Other local artwork') && source.includes('rankLocalCoverCandidates') && source.includes('localCoverCandidates.map'), 'Cover editor must expose ranked local cover alternatives');
 assert.ok(source.includes('persistPickedCover(') && source.includes("documentDirectory+'covers/'"), 'Picked cover artwork must be copied into Archivist app storage before it becomes a manual override');
 assert.ok(source.includes('Manual cover · protected from rescans') && source.includes('Use scanned metadata & cover'), 'Manual cover protection and scanned-cover restore controls are missing');
 assert.equal(source.includes('requestMediaLibraryPermissionsAsync'),false,'Cover selection must rely on the privacy-preserving system picker and must not request broad photo-library permission');
-assert.ok(source.includes("selectionLimit:1") && source.includes("asset.fileSize>25*1024*1024"),'Cover picker must remain single-select and reject oversized artwork');
-assert.ok(source.includes("setEditPickedCover({uri:asset.uri,fileName:asset.fileName})") && source.includes("setEditCoverUri(asset.uri)"),'Chosen device artwork must preview immediately before save');
-assert.ok(source.includes("const selected=!editPickedCover&&editCoverUri===uri") && source.includes("setEditPickedCover(null);setEditCoverUri(uri)"),'Ranked local cover candidates must be selectable without changing the metadata form layout');
+assert.ok(source.includes("selectionLimit:1") && source.includes('inspectPickedCover(asset.uri,asset.fileSize'), 'Cover picker must remain single-select and verify selected artwork before preview');
+assert.ok(coverManagementSource.includes('MAX_MANUAL_COVER_BYTES=25*1024*1024') && coverManagementSource.includes('Saved cover size did not match'), 'Manual-cover persistence must enforce the 25 MB limit and verify the copied file');
+assert.ok(source.includes("setEditPickedCover({uri:asset.uri,fileName:asset.fileName,fileSize:inspection.size})") && source.includes("setEditCoverUri(asset.uri)"),'Chosen device artwork must preview immediately before save');
+assert.ok(source.includes("const selected=!editPickedCover&&editCoverUri===uri") && source.includes("setEditPickedCover(null);setEditCoverUri(uri)") && coverManagementSource.includes('rankLocalCoverCandidates'), 'Ranked local cover candidates must be selectable without changing the metadata form layout');
 assert.ok(source.includes('function BulkMetadataPanel()') && source.includes('>Edit metadata</Text>') && source.includes('accessibilityLabel="Bulk author"') && source.includes('accessibilityLabel="Bulk series"') && source.includes('accessibilityLabel="Bulk genre"'), 'Library selection mode must expose approved bulk metadata editing');
 assert.ok(source.includes('Number series sequentially') && source.includes('Numbers follow the works\' current Library order.'), 'Bulk metadata must support sequential series numbering in visible Library order');
 assert.ok(source.includes('consolidates selected author-name variants'), 'Bulk author editing must explain author variant consolidation');
