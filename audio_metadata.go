@@ -11,9 +11,11 @@ import (
 )
 
 const maxID3Head = 256 << 10
+const maxMP4MetadataChunk = 4 << 20
 
 func audioMetadata(filename string) embeddedMetadata {
-	if !strings.EqualFold(audioFileExt(filename), ".mp3") {
+	ext:=strings.ToLower(audioFileExt(filename))
+	if ext!=".mp3" && ext!=".m4a" && ext!=".m4b" {
 		return embeddedMetadata{}
 	}
 	f, err := os.Open(filename)
@@ -21,6 +23,11 @@ func audioMetadata(filename string) embeddedMetadata {
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() { return embeddedMetadata{} }
+
+	if ext==".m4a" || ext==".m4b" {
+		return mp4MetadataFromFile(f,info.Size())
+	}
+
 	headSize := int64(maxID3Head)
 	if info.Size() < headSize { headSize = info.Size() }
 	head := make([]byte, headSize)
@@ -43,6 +50,68 @@ func audioFileExt(filename string) string {
 	return filename[index:]
 }
 
+func mp4MetadataFromFile(f *os.File, size int64) embeddedMetadata {
+	readChunk:=func(offset,length int64) []byte {
+		if length<=0 { return nil }
+		if _,err:=f.Seek(offset,io.SeekStart);err!=nil{return nil}
+		data:=make([]byte,length)
+		n,_:=io.ReadFull(f,data)
+		return data[:n]
+	}
+	length:=int64(maxMP4MetadataChunk)
+	if size<length { length=size }
+	meta:=parseMP4Metadata(readChunk(0,length))
+	if size>length {
+		tailLength:=int64(maxMP4MetadataChunk)
+		if size<tailLength { tailLength=size }
+		meta=fillMetadataBlanks(meta,parseMP4Metadata(readChunk(size-tailLength,tailLength)))
+	}
+	return meta
+}
+
+func parseMP4Metadata(data []byte) embeddedMetadata {
+	if len(data)<16 { return embeddedMetadata{} }
+	title:=mp4Text(data,[]byte{0xa9,'n','a','m'})
+	album:=mp4Text(data,[]byte{0xa9,'a','l','b'})
+	author:=mp4Text(data,[]byte{0xa9,'A','R','T'})
+	if author=="" { author=mp4Text(data,[]byte{'a','A','R','T'}) }
+	genre:=mp4Text(data,[]byte{0xa9,'g','e','n'})
+	date:=mp4Text(data,[]byte{0xa9,'d','a','y'})
+	series:=mp4Text(data,[]byte{0xa9,'g','r','p'})
+	if title=="" || (genericAudioTrackLabel(title)&&album!="") { title=album }
+	return embeddedMetadata{
+		Title:cleanMetadata(title), Author:normalizeAuthor(author), Series:cleanMetadata(series),
+		Genre:cleanMetadata(genre), PublishedYear:yearFromText(date),
+	}
+}
+
+func mp4Text(data,name []byte) string {
+	payload:=mp4Data(data,name)
+	if len(payload)==0 { return "" }
+	return cleanMetadata(strings.Trim(string(payload),"\x00 "))
+}
+
+func mp4Data(data,name []byte) []byte {
+	if len(name)!=4 { return nil }
+	for i:=4;i+4<=len(data);i++ {
+		if string(data[i:i+4])!=string(name) { continue }
+		parentStart:=i-4
+		if parentStart+4>len(data){continue}
+		parentSize:=int(binary.BigEndian.Uint32(data[parentStart:parentStart+4]))
+		if parentSize<16 { continue }
+		parentEnd:=parentStart+parentSize
+		if parentEnd>len(data) { parentEnd=len(data) }
+		for j:=i+4;j+16<=parentEnd;j++ {
+			if string(data[j:j+4])!="data" { continue }
+			dataStart:=j-4
+			dataSize:=int(binary.BigEndian.Uint32(data[dataStart:dataStart+4]))
+			if dataSize<16 || dataStart+dataSize>parentEnd { continue }
+			return data[j+12:dataStart+dataSize]
+		}
+	}
+	return nil
+}
+
 func parseID3v2(data []byte) embeddedMetadata {
 	if len(data)<10 || string(data[:3])!="ID3" || (data[3]!=3 && data[3]!=4) {
 		return embeddedMetadata{}
@@ -52,6 +121,7 @@ func parseID3v2(data []byte) embeddedMetadata {
 	end:=10+tagSize
 	if end>len(data){ end=len(data) }
 	meta:=embeddedMetadata{}
+	album:=""
 	for offset:=10; offset+10<=end; {
 		id:=string(data[offset:offset+4])
 		if strings.Trim(id,"\x00 ")=="" { break }
@@ -81,7 +151,9 @@ func parseID3v2(data []byte) embeddedMetadata {
 				value:=cleanMetadata(decodeID3Text(frame))
 				switch id {
 				case "TIT2": if meta.Title=="" { meta.Title=value }
+				case "TALB": if album=="" { album=value }
 				case "TPE1": if meta.Author=="" { meta.Author=normalizeAuthor(value) }
+				case "TPE2": if meta.Author=="" { meta.Author=normalizeAuthor(value) }
 				case "TDRC","TYER": if meta.PublishedYear==0 { meta.PublishedYear=yearFromText(value) }
 				case "TCON": if meta.Genre=="" { meta.Genre=value }
 				case "TPUB": if meta.Publisher=="" { meta.Publisher=value }
@@ -91,6 +163,7 @@ func parseID3v2(data []byte) embeddedMetadata {
 		}
 		offset += 10+frameSize
 	}
+	if album!="" && (meta.Title=="" || genericAudioTrackLabel(meta.Title)) { meta.Title=album }
 	return meta
 }
 
