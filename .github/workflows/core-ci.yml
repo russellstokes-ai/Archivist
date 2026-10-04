@@ -2,7 +2,7 @@ name: Core CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, server/parity-0.9.4-20261004]
   pull_request:
     branches: [main]
   workflow_dispatch:
