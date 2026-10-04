@@ -3227,8 +3227,8 @@ function Client() {
     const work=formatPicker.work;
     const choices=formatPicker.choices.filter(choice=>choice.available);
     return <Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setFormatPicker(null)}>
-      <View style={styles.modalBackdrop}>
-        <View accessibilityViewIsModal={true} accessibilityLabel={'Choose format for '+work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close format picker" style={styles.modalBackdrop} onPress={()=>setFormatPicker(null)}>
+        <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Choose format for '+work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{work.title}</Text>
           <Text style={[styles.meta,{color:p.muted}]}>{work.author||'Unknown author'} · Choose how to continue.</Text>
           {choices.map(choice=>{
@@ -3236,8 +3236,8 @@ function Client() {
             return <Button key={choice.key} label={choice.format+' · '+action} tone="quiet" onPress={()=>openShelfFormatChoice(work,choice)}/>;
           })}
           <Button label="Cancel" tone="quiet" onPress={()=>setFormatPicker(null)}/>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>;
   }
 
@@ -6212,7 +6212,7 @@ function Client() {
       <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibraryManageOpen(false)}>
         <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
           <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} style={styles.libraryManageBodyScroll} contentContainerStyle={styles.libraryManageBody}>
-            <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
+            <DismissSheetHandle onDismiss={()=>setLibraryManageOpen(false)} foldLayout={foldLayout}/>
             <View style={styles.sheetHeader}>
               <View style={{flex:1,minWidth:0}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Manage Library</Text><Text style={[styles.meta,{color:p.muted}]}>Scan, repair metadata and organise safely. Archivist previews file changes before applying them.</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" onPress={()=>setLibraryManageOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
