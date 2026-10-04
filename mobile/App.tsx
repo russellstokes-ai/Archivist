@@ -784,11 +784,12 @@ function Client() {
   const playerSeeks=useRef(new PlayerSeekQueue()).current;
   const currentAudioKey=playing ? [playing.source,playing.uri,playing.id].join(':') : '';
   const currentAudioKeyRef=useRef(currentAudioKey);currentAudioKeyRef.current=currentAudioKey;
-  useEffect(()=>{playerSeeks.reset(currentAudioKey);},[currentAudioKey,playerSeeks]);
+  useEffect(()=>{playerSeeks.reset(currentAudioKey);setPlayerSeekPreview(null);},[currentAudioKey,playerSeeks]);
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [playerPanel, setPlayerPanel] = useState<'speed'|'sleep'|'queue'|'bookmarks'|'chapters'|'structure'|null>(null);
+  const [playerSeekPreview,setPlayerSeekPreview]=useState<{key:string;seconds:number}|null>(null);
   const [playerProgressWidth,setPlayerProgressWidth]=useState(1);
   const [localSpeed, setLocalSpeed] = useState(1);
   const [playerBookmarks,setPlayerBookmarks]=useState<PlayerBookmark[]>([]);
@@ -4479,14 +4480,16 @@ function Client() {
     const serverPlayer = current?.source==='server';
     const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
     const duration = serverPlayer ? playback?.duration || 0 : audio.duration || 0;
+    const visualPosition=playerSeekPreview?.key===currentAudioKey?playerSeekPreview.seconds:position;
+    const visualProgress=duration?Math.max(0,Math.min(1,visualPosition/duration)):0;
     const isPlaying = serverPlayer ? !!playback?.playing : !!audio.playing;
     const speed = serverPlayer ? playback?.speed || 1 : localSpeed;
     const workKey=playbackWorkKey(current);
     const effectiveChapters=chapterOverrides[workKey]?.length?chapterOverrides[workKey]:chapters;
-    const currentChapterIndex = effectiveChapters.findIndex(chapter => position >= chapter.start && (chapter.end <= chapter.start || position < chapter.end));
+    const currentChapterIndex = effectiveChapters.findIndex(chapter => visualPosition >= chapter.start && (chapter.end <= chapter.start || visualPosition < chapter.end));
     const currentChapter = currentChapterIndex >= 0 ? effectiveChapters[currentChapterIndex] : null;
     const currentBookmarks=playerBookmarks.filter(item=>item.workKey===workKey);
-    const remaining = Math.max(0, duration - position);
+    const remaining = Math.max(0, duration - visualPosition);
     const nativeSleepSupported = typeof (player as typeof player & {setSleepTimer?: (seconds:number)=>void}).setSleepTimer === 'function';
     const currentServerWork=current?.serverWorkId?serverWorks.find(work=>work.id===current.serverWorkId):undefined;
     const offlineCopy=currentServerWork?downloadedServerWork(currentServerWork):current?.source==='downloaded'?Object.values(offlineWorks).find(item=>item.server===current.originServer&&item.workId===current.serverWorkId):undefined;
@@ -4504,18 +4507,26 @@ function Client() {
 
     const transportReady = !!current && audio.isLoaded && !(serverPlayer && playback?.loading);
     function requestSeek(input:{target?:number;delta?:number},pages?:number,direction:1|-1=1) {
-      if(!transportReady)return;
+      if(!transportReady)return null;
       const key=currentAudioKey;
+      const base=playerSeekPreview?.key===key?playerSeekPreview.seconds:position;
       const target=playerSeeks.request({
-        key,current:position,duration,...input,
+        key,current:base,duration,...input,
         seek:async seconds=>{if(serverPlayer){if(!await controller.seek(seconds))throw Error(controller.state.error||'Playback changed. Try again.');}else await player.seekTo(seconds);},
-        persist:async seconds=>{if(!serverPlayer)await persistLocalPlaybackPosition(seconds);},
+        persist:async seconds=>{
+          if(!serverPlayer)await persistLocalPlaybackPosition(seconds);
+          setPlayerSeekPreview(current=>current?.key===key&&Math.abs(current.seconds-seconds)<0.5?null:current);
+        },
         isCurrent:()=>currentAudioKeyRef.current===key,
-        onError:error=>setError(error instanceof Error?error.message:String(error)),
+        onError:error=>{setPlayerSeekPreview(current=>current?.key===key?null:current);setError(error instanceof Error?error.message:String(error));},
       });
-      if(target!==null && pages && isPlaying)turnPages(pages,direction);
+      if(target!==null){
+        setPlayerSeekPreview({key,seconds:target});
+        if(pages && isPlaying)turnPages(pages,direction);
+      }
+      return target;
     }
-    function seekTo(seconds:number){requestSeek({target:seconds});}
+    function seekTo(seconds:number){return requestSeek({target:seconds});}
     function skipAudio(size:'small'|'large',direction:1|-1){
       const skip=PLAYER_SKIP[size];
       requestSeek({delta:direction*skip.seconds},skip.pages,direction);
@@ -4558,13 +4569,13 @@ function Client() {
             </View>
             </View>
             <View style={styles.playerControlColumn}>
-            <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><Text style={{color:p.muted,fontSize:13}}>{Math.round(displayedProgress*100)}%</Text></View>
+            <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>
 
             <Pressable
               accessibilityRole="adjustable"
               accessibilityLabel="Playback position"
               accessibilityHint="Tap to seek, or swipe up and down with a screen reader to move by 30 seconds"
-              accessibilityValue={{min:0,max:Math.max(1,Math.round(duration)),now:Math.round(position),text:formatTime(position)+' of '+formatTime(duration)}}
+              accessibilityValue={{min:0,max:Math.max(1,Math.round(duration)),now:Math.round(visualPosition),text:formatTime(visualPosition)+' of '+formatTime(duration)}}
               accessibilityActions={[{name:'increment',label:'Forward 30 seconds'},{name:'decrement',label:'Back 30 seconds'}]}
               onAccessibilityAction={event=>{
                 if(event.nativeEvent.actionName==='increment'){skipAudio('large',1);}
@@ -4578,11 +4589,11 @@ function Client() {
               }}
               style={[styles.progressHitArea,{maxWidth:560,alignSelf:'center',width:'100%'}]}>
               <View style={[styles.progressTrack, {backgroundColor:p.card,height:24,borderRadius:14,overflow:'visible'}]}>
-                <View style={[styles.progressFill, {backgroundColor:'rgba(71,115,111,.20)',borderRadius:14,width: `${displayedProgress * 100}%`}]} /><View pointerEvents="none" style={{position:'absolute',left:`${displayedProgress*100}%`,marginLeft:-12,top:0,width:24,height:24,borderRadius:12,backgroundColor:p.ink}}/>
+                <View style={[styles.progressFill, {backgroundColor:'rgba(71,115,111,.20)',borderRadius:14,width: `${visualProgress * 100}%`}]} /><View pointerEvents="none" style={{position:'absolute',left:`${visualProgress*100}%`,marginLeft:-12,top:0,width:24,height:24,borderRadius:12,backgroundColor:p.ink}}/>
               </View>
             </Pressable>
             <View style={styles.timeRow}>
-              <Text style={[styles.playerTime,{color:p.muted}]}>{formatTime(position)}</Text>
+              <Text style={[styles.playerTime,{color:p.muted}]}>{formatTime(visualPosition)}</Text>
               <Text style={[styles.playerTime,{color:p.muted}]}>−{formatTime(remaining)}</Text>
             </View>
 
@@ -4658,12 +4669,12 @@ function Client() {
             {playerPanel==='chapters' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <View style={styles.queueHeader}><Text style={[styles.playerPanelTitle,{color:p.ink}]}>Chapters</Text><Text style={[styles.meta,{color:p.muted}]}>{effectiveChapters.length}</Text></View>
               {chapterError?<Text accessibilityRole="alert" style={{color:p.sage}}>{chapterError}</Text>:!effectiveChapters.length?<Text style={{color:p.muted}}>No chapters are available for this file.</Text>:null}
-              {effectiveChapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>{seekTo(chapter.start);setPlayerPanel(null)}} style={[styles.chapterRow,currentChapterIndex===index&&{backgroundColor:p.raised}]}><Text style={[styles.chapterIndex,{color:p.sage}]}>{index+1}</Text><View style={{flex:1}}><Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}{chapter.end>chapter.start?' – '+formatTime(chapter.end):''}</Text></View></Pressable>)}
+              {effectiveChapters.map((chapter,index)=><Pressable key={index} accessibilityRole="button" accessibilityLabel={'Chapter '+(index+1)+', '+chapter.title+', '+formatTime(chapter.start)} onPress={()=>{if(seekTo(chapter.start)!==null)setPlayerPanel(null)}} style={[styles.chapterRow,currentChapterIndex===index&&{backgroundColor:p.raised}]}><Text style={[styles.chapterIndex,{color:p.sage}]}>{index+1}</Text><View style={{flex:1}}><Text numberOfLines={1} style={{color:p.ink,fontWeight:currentChapterIndex===index?'800':'600'}}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)}{chapter.end>chapter.start?' – '+formatTime(chapter.end):''}</Text></View></Pressable>)}
             </View> : null}
 
             {playerPanel==='structure' ? <View style={[styles.playerPanel,{backgroundColor:p.card,borderColor:p.line}]}>
               <Text style={[styles.playerPanelTitle,{color:p.ink}]}>Audiobook structure</Text><Text style={[styles.meta,{color:p.muted}]}>Corrections are stored by Archivist. Your original audio files are never rewritten.</Text>
-              {((serverPlayer?playback?.tracks:activeLocalWork?.tracks)?.length||0)>1?<><Text style={[styles.filterLabel,{color:p.muted}]}>FILE ORDER</Text>{(serverPlayer?playback?.tracks||[]:activeLocalWork?.tracks||[]).map((track:any,index:number)=><View key={String(track.id||track.uri)} style={[styles.structureRow,{borderColor:p.line}]}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Pressable accessibilityRole="button" accessibilityLabel={'Move '+track.title+' up'} accessibilityState={{disabled:index===0}} disabled={index===0} onPress={()=>void moveCurrentTrack(index,-1)}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900',padding:8}}>Up</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Move '+track.title+' down'} accessibilityState={{disabled:index===(serverPlayer?playback?.tracks?.length||0:activeLocalWork?.tracks?.length||0)-1}} disabled={index===(serverPlayer?playback?.tracks?.length||0:activeLocalWork?.tracks?.length||0)-1} onPress={()=>void moveCurrentTrack(index,1)}><Text style={{color:p.sage,fontWeight:'900',padding:8}}>Down</Text></Pressable></View>)}</>:null}
+              {((serverPlayer?playback?.tracks:activeLocalWork?.tracks)?.length||0)>0?<><Text style={[styles.filterLabel,{color:p.muted}]}>AUDIO FILES</Text>{(serverPlayer?playback?.tracks||[]:activeLocalWork?.tracks||[]).map((track:any,index:number)=><View key={String(track.id||track.uri)} style={[styles.structureRow,{borderColor:p.line}]}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink,flex:1}]}>{index+1}. {track.title}</Text><Pressable accessibilityRole="button" accessibilityLabel={'Move '+track.title+' up'} accessibilityState={{disabled:index===0}} disabled={index===0} onPress={()=>void moveCurrentTrack(index,-1)}><Text style={{color:index===0?p.muted:p.sage,fontWeight:'900',padding:8}}>Up</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Move '+track.title+' down'} accessibilityState={{disabled:index===(serverPlayer?playback?.tracks?.length||0:activeLocalWork?.tracks?.length||0)-1}} disabled={index===(serverPlayer?playback?.tracks?.length||0:activeLocalWork?.tracks?.length||0)-1} onPress={()=>void moveCurrentTrack(index,1)}><Text style={{color:p.sage,fontWeight:'900',padding:8}}>Down</Text></Pressable></View>)}</>:null}
               {effectiveChapters.length?<><View style={styles.queueHeader}><Text style={[styles.filterLabel,{color:p.muted}]}>CHAPTER EDITOR</Text>{chapterOverrides[workKey]?<Pressable accessibilityRole="button" accessibilityLabel="Reset embedded chapters" onPress={()=>void saveChapterOverride(workKey,null)}><Text style={{color:p.sage,fontWeight:'800'}}>Reset embedded</Text></Pressable>:null}</View>{effectiveChapters.map((chapter,index)=><View key={index} style={[styles.structureChapter,{borderColor:p.line}]}><View style={{flex:1}}>{chapterEditIndex===index?<TextInput accessibilityLabel={'Chapter name for '+chapter.title} value={chapterEditTitle} onChangeText={setChapterEditTitle} autoFocus style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:<><Text style={[styles.bookTitle,{color:p.ink}]}>{chapter.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{formatTime(chapter.start)} – {formatTime(chapter.end)}</Text></>}</View>{chapterEditIndex===index?<Pressable accessibilityRole="button" accessibilityLabel={'Save chapter name '+chapter.title} onPress={()=>{void saveChapterOverride(workKey,renameChapter(effectiveChapters,index,chapterEditTitle));setChapterEditIndex(null)}}><Text style={{color:p.sage,fontWeight:'800'}}>Save</Text></Pressable>:<Pressable accessibilityRole="button" accessibilityLabel={'Rename chapter '+chapter.title} onPress={()=>{setChapterEditIndex(index);setChapterEditTitle(chapter.title)}}><Text style={{color:p.sage,fontWeight:'800'}}>Rename</Text></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel={'Split chapter '+chapter.title+' here'} accessibilityState={{disabled:index!==currentChapterIndex}} disabled={index!==currentChapterIndex} onPress={()=>void saveChapterOverride(workKey,splitChapter(effectiveChapters,index,position))}><Text style={{color:index===currentChapterIndex?p.sage:p.muted,fontWeight:'800'}}>Split here</Text></Pressable>{index<effectiveChapters.length-1?<Pressable accessibilityRole="button" accessibilityLabel={'Merge '+chapter.title+' with next chapter'} onPress={()=>void saveChapterOverride(workKey,mergeChapter(effectiveChapters,index))}><Text style={{color:p.sage,fontWeight:'800'}}>Merge next</Text></Pressable>:null}{index>0?<View style={styles.boundaryRow}><Pressable accessibilityRole="button" accessibilityLabel={'Move '+chapter.title+' start back 5 seconds'} onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start-5))}><Text style={{color:p.muted,fontWeight:'800'}}>−5s start</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Move '+chapter.title+' start forward 5 seconds'} onPress={()=>void saveChapterOverride(workKey,setChapterBoundary(effectiveChapters,index,chapter.start+5))}><Text style={{color:p.muted,fontWeight:'800'}}>+5s start</Text></Pressable></View>:null}</View>)}</>:null}
             </View> : null}
 
@@ -4799,7 +4810,7 @@ function Client() {
         </View>
       </View>
       <Animated.View style={[styles.liveHubBody,{opacity:liveModeTransition,transform:[{translateY:liveModeTransition.interpolate({inputRange:[0,1],outputRange:[reduceMotion?0:4,0]})}]}]}>
-        {liveMode==='player'?<Player embedded/>:<Reader embedded/>}
+        {liveMode==='player'?Player({embedded:true}):<Reader embedded/>}
       </Animated.View>
     </View>;
   }
