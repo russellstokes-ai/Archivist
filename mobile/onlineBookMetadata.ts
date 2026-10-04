@@ -138,8 +138,9 @@ function folderHints(uri?:string){
   if(parent){
     const indexed=parent.match(/^\s*\d+(?:\.\d+)?\s*[-._:]\s*(.+)$/);
     if(indexed)titles.push(indexed[1]);
-    else if(similarity(parent,file)<.95)series.push(parent);
+    else if(dirs.length>=2&&similarity(parent,file)<.95)series.push(parent);
   }
+  if(dirs.length===1&&parent)authors.push(parent);
   if(grand)authors.push(grand);
   if(great)authors.push(great);
   return {titles:unique(titles.filter(useful)),authors:unique(authors.filter(useful)),series:unique(series.filter(useful))};
@@ -192,6 +193,24 @@ function coverUrlOpenLibrary(doc:any){
   const id=Number(doc?.cover_i);
   return Number.isFinite(id)&&id>0?'https://covers.openlibrary.org/b/id/'+id+'-L.jpg?default=false':undefined;
 }
+function parseSeriesValue(value:unknown){
+  const raw=firstString(value);
+  if(!raw)return {series:undefined as string|undefined,seriesNumber:undefined as number|undefined};
+  const patterns=[
+    /^(.*?)\s*[#,]\s*(?:book\s*|vol(?:ume)?\.?\s*)?(\d+(?:\.\d+)?)\s*$/i,
+    /^(.*?)\s*\(\s*(?:book\s*|vol(?:ume)?\.?\s*)?(\d+(?:\.\d+)?)\s*\)\s*$/i,
+    /^(.*?)\s+(?:book|volume|vol\.?)\s+(\d+(?:\.\d+)?)\s*$/i,
+  ];
+  for(const pattern of patterns){
+    const match=raw.match(pattern);
+    if(match){
+      const name=clean(match[1]).replace(/[,(\s]+$/,'').trim();
+      const number=Number(match[2]);
+      return {series:name||raw,seriesNumber:Number.isFinite(number)?number:undefined};
+    }
+  }
+  return {series:raw,seriesNumber:undefined};
+}
 function compact<T extends Record<string,any>>(fields:T):T{
   const out:any={};
   for(const [key,value] of Object.entries(fields))if(value!==undefined&&value!==null&&String(value).trim()!=='')out[key]=value;
@@ -200,8 +219,9 @@ function compact<T extends Record<string,any>>(fields:T):T{
 function openLibraryIdentifiers(doc:any):string[]{const values:any[]=Array.isArray(doc?.isbn)?doc.isbn:[];return unique<string>(values.map(value=>normalizeIsbn(value)).filter(value=>!!value));}
 function openLibraryFields(doc:any):OnlineBookFields{
   const isbns=openLibraryIdentifiers(doc);
+  const parsedSeries=parseSeriesValue(doc?.series);
   return compact({
-    title:firstString(doc?.title),author:firstString(doc?.author_name),series:firstString(doc?.series),genre:selectGenre(doc?.subject),
+    title:firstString(doc?.title),author:firstString(doc?.author_name),series:parsedSeries.series,seriesNumber:parsedSeries.seriesNumber,genre:selectGenre(doc?.subject),
     publishedYear:safeYear(doc?.first_publish_year)||safeYear(Array.isArray(doc?.publish_year)?doc.publish_year[0]:undefined),
     publisher:firstString(doc?.publisher),isbn:isbns.find((value:string)=>value.length===13)||isbns[0],language:firstString(doc?.language),description:firstString(doc?.first_sentence),
   });
