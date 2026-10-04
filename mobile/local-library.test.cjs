@@ -39,7 +39,9 @@ const localDirs = new Map();
 const localCopies = [];
 const localDeletes = [];
 const localMade = [];
+const embeddedCoverResults = new Map();
 Module._load = function(request, parent, isMain) {
+  if (request === './coverDiscovery') return {discoverEmbeddedCover: async uri => embeddedCoverResults.get(uri)};
   if (request === 'react-native') return {Platform: {OS: 'android'}};
   if (request === 'expo-file-system/legacy') return {
     EncodingType: {Base64:'base64'},
@@ -323,15 +325,9 @@ assert.equal(previews[0].state, 'review');
   // Sprint 7 publishes the catalogue before expensive embedded-cover recovery.
   const coverRoot='content://root/tree/primary:Books/document/primary:CoverEnrichment';
   const coverBook=coverRoot+'%2FCovered.epub';
-  const JSZip=require('jszip');
-  const coverZip=new JSZip();
-  coverZip.file('META-INF/container.xml','<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>');
-  coverZip.file('OEBPS/content.opf','<package><metadata><dc:title>Covered</dc:title><dc:creator>Cover Author</dc:creator><meta name="cover" content="front"/></metadata><manifest><item id="front" href="front.jpg" media-type="image/jpeg"/></manifest></package>');
-  coverZip.file('OEBPS/front.jpg',Buffer.from([0xff,0xd8,0xff,0xe0,1,2,3,0xff,0xd9]));
-  const coverBase64=await coverZip.generateAsync({type:'base64'});
   saf.dirs.set(coverRoot,[coverBook]);
-  fileInfo.set(coverBook,{exists:true,size:Math.floor(coverBase64.length*3/4),modificationTime:77});
-  fileText.set(coverBook,coverBase64);
+  fileInfo.set(coverBook,{exists:true,size:32,modificationTime:77});
+  embeddedCoverResults.set(coverBook,'data:image/jpeg;base64,/9j/4AAQSkZJRg==');
   const deferredCoverScan=await scanLocalFolders(
     [{id:coverRoot,uri:coverRoot,name:'CoverEnrichment',status:'Ready',itemCount:0}],
     undefined,
