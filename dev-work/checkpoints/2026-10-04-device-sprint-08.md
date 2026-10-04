@@ -84,8 +84,10 @@ No Shelf, Library, Player, Atlas, Comic Focus or general visual redesign was int
 ## Automated evidence
 
 - Server checks run `37223175976`: **PASS** — root/package Go tests, Raspberry Pi ARM64 compile, browser JavaScript syntax, UI contract, HA package contract, source parity and Home Assistant Docker smoke.
-- Mobile checks run `37223198069`: running at checkpoint creation; TypeScript and all behavioral tests are already green, final Expo web export still running.
-- iOS checks run `37223198102`: running at checkpoint creation; dependency install, Expo Doctor, TypeScript and native project generation have passed; CocoaPods/native compile remain.
+- Mobile checks run `37223198069`: **PASS** — dependency install, Expo Doctor, TypeScript, all maintained behavioral/UI-contract suites, version consistency and Expo web export.
+- iOS checks run `37223198102`: **PASS** — dependency install, Expo Doctor, TypeScript, native project generation, CocoaPods and full iOS Simulator compile.
+- Final mobile executable/test head: `e2a9e9c944b44161659c50564f09948689806f63`.
+- Final server/UI-contract head: `b04bfa910f234e3b40e97da7e8b9ea4a8f02b778`.
 
 ## Physical acceptance boundary
 
