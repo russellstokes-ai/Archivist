@@ -627,7 +627,7 @@ func (a *app) routes() http.Handler {
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		reviewOnly := r.URL.Query().Get("review") == "1"
 		metadataGap := strings.TrimSpace(r.URL.Query().Get("metadataGap"))
-		validMetadataGap := map[string]bool{"":true,"review":true,"author":true,"series":true,"genre":true,"seriesNumber":true,"identifier":true,"description":true,"incomplete":true}
+		validMetadataGap := map[string]bool{"":true,"review":true,"conflicts":true,"author":true,"series":true,"genre":true,"seriesNumber":true,"identifier":true,"description":true,"incomplete":true}
 		if !validMetadataGap[metadataGap] {
 			fail(w,400,errors.New("invalid metadata-gap filter"))
 			return
@@ -654,6 +654,7 @@ func (a *app) routes() http.Handler {
 			AND (?=0 OR a.needs_review=1)
 			AND (?='' OR
 				(?='review' AND a.needs_review=1) OR
+				(?='conflicts' AND a.review_reason LIKE 'Metadata sources disagree%') OR
 				(?='author' AND trim(a.author)='') OR
 				(?='series' AND trim(a.series)='') OR
 				(?='genre' AND trim(a.genre)='') OR
@@ -670,7 +671,7 @@ func (a *app) routes() http.Handler {
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
 			ORDER BY a.needs_review DESC,a.title,a.id LIMIT ? OFFSET ?`,
 			q, q, q, q, q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
-			metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap,
+			metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap, metadataGap,
 			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
 		if e != nil {
 			fail(w, 500, e)
