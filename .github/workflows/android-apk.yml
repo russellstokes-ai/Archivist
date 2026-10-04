@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - dev/archivist-work
+      - polish/final-release-sweep-20261004
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
