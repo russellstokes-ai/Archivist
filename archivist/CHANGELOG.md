@@ -6,6 +6,11 @@
 - Adds no database or media-schema migration; existing `/data` state and configured sources are retained.
 - Mobile/server endpoint parity is covered by the release regression suite.
 - Physical Fold/phone, Home Assistant and remote-access acceptance remain device checks.
+- Server metadata management now matches the advanced mobile workflow: embedded tags, sidecars and filename/folder evidence are merged with confidence and conflict review.
+- Filename intelligence recognises author, series, sequence, narrator, publication year, ISBN and ASIN patterns without altering source media.
+- Adds metadata-gap and conflict filters, rich identifier search, the full metadata editor, bulk metadata changes and sequential series numbering in the Home Assistant UI.
+- Adds AAC and Opus catalogue discovery; CBR remains intentionally excluded until the server reader can decode RAR safely.
+- Existing preview-first sorting, collision protection, SHA-256 duplicate verification and crash-safe move recovery remain unchanged.
 
 
 ## 0.9.3 — UI testing release
