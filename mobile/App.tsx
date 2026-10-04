@@ -62,6 +62,7 @@ import {shelfRecommendations} from './shelfRecommendations';
 import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
 import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from './bulkMetadata';
 import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanPhaseStep} from './scanFeedback';
+import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -688,6 +689,7 @@ function Client() {
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
+  const scanCommitGate=useRef(new ScanCommitGate()).current;
   const [reviewOnly, setReviewOnly] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
@@ -2128,34 +2130,55 @@ function Client() {
 
   const scanFrame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
 
-  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[]) {
+  const beginLocalScan=()=>{
+    const generation=scanCommitGate.begin();
+    setLocalScanning(true);
+    setScanResultSummary(null);
+    return generation;
+  };
+  const reportLocalScan=(generation:number)=>(progress:LocalScanProgress)=>{
+    if(scanCommitGate.isCurrent(generation))setScanProgress(progress);
+  };
+  const endLocalScan=(generation:number)=>{
+    if(!scanCommitGate.isCurrent(generation))return;
+    setLocalScanning(false);
+    setScanProgress(null);
+  };
+
+  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[], generation:number) {
+    if(!scanCommitGate.isCurrent(generation))return null;
     setScanProgress({phase:'checking-duplicates',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
+    if(!scanCommitGate.isCurrent(generation))return null;
     localRelationClassification(result.books);
     setScanProgress({phase:'preparing',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
+    if(!scanCommitGate.isCurrent(generation))return null;
 
     const summary=reconcileScan(previousLocal,result.books);
-    setScanResultSummary(summary);
-    setLocalFolders(result.folders);
-    setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
-    setLocalMovePreviews([]);
-    setLocalMoveSelection([]);
-    setSpaces([...new Set(result.books.map(book=>book.space))]);
-
+    const nextBooks=result.books.map(book=>({...book,source:'local' as const}));
     const reconciledHistory=localSortHistory.map(item=>item.complete===false?{...item,complete:true}:item);
     const historyChanged=reconciledHistory.some((item,index)=>item.complete!==localSortHistory[index]?.complete);
-    if(historyChanged)setLocalSortHistory(reconciledHistory);
 
+    // Persist the complete reconciled snapshot before publishing it to Shelf/Library.
     await Promise.all([
       setPersistedJSON(localFoldersKey,result.folders),
       setPersistedJSON(localCatalogKey,result.books),
       historyChanged?setPersistedJSON(localSortHistoryKey,reconciledHistory):Promise.resolve(),
     ]);
+    if(!scanCommitGate.isCurrent(generation))return null;
+
+    setScanResultSummary(summary);
+    setLocalFolders(result.folders);
+    setLocalBooks(nextBooks);
+    setLocalMovePreviews([]);
+    setLocalMoveSelection([]);
+    setSpaces([...new Set(result.books.map(book=>book.space))]);
+    if(historyChanged)setLocalSortHistory(reconciledHistory);
     setRescanPromptOpen(false);
     setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
-    return summary;
+    return scanCommitGate.isCurrent(generation)?summary:null;
   }
 
   function scanNotice(result:LocalScanResult) {
@@ -2170,25 +2193,27 @@ function Client() {
   async function addLocalFolder() {
     setError('');
     setLocalFolderNotice('');
-    setScanResultSummary(null);
-    setLocalScanning(true);
+    const picked=await pickLocalFolder().catch(e=>{setError((e as Error).message);return null;});
+    if(!picked){
+      setLocalFolderNotice('Folder selection cancelled.');
+      return;
+    }
+
+    const exists=localFolders.some(folder=>folder.uri===picked.uri);
+    const stagedFolder:LocalFolder={...picked,status:'Scanning…'};
+    const folders=exists?localFolders:[...localFolders,stagedFolder];
+    const generation=beginLocalScan();
     try {
-      const picked=await pickLocalFolder();
-      if(!picked){
-        setLocalFolderNotice('Folder selection cancelled.');
-        return;
-      }
-      const exists=localFolders.some(folder=>folder.uri===picked.uri);
-      const stagedFolder:LocalFolder={...picked,status:'Scanning…'};
-      const folders=exists?localFolders:[...localFolders,stagedFolder];
       if(!exists){
+        // Show the source immediately; the published catalogue remains untouched until commit.
         setLocalFolders(folders);
         await setPersistedJSON(localFoldersKey,folders);
       }
       setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(folders,setScanProgress,localMetadataOverrides,previousLocal);
-      await finaliseLocalScan(result,previousLocal);
+      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal);
+      const summary=await finaliseLocalScan(result,previousLocal,generation);
+      if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
       if(result.books.length&&celebrationEligible){
         setCelebrating(true);
@@ -2197,29 +2222,37 @@ function Client() {
         setTimeout(()=>setCelebrating(false),1900);
       }
     }catch(e){
-      setError((e as Error).message);
+      if(scanCommitGate.isCurrent(generation)){
+        const failedFolders=folders.map(folder=>folder.uri===picked.uri?{...folder,status:'Scan failed · tap Refresh'}:folder);
+        setLocalFolders(failedFolders);
+        await setPersistedJSON(localFoldersKey,failedFolders).catch(()=>undefined);
+        setLocalFolderNotice(scanFailureCopy(localBooks.length>0));
+        setError((e as Error).message);
+      }
     }finally{
-      setLocalScanning(false);
-      setScanProgress(null);
+      endLocalScan(generation);
     }
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides) {
     if(!localFolders.length)return;
     setError('');
-    setScanResultSummary(null);
-    setLocalScanning(true);
+    setLocalFolderNotice('');
+    const generation=beginLocalScan();
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(localFolders,setScanProgress,overrides,previousLocal);
-      await finaliseLocalScan(result,previousLocal);
+      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal);
+      const summary=await finaliseLocalScan(result,previousLocal,generation);
+      if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
     }catch(e){
-      setError((e as Error).message);
+      if(scanCommitGate.isCurrent(generation)){
+        setLocalFolderNotice(scanFailureCopy(localBooks.length>0));
+        setError((e as Error).message);
+      }
     }finally{
-      setLocalScanning(false);
-      setScanProgress(null);
+      endLocalScan(generation);
     }
   }
 
@@ -2241,8 +2274,7 @@ function Client() {
     if(localScanning)return;
     setError('');
     setLocalFolderNotice('');
-    setScanResultSummary(null);
-    setLocalScanning(true);
+    const generation=beginLocalScan();
     try{
       await removeLocalFolderSource(folder);
       const remaining=localFolders.filter(item=>item.uri!==folder.uri);
@@ -2251,18 +2283,21 @@ function Client() {
       const nextOverrides=Object.fromEntries(Object.entries(localMetadataOverrides).filter(([uri])=>!removedUris.has(uri)));
       setLocalMetadataOverrides(nextOverrides);
       await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
-      const result=await scanLocalFolders(remaining,setScanProgress,nextOverrides,previousLocal);
-      await finaliseLocalScan(result,previousLocal);
+      const result=await scanLocalFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal);
+      const summary=await finaliseLocalScan(result,previousLocal,generation);
+      if(!summary)return;
       if(sourceFilter==='local'&&space===folder.name&&libraryFolderExact){
         setSpace('');
         setLibraryFolderExact(false);
       }
       setLocalFolderNotice(importedPlatformCopyRemovedLabel(folder));
     }catch(e){
-      setError((e as Error).message);
+      if(scanCommitGate.isCurrent(generation)){
+        setLocalFolderNotice(scanFailureCopy(localBooks.length>0));
+        setError((e as Error).message);
+      }
     }finally{
-      setLocalScanning(false);
-      setScanProgress(null);
+      endLocalScan(generation);
     }
   }
 
@@ -3039,6 +3074,19 @@ function Client() {
         {hasBooks?<Button label="Finish setup" onPress={()=>void finishOnboarding()}/>:null}
       </View>
     );
+  }
+
+  function LocalScanStatus(){
+    if(!localScanning||!scanProgress)return null;
+    const copy=scanStatusCopy({...scanProgress,publishedCount:localBooks.length});
+    return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+      <View style={{flex:1,minWidth:0,gap:2}}>
+        <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{copy.title}</Text>
+        <Text numberOfLines={3} style={[styles.scanBannerDetail,{color:p.muted}]}>{copy.detail}</Text>
+        <View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:`${scanPhaseStep(scanProgress.phase)*20}%` as `${number}%`}]} /></View>
+      </View>
+    </View>;
   }
 
   function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
@@ -4237,10 +4285,7 @@ function Client() {
         <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
       </Pressable>:null}
 
-      {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
-        <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found</Text></View>
-      </View>:null}
+      <LocalScanStatus/>
 
       {showStandaloneEmpty?<View style={styles.designedEmpty}>
         <ArchivistLogo size={46}/>
@@ -4379,6 +4424,7 @@ function Client() {
           </Pressable>
         </View>
       </View>
+      <LocalScanStatus/>
       {!wide?<Pressable accessibilityRole="button" accessibilityLabel={'Sources and folders, '+selectedLocationLabel} onPress={()=>setLibrarySourcesOpen(true)} style={[styles.libraryMobileSourceButton,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={[styles.libraryTreeIcon,{backgroundColor:p.card}]}><UiIcon name="shelf" color={p.sage} size={17}/></View>
         <View style={{flex:1,minWidth:0}}><Text style={[styles.libraryMobileSourceKicker,{color:p.muted}]}>SOURCES & FOLDERS</Text><Text numberOfLines={1} style={[styles.libraryMobileSourceLabel,{color:p.ink}]}>{selectedLocationLabel}</Text></View>
@@ -6909,6 +6955,11 @@ const styles = StyleSheet.create({
   continueTitle: {fontSize:14,fontWeight:'800'},
   seriesChip: {minWidth:140,maxWidth:220,borderWidth:0,borderRadius:12,paddingHorizontal:14,paddingVertical:12,gap:2},
   scanBanner: {borderRadius:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:10,paddingHorizontal:0,flexDirection:'row',alignItems:'center',gap:12},
+  scanBannerStable: {minHeight:68},
+  scanBannerTitle: {fontSize:12.5,lineHeight:18,fontWeight:'700'},
+  scanBannerDetail: {fontSize:11.5,lineHeight:16},
+  scanProgressTrack: {height:2,borderRadius:1,overflow:'hidden',marginTop:5},
+  scanProgressFill: {height:2,borderRadius:1},
   onboardingCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
   onboardingEyebrow: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.5},
   onboardingTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:25,fontWeight:'500',letterSpacing:-.15},
