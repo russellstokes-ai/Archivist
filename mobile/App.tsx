@@ -2199,9 +2199,10 @@ function Client() {
     const enriched=await enrichLocalBookCovers(baseBooks,{
       batchSize:4,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
-      onBatch:(batch)=>{
+      onBatch:async(batch)=>{
         if(!scanCommitGate.isCurrent(generation))return;
         setLocalBooks(current=>applyCoverEnrichment(current,batch));
+        await scanFrame();
       },
     }).catch(()=>null);
     if(!enriched?.updated||!scanCommitGate.isCurrent(generation))return;
