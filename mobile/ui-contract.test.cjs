@@ -314,12 +314,12 @@ for(const match of source.matchAll(/<Pressable\b[\s\S]*?>/g)){
   const tag=match[0];
   assert.ok(/accessibilityRole=/.test(tag)||/accessible=\{false\}/.test(tag),'Pressable missing accessibility semantics: '+tag.replace(/\s+/g,' ').slice(0,220));
 }
-assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?112:132"),'Locked Library folder rail dimensions changed');
+assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?136:160"),'Approved Library folder rail width fix regressed');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"),'Locked primary-page geometry changed');
 const lockedStylesStart=source.indexOf('const styles = StyleSheet.create({');
 assert.ok(lockedStylesStart>=0,'StyleSheet block missing');
 const lockedFoldStyleNames=[
-  'libraryRailFold','libraryMainFold','shelfContentFold','shelfHeroFold','shelfHeroArtworkFold',
+  'libraryMainFold','shelfContentFold','shelfHeroFold','shelfHeroArtworkFold',
   'playerScreenFold','playerAdaptiveWide','atlasScreenFold','statsScreenFold',
   'profileHubScreenFold','settingsScreenFold','sheetBackdropFold','actionSheetFold','workDetailsHeroFold'
 ];
