@@ -9,7 +9,7 @@
   const tools=document.createElement('div');tools.className='tools';
   const gap=document.createElement('select');gap.setAttribute('aria-label','Metadata gap');
   [
-    ['','All scanned files'],['review','Needs review'],['incomplete','Any missing details'],
+    ['','All scanned files'],['review','Needs review'],['conflicts','Metadata conflicts'],['incomplete','Any missing details'],
     ['author','Missing author'],['series','Missing series'],['seriesNumber','Missing series order'],
     ['genre','Missing genre'],['identifier','Missing ISBN or ASIN'],['description','Missing description'],
   ].forEach(([value,label])=>gap.append(new Option(label,value)));
