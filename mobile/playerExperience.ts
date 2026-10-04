@@ -10,6 +10,15 @@ export type PlayerBookmark = {
 
 export type PlayerMotionState = 'closed'|'open'|'turning';
 
+export const PLAYER_MOTION_TIMING = {
+  pauseGraceMs: 420,
+  openMs: 900,
+  closeMs: 420,
+  firstTurnDelayMs: 520,
+  pageTurnMs: 2200,
+  pageRestMs: 8200,
+} as const;
+
 export function playerMotionState(input:{playing:boolean;visible:boolean;reduceMotion:boolean}):PlayerMotionState{
   if(!input.visible)return 'closed';
   if(input.reduceMotion)return 'open';
