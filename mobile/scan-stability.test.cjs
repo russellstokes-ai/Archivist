@@ -18,7 +18,7 @@ assert.ok(source.includes("folder.status==='Scanning…'||folder.status==='Ready
 assert.ok(source.includes('if(!needsInitialCatalogue&&!pendingFolder)return'),'existing catalogues should only auto-rescan for genuinely pending folders');
 assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan completion notice should be visible but not become stale chrome');
 assert.ok(source.includes('{deferEmbeddedCovers:true}'),'app scans must publish identity before expensive embedded-cover recovery');
-assert.ok(source.includes('void enrichPublishedLocalLibrary(result.books,generation)'),'successful catalogue publication must start background library enrichment without blocking scan completion');
+assert.ok(source.includes('void enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),'successful catalogue publication must start background library enrichment without blocking scan completion and preserve explicit-refresh intent');
 assert.ok(source.includes('await enrichPublishedLocalCovers(baseBooks,generation)'),'background library enrichment must preserve local cover recovery as its first stage');
 assert.ok(source.includes('await enrichPublishedLocalBookMetadata(latest,generation)'),'background library enrichment must continue into online book metadata after the latest persisted cover state');
 assert.ok(source.includes('await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation)'),'comic enrichment must run after books against the latest persisted catalogue');
