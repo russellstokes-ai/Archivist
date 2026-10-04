@@ -258,6 +258,38 @@ assert.equal(previews[0].state, 'review');
   assert.equal(infoReads.includes(hugeBook),true);
   assert.equal(fileReads.includes(hugeBook),false);
 
+  // A generic cover beside several independent books is ambiguous and must not be guessed.
+  const ambiguousCoverRoot='content://root/tree/primary:Books/document/primary:AmbiguousCovers';
+  const ambiguousA=ambiguousCoverRoot+'%2FAlpha.epub';
+  const ambiguousB=ambiguousCoverRoot+'%2FBeta.epub';
+  const ambiguousGeneric=ambiguousCoverRoot+'%2Fcover.jpg';
+  saf.dirs.set(ambiguousCoverRoot,[ambiguousA,ambiguousB,ambiguousGeneric]);
+  fileInfo.set(ambiguousA,{exists:true,size:32,modificationTime:1});
+  fileInfo.set(ambiguousB,{exists:true,size:32,modificationTime:1});
+  const ambiguousScan=await scanLocalFolders(
+    [{id:ambiguousCoverRoot,uri:ambiguousCoverRoot,name:'AmbiguousCovers',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    [],
+    {deferEmbeddedCovers:true},
+  );
+  assert.equal(ambiguousScan.books.length,2);
+  assert.equal(ambiguousScan.books.every(book=>!book.coverUri),true,'one generic image must not be assigned to multiple unrelated books');
+
+  const preciseCoverRoot='content://root/tree/primary:Books/document/primary:PreciseCovers';
+  const preciseBook=preciseCoverRoot+'%2FAlpha.epub';
+  const preciseArtwork=preciseCoverRoot+'%2FAlpha.jpg';
+  saf.dirs.set(preciseCoverRoot,[preciseBook,preciseArtwork]);
+  fileInfo.set(preciseBook,{exists:true,size:32,modificationTime:1});
+  const preciseScan=await scanLocalFolders(
+    [{id:preciseCoverRoot,uri:preciseCoverRoot,name:'PreciseCovers',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    [],
+    {deferEmbeddedCovers:true},
+  );
+  assert.equal(preciseScan.books[0].coverUri,preciseArtwork,'same-stem artwork should be trusted immediately');
+
   // Sprint 7 publishes the catalogue before expensive embedded-cover recovery.
   const coverRoot='content://root/tree/primary:Books/document/primary:CoverEnrichment';
   const coverBook=coverRoot+'%2FCovered.epub';
