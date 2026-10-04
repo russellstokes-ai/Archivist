@@ -1,3 +1,4 @@
+import {startPageTurnLoop} from './pageTurnLoop';
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
@@ -19,6 +20,8 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
+  StatusBar,
+  BackHandler,
   StyleSheet,
   Text,
   TextInput,
@@ -613,6 +616,50 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
   </Pressable>;
 }
 
+  function Artwork({
+    title,format,coverShape,coverUri,serverPath,large=false,fill=false,session,p,
+  }: {
+    session:Session|null;p:Palette;title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;fill?:boolean;
+  }) {
+    const square = coverShape ? coverShape === 'square' : format === 'Audio';
+    const imageSource = session && serverPath
+      ? {uri: session.server + serverPath, headers: {Authorization: 'Bearer ' + session.token}}
+      : coverUri ? {uri: coverUri} : null;
+    const [coverFailed, setCoverFailed] = useState(false);
+    useEffect(() => setCoverFailed(false), [imageSource?.uri]);
+    return (
+      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, fill&&styles.coverFill, {backgroundColor:p.card}]}>
+        {imageSource && !coverFailed ? (
+          <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
+        ) : (
+          <View style={styles.coverFallback}>
+            <ArchivistLogo size={22} opacity={.50}/>
+            <View style={styles.coverFallbackCopy}>
+              <Text numberOfLines={1} style={[styles.coverFormat,{color:p.sage}]}>{format.toUpperCase()}</Text>
+              <Text maxFontSizeMultiplier={1.1} numberOfLines={large ? 3 : 2} style={[styles.coverTitle,{color:p.ink},large&&styles.coverTitleLarge]}>{title}</Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+
+  function MiniArtwork({book,session,p}: {book: Book;session:Session|null;p:Palette}) {
+    const source = session && book.source==='server'
+      ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
+      : book.coverUri ? {uri: book.coverUri} : null;
+    const [failed,setFailed]=useState(false);
+    useEffect(()=>setFailed(false),[source?.uri]);
+    return (
+      <View style={[styles.miniCover,{backgroundColor:'#111111'}]}>
+        <Text numberOfLines={1} style={styles.miniCoverLabel}>{book.format.toUpperCase()}</Text>
+        {source && !failed ? <Image accessible={false} source={source} resizeMode="cover" style={styles.miniCoverImage} onError={()=>setFailed(true)} /> : null}
+      </View>
+    );
+  }
+
+
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
@@ -762,11 +809,14 @@ function Client() {
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [reading, setReading] = useState<Book | null>(null);
+  const [readerFullscreen,setReaderFullscreen]=useState(false);
   const [localReader, setLocalReader] = useState<LocalReaderDocument | null>(null);
+  useEffect(()=>()=>{void localReader?.dispose?.();},[localReader]);
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerLoadError,setReaderLoadError]=useState('');
   const [readerReloadKey,setReaderReloadKey]=useState(0);
   const readerWebRef=useRef<WebView|null>(null);
+  const readerOpenGeneration=useRef(0);
   const [readerBookmarks,setReaderBookmarks]=useState<ReaderBookmark[]>([]);
   const [readerAnnotations,setReaderAnnotations]=useState<ReaderAnnotation[]>([]);
   const [readerAppearance,setReaderAppearance]=useState<ReaderAppearance>(defaultReaderAppearance);
@@ -782,6 +832,10 @@ function Client() {
   const [playing, setPlaying] = useState<Book | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
   const [liveMode,setLiveMode]=useState<'player'|'reader'>('player');
+  const readerIsFullscreen=readerFullscreen&&!!reading&&(activeTab==='reader'||(activeTab==='now'&&liveMode==='reader'));
+  useEffect(()=>{NativeModules.ArchivistArchive?.setReaderFullscreen?.(readerIsFullscreen);return()=>NativeModules.ArchivistArchive?.setReaderFullscreen?.(false);},[readerIsFullscreen]);
+  useEffect(()=>{if(!readerIsFullscreen)return;const sub=BackHandler.addEventListener('hardwareBackPress',()=>{setReaderFullscreen(false);return true;});return()=>sub.remove();},[readerIsFullscreen]);
+
   const [lastReading,setLastReading]=useState<Book|null>(null);
   const [lastPlaying,setLastPlaying]=useState<Book|null>(null);
   const tabTransition=useRef(new Animated.Value(1)).current;
@@ -951,7 +1005,7 @@ function Client() {
   const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
   const [playerVisualPlaying,setPlayerVisualPlaying]=useState(false);
   useEffect(()=>{
-    if(!playbackVisible||reduceMotion){setPlayerVisualPlaying(false);return;}
+    if(!playbackVisible){setPlayerVisualPlaying(false);return;}
     if(playbackIsPlaying){setPlayerVisualPlaying(true);return;}
     const timer=setTimeout(()=>setPlayerVisualPlaying(false),PLAYER_MOTION_TIMING.pauseGraceMs);
     return()=>clearTimeout(timer);
@@ -1017,6 +1071,7 @@ function Client() {
     bookOpenAnim.stopAnimation();
     Animated.timing(bookOpenAnim,{
       toValue:motion==='closed'?0:1,
+      isInteraction:false,
       duration:reduceMotion?0:motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs,
       easing:Easing.inOut(Easing.cubic),
       useNativeDriver:true,
@@ -1029,19 +1084,14 @@ function Client() {
     }
 
     pageTurnAnim.setValue(0);
-    const loop=Animated.loop(Animated.sequence([
-      Animated.delay(PLAYER_MOTION_TIMING.firstTurnDelayMs),
-      Animated.timing(pageTurnAnim,{
-        toValue:1,
-        duration:PLAYER_MOTION_TIMING.pageTurnMs,
-        easing:Easing.bezier(.22,.72,.2,1),
-        useNativeDriver:true,
-      }),
-      Animated.timing(pageTurnAnim,{toValue:0,duration:0,useNativeDriver:true}),
-      Animated.delay(PLAYER_MOTION_TIMING.pageRestMs),
-    ]));
-    loop.start();
-    return()=>{loop.stop();pageTurnAnim.stopAnimation();};
+    const stop=startPageTurnLoop({
+      firstDelay:PLAYER_MOTION_TIMING.openMs+PLAYER_MOTION_TIMING.firstTurnDelayMs,
+      restDelay:PLAYER_MOTION_TIMING.pageRestMs,
+      reset:()=>pageTurnAnim.setValue(0),
+      animate:done=>Animated.timing(pageTurnAnim,{toValue:1,duration:PLAYER_MOTION_TIMING.pageTurnMs,easing:Easing.bezier(.22,.72,.2,1),useNativeDriver:true,isInteraction:false}).start(({finished})=>done(finished)),
+      stop:()=>pageTurnAnim.stopAnimation(),
+    });
+    return()=>{stop();bookOpenAnim.stopAnimation();};
   },[bookOpenAnim,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
@@ -1105,7 +1155,7 @@ function Client() {
   const atlasGenreColor=(name:string)=>atlasGenreColors.get(name.trim()||'Unclassified')||genreColour(name);
   const atlasRingSize=Math.min(width-(width>=940?56:width>=600?48:width<360?28:32),width>=940?720:width>=600?620:520);
   const atlasDiameter=Math.max(1,atlasRingSize-64);
-  const atlasUniverse=useMemo(()=>buildAtlasUniverse(atlasUniverseWorks,collections,readerAnnotations,120,atlasPriorityKeys),[atlasUniverseWorks,collections,readerAnnotations,atlasPriorityKeys]);
+  const atlasUniverse=useMemo(()=>buildAtlasUniverse(activeTab==='atlas'?atlasUniverseWorks:[],collections,readerAnnotations,120,atlasPriorityKeys),[activeTab,atlasUniverseWorks,collections,readerAnnotations,atlasPriorityKeys]);
   const atlasNodeMap=useMemo(()=>new Map(atlasUniverse.nodes.map(node=>[node.id,node])),[atlasUniverse]);
   const atlasAdjacency=useMemo(()=>{
     const map=new Map<string,Set<string>>();
@@ -2162,8 +2212,9 @@ function Client() {
     setScanResultSummary(null);
     return generation;
   };
-  const reportLocalScan=(generation:number)=>(progress:LocalScanProgress)=>{
-    if(scanCommitGate.isCurrent(generation))setScanProgress(progress);
+  const reportLocalScan=(generation:number)=>{
+    let last=0;
+    return (progress:LocalScanProgress)=>{const now=Date.now();if(scanCommitGate.isCurrent(generation)&&now-last>=150){last=now;setScanProgress(progress);}};
   };
   const endLocalScan=(generation:number)=>{
     if(!scanCommitGate.isCurrent(generation))return;
@@ -2282,7 +2333,8 @@ function Client() {
     }
   }
 
-  async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides) {
+  async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
+    if(localScanning)return;
     if(!localFolders.length)return;
     setError('');
     setLocalFolderNotice('');
@@ -2290,7 +2342,7 @@ function Client() {
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true});
+      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,refreshMetadata});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
@@ -2613,16 +2665,20 @@ function Client() {
     const next=addReaderAnnotation(readerAnnotations,{workKey,page:readerPage,kind,text,note:kind==='note'?readerNote:undefined});
     await persistReaderAnnotations(next);setReaderNote('');
   }
+  const readingIdentity=useRef(reading?.uri||reading?.id);readingIdentity.current=reading?.uri||reading?.id;
   function handleReaderMessage(raw:string){
     if(!reading)return;
     try{
       const message=JSON.parse(raw);
       if(message?.type==='reader-page-request'&&localReader?.loadPage){
         const page=Math.max(0,Math.min(Math.max(0,(localReader.pageCount||1)-1),Number(message.page)||0));
+        const identity=readingIdentity.current;
         void localReader.loadPage(page).then(data=>{
+          if(readingIdentity.current!==identity)return;
           const script='window.__archivistSetComicPage?.('+page+','+JSON.stringify(data.mime)+','+JSON.stringify(data.base64)+');true;';
           readerWebRef.current?.injectJavaScript(script);
         }).catch(error=>{
+          if(readingIdentity.current!==identity)return;
           const text=error instanceof Error?error.message:String(error);
           setReaderLoadError(text);setError(text);
         });
@@ -2631,6 +2687,7 @@ function Client() {
         if(Number.isInteger(message.page)&&message.page>=0)setReaderPage(message.page);
         if(Number.isInteger(message.count)&&message.count>=0)setReaderCount(message.count);
       }
+      if(message?.type==='reader-page-error')setReaderLoadError('This comic page could not be decoded. Try opening the book again.');
       if(message?.type==='reader-selection')setReaderSelection(String(message.text||'').slice(0,4000));
       if(message?.type==='reader-chrome-toggle')setReaderChromeVisible(value=>!value);
       if(message?.type==='reader-search-results')setReaderSearchCount(Math.max(0,Number(message.count)||0));
@@ -2651,6 +2708,7 @@ function Client() {
       setError('This file is currently unavailable.');
       return;
     }
+    const generation=++readerOpenGeneration.current;
     setError('');
     setReaderLoadError('');
     setReaderPage(book.uri ? (localReadingProgress[book.uri]||0) : 0);setReaderCount(0);setReaderSelection('');setReaderSearch('');setReaderSearchCount(null);setReaderRequestedPage(null);setReaderToolsOpen(false);setReaderChromeVisible(true);
@@ -2665,9 +2723,9 @@ function Client() {
       setReaderLoading(true);
       setLocalReader(null);
       buildLocalReaderDocument(book.uri, book.format, book.title, localReadingProgress[book.uri] || 0)
-        .then(setLocalReader)
-        .catch(e => {setReaderLoadError(e.message);setError(e.message);})
-        .finally(() => setReaderLoading(false));
+        .then(document=>{if(readerOpenGeneration.current===generation)setLocalReader(document);else void document.dispose?.();})
+        .catch(e => {if(readerOpenGeneration.current===generation){setReaderLoadError(e.message);setError(e.message);}})
+        .finally(() => {if(readerOpenGeneration.current===generation)setReaderLoading(false);});
     }
     else {
       if(!session){setError('Server is unavailable. Download this title for offline use or reconnect in Settings.');return;}
@@ -2924,36 +2982,8 @@ function Client() {
     await setPersistedJSON(localQueueKey, next);
   }
 
-  function Artwork({
-    title,format,coverShape,coverUri,serverPath,large=false,fill=false,
-  }: {
-    title:string;format:string;coverShape?:'portrait'|'square';coverUri?:string;serverPath?:string;large?:boolean;fill?:boolean;
-  }) {
-    const square = coverShape ? coverShape === 'square' : format === 'Audio';
-    const imageSource = session && serverPath
-      ? {uri: session.server + serverPath, headers: {Authorization: 'Bearer ' + session.token}}
-      : coverUri ? {uri: coverUri} : null;
-    const [coverFailed, setCoverFailed] = useState(false);
-    useEffect(() => setCoverFailed(false), [imageSource?.uri]);
-    return (
-      <View style={[styles.cover, square && styles.coverSquare, large && styles.coverLarge, square && large && styles.coverLargeSquare, fill&&styles.coverFill, {backgroundColor:p.card}]}>
-        {imageSource && !coverFailed ? (
-          <Image accessible={false} source={imageSource} resizeMode="cover" style={styles.coverImage} onError={() => setCoverFailed(true)} />
-        ) : (
-          <View style={styles.coverFallback}>
-            <ArchivistLogo size={22} opacity={.50}/>
-            <View style={styles.coverFallbackCopy}>
-              <Text numberOfLines={1} style={[styles.coverFormat,{color:p.sage}]}>{format.toUpperCase()}</Text>
-              <Text maxFontSizeMultiplier={1.1} numberOfLines={large ? 3 : 2} style={[styles.coverTitle,{color:p.ink},large&&styles.coverTitleLarge]}>{title}</Text>
-            </View>
-          </View>
-        )}
-      </View>
-    );
-  }
-
   function Cover({book, large = false,fill=false}: {book: Book; large?: boolean;fill?:boolean}) {
-    return <Artwork
+    return <Artwork session={session} p={p}
       title={book.title}
       format={book.format}
       coverShape={book.coverShape}
@@ -2962,20 +2992,6 @@ function Client() {
       large={large}
       fill={fill}
     />;
-  }
-
-  function MiniArtwork({book}: {book: Book}) {
-    const source = session && book.source==='server'
-      ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
-      : book.coverUri ? {uri: book.coverUri} : null;
-    const [failed,setFailed]=useState(false);
-    useEffect(()=>setFailed(false),[source?.uri]);
-    return (
-      <View style={[styles.miniCover,{backgroundColor:'#111111'}]}>
-        <Text numberOfLines={1} style={styles.miniCoverLabel}>{book.format.toUpperCase()}</Text>
-        {source && !failed ? <Image accessible={false} source={source} resizeMode="cover" style={styles.miniCoverImage} onError={()=>setFailed(true)} /> : null}
-      </View>
-    );
   }
 
   function ServerConnect() {
@@ -3183,7 +3199,7 @@ function Client() {
     return (
       <View style={[styles.maintenanceAssetCard,{borderBottomColor:p.line}]}>
         <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)} style={styles.maintenanceAssetMain}>
-          <View style={styles.maintenanceAssetCover}><Cover book={item}/></View>
+          <View style={styles.maintenanceAssetCover}>{Cover({book:item})}</View>
           <View style={styles.maintenanceAssetCopy}>
             <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
             <View style={[styles.maintenanceAssetStatusRow,phoneLayout&&styles.maintenanceAssetStatusRowPhone]}>
@@ -3230,7 +3246,7 @@ function Client() {
     return (
       <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
-          <Artwork title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverUri} />
+          <Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverUri} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
           {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
           <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
@@ -3254,7 +3270,7 @@ function Client() {
     return (
       <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>void openServerWork(work)}>
-          <Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} serverPath={'/api/works/'+work.id+'/cover'} />
+          <Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} serverPath={'/api/works/'+work.id+'/cover'} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
           <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
             {work.author || 'Unknown author'}{work.series ? ' · '+work.series : ''}{work.genre ? ' · '+work.genre : ''}{work.files>1 ? ' · '+work.files+' files' : ''}{work.editions>1 ? ' · '+work.editions+' editions' : ''}
@@ -3391,7 +3407,7 @@ function Client() {
   }) {
     return (
       <Pressable accessibilityRole="button" accessibilityLabel={'Continue '+title+', '+(author||format)} onPress={onPress} style={styles.continueCard}>
-        <Artwork title={title} format={format} coverShape={format==='Audio'?'square':'portrait'} coverUri={coverUri} serverPath={serverPath} />
+        <Artwork session={session} p={p} title={title} format={format} coverShape={format==='Audio'?'square':'portrait'} coverUri={coverUri} serverPath={serverPath} />
         <Text numberOfLines={2} style={[styles.continueTitle,{color:p.ink}]}>{title}</Text>
         <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{author || format}</Text>
       </Pressable>
@@ -3459,7 +3475,7 @@ function Client() {
         pressed&&styles.cardPressed,
       ]}>
       <View style={[styles.unifiedCoverWrap,list&&styles.unifiedCoverWrapList]}>
-        <Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath}/>
+        <Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath}/>
         {work.source==='downloaded'?<View style={[styles.offlineBadge,{backgroundColor:p.sage}]}><Text style={styles.offlineBadgeText}>SAVED</Text></View>:null}
         <Pressable
           accessibilityRole="button"
@@ -3584,7 +3600,7 @@ function Client() {
       close();
     };
     const refreshMetadata=()=>{
-      if(local){void rescanLocalFolders();close();return;}
+      if(local){void rescanLocalFolders(localMetadataOverrides,true);close();return;}
       if(remote&&owner&&matchingServerSources.length===1){void sourceAction('/api/sources/'+matchingServerSources[0].id+'/scan');close();return;}
       openServerManagement();
     };
@@ -3598,7 +3614,7 @@ function Client() {
               <Pressable accessibilityRole="button" accessibilityLabel="Close work details" onPress={close} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
             </View>
             <View style={[styles.workDetailsHero,foldLayout&&styles.workDetailsHeroFold]}>
-              <View style={[styles.workDetailsCover,work.format==='Audio'&&styles.workDetailsCoverSquare]}><Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath} fill/></View>
+              <View style={[styles.workDetailsCover,work.format==='Audio'&&styles.workDetailsCoverSquare]}><Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath} fill/></View>
               <View style={styles.workDetailsIdentity}>
                 <Text maxFontSizeMultiplier={1.18} style={[styles.workDetailsTitle,{color:p.ink}]}>{work.title}</Text>
                 <Text style={[styles.workDetailsAuthor,{color:p.muted}]}>{work.author||'Unknown author'}</Text>
@@ -3763,7 +3779,7 @@ function Client() {
             </View>:null}
             {localEdit?<View style={{gap:10}}>
               <View style={styles.metadataCoverEditor}>
-                <View style={styles.metadataCoverPreview}><Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
+                <View style={styles.metadataCoverPreview}><Artwork session={session} p={p} title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
                 <View style={{flex:1,gap:6}}>
                   <Text style={[styles.bookTitle,{color:p.ink}]}>Cover artwork</Text>
                   <Text style={[styles.meta,{color:p.muted}]}>{editPickedCover?'Device image selected. Save details to make it the protected manual cover.':localMetadataOverrides[editing.uri!]?.coverUri?'Manual cover · protected from rescans':'Archivist uses the best local artwork it finds unless you choose a cover manually.'}</Text>
@@ -3782,7 +3798,7 @@ function Client() {
                       accessibilityState={{selected}}
                       onPress={()=>{setEditPickedCover(null);setEditCoverUri(uri)}}
                       style={({pressed})=>[{width:64,opacity:pressed?.72:1,borderWidth:selected?2:0,borderColor:p.sage,borderRadius:9,overflow:'hidden'}]}>
-                      <Artwork title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={uri}/>
+                      <Artwork session={session} p={p} title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={uri}/>
                     </Pressable>;
                   })}
                 </ScrollView>
@@ -4162,8 +4178,8 @@ function Client() {
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
-    const workArtwork=(work:UnifiedWork)=><Artwork title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPathFor(work)}/>;
-    const renderWorks=(works:UnifiedWork[])=>works.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedRow}>{works.map(work=><View key={work.key} style={styles.curatedCardWrap}><UnifiedWorkCard work={work}/></View>)}</ScrollView>:null;
+    const workArtwork=(work:UnifiedWork)=><Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPathFor(work)}/>;
+    const renderWorks=(works:UnifiedWork[])=>works.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedRow}>{works.map(work=><View key={work.key} style={styles.curatedCardWrap}>{UnifiedWorkCard({work})}</View>)}</ScrollView>:null;
 
     const openLibraryBrowse=({family='',source='all'}:{family?:LibraryFormatFamily;source?:LibrarySource})=>{
       clearLibraryFilters();
@@ -4364,7 +4380,7 @@ function Client() {
         <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
       </Pressable>:null}
 
-      <LocalScanStatus/>
+      {LocalScanStatus()}
 
       {showStandaloneEmpty?<View style={styles.designedEmpty}>
         <ArchivistLogo size={46}/>
@@ -4409,7 +4425,7 @@ function Client() {
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('manage')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Manage collections</Text></Pressable>
       </View>
 
-      <WorkActionSheet/><OrganisationPanel/><ShelfManagePanel/><MetadataEditorPanel/>
+      {WorkActionSheet()}{OrganisationPanel()}{ShelfManagePanel()}{MetadataEditorPanel()}
     </ScrollView>;
   }
 
@@ -4480,7 +4496,7 @@ function Client() {
     const MaintenanceList=()=>maintenanceMode?<FlatList
       data={visibleBooks}
       keyExtractor={item=>(item.source||'local')+'-'+item.id+'-'+(item.uri||'')}
-      renderItem={({item})=><RawAssetCard item={item}/>}
+      renderItem={({item})=>RawAssetCard({item})}
       initialNumToRender={12}
       maxToRenderPerBatch={12}
       windowSize={7}
@@ -4503,7 +4519,7 @@ function Client() {
           </Pressable>
         </View>
       </View>
-      <LocalScanStatus/>
+      {LocalScanStatus()}
       {!wide?<Pressable accessibilityRole="button" accessibilityLabel={'Sources and folders, '+selectedLocationLabel} onPress={()=>setLibrarySourcesOpen(true)} style={[styles.libraryMobileSourceButton,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={[styles.libraryTreeIcon,{backgroundColor:p.card}]}><UiIcon name="shelf" color={p.sage} size={17}/></View>
         <View style={{flex:1,minWidth:0}}><Text style={[styles.libraryMobileSourceKicker,{color:p.muted}]}>SOURCES & FOLDERS</Text><Text numberOfLines={1} style={[styles.libraryMobileSourceLabel,{color:p.ink}]}>{selectedLocationLabel}</Text></View>
@@ -4552,13 +4568,13 @@ function Client() {
         windowSize={7}
         contentContainerStyle={libraryView==='grid'?styles.unifiedGrid:styles.unifiedList}
         columnWrapperStyle={columns>1?styles.unifiedGridRow:undefined}
-        renderItem={({item})=><UnifiedWorkCard work={item} list={libraryView==='list'}/>} 
+        renderItem={({item})=>UnifiedWorkCard({work:item,list:libraryView==='list'})} 
         ListEmptyComponent={!shelfLoading&&!localScanning?<LibraryEmptyState/>:null}
         onScroll={e=>{libraryScrollOffset.current=e.nativeEvent.contentOffset.y}}
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
-      <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/><BulkMetadataPanel/><LibraryManagementPanel/>
+      {WorkActionSheet()}{OrganisationPanel()}{MetadataEditorPanel()}{BulkMetadataPanel()}{LibraryManagementPanel()}
       {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={modalSheetBackdrop} onPress={()=>setLibrarySourcesOpen(false)}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
@@ -4694,7 +4710,7 @@ function Client() {
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?<Cover book={current} fill/>:null}/>
+            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?Cover({book:current,fill:true}):null}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               {(current.narrator||current.author)?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>{current.narrator?'Narrated by '+current.narrator:'By '+current.author}</Text>:null}
@@ -4912,23 +4928,23 @@ function Client() {
   }
 
   function Reader({embedded=false}:{embedded?:boolean}={}) {
-    const closeReader=()=>{setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
-    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
+    const closeReader=()=>{++readerOpenGeneration.current;setReaderFullscreen(false);setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
+    const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper}]}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}<Pressable accessibilityRole="button" accessibilityLabel={readerIsFullscreen?'Exit full screen':'Full screen reading'} onPress={()=>{setReaderFullscreen(value=>!value);setReaderChromeVisible(false);}} style={styles.readerBack}><Text style={{color:p.ink,fontSize:12}}>{readerIsFullscreen?'Exit full screen':'Full screen'}</Text></Pressable><View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View><Pressable accessibilityRole="button" accessibilityLabel="Reader tools" onPress={()=>setReaderToolsOpen(true)} style={styles.readerToolsButton}><Text style={[styles.readerToolGlyph,{color:p.ink}]}>Aa</Text></Pressable></View>;
     if(!reading)return <LiveMediaEmpty mode="reader" lastTitle={lastReading?.title} onResume={lastReading?()=>openBook(lastReading):undefined}/>;
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
-      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView ref={readerWebRef} originWhitelist={['*']} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}<ReaderTools/></View>;
+      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ActivityIndicator accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView ref={readerWebRef} originWhitelist={['*']} key={reading.uri} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
     }
-    if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View><ReaderTools/></View>;
-    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}<ReaderTools/></View>;
+    if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>{ReaderTools()}</View>;
+    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ActivityIndicator accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}{ReaderTools()}</View>;
   }
 
   function LiveHub(){
     const audioLive=!!playing;
     const readerLive=!!reading;
     return <View style={styles.liveHub}>
-      <View style={styles.liveHubTop}>
+      <View style={[styles.liveHubTop,readerIsFullscreen&&{display:'none'}]}>
         <View style={[styles.liveHubSegment,{backgroundColor:p.card,borderColor:p.line}]}>
           {(['player','reader'] as const).map(mode=>{
             const selected=liveMode===mode;
@@ -4948,7 +4964,7 @@ function Client() {
         </View>
       </View>
       <Animated.View style={[styles.liveHubBody,{opacity:liveModeTransition,transform:[{translateY:liveModeTransition.interpolate({inputRange:[0,1],outputRange:[reduceMotion?0:4,0]})}]}]}>
-        {liveMode==='player'?Player({embedded:true}):<Reader embedded/>}
+        {liveMode==='player'?Player({embedded:true}):Reader({embedded:true})}
       </Animated.View>
     </View>;
   }
@@ -6465,10 +6481,10 @@ function Client() {
             <View style={[styles.libraryManageSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ADVANCED ORGANISATION</Text>
               <Text style={[styles.meta,{color:p.muted}]}>For advanced users: choose a layout, preview proposed copies, then apply only ready items. Originals remain untouched until you explicitly clean up copy history.</Text>
-              <LocalSortingPanel/>
+              {LocalSortingPanel()}
               <View style={styles.settingsSubgroup}>
                 <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Duplicate review</Text><Text style={[styles.meta,{color:p.muted}]}>{localDuplicateCount?localDuplicateCount+' local candidates found. ':''}Archivist never removes duplicate candidates automatically.</Text></View><Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Check</Text></Pressable></View>
-                <DuplicateReviewPanel/>
+                {DuplicateReviewPanel()}
               </View>
             </View>
 
@@ -6679,6 +6695,7 @@ function Client() {
         <View style={[styles.settingsColumns,width>=900&&styles.settingsColumnsWide]}>
           <View style={[styles.settingsColumn,phoneLayout&&styles.settingsColumnPhone]}>
             <Text style={[styles.settingsColumnKicker,{color:p.muted}]}>LIBRARY & DATA</Text>
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}><Text style={[styles.settingsSectionTitle,{color:p.muted}]}>READING</Text><View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:16}}><Text style={[styles.meta,{color:p.ink}]}>Page-turn sound</Text><Toggle label="Page-turn sound" value={readerAppearance.sound!==false} onPress={()=>void persistReaderAppearance({...readerAppearance,sound:readerAppearance.sound===false})}/></View></View>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
@@ -6695,7 +6712,7 @@ function Client() {
                 </View>)}
                 <View style={styles.settingsInlineActions}>
                   <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
-                  {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
+                  {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders(localMetadataOverrides,true)} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
                 </View>
                 {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
@@ -6705,10 +6722,10 @@ function Client() {
                   <View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Duplicate review</Text><Text style={[styles.meta,{color:p.muted}]}>Find possible copies without deleting or changing files.</Text></View>
                   {(!session||owner)?<Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Review</Text></Pressable>:null}
                 </View>
-                <DuplicateReviewPanel/>
+                {DuplicateReviewPanel()}
               </View>
 
-              <LocalSortingPanel/>
+              {LocalSortingPanel()}
 
               {owner?<View style={styles.settingsSubgroup}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server source folders</Text>
@@ -6735,7 +6752,7 @@ function Client() {
                 <View style={[styles.settingsStatusIcon,{backgroundColor:p.card}]}><UiIcon name="layers" color={p.gold} size={18}/></View>
                 <View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{localStorageText} stored offline</Text><Text style={[styles.meta,{color:p.muted}]}>{offlineStorage?.items||0} complete download{offlineStorage?.items===1?'':'s'} · {offlineStorage?.incompleteWorks||0} incomplete</Text></View>
               </View>
-              <OfflineDownloadsPanel/>
+              {OfflineDownloadsPanel()}
             </View>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
@@ -6864,14 +6881,14 @@ function Client() {
   ];
 
   return (
-    <SafeAreaView style={[styles.screen,{backgroundColor:darkMode?'#07151C':'#FBFAF7'}]}><AmbientGlow color={ambientHaloColor} size={Math.max(1500,width*2.2)} strength={ambientHaloStrength}/>
+    <SafeAreaView edges={readerIsFullscreen?[]:undefined} style={[styles.screen,{backgroundColor:darkMode?'#07151C':'#FBFAF7'}]}><StatusBar hidden={readerIsFullscreen}/><AmbientGlow color={ambientHaloColor} size={Math.max(1500,width*2.2)} strength={ambientHaloStrength}/>
       {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger,backgroundColor:p.paper==='#000000'?'#241416':'#FFF5F5'}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
           <UiIcon name="close" color={p.danger} size={18}/>
         </Pressable>
       </View> : null}
-      <View pointerEvents="box-none" style={[styles.globalProfileCorner,phoneLayout&&styles.globalProfileCornerPhone,{top:safeArea.top+(phoneLayout?8:10),right:width>=940?28:width>=600?24:narrowPhone?12:16}]}>
+      <View pointerEvents="box-none" style={[readerIsFullscreen&&{display:'none'},styles.globalProfileCorner,phoneLayout&&styles.globalProfileCornerPhone,{top:safeArea.top+(phoneLayout?8:10),right:width>=940?28:width>=600?24:narrowPhone?12:16}]}>
         <ProfileAvatarButton size={42}/>
       </View>
       <Animated.View style={[styles.tabBody,{
@@ -6886,10 +6903,10 @@ function Client() {
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
-      <ProfileMenu/>
-      <WorkDetailsPanel/>
-      <FormatPickerPanel/>
-      <RatingPromptPanel />
+      {ProfileMenu()}
+      {WorkDetailsPanel()}
+      {FormatPickerPanel()}
+      {RatingPromptPanel()}
       {rescanPromptOpen?<Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRescanPromptOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close rescan prompt" style={styles.modalBackdrop} onPress={()=>setRescanPromptOpen(false)}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library may be out of date" style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
@@ -6900,10 +6917,10 @@ function Client() {
           </Pressable>
         </Pressable>
       </Modal>:null}
-      {playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
+      {!readerIsFullscreen && playing && !(activeTab==='now'&&liveMode==='player') && activeTab!=='player' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>{setLiveMode('player');setActiveTab('now')}} style={styles.miniPlayerMain}>
-            <MiniArtwork book={playing}/>
+            <MiniArtwork session={session} p={p} book={playing}/>
             <View style={{flex:1,minWidth:0}}>
               <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
               <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>
@@ -6916,7 +6933,7 @@ function Client() {
       ) : !playing && (reading||lastReading) && !(activeTab==='now'&&liveMode==='reader') && activeTab!=='reader' ? (
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Open reader for '+(reading||lastReading)!.title} onPress={()=>{if(!reading&&lastReading)openBook(lastReading);else{setLiveMode('reader');setActiveTab('now')}}} style={styles.miniPlayerMain}>
-            <MiniArtwork book={(reading||lastReading)!}/>
+            <MiniArtwork session={session} p={p} book={(reading||lastReading)!}/>
             <View style={{flex:1,minWidth:0}}>
               <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{(reading||lastReading)!.title}</Text>
               <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{reading?.format||lastReading?.format||'Reader'} · {readerPage>0?'Page '+(readerPage+1):'Resume reading'}</Text>
@@ -6927,7 +6944,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,phoneLayout&&styles.tabBarPhone,narrowPhone&&styles.tabBarNarrow,{backgroundColor:darkMode?'#07111D':'#FBF8F1',borderTopColor:darkMode?'#26364A':'#DDD3C1'}]}>
+      {!readerIsFullscreen&&activeTab!=='reader'&&activeTab!=='player'?<View style={[styles.tabBar,phoneLayout&&styles.tabBarPhone,narrowPhone&&styles.tabBarNarrow,{backgroundColor:darkMode?'#07111D':'#FBF8F1',borderTopColor:darkMode?'#26364A':'#DDD3C1'}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';

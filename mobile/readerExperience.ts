@@ -1,4 +1,4 @@
-export type ReaderAppearance={scale:number;theme:'system'|'paper'|'sepia'|'dark'};
+export type ReaderAppearance={sound?:boolean;scale:number;theme:'system'|'paper'|'sepia'|'dark'};
 export type ReaderBookmark={id:string;workKey:string;page:number;createdAt:string;label?:string};
 export type ReaderAnnotation={id:string;workKey:string;page:number;kind:'highlight'|'note';text:string;note?:string;createdAt:string};
 
@@ -8,7 +8,7 @@ export function sanitizeReaderAppearance(value:unknown):ReaderAppearance{
   const raw=(value&&typeof value==='object'?value:{}) as any;
   const scale=Math.max(.78,Math.min(1.5,Number(raw.scale)||1));
   const theme:['system','paper','sepia','dark'][number]=['system','paper','sepia','dark'].includes(raw.theme)?raw.theme:'system';
-  return {scale,theme};
+  return {scale,theme,sound:raw.sound!==false};
 }
 export function sanitizeReaderBookmarks(value:unknown):ReaderBookmark[]{
   if(!Array.isArray(value))return [];

@@ -7,6 +7,7 @@ on:
       - main
       - dev/archivist-work
       - build/final-apk-0.9.4-20261004
+      - fix/test5-reader-player-blockers
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
@@ -16,7 +17,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '5'
+  TEST_BUILD: '6'
 
 concurrency:
   group: android-apk-${{ github.ref }}
@@ -194,6 +195,7 @@ jobs:
           script: bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
 
       - name: Publish tested APK download
+        if: github.ref != 'refs/heads/fix/test5-reader-player-blockers'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.app_version.outputs.version }}

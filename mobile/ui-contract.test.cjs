@@ -39,7 +39,7 @@ assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats
 assert.match(source,/\{id:\s*['"]library['"],\s*label:\s*['"]Library['"]/, 'Library tab is not wired');
 assert.match(source,/\{id:\s*['"]now['"],\s*label:\s*['"]Now['"]/, 'Center Player/Reader live tab is not wired');
 assert.ok(source.includes('function LiveHub()'), 'Player/Reader live hub is missing');
-assert.ok(source.includes("liveMode==='player'?Player({embedded:true}):<Reader embedded/>"), 'Live Player must render directly so routine parent updates do not remount and reset its scroll/panel state');
+assert.ok(source.includes("liveMode==='player'?Player({embedded:true}):Reader({embedded:true})"), 'Live Player must render directly so routine parent updates do not remount and reset its scroll/panel state');
 assert.equal(source.includes("liveMode==='player'?<Player embedded/>"),false,'Live Player must not use a remounting nested component boundary');
 assert.ok(source.includes('playerSeekPreview') && source.includes('visualPosition') && source.includes('setPlayerSeekPreview({key,seconds:target})'), 'Live Player seeks must hold an optimistic visual position until the native seek settles');
 assert.ok(source.includes('function LiveMediaEmpty(') && source.includes('if(embedded&&!current)return <LiveMediaEmpty mode="player"') && source.includes('if(!reading)return <LiveMediaEmpty mode="reader"') && source.includes("liveMediaEmpty: {flex:1"), 'Embedded Player and Reader empty states must use the identical shared layout');
@@ -51,7 +51,7 @@ assert.ok(source.includes('tabCenterOrb') && source.includes('liveHubSegment'), 
 for(const label of ['Back 30 seconds','Back 15 seconds','Forward 15 seconds','Forward 30 seconds'])assert.ok(source.includes('accessibilityLabel="'+label+'"'),'Missing timed skip '+label);
 assert.ok(source.includes("skipAudio('large',-1)") && source.includes("skipAudio('large',1)") && source.includes("skipAudio('small',-1)") && source.includes("skipAudio('small',1)"),'Both skip sizes must work in both directions');
 assert.ok(livingBookSource.includes('Math.min(6,Math.round(skipPages))'),'Living Book must allow six leaves for large skips');
-assert.ok(source.includes('title={current.title}') && source.includes('cover={(current.coverUri||current.source===\'server\')?<Cover book={current} fill/>:null}'), 'Living book must use the current title and metadata cover');
+assert.ok(source.includes('title={current.title}') && source.includes('cover={(current.coverUri||current.source===\'server\')?Cover({book:current,fill:true}):null}'), 'Living book must use the current title and metadata cover');
 assert.ok(livingBookSource.includes('skipPages=3') && livingBookSource.includes('leafCount') && livingBookSource.includes('closedCover'), 'Living book must support smooth closed-cover and multi-page skip animation');
 assert.ok(livingBookSource.includes('opacity:open.interpolate') && livingBookSource.includes("rotateY:open.interpolate"), 'Living book open/close transition is missing');
 assert.ok(source.includes('playerVisualPlaying') && source.includes('PLAYER_MOTION_TIMING.pauseGraceMs'), 'Living Book must absorb transient seek/buffer playback flicker before changing motion state');
@@ -263,7 +263,7 @@ assert.ok(source.includes("status=item.state==='ready'?'Ready':item.state==='rev
 assert.ok(source.includes("label=\"Preview\"") && source.includes("label={'Apply selected'") && source.includes('serverMoveSelection'), 'Library server organisation preview/apply controls are missing');
 assert.ok(source.includes('Archivist never removes duplicate candidates automatically.'), 'Duplicate-management safety copy is missing');
 assert.ok(source.includes('function LocalSortingPanel()'), 'Local organisation controls should live in a dedicated Settings panel');
-assert.match(source,/<LocalSortingPanel\s*\/>/, 'Settings must render the local organisation panel');
+assert.match(source,/LocalSortingPanel\(\)/, 'Settings must render the local organisation panel');
 assert.equal(shelfSource.includes('>Local sorting</Text>'),false,'Technical local sorting controls must not live on the Shelf');
 
 assert.ok(source.includes('function PersonalControls('), 'Personal star/favourite controls are missing');

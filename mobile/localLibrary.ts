@@ -115,6 +115,7 @@ export type LocalScanResult = {
 
 export type LocalScanOptions = {
   deferEmbeddedCovers?: boolean;
+  refreshMetadata?: boolean;
 };
 
 export type LocalCoverEnrichmentResult = {
@@ -348,6 +349,7 @@ export async function scanLocalFolders(
 
     for (const child of children) {
       entriesVisited += 1;
+      if(entriesVisited%12===0)await new Promise(resolve=>setTimeout(resolve,0));
       if (entriesVisited > maxVisitedEntriesPerScan) {
         truncated = true;
         truncatedReason = 'entry-limit';
@@ -394,7 +396,7 @@ export async function scanLocalFolders(
         const previous = previousByUri.get(child);
         const unchanged = !!previous && fileSize !== undefined && previous.fileSize === fileSize
           && modificationTime !== undefined && previous.modificationTime === modificationTime;
-        const embeddedRawFields = unchanged && previous?.embeddedMetadata
+        const embeddedRawFields = !options.refreshMetadata && unchanged && previous?.embeddedMetadata && Object.keys(previous.embeddedMetadata).length
           ? previous.embeddedMetadata
           : format === 'Audio'
             ? await extractAudioMetadata(child, ext, {size:fileSize})
@@ -557,6 +559,7 @@ export async function enrichLocalBookCovers(
 
   for(let index=0;index<next.length;index+=1){
     if(!shouldContinue())break;
+    await new Promise(resolve=>setTimeout(resolve,0));
     const book=next[index];
     if(book.coverUri)continue;
     const ext=extension(book.uri);
@@ -640,6 +643,7 @@ export async function previewLocalSortSafely(
   const cache=new Map<string,string[]>();
   const checked:LocalSortPreview[]=[];
   for(const preview of previews){
+    if(checked.length%20===0)await new Promise(resolve=>setTimeout(resolve,0));
     if(preview.state!=='ready'){
       checked.push(preview);
       continue;
@@ -660,6 +664,7 @@ export async function applyLocalSortCopies(
   const failed: LocalSortApplyResult['failed'] = [];
   for (const preview of previews) {
     if (preview.state !== 'ready') continue;
+    await new Promise(resolve=>setTimeout(resolve,0));
     try {
       const target = await createTargetFile(preview.rootUri, preview.relativePath);
       const sourceInfo = await getInfoAsync(preview.sourceUri).catch(() => null);

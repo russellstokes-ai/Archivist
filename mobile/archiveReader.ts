@@ -2,6 +2,27 @@ import {cacheDirectory,deleteAsync,EncodingType,getInfoAsync,readAsStringAsync} 
 
 declare const require:any;
 export type ArchiveImage={name:string;mime:string;base64:string};
+export async function openCbrPages(uri:string):Promise<{pageCount:number;loadPage:(index:number)=>Promise<ArchiveImage>}>{
+  const native=require('react-native').NativeModules?.ArchivistArchive;
+  if(native?.listRarEntries&&native?.readRarEntry){
+    const names:string[]=(await native.listRarEntries(uri)).filter((name:string)=>imageName(name)&&!/(^|\/)__MACOSX\//i.test(name));
+    names.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    return {pageCount:names.length,loadPage:async index=>{
+      const name=names[Math.max(0,Math.min(names.length-1,Math.floor(index)))];
+      if(!name)throw Error('No readable comic pages found.');
+      return {name,mime:mime(name),base64:await native.readRarEntry(uri,name,false)};
+    }};
+  }
+  const pages=await readCbrImages(uri);
+  return {pageCount:pages.length,loadPage:async index=>pages[index]};
+}
+export async function readCbrMetadataText(uri:string):Promise<string>{
+  const native=require('react-native').NativeModules?.ArchivistArchive;
+  if(!native?.listRarEntries||!native?.readRarEntry)return '';
+  const names:string[]=await native.listRarEntries(uri);
+  const name=names.find(name=>/(^|[\\/])ComicInfo\.xml$/i.test(name));
+  return name?native.readRarEntry(uri,name,true):'';
+}
 const maxArchiveBytes=256*1024*1024;
 const maxEntryBytes=64*1024*1024;
 const maxPages=500;

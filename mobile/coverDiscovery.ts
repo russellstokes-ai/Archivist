@@ -1,6 +1,7 @@
+import {openNativeZip} from './nativeZip';
 import JSZip from 'jszip';
 import {NativeModules} from 'react-native';
-import {readCbrImages,readCbtImages} from './archiveReader';
+import {openCbrPages,readCbtImages} from './archiveReader';
 import {
   documentDirectory,
   EncodingType,
@@ -36,17 +37,20 @@ export async function discoverEmbeddedCover(
       if(!base64||Math.floor(base64.length*3/4)>maxCoverBytes)return undefined;
       cover={base64,mimeType:'image/png',extension:'png'};
     }else if(ext==='cbr'||ext==='cbt'){
-      const pages=ext==='cbr'?await readCbrImages(uri):await readCbtImages(uri);
-      const first=pages[0];
+      const first=ext==='cbr'?await (await openCbrPages(uri)).loadPage(0):(await readCbtImages(uri))[0];
       const base64=String(first?.base64||'');
       const mimeType=String(first?.mime||'image/jpeg');
       if(!base64||Math.floor(base64.length*3/4)>maxCoverBytes)return undefined;
       const extension=mimeType.includes('png')?'png':mimeType.includes('webp')?'webp':mimeType.includes('gif')?'gif':'jpg';
       cover={base64,mimeType,extension};
     }else if(ext==='epub'||ext==='cbz'||ext==='zip'){
-      if(typeof info?.size==='number'&&info.size>maxArchiveBytes)return undefined;
-      const base64=await readAsStringAsync(uri,{encoding:EncodingType.Base64});
-      cover=await extractArchiveCoverFromBase64(base64,ext);
+      const nativeZip=await openNativeZip(uri);
+      if(nativeZip){try{cover=await extractArchiveCoverFromZip(nativeZip,ext);}finally{await nativeZip.dispose?.();}}
+      else{
+        if(typeof info?.size==='number'&&info.size>maxArchiveBytes)return undefined;
+        const base64=await readAsStringAsync(uri,{encoding:EncodingType.Base64});
+        cover=await extractArchiveCoverFromBase64(base64,ext);
+      }
     }else if(ext==='mp3'){
       const length=typeof info?.size==='number'?Math.min(info.size,maxAudioTagBytes):maxAudioTagBytes;
       const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length});
@@ -74,7 +78,12 @@ export async function discoverEmbeddedCover(
 export async function extractArchiveCoverFromBase64(base64:string, extension:string):Promise<DiscoveredCover|undefined>{
   if(!base64)return undefined;
   try{
-    const zip=await JSZip.loadAsync(base64,{base64:true});
+    return await extractArchiveCoverFromZip(await JSZip.loadAsync(base64,{base64:true}),extension);
+  }catch{return undefined;}
+}
+
+async function extractArchiveCoverFromZip(zip:JSZip,extension:string):Promise<DiscoveredCover|undefined>{
+  try{
     const entries=Object.values(zip.files).filter(file=>!file.dir&&isImage(file.name)&&(((file as any)._data?.uncompressedSize??0)<=maxCoverBytes));
     if(!entries.length)return undefined;
     const ext=extension.toLowerCase();

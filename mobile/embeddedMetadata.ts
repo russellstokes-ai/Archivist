@@ -1,15 +1,22 @@
+import {openNativeZip} from './nativeZip';
 import JSZip from 'jszip';
 import {EncodingType, getInfoAsync, readAsStringAsync} from 'expo-file-system/legacy';
 import {LocalMetadataFields, parseLocalSidecar} from './libraryIntelligence';
+import {readCbrMetadataText} from './archiveReader';
 
 const maxEmbeddedArchiveBytes = 64 * 1024 * 1024;
 
 export async function extractEmbeddedMetadata(uri:string, extension:string, knownInfo?:{exists?:boolean;size?:number}):Promise<LocalMetadataFields> {
   const ext=extension.toLowerCase();
+  if(ext==='cbr'){
+    try{return parseLocalSidecar(await readCbrMetadataText(uri),'xml');}catch{return {};}
+  }
   if(ext!=='epub'&&ext!=='cbz'&&ext!=='zip')return {};
   try{
     const info=knownInfo || await getInfoAsync(uri);
     if(info.exists===false)return {};
+    const nativeZip=await openNativeZip(uri);
+    if(nativeZip){try{return await extractEmbeddedMetadataFromZip(nativeZip,ext);}finally{await nativeZip.dispose?.();}}
     if(typeof info.size==='number'&&info.size>maxEmbeddedArchiveBytes)return {};
     const base64=await readAsStringAsync(uri,{encoding:EncodingType.Base64});
     return extractEmbeddedMetadataFromBase64(base64,ext);
@@ -21,7 +28,12 @@ export async function extractEmbeddedMetadata(uri:string, extension:string, know
 export async function extractEmbeddedMetadataFromBase64(base64:string, extension:string):Promise<LocalMetadataFields> {
   if(!base64)return {};
   try{
-    const zip=await JSZip.loadAsync(base64,{base64:true});
+    return await extractEmbeddedMetadataFromZip(await JSZip.loadAsync(base64,{base64:true}),extension);
+  }catch{return {};}
+}
+
+async function extractEmbeddedMetadataFromZip(zip:JSZip,extension:string):Promise<LocalMetadataFields>{
+  try{
     const ext=extension.toLowerCase();
     if(ext==='epub'){
       let opfPath='';

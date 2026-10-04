@@ -1,10 +1,12 @@
+import {openNativeZip,BookZip} from './nativeZip';
 import JSZip from 'jszip';
 import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
 import {speechFocusBrowserSource} from './speechFocus';
-import {readCbrImages, readCbtImages, ArchiveImage} from './archiveReader';
+import {openCbrPages, readCbtImages, ArchiveImage} from './archiveReader';
 
 export type LocalReaderPage = {mime:string;base64:string};
 export type LocalReaderDocument = {
+  dispose?:()=>Promise<void>;
   html?: string;
   uri?: string;
   pageCount?: number;
@@ -18,7 +20,11 @@ export async function buildLocalReaderDocument(uri: string, format: string, titl
   if (format === 'PDF') return {uri};
   if (format === 'Comic') {
     const ext=(uri.split('?')[0].match(/\.([a-z0-9]+)$/i)?.[1]||'').toLowerCase();
-    if(ext==='cbr')return comicArchiveDocument(await readCbrImages(uri), title, initialPage);
+    if(ext==='cbr'){
+      const pages=await openCbrPages(uri);
+      if(!pages.pageCount)throw Error('No readable comic pages found.');
+      return {...pages,html:shell(title,'<img id="comicPage" class="comic-page active" alt="Loading comic page">','comic',initialPage,pages.pageCount)};
+    }
     if(ext==='cbt')return comicArchiveDocument(await readCbtImages(uri), title, initialPage);
     return comicDocument(uri, title, initialPage);
   }
@@ -32,8 +38,9 @@ async function comicDocument(uri: string, title: string, initialPage: number):Pr
     .filter(file => !file.dir && imageExt.test(file.name))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}))
     .slice(0,500);
-  if(!pages.length)return {html:shell(title,'<p>No readable comic pages found.</p>','comic',0,0),pageCount:0};
+  if(!pages.length){await zip.dispose?.();throw Error('No readable comic pages found.');}
   return {
+    dispose:()=>zip.dispose?.()||Promise.resolve(),
     html:shell(title,'<img id="comicPage" class="comic-page active" alt="Comic page">','comic',initialPage,pages.length),
     pageCount:pages.length,
     loadPage:async index=>{
@@ -58,17 +65,21 @@ function comicArchiveDocument(images: ArchiveImage[], title: string, initialPage
 
 async function epubHtml(uri: string, title: string, initialPage: number) {
   const zip = await zipFromUri(uri);
+  try{
   const docs = Object.values(zip.files)
     .filter(file => !file.dir && textExt.test(file.name))
     .sort((a, b) => scoreEpubPath(a.name) - scoreEpubPath(b.name));
-  const parts = await Promise.all(docs.slice(0, 80).map(async file => {
+  const parts:string[]=[];
+  for(const file of docs.slice(0,80)){
     const raw = await file.async('text');
-    return `<section>${sanitizeEpubHtml(raw)}</section>`;
-  }));
+    parts.push(`<section>${sanitizeEpubHtml(raw)}</section>`);
+  }
   return shell(title, parts.join('\n') || '<p>No readable EPUB text found.</p>', 'epub', initialPage);
+  }finally{await zip.dispose?.();}
 }
 
-async function zipFromUri(uri: string) {
+async function zipFromUri(uri: string):Promise<BookZip> {
+  const native=await openNativeZip(uri);if(native)return native;
   const data = await readAsStringAsync(uri, {encoding: EncodingType.Base64});
   return JSZip.loadAsync(data, {base64: true});
 }
@@ -121,10 +132,10 @@ html[data-reader-theme='paper']{--paper:#FAF8F2;--ink:#111111;--muted:#6B6B6B;--
 <body class="${mode}">
 <main id="reader" class="turn-surface">${body}</main>
 <div id="readerHud" class="reader-hud" aria-label="Reader controls">
-  <button id="readerPrev" aria-label="Previous page">Prev</button>
+
   <span id="readerPosition" class="reader-position"></span>
-  <button id="readerSound" aria-label="Toggle page turn sound">Sound</button>
-  <button id="readerNext" aria-label="Next page">Next</button>
+
+
 </div>
 <script>${speechFocusBrowserSource()}</script>
 ${readerInteractionScript(mode, initialPage, externalPageCount)}
@@ -135,14 +146,13 @@ ${readerInteractionScript(mode, initialPage, externalPageCount)}
 function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, externalPageCount = 0) {
   return `<script>
 (() => {
+  // Android HTML WebViews can deny localStorage on opaque origins.
+  const storage={getItem:key=>{try{return localStorage.getItem(key);}catch{return null;}},setItem:(key,value)=>{try{localStorage.setItem(key,value);}catch{}}};
   const mode = '${mode}';
   const externalComicCount = ${Math.max(0, Math.floor(externalPageCount))};
   const reader = document.getElementById('reader');
   const hud = document.getElementById('readerHud');
   const position = document.getElementById('readerPosition');
-  const prev = document.getElementById('readerPrev');
-  const next = document.getElementById('readerNext');
-  const soundButton = document.getElementById('readerSound');
   const speechFocus = window.__archivistSpeechFocus;
   const pages = [...document.querySelectorAll('.comic-page')];
   let page = Math.max(0, Number('${Math.max(0, Math.floor(initialPage))}') || 0);
@@ -150,9 +160,10 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   let zoom = 1;
   let pinchStartDistance = 0;
   let pinchStartZoom = 1;
-  let pinchStartScale = Number(localStorage.getItem('archivist-reader-text-scale')) || 1;
-  let soundEnabled = localStorage.getItem('archivist-reader-sound') !== 'off';
+  let pinchStartScale = Number(storage.getItem('archivist-reader-text-scale')) || 1;
+  let soundEnabled = storage.getItem('archivist-reader-sound') !== 'off';
   let hudTimer;
+  let touchStart=null,pinchGesture=false;
   let lastTapAt=0,lastTapX=0,lastTapY=0,suppressClickUntil=0;
 
   document.documentElement.style.setProperty('--reader-scale', String(Math.max(.78, Math.min(1.5, pinchStartScale))));
@@ -172,10 +183,6 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   }
   function refreshHud(){
     position.textContent=(page+1)+' / '+pageCount();
-    prev.disabled=page<=0;
-    next.disabled=page>=pageCount()-1;
-    soundButton.textContent=soundEnabled?'Sound on':'Sound off';
-    soundButton.setAttribute('aria-pressed',soundEnabled?'true':'false');
     clearTimeout(hudTimer);hud.classList.remove('dim');hudTimer=setTimeout(()=>hud.classList.add('dim'),1800);
   }
   function pageSound(){
@@ -211,6 +218,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     const img=pages[0];if(!img)return;
     img.alt='Page '+(index+1);
     img.dataset.page=String(index);
+    img.onerror=()=>post({type:'reader-page-error',page:index});
     img.src='data:'+String(mimeType||'image/jpeg')+';base64,'+String(base64||'');
     img.classList.add('active');
     refreshHud();
@@ -255,8 +263,6 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   reader.addEventListener('click',event=>{
     if(turning||Date.now()<suppressClickUntil)return;
     const x=event.clientX;
-    if(x<innerWidth*.18){move(-1);return;}
-    if(x>innerWidth*.82){move(1);return;}
     if(event.detail===1)post({type:'reader-chrome-toggle'});
     refreshHud();
   });
@@ -269,6 +275,8 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   });
 
   reader.addEventListener('touchstart',event=>{
+    pinchGesture=event.touches.length>1;
+    touchStart=event.touches.length===1?{x:event.touches[0].clientX,y:event.touches[0].clientY}:null;
     if(event.touches.length===2){
       event.preventDefault();
       speechFocus?.cancel?.();
@@ -300,13 +308,19 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
       pinchStartDistance=0;
       if(mode==='epub'){
         const scale=Number(getComputedStyle(document.documentElement).getPropertyValue('--reader-scale'))||1;
-        localStorage.setItem('archivist-reader-text-scale',String(scale));
+        storage.setItem('archivist-reader-text-scale',String(scale));
         page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;refreshHud();
       }
       return;
     }
     if(event.touches.length||event.changedTouches.length!==1)return;
     const tap=event.changedTouches[0],now=Date.now();
+    if(pinchGesture){pinchGesture=false;touchStart=null;suppressClickUntil=now+440;return;}
+    if(touchStart){
+      const dx=tap.clientX-touchStart.x,dy=tap.clientY-touchStart.y;touchStart=null;
+      if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.35){event.preventDefault();suppressClickUntil=now+440;lastTapAt=0;move(dx<0?1:-1);return;}
+      if(Math.hypot(dx,dy)>18){lastTapAt=0;return;}
+    }
     const delta=now-lastTapAt;
     const distanceFromLast=Math.hypot(tap.clientX-lastTapX,tap.clientY-lastTapY);
     if(delta>0&&delta<=320&&distanceFromLast<=30){
@@ -320,15 +334,6 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     }
     lastTapAt=now;lastTapX=tap.clientX;lastTapY=tap.clientY;
   },{passive:false});
-
-  prev.onclick=()=>move(-1);
-  next.onclick=()=>move(1);
-  soundButton.onclick=()=>{
-    soundEnabled=!soundEnabled;
-    localStorage.setItem('archivist-reader-sound',soundEnabled?'on':'off');
-    if(soundEnabled)pageSound();
-    refreshHud();
-  };
 
   addEventListener('resize',()=>{if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();});
   document.addEventListener('keydown',event=>{if(event.key==='ArrowLeft')move(-1);if(event.key==='ArrowRight')move(1);});
@@ -345,9 +350,10 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     post({type:'reader-search-results',count});
   }
   function applyAppearance(value){
+    soundEnabled=value?.sound!==false;storage.setItem('archivist-reader-sound',soundEnabled?'on':'off');
     const scale=clamp(Number(value?.scale)||1,.78,1.5);document.documentElement.style.setProperty('--reader-scale',String(scale));
     const theme=['system','paper','sepia','dark'].includes(value?.theme)?value.theme:'system';document.documentElement.dataset.readerTheme=theme;
-    localStorage.setItem('archivist-reader-text-scale',String(scale));
+    storage.setItem('archivist-reader-text-scale',String(scale));
     if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();
   }
   function handleCommand(event){
