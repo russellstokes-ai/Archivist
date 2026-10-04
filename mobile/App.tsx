@@ -974,31 +974,28 @@ function Client() {
   useEffect(()=>{
     const motion=playerMotionState({playing:playbackIsPlaying,visible:playbackVisible,reduceMotion});
     bookOpenAnim.stopAnimation();
-    Animated.timing(bookOpenAnim,{toValue:playbackVisible&&playbackIsPlaying?1:0,duration:reduceMotion?0:520,easing:Easing.inOut(Easing.cubic),useNativeDriver:true}).start();
+    Animated.timing(bookOpenAnim,{
+      toValue:motion==='closed'?0:1,
+      duration:reduceMotion?0:motion==='closed'?360:760,
+      easing:Easing.inOut(Easing.cubic),
+      useNativeDriver:true,
+    }).start();
 
+    pageTurnAnim.stopAnimation();
     if(motion!=='turning'){
-      pageTurnAnim.stopAnimation(value=>{
-        if(reduceMotion || value<=0.01){pageTurnAnim.setValue(0);return;}
-        Animated.timing(pageTurnAnim,{
-          toValue:1,
-          duration:Math.max(120,Math.round((1-value)*620)),
-          useNativeDriver:true,
-        }).start(()=>pageTurnAnim.setValue(0));
-      });
+      pageTurnAnim.setValue(0);
       return;
     }
 
-    pageTurnAnim.stopAnimation();
     pageTurnAnim.setValue(0);
     const loop=Animated.loop(Animated.sequence([
-      Animated.delay(7200),
-      Animated.timing(pageTurnAnim,{toValue:1,duration:620,useNativeDriver:true}),
+      Animated.timing(pageTurnAnim,{toValue:1,duration:1350,easing:Easing.inOut(Easing.cubic),useNativeDriver:true}),
       Animated.timing(pageTurnAnim,{toValue:0,duration:0,useNativeDriver:true}),
-      Animated.delay(900),
+      Animated.delay(7600),
     ]));
     loop.start();
-    return()=>loop.stop();
-  },[activeTab,appActive,bookOpenAnim,pageTurnAnim,playbackIsPlaying,playbackVisible,reduceMotion]);
+    return()=>{loop.stop();pageTurnAnim.stopAnimation();};
+  },[bookOpenAnim,pageTurnAnim,playbackIsPlaying,playbackVisible,reduceMotion]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
