@@ -1,6 +1,7 @@
 name: Android native checks
 
 # Build 6 release gate: this workflow is intentionally triggered alongside APK validation.
+# Final Test 6 same-SHA gate.
 
 on:
   push:
