@@ -73,7 +73,16 @@ export async function persistManualCover(
 
   const directory=ops.documentDirectory+'covers/';
   await ops.makeDirectoryAsync(directory,{intermediates:true});
-  const target=directory+'manual-cover-'+(ops.now?.()??Date.now())+'.'+coverExtension(fileName,uri);
+  const stamp=ops.now?.()??Date.now();
+  const extension=coverExtension(fileName,uri);
+  let target='';
+  for(let attempt=0;attempt<100;attempt+=1){
+    const suffix=attempt===0?'':'-'+attempt;
+    const candidate=directory+'manual-cover-'+stamp+suffix+'.'+extension;
+    const existing=await ops.getInfoAsync(candidate).catch(()=>null);
+    if(!existing?.exists){target=candidate;break;}
+  }
+  if(!target)throw Error('Could not reserve safe cover storage.');
   let copied=false;
   try{
     await ops.copyAsync({from:uri,to:target});
