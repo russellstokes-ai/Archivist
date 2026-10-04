@@ -2637,9 +2637,8 @@ function Client() {
           <TextInput accessibilityLabel="Server address" autoCapitalize="none" autoCorrect={false} keyboardType="url" value={server} onChangeText={setServer} placeholder="https://books.example.com" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <TextInput accessibilityLabel="Profile access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={key} onChangeText={setKey} placeholder="Profile access key" placeholderTextColor={p.muted} style={[styles.input, {color: p.ink, borderColor: p.line, backgroundColor: p.card}]} />
           <Button label={busy ? 'Checking...' : 'Check server'} onPress={() => void checkServerAddress()} disabled={busy || !server.trim()} tone="quiet" />
-          <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy} />
-          {serverNotice?<Text style={[styles.meta,{color:p.sage}]}>{serverNotice}</Text>:null}
-          {error ? <Text accessibilityRole="alert" style={[styles.error, {color:p.danger}]}>{error}</Text> : null}
+          <Button label={busy ? 'Connecting...' : 'Connect'} onPress={() => void signIn()} disabled={busy || !server.trim() || !key.trim()} />
+          {serverNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{serverNotice}</Text>:null}
       </View>
     );
   }
@@ -2751,7 +2750,7 @@ function Client() {
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
-          <View style={{flex:1}}>
+          <View style={{flex:1,minWidth:0}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Choose where your media lives</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} device folder${localFolders.length===1?'':'s'} added` : shelfServerPromptHidden ? 'Add a Books, Comics or Audiobooks folder. Server prompts are hidden on Shelf.' : 'Add a device folder or connect an Archivist Server. You can add the other later.'}</Text>
           </View>
@@ -2759,7 +2758,7 @@ function Client() {
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasBooks?p.sage:p.muted}]}>02</Text>
-          <View style={{flex:1}}>
+          <View style={{flex:1,minWidth:0}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist scans and identifies it</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{localScanning&&scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${localBooks.length} items found` : 'Scanning starts immediately after you add a folder.'}</Text>
           </View>
@@ -2767,7 +2766,7 @@ function Client() {
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasBooks&&reviewCount===0?p.sage:p.muted}]}>03</Text>
-          <View style={{flex:1}}>
+          <View style={{flex:1,minWidth:0}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Confident matches stay out of your way.' : reviewCount ? `${reviewCount} item${reviewCount===1?'':'s'} need a quick check.` : 'Everything found so far looks good.'}</Text>
           </View>
@@ -3912,7 +3911,7 @@ function Client() {
         <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
       </Pressable>:null}
 
-      {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      {localScanning&&scanProgress?<View accessibilityLiveRegion="polite" style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
         <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found</Text></View>
       </View>:null}
@@ -5995,14 +5994,14 @@ function Client() {
             {owner&&session?<View style={[styles.libraryManageSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ARCHIVIST SERVER</Text>
               <Text style={[styles.meta,{color:p.muted}]}>Scan configured server folders here, then preview safe organisation before applying it.</Text>
-              {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable></View>)}
+              {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line},layoutTier==='compact'&&{alignItems:'flex-start',flexWrap:'wrap'}]}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View><Pressable accessibilityRole="button" disabled={busy} onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable></View>)}
               <View style={styles.segment}>{[['author-title','Author / Title'],['author-series-title','Author / Series / Title'],['format-author-title','Format / Author / Title']].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}</View>
               <View style={styles.toolRow}><Button label="Preview" tone="quiet" disabled={busy||shelfLoading} onPress={()=>void previewLibrary(false)}/><Button label={'Apply selected'+(serverMoveSelection.length?' ('+serverMoveSelection.length+')':'')} disabled={busy||serverMoveSelection.length===0} onPress={()=>void applySortBatch()}/></View>
               {serverMovePreviews.some(item=>!!item.move)?<View style={styles.toolRow}>
                 <Button label="Select all Ready" tone="quiet" onPress={()=>setServerMoveSelection(serverMovePreviews.flatMap(item=>item.move?.id?[item.move.id]:[]))}/>
                 <Button label="Clear selection" tone="quiet" onPress={()=>setServerMoveSelection([])}/>
               </View>:null}
-              {moveStatus?<Text style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
+              {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
               {serverMovePreviews.slice(0,20).map((item,index)=>{
                 const move=item.move;
                 const asset=serverBooks.find(book=>book.id===item.asset);
@@ -6164,7 +6163,7 @@ function Client() {
                   <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
                   {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Refresh metadata & covers</Text></Pressable>:null}
                 </View>
-                {localFolderNotice?<Text style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
+                {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
 
               <View style={styles.settingsSubgroup}>
@@ -6181,9 +6180,9 @@ function Client() {
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server source folders</Text>
                 {sources.map(source=><View key={source.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{source.space}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{source.path}</Text><Text style={[styles.meta,{color:source.status==='ok'?p.sage:p.muted}]}>{source.status}</Text></View>
-                  <View style={styles.settingsRowActions}><Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void removeSource(source.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable></View>
+                  <View style={[styles.settingsRowActions,layoutTier==='compact'&&{width:'100%',justifyContent:'flex-start'}]}><Pressable accessibilityRole="button" onPress={()=>void sourceAction('/api/sources/'+source.id+'/scan')} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Scan</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>void removeSource(source.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable></View>
                 </View>)}
-                <View style={styles.settingsAddFolder}><TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Button label="Add server folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/></View>
+                <View style={styles.settingsAddFolder}><TextInput accessibilityLabel="Folder on server" value={folderPath} onChangeText={setFolderPath} placeholder="/media/books" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{flex:0,width:'100%',color:p.ink,backgroundColor:p.card}]}/><TextInput accessibilityLabel="Library space" value={folderSpace} onChangeText={setFolderSpace} placeholder="Space" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{flex:0,width:'100%',color:p.ink,backgroundColor:p.card}]}/><Button label="Add server folder" disabled={busy||!folderPath.trim()} onPress={()=>void sourceAction('/api/sources',{path:folderPath,space:folderSpace})}/></View>
               </View>:null}
 
               {owner?<View style={styles.settingsSubgroup}>
@@ -6219,7 +6218,7 @@ function Client() {
                 {privacyBackupText?<Text selectable style={[styles.settingsBackupText,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}>{privacyBackupText}</Text>:null}
                 <TextInput accessibilityLabel="Paste Archivist backup snapshot" multiline value={privacyRestoreText} onChangeText={setPrivacyRestoreText} placeholder="Paste backup JSON here" placeholderTextColor={p.muted} style={[styles.settingsRestoreInput,{color:p.ink,backgroundColor:p.card,borderColor:p.line}]}/>
                 <Button label="Restore backup snapshot" disabled={!privacyRestoreText.trim()} onPress={()=>void restorePrivacyBackup()}/>
-                {privacyDataNotice?<Text style={[styles.meta,{color:privacyDataNotice.includes('could not')||privacyDataNotice.includes('not an')?p.danger:p.sage}]}>{privacyDataNotice}</Text>:null}
+                {privacyDataNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:privacyDataNotice.includes('could not')||privacyDataNotice.includes('not an')?p.danger:p.sage}]}>{privacyDataNotice}</Text>:null}
               </View>
             </View>
           </View>
@@ -6239,7 +6238,7 @@ function Client() {
               {owner?<View style={styles.settingsSubgroup}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Family users</Text>
                 <Text style={[styles.meta,{color:p.muted}]}>Family users can browse, read, listen, rate, favourite and download. Only Admin manages files, metadata, users and server settings.</Text>
-                <View style={styles.settingsAddRow}><TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,{color:p.ink,backgroundColor:p.card}]}/><Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?0.38:1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{busy?'Creating…':'Add user'}</Text></Pressable></View>
+                <View style={[styles.settingsAddRow,layoutTier==='compact'&&{flexWrap:'wrap',alignItems:'stretch'}]}><TextInput accessibilityLabel="New user name" value={newUserName} onChangeText={setNewUserName} placeholder="Name" placeholderTextColor={p.muted} style={[styles.settingsInlineInput,layoutTier==='compact'&&{flex:0,width:'100%'},{color:p.ink,backgroundColor:p.card}]}/><Pressable accessibilityRole="button" disabled={busy||!newUserName.trim()} onPress={()=>void createFamilyUser()} style={[styles.settingsAddButton,{opacity:busy||!newUserName.trim()?0.38:1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{busy?'Creating…':'Add user'}</Text></Pressable></View>
                 {newUserKey?<View style={[styles.settingsKeyReveal,{backgroundColor:p.card}]}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>User access key — shown once</Text><Text selectable style={[styles.settingsKeyText,{color:p.sage}]}>{newUserKey}</Text><Pressable accessibilityRole="button" onPress={()=>setNewUserKey('')} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Hide key</Text></Pressable></View>:null}
                 {householdUsers.map(user=><View key={user.id} style={[styles.settingsListRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{user.name}</Text><Text style={[styles.meta,{color:p.muted}]}>{user.revoked?'Revoked':'User · whole library'}</Text></View>{!user.revoked?<Pressable accessibilityRole="button" onPress={()=>void revokeFamilyUser(user.id)} disabled={busy} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Revoke</Text></Pressable>:null}</View>)}
               </View>:null}
@@ -6326,7 +6325,7 @@ function Client() {
 
   return (
     <SafeAreaView style={[styles.screen,{backgroundColor:darkMode?'#07151C':'#FBFAF7'}]}><AmbientGlow color={ambientHaloColor} size={Math.max(1500,width*2.2)} strength={ambientHaloStrength}/>
-      {error ? <View style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger,backgroundColor:p.paper==='#000000'?'#241416':'#FFF5F5'}]}>
+      {error ? <View accessibilityLiveRegion="assertive" style={[styles.errorBanner,{borderTopColor:p.danger,borderBottomColor:p.danger,backgroundColor:p.paper==='#000000'?'#241416':'#FFF5F5'}]}>
         <Text accessibilityRole="alert" style={[styles.error,{color:p.danger,flex:1}]}>{error}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" hitSlop={8} onPress={()=>setError('')} style={styles.errorDismiss}>
           <UiIcon name="close" color={p.danger} size={18}/>
