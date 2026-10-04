@@ -18,7 +18,9 @@ assert.ok(source.includes("folder.status==='Scanning…'||folder.status==='Ready
 assert.ok(source.includes('if(!needsInitialCatalogue&&!pendingFolder)return'),'existing catalogues should only auto-rescan for genuinely pending folders');
 assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan completion notice should be visible but not become stale chrome');
 assert.ok(source.includes('{deferEmbeddedCovers:true}'),'app scans must publish identity before expensive embedded-cover recovery');
-assert.ok(source.includes('void enrichPublishedLocalCovers(result.books,generation)'),'successful catalogue publication must start cover enrichment without blocking scan completion');
+assert.ok(source.includes('void enrichPublishedLocalLibrary(result.books,generation)'),'successful catalogue publication must start background library enrichment without blocking scan completion');
+assert.ok(source.includes('await enrichPublishedLocalCovers(baseBooks,generation)'),'background library enrichment must preserve local cover recovery as its first stage');
+assert.ok(source.includes('await enrichPublishedLocalBookMetadata(latest,generation)'),'background library enrichment must continue into online book metadata after the latest persisted cover state');
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'stale enrichment must stop when a newer scan begins');
 assert.ok(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),'background enrichment must patch the current catalogue rather than replace it');
 assert.ok(source.includes('const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey)'),'final enrichment persistence must merge with the latest persisted catalogue so user edits are not rolled back');
