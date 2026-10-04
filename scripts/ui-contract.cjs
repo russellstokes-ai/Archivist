@@ -33,6 +33,16 @@ assert.ok(html.includes('role="tab" data-settings="library" aria-selected="true"
 assert.ok(source.includes("if(event.key==='Escape')"), 'Browser overlays must close with Escape');
 assert.ok(source.includes("overlayFocus=new Map()"), 'Browser overlays must restore focus');
 assert.ok(source.includes("event.key!=='Tab'"), 'Browser overlays must contain keyboard focus');
+assert.ok(source.includes("'./api/file-moves/preview-template-batch'"), 'Organisation UI must use structured batch previews');
+assert.ok(source.includes("'./api/file-moves/apply-batch'"), 'Organisation UI must apply explicit selected move IDs');
+assert.ok(source.includes("'Select all Ready'"), 'Organisation UI must expose Select all Ready');
+assert.ok(source.includes("'Clear selection'"), 'Organisation UI must expose Clear selection');
+assert.ok(source.includes("'Apply selected'"), 'Organisation UI must label the explicit apply action');
+for (const label of ['Ready','Review recommended','Conflict','Already organised']) {
+  assert.ok(source.includes(label), 'Organisation preview status missing: '+label);
+}
+assert.ok(source.includes('selectedIds=new Set'), 'Organisation preview must maintain explicit selection state');
+
 const css=fs.readFileSync('web/style.css','utf8');
 assert.ok(css.includes('focus-visible'), 'Browser controls need visible keyboard focus');
 assert.ok(css.includes('prefers-reduced-motion'), 'Browser UI must respect reduced-motion preference');
