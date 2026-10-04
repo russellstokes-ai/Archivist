@@ -56,6 +56,7 @@ import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSe
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
+import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
 import {shelfRecommendations} from './shelfRecommendations';
 import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
@@ -594,10 +595,8 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
   const dismissRef=useRef(onDismiss);
   dismissRef.current=onDismiss;
   const pan=useRef(PanResponder.create({
-    onMoveShouldSetPanResponder:(_,gesture)=>!foldLayout&&gesture.dy>8&&Math.abs(gesture.dy)>Math.abs(gesture.dx),
-    onPanResponderRelease:(_,gesture)=>{
-      if(gesture.dy>56||gesture.vy>.7)dismissRef.current();
-    },
+    onMoveShouldSetPanResponder:(_,gesture)=>!foldLayout&&shouldCaptureSheetDismiss(gesture),
+    onPanResponderRelease:(_,gesture)=>{if(shouldDismissSheet(gesture))dismissRef.current();},
     onPanResponderTerminate:()=>undefined,
   })).current;
   if(foldLayout)return null;
@@ -621,6 +620,7 @@ function Client() {
   const foldLayout = width >= 600;
   const phoneLayout = width < 600;
   const narrowPhone = width < 360;
+  const modalSheetBackdrop=[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold,!foldLayout&&{paddingBottom:Math.max(12,safeArea.bottom+8)}];
   const [theme, setTheme] = useState<ThemeMode>('system');
   const [accessibilityPrefs,setAccessibilityPrefs]=useState<AccessibilityPreferences>({reduceMotion:false,highContrast:false,largeText:false});
   const p = useMemo(() => palette(theme, systemScheme,accessibilityPrefs.highContrast), [theme, systemScheme,accessibilityPrefs.highContrast]);
@@ -3181,8 +3181,8 @@ function Client() {
     const formatCounts=choices.reduce<Record<string,number>>((counts,track)=>({...counts,[track.format]:(counts[track.format]||0)+1}),{});
     return (
       <Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setWorkPicker(null)}>
-        <View style={styles.modalBackdrop}>
-          <View accessibilityViewIsModal={true} accessibilityLabel={'Choose format or edition for '+workPicker.work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close format or edition picker" style={styles.modalBackdrop} onPress={()=>setWorkPicker(null)}>
+          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Choose format or edition for '+workPicker.work.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{workPicker.work.title}</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Choose a format or edition to open.</Text>
             {choices.map(track=><Button
@@ -3192,8 +3192,8 @@ function Client() {
               onPress={()=>openServerWorkTrack(workPicker.work,track)}
             />)}
             <Button label="Cancel" tone="quiet" onPress={()=>setWorkPicker(null)} />
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     );
   }
@@ -3379,7 +3379,7 @@ function Client() {
       close();
     };
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close actions" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close actions" style={modalSheetBackdrop} onPress={close}>
         <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Actions for '+work.title} style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
           <DismissSheetHandle onDismiss={close} foldLayout={foldLayout}/>
           <View style={styles.sheetHeader}>
@@ -3459,7 +3459,7 @@ function Client() {
       openServerManagement();
     };
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={close}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close work details" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={close}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close work details" style={modalSheetBackdrop} onPress={close}>
         <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Work details for '+work.title} style={[styles.workDetailsSheet,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
           <DismissSheetHandle onDismiss={close} foldLayout={foldLayout}/>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.workDetailsInner}>
@@ -3770,7 +3770,7 @@ function Client() {
       close();
     };
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestClose}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close organisation panel" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={requestClose}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close organisation panel" style={modalSheetBackdrop} onPress={requestClose}>
         <Pressable accessible={false} accessibilityViewIsModal={true} style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
           <DismissSheetHandle onDismiss={requestClose} foldLayout={foldLayout}/>
           <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}>
@@ -3814,8 +3814,8 @@ function Client() {
     if(!shelfManageOpen)return null;
     const move=(index:number,direction:-1|1)=>{const target=index+direction;if(target<0||target>=shelfSections.length)return;const next=[...shelfSections];[next[index],next[target]]=[next[target],next[index]];void saveShelfSections(next)};
     const toggle=(id:ShelfSectionId)=>void saveShelfSections(shelfSections.map(item=>item.id===id?{...item,visible:!item.visible}:item));
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setShelfManageOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Customise Shelf" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setShelfManageOpen(false)}>
-      <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Customise Shelf" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setShelfManageOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Customise Shelf" style={modalSheetBackdrop} onPress={()=>setShelfManageOpen(false)}>
+      <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Customise Shelf" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
         <DismissSheetHandle onDismiss={()=>setShelfManageOpen(false)} foldLayout={foldLayout}/><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Customise Shelf</Text>
         <Text style={[styles.meta,{color:p.muted}]}>Choose what appears and arrange it around the way you use your library.</Text>
         {shelfSections.map((item,index)=><View key={item.id} style={[styles.manageRow,{borderColor:p.line}]}>
@@ -3907,7 +3907,7 @@ function Client() {
     return <Modal transparent visible={profileMenuMounted} animationType="none" onRequestClose={()=>closeProfileMenu()}>
       <View style={styles.profileMenuLayer}>
         <Animated.View pointerEvents="box-none" style={[styles.profileMenuBackdropLayer,{opacity:profileMenuAnim}]}><Pressable accessibilityRole="button" accessibilityLabel="Close profile menu" onPress={()=>closeProfileMenu()} style={styles.profileMenuBackdrop}/></Animated.View>
-        <Animated.View style={[styles.profileMenu,{backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
+        <Animated.View style={[styles.profileMenu,{top:safeArea.top+56,backgroundColor:p.raised,borderColor:p.line,opacity:profileMenuAnim,transform:[{translateX:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[12,0]})},{translateY:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[-10,0]})},{scale:profileMenuAnim.interpolate({inputRange:[0,1],outputRange:[.92,1]})}]}]}>
           <View style={styles.profileMenuIdentity}>
             <View style={[styles.profileMenuAvatar,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileMenuAvatarImage}/>:<Text style={styles.profileMenuAvatarText}>{avatarInitials}</Text>}</View>
             <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.profileMenuName,{color:p.ink}]}>{profileStats?.name||'Reader'}</Text><Text style={[styles.profileMenuMeta,{color:p.muted}]}>Level {profileProgression?.overall.level||1} · {profileProgression?.overall.title||'Reader'} · {unlocked} unlocked</Text></View>
@@ -4368,15 +4368,15 @@ function Client() {
       />:null}
       <WorkActionSheet/><OrganisationPanel/><MetadataEditorPanel/><BulkMetadataPanel/><LibraryManagementPanel/>
       {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibrarySourcesOpen(false)}>
-          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={modalSheetBackdrop} onPress={()=>setLibrarySourcesOpen(false)}>
+          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
             <DismissSheetHandle onDismiss={()=>setLibrarySourcesOpen(false)} foldLayout={foldLayout}/>
             <View style={styles.sheetHeader}><View style={{flex:1}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Sources & folders</Text><Text style={[styles.meta,{color:p.muted}]}>Choose where the catalogue is physically stored.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close sources and folders" onPress={()=>setLibrarySourcesOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable></View>
             <ScrollView contentContainerStyle={styles.librarySourceSheetBody}><LibrarySourceNavigator compact/></ScrollView>
           </Pressable>
         </Pressable>
       </Modal>:null}
-      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Library filters" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibraryFiltersOpen(false)}><Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
+      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Library filters" style={modalSheetBackdrop} onPress={()=>setLibraryFiltersOpen(false)}><Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.filterWrap}>{([
           ['title','Title'],
           ['author','Author'],
@@ -4582,7 +4582,7 @@ function Client() {
             {playback?.error?<Text accessibilityRole="alert" style={[styles.playerNotice,{color:p.danger,backgroundColor:p.dangerSoft}]}>{playback.error}</Text>:null}
 
             {playerPanel?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setPlayerPanel(null)}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close player options" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setPlayerPanel(null)}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close player options" style={modalSheetBackdrop} onPress={()=>setPlayerPanel(null)}>
                 <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Player options" style={[styles.actionSheet,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
                   <View style={[styles.sheetHandle,foldLayout&&styles.sheetHandleFold]}/>
                   <View style={styles.sheetHeader}><View style={{flex:1,minWidth:0}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Player options</Text><Text style={[styles.meta,{color:p.muted}]}>Playback controls without leaving Now Playing.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close player options" onPress={()=>setPlayerPanel(null)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable></View>
@@ -4655,7 +4655,7 @@ function Client() {
   function ReaderTools(){
     if(!reading)return null;const workKey=readerWorkKey(reading);const bookmarks=workReaderBookmarks(readerBookmarks,workKey);const annotations=workReaderAnnotations(readerAnnotations,workKey);
     const updateScale=(delta:number)=>void persistReaderAppearance({...readerAppearance,scale:Math.max(.78,Math.min(1.5,readerAppearance.scale+delta))});
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Reader tools" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setReaderToolsOpen(false)}><Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}><DismissSheetHandle onDismiss={()=>setReaderToolsOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}>
+    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible={readerToolsOpen} onRequestClose={()=>setReaderToolsOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Reader tools" style={modalSheetBackdrop} onPress={()=>setReaderToolsOpen(false)}><Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Reader tools" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}><DismissSheetHandle onDismiss={()=>setReaderToolsOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}>
       <View style={styles.readerSheetHeader}>
         <View style={{flex:1}}>
           <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader</Text>
@@ -6209,7 +6209,7 @@ function Client() {
     const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
     const openReview=()=>{clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" style={[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold]} onPress={()=>setLibraryManageOpen(false)}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" style={modalSheetBackdrop} onPress={()=>setLibraryManageOpen(false)}>
         <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
           <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} style={styles.libraryManageBodyScroll} contentContainerStyle={styles.libraryManageBody}>
             <DismissSheetHandle onDismiss={()=>setLibraryManageOpen(false)} foldLayout={foldLayout}/>
@@ -7512,7 +7512,7 @@ const styles = StyleSheet.create({
   offlineBadgeText: {color:'#F8F7F2',fontSize:9,fontWeight:'900',letterSpacing:0.8},
   cardPressed: {opacity:0.88},
   actionSheet: {width:'100%',maxWidth:620,borderWidth:0,borderTopLeftRadius:24,borderTopRightRadius:24,padding:18,gap:9,alignSelf:'center'},
-  actionSheetStable: {maxHeight:'88%',overflow:'hidden'},
+  actionSheetStable: {height:'76%',minHeight:360,maxHeight:680,overflow:'hidden'},
   sheetInnerScroll: {paddingBottom:8,gap:9},
   actionSheetFold: {width:420,maxWidth:420,height:'100%',borderTopLeftRadius:24,borderBottomLeftRadius:24,borderTopRightRadius:0,paddingHorizontal:22,paddingVertical:24,alignSelf:'flex-end'},
   sheetBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',justifyContent:'flex-end',padding:12},
