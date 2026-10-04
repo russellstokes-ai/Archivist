@@ -76,7 +76,7 @@ const server=http.createServer((req,res)=>{
     await page.waitForFunction(()=>document.querySelectorAll('.book').length===9);
     assert.deepEqual(await page.locator('.cover').evaluateAll(nodes=>nodes.map(n=>n.dataset.binding)),bindings,'fallback bindings are stable');
     await page.fill('#search','no-such-title');await page.getByText('No books found',{exact:true}).waitFor();
-    await page.locator('.empty-state button').click();await page.locator('.book').first().waitFor();
+    await page.locator('#library .empty-state button').click();await page.locator('.book').first().waitFor();
     failBooks=true;await page.fill('#search','Piranesi');await page.getByText('Your library couldn’t load',{exact:true}).waitFor();
     failBooks=false;await page.getByRole('button',{name:'Try again',exact:true}).click();await page.locator('.book').first().waitFor();
     assert.equal(await page.locator('.book').count(),1);
