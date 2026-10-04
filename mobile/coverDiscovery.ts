@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import {NativeModules} from 'react-native';
+import {readCbrImages,readCbtImages} from './archiveReader';
 import {
   documentDirectory,
   EncodingType,
@@ -34,11 +35,9 @@ export async function discoverEmbeddedCover(
       const base64=String(result?.base64||'');
       if(!base64||Math.floor(base64.length*3/4)>maxCoverBytes)return undefined;
       cover={base64,mimeType:'image/png',extension:'png'};
-    }else if(ext==='cbr'){
-      const module=NativeModules?.ArchivistArchive;
-      if(!module?.readRarImages)return undefined;
-      const pages=await module.readRarImages(uri,1,maxCoverBytes,maxCoverBytes);
-      const first=Array.isArray(pages)?pages[0]:undefined;
+    }else if(ext==='cbr'||ext==='cbt'){
+      const pages=ext==='cbr'?await readCbrImages(uri):await readCbtImages(uri);
+      const first=pages[0];
       const base64=String(first?.base64||'');
       const mimeType=String(first?.mime||'image/jpeg');
       if(!base64||Math.floor(base64.length*3/4)>maxCoverBytes)return undefined;
