@@ -46,6 +46,7 @@ export type LocalBook = {
   onlineMetadataAlternatives?: OnlineBookCandidate[];
   comicIssueNumber?: string;
   comicVolume?: number;
+  comicSeriesAliases?: string[];
   comicCreators?: Array<{name:string;roles:string[]}>;
   comicStoryArcs?: string[];
   comicCharacters?: string[];
@@ -460,7 +461,7 @@ export async function scanLocalFolders(
         const comicFields:LocalMetadataFields=format==='Comic'?{...sidecarFields,...embeddedFields}:{};
         const comicMetadataProvenance:Partial<Record<string,MetadataSource>>={};
         if(format==='Comic'){
-          for(const key of ['comicIssueNumber','comicVolume','comicCreators','comicStoryArcs','comicCharacters','comicTeams','comicUniverses','comicUpc','comicSku','comicVineId','comicGcdId','comicStoreDate','comicCoverDate','comicPageCount']){
+          for(const key of ['comicIssueNumber','comicVolume','comicSeriesAliases','comicCreators','comicStoryArcs','comicCharacters','comicTeams','comicUniverses','comicUpc','comicSku','comicVineId','comicGcdId','comicStoreDate','comicCoverDate','comicPageCount']){
             if((sidecarFields as any)[key]!==undefined)comicMetadataProvenance[key]='sidecar';
             if((embeddedFields as any)[key]!==undefined)comicMetadataProvenance[key]='embedded';
           }
@@ -531,6 +532,7 @@ export async function scanLocalFolders(
           coverCandidates,
           comicIssueNumber: comicFields.comicIssueNumber || (format==='Comic'&&identity.seriesNumber!==undefined?String(identity.seriesNumber):undefined),
           comicVolume: comicFields.comicVolume,
+          comicSeriesAliases: comicFields.comicSeriesAliases,
           comicCreators: comicFields.comicCreators,
           comicStoryArcs: comicFields.comicStoryArcs,
           comicCharacters: comicFields.comicCharacters,
