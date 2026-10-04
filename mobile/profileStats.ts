@@ -142,15 +142,16 @@ export function progressionFor(stats:VerifiedProfileStats):ArchivistProgression{
   const readingXp=Math.round(Math.max(0,stats.completedReading)*160+Math.max(0,stats.startedReading)*28);
   const listeningXp=Math.round(Math.max(0,stats.completedAudio)*160+Math.max(0,stats.startedAudio)*28);
   const libraryXp=Math.round(
-    Math.sqrt(Math.max(0,stats.works))*140+
-    Math.max(0,stats.series)*34+
-    Math.max(0,stats.formats)*100+
-    Math.max(0,stats.favourites||0)*8+
-    Math.max(0,stats.rated||0)*6
+    // Library growth matters, but passive importing must not outrank actually reading.
+    Math.sqrt(Math.max(0,stats.works))*70+
+    Math.max(0,stats.series)*22+
+    Math.max(0,stats.formats)*55+
+    Math.max(0,stats.favourites||0)*6+
+    Math.max(0,stats.rated||0)*5
   );
   const ritualXp=Math.round(Math.max(0,stats.activeDays||0)*40+Math.max(0,stats.bestStreak||0)*55);
   const unlockedAchievements=achievementsFor(stats).filter(item=>item.unlocked).length;
-  const totalXp=readingXp+listeningXp+libraryXp+ritualXp+unlockedAchievements*30;
+  const totalXp=readingXp+listeningXp+libraryXp+ritualXp+unlockedAchievements*18;
   return {
     overall:levelFromXp(totalXp,overallTitle),
     paths:{
