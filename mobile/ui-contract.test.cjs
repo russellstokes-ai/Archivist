@@ -314,6 +314,15 @@ for(const match of source.matchAll(/<Pressable\b[\s\S]*?>/g)){
   const tag=match[0];
   assert.ok(/accessibilityRole=/.test(tag)||/accessible=\{false\}/.test(tag),'Pressable missing accessibility semantics: '+tag.replace(/\s+/g,' ').slice(0,220));
 }
+assert.ok(source.includes("top:safeArea.top+(phoneLayout?8:10)") && source.includes("top:safeArea.top+56"),'Profile avatar and menu must respect the device status-bar safe area');
+assert.ok(source.includes("else if(atlasNodeId||atlasBreakdown)dismissAtlasNode()"),'Atlas background taps must clear selection and restore the universe');
+assert.ok(source.includes("const MaintenanceList=()=>maintenanceMode?<FlatList") && source.includes("initialNumToRender={12}") && source.includes("maintenanceAssetStatusRowPhone"),'Needs-attention must use the compact virtualised mobile maintenance layout');
+assert.ok(source.includes("const modalSheetBackdrop=[styles.sheetBackdrop") && source.includes("paddingBottom:Math.max(12,safeArea.bottom+8)"),'Bottom sheets must respect the device bottom safe area');
+assert.ok(source.includes("function DismissSheetHandle") && source.includes("shouldCaptureSheetDismiss") && source.includes("shouldDismissSheet"),'Dismissible sheets must use the tested swipe-down interaction contract');
+assert.ok(source.includes("actionSheetStable: {height:'76%',minHeight:360,maxHeight:680,overflow:'hidden'}"),'Dynamic mobile sheets must use a stable detent rather than jump as content changes');
+assert.ok(source.includes('accessibilityLabel="Close format or edition picker"') && source.includes('accessibilityLabel="Close format picker"'),'Format pickers must dismiss by tapping the scrim as well as Android Back');
+assert.ok(source.includes("accessibilityLabel="Player options" style={[styles.actionSheet,styles.actionSheetStable") && source.includes("<DismissSheetHandle onDismiss={()=>setPlayerPanel(null)}"),'Player options must use the standard stable dismissible sheet');
+assert.ok(source.includes("Alert.alert('Discard changes?'") && source.includes("Alert.alert('Discard bulk changes?'"),'Editable metadata modals must protect unsaved work when dismissed');
 assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?136:160"),'Approved Library folder rail width fix regressed');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"),'Locked primary-page geometry changed');
 const lockedStylesStart=source.indexOf('const styles = StyleSheet.create({');
