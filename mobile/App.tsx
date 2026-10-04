@@ -40,7 +40,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, pickLocalFolder, previewLocalSort, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {persistAndroidAutoLibrary} from './androidAuto';
@@ -2510,15 +2510,27 @@ function Client() {
     }
   }
 
-  function previewLocalSortBatch() {
-    const previews=previewLocalSort(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate);
-    const readyIds=previews.filter(item=>item.state==='ready').map(item=>item.id);
-    setLocalMovePreviews(previews);
-    setLocalMoveSelection(readyIds);
-    const conflicts=previews.filter(item=>item.state==='conflict').length;
-    const review=previews.filter(item=>item.state==='review').length;
-    const same=previews.filter(item=>item.state==='same').length;
-    setMoveStatus(`${readyIds.length} ready and selected; ${review} review recommended; ${conflicts} conflicts; ${same} already organised.`);
+  async function previewLocalSortBatch() {
+    setBusy(true);
+    setError('');
+    setMoveStatus('Checking proposed destinations…');
+    try{
+      const previews=await previewLocalSortSafely(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate);
+      const readyIds=previews.filter(item=>item.state==='ready').map(item=>item.id);
+      setLocalMovePreviews(previews);
+      setLocalMoveSelection(readyIds);
+      const conflicts=previews.filter(item=>item.state==='conflict').length;
+      const review=previews.filter(item=>item.state==='review').length;
+      const same=previews.filter(item=>item.state==='same').length;
+      setMoveStatus(`${readyIds.length} ready and selected; ${review} review recommended; ${conflicts} conflicts; ${same} already organised.`);
+    }catch(e){
+      setLocalMovePreviews([]);
+      setLocalMoveSelection([]);
+      setMoveStatus('');
+      setError((e as Error).message);
+    }finally{
+      setBusy(false);
+    }
   }
 
   async function applyLocalSortBatch() {
@@ -6322,7 +6334,7 @@ function Client() {
           ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
         <View style={styles.toolRow}>
-          <Button label="Preview" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+          <Button label={busy?'Checking…':'Preview'} disabled={busy||localBooks.length===0} tone="quiet" onPress={()=>void previewLocalSortBatch()}/>
           <Button label={'Apply selected'+(selectedReady.length?' ('+selectedReady.length+')':'')} disabled={busy||selectedReady.length===0} onPress={()=>void applyLocalSortBatch()}/>
         </View>
         {readyIds.length?<View style={styles.toolRow}>
@@ -6352,6 +6364,7 @@ function Client() {
             <Text style={[styles.meta,{color:p.muted}]}>Proposed</Text>
             <Text numberOfLines={2} style={{color:item.state==='conflict'?p.danger:p.ink}}>{item.to}</Text>
             {item.metadataSummary?<Text numberOfLines={3} style={[styles.meta,{color:p.muted}]}>Metadata used · {item.metadataSummary}</Text>:null}
+            {item.reason?<Text numberOfLines={2} style={[styles.meta,{color:item.state==='conflict'?p.danger:p.muted}]}>{item.reason}</Text>:null}
           </Pressable>;
         })}
         {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed changes.</Text>:null}
