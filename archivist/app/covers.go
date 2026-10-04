@@ -68,7 +68,16 @@ func readLimited(f *os.File) ([]byte,error) {
 func externalCover(root, rel string) ([]byte,string,error) {
 	dirRel := filepath.Dir(rel)
 	base := strings.TrimSuffix(filepath.Base(rel),filepath.Ext(rel))
-	names := []string{"cover.jpg","cover.jpeg","cover.png","cover.webp","folder.jpg","folder.jpeg","folder.png","folder.webp",base+".jpg",base+".png"}
+	names := []string{
+		"cover.jpg","cover.jpeg","cover.png","cover.webp",
+		"front.jpg","front.jpeg","front.png","front.webp",
+		"front-cover.jpg","front-cover.jpeg","front-cover.png","front-cover.webp",
+		"book-cover.jpg","book-cover.jpeg","book-cover.png","book-cover.webp",
+		"folder.jpg","folder.jpeg","folder.png","folder.webp",
+		"coverart.jpg","coverart.jpeg","coverart.png","coverart.webp",
+		"artwork.jpg","artwork.jpeg","artwork.png","artwork.webp",
+		base+".jpg",base+".jpeg",base+".png",base+".webp",
+	}
 	r, err := os.OpenRoot(root)
 	if err != nil { return nil,"",err }
 	defer r.Close()
