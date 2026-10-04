@@ -110,8 +110,9 @@ function safeYear(value:unknown){
 export function normalizeComicIssueNumber(value:unknown){
   let raw=clean(value).replace(/^#\s*/,'').replace(/\s+/g,'').toUpperCase();
   if(!raw)return '';
-  if(/^0*\d+(?:\.0+)?$/.test(raw))return String(Number(raw));
-  raw=raw.replace(/^0+(?=\d)/,'');
+  if(/^-?0*\d+(?:\.0+)?$/.test(raw))return String(Number(raw));
+  raw=raw.replace(/^(-?)0+(?=\d)/,'$1');
+  raw=raw.replace(/^(ANNUAL)0+(?=\d)/,'$1');
   return raw;
 }
 function numericIssue(value:unknown){
@@ -175,16 +176,23 @@ function parseStem(value:string){
     series=clean(raw.slice(0,named.index)).replace(/\((?:18|19|20)\d{2}\)/g,' ').replace(/\b(?:v|vol(?:ume)?\.?)[\s._-]*\d{1,3}\b/ig,' ').trim();
     title=clean(raw.slice((named.index||0)+named[0].length)).replace(/^[-:]+/,'').trim();
   }else{
-    const issueIndex=dashed.findIndex(part=>/^#?0*\d+(?:\.\d+)?[A-Za-z]?$/.test(part));
+    const seriesIssueTitle=raw.match(/^(.*?)\s+(#?(?:-?\d+(?:\.\d+)?(?:[A-Za-z]+)?(?:\/\d+)?|ANNUAL\s*\d+))\s*[-:]\s*(.+)$/i);
+    if(seriesIssueTitle&&clean(seriesIssueTitle[1])){
+      series=clean(seriesIssueTitle[1]).replace(/\((?:18|19|20)\d{2}\)/g,' ').replace(/\b(?:v|vol(?:ume)?\.?)[\s._-]*\d{1,3}\b/ig,' ').trim();
+      issue=normalizeComicIssueNumber(seriesIssueTitle[2]);
+      title=clean(seriesIssueTitle[3]);
+      return {series:clean(series),issue,title:clean(title),year,volume:volumeMatch?safeNumber(volumeMatch[1]):undefined};
+    }
+    const issueIndex=dashed.findIndex(part=>/^#?(?:-?0*\d+(?:\.\d+)?(?:[A-Za-z]+)?(?:\/\d+)?|ANNUAL\s*\d+)$/i.test(part));
     if(issueIndex>=0){
       issue=normalizeComicIssueNumber(dashed[issueIndex]);
       series=dashed.slice(0,issueIndex).join(' - ');
       title=dashed.slice(issueIndex+1).join(' - ');
-    }else if(/^#?0*\d+(?:\.\d+)?[A-Za-z]?$/.test(raw)){
+    }else if(/^#?(?:-?0*\d+(?:\.\d+)?(?:[A-Za-z]+)?(?:\/\d+)?|ANNUAL\s*\d+)$/i.test(raw)){
       issue=normalizeComicIssueNumber(raw);
     }else{
       const withoutYear=raw.replace(/\((?:18|19|20)\d{2}\)/g,' ').replace(/\b(?:v|vol(?:ume)?\.?)[\s._-]*\d{1,3}\b/ig,' ').trim();
-      const trailing=withoutYear.match(/^(.*?)\s+[._-]?\s*(0*\d{1,4}(?:\.\d+)?[A-Za-z]?)$/);
+      const trailing=withoutYear.match(/^(.*?)\s+[._-]?\s*((?:-?0*\d{1,4}(?:\.\d+)?(?:[A-Za-z]+)?(?:\/\d+)?)|(?:ANNUAL\s*\d+))$/i);
       if(trailing&&clean(trailing[1])){
         series=clean(trailing[1]);issue=normalizeComicIssueNumber(trailing[2]);
       }
@@ -219,13 +227,14 @@ export function buildComicLookupHints(input:ComicLookupInput){
   };
 }
 
-type QueryPlan={kind:'external'|'upc'|'sku'|'series-issue'|'series';params:Record<string,string>};
+type QueryPlan={kind:'metron'|'external'|'upc'|'sku'|'series-issue'|'series';params:Record<string,string>;id?:string};
 function queryPlans(input:ComicLookupInput){
   const hints=buildComicLookupHints(input);
   const plans:QueryPlan[]=[];
+  if(hints.externalIds.metron)plans.push({kind:'metron',params:{},id:String(hints.externalIds.metron)});
   if(hints.externalIds.comicVine)plans.push({kind:'external',params:{cv_id:String(hints.externalIds.comicVine)}});
   if(hints.externalIds.gcd)plans.push({kind:'external',params:{gcd_id:String(hints.externalIds.gcd)}});
-  if(hints.upc)plans.push({kind:'upc',params:{upc:hints.upc}});
+  if(hints.upc)plans.push({kind:'upc',params:hints.upc.length===12?{upc_starts_with:hints.upc}:{upc:hints.upc}});
   if(hints.sku)plans.push({kind:'sku',params:{sku:hints.sku}});
   for(const series of hints.series.slice(0,3)){
     for(const issue of hints.issueNumbers.slice(0,2)){
@@ -238,7 +247,7 @@ function queryPlans(input:ComicLookupInput){
     if(!hints.issueNumbers.length)plans.push({kind:'series',params:{series_q:series}});
   }
   const seen=new Set<string>();
-  return plans.filter(plan=>{const key=JSON.stringify(plan.params);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,8);
+  return plans.filter(plan=>{const key=plan.kind+':'+(plan.id||'')+':'+JSON.stringify(plan.params);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,8);
 }
 
 function creatorCredits(value:any):ComicCreator[]|undefined{
@@ -317,6 +326,7 @@ function rawCandidate(item:any,query:string):Omit<OnlineComicCandidate,'score'|'
 
 function sameExternal(input?:ComicExternalIds,candidate?:ComicExternalIds){
   if(!input||!candidate)return false;
+  if(input.metron&&candidate.metron&&input.metron===candidate.metron)return true;
   if(input.comicVine&&candidate.comicVine&&input.comicVine===candidate.comicVine)return true;
   if(input.gcd&&candidate.gcd&&input.gcd===candidate.gcd)return true;
   return false;
@@ -389,6 +399,10 @@ async function fetchJson(fetcher:FetchLike,url:string,token:string,timeoutMs:num
 function queryLabel(plan:QueryPlan){return new URLSearchParams(plan.params).toString();}
 async function searchMetron(fetcher:FetchLike,plan:QueryPlan,token:string,timeoutMs:number){
   const query=queryLabel(plan);
+  if(plan.kind==='metron'&&plan.id){
+    const detail=await fetchJson(fetcher,'https://metron.cloud/api/issue/'+encodeURIComponent(plan.id)+'/',token,timeoutMs);
+    return [rawCandidate(detail,'id='+plan.id)];
+  }
   const json=await fetchJson(fetcher,'https://metron.cloud/api/issue/?'+query,token,timeoutMs);
   const results=Array.isArray(json?.results)?json.results:Array.isArray(json)?json:[];
   return results.slice(0,25).map((item:any)=>rawCandidate(item,query));
@@ -408,7 +422,7 @@ async function hydrateCandidate(fetcher:FetchLike,input:ComicLookupInput,candida
 export function onlineComicCacheKey(input:ComicLookupInput){
   const hints=buildComicLookupHints(input);
   return [
-    hints.externalIds.comicVine||'',hints.externalIds.gcd||'',hints.upc,hints.sku,
+    hints.externalIds.metron||'',hints.externalIds.comicVine||'',hints.externalIds.gcd||'',hints.upc,hints.sku,
     normalize(hints.series[0]),hints.issueNumbers[0]||'',hints.volumes[0]??'',hints.years[0]??'',
   ].join('|');
 }
@@ -439,7 +453,7 @@ export async function lookupOnlineComic(input:ComicLookupInput,options:OnlineCom
       if(ranked[0]?.exactIdentifier||(ranked[0]?.exactIssue&&ranked[0]?.seriesScore>=.88&&ranked[0]?.score>=88))break;
     }
     let ranked=rankCandidates(input,raw);
-    const hydrate=ranked.slice(0,2).filter(candidate=>candidate.score>=(ranked[0]?.score||0)-12);
+    const hydrate=ranked.slice(0,2).filter(candidate=>candidate.score>=(ranked[0]?.score||0)-12&&(!candidate.fields.description||!candidate.fields.comicCreators?.length));
     if(hydrate.length){
       const detailed:typeof raw=[];
       for(const candidate of hydrate){

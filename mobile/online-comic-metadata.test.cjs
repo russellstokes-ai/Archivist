@@ -15,6 +15,24 @@ const {
 
 assert.equal(normalizeComicIssueNumber('#001'),'1');
 assert.equal(normalizeComicIssueNumber('001A'),'1A');
+assert.equal(normalizeComicIssueNumber('001.MU'),'1.MU');
+assert.equal(normalizeComicIssueNumber('-01'),'-1');
+assert.equal(normalizeComicIssueNumber('Annual 01'),'ANNUAL1');
+
+const annualIssue=buildComicLookupHints({
+  format:'Comic',
+  uri:'content://root/document/primary:Comics%2FBatman%2FBatman%20Annual%2001%20-%20Good%20Boy.cbz',
+});
+assert(annualIssue.series.includes('Batman'));
+assert(annualIssue.issueNumbers.includes('ANNUAL1'));
+
+const titledIssue=buildComicLookupHints({
+  format:'Comic',
+  uri:'content://root/document/primary:Comics%2FMarvel%2FAmazing%20Spider-Man%2FAmazing%20Spider-Man%20001%20-%20Back%20to%20Basics.cbz',
+});
+assert(titledIssue.series.includes('Amazing Spider-Man'));
+assert(titledIssue.issueNumbers.includes('1'));
+
 
 const sparse=buildComicLookupHints({
   format:'Comic',
@@ -138,6 +156,26 @@ assert.equal(protectedMerged.coverUri,'https://static.metron.cloud/sandman.jpg')
   assert.equal(result.best.fields.comicExternalIds.comicVine,676020);
   assert(calls.every(call=>call.auth==='Bearer metron-test-token'));
   assert(calls.every(call=>/^Archivist\//.test(call.userAgent)));
+
+  const directCalls=[];
+  const directFetcher=async(url,init)=>{
+    directCalls.push(url);
+    return {ok:true,status:200,json:async()=>({
+      id:50,
+      series:{id:15,name:'Amazing Spider-Man',volume:5,year_began:2018,publisher:{id:1,name:'Marvel'},genres:[{name:'Superhero'}],language:'en'},
+      number:'1',cover_date:'2018-07-01',image:'https://static.metron.cloud/asm1.jpg',desc:'Peter Parker returns to basics.',
+      credits:[{creator:{name:'Nick Spencer'},role:[{name:'Writer'}]}],
+    })};
+  };
+  const direct=await lookupOnlineComic({...input,comicExternalIds:{metron:50}},{token:'metron-test-token',fetcher:directFetcher,cache:{}});
+  assert.equal(direct.status,'matched');
+  assert.equal(direct.best.providerId,'50');
+  assert.equal(directCalls[0],'https://metron.cloud/api/issue/50/');
+
+  const upcCalls=[];
+  const upcFetcher=async(url)=>{upcCalls.push(url);return {ok:true,status:200,json:async()=>({results:[]})}};
+  await lookupOnlineComic({format:'Comic',series:'Example',comicIssueNumber:'1',comicUpc:'759606095582'},{token:'metron-test-token',fetcher:upcFetcher,cache:{}});
+  assert(upcCalls.some(url=>url.includes('upc_starts_with=759606095582')));
 
   const unconfigured=await lookupOnlineComic(input,{fetcher,cache:{}});
   assert.equal(unconfigured.status,'unconfigured');
