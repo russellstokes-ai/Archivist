@@ -727,3 +727,44 @@ Combined executable/tested head: `a9bcf1ae0ef5061412d39ce5241fc8e1e64ffdcd`.
 - Android release APK/emulator cold-start validation.
 - Physical Fold cold-start timing/visual quality and Settings layout interaction.
 - Durable app-private download/cache of online cover image bytes remains part of the later metadata/cover refinement/release work.
+
+
+## 2026-10-05 — Build 6 Sprints 6–7: commercial refinement and release gate
+
+Executable/tested head: `6ff1ef1606dc882e97cc3c774fb55398c3330e33`.
+
+### Sprint 6 — refinement
+- Explicit **Refresh metadata & covers** now waits for the complete local-cover → book-provider → comic-provider enrichment pipeline before reporting completion. Automatic scans remain non-blocking.
+- Added durable app-private caching for online book/comic provider artwork.
+- Provider covers use deterministic cache paths, bounded 3-worker download concurrency and a 12 MB per-image safety ceiling.
+- Failed or unsafe downloads fall back to the provider URL instead of damaging the catalogue.
+- Manual and existing local covers are never replaced by provider-cover caching.
+- Scan-generation cancellation remains active during cover downloads so stale enrichment cannot overwrite a newer scan.
+- Pre-Sprint-6 rollback branch: `backup/0.9.4-pre-sprint6-refinement-20261005`.
+
+### Sprint 7 — Test Build 6 release gate
+- Version remains Archivist `0.9.4`; Android `versionCode 96`; test iteration `6`.
+- Android Test APK workflow now includes the Build-6 branch.
+- Added a release-contract suite locking version metadata, Test-6 workflow identity, release lint/package/signature/alignment/emulator gates, branded launch and durable provider-cover caching.
+- All four final workflows ran against the same executable SHA.
+
+### Final automated evidence on exactly `6ff1ef1606dc882e97cc3c774fb55398c3330e33`
+- **PASS Mobile** run `37242628841`: Expo Doctor, TypeScript, **49/49 mobile suites**, version consistency and production web bundle.
+- **PASS Android native** run `37242628825`: native contract tests, Kotlin compile and merged Android manifest.
+- **PASS iOS** run `37242628877`: Expo Doctor, TypeScript, native project generation, CocoaPods and complete iOS Simulator compile.
+- **PASS Android Test APK** run `37242628844`: runtime dependency audit, full JS tests, release lint, optimized release APK build, package/version verification, signature verification, zip alignment, ABI verification, artifact upload, Android emulator install/cold-launch smoke and prerelease publication.
+
+### Published Test Build 6
+- Release tag: `v0.9.4-testing.6`
+- APK: `Archivist-0.9.4-test-6.apk`
+- APK size: `59,361,797` bytes
+- SHA-256: `b5194e683497d6734e1f39368b6dd72772bc44800cb5f56361e1b2a47de66177`
+- GitHub prerelease targets exactly `6ff1ef1606dc882e97cc3c774fb55398c3330e33`.
+
+### Remaining physical acceptance
+- Real-device cold-launch timing/visual quality on Samsung Fold closed/open.
+- Real Google Books and Metron credentials against representative user libraries.
+- Large real-library enrichment duration, offline cached-cover behaviour and network interruption recovery.
+- Final visual/gesture acceptance for Player, Comic Focus, Atlas and Settings on the physical device.
+
+These are physical/runtime acceptance items; they are not falsely marked as automated proof.
