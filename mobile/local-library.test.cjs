@@ -172,7 +172,7 @@ assert.equal(previews[0].to, 'EPUB/Frank Herbert/Dune/Dune.epub');
 assert.equal(previews[1].to, 'Comic/Frank Herbert/Dune/Dune.cbz');
 assert.equal(previews.every(item => item.state === 'ready'), true);
 
-previews = previewLocalSort([books[0], {...books[0], id: 4, uri: 'content://root/document/primary:Other%2FDune.epub'}], 'author-title');
+previews = previewLocalSort([books[0], {...books[0], id: 4, uri: 'content://root/document/primary:Books%2FOther%2FDune.epub'}], 'author-title');
 assert.equal(previews.every(item => item.state === 'conflict'), true);
 
 previews = previewLocalSort([{...books[0], needsReview: true}], 'author-title');
