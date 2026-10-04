@@ -76,3 +76,19 @@ func TestSafeImageDataDownsizesLargeArtwork(t *testing.T) {
 	if err!=nil{t.Fatal(err)}
 	if cfg.Width>420 || cfg.Height>640{t.Fatalf("thumbnail too large: %dx%d",cfg.Width,cfg.Height)}
 }
+
+func TestAudioEmbeddedCoverReadsM4BArtwork(t *testing.T) {
+	root:=t.TempDir()
+	img:=image.NewRGBA(image.Rect(0,0,64,96))
+	for y:=0;y<96;y++{for x:=0;x<64;x++{img.Set(x,y,color.RGBA{R:120,G:90,B:70,A:255})}}
+	var jpegData bytes.Buffer
+	if err:=jpeg.Encode(&jpegData,img,&jpeg.Options{Quality:80});err!=nil{t.Fatal(err)}
+	dataAtom:=mp4TestAtom([]byte("data"),append(make([]byte,8),jpegData.Bytes()...))
+	covr:=mp4TestAtom([]byte("covr"),dataAtom)
+	if err:=os.WriteFile(filepath.Join(root,"book.m4b"),covr,0600);err!=nil{t.Fatal(err)}
+	data,mime,err:=audioEmbeddedCover(root,"book.m4b")
+	if err!=nil{t.Fatal(err)}
+	if mime!="image/jpeg"{t.Fatalf("mime=%q",mime)}
+	cfg,_,err:=image.DecodeConfig(bytes.NewReader(data));if err!=nil{t.Fatal(err)}
+	if cfg.Width!=64||cfg.Height!=96{t.Fatalf("cover dimensions=%dx%d",cfg.Width,cfg.Height)}
+}
