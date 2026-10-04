@@ -36,3 +36,6 @@ assert.ok(library.includes("result.autoApply&&options.applyHighConfidence!==fals
 assert.ok((library.match(/result\.autoApply&&options\.applyHighConfidence!==false/g)||[]).length>=2,'books and comics must both respect the auto-apply setting');
 
 console.log('PASS: holistic metadata settings control books/comics, secure credentials, caches and explicit refresh');
+
+assert.ok(source.includes("import {cacheOnlineCoverUris} from './onlineCoverCache'"),'provider covers must have a durable app-private cache');
+assert.ok((source.match(/cacheOnlineCoverUris\(enriched\.books/g)||[]).length>=2,'book and comic enrichment must both persist provider covers for offline use');

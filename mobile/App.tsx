@@ -37,7 +37,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
-import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
+import {copyAsync, deleteAsync, documentDirectory, downloadAsync, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
@@ -71,6 +71,7 @@ import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanPhaseStep} from '.
 import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
+import {cacheOnlineCoverUris} from './onlineCoverCache';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -2405,9 +2406,18 @@ function Client() {
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],enriched.books).map(book=>({...book,source:'local' as const})));
+    const cachedCovers=await cacheOnlineCoverUris(enriched.books,{
+      documentDirectory,
+      makeDirectoryAsync,
+      downloadAsync,
+      getInfoAsync,
+      deleteAsync,
+    },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
+    if(!scanCommitGate.isCurrent(generation))return;
+    const finalBooks=cachedCovers?.books||enriched.books;
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
     await Promise.all([
-      setPersistedJSON(localCatalogKey,enriched.books),
+      setPersistedJSON(localCatalogKey,finalBooks),
       setPersistedJSON(onlineBookMetadataCacheKey,enriched.cache),
     ]).catch(()=>undefined);
     if(enriched.matched||enriched.review){
@@ -2442,9 +2452,18 @@ function Client() {
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],enriched.books).map(book=>({...book,source:'local' as const})));
+    const cachedCovers=await cacheOnlineCoverUris(enriched.books,{
+      documentDirectory,
+      makeDirectoryAsync,
+      downloadAsync,
+      getInfoAsync,
+      deleteAsync,
+    },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
+    if(!scanCommitGate.isCurrent(generation))return;
+    const finalBooks=cachedCovers?.books||enriched.books;
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
     await Promise.all([
-      setPersistedJSON(localCatalogKey,enriched.books),
+      setPersistedJSON(localCatalogKey,finalBooks),
       setPersistedJSON(onlineComicMetadataCacheKey,enriched.cache),
     ]).catch(()=>undefined);
     if(enriched.matched||enriched.review||enriched.rateLimited){
