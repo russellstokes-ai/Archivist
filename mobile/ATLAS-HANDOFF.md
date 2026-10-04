@@ -1,6 +1,6 @@
 # Archivist Atlas — durable handoff
 
-**Status:** Astra owns the final Atlas finishing pass. This file is the durable integration contract so Atlas work does not depend on chat history.
+**Status:** Atlas finishing implementation and exported-web acceptance completed on 4 October 2026. Physical-device release acceptance remains pending. This file is the durable integration contract so Atlas work does not depend on chat history.
 
 **Active mobile source:** `design/draftbit-universal-phone`
 
@@ -86,10 +86,10 @@ Astra must not alter:
 
 Before producing the first complete test app, Astra must update this section with:
 
-- **Final Atlas branch/ref:** _pending Astra_
-- **Final Atlas commit SHA:** _pending Astra_
-- **Tests/checks run:** _pending Astra_
-- **Known runtime/device gaps:** _pending Astra_
+- **Final Atlas branch/ref:** `design/draftbit-universal-phone`
+- **Final Atlas commit SHA:** `9917cb6f2b938a58fa96adbd773f3c1d40b572da` (implementation; the following documentation commit records this SHA)
+- **Tests/checks run:** 33/33 mobile suites, TypeScript, production Expo web export; responsive browser checks at 320/390/600/720/1200px, light/dark, Reduced Motion/enlarged text; synthetic pinch/pan/cancel, chart/category/book/author transitions and repeated resizing; 2,000-book/40-genre browser stress fixture.
+- **Known runtime/device gaps:** native Android/iOS/Fold touch handoff, real server data, frame pacing/long sessions and native accessibility. Existing web SecureStore warning persists; the harness explicitly dismisses its banner. Full evidence, caveats and reproduction: [ATLAS-ACCEPTANCE.md](ATLAS-ACCEPTANCE.md). No APK/IPA or complete test app has been assembled in this pass.
 
 Do not call the first complete test app assembled until the final Atlas commit is explicitly identified here or in `FIRST-COMPLETE-TEST-BUILD-HANDOFF.md`.
 
