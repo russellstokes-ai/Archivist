@@ -18,6 +18,13 @@ import (
 
 const metadataXMLLimit = 2 << 20
 
+var (
+	asinQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ASIN\\s*[:#-]?\\s*([A-Z0-9]{10})\\s*\\]`)
+	isbnQualifierRE = regexp.MustCompile(`(?i)\\[\\s*ISBN(?:-1[03])?\\s*[:#-]?\\s*([0-9Xx -]{10,20})\\s*\\]`)
+	narratorQualifierRE = regexp.MustCompile(`\\{([^{}]{2,100})\\}`)
+	yearQualifierRE = regexp.MustCompile(`\\(\\s*((?:19|20)\\d{2})\\s*\\)`)
+)
+
 type embeddedMetadata struct {
 	Title         string
 	Author        string
@@ -392,26 +399,21 @@ func sidecarMetadata(filename string) embeddedMetadata {
 
 func filenameQualifiers(value string) (stem, narrator, isbn, asin string, publishedYear int) {
 	stem = value
-	asinRE := regexp.MustCompile(`(?i)\\[\\s*ASIN\\s*[:#-]?\\s*([A-Z0-9]{10})\\s*\\]`)
-	isbnRE := regexp.MustCompile(`(?i)\\[\\s*ISBN(?:-1[03])?\\s*[:#-]?\\s*([0-9Xx -]{10,20})\\s*\\]`)
-	narratorRE := regexp.MustCompile(`\\{([^{}]{2,100})\\}`)
-	yearRE := regexp.MustCompile(`\\(\\s*((?:19|20)\\d{2})\\s*\\)`)
-
-	if match := asinRE.FindStringSubmatch(stem); len(match) == 2 {
+	if match := asinQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
 		asin = normalizeIdentifier(match[1])
-		stem = asinRE.ReplaceAllString(stem, "")
+		stem = asinQualifierRE.ReplaceAllString(stem, "")
 	}
-	if match := isbnRE.FindStringSubmatch(stem); len(match) == 2 {
+	if match := isbnQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
 		isbn = normalizeIdentifier(match[1])
-		stem = isbnRE.ReplaceAllString(stem, "")
+		stem = isbnQualifierRE.ReplaceAllString(stem, "")
 	}
-	if match := narratorRE.FindStringSubmatch(stem); len(match) == 2 {
+	if match := narratorQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
 		narrator = cleanMetadata(match[1])
-		stem = narratorRE.ReplaceAllString(stem, "")
+		stem = narratorQualifierRE.ReplaceAllString(stem, "")
 	}
-	if match := yearRE.FindStringSubmatch(stem); len(match) == 2 {
+	if match := yearQualifierRE.FindStringSubmatch(stem); len(match) == 2 {
 		publishedYear = yearFromText(match[1])
-		stem = yearRE.ReplaceAllString(stem, "")
+		stem = yearQualifierRE.ReplaceAllString(stem, "")
 	}
 	stem = cleanMetadata(stem)
 	return
@@ -456,16 +458,18 @@ func pathMetadata(relative, format string) metadataCandidate {
 	grandparent := ""
 	if len(parts) >= 3 { grandparent = cleanMetadata(parts[len(parts)-3]) }
 
-	switch {
-	case len(dashed) >= 4:
+	parsedFilename := false
+	if len(dashed) >= 4 {
 		if number, ok := seriesPositionFromLabel(dashed[2]); ok {
 			m.Author = normalizeAuthor(dashed[0])
 			m.Series = dashed[1]
 			m.SeriesNumber = number
 			m.Title = cleanMetadata(strings.Join(dashed[3:], " - "))
 			confidence = 82
+			parsedFilename = true
 		}
-	case len(dashed) >= 3:
+	}
+	if !parsedFilename && len(dashed) >= 3 {
 		if number, ok := seriesPositionFromLabel(dashed[1]); ok {
 			m.Author = normalizeAuthor(dashed[0])
 			m.SeriesNumber = number
@@ -485,12 +489,12 @@ func pathMetadata(relative, format string) metadataCandidate {
 			confidence = 52
 		}
 	}
-	if len(dashed) >= 2 && m.Author == "" {
-		if _, indexed := seriesPositionFromLabel(dashed[0]); indexed && m.Series != "" {
-			m.SeriesNumber, _ = seriesPositionFromLabel(dashed[0])
+	if len(dashed) >= 2 {
+		if number, indexed := seriesPositionFromLabel(dashed[0]); indexed && m.Series != "" {
+			m.SeriesNumber = number
 			m.Title = cleanMetadata(strings.Join(dashed[1:], " - "))
 			if confidence < 76 { confidence = 76 }
-		} else if cleanMetadata(dashed[0]) != "" && cleanMetadata(strings.Join(dashed[1:], " - ")) != "" {
+		} else if m.Author == "" && cleanMetadata(dashed[0]) != "" && cleanMetadata(strings.Join(dashed[1:], " - ")) != "" {
 			m.Author = normalizeAuthor(dashed[0])
 			m.Title = cleanMetadata(strings.Join(dashed[1:], " - "))
 			if confidence < 68 { confidence = 68 }
