@@ -34,6 +34,16 @@ export async function discoverEmbeddedCover(
       const length=typeof info?.size==='number'?Math.min(info.size,maxAudioTagBytes):maxAudioTagBytes;
       const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length});
       cover=extractID3PictureFromBase64(head);
+    }else if(ext==='m4a'||ext==='m4b'){
+      const size=typeof info?.size==='number'?info.size:undefined;
+      const length=size===undefined?maxAudioTagBytes:Math.min(size,maxAudioTagBytes);
+      const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length});
+      cover=extractMP4PictureFromBase64(head);
+      if(!cover&&size!==undefined&&size>length){
+        const tailLength=Math.min(size,maxAudioTagBytes);
+        const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-tailLength),length:tailLength});
+        cover=extractMP4PictureFromBase64(tail);
+      }
     }else{
       return undefined;
     }
@@ -98,6 +108,33 @@ export function extractID3PictureFromBase64(base64:string):DiscoveredCover|undef
     offset+=10+frameSize;
   }
   return fallback;
+}
+
+export function extractMP4PictureFromBase64(base64:string):DiscoveredCover|undefined{
+  const bytes=base64Bytes(base64);
+  const payload=mp4Data(bytes,'covr');
+  if(!payload?.length||payload.length>maxCoverBytes)return undefined;
+  const extension=signatureExtension(payload);
+  if(!extension)return undefined;
+  return {base64:bytesBase64(payload),mimeType:mimeForExtension(extension),extension};
+}
+
+function mp4Data(bytes:Uint8Array,name:string){
+  for(let i=4;i+4<=bytes.length;i++){
+    if(ascii(bytes,i,4)!==name)continue;
+    const parentStart=i-4;
+    const parentSize=bigEndian32(bytes,parentStart);
+    if(parentSize<16)continue;
+    const parentEnd=Math.min(bytes.length,parentStart+parentSize);
+    for(let j=i+4;j+16<=parentEnd;j++){
+      if(ascii(bytes,j,4)!=='data')continue;
+      const dataStart=j-4;
+      const dataSize=bigEndian32(bytes,dataStart);
+      if(dataSize<16||dataStart+dataSize>parentEnd)continue;
+      return bytes.slice(j+12,dataStart+dataSize);
+    }
+  }
+  return undefined;
 }
 
 async function epubCoverEntry(zip:JSZip){
