@@ -73,7 +73,7 @@ assert.ok(source.includes('styles.globalProfileCorner') && source.includes('<Pro
 const stateStoreSource = fs.readFileSync('stateStore.ts','utf8');
 assert.ok(stateStoreSource.includes('browserStorageAvailable') && stateStoreSource.includes('writeBrowserValue'), 'Draftbit persistence fallback must avoid unavailable native SecureStore bridges');
 assert.ok(source.includes("backgroundColor:'transparent',borderRightColor:p.line") && source.includes("libraryTwoPane: {flex:1,flexDirection:'row',backgroundColor:'transparent'}"), 'Library wide layout must not paint an opaque margin over the global halo');
-assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?112:132") && source.includes("minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0") && source.includes("libraryRail: {width:132,minWidth:132,maxWidth:132,flexBasis:132") && source.includes("libraryRailFold: {width:112,minWidth:112,maxWidth:112,flexBasis:112") && source.includes("libraryMainFold: {paddingLeft:10,paddingRight:24") && source.includes("libraryMainWide: {paddingLeft:12,paddingRight:28"), 'Library folder/source column must be physically constrained and must not stretch from folder content');
+assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?136:160") && source.includes("minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0") && source.includes("libraryRail: {width:160,minWidth:160,maxWidth:160,flexBasis:160") && source.includes("libraryRailFold: {width:136,minWidth:136,maxWidth:136,flexBasis:136") && source.includes("libraryMainFold: {paddingLeft:10,paddingRight:24") && source.includes("libraryMainWide: {paddingLeft:12,paddingRight:28"), 'Library folder/source column must be physically constrained and must not stretch from folder content');
 
 assert.ok(source.includes("errorBanner: {position:'absolute'") && source.includes('globalProfileCorner'), 'Error banners must overlay without moving the persistent profile avatar');
 assert.ok(source.includes('const LibraryEmptyState=()=>') && source.includes("title='Archivist Server is offline'") && source.includes("title='Your Library is waiting'") && source.includes("title='This folder is empty'") && source.includes("title='No offline downloads'"), 'Library must distinguish empty, offline and filtered states');
@@ -314,12 +314,20 @@ for(const match of source.matchAll(/<Pressable\b[\s\S]*?>/g)){
   const tag=match[0];
   assert.ok(/accessibilityRole=/.test(tag)||/accessible=\{false\}/.test(tag),'Pressable missing accessibility semantics: '+tag.replace(/\s+/g,' ').slice(0,220));
 }
-assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?112:132"),'Locked Library folder rail dimensions changed');
+assert.ok(source.includes("top:safeArea.top+(phoneLayout?8:10)") && source.includes("top:safeArea.top+56"),'Profile avatar and menu must respect the status-bar safe area');
+assert.ok(source.includes("else if(atlasNodeId||atlasBreakdown)dismissAtlasNode()"),'Atlas background taps must clear selection');
+assert.ok(source.includes("const MaintenanceList=()=>maintenanceMode?<FlatList") && source.includes("initialNumToRender={12}") && source.includes("maintenanceAssetStatusRowPhone"),'Needs-attention must use the virtualised compact mobile layout');
+assert.ok(source.includes("const modalSheetBackdrop=[styles.sheetBackdrop") && source.includes("paddingBottom:Math.max(12,safeArea.bottom+8)"),'Bottom sheets must respect the bottom safe area');
+assert.ok(source.includes("function DismissSheetHandle") && source.includes("shouldCaptureSheetDismiss") && source.includes("shouldDismissSheet"),'Sheets must use the tested swipe-down contract');
+assert.ok(source.includes("actionSheetStable: {height:'76%',minHeight:360,maxHeight:680,overflow:'hidden'}"),'Dynamic sheets must keep stable geometry');
+assert.ok(source.includes('accessibilityLabel="Close format or edition picker"') && source.includes('accessibilityLabel="Close format picker"'),'Format pickers must support scrim dismissal');
+assert.ok(source.includes("Alert.alert('Discard changes?'") && source.includes("Alert.alert('Discard bulk changes?'"),'Editable metadata modals must protect unsaved work');
+assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?136:160"),'Approved Library folder rail width regressed');
 assert.ok(source.includes("shelfContent: {paddingHorizontal:18,paddingTop:10") && source.includes("libraryMain: {flex:1,paddingHorizontal:18,paddingTop:10") && source.includes("atlasScreen: {paddingHorizontal:18,paddingTop:10") && source.includes("settingsScreen: {paddingHorizontal:18,paddingTop:10"),'Locked primary-page geometry changed');
 const lockedStylesStart=source.indexOf('const styles = StyleSheet.create({');
 assert.ok(lockedStylesStart>=0,'StyleSheet block missing');
 const lockedFoldStyleNames=[
-  'libraryRailFold','libraryMainFold','shelfContentFold','shelfHeroFold','shelfHeroArtworkFold',
+  'libraryMainFold','shelfContentFold','shelfHeroFold','shelfHeroArtworkFold',
   'playerScreenFold','playerAdaptiveWide','atlasScreenFold','statsScreenFold',
   'profileHubScreenFold','settingsScreenFold','sheetBackdropFold','actionSheetFold','workDetailsHeroFold'
 ];
