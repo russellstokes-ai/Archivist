@@ -11,6 +11,16 @@ import (
 	"testing"
 )
 
+func readyMoveIDs(result fileMoveBatchResult) []string {
+	ids:=[]string{}
+	for _,item:=range result.Items {
+		if item.Status=="ready" && item.Move!=nil && item.Move.ID!="" {
+			ids=append(ids,item.Move.ID)
+		}
+	}
+	return ids
+}
+
 func TestRecoverableFileMoves(t *testing.T) {
 	a := fixture(t)
 	a.initMoves()
@@ -118,7 +128,7 @@ func TestBatchTemplatePreviewAndApply(t *testing.T) {
 	if out.OK != 2 || out.Failed != 0 {
 		t.Fatalf("preview batch: %+v", out)
 	}
-	out = a.applyMoveBatch(nil)
+	out = a.applyMoveBatch(readyMoveIDs(out))
 	if out.OK != 2 || out.Failed != 0 {
 		t.Fatalf("apply batch: %+v", out)
 	}
@@ -143,13 +153,16 @@ func TestBatchTemplateRejectsDuplicateDestinations(t *testing.T) {
 	}
 	a.db.Exec("UPDATE assets SET title='Same',author='Ada',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id IN (1,2)")
 	out := a.previewMoveTemplateBatch([]int64{1, 2}, "author-title")
-	if out.OK != 1 || out.Failed != 1 {
+	if out.OK != 0 || out.Failed != 2 {
 		t.Fatalf("duplicate handling: %+v", out)
+	}
+	if len(out.Items)!=2 || out.Items[0].Status!="conflict" || out.Items[1].Status!="conflict" {
+		t.Fatalf("duplicate destinations must mark every affected item conflict: %+v",out.Items)
 	}
 	var n int
 	a.db.QueryRow("SELECT count(*) FROM file_moves WHERE state='preview'").Scan(&n)
-	if n != 1 {
-		t.Fatalf("created duplicate previews: %d", n)
+	if n != 0 {
+		t.Fatalf("created unsafe duplicate previews: %d", n)
 	}
 }
 
@@ -204,7 +217,7 @@ func TestBatchApplyRecoversLinkedJournal(t *testing.T) {
 	os.Link(filepath.Join(root, "One.mp3"), filepath.Join(root, "Ada/One.mp3"))
 	a.db.Exec("UPDATE assets SET relative_path=? WHERE id=1", filepath.Join("Ada", "One.mp3"))
 	a.db.Exec("UPDATE file_moves SET state='linked' WHERE asset=1")
-	out = a.applyMoveBatch(nil)
+	out = a.applyMoveBatch(readyMoveIDs(out))
 	if out.OK != 2 || out.Failed != 0 {
 		t.Fatalf("apply recovery batch: %+v", out)
 	}
@@ -236,8 +249,11 @@ func TestTemplateOrganisationRequiresReviewedMetadata(t *testing.T) {
 	if out.OK != 0 || out.Failed != 1 {
 		t.Fatalf("unreviewed metadata organised: %+v", out)
 	}
-	if len(out.Items) != 1 || out.Items[0].Error != "review metadata before organising this file" {
+	if len(out.Items) != 1 || out.Items[0].Status!="review" || out.Items[0].Error != "review metadata before organising this file" {
 		t.Fatalf("unexpected review failure: %+v", out)
+	}
+	if out.Items[0].From!="Mystery.epub" || out.Items[0].To=="" {
+		t.Fatalf("review preview must still show current and proposed paths: %+v",out.Items[0])
 	}
 	a.db.Exec("UPDATE assets SET title='Mystery',author='Known Author',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id=1")
 	out = a.previewMoveTemplateBatch([]int64{1}, "author-title")
@@ -311,4 +327,63 @@ func TestSeriesNumberAwareSortTemplate(t *testing.T) {
 	if e != nil { t.Fatal(e) }
 	want = filepath.Join("Ebook", "Author", "Saga", "2.5 - A Novella.epub")
 	if got != want { t.Fatalf("decimal series got %q want %q", got, want) }
+}
+
+func TestOrganisationPreviewFourStatesAndExplicitApply(t *testing.T) {
+	a:=fixture(t)
+	if e:=a.initMoves();e!=nil{t.Fatal(e)}
+	root:=t.TempDir()
+	if e:=os.MkdirAll(filepath.Join(root,"Author"),0750);e!=nil{t.Fatal(e)}
+	for _,name:=range []string{"Ready.epub","Review.epub","Conflict.epub"} {
+		if e:=os.WriteFile(filepath.Join(root,name),[]byte(name),0600);e!=nil{t.Fatal(e)}
+	}
+	if e:=os.WriteFile(filepath.Join(root,"Author","Already.epub"),[]byte("already"),0600);e!=nil{t.Fatal(e)}
+	if e:=a.addSource("Books",root);e!=nil{t.Fatal(e)}
+	if e:=a.scan(1);e!=nil{t.Fatal(e)}
+
+	type row struct{id int64;path string}
+	rows,err:=a.db.Query("SELECT id,relative_path FROM assets ORDER BY id")
+	if err!=nil{t.Fatal(err)}
+	ids:=map[string]int64{}
+	for rows.Next(){var r row;if err=rows.Scan(&r.id,&r.path);err!=nil{t.Fatal(err)};ids[filepath.ToSlash(r.path)]=r.id}
+	rows.Close()
+
+	for path,id:=range ids {
+		switch path {
+		case "Ready.epub":
+			a.db.Exec("UPDATE assets SET title='Ready',author='Author',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id=?",id)
+		case "Conflict.epub":
+			a.db.Exec("UPDATE assets SET title='Taken',author='Author',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id=?",id)
+		case "Author/Already.epub":
+			a.db.Exec("UPDATE assets SET title='Already',author='Author',needs_review=0,metadata_source='manual',metadata_confidence=100 WHERE id=?",id)
+		}
+	}
+	if err:=os.WriteFile(filepath.Join(root,"Author","Taken.epub"),[]byte("occupied"),0600);err!=nil{t.Fatal(err)}
+
+	requested:=[]int64{ids["Ready.epub"],ids["Review.epub"],ids["Conflict.epub"],ids["Author/Already.epub"]}
+	out:=a.previewMoveTemplateBatch(requested,"author-title")
+	statuses:=map[int64]string{}
+	for _,item:=range out.Items {
+		statuses[item.Asset]=item.Status
+		if item.From==""||item.To==""{t.Fatalf("preview paths missing: %+v",item)}
+	}
+	if statuses[ids["Ready.epub"]]!="ready"{t.Fatalf("ready=%q",statuses[ids["Ready.epub"]])}
+	if statuses[ids["Review.epub"]]!="review"{t.Fatalf("review=%q",statuses[ids["Review.epub"]])}
+	if statuses[ids["Conflict.epub"]]!="conflict"{t.Fatalf("conflict=%q",statuses[ids["Conflict.epub"]])}
+	if statuses[ids["Author/Already.epub"]]!="same"{t.Fatalf("same=%q",statuses[ids["Author/Already.epub"]])}
+
+	empty:=a.applyMoveBatch(nil)
+	if empty.OK!=0||empty.Failed!=1||len(empty.Items)!=1||!strings.Contains(empty.Items[0].Error,"select at least one ready move"){
+		t.Fatalf("empty selection must not apply pending moves: %+v",empty)
+	}
+	if _,err:=os.Stat(filepath.Join(root,"Ready.epub"));err!=nil{t.Fatal("empty apply changed files",err)}
+
+	readyIDs:=readyMoveIDs(out)
+	if len(readyIDs)!=1{t.Fatalf("only one ready move should be selectable: %v",readyIDs)}
+	applied:=a.applyMoveBatch(readyIDs)
+	if applied.OK!=1||applied.Failed!=0{t.Fatalf("explicit ready apply=%+v",applied)}
+	if _,err:=os.Stat(filepath.Join(root,"Author","Ready.epub"));err!=nil{t.Fatal("selected ready move not applied",err)}
+	if _,err:=os.Stat(filepath.Join(root,"Review.epub"));err!=nil{t.Fatal("review item changed",err)}
+	if _,err:=os.Stat(filepath.Join(root,"Conflict.epub"));err!=nil{t.Fatal("conflict item changed",err)}
+	if _,err:=os.Stat(filepath.Join(root,"Author","Already.epub"));err!=nil{t.Fatal("already-organised item changed",err)}
 }
