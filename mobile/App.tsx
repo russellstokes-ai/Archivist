@@ -6705,7 +6705,7 @@ function Client() {
       <RatingPromptPanel />
       {rescanPromptOpen?<Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRescanPromptOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close rescan prompt" style={styles.modalBackdrop} onPress={()=>setRescanPromptOpen(false)}>
-          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library may be out of date" style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined>>
+          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library may be out of date" style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Library may be out of date</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Some files changed while Archivist was organising your library. Rescan to make sure everything is correctly indexed.</Text>
             <Button label="Rescan" disabled={localScanning||!localFolders.length} onPress={()=>{setRescanPromptOpen(false);void rescanLocalFolders();}}/>
