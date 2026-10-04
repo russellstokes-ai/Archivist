@@ -293,8 +293,23 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
   const genre = xmlValue(text, ['dc:subject', 'subject', 'genre', 'Genre']);
   const narrator = xmlValue(text, ['narrator', 'Narrator']);
   const publisher = xmlValue(text, ['dc:publisher', 'publisher', 'Publisher']);
-  const isbn = xmlValue(text, ['isbn', 'ISBN']);
-  const asin = xmlValue(text, ['asin', 'ASIN']);
+  let isbn = xmlValue(text, ['isbn', 'ISBN']);
+  let asin = xmlValue(text, ['asin', 'ASIN']);
+  const identifiers = xmlValues(text, ['dc:identifier','identifier']);
+  for (const identifier of identifiers) {
+    const clean = identifier.trim();
+    if (!isbn) {
+      const isbnMatch = clean.match(/(?:urn:isbn:|isbn(?:-1[03])?[:#\s-]*)?([0-9Xx][0-9Xx\s-]{8,20})$/i);
+      if (isbnMatch) {
+        const candidate = normalizeIdentifier(isbnMatch[1])?.replace(/-/g,'');
+        if (candidate && /^(?:\d{9}[\dXx]|\d{13})$/.test(candidate)) isbn = candidate;
+      }
+    }
+    if (!asin) {
+      const asinMatch = clean.match(/(?:urn:asin:|asin[:#\s-]*)([A-Z0-9]{10})/i);
+      if (asinMatch) asin = asinMatch[1];
+    }
+  }
   const language = xmlValue(text, ['dc:language', 'language', 'Language']);
   const description = xmlValue(text, ['dc:description', 'description', 'Description', 'summary', 'Summary', 'comments', 'Comments']);
   if (!series && ext === 'opf') {
@@ -308,6 +323,11 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     if (!series) {
       const collection = text.match(/<meta\b[^>]*property\s*=\s*["'][^"']*belongs-to-collection["'][^>]*>([\s\S]*?)<\/meta>/i);
       if (collection) series = stripXml(collection[1]);
+    }
+    if (seriesNumber === undefined) {
+      const groupPosition = text.match(/<meta\b[^>]*property\s*=\s*["'][^"']*(?:group-position|series-number)["'][^>]*>([\s\S]*?)<\/meta>/i)
+        || text.match(/<meta\b[^>]*(?:name|property)\s*=\s*["'][^"']*(?:series[_-]?index|series[_-]?number|group-position)["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i);
+      if (groupPosition) seriesNumber = numberValue(stripXml(groupPosition[1]));
     }
   }
 
@@ -336,6 +356,18 @@ export function decodedPathParts(uri: string): string[] {
   if (value.includes(marker)) value = value.split(marker).pop() || value;
   value = value.replace(/^primary:/, '');
   return value.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
+}
+
+function xmlValues(text: string, tags: string[]) {
+  const values:string[]=[];
+  for (const tag of tags) {
+    const pattern=new RegExp('<'+tag+'\\b[^>]*>([\\s\\S]*?)<\\/'+tag+'>','gi');
+    for (const match of text.matchAll(pattern)) {
+      const value=stripXml(match[1]);
+      if(value)values.push(value);
+    }
+  }
+  return values;
 }
 
 function xmlValue(text: string, tags: string[]) {
