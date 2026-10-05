@@ -9,11 +9,18 @@ assert(store.includes('uri TEXT PRIMARY KEY NOT NULL'),'Local assets must be key
 assert(store.includes('fingerprint TEXT PRIMARY KEY NOT NULL'),'Enrichment must be keyed by work fingerprint.');
 assert(store.includes('withExclusiveTransactionAsync'),'Catalogue writes must be transactional.');
 assert(store.includes('scan_generation'),'Full scans must use a generation marker rather than per-row deletion churn.');
+assert(store.includes('CREATE TABLE IF NOT EXISTS local_scan_assets'),'Streaming scans must use an isolated staging table.');
+assert(store.includes('beginLocalStageScan'),'Streaming scans must have an explicit generation start.');
+assert(store.includes('commitLocalStageScan'),'Streaming scans must commit atomically.');
+assert(store.includes('abandonLocalStageScan'),'Interrupted scans must discard only their staging generation.');
 
 const app=fs.readFileSync(path.join(__dirname,'App.tsx'),'utf8');
 assert.equal(app.includes('setPersistedJSON(localCatalogKey'),false,'Do not rewrite the whole local catalogue JSON during scan/enrichment.');
 assert.equal(app.includes('setPersistedJSON(localEnrichmentKey'),false,'Do not rewrite the whole enrichment cache JSON during progress.');
-assert(app.includes('replaceLocalStageBooks(result.books)'),'Scan result must persist through the keyed SQLite store.');
+assert(app.includes('beginLocalStageScan()'),'A scan must start an isolated SQLite generation.');
+assert(app.includes('stageLocalScanBooks(generation,batch,ordinal)'),'Discovery batches must be persisted incrementally.');
+assert(app.includes('commitLocalStageScan(generation)'),'Only a complete scan may replace the committed catalogue.');
+assert(app.includes('abandonLocalStageScan(generation)'),'Failed scans must discard their partial generation.');
 assert(app.includes('upsertLocalStageBooks(books)'),'Enrichment must checkpoint only changed asset rows.');
 assert(app.includes('upsertLocalEnrichmentEntries(entries)'),'Enrichment must checkpoint only changed work rows.');
 
