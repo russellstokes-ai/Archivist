@@ -1241,35 +1241,48 @@ function Client() {
   const downloadedPersonalWorks = useMemo(() => personaliseLocalWorks(downloadedWorks), [downloadedWorks,localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress]);
   const localPersonalWorks = useMemo(() => [...phonePersonalWorks,...downloadedPersonalWorks], [downloadedPersonalWorks,phonePersonalWorks]);
   useEffect(()=>{
-    const timer=setTimeout(()=>void persistAndroidAutoLibrary(localPersonalWorks,localWorkProgress).catch(()=>undefined),900);
+    const current=nowSessionRef.current;
+    const resume=current?.kind==='audio'&&current.media.localWorkKey
+      ? {workKey:current.media.localWorkKey,updatedAt:current.updatedAt}
+      : {};
+    const timer=setTimeout(()=>void persistAndroidAutoLibrary(localPersonalWorks,localWorkProgress,resume).catch(()=>undefined),900);
     return()=>clearTimeout(timer);
-  },[localPersonalWorks,localWorkProgress]);
+  },[localPersonalWorks,localWorkProgress,nowSession?.updatedAt]);
   useEffect(()=>{
     if(!appActive||!localCatalogReady||!localPersonalWorks.length)return;
-    let cancelled=false;
-    void consumeAndroidAutoProgress().then(progress=>{
-      if(cancelled||!progress)return;
-      setLocalWorkProgress(current=>{
-        const next={...current,[progress.workKey]:{uri:progress.trackUri,seconds:progress.complete?0:progress.seconds,complete:progress.complete}};
-        setPersistedJSON(localWorkProgressKey,next).catch(()=>undefined);
-        return next;
-      });
-      const work=localPersonalWorks.find(item=>item.key===progress.workKey);
-      const track=work?.tracks.find(item=>item.uri===progress.trackUri);
-      if(work&&track){
-        const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
-        void persistNowSession('audio',display,progress.complete?0:progress.seconds,{trackUri:progress.trackUri,wasPlaying:false}).catch(()=>undefined);
-      }
-      if(progress.complete){
-        setLocalAudioCompleted(current=>{
-          if(current[progress.workKey])return current;
-          const next={...current,[progress.workKey]:true};
-          setPersistedJSON(localAudioCompletedKey,next).catch(()=>undefined);
+    let cancelled=false,busy=false;
+    const syncAndroidAutoProgress=async()=>{
+      if(cancelled||busy)return;
+      busy=true;
+      try{
+        const progress=await consumeAndroidAutoProgress();
+        if(cancelled||!progress)return;
+        const currentNow=nowSessionRef.current;
+        if((currentNow?.updatedAt||0)>progress.updatedAt)return;
+        setLocalWorkProgress(current=>{
+          const next={...current,[progress.workKey]:{uri:progress.trackUri,seconds:progress.complete?0:progress.seconds,complete:progress.complete}};
+          setPersistedJSON(localWorkProgressKey,next).catch(()=>undefined);
           return next;
         });
-      }
-    }).catch(()=>undefined);
-    return()=>{cancelled=true;};
+        const work=localPersonalWorks.find(item=>item.key===progress.workKey);
+        const track=work?.tracks.find(item=>item.uri===progress.trackUri);
+        if(work&&track){
+          const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
+          await persistNowSession('audio',display,progress.complete?0:progress.seconds,{trackUri:progress.trackUri,wasPlaying:false});
+        }
+        if(progress.complete){
+          setLocalAudioCompleted(current=>{
+            if(current[progress.workKey])return current;
+            const next={...current,[progress.workKey]:true};
+            setPersistedJSON(localAudioCompletedKey,next).catch(()=>undefined);
+            return next;
+          });
+        }
+      }catch{}finally{busy=false;}
+    };
+    void syncAndroidAutoProgress();
+    const timer=setInterval(()=>void syncAndroidAutoProgress(),4000);
+    return()=>{cancelled=true;clearInterval(timer);};
   },[appActive,localCatalogReady,localPersonalWorks]);
 
   const sourceWorks = useMemo<UnifiedWork[]>(() => {
