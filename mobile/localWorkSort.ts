@@ -8,8 +8,8 @@ export type LocalWorkSortMember={
   id:string;
   asset:number;
   filename:string;
-  sourceUri:string;
-  rootUri:string;
+  fileUri:string;
+  sourceTreeUri:string;
   relativePath:string;
   from:string;
   to:string;
@@ -113,8 +113,8 @@ function memberPreview(work:LocalWork,track:LocalBook,rootUri:string,base:string
     id:'work:'+work.key+':asset:'+track.id,
     asset:track.id,
     filename,
-    sourceUri:track.uri,
-    rootUri,
+    fileUri:track.uri,
+    sourceTreeUri:rootUri,
     relativePath,
     from:displayPath(track.uri),
     to:relativePath,
@@ -151,9 +151,9 @@ export async function applyLocalWorkSortCopies(previews:LocalWorkSortPreview[]):
     const createdTargets:string[]=[];
     try{
       for(const member of preview.members){
-        const target=await createTargetFile(member.rootUri,member.relativePath);
+        const target=await createTargetFile(member.sourceTreeUri,member.relativePath);
         createdTargets.push(target);
-        await StorageAccessFramework.copyAsync({from:member.sourceUri,to:target});
+        await StorageAccessFramework.copyAsync({from:member.fileUri,to:target});
         created.push({id:member.id,title:preview.title,uri:target});
       }
       copied.push(...created);
@@ -172,12 +172,12 @@ export async function applyLocalWorkSortCopies(previews:LocalWorkSortPreview[]):
   return {copied,failed};
 }
 
-async function createTargetFile(rootUri:string,relativePath:string){
-  if(!rootUri)throw Error('Missing selected source folder for this work.');
+async function createTargetFile(sourceTreeUri:string,relativePath:string){
+  if(!sourceTreeUri)throw Error('Missing selected source folder for this work.');
   const parts=relativePath.split('/').filter(Boolean);
   if(!parts.length)throw Error('Missing destination file name.');
   const filename=parts.pop()!;
-  let dir=rootUri;
+  let dir=sourceTreeUri;
   for(const part of parts)dir=await ensureDirectory(dir,part);
   const dot=filename.lastIndexOf('.');
   const name=dot>0?filename.slice(0,dot):filename;
