@@ -8,6 +8,7 @@ const pkg=JSON.parse(read('package.json'));
 const gradle=read('android/app/build.gradle');
 const manifest=read('android/app/src/main/AndroidManifest.xml');
 const apkWorkflow=fs.readFileSync(here+'/../.github/workflows/android-apk.yml','utf8');
+const androidWorkflow=fs.readFileSync(here+'/../.github/workflows/android-check.yml','utf8');
 
 const requiredGates=[
   'sprint10-library-pipeline.test.cjs',
@@ -29,6 +30,7 @@ assert.ok(apkWorkflow.includes('build/0.9.4-test10-20261005'),'final Test 10 bra
 assert.ok(apkWorkflow.includes('Android test-release lint'),'final APK must pass release lint');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'final APK must verify package/version/signature/alignment');
 assert.ok(apkWorkflow.includes('Launch test APK in Android emulator'),'final APK must cold-launch in the emulator');
+assert.ok(androidWorkflow.includes('mobile/sprint10-final-release-gate.test.cjs'),'final Test 10 commit must also trigger Android native Kotlin/manifest validation on the same SHA');
 assert.ok(manifest.includes('android:name=".ArchivistAutoService"')&&manifest.includes('androidx.media3.session.MediaButtonReceiver'),'final APK must retain Android Auto browse and resumption services');
 
 assert.ok(read('sprint10-library-pipeline.test.cjs').includes('single-job'),'Sprint 1 scanner closure gate must remain present');
