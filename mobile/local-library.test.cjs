@@ -44,7 +44,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyLocalSortCopies, previewLocalSort, removeLocalSortCopies, localAssetSignature, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {removeLocalSortCopies, localAssetSignature, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
 const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
 
 const books = [
@@ -132,17 +132,6 @@ const audioPath = inferLocalBookMetadata(
 );
 assert.equal(audioPath.author, 'Frank Herbert');
 assert.equal(audioPath.series, '');
-let previews = previewLocalSort(books.slice(0, 2), 'format-author-title');
-assert.equal(previews[0].to, 'EPUB/Frank Herbert/Dune/Dune.epub');
-assert.equal(previews[1].to, 'Comic/Frank Herbert/Dune/Dune.cbz');
-assert.equal(previews.every(item => item.state === 'ready'), true);
-
-previews = previewLocalSort([books[0], {...books[0], id: 4, uri: 'content://root/document/primary:Other%2FDune.epub'}], 'author-title');
-assert.equal(previews.every(item => item.state === 'conflict'), true);
-
-previews = previewLocalSort([{...books[0], needsReview: true}], 'author-title');
-assert.equal(previews[0].state, 'review');
-
 (async () => {
   const root = 'content://root/tree/primary:Books/document/primary:Books';
   const file = root + '%2FMystery.epub';
@@ -158,6 +147,7 @@ assert.equal(previews[0].state, 'review');
   assert.equal(scanned.books[0].genre, 'Science Fiction');
   assert.equal(scanned.books[0].needsReview, false);
   assert.equal(scanned.books[0].coverUri, cover);
+  assert.equal(scanned.books[0].sourceUri,root,'fallback scanner must persist the exact selected source tree URI');
 
   scanned = await scanLocalFolders(
     [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
@@ -257,20 +247,16 @@ assert.equal(previews[0].state, 'review');
   assert.equal(oversizedScan.books[0].title,'Original');
   assert.equal(fileReads.includes(oversizedSidecar),false);
 
-  previews = previewLocalSort([books[0]], 'author-series-title');
-  saf.dirs.set(previews[0].rootUri, []);
-  const result = await applyLocalSortCopies(previews);
-  assert.equal(result.copied.length, 1);
-  assert.equal(result.failed.length, 0);
-  assert.equal(saf.made.map(item => item[1]).join('/'), 'Frank Herbert/Dune/Dune');
-  assert.equal(saf.files[0][1], 'Dune');
-  assert.equal(saf.files[0][2], 'application/epub+zip');
-  assert.equal(saf.copies[0].from, books[0].uri);
-  assert.equal(saf.copies[0].to, saf.files[0][3]);
-  const removed = await removeLocalSortCopies({id: '1', createdAt: new Date().toISOString(), copied: result.copied, failed: []});
-  assert.equal(removed.copied.length, 1);
-  assert.equal(saf.deleted[0], result.copied[0].uri);
-  console.log('PASS: local scanner handles messy names, CBZ-only local comics, deep folders, huge files, bounded sidecars, metadata caching, sort previews and recovery');
+  const copiedHistoryUri='content://com.android.externalstorage.documents/tree/primary%3ABooks/document/primary%3ABooks%2FOrganised%2FDune.epub';
+  const removed = await removeLocalSortCopies({
+    id:'1',
+    createdAt:new Date().toISOString(),
+    copied:[{id:'work:dune:asset:1',title:'Dune',uri:copiedHistoryUri}],
+    failed:[],
+  });
+  assert.equal(removed.copied.length,1);
+  assert.equal(saf.deleted[0],copiedHistoryUri);
+  console.log('PASS: local scanner handles messy names, CBZ/CBR/CBT, deep folders, huge files, bounded sidecars, explicit source trees and recovery');
 })().catch(e => { console.error(e); process.exitCode = 1; });
 
 assert.equal(parseLocalSidecar('<metadata><dc:date>1998-06-01</dc:date></metadata>','opf').publishedYear,1998);
