@@ -40,6 +40,7 @@ type onlineMetadataCandidate struct {
 	ISBN          string   `json:"isbn,omitempty"`
 	Language      string   `json:"language,omitempty"`
 	Description   string   `json:"description,omitempty"`
+	CoverURL      string   `json:"coverUrl,omitempty"`
 	Provider      string   `json:"provider"`
 	Score         int      `json:"score"`
 	Subjects      []string `json:"-"`
@@ -92,7 +93,8 @@ func (a *app) initMetadataOnline() error {
 	if _, alterErr := a.db.Exec("ALTER TABLE metadata_provider_settings ADD COLUMN auto_enrich INTEGER NOT NULL DEFAULT 1"); alterErr != nil && !strings.Contains(strings.ToLower(alterErr.Error()), "duplicate column") {
 		return alterErr
 	}
-	return a.initMetadataJobs()
+	if err:=a.initMetadataJobs();err!=nil{return err}
+	return a.initCoverCache()
 }
 
 func (a *app) metadataSettings() (metadataProviderSettings, error) {
@@ -259,7 +261,7 @@ func getJSON(ctx context.Context, client *http.Client, endpoint string, query ur
 
 func openLibraryCandidates(ctx context.Context, client *http.Client, target metadataEnrichTarget) ([]onlineMetadataCandidate,error) {
 	title := lookupTitleForTarget(target)
-	query := url.Values{"limit":{"5"},"fields":{"title,author_name,subject,publisher,first_publish_year,isbn,language"}}
+	query := url.Values{"limit":{"5"},"fields":{"title,author_name,subject,publisher,first_publish_year,isbn,language,cover_i"}}
 	if target.ISBN != "" {
 		query.Set("isbn",normalizeIdentifier(target.ISBN))
 	} else {
@@ -276,12 +278,15 @@ func openLibraryCandidates(ctx context.Context, client *http.Client, target meta
 			FirstPublishYear int      `json:"first_publish_year"`
 			ISBN             []string `json:"isbn"`
 			Language         []string `json:"language"`
+			CoverID          int64    `json:"cover_i"`
 		} `json:"docs"`
 	}
 	if err := getJSON(ctx,client,openLibrarySearchURL,query,&payload); err != nil { return nil,err }
 	out:=make([]onlineMetadataCandidate,0,len(payload.Docs))
 	for _,doc:=range payload.Docs {
 		if cleanMetadata(doc.Title)=="" { continue }
+		coverURL:=""
+		if doc.CoverID>0{coverURL=fmt.Sprintf("https://covers.openlibrary.org/b/id/%d-L.jpg",doc.CoverID)}
 		out=append(out,onlineMetadataCandidate{
 			Title:cleanMetadata(doc.Title),
 			Author:joinOnlineAuthors(doc.AuthorName),
@@ -290,6 +295,7 @@ func openLibraryCandidates(ctx context.Context, client *http.Client, target meta
 			Publisher:firstOnlineValue(doc.Publisher),
 			ISBN:preferredISBN(doc.ISBN,target.ISBN),
 			Language:firstOnlineValue(doc.Language),
+			CoverURL:coverURL,
 			Provider:"Open Library",
 			Subjects:doc.Subject,
 		})
@@ -322,6 +328,10 @@ func googleBooksCandidates(ctx context.Context, client *http.Client, target meta
 					Type       string `json:"type"`
 					Identifier string `json:"identifier"`
 				} `json:"industryIdentifiers"`
+				ImageLinks struct {
+					Thumbnail      string `json:"thumbnail"`
+					SmallThumbnail string `json:"smallThumbnail"`
+				} `json:"imageLinks"`
 			} `json:"volumeInfo"`
 		} `json:"items"`
 	}
@@ -332,6 +342,8 @@ func googleBooksCandidates(ctx context.Context, client *http.Client, target meta
 		if cleanMetadata(info.Title)=="" { continue }
 		ids:=make([]string,0,len(info.IndustryIdentifiers))
 		for _,id:=range info.IndustryIdentifiers { ids=append(ids,id.Identifier) }
+		coverURL:=cleanMetadata(info.ImageLinks.Thumbnail)
+		if coverURL==""{coverURL=cleanMetadata(info.ImageLinks.SmallThumbnail)}
 		out=append(out,onlineMetadataCandidate{
 			Title:cleanMetadata(info.Title),
 			Author:joinOnlineAuthors(info.Authors),
@@ -341,6 +353,7 @@ func googleBooksCandidates(ctx context.Context, client *http.Client, target meta
 			ISBN:preferredISBN(ids,target.ISBN),
 			Language:cleanMetadata(info.Language),
 			Description:cleanMetadata(info.Description),
+			CoverURL:coverURL,
 			Provider:"Google Books",
 			Subjects:info.Categories,
 		})
@@ -521,6 +534,7 @@ func (a *app) enrichMetadataWithProgress(ctx context.Context,sourceID int64,limi
 			result.Updated++
 			affected[target.SourceID]=struct{}{}
 			a.recordMetadataLookupState(target,"matched")
+			_ = a.cacheCoverForMetadata(ctx,target,candidate)
 		}else{result.Skipped++}
 		if progress!=nil{progress(index+1,len(targets))}
 	}
@@ -545,6 +559,7 @@ func (a *app) enrichMetadataWithProgress(ctx context.Context,sourceID int64,limi
 
 func (a *app) metadataOnlineRoutes(mux *http.ServeMux) {
 	a.metadataJobRoutes(mux)
+	a.coverCacheRoutes(mux)
 	mux.HandleFunc("GET /api/metadata/settings",func(w http.ResponseWriter,r *http.Request){
 		if !who(r).Owner{fail(w,http.StatusForbidden,errors.New("metadata provider settings are available to the library owner"));return}
 		settings,err:=a.metadataSettings();if err!=nil{fail(w,500,err);return};reply(w,settings)
