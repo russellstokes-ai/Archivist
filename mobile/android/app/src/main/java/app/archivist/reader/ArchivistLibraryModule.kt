@@ -73,8 +73,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     if (format.isNotEmpty()) return "media" to format
     if (ext == "opf" || ext == "nfo") return "sidecar" to ""
     if (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "webp") {
-      val stem = name.substringBeforeLast('.').lowercase()
-      if (stem == "cover" || stem == "folder") return "artwork" to ""
+      return "artwork" to ""
     }
     return null
   }
