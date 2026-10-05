@@ -19,6 +19,9 @@ assert.ok(app.includes("serverWorks.find(item=>item.id===media.serverWorkId)")&&
 assert.ok(app.includes("Object.values(offlineWorks).find(item=>item.server===media.originServer&&item.workId===media.serverWorkId)"),'server Now session must fall back to downloaded content offline');
 assert.ok(app.includes("persistNowSession('audio',display,progress.complete?0:progress.seconds"),'Android Auto progress must feed the same authoritative Now session');
 assert.ok(app.includes("if(centre){void openNowTab()}"),'tapping Now must reopen the durable session directly without a Resume button step');
+assert.ok(app.includes("currentNow?.kind==='audio'&&sameNowMedia(currentNow.media,nowMediaFromBook(playing))"),'background audio checkpoints must never steal Now back from a newer reader session');
+assert.ok(app.includes("currentNow?.kind==='reader'&&sameNowMedia(currentNow.media,nowMediaFromBook(reading))"),'hidden reader updates must never steal Now back from a newer audio session');
+assert.ok(app.includes("if(!nowSessionReady||activeTab!=='now'||playing||reading||!nowSessionRef.current)return;"),'an early Now tap must auto-resume once launch restoration finishes');
 assert.ok(model.includes('sameNowMedia')&&model.includes('serverWorkId')&&model.includes('localWorkKey')&&model.includes('uri'),'Now identity must survive metadata renames and asset refreshes');
 
 console.log('PASS: Test 10 Sprint 4 durable Now/player persistence contract is locked');
