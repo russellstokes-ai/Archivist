@@ -167,15 +167,14 @@ function folderFallbackCandidate(
   }
 
   const chapterCount=items.filter(item=>item.chapterLike).length;
-  const trackEvidence=members.filter(book=>(book.trackNumber||0)>0||(book.discNumber||0)>0).length;
   const strongChapterEvidence=
     chapterCount>=2 &&
     chapterCount>=Math.ceil(members.length*.6);
-  const strongTrackEvidence=
-    trackEvidence>=2 &&
-    trackEvidence>=Math.ceil(members.length*.6);
 
-  if(!strongChapterEvidence&&!strongTrackEvidence)return '';
+  // Track/disc tags alone are not work identity. Standalone M4Bs in an author
+  // or series folder often all report track=1 (or arbitrary playlist indexes).
+  // Without a shared trusted title/album, require filename-level chapter evidence.
+  if(!strongChapterEvidence)return '';
   const directoryTitle=items[0].directoryTitle;
   if(!directoryTitle||isLibraryRoot(directoryTitle)||looksLikeAuthorContainer(directoryTitle,members))return '';
   return ['folder',sourceScope(members[0]),items[0].directoryKey,normalKey(directoryTitle)].join(':');
@@ -189,7 +188,6 @@ function isResolvedSharedIdentity(book:LocalBook){
 }
 
 function chapterEvidence(book:LocalBook){
-  if((book.trackNumber||0)>0||(book.discNumber||0)>0)return true;
   const parts=decodedPathParts(book.uri);
   const filename=cleanLabel(parts[parts.length-1]||'').replace(/\.[^.]+$/,'');
   if(/^(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}\b/i.test(filename))return true;
