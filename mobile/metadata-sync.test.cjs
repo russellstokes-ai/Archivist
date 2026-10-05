@@ -109,6 +109,41 @@ const rootWorks=groupLocalWorks(rootSynced);
 assert.equal(rootWorks.find(item=>item.author==='Frank Herbert')?.title,'Dune','embedded album/work title must become the canonical root audiobook identity');
 assert.equal(rootWorks.find(item=>item.author==='Andy Weir')?.title,'Project Hail Mary','each root audiobook must retain its own canonical work title');
 
+const mixedRootRealWorld=[
+  track(80,'The Martian - Chapter 01',{
+    uri:'content://root/document/primary:Audiobooks%2FThe%20Martian%20-%20Chapter%2001.mp3',
+    title:'Chapter 01',
+    author:'Andy Weir',
+    embeddedMetadata:{},
+  }),
+  track(81,'The Martian - Chapter 02',{
+    uri:'content://root/document/primary:Audiobooks%2FThe%20Martian%20-%20Chapter%2002.mp3',
+    title:'Chapter 02',
+    author:'Andy Weir',
+    embeddedMetadata:{},
+  }),
+  track(82,'000001',{
+    uri:'content://root/document/primary:Audiobooks%2F000001.mp3',
+    title:'000001',
+    author:'Douglas Adams',
+    embeddedMetadata:{workTitle:"The Hitchhiker's Guide to the Galaxy"},
+  }),
+  track(83,'000002',{
+    uri:'content://root/document/primary:Audiobooks%2F000002.mp3',
+    title:'000002',
+    author:'Douglas Adams',
+    embeddedMetadata:{workTitle:"The Hitchhiker's Guide to the Galaxy"},
+  }),
+];
+const mixedRootKeys=audioWorkGroupKeys(mixedRootRealWorld);
+assert.equal(mixedRootKeys.get(mixedRootRealWorld[0].uri),mixedRootKeys.get(mixedRootRealWorld[1].uri),'book-name plus chapter-number filenames must form one root audiobook');
+assert.equal(mixedRootKeys.get(mixedRootRealWorld[2].uri),mixedRootKeys.get(mixedRootRealWorld[3].uri),'unclear filenames with the same embedded album/work title must form one root audiobook');
+assert.notEqual(mixedRootKeys.get(mixedRootRealWorld[0].uri),mixedRootKeys.get(mixedRootRealWorld[2].uri),'filename-derived and metadata-derived root audiobooks must remain separate');
+const mixedRootWorks=groupLocalWorks(synchronizeLocalMetadata(mixedRootRealWorld).books);
+assert.equal(mixedRootWorks.length,2,'two real-world root audiobooks must become two logical books');
+assert.ok(mixedRootWorks.some(work=>work.title==='The Martian'&&work.files===2));
+assert.ok(mixedRootWorks.some(work=>work.title==="The Hitchhiker's Guide to the Galaxy"&&work.files===2));
+
 const rootByName=[
   track(74,'Leviathan Wakes - Part 01',{uri:'content://root/document/primary:Audiobooks%2FLeviathan%20Wakes%20-%20Part%2001.mp3',title:'Part 01',author:''}),
   track(75,'Leviathan Wakes - Part 02',{uri:'content://root/document/primary:Audiobooks%2FLeviathan%20Wakes%20-%20Part%2002.mp3',title:'Part 02',author:''}),
