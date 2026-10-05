@@ -53,3 +53,56 @@ export function chooseLivingBookCover(input:{
 export function lockLivingBookCover(current:LivingBookCoverDecision|undefined,next:LivingBookCoverDecision){
   return current||next;
 }
+
+
+export type ResolvedLivingBookCoverInput={
+  format:string;
+  editionCoverUri?:string;
+  editionCoverShape?:'portrait'|'square';
+  livingBookCoverUri?:string;
+  livingBookCoverSource?:LivingBookCoverSource;
+  livingBookCoverConfidence?:number;
+};
+
+/**
+ * Production resolver for the physical book texture.
+ * Explicit, already-validated portrait artwork wins. Audio edition artwork is
+ * never stretched to portrait; it becomes the centre of a generated jacket.
+ */
+export function resolveLivingBookCover(input:ResolvedLivingBookCoverInput):LivingBookCoverDecision{
+  const livingUri=String(input.livingBookCoverUri||'').trim();
+  const livingSource=input.livingBookCoverSource||'none';
+  const confidence=Math.max(0,Math.min(1,Number(input.livingBookCoverConfidence)||0));
+
+  if(livingUri&&livingSource==='jacket'){
+    return {kind:'jacket',uri:livingUri,source:'jacket',confidence:confidence||1};
+  }
+  if(livingUri&&livingSource!=='none'&&(confidence>=0.88||livingSource==='manual'||livingSource==='embedded')){
+    return {kind:'portrait',uri:livingUri,source:livingSource,confidence:confidence||1};
+  }
+
+  const edition=String(input.editionCoverUri||'').trim();
+  if(input.format==='Audio'){
+    return edition
+      ? {kind:'jacket',uri:edition,source:'jacket',confidence:1}
+      : {kind:'placeholder',source:'none',confidence:0};
+  }
+  if(edition&&input.editionCoverShape==='portrait'){
+    return {kind:'portrait',uri:edition,source:'embedded',confidence:1};
+  }
+  return {kind:'placeholder',source:'none',confidence:0};
+}
+
+export type LivingBookCoverSession={
+  key:string;
+  decision:LivingBookCoverDecision;
+};
+
+export function lockLivingBookCoverSession(
+  current:LivingBookCoverSession|undefined,
+  key:string,
+  next:LivingBookCoverDecision,
+):LivingBookCoverSession{
+  if(current&&current.key===key)return current;
+  return {key,decision:next};
+}
