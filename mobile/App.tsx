@@ -1129,17 +1129,16 @@ function Client() {
       void persistNowSession('reader',reading,readerPage,{wasPlaying:false}).catch(()=>undefined);
     }
   },[reading?.id,reading?.uri,readerPage]);
-  const [playerVisualPlaying,setPlayerVisualPlaying]=useState(false);
+  const [playerMotionIntent,setPlayerMotionIntent]=useState<boolean|null>(null);
+  const playerMotionPlaying=playerMotionIntent??playbackIsPlaying;
   useLayoutEffect(()=>{
-    // Resolve visibility/playback state before paint so returning to Now cannot
-    // render one stale closed/turning frame before the book reopens.
-    if(!playbackVisible){setPlayerVisualPlaying(false);return;}
-    if(playbackIsPlaying){setPlayerVisualPlaying(true);return;}
-    const timer=setTimeout(()=>setPlayerVisualPlaying(false),PLAYER_MOTION_TIMING.pauseGraceMs);
-    return()=>clearTimeout(timer);
-  },[playbackIsPlaying,playbackVisible]);
+    // Transport taps drive the Living Book immediately; playback status only
+    // confirms the intent. This removes the old pause grace that could reassert
+    // the open state after Pause and make closing appear delayed or broken.
+    if(playerMotionIntent!==null&&playbackIsPlaying===playerMotionIntent)setPlayerMotionIntent(null);
+  },[playbackIsPlaying,playerMotionIntent]);
   useLayoutEffect(()=>{
-    if(!playbackVisible||!playbackIsPlaying||reduceMotion){
+    if(!playbackVisible||!playerMotionPlaying||reduceMotion){
       ++skipGeneration.current;
       ambientPageLoopStopRef.current?.();
       ambientPageLoopStopRef.current=null;
@@ -1147,11 +1146,8 @@ function Client() {
       skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
       return;
     }
-    // A quick Pause→Play inside the cover-close grace period leaves
-    // playerVisualPlaying true. Restart a fresh ambient schedule rather than
-    // resuming a page that was stopped at Pause.
-    if(playerVisualPlaying&&bookOpenProgressRef.current>=.95)setAmbientPageLoopEpoch(value=>value+1);
-  },[pageTurnAnim,playbackIsPlaying,playbackVisible,playerVisualPlaying,reduceMotion,skipTurnAnim]);
+    if(bookOpenProgressRef.current>=.95)setAmbientPageLoopEpoch(value=>value+1);
+  },[pageTurnAnim,playbackVisible,playerMotionPlaying,reduceMotion,skipTurnAnim]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>(ritualDaysKey).then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
     if(!ritualReady)return;
@@ -1270,7 +1266,7 @@ function Client() {
     skipTurnAnim.setValue(0);
     setSkipTurning(false);
 
-    const motion=playerMotionState({playing:playbackIsPlaying||playerVisualPlaying,visible:true,reduceMotion});
+    const motion=playerMotionState({playing:playerMotionPlaying,visible:true,reduceMotion});
     const target=motion==='closed'?0:1;
     const current=Math.max(0,Math.min(1,bookOpenProgressRef.current));
     const baseDuration=motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs;
@@ -1315,7 +1311,7 @@ function Client() {
       if(ambientPageLoopStopRef.current===stop)ambientPageLoopStopRef.current=null;
       if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();
     };
-  },[ambientPageLoopEpoch,bookOpenAnim,livingBookWorkKey,pageTurnAnim,playbackIsPlaying,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
+  },[ambientPageLoopEpoch,bookOpenAnim,livingBookWorkKey,pageTurnAnim,playerMotionPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
@@ -5533,8 +5529,17 @@ function Client() {
     if(embedded&&!current)return <LiveMediaEmpty mode="player" lastTitle={lastPlaying?.title} onResume={lastPlaying?()=>void playBook(lastPlaying):undefined}/>;
 
     async function togglePlayback(){
-      if(serverPlayer){controller.toggle();return;}
-      if(isPlaying){player.pause();await persistLocalPlaybackPosition(position);}else player.play();
+      const targetPlaying=!isPlaying;
+      // Drive the cover immediately from the user's tap; do not wait for the
+      // native/server playback status round-trip before opening or closing.
+      setPlayerMotionIntent(targetPlaying);
+      try{
+        if(serverPlayer){controller.toggle();return;}
+        if(isPlaying){player.pause();await persistLocalPlaybackPosition(position);}else player.play();
+      }catch(error){
+        setPlayerMotionIntent(null);
+        throw error;
+      }
     }
     async function moveCurrentTrack(index:number,direction:-1|1){
       if(!workKey)return;
