@@ -163,7 +163,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   let pinchStartScale = Number(storage.getItem('archivist-reader-text-scale')) || 1;
   let soundEnabled = storage.getItem('archivist-reader-sound') !== 'off';
   let hudTimer;
-  let touchStart=null,pinchGesture=false;
+  let touchStart=null,pinchGesture=false,gestureKind='idle',lastTouchEndedAt=0;
   let drag=null,turnLayer=null,underLayer=null,settleTimer=null;
   const comicCache=new Map(),requestedPages=new Set();
   const reducedMotion=()=>typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -179,17 +179,18 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   function paintTurn(progress){
     if(!turnLayer||!drag)return;
     const signed=drag.direction>0?-1:1;
-    turnLayer.style.transform='perspective(1600px) rotateY('+(signed*progress*165)+'deg)';
-    turnLayer.style.filter='brightness('+(1-progress*.35)+')';
-    turnLayer.style.boxShadow=(-signed*progress*24)+'px 0 32px #0008';
-    drag.progress=progress;
+    const eased=clamp(progress,0,1);
+    turnLayer.style.transform='perspective(1600px) translateX('+(signed*eased*12)+'%) rotateY('+(signed*eased*150)+'deg) scale('+(1-eased*.012)+')';
+    turnLayer.style.filter='brightness('+(1-eased*.34)+')';
+    turnLayer.style.boxShadow=(-signed*eased*26)+'px 0 34px #0008';
+    drag.progress=eased;
   }
-  function beginTurn(direction){
+  function beginTurn(direction,originX=0,startedAt=Date.now()){
     if(mode!=='comic'||zoom>1.01||turning||page+direction<0||page+direction>=pageCount())return false;
     const img=activeComicImage();if(!img||!img.src||!img.getBoundingClientRect)return false;
     speechFocus?.cancel?.();
     const rect=img.getBoundingClientRect();
-    drag={direction,progress:0,target:page+direction};
+    drag={direction,progress:0,target:page+direction,startX:originX,startAt:startedAt,lastX:originX,lastAt:startedAt,velocity:0};
     if(externalComicCount)requestPage(drag.target);
     underLayer=img.cloneNode(false);turnLayer=img.cloneNode(false);
     for(const layer of [underLayer,turnLayer]){
@@ -215,6 +216,14 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     },duration);
   }
   let lastTapAt=0,lastTapX=0,lastTapY=0,suppressClickUntil=0,singleTapTimer=null;
+  function scheduleSingleTap(){
+    clearTimeout(singleTapTimer);
+    singleTapTimer=setTimeout(()=>{
+      lastTapAt=0;
+      post({type:'reader-chrome-toggle'});
+      refreshHud();
+    },330);
+  }
 
   document.documentElement.style.setProperty('--reader-scale', String(Math.max(.78, Math.min(1.5, pinchStartScale))));
 
@@ -322,17 +331,18 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   }
 
   reader.addEventListener('click',event=>{
-    if(turning||Date.now()<suppressClickUntil)return;
-    const x=event.clientX;
-    if(event.detail===1){clearTimeout(singleTapTimer);singleTapTimer=setTimeout(()=>post({type:'reader-chrome-toggle'}),330);}
+    const now=Date.now();
+    if(turning||now<suppressClickUntil||now-lastTouchEndedAt<600)return;
+    if(event.detail===1)scheduleSingleTap();
     refreshHud();
   });
 
   reader.addEventListener('dblclick',event=>{
     event.preventDefault();
-    if(Date.now()<suppressClickUntil)return;
+    const now=Date.now();
+    if(now<suppressClickUntil||now-lastTouchEndedAt<600)return;
     clearTimeout(singleTapTimer);
-    suppressClickUntil=Date.now()+420;
+    suppressClickUntil=now+420;
     focusAt(event.target,event.clientX,event.clientY);
     refreshHud();
   });
@@ -340,8 +350,13 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   reader.addEventListener('touchstart',event=>{
     clearTimeout(singleTapTimer);
     pinchGesture=event.touches.length>1;
-    touchStart=event.touches.length===1?{x:event.touches[0].clientX,y:event.touches[0].clientY}:null;
+    if(event.touches.length===1){
+      const touch=event.touches[0];
+      touchStart={x:touch.clientX,y:touch.clientY,time:Date.now()};
+      gestureKind='tap';
+    }else touchStart=null;
     if(event.touches.length===2){
+      gestureKind='pinch';
       clearTurn();
       event.preventDefault();
       speechFocus?.cancel?.();
@@ -353,12 +368,23 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
 
   reader.addEventListener('touchmove',event=>{
     if(event.touches.length===1&&touchStart&&mode==='comic'&&zoom<=1.01&&!turning){
-      const dx=event.touches[0].clientX-touchStart.x,dy=event.touches[0].clientY-touchStart.y;
-      if(!drag&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.35)beginTurn(dx<0?1:-1);
-      if(drag){event.preventDefault();paintTurn(clamp(-dx*drag.direction/Math.max(1,innerWidth),0,1));}
-      return;
+      const touch=event.touches[0],dx=touch.clientX-touchStart.x,dy=touch.clientY-touchStart.y;
+      if(!drag&&gestureKind==='tap'&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.35){
+        if(beginTurn(dx<0?1:-1,touchStart.x,touchStart.time)){gestureKind='page-turn';lastTapAt=0;}
+      }
+      if(drag){
+        event.preventDefault();
+        const stamp=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+        const dt=Math.max(1,stamp-drag.lastAt);
+        drag.velocity=(touch.clientX-drag.lastX)/dt;
+        drag.lastX=touch.clientX;drag.lastAt=stamp;
+        paintTurn(clamp(-dx*drag.direction/Math.max(1,innerWidth),0,1));
+        return;
+      }
+      if(Math.hypot(dx,dy)>18)gestureKind='pan';
     }
     if(event.touches.length!==2||!pinchStartDistance)return;
+    gestureKind='pinch';
     event.preventDefault();
     const ratio=distance(event.touches[0],event.touches[1])/pinchStartDistance;
     if(mode==='comic'){
@@ -375,6 +401,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   },{passive:false});
 
   reader.addEventListener('touchend',event=>{
+    const now=Date.now();lastTouchEndedAt=now;
     if(event.touches.length<2&&pinchStartDistance){
       pinchStartDistance=0;
       if(mode==='epub'){
@@ -382,17 +409,25 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
         storage.setItem('archivist-reader-text-scale',String(scale));
         page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;refreshHud();
       }
+      if(!event.touches.length){gestureKind='idle';pinchGesture=false;touchStart=null;suppressClickUntil=now+440;}
       return;
     }
     if(event.touches.length||event.changedTouches.length!==1)return;
-    const tap=event.changedTouches[0],now=Date.now();
-    if(pinchGesture){pinchGesture=false;touchStart=null;suppressClickUntil=now+440;return;}
-    if(drag){event.preventDefault();suppressClickUntil=now+440;lastTapAt=0;touchStart=null;finishTurn(drag.progress>.22);return;}
+    const tap=event.changedTouches[0];
+    if(pinchGesture||gestureKind==='pinch'){pinchGesture=false;gestureKind='idle';touchStart=null;suppressClickUntil=now+440;return;}
+    if(drag){
+      event.preventDefault();
+      suppressClickUntil=now+440;lastTapAt=0;touchStart=null;gestureKind='idle';
+      const flickForward=(-drag.velocity*drag.direction)>.42;
+      finishTurn(drag.progress>.24||flickForward);
+      return;
+    }
     if(touchStart){
       const dx=tap.clientX-touchStart.x,dy=tap.clientY-touchStart.y;touchStart=null;
-      if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.35){event.preventDefault();suppressClickUntil=now+440;lastTapAt=0;move(dx<0?1:-1);return;}
-      if(Math.hypot(dx,dy)>18){lastTapAt=0;return;}
+      if(gestureKind==='pan'||Math.hypot(dx,dy)>18){gestureKind='idle';lastTapAt=0;return;}
+      if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.35){event.preventDefault();suppressClickUntil=now+440;gestureKind='idle';lastTapAt=0;move(dx<0?1:-1);return;}
     }
+    gestureKind='idle';
     const delta=now-lastTapAt;
     const distanceFromLast=Math.hypot(tap.clientX-lastTapX,tap.clientY-lastTapY);
     if(delta>0&&delta<=320&&distanceFromLast<=30){
@@ -406,9 +441,10 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
       return;
     }
     lastTapAt=now;lastTapX=tap.clientX;lastTapY=tap.clientY;
+    scheduleSingleTap();
   },{passive:false});
 
-  reader.addEventListener('touchcancel',()=>{clearTurn();touchStart=null;pinchStartDistance=0;});
+  reader.addEventListener('touchcancel',()=>{clearTurn();clearTimeout(singleTapTimer);touchStart=null;pinchStartDistance=0;pinchGesture=false;gestureKind='idle';lastTapAt=0;});
   addEventListener('resize',()=>{clearTurn();if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();});
   document.addEventListener('keydown',event=>{if(event.key==='ArrowLeft')move(-1);if(event.key==='ArrowRight')move(1);});
 
