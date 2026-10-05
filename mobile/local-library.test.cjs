@@ -393,13 +393,14 @@ assert.equal(previews[0].state, 'review');
   assert.equal(deferredCoverScan.books[0].title,'Covered');
   assert.equal(deferredCoverScan.books[0].coverUri,undefined,'primary catalogue must not wait for embedded cover extraction');
 
-  let coverBatches=0;
+  const coverProgress=[];
   const enrichedCoverScan=await enrichLocalBookCovers(deferredCoverScan.books,{
     batchSize:1,
-    onBatch(){coverBatches+=1;},
+    onBatch(_books,progress){coverProgress.push({...progress});},
   });
   assert.equal(enrichedCoverScan.updated,1);
-  assert.equal(coverBatches,1);
+  assert.ok(coverProgress.length>=1,'cover enrichment must report progress while remaining responsive');
+  assert.equal(coverProgress.at(-1).updated,1);
   assert.match(enrichedCoverScan.books[0].coverUri,/^data:image\/jpeg;base64,/);
 
   const sharedCoverRoot='content://root/tree/primary:Audiobooks/document/primary:Audiobooks%2FSharedCoverBook';
