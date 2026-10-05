@@ -24,4 +24,13 @@ assert(app.includes("import {LivingBookCanvas} from './LivingBookCanvas';"),'Now
 assert(app.includes('<LivingBookCanvas'),'Player must render the Canvas Living Book');
 assert.equal(app.includes('<LivingBookArtwork'),false,'obsolete flat renderer must stay out of the Player');
 
+
+assert.equal(app.includes('function LivingBookCoverTexture('),false,'dead nested Living Book cover component must stay removed');
+const coverEffectStart=canvas.indexOf('void coverSource(props.coverUri,props.coverHeaders)');
+const coverEffectEnd=canvas.indexOf('return()=>{live=false;};',coverEffectStart);
+const coverEffect=canvas.slice(coverEffectStart,coverEffectEnd+80);
+assert.equal(coverEffect.includes('props.phase'),false,'page/phase updates must not reload physical cover artwork');
+assert.equal(coverEffect.includes('props.number'),false,'chapter/page updates must not reload physical cover artwork');
+assert(canvas.includes("[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]"),'cover materialization must depend only on cover identity/auth, not playback progress');
+
 console.log('PASS: Living Book Canvas preserves mesh physics, landing continuity and production Player wiring');
