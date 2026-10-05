@@ -499,3 +499,13 @@ assert.equal(previews[0].state, 'review');
 
 assert.equal(parseLocalSidecar('<metadata><dc:date>1998-06-01</dc:date></metadata>','opf').publishedYear,1998);
 assert.equal(parseLocalSidecar('<metadata><year>unknown</year></metadata>','nfo').publishedYear,undefined);
+
+// A completed cache download replaces its remote URL, while manual artwork wins.
+{
+  const {applyOnlineMetadataEnrichment}=require('./localLibrary.ts');
+  const remote={uri:'file:///book.epub',title:'Book',coverUri:'https://covers.test/book.jpg'};
+  const cached={...remote,coverUri:'file:///covers/book.jpg',coverCandidates:['file:///covers/book.jpg',remote.coverUri]};
+  assert.equal(applyOnlineMetadataEnrichment([remote],[cached])[0].coverUri,cached.coverUri);
+  const manual={...remote,coverUri:'file:///manual.jpg',metadataProvenance:{coverUri:'manual'}};
+  assert.equal(applyOnlineMetadataEnrichment([manual],[cached])[0].coverUri,manual.coverUri);
+}

@@ -53,7 +53,7 @@ assert.ok(source.includes("skipAudio('large',-1)") && source.includes("skipAudio
 assert.ok(livingBookSource.includes('Math.min(6,Math.round(skipPages))'),'Living Book must allow six leaves for large skips');
 assert.ok(source.includes('title={current.title}') && source.includes('cover={(current.coverUri||current.source===\'server\')?Cover({book:current,fill:true}):null}'), 'Living book must use the current title and metadata cover');
 assert.ok(livingBookSource.includes('skipPages=3') && livingBookSource.includes('leafCount') && livingBookSource.includes('closedCover'), 'Living book must support smooth closed-cover and multi-page skip animation');
-assert.ok(livingBookSource.includes('opacity:open.interpolate') && livingBookSource.includes("rotateY:open.interpolate"), 'Living book open/close transition is missing');
+assert.ok(!livingBookSource.includes('opacity:open.interpolate') && livingBookSource.includes("rotateY:open.interpolate"), 'Living book open/close transition is missing');
 assert.ok(source.includes('playerVisualPlaying') && source.includes('PLAYER_MOTION_TIMING.pauseGraceMs'), 'Living Book must absorb transient seek/buffer playback flicker before changing motion state');
 assert.ok(source.includes('PLAYER_MOTION_TIMING.firstTurnDelayMs') && source.includes('PLAYER_MOTION_TIMING.pageTurnMs') && source.includes('PLAYER_MOTION_TIMING.pageRestMs'), 'Living Book must use the deliberate slow page-turn cadence');
 assert.ok(livingBookSource.includes('scaleX:turn.interpolate') && livingBookSource.includes('translateX:turn.interpolate') && livingBookSource.includes("outputRange:['0deg','-78deg','-102deg','-180deg']"), 'Living Book ambient page turn must include a physical curl rather than a flat card flip');

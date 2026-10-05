@@ -9,9 +9,11 @@ assert(x.playerMotionState({playing:false,visible:true,reduceMotion:true})==='cl
 assert(x.PLAYER_MOTION_TIMING.pauseGraceMs>=300&&x.PLAYER_MOTION_TIMING.pauseGraceMs<=600,'seek/buffer flicker grace must be short and intentional');
 assert(x.PLAYER_MOTION_TIMING.openMs>=750,'book opening should feel deliberate rather than snap open');
 assert(x.PLAYER_MOTION_TIMING.firstTurnDelayMs<700,'first page motion should begin promptly after Play');
-assert(x.PLAYER_MOTION_TIMING.pageTurnMs>=1800,'page turn should be slow enough to read as a physical page');
-assert(x.PLAYER_MOTION_TIMING.pageRestMs>=1000,'ambient page turns should remain restrained rather than distracting');
+assert(x.PLAYER_MOTION_TIMING.pageTurnMs>=1200,'page turn should be slow enough to read as a physical page');
+assert(x.PLAYER_MOTION_TIMING.pageRestMs>=200,'ambient page turns should remain restrained rather than distracting');
 let marks=x.addBookmark([],{workKey:'server-work:x:1',seconds:12.34,label:'Clue',now:'2026-10-01T12:00:00Z'});assert(marks.length===1&&marks[0].seconds===12.3,'bookmark add');marks=x.addBookmark(marks,{workKey:'server-work:x:1',seconds:12.4});assert(marks.length===1,'near duplicate bookmark');
 const tracks=[{id:1},{id:2},{id:3}];assert(x.applyTrackOrder(tracks,['3','1'],t=>String(t.id)).map(t=>t.id).join(',')==='3,1,2','saved track order');assert(x.moveTrackOrder(tracks,1,-1,t=>String(t.id)).join(',')==='2,1,3','move order');
 let chapters=[{title:'One',start:0,end:100},{title:'Two',start:100,end:200}];chapters=x.splitChapter(chapters,0,40);assert(chapters.length===3&&chapters[1].start===40,'split chapter');chapters=x.mergeChapter(chapters,0);assert(chapters.length===2&&chapters[0].end===100,'merge chapter');chapters=x.setChapterBoundary(chapters,1,120);assert(chapters[0].end===120&&chapters[1].start===120,'boundary edit');chapters=x.renameChapter(chapters,1,'Ending');assert(chapters[1].title==='Ending','rename');
 console.log('player-experience.test.cjs passed');
+
+assert(x.PLAYER_MOTION_TIMING.pageTurnMs+x.PLAYER_MOTION_TIMING.pageRestMs<=2000,'user requested a complete turn every one to two seconds');

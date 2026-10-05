@@ -13,10 +13,10 @@ export type PlayerMotionState = 'closed'|'open'|'turning';
 export const PLAYER_MOTION_TIMING = {
   pauseGraceMs: 420,
   openMs: 900,
-  closeMs: 420,
+  closeMs: 700,
   firstTurnDelayMs: 520,
-  pageTurnMs: 2200,
-  pageRestMs: 1600,
+  pageTurnMs: 1500,
+  pageRestMs: 300,
 } as const;
 
 export function playerMotionState(input:{playing:boolean;visible:boolean;reduceMotion:boolean}):PlayerMotionState{

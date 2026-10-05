@@ -109,7 +109,7 @@ main{width:100%;height:100%;margin:0;position:relative}
 @keyframes turnPrev{0%{opacity:1;transform:translateX(0) rotateY(0) scale(1)}45%{opacity:.9;transform:translateX(5%) rotateY(16deg) scale(.99)}50%{opacity:.68;transform:translateX(2%) rotateY(26deg) scale(.985)}55%{opacity:.74;transform:translateX(-4%) rotateY(-21deg) scale(.99)}100%{opacity:1;transform:translateX(0) rotateY(0) scale(1)}}
 
 .comic main{display:flex;align-items:center;justify-content:center;background:#000000;padding:0;overflow:hidden;touch-action:none}
-.comic .comic-page{display:none;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;transform-origin:center center;will-change:transform,opacity;user-select:none;-webkit-user-drag:none}
+.comic .comic-page{display:none;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;transform-origin:center center;transition:transform .3s cubic-bezier(.2,.72,.2,1);will-change:transform,opacity;user-select:none;-webkit-user-drag:none}
 .comic .comic-page.active{display:block}
 .comic .comic-page.focused{cursor:zoom-out}
 .speech-focus-overlay{position:fixed;z-index:80;margin:0;padding:0;border:0;background:transparent;outline:none;opacity:.82;transform:scale(1);transform-origin:center center;transition:left .34s cubic-bezier(.2,.72,.2,1),top .34s cubic-bezier(.2,.72,.2,1),width .34s cubic-bezier(.2,.72,.2,1),height .34s cubic-bezier(.2,.72,.2,1),opacity .22s ease,filter .22s ease;filter:drop-shadow(0 12px 22px #0008);cursor:zoom-out}
@@ -164,6 +164,56 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   let soundEnabled = storage.getItem('archivist-reader-sound') !== 'off';
   let hudTimer;
   let touchStart=null,pinchGesture=false;
+  let drag=null,turnLayer=null,underLayer=null,settleTimer=null;
+  const comicCache=new Map(),requestedPages=new Set();
+  const reducedMotion=()=>typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function requestPage(index){
+    if(index<0||index>=pageCount()||comicCache.has(index)||requestedPages.has(index))return;
+    requestedPages.add(index);post({type:'reader-page-request',page:index});
+  }
+  function clearTurn(){
+    clearTimeout(settleTimer);turnLayer?.remove();underLayer?.remove();turnLayer=null;underLayer=null;
+    const img=activeComicImage();if(img)img.style.visibility='';
+    drag=null;turning=false;
+  }
+  function paintTurn(progress){
+    if(!turnLayer||!drag)return;
+    const signed=drag.direction>0?-1:1;
+    turnLayer.style.transform='perspective(1600px) rotateY('+(signed*progress*165)+'deg)';
+    turnLayer.style.filter='brightness('+(1-progress*.35)+')';
+    turnLayer.style.boxShadow=(-signed*progress*24)+'px 0 32px #0008';
+    drag.progress=progress;
+  }
+  function beginTurn(direction){
+    if(mode!=='comic'||zoom>1.01||turning||page+direction<0||page+direction>=pageCount())return false;
+    const img=activeComicImage();if(!img||!img.src||!img.getBoundingClientRect)return false;
+    speechFocus?.cancel?.();
+    const rect=img.getBoundingClientRect();
+    drag={direction,progress:0,target:page+direction};
+    if(externalComicCount)requestPage(drag.target);
+    underLayer=img.cloneNode(false);turnLayer=img.cloneNode(false);
+    for(const layer of [underLayer,turnLayer]){
+      layer.removeAttribute('id');layer.className='comic-turn-layer';
+      Object.assign(layer.style,{position:'fixed',left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px',maxWidth:'none',maxHeight:'none',display:'block',objectFit:'contain',pointerEvents:'none',background:'#eee9d5',zIndex:'50',transform:'none'});
+      document.body.append(layer);
+    }
+    const next=externalComicCount?comicCache.get(drag.target):pages[drag.target]?.src;
+    if(next)underLayer.src=next;else underLayer.removeAttribute('src');
+    turnLayer.style.zIndex='51';turnLayer.style.transformOrigin=direction>0?'left center':'right center';
+    turnLayer.style.backfaceVisibility='hidden';img.style.visibility='hidden';
+    return true;
+  }
+  function finishTurn(commit){
+    if(!drag)return;
+    const target=drag.target;turning=true;
+    const duration=reducedMotion()?0:Math.max(140,Math.round(320*(commit?1-drag.progress:drag.progress)));
+    if(turnLayer)turnLayer.style.transition='transform '+duration+'ms cubic-bezier(.2,.7,.2,1),filter '+duration+'ms';
+    paintTurn(commit?1:0);
+    settleTimer=setTimeout(()=>{
+      if(commit){page=target;resetComicZoom();showComic(page);pageSound();refreshHud();reportPosition();}
+      clearTurn();
+    },duration);
+  }
   let lastTapAt=0,lastTapX=0,lastTapY=0,suppressClickUntil=0;
 
   document.documentElement.style.setProperty('--reader-scale', String(Math.max(.78, Math.min(1.5, pinchStartScale))));
@@ -209,24 +259,35 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     const img=activeComicImage();
     if(img){img.classList.remove('focused');img.style.transform='scale(1)';img.style.transformOrigin='center center';}
   }
+  function displayComic(index,src){
+    const img=pages[0];if(!img)return;
+    img.alt='Page '+(index+1);img.dataset.page=String(index);
+    img.onerror=()=>post({type:'reader-page-error',page:index});
+    img.src=src;img.classList.add('active');refreshHud();
+  }
   function showComic(index){
-    if(externalComicCount){post({type:'reader-page-request',page:index});return;}
+    if(externalComicCount){
+      const cached=comicCache.get(index);
+      if(cached)displayComic(index,cached);else requestPage(index);
+      requestPage(index+1);requestPage(index-1);return;
+    }
     pages.forEach((img,i)=>img.classList.toggle('active',i===index));
   }
   window.__archivistSetComicPage=(index,mimeType,base64)=>{
-    if(mode!=='comic'||!externalComicCount||index!==page)return;
-    const img=pages[0];if(!img)return;
-    img.alt='Page '+(index+1);
-    img.dataset.page=String(index);
-    img.onerror=()=>post({type:'reader-page-error',page:index});
-    img.src='data:'+String(mimeType||'image/jpeg')+';base64,'+String(base64||'');
-    img.classList.add('active');
-    refreshHud();
+    if(mode!=='comic'||!externalComicCount)return;
+    requestedPages.delete(index);
+    if(Math.abs(index-page)>1&&index!==drag?.target)return;
+    const src='data:'+String(mimeType||'image/jpeg')+';base64,'+String(base64||'');
+    comicCache.set(index,src);
+    for(const key of comicCache.keys())if(Math.abs(key-page)>1&&key!==drag?.target)comicCache.delete(key);
+    if(drag?.target===index&&underLayer)underLayer.src=src;
+    if(index===page)displayComic(index,src);
   };
   function move(delta){
     if(turning || (mode==='comic' && zoom>1.01))return;
     const count=pageCount(),target=clamp(page+delta,0,count-1);
     if(target===page)return;
+    if(mode==='comic'&&beginTurn(delta>0?1:-1)){finishTurn(true);return;}
     turning=true;
     const cls=delta>0?'turn-next':'turn-prev';
     reader.classList.add(cls);pageSound();
@@ -269,6 +330,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
 
   reader.addEventListener('dblclick',event=>{
     event.preventDefault();
+    if(Date.now()<suppressClickUntil)return;
     suppressClickUntil=Date.now()+420;
     focusAt(event.target,event.clientX,event.clientY);
     refreshHud();
@@ -278,6 +340,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     pinchGesture=event.touches.length>1;
     touchStart=event.touches.length===1?{x:event.touches[0].clientX,y:event.touches[0].clientY}:null;
     if(event.touches.length===2){
+      clearTurn();
       event.preventDefault();
       speechFocus?.cancel?.();
       pinchStartDistance=distance(event.touches[0],event.touches[1]);
@@ -287,6 +350,12 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   },{passive:false});
 
   reader.addEventListener('touchmove',event=>{
+    if(event.touches.length===1&&touchStart&&mode==='comic'&&zoom<=1.01&&!turning){
+      const dx=event.touches[0].clientX-touchStart.x,dy=event.touches[0].clientY-touchStart.y;
+      if(!drag&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.35)beginTurn(dx<0?1:-1);
+      if(drag){event.preventDefault();paintTurn(clamp(-dx*drag.direction/Math.max(1,innerWidth),0,1));}
+      return;
+    }
     if(event.touches.length!==2||!pinchStartDistance)return;
     event.preventDefault();
     const ratio=distance(event.touches[0],event.touches[1])/pinchStartDistance;
@@ -316,6 +385,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     if(event.touches.length||event.changedTouches.length!==1)return;
     const tap=event.changedTouches[0],now=Date.now();
     if(pinchGesture){pinchGesture=false;touchStart=null;suppressClickUntil=now+440;return;}
+    if(drag){event.preventDefault();suppressClickUntil=now+440;lastTapAt=0;touchStart=null;finishTurn(drag.progress>.22);return;}
     if(touchStart){
       const dx=tap.clientX-touchStart.x,dy=tap.clientY-touchStart.y;touchStart=null;
       if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.35){event.preventDefault();suppressClickUntil=now+440;lastTapAt=0;move(dx<0?1:-1);return;}
@@ -335,7 +405,8 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     lastTapAt=now;lastTapX=tap.clientX;lastTapY=tap.clientY;
   },{passive:false});
 
-  addEventListener('resize',()=>{if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();});
+  reader.addEventListener('touchcancel',()=>{clearTurn();touchStart=null;pinchStartDistance=0;});
+  addEventListener('resize',()=>{clearTurn();if(mode==='epub'){page=clamp(page,0,pageCount()-1);reader.scrollLeft=page*innerWidth;}refreshHud();});
   document.addEventListener('keydown',event=>{if(event.key==='ArrowLeft')move(-1);if(event.key==='ArrowRight')move(1);});
 
   function post(payload){try{window.ReactNativeWebView?.postMessage(JSON.stringify(payload));}catch{}}

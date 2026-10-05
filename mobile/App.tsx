@@ -37,7 +37,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
-import {copyAsync, deleteAsync, documentDirectory, downloadAsync, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
+import {createDownloadResumable, copyAsync, deleteAsync, documentDirectory, downloadAsync, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
@@ -87,6 +87,18 @@ import {
   removeOfflineCheckpoint,
   removeOfflineWork,
 } from './offlineLibrary';
+
+async function downloadCoverWithDeadline(uri:string,target:string){
+  const task=createDownloadResumable(uri,target);
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{
+    const result=await Promise.race([task.downloadAsync(),new Promise<never>((_,reject)=>{
+      timer=setTimeout(()=>{void task.pauseAsync().catch(()=>undefined);reject(new Error('Cover download timed out'));},15000);
+    })]);
+    if(!result)throw new Error('Cover download interrupted');
+    return result;
+  }finally{if(timer)clearTimeout(timer);}
+}
 
 async function persistPickedCover(uri:string,fileName?:string|null,fileSize?:number) {
   return persistManualCover(uri,fileName||undefined,fileSize,{
@@ -1117,7 +1129,7 @@ function Client() {
   }, [localBooks]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
-  useEffect(()=>{void persistAndroidAutoLibrary(localWorks).catch(()=>undefined);},[localWorks]);
+  useEffect(()=>{const timer=setTimeout(()=>void persistAndroidAutoLibrary(localWorks).catch(()=>undefined),2000);return()=>clearTimeout(timer);},[localWorks]);
 
   const personaliseLocalWorks = (items: LocalWork[]): PersonalLocalWork[] => items.map(work => {
     let readingState:ReadingState='not-started';
@@ -1911,7 +1923,7 @@ function Client() {
     try{
       await clearMetadataCaches(false);
       await rescanLocalFolders(localMetadataOverrides,true);
-      setMetadataSettingsNotice(metadataSettings.onlineEnabled?'Local refresh complete · online enrichment continues in the background.':'Local metadata and cover refresh complete.');
+      setMetadataSettingsNotice(metadataSettings.onlineEnabled?'Local refresh complete · online enrichment continues in the background.':'Local refresh complete · cover recovery continues in the background.');
     }catch(e){
       setMetadataSettingsNotice('Metadata refresh could not complete: '+(e as Error).message);
     }
@@ -2302,7 +2314,7 @@ function Client() {
     );
   }
 
-  const scanFrame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+  const scanFrame=()=>new Promise<void>(resolve=>setTimeout(resolve,16));
 
   const beginLocalScan=()=>{
     autoLocalScanAttempted.current=true;
@@ -2326,7 +2338,6 @@ function Client() {
     setScanProgress({phase:'checking-duplicates',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
     if(!scanCommitGate.isCurrent(generation))return null;
-    localRelationClassification(result.books);
     setScanProgress({phase:'preparing',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
     if(!scanCommitGate.isCurrent(generation))return null;
@@ -2356,8 +2367,7 @@ function Client() {
     await scanFrame();
     if(scanCommitGate.isCurrent(generation)){
       const enrichment=enrichPublishedLocalLibrary(result.books,generation,forceOnline);
-      if(forceOnline)await enrichment;
-      else void enrichment;
+      void enrichment.catch(error=>{if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String(error?.message||error));});
     }
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
@@ -2381,7 +2391,7 @@ function Client() {
   }
 
   async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number){
-    if(!baseBooks.some(book=>book.format==='EPUB'||book.format==='PDF')||!scanCommitGate.isCurrent(generation))return;
+    if(!baseBooks.some(book=>book.format==='EPUB'||book.format==='PDF'||book.format==='Audio')||!scanCommitGate.isCurrent(generation))return;
     const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
     if(!scanCommitGate.isCurrent(generation))return;
     const googleBooksApiKey=metadataSettings.books.googleBooks
@@ -2393,10 +2403,11 @@ function Client() {
       googleBooksApiKey,
       openLibraryEnabled:metadataSettings.books.openLibrary,
       applyHighConfidence:metadataSettings.applyHighConfidence,
-      batchSize:4,
+      batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
+        setLocalFolderNotice(`Metadata · ${progress.attempted} checked · ${progress.matched} matched · ${progress.review} need review`);
         setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
         await Promise.all([
           setPersistedJSON(localCatalogKey,batch),
@@ -2409,7 +2420,7 @@ function Client() {
     const cachedCovers=await cacheOnlineCoverUris(enriched.books,{
       documentDirectory,
       makeDirectoryAsync,
-      downloadAsync,
+      downloadAsync:downloadCoverWithDeadline,
       getInfoAsync,
       deleteAsync,
     },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
@@ -2439,10 +2450,11 @@ function Client() {
       token,
       cache,
       applyHighConfidence:metadataSettings.applyHighConfidence,
-      batchSize:3,
+      batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
+        setLocalFolderNotice(`Metadata · ${progress.attempted} checked · ${progress.matched} matched · ${progress.review} need review`);
         setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
         await Promise.all([
           setPersistedJSON(localCatalogKey,batch),
@@ -2455,7 +2467,7 @@ function Client() {
     const cachedCovers=await cacheOnlineCoverUris(enriched.books,{
       documentDirectory,
       makeDirectoryAsync,
-      downloadAsync,
+      downloadAsync:downloadCoverWithDeadline,
       getInfoAsync,
       deleteAsync,
     },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
@@ -2481,10 +2493,11 @@ function Client() {
   async function enrichPublishedLocalCovers(baseBooks:LocalBook[],generation:number){
     if(!baseBooks.some(book=>!book.coverUri)||!scanCommitGate.isCurrent(generation))return;
     const enriched=await enrichLocalBookCovers(baseBooks,{
-      batchSize:4,
+      batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
-      onBatch:async(batch)=>{
+      onBatch:async(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
+        setLocalFolderNotice(`Covers · ${progress.attempted} checked · ${progress.updated} found`);
         setLocalBooks(current=>applyCoverEnrichment(current,batch));
         await scanFrame();
       },
@@ -2796,11 +2809,13 @@ function Client() {
   }
 
   async function previewLocalSortBatch() {
+    if(localScanning){setMoveStatus('Finish the current scan before organising.');return;}
+    scanCommitGate.begin(); // Invalidate background enrichment before snapshotting destinations.
     setBusy(true);
     setError('');
     setMoveStatus('Checking proposed destinations…');
     try{
-      const previews=await previewLocalSortSafely(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate);
+      const previews=await previewLocalSortSafely(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate,undefined,(done,total)=>setMoveStatus(`Checking destinations · ${done} / ${total}`));
       const readyIds=previews.filter(item=>item.state==='ready').map(item=>item.id);
       setLocalMovePreviews(previews);
       setLocalMoveSelection(readyIds);
@@ -2819,6 +2834,8 @@ function Client() {
   }
 
   async function applyLocalSortBatch() {
+    if(localScanning){setMoveStatus('Finish the current scan before organising.');return;}
+    scanCommitGate.begin();
     const selected=new Set(localMoveSelection);
     const ready=localMovePreviews.filter(item=>item.state==='ready'&&selected.has(item.id));
     if(!ready.length){
@@ -2837,6 +2854,7 @@ function Client() {
       const checkpoint = async (partial: {copied: LocalSortHistory['copied']; failed: LocalSortHistory['failed']}) => {
         history = history.map(item => item.id === transactionId ? {...item, copied: partial.copied, failed: partial.failed} : item);
         setLocalSortHistory(history);
+        setMoveStatus(`Organising · ${partial.copied.length+partial.failed.length} / ${ready.length} · ${partial.failed.length} need review`);
         await setPersistedJSON(localSortHistoryKey, history);
       };
       const result = await applyLocalSortCopies(ready, checkpoint);
@@ -4849,7 +4867,7 @@ function Client() {
   }
 
   function Player({embedded=false}:{embedded?:boolean}={}) {
-    const current = playing;
+    const current = playing?.uri ? {...playing,...localBooks.find(book=>book.uri===playing.uri)} : playing;
     const serverPlayer = current?.source==='server';
     const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
     const duration = serverPlayer ? playback?.duration || 0 : audio.duration || 0;

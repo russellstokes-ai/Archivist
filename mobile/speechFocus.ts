@@ -1,3 +1,4 @@
+import {speechFocusSource} from './speechFocus.generated';
 export type SpeechBubbleRegion={
   left:number;
   top:number;
@@ -268,5 +269,5 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
 }
 
 export function speechFocusBrowserSource(){
-  return `window.__archivistSpeechFocus=(${installSpeechFocus.toString()})(${detectBubbleRegion.toString()});`;
+  return speechFocusSource;
 }

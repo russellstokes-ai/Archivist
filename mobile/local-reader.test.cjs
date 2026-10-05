@@ -68,22 +68,23 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
 
   // Execute the actual generated reader script with Android opaque-origin storage failures.
   const messages=[],timers=new Map(),listeners={};let timerId=0;
-  function element(){return {style:{setProperty(){}},dataset:{},classList:{add(){},remove(){},toggle(){}},addEventListener(name,fn){this[name]=fn;},setAttribute(){},scrollWidth:400};}
+  function element(){return {style:{setProperty(){}},dataset:{},classList:{add(){},remove(){},toggle(){}},addEventListener(name,fn){this[name]=fn;},setAttribute(){},scrollWidth:400,remove(){},removeAttribute(key){delete this[key];},getBoundingClientRect(){return {left:0,top:0,width:400,height:600};},cloneNode(){const clone=element();clone.src=this.src;return clone;}};}
   const elements={reader:element(),readerHud:element(),readerPosition:element()},img=element();
-  const document={getElementById:id=>elements[id],querySelectorAll:selector=>selector==='.comic-page'?[img]:[],documentElement:element(),addEventListener:(name,fn)=>listeners[name]=fn};
+  const layers=[];
+  const document={body:{append(node){layers.push(node);}},getElementById:id=>elements[id],querySelectorAll:selector=>selector==='.comic-page'?[img]:[],documentElement:element(),addEventListener:(name,fn)=>listeners[name]=fn};
   const window={ReactNativeWebView:{postMessage:raw=>messages.push(JSON.parse(raw))},addEventListener:(name,fn)=>listeners[name]=fn};
-  const sandbox={document,window,innerWidth:400,localStorage:{getItem(){throw Error('SecurityError');},setItem(){throw Error('SecurityError');}},requestAnimationFrame:fn=>fn(),setTimeout:(fn,ms)=>{const id=++timerId;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),addEventListener(){}};
+  const sandbox={document,window,innerWidth:400,matchMedia:()=>({matches:false}),localStorage:{getItem(){throw Error('SecurityError');},setItem(){throw Error('SecurityError');}},requestAnimationFrame:fn=>fn(),setTimeout:(fn,ms)=>{const id=++timerId;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),addEventListener(){}};
   const scripts=[...cbr.html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   vm.runInNewContext(scripts.at(-1)[1],sandbox);
   assert.equal(messages.find(m=>m.type==='reader-page-request').page,0,'first page must be requested even with blocked storage');
   window.__archivistSetComicPage(0,'image/jpeg','AQID');
   assert.equal(img.src,'data:image/jpeg;base64,AQID');
-  function swipe(from,to){elements.reader.touchstart({touches:[{clientX:from,clientY:100}]});elements.reader.touchend({touches:[],changedTouches:[{clientX:to,clientY:105}],preventDefault(){}});for(const [id,timer] of [...timers])if(timer.ms<1000){timers.delete(id);timer.fn();}}
+  function swipe(from,to){elements.reader.touchstart({touches:[{clientX:from,clientY:100}]});elements.reader.touchmove({touches:[{clientX:to,clientY:105}],preventDefault(){}});assert(layers.at(-1).style.transform.includes('rotateY'),'page follows finger before release');elements.reader.touchend({touches:[],changedTouches:[{clientX:to,clientY:105}],preventDefault(){}});for(const [id,timer] of [...timers])if(timer.ms<1000){timers.delete(id);timer.fn();}}
   swipe(350,50);
-  assert.equal(messages.filter(m=>m.type==='reader-page-request').at(-1).page,1,'left swipe advances');
+  assert.equal(messages.filter(m=>m.type==='reader-position').at(-1).page,1,'left swipe advances');
   window.__archivistSetComicPage(0,'image/jpeg','STALE');assert(!img.src.includes('STALE'),'late page response must not replace current page');
   window.__archivistSetComicPage(1,'image/jpeg','PAGE2');assert(img.src.endsWith('PAGE2'));
-  swipe(50,350);assert.equal(messages.filter(m=>m.type==='reader-page-request').at(-1).page,0,'right swipe goes back');
+  swipe(50,350);assert.equal(messages.filter(m=>m.type==='reader-position').at(-1).page,0,'right swipe goes back');
   listeners.message({data:JSON.stringify({type:'reader-command',command:'appearance',value:{sound:false,theme:'dark'}})});
   assert.equal(document.documentElement.dataset.readerTheme,'dark','settings must apply without storage');
 

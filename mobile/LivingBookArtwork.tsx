@@ -16,15 +16,14 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
     <View pointerEvents="none" style={[s.stage,{maxWidth:undefined,transform:[{scale}]}]}>
     <AmbientGlow color={glowColor} size={520} strength={glowStrength}/>
     <View style={s.shadow}/>
-    <Animated.View style={[s.closedCover,{opacity:open.interpolate({inputRange:[0,.18,.62,1],outputRange:[1,1,.18,0]}),transform:[{perspective:1000},{rotateX:'7deg'},{scale:open.interpolate({inputRange:[0,1],outputRange:[1,.88]})},{translateX:open.interpolate({inputRange:[0,1],outputRange:[0,34]})}]}]}>{coverArt}</Animated.View>
-    <Animated.View style={[s.book,{opacity:open.interpolate({inputRange:[0,.12,.38,1],outputRange:[0,.08,1,1]}),transform:[{perspective:1200},{rotateX:'9deg'},{scale:open.interpolate({inputRange:[0,1],outputRange:[.88,1]})}]}]}>
-      <View style={s.binding}/>
-      {[3,2,1].map(i=><View key={i} style={[s.pageEdge,{top:i*2,bottom:-i*2,left:3-i,right:3-i}]}/>)}
-      <View style={[s.page,{left:0}]}>{page(0)}</View><View style={[s.page,{right:0}]}>{page(1)}</View>
+    <Animated.View style={[s.book,{transform:[{perspective:1200},{rotateX:'9deg'},{translateX:open.interpolate({inputRange:[0,1],outputRange:[-85.5,0]})}]}]}>
+      <View style={[s.binding,{left:171}]}/>
+      {[3,2,1].map(i=><View key={i} style={[s.pageEdge,{top:i*2,bottom:-i*2,left:171,right:3-i}]}/>)}
+      <Animated.View style={[s.page,{left:0,transformOrigin:'right center',transform:[{perspective:1200},{rotateY:open.interpolate({inputRange:[0,1],outputRange:['180deg','0deg']})}]}]}>{page(0)}</Animated.View><View style={[s.page,{right:0}]}>{page(1)}</View>
       <View pointerEvents="none" style={s.gutter}/>
       {!skipping?<Animated.View pointerEvents="none" style={[s.page,s.leaf,{right:0,opacity:turn.interpolate({inputRange:[0,.06,.9,1],outputRange:[0,.98,.98,0]}),transformOrigin:'left center',transform:[{perspective:1100},{translateX:turn.interpolate({inputRange:[0,.5,1],outputRange:[0,-5,0]})},{scaleX:turn.interpolate({inputRange:[0,.48,.52,1],outputRange:[1,.84,.84,1]})},{rotateY:turn.interpolate({inputRange:[0,.46,.54,1],outputRange:['0deg','-78deg','-102deg','-180deg']})}]} as any]}>{page(1)}</Animated.View>:null}
       {skipping?Array.from({length:leafCount},(_,i)=><Animated.View key={i} pointerEvents="none" style={[s.page,s.leaf,{left:direction===-1?0:undefined,right:direction===1?0:undefined,zIndex:9-i,opacity:skip.interpolate({inputRange:[i,i+.01,i+.98,i+1],outputRange:[0,1,1,0],extrapolate:'clamp'}),transformOrigin:direction===1?'left center':'right center',transform:[{perspective:900},{rotateY:skip.interpolate({inputRange:[i,i+1],outputRange:['0deg',direction===1?'-180deg':'180deg'],extrapolate:'clamp'})}]} as any]}>{page(direction===1?1:0)}</Animated.View>):null}
-      <Animated.View pointerEvents="none" style={[s.front,{opacity:open.interpolate({inputRange:[0,.28,.92,1],outputRange:[0,1,1,0]}),transformOrigin:'left center',transform:[{perspective:900},{rotateY:open.interpolate({inputRange:[0,1],outputRange:['0deg','-180deg']})}]} as any]}>{coverArt}</Animated.View>
+      <Animated.View pointerEvents="none" style={[s.front,{transformOrigin:'left center',transform:[{perspective:900},{rotateY:open.interpolate({inputRange:[0,1],outputRange:['0deg','-180deg']})}]} as any]}>{coverArt}</Animated.View>
     </Animated.View>
     </View>
   </View>;

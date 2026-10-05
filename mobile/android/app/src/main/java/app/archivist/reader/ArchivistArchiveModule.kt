@@ -52,6 +52,39 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
     }
   }
 
+  // SAF-to-SAF copies must stream through ContentResolver; Expo's file copy path
+  // cannot reliably write document-provider destinations. Keep all I/O off UI/JS.
+  @ReactMethod
+  fun copyDocument(from: String, to: String, promise: Promise) {
+    thread(name = "archivist-organise-copy") {
+      try {
+        val target = Uri.parse(to)
+        var written = 0L
+        openInput(from).use { input ->
+          val output = if (target.scheme == "content") context.contentResolver.openOutputStream(target, "wt")
+            else File(target.path ?: to).outputStream()
+          requireNotNull(output) { "Destination cannot be opened for writing." }.use { sink ->
+            val buffer = ByteArray(65536)
+            while (true) {
+              val count = input.read(buffer)
+              if (count < 0) break
+              sink.write(buffer, 0, count)
+              written += count
+            }
+            sink.flush()
+          }
+        }
+        var verified = 0L
+        openInput(to).use { input ->
+          val buffer = ByteArray(65536)
+          while (true) { val count = input.read(buffer); if (count < 0) break; verified += count }
+        }
+        check(verified == written) { "Destination verification failed. Original retained." }
+        promise.resolve(written.toDouble())
+      } catch (error: Throwable) { promise.reject("COPY_FAILED", error.message, error) }
+    }
+  }
+
   @ReactMethod
   fun openZip(uri: String, promise: Promise) {
     thread(name = "archivist-zip-index") {

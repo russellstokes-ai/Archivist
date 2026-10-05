@@ -282,11 +282,14 @@ function rankCandidates(input:BookLookupInput,candidates:Array<Omit<OnlineBookCa
 
 async function fetchJson(fetcher:FetchLike,url:string,timeoutMs:number,init:any={}){
   const controller=typeof AbortController!=='undefined'?new AbortController():undefined;
-  const timer=controller?setTimeout(()=>controller.abort(),timeoutMs):undefined;
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller?.abort();reject(new Error('Metadata request timed out'));},timeoutMs);});
   try{
-    const response=await fetcher(url,{...init,signal:controller?.signal});
-    if(!response.ok)throw Object.assign(new Error('Metadata provider returned '+response.status),{status:response.status});
-    return await response.json();
+    return await Promise.race([(async()=>{
+      const response=await fetcher(url,{...init,signal:controller?.signal});
+      if(!response.ok)throw Object.assign(new Error('Metadata provider returned '+response.status),{status:response.status});
+      return await response.json();
+    })(),deadline]);
   }finally{if(timer)clearTimeout(timer);}
 }
 async function throttleOpenLibrary(){
@@ -332,7 +335,7 @@ export function onlineBookCacheKey(input:BookLookupInput){
 
 export function shouldLookupBookOnline(input:BookLookupInput){
   const format=String(input.format||'').toLowerCase();
-  if(format&&format!=='epub'&&format!=='pdf')return false;
+  if(format&&format!=='epub'&&format!=='pdf'&&format!=='audio')return false;
   const provenance=input.metadataProvenance||{};
   if(provenance.title==='manual'&&provenance.author==='manual'&&input.coverUri&&input.description&&input.genre)return false;
   if(!useful(input.title)&&!normalizeIsbn(input.isbn)&&!input.uri)return false;

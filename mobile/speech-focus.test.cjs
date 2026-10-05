@@ -1,7 +1,8 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {stripTypeScriptTypes}=require('node:module');
-const source=stripTypeScriptTypes(fs.readFileSync(__dirname+'/speechFocus.ts','utf8')).replaceAll('export function','function');
-const {detectBubbleRegion,speechFocusBrowserSource}=vm.runInNewContext(source+';({detectBubbleRegion,speechFocusBrowserSource})');
+const source=stripTypeScriptTypes(fs.readFileSync(__dirname+'/speechFocus.ts','utf8')).replace(/^import .*speechFocus.generated.*\n/m,'').replaceAll('export function','function');
+const generated=stripTypeScriptTypes(fs.readFileSync(__dirname+'/speechFocus.generated.ts','utf8')).replace('export const','const');
+const {detectBubbleRegion,speechFocusBrowserSource}=vm.runInNewContext(generated+'\n'+source+';({detectBubbleRegion,speechFocusBrowserSource})');
 
 function image(width,height,r=70,g=70,b=70){
   const data=new Uint8ClampedArray(width*height*4);
@@ -250,3 +251,6 @@ assert(browser.includes('Close enlarged speech bubble'),'enlarged bubble must be
 }
 
 console.log('PASS: speech focus corpus covers oval, rectangular, grey, edge, lettering, adjacent, tailed and negative comic regions');
+
+assert(!source.includes('.toString()'),'Hermes reader source must be static, not runtime function serialization');
+new vm.Script(speechFocusBrowserSource());

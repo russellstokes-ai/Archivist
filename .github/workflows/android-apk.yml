@@ -9,6 +9,7 @@ on:
       - build/final-apk-0.9.4-20261004
       - build/0.9.4-test6-20261004
       - fix/test5-reader-player-blockers
+      - fix/device-player-metadata-reader-20261005
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
@@ -18,7 +19,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '6'
+  TEST_BUILD: '7'
 
 concurrency:
   group: android-apk-${{ github.ref }}

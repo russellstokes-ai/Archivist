@@ -389,14 +389,17 @@ function rankCandidates(input:ComicLookupInput,raw:Array<Omit<OnlineComicCandida
 
 async function fetchJson(fetcher:FetchLike,url:string,token:string,timeoutMs:number){
   const controller=typeof AbortController!=='undefined'?new AbortController():undefined;
-  const timer=controller?setTimeout(()=>controller.abort(),timeoutMs):undefined;
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller?.abort();reject(new Error('Comic metadata request timed out'));},timeoutMs);});
   try{
+    return await Promise.race([(async()=>{
     const response=await fetcher(url,{headers:{Accept:'application/json',Authorization:'Bearer '+token,'User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'},signal:controller?.signal});
     if(response.status===429){
       const error:any=new Error('Metron rate limit reached');error.code='rate-limited';throw error;
     }
     if(!response.ok)throw new Error('Metron returned '+response.status);
     return await response.json();
+    })(),deadline]);
   }finally{if(timer)clearTimeout(timer);}
 }
 function queryLabel(plan:QueryPlan){return new URLSearchParams(plan.params).toString();}
