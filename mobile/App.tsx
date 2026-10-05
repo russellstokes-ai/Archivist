@@ -2104,12 +2104,12 @@ function Client() {
 
   useEffect(() => {
     const pendingFolder=localFolders.some(folder=>folder.status==='Scanning…'||folder.status==='Ready to scan');
-    const needsInitialCatalogue=localBooks.length===0;
-    if(restoring||!localFoldersReady||!localOverridesReady||!localCatalogReady||!metadataSettingsReady||!localFolders.length||localScanning||autoLocalScanAttempted.current)return;
-    if(!needsInitialCatalogue&&!pendingFolder)return;
+    // New onboarding folders use "Ready to prepare" and must never auto-start.
+    // Only recover an explicitly interrupted legacy scan after process restart.
+    if(restoring||!localFoldersReady||!localOverridesReady||!localCatalogReady||!metadataSettingsReady||!localFolders.length||localScanning||autoLocalScanAttempted.current||!pendingFolder)return;
     autoLocalScanAttempted.current=true;
     void rescanLocalFolders();
-  },[localBooks.length,localCatalogReady,localFolders,localFoldersReady,localOverridesReady,localScanning,metadataSettingsReady,restoring]);
+  },[localCatalogReady,localFolders,localFoldersReady,localOverridesReady,localScanning,metadataSettingsReady,restoring]);
 
   useEffect(()=>{
     if(activeTab!=='settings')return;
