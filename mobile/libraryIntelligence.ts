@@ -55,6 +55,7 @@ export type LocalMetadataFields = {
 
 export type LocalMetadataContext = {
   siblingMediaCount?: number;
+  rootUri?: string;
 };
 
 export function audioMultipartWorkTitle(value:string){
@@ -79,6 +80,10 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
   const qualifiers = filenameQualifiers(rawStem);
   const stem = qualifiers.stem;
   const rawDirs = parts.slice(0, -1).filter(Boolean).map(cleanLabel);
+  const selectedRootDirs=context.rootUri?decodedPathParts(context.rootUri).map(cleanLabel):[];
+  const atSelectedRoot=selectedRootDirs.length>0
+    && rawDirs.length===selectedRootDirs.length
+    && rawDirs.every((value,index)=>equivalent(value,selectedRootDirs[index]||''));
   const dirs = [...rawDirs];
   while (dirs.length && isLibraryRootLabel(dirs[0])) dirs.shift();
   const inferredGenre = inferGenreFromDirectories(dirs);
@@ -87,7 +92,7 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
   const grandparent = cleanLabel(semanticDirs[semanticDirs.length - 2] || '');
   const greatGrandparent = cleanLabel(semanticDirs[semanticDirs.length - 3] || '');
 
-  const rootMultipartTitle=format==='Audio'&&!parent?audioMultipartWorkTitle(stem):'';
+  const rootMultipartTitle=format==='Audio'&&(!parent||atSelectedRoot)?audioMultipartWorkTitle(stem):'';
   let title = rootMultipartTitle || stem || 'Untitled';
   let author = '';
   let series = '';
