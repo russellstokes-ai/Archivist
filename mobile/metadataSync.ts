@@ -221,6 +221,12 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
       values.push({book,value,source,confidence,key:normal(value)});
     }
     if(audio&&['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'].includes(field)){
+      if(field==='title'){
+        const workTitle=book.embeddedMetadata?.workTitle;
+        if(present(workTitle)&&normal(workTitle)!==normal(value)){
+          values.push({book,value:workTitle,source:'embedded',confidence:'high',key:normal(workTitle),workHint:true});
+        }
+      }
       const onlineValue=book.onlineMetadataMatch?.fields?.[field];
       if(present(onlineValue)&&normal(onlineValue)!==normal(value)){
         values.push({
