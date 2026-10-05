@@ -370,3 +370,85 @@ export function synchronizeLocalMetadata<T extends SynchronizableBook>(books:T[]
   }
   return {books:next,updated,audioGroups:audioGroups.size};
 }
+
+
+export async function synchronizeLocalMetadataCooperative<T extends SynchronizableBook>(
+  books:T[],
+  options:{shouldContinue?:()=>boolean;batchSize?:number}={},
+):Promise<{books:T[];updated:number;audioGroups:number}>{
+  const shouldContinue=options.shouldContinue||(()=>true);
+  const batchSize=Math.max(8,Math.min(256,Math.trunc(options.batchSize||48)));
+  let operations=0;
+  const yieldIfNeeded=async(force=false)=>{
+    operations+=1;
+    if(!force&&operations%batchSize!==0)return;
+    await new Promise<void>(resolve=>setTimeout(resolve,0));
+  };
+
+  let next=books.slice();
+  const audioGroups=new Map<string,number[]>();
+  const audioKeys=audioWorkGroupKeys(next);
+  next.forEach((book,index)=>{
+    if(book.format!=='Audio')return;
+    const key=audioKeys.get(book.uri)||('audio-file:'+book.uri);
+    const indexes=audioGroups.get(key)||[];
+    indexes.push(index);
+    audioGroups.set(key,indexes);
+  });
+
+  let updated=0;
+  for(const indexes of audioGroups.values()){
+    if(!shouldContinue())break;
+    const group=indexes.map(index=>next[index]);
+    const canonical=canonicalMetadataForBooks(group);
+    for(const index of indexes){
+      if(!shouldContinue())break;
+      const before=next[index];
+      const after=applyCanonical(before,canonical,indexes.length);
+      if(syncMateriallyChanged(before,after)){next[index]=after;updated++;}
+      await yieldIfNeeded();
+    }
+  }
+
+  if(shouldContinue()){
+    const exactWorks=new Map<string,number[]>();
+    next.forEach((book,index)=>{
+      if(!book.title||!book.author)return;
+      const key=normal(book.title)+'|'+normal(book.author);
+      if(!key.replace(/\|/g,''))return;
+      const indexes=exactWorks.get(key)||[];
+      indexes.push(index);
+      exactWorks.set(key,indexes);
+    });
+    for(const indexes of exactWorks.values()){
+      if(!shouldContinue())break;
+      if(indexes.length<2)continue;
+      const group=indexes.map(index=>next[index]);
+      const canonical=canonicalMetadataForBooks(group);
+      for(const index of indexes){
+        if(!shouldContinue())break;
+        const before=next[index],after:any={...before};
+        let changed=false;
+        for(const field of ['series','seriesNumber','genre','publishedYear','description'] as SyncField[]){
+          const value=(canonical as any)[field];
+          if(!present((after as any)[field])&&present(value)){
+            (after as any)[field]=value;
+            after.metadataProvenance={...(after.metadataProvenance||{}),[field]:canonical.provenance[field]||'path'};
+            after.metadataFieldConfidence={...(after.metadataFieldConfidence||{}),[field]:canonical.confidence[field]||'low'};
+            changed=true;
+          }
+        }
+        if(changed){
+          after.workKey=logicalWorkKey(after);
+          after.editionKey=editionKey(after,after.format);
+          next[index]=after;
+          updated+=1;
+        }
+        await yieldIfNeeded();
+      }
+    }
+  }
+
+  await yieldIfNeeded(true);
+  return {books:next,updated,audioGroups:audioGroups.size};
+}
