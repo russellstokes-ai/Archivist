@@ -48,8 +48,10 @@ const {buildAndroidAutoLibrary,persistAndroidAutoLibrary,consumeAndroidAutoProgr
     },
   ];
 
-  const snapshot=buildAndroidAutoLibrary(works,{'audio-dir:Books:Dune':{uri:'content://books/dune/02.mp3',seconds:431.25}});
-  assert.equal(snapshot.version,2);
+  const snapshot=buildAndroidAutoLibrary(works,{'audio-dir:Books:Dune':{uri:'content://books/dune/02.mp3',seconds:431.25}},{workKey:'audio-dir:Books:Dune',updatedAt:9876});
+  assert.equal(snapshot.version,3);
+  assert.equal(snapshot.resumeWorkKey,'audio-dir:Books:Dune');
+  assert.equal(snapshot.resumeUpdatedAt,9876);
   assert.deepEqual(snapshot.works.map(work=>work.title),['Dune','Foundation']);
   assert.equal(snapshot.works[0].id,'work:audio-dir:Books:Dune');
   assert.equal(snapshot.works[0].key,'audio-dir:Books:Dune');
@@ -61,10 +63,11 @@ const {buildAndroidAutoLibrary,persistAndroidAutoLibrary,consumeAndroidAutoProgr
   assert.equal(snapshot.works[1].tracks[0].uri,'file:///offline/foundation.m4b');
   assert.equal(JSON.stringify(snapshot).includes('token'),false);
 
-  await persistAndroidAutoLibrary(works,{'audio-dir:Books:Dune':{uri:'content://books/dune/02.mp3',seconds:431.25}});
+  await persistAndroidAutoLibrary(works,{'audio-dir:Books:Dune':{uri:'content://books/dune/02.mp3',seconds:431.25}},{workKey:'audio-dir:Books:Dune',updatedAt:9876});
   assert.equal(made.length,1);
   assert.equal(writes[0][0],'file:///app/Documents/android-auto/library.json');
   assert.equal(JSON.parse(writes[0][1]).works[0].resumeSeconds,431.25);
+  assert.equal(JSON.parse(writes[0][1]).resumeWorkKey,'audio-dir:Books:Dune');
 
   const progressUri='file:///app/Documents/android-auto/progress.json';
   reads.set(progressUri,JSON.stringify({version:1,workKey:'audio-dir:Books:Dune',trackUri:'content://books/dune/02.mp3',seconds:499.5,complete:false,updatedAt:123}));
