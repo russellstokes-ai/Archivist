@@ -1186,11 +1186,37 @@ function Client() {
     return()=>bookOpenAnim.removeListener(listener);
   },[bookOpenAnim]);
 
+  const livingBookMotionGeneration=useRef(0);
   useEffect(()=>{
-    const motion=playerMotionState({playing:playerVisualPlaying,visible:playbackVisible,reduceMotion});
+    const generation=++livingBookMotionGeneration.current;
+
+    // When the player is not on screen there is no reason to preserve an
+    // in-flight visual frame. Normalising here prevents a half-closed hinge or
+    // half-turned page from being resurrected when Now is opened again.
+    if(!playbackVisible){
+      bookOpenAnim.stopAnimation();
+      pageTurnAnim.stopAnimation();
+      skipTurnAnim.stopAnimation();
+      bookOpenAnim.setValue(0);
+      bookOpenProgressRef.current=0;
+      pageTurnAnim.setValue(0);
+      skipTurnAnim.setValue(0);
+      setSkipTurning(false);
+      return;
+    }
+
+    // Every visible player session starts with a clean page layer. Playback may
+    // already be active in the background, but the visual book always re-enters
+    // from a deterministic closed state rather than an abandoned native frame.
+    pageTurnAnim.stopAnimation();
+    skipTurnAnim.stopAnimation();
+    pageTurnAnim.setValue(0);
+    skipTurnAnim.setValue(0);
+    setSkipTurning(false);
+
+    const motion=playerMotionState({playing:playerVisualPlaying,visible:true,reduceMotion});
     const target=motion==='closed'?0:1;
     const current=Math.max(0,Math.min(1,bookOpenProgressRef.current));
-    const distance=Math.abs(target-current);
     const baseDuration=motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs;
     const hingeDuration=livingBookHingeDuration(current,target,baseDuration,reduceMotion);
 
@@ -1202,28 +1228,31 @@ function Client() {
       easing:Easing.inOut(Easing.cubic),
       useNativeDriver:true,
     }).start(({finished})=>{
+      if(generation!==livingBookMotionGeneration.current)return;
       if(finished&&target===0){
+        bookOpenProgressRef.current=0;
         pageTurnAnim.setValue(0);
         skipTurnAnim.setValue(0);
       }
     });
 
     if(motion!=='turning'){
-      // Do not snap a visible half-turned leaf back to zero. The leaf gate
-      // fades it out with the closing hinge, then the closed callback resets it.
-      return()=>{bookOpenAnim.stopAnimation();};
+      return()=>{if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();};
     }
 
-    if(current<.88)pageTurnAnim.setValue(0);
     const stop=startPageTurnLoop({
       firstDelay:hingeDuration+PLAYER_MOTION_TIMING.firstTurnDelayMs,
       restDelay:PLAYER_MOTION_TIMING.pageRestMs,
-      reset:()=>pageTurnAnim.setValue(0),
-      animate:done=>Animated.timing(pageTurnAnim,{toValue:1,duration:PLAYER_MOTION_TIMING.pageTurnMs,easing:Easing.bezier(.22,.72,.2,1),useNativeDriver:true,isInteraction:false}).start(({finished})=>done(finished)),
+      reset:()=>{if(generation===livingBookMotionGeneration.current)pageTurnAnim.setValue(0);},
+      animate:done=>{
+        if(generation!==livingBookMotionGeneration.current){done(false);return;}
+        Animated.timing(pageTurnAnim,{toValue:1,duration:PLAYER_MOTION_TIMING.pageTurnMs,easing:Easing.bezier(.22,.72,.2,1),useNativeDriver:true,isInteraction:false})
+          .start(({finished})=>done(finished&&generation===livingBookMotionGeneration.current));
+      },
       stop:()=>pageTurnAnim.stopAnimation(),
-      preserveCurrentOnStop:true,
+      preserveCurrentOnStop:false,
     });
-    return()=>{stop();bookOpenAnim.stopAnimation();};
+    return()=>{stop();if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();};
   },[bookOpenAnim,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
