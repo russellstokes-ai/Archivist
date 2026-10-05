@@ -31,7 +31,7 @@ const fileInfo = new Map();
 const fileReads = [];
 const infoReads = [];
 Module._load = function(request, parent, isMain) {
-  if (request === 'react-native') return {Platform: {OS: 'android'}};
+  if (request === 'react-native') return {Platform: {OS: 'android'}, NativeModules: {}};
   if (request === 'expo-file-system/legacy') return {
     StorageAccessFramework: saf,
     async readAsStringAsync(uri) { fileReads.push(uri); return fileText.get(uri) || ''; },
@@ -156,17 +156,17 @@ assert.equal(previews[0].state, 'review');
   assert.equal(dottedScan.books.length,1);
   assert.equal(dottedScan.books[0].title,'The Hobbit');
 
-  // Local reading is deliberately CBZ/ZIP only. CBR is unsupported and CBT
-  // remains server-reader-only, so neither should appear as broken local books.
+  // Local reader support now includes CBZ/CBR/CBT, so scanner parity must
+  // expose all three rather than silently dropping archives the reader can open.
   const comicRoot='content://root/tree/primary:Comics/document/primary:Comics';
   const cbz=comicRoot+'%2FSupported.cbz';
-  const cbr=comicRoot+'%2FUnsupported.cbr';
-  const cbt=comicRoot+'%2FRemoteOnly.cbt';
+  const cbr=comicRoot+'%2FSupported.cbr';
+  const cbt=comicRoot+'%2FSupported.cbt';
   saf.dirs.set(comicRoot,[cbz,cbr,cbt]);
   const comicScan=await scanLocalFolders([{id:comicRoot,uri:comicRoot,name:'Comics',status:'Ready',itemCount:0}]);
-  assert.equal(comicScan.books.length,1);
-  assert.equal(comicScan.books[0].uri,cbz);
-  assert.equal(comicScan.books[0].format,'Comic');
+  assert.equal(comicScan.books.length,3);
+  assert.deepEqual(comicScan.books.map(item=>item.uri),[cbz,cbr,cbt]);
+  assert.equal(comicScan.books.every(item=>item.format==='Comic'),true);
 
   // Multi-track audiobooks may use one book-level OPF/cover. Parse that OPF once,
   // then reuse it for every track instead of doing repeated I/O.
