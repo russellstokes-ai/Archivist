@@ -9,9 +9,12 @@ const loop=fs.readFileSync(__dirname+'/pageTurnLoop.ts','utf8');
 assert.ok(app.includes('const bookOpenProgressRef=useRef(0)'),'player must remember the current normalized hinge position');
 assert.ok(app.includes("bookOpenAnim.addListener(({value})=>{bookOpenProgressRef.current=value;})"),'hinge state must track the live native animation value');
 assert.ok(app.includes('livingBookHingeDuration(current,target,baseDuration,reduceMotion)'),'rapid play/pause reversals must animate only the remaining hinge travel');
-assert.ok(app.includes('preserveCurrentOnStop:true'),'pause must not snap a visible turning leaf backwards');
-assert.ok(app.includes("if(finished&&target===0)")&&app.includes('pageTurnAnim.setValue(0)'),'turn state must reset only after the cover is physically closed');
-assert.ok(loop.includes('preserveCurrentOnStop?:boolean')&&loop.includes('if(!input.preserveCurrentOnStop)input.stop()'),'ambient loop must support non-snapping cancellation');
+assert.ok(app.includes('preserveCurrentOnStop:false'),'player lifecycle changes must stop abandoned page turns instead of preserving phantom leaves');
+assert.ok(app.includes("if(!playbackVisible)")&&app.includes('bookOpenAnim.setValue(0)')&&app.includes('bookOpenProgressRef.current=0')&&app.includes('pageTurnAnim.setValue(0)'),'leaving the Live Player must normalise hinge and page state before re-entry');
+assert.ok(app.includes('const livingBookMotionGeneration=useRef(0)'),'stale native animation callbacks must be generation-guarded');
+assert.ok(app.includes('generation!==livingBookMotionGeneration.current'),'abandoned Living Book callbacks must never mutate a new visible session');
+assert.ok(app.includes("if(finished&&target===0)")&&app.includes('pageTurnAnim.setValue(0)'),'visible pause must still end in a clean closed state');
+assert.ok(loop.includes('preserveCurrentOnStop?:boolean')&&loop.includes('if(!input.preserveCurrentOnStop)input.stop()'),'ambient loop must support deterministic cancellation for player lifecycle changes');
 
 assert.ok(artwork.includes('baseSpread')&&artwork.includes('leafEnvelope'),'static book layers and turning leaves must use separate clipping domains');
 assert.ok(artwork.includes("overflow:'visible'")&&artwork.includes('leafEnvelopePad'),'turning pages must have an oversized visible animation envelope');
