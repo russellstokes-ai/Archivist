@@ -15,6 +15,9 @@ assert.ok(app.includes("const livingBookVisualWorkRef=useRef('')")&&app.includes
 assert.ok(app.includes('if(workChanged)')&&app.includes("livingBookVisualWorkRef.current=livingBookWorkKey"),'switching audiobooks must reset the old cover/leaf frame without reopening on ordinary chapter changes');
 assert.ok(app.includes('generation!==livingBookMotionGeneration.current'),'stale animation callbacks from the previous screen session must be ignored');
 assert.ok(app.includes('preserveCurrentOnStop:false'),'page turn cancellation must not preserve a phantom leaf across player lifecycle changes');
+assert.ok(app.includes("const ambientPageLoopStopRef=useRef<(()=>void)|null>(null)")&&app.includes('ambientPageLoopStopRef.current?.();'),'manual skip must take exclusive ownership from the ambient page loop');
+assert.ok(app.includes("bookOpenProgressRef.current<.95"),'manual page skips must not animate beside a partially opened cover');
+assert.ok(app.includes('setAmbientPageLoopEpoch(value=>value+1)'),'ambient turning must restart from a fresh schedule only after a manual skip completes');
 
 const visibleReset=app.indexOf('// Every visible player session starts with a clean page layer.');
 const timing=app.indexOf('Animated.timing(bookOpenAnim,{',visibleReset);
