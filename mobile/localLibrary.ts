@@ -17,8 +17,12 @@ export type LocalBook = {
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
-  metadataSource?: 'path' | 'sidecar' | 'manual';
+  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded';
   coverUri?: string;
+  workTitleHint?: string;
+  trackTitle?: string;
+  trackNumber?: number;
+  discNumber?: number;
 };
 
 export type LocalSortPreview = {
@@ -55,7 +59,7 @@ export type LocalFolder = {
 };
 
 export type LocalScanProgress = {
-  phase: 'discovering' | 'complete';
+  phase: 'discovering' | 'identifying' | 'complete';
   currentFolder: string;
   entriesVisited: number;
   found: number;
@@ -151,10 +155,25 @@ type NativeLibraryScanBatch = {
   lastError?: string;
 };
 
+type NativeAudioMetadata = {
+  uri: string;
+  title?: string;
+  album?: string;
+  artist?: string;
+  albumArtist?: string;
+  author?: string;
+  genre?: string;
+  track?: string;
+  disc?: string;
+  year?: string;
+  duration?: string;
+  error?: string;
+};
 type NativeLibraryScanner = {
   startTreeScan: (uri: string) => Promise<string>;
   readTreeScanBatch: (scanId: string, limit: number) => Promise<NativeLibraryScanBatch>;
   cancelTreeScan: (scanId: string) => Promise<boolean>;
+  readAudioMetadataBatch?: (uris: string[]) => Promise<NativeAudioMetadata[]>;
 };
 
 const nativeLibraryScanner = (NativeModules.ArchivistLibrary || null) as NativeLibraryScanner | null;
@@ -246,6 +265,21 @@ async function scanLocalFoldersNative(
     visitedBeforeFolder += lastVisited;
     entriesVisited = visitedBeforeFolder;
 
+    const audioMetadataByUri = new Map<string, NativeAudioMetadata>();
+    const audioItems = pending.filter(item => item.format === 'Audio');
+    if (nativeLibraryScanner.readAudioMetadataBatch && audioItems.length) {
+      for (let offset = 0; offset < audioItems.length; offset += 48) {
+        report('identifying', folder.name);
+        try {
+          const metadata = await nativeLibraryScanner.readAudioMetadataBatch(audioItems.slice(offset, offset + 48).map(item => item.uri));
+          for (const item of metadata || []) audioMetadataByUri.set(item.uri, item);
+        } catch {
+          // Embedded tags are evidence, not a reason to fail the scan.
+        }
+        await yieldToUi();
+      }
+    }
+
     const mediaCountByParent = new Map<string, number>();
     const audioOnlyByParent = new Map<string, boolean>();
     for (const item of pending) {
@@ -257,6 +291,18 @@ async function scanLocalFoldersNative(
     for (let index = 0; index < pending.length; index += 1) {
       const item = pending[index];
       let identity = inferLocalBookMetadata(item.uri, item.format);
+      const embedded = item.format === 'Audio' ? audioMetadataByUri.get(item.uri) : undefined;
+      const embeddedAuthor = embedded?.albumArtist || embedded?.author || embedded?.artist || '';
+      const oneFileWork = (mediaCountByParent.get(item.parentId) || 0) === 1;
+      const embeddedWorkTitle = embedded?.album || (oneFileWork ? embedded?.title : '') || '';
+      if (embeddedWorkTitle || embeddedAuthor || embedded?.genre || embedded?.year) {
+        identity = applyLocalMetadata(identity, {
+          ...(embeddedWorkTitle ? {title: embeddedWorkTitle} : {}),
+          ...(embeddedAuthor ? {author: embeddedAuthor} : {}),
+          ...(embedded?.genre ? {genre: embedded.genre} : {}),
+          ...(metadataYear(embedded?.year) ? {publishedYear: metadataYear(embedded?.year)} : {}),
+        }, 'embedded');
+      }
       const sidecars = sidecarsByParent.get(item.parentId);
       const stem = fileStem(item.name).toLowerCase();
       const genericAllowed = (mediaCountByParent.get(item.parentId) || 0) === 1 || !!audioOnlyByParent.get(item.parentId);
@@ -289,6 +335,10 @@ async function scanLocalFoldersNative(
         coverShape: identity.coverShape,
         metadataSource: identity.metadataSource,
         coverUri: coversByParent.get(item.parentId),
+        workTitleHint: embedded?.album || undefined,
+        trackTitle: embedded?.title || undefined,
+        trackNumber: metadataIndex(embedded?.track),
+        discNumber: metadataIndex(embedded?.disc),
       });
 
       if (index % 80 === 79) {
@@ -532,6 +582,18 @@ export async function removeLocalSortCopies(history: LocalSortHistory): Promise<
     }
   }
   return {copied: removed, failed};
+}
+
+function metadataIndex(value?: string) {
+  const match = String(value || '').match(/\d+/);
+  const number = match ? Number(match[0]) : 0;
+  return number > 0 ? number : undefined;
+}
+
+function metadataYear(value?: string) {
+  const match = String(value || '').match(/(?:^|\D)(\d{4})(?:\D|$)/);
+  const year = match ? Number(match[1]) : 0;
+  return year >= 1000 && year <= new Date().getFullYear() + 2 ? year : undefined;
 }
 
 function extension(uri: string) {
