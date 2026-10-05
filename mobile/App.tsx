@@ -72,7 +72,7 @@ import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
-import {synchronizeLocalMetadata} from './metadataSync';
+import {synchronizeLocalMetadataCooperative} from './metadataSync';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -2483,7 +2483,7 @@ function Client() {
       },
     }).catch(error=>{recordLibraryRefreshWarning('Embedded metadata',error);return null;});
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
-    const synchronized=synchronizeLocalMetadata(enriched.books).books as LocalBook[];
+    const synchronized=(await synchronizeLocalMetadataCooperative(enriched.books,{shouldContinue:()=>scanCommitGate.isCurrent(generation)})).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],synchronized).map(book=>({...book,source:'local' as const})));
     await setPersistedJSON(localCatalogKey,synchronized).catch(()=>undefined);
   }
@@ -2520,7 +2520,7 @@ function Client() {
       deleteAsync,
     },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(error=>{recordLibraryRefreshWarning('Book cover cache',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return;
-    const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
+    const finalBooks=(await synchronizeLocalMetadataCooperative(cachedCovers?.books||enriched.books,{shouldContinue:()=>scanCommitGate.isCurrent(generation)})).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
     await Promise.all([
       setPersistedJSON(localCatalogKey,finalBooks),
@@ -2564,7 +2564,7 @@ function Client() {
       deleteAsync,
     },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(error=>{recordLibraryRefreshWarning('Comic cover cache',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return;
-    const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
+    const finalBooks=(await synchronizeLocalMetadataCooperative(cachedCovers?.books||enriched.books,{shouldContinue:()=>scanCommitGate.isCurrent(generation)})).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
     await Promise.all([
       setPersistedJSON(localCatalogKey,finalBooks),
@@ -2601,7 +2601,7 @@ function Client() {
     if(!scanCommitGate.isCurrent(generation))return;
     const currentStored=Array.isArray(stored)?stored:baseBooks;
     const patched=applyCoverEnrichment(currentStored,enriched.books);
-    const synchronized=synchronizeLocalMetadata(patched).books as LocalBook[];
+    const synchronized=(await synchronizeLocalMetadataCooperative(patched,{shouldContinue:()=>scanCommitGate.isCurrent(generation)})).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],synchronized).map(book=>({...book,source:'local' as const})));
     if(patched!==currentStored||synchronized!==patched)await setPersistedJSON(localCatalogKey,synchronized).catch(()=>undefined);
   }
