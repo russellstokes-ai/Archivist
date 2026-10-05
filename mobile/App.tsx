@@ -3078,8 +3078,7 @@ function Client() {
       serverWorkId: work.originWorkId,
     };
     setPlaying(display);
-    setLastPlaying(display);
-    void setPersistedJSON(lastPlayingKey,display).catch(()=>undefined);
+    void persistNowSession('audio',display,seconds,{trackUri:track.uri,wasPlaying:true}).catch(()=>undefined);
     setLiveMode('player');
     setActiveTab('now');
 
@@ -3118,7 +3117,7 @@ function Client() {
     player.play();
   }
 
-  async function playLocalWork(work: LocalWork) {
+  async function playLocalWork(work: LocalWork, resume?:{trackUri?:string;seconds?:number}) {
     work=orderedLocalWork(work);
     if (!work.available || !work.tracks.length) {
       setError('This audiobook is currently unavailable.');
@@ -3127,15 +3126,18 @@ function Client() {
     try {
       await controller.stop();
       const saved = localWorkProgress[work.key];
+      const requestedIndex=resume?.trackUri?work.tracks.findIndex(track=>track.uri===resume.trackUri):-1;
       const savedIndex = saved && !saved.complete ? work.tracks.findIndex(track => track.uri === saved.uri) : -1;
-      const index = savedIndex >= 0 ? savedIndex : 0;
-      await loadLocalWorkTrack(work, index, saved && !saved.complete ? saved.seconds : 0);
+      const index = requestedIndex>=0?requestedIndex:(savedIndex >= 0 ? savedIndex : 0);
+      const savedSeconds=saved&&!saved.complete&&saved.uri===work.tracks[index]?.uri?saved.seconds:0;
+      const seconds=resume?.seconds!==undefined?Math.max(0,Math.max(resume.seconds,savedSeconds)):savedSeconds;
+      await loadLocalWorkTrack(work, index, seconds);
     } catch (e) {
       if ((e as Error).message !== 'Playback changed.') setError((e as Error).message);
     }
   }
 
-  async function playBook(book: Book) {
+  async function playBook(book: Book, resumeSeconds?:number) {
     if (book.source!=='server') {
       if (book.localWorkKey) {
         const work = localWorks.find(item => item.key === book.localWorkKey);
@@ -3147,13 +3149,13 @@ function Client() {
         loadCancel.current?.();
         await controller.stop();
         setPlaying(book);
-        setLastPlaying(book);
-        void setPersistedJSON(lastPlayingKey,book).catch(()=>undefined);
+        const savedSeconds=Math.max(0,resumeSeconds??localProgress[book.uri]??0);
+        void persistNowSession('audio',book,savedSeconds,{trackUri:book.uri,wasPlaying:true}).catch(()=>undefined);
         setLiveMode('player');
         setActiveTab('now');
         player.replace({uri: book.uri});
         player.setActiveForLockScreen(true, {title: book.title, albumTitle: 'Archivist'});
-        if (localProgress[book.uri]) await player.seekTo(localProgress[book.uri]);
+        if (savedSeconds) await player.seekTo(savedSeconds);
         player.play();
       } catch (e) {
         setError((e as Error).message);
@@ -3168,11 +3170,11 @@ function Client() {
     setError('');
     try {
       setPlaying(book);
-      setLastPlaying(book);
-      void setPersistedJSON(lastPlayingKey,book).catch(()=>undefined);
+      void persistNowSession('audio',book,Math.max(0,resumeSeconds||0),{trackId:book.id,wasPlaying:true}).catch(()=>undefined);
       setLiveMode('player');
       setActiveTab('now');
       await controller.open(book.id);
+      if(resumeSeconds!==undefined&&resumeSeconds>controller.state.seconds+1)await controller.seek(resumeSeconds);
       const order=trackOrders[playbackWorkKey(book)]?.map(Number).filter(Number.isFinite);
       if(order?.length)controller.setTrackOrder(order);
     } catch (e) {
@@ -3312,7 +3314,7 @@ function Client() {
     }catch{}
   }
 
-  function openBook(book: Book) {
+  function openBook(book: Book, resumePage?:number) {
     if (!book.available) {
       setError('This file is currently unavailable.');
       return;
@@ -3320,18 +3322,18 @@ function Client() {
     const generation=++readerOpenGeneration.current;
     setError('');
     setReaderLoadError('');
-    setReaderPage(book.uri ? (localReadingProgress[book.uri]||0) : 0);setReaderCount(0);setReaderSelection('');setReaderSearch('');setReaderSearchCount(null);setReaderRequestedPage(null);setReaderToolsOpen(false);setReaderChromeVisible(true);
+    const initialPage=Math.max(0,Math.floor(resumePage??(book.uri ? (localReadingProgress[book.uri]||0) : 0)));
+    setReaderPage(initialPage);setReaderCount(0);setReaderSelection('');setReaderSearch('');setReaderSearchCount(null);setReaderRequestedPage(null);setReaderToolsOpen(false);setReaderChromeVisible(true);
     if (book.format === 'Audio') playBook(book);
     else if (book.source!=='server') {
       if (!book.uri) return;
       setReading(book);
-      setLastReading(book);
-      void setPersistedJSON(lastReadingKey,book).catch(()=>undefined);
+      void persistNowSession('reader',book,initialPage,{wasPlaying:false}).catch(()=>undefined);
       setLiveMode('reader');
       setActiveTab('now');
       setReaderLoading(true);
       setLocalReader(null);
-      buildLocalReaderDocument(book.uri, book.format, book.title, localReadingProgress[book.uri] || 0)
+      buildLocalReaderDocument(book.uri, book.format, book.title, initialPage)
         .then(document=>{if(readerOpenGeneration.current===generation)setLocalReader(document);else void document.dispose?.();})
         .catch(e => {if(readerOpenGeneration.current===generation){setReaderLoadError(e.message);setError(e.message);}})
         .finally(() => {if(readerOpenGeneration.current===generation)setReaderLoading(false);});
@@ -3339,8 +3341,7 @@ function Client() {
     else {
       if(!session){setError('Server is unavailable. Download this title for offline use or reconnect in Settings.');return;}
       setReading(book);
-      setLastReading(book);
-      void setPersistedJSON(lastReadingKey,book).catch(()=>undefined);
+      void persistNowSession('reader',book,initialPage,{wasPlaying:false}).catch(()=>undefined);
       setReaderLoading(true);
       setLiveMode('reader');
       setActiveTab('now');
