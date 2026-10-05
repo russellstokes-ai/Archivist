@@ -30,7 +30,8 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, pickLocalFolder, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalWorkSortPreview, applyLocalWorkSortCopies, previewLocalWorkSort} from './localWorkSort';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {enrichLocalCatalogue, LocalEnrichmentCache, LocalEnrichmentProgress, publishableLocalWork} from './localEnrichment';
@@ -673,7 +674,7 @@ function Client() {
   const [editGenre,setEditGenre]=useState('');
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
-  const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
+  const [localMovePreviews,setLocalMovePreviews]=useState<LocalWorkSortPreview[]>([]);
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
@@ -2197,13 +2198,13 @@ function Client() {
   }
 
   function previewLocalSortBatch() {
-    const previews = previewLocalSort(localBooks.filter(book => book.uri) as LocalBook[], sortTemplate);
+    const previews = previewLocalWorkSort(allPhoneWorks, sortTemplate);
     setLocalMovePreviews(previews);
     const ready = previews.filter(item => item.state === 'ready').length;
     const conflicts = previews.filter(item => item.state === 'conflict').length;
     const review = previews.filter(item => item.state === 'review').length;
     const same = previews.filter(item => item.state === 'same').length;
-    setMoveStatus(`${ready} ready; ${review} need metadata review; ${conflicts} conflicts; ${same} already organised.`);
+    setMoveStatus(`${ready} works ready; ${review} need metadata review; ${conflicts} conflicts; ${same} already organised.`);
   }
 
   async function applyLocalSortBatch() {
@@ -2216,7 +2217,7 @@ function Client() {
     setError('');
     setMoveStatus('Copying organised files...');
     try {
-      const result = await applyLocalSortCopies(ready);
+      const result = await applyLocalWorkSortCopies(ready);
       const entry: LocalSortHistory = {id: String(Date.now()), createdAt: new Date().toISOString(), copied: result.copied, failed: result.failed};
       const history = [entry, ...localSortHistory].slice(0, 20);
       setLocalSortHistory(history);
@@ -4408,14 +4409,14 @@ function Client() {
             ['format-author-title','Format / Author / Title'],
           ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
-        <Button label="Preview visible local items" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
+        <Button label="Preview local works" disabled={localBooks.length===0} tone="quiet" onPress={previewLocalSortBatch}/>
         <Button label="Copy organised files" disabled={busy || localMovePreviews.every(item=>item.state!=='ready')} onPress={()=>void applyLocalSortBatch()}/>
         {moveStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{moveStatus}</Text>:null}
         {localMovePreviews.slice(0,20).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
           <Text style={{color:p.ink,fontWeight:'700'}}>{item.title}</Text>
-          <Text style={{color:p.muted}}>From: {item.from}</Text>
+          <Text style={{color:p.muted}}>{item.files} file{item.files===1?'':'s'} · {item.author||'Unknown author'}</Text>
           <Text style={{color:item.state==='conflict'?p.danger:item.state==='review'?p.sage:p.muted}}>To: {item.to}</Text>
-          <Text style={{color:item.state==='review'?p.sage:p.muted}}>{item.state==='review'?'Review metadata before organising':item.state}</Text>
+          <Text style={{color:item.state==='review'?p.sage:p.muted}}>{item.state==='review'?(item.reason||'Review metadata before organising'):item.state==='conflict'?(item.reason||'Resolve destination conflict'):item.state}</Text>
         </View>)}
         {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed moves.</Text>:null}
         {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
