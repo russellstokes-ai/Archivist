@@ -10,7 +10,7 @@ assert.ok(source.includes('if(!scanCommitGate.isCurrent(generation))return null'
 const finalise=source.slice(source.indexOf('async function finaliseLocalScan'),source.indexOf('function scanNotice'));
 assert.ok(finalise.indexOf('setPersistedJSONArrayCooperative(localCatalogKey,result.books')<finalise.indexOf('setLocalBooks(nextBooks)'),'safe discovery baseline must persist cooperatively before it is published to the UI');
 assert.ok(source.includes("status:'Ready to prepare'")&&source.includes('setLocalFolders(folders)'),'new folder must appear immediately in setup without starting preparation');
-assert.ok(source.includes("status:'Scan failed · tap Refresh'")&&source.includes('scanFailureCopy(localBooks.length>0)'),'scan failures must preserve recoverable source state and explain that existing content remains safe');
+assert.ok(source.includes('setLocalFolderNotice(scanFailureCopy(localBooks.length>0))')&&source.includes("const stagedFolder:LocalFolder={...picked,status:'Ready to prepare'}"),'scan failures must preserve configured sources and explain that existing content remains safe');
 assert.ok(source.includes('{LocalScanStatus()}'),'Shelf/Library must expose a stable scan state rather than silently changing underneath the user');
 assert.ok(source.includes("setSpaces([...new Set([...result.books.map(book=>book.space),...sources.map(source=>source.space)].filter(Boolean))])"),'local scan must not erase server-space choices');
 assert.ok(source.includes('const autoLocalScanAttempted=useRef(false)'),'startup scan recovery must be one-shot');
