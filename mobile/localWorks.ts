@@ -1,5 +1,5 @@
 import {decodedPathParts, logicalWorkKey} from './libraryIntelligence';
-import {canonicalMetadataForBooks} from './metadataSync';
+import {audioWorkGroupKeys, canonicalMetadataForBooks} from './metadataSync';
 import {LocalBook} from './localLibrary';
 
 export type LocalWork = {
@@ -28,9 +28,10 @@ export type LocalWork = {
 export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   const groups = new Map<string, LocalBook[]>();
   const order: string[] = [];
+  const audioKeys=audioWorkGroupKeys(books);
 
   for (const book of books) {
-    const key = localWorkKey(book);
+    const key = localWorkKey(book,audioKeys);
     if (!groups.has(key)) {
       groups.set(key, []);
       order.push(key);
@@ -75,15 +76,9 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   });
 }
 
-function localWorkKey(book: LocalBook) {
+function localWorkKey(book: LocalBook,audioKeys:Map<string,string>) {
   if (book.format !== 'Audio') return 'asset:' + book.uri;
-  const parts = decodedPathParts(book.uri);
-  const dirs = parts.slice(0, -1).filter(Boolean);
-  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
-  if (!dirs.length) return 'audio-file:' + book.uri;
-  const parent = dirs[dirs.length - 1];
-  if (isLibraryRoot(parent)) return 'audio-file:' + book.uri;
-  return 'audio-dir:' + book.space + ':' + dirs.join('/');
+  return audioKeys.get(book.uri)||('audio-file:'+book.uri);
 }
 
 function audioFolderTitle(uri: string) {
