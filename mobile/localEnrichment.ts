@@ -41,7 +41,7 @@ export type LocalEnrichmentDelta={
 };
 
 type Dependencies={
-  lookup?:(input:{title:string;author?:string;series?:string;publishedYear?:number;isbn?:string},minimum?:number)=>Promise<MetadataMatch|null>;
+  lookup?:(input:{title:string;author?:string;series?:string;publishedYear?:number;isbn?:string;identifiers?:string[]},minimum?:number)=>Promise<MetadataMatch|null>;
   extractAudioArtwork?:(uri:string)=>Promise<{uri:string;mimeType:string;width:number;height:number}|null>;
   cachePortrait?:(key:string,uri:string)=>Promise<{uri:string;width:number;height:number;aspectRatio:number}>;
   now?:()=>Date;
@@ -61,8 +61,31 @@ export function localWorkFingerprint(work:Pick<LocalWork,'tracks'|'format'|'spac
   return hash(work.format+'|'+work.space+'|'+work.tracks.map(track=>track.uri+'@'+(track.assetSignature||'unversioned')).sort().join('|'));
 }
 
-export function localWorkQuerySignature(work:Pick<LocalWork,'title'|'author'|'series'|'publishedYear'>){
-  return [normal(work.title),normal(work.author),normal(work.series),work.publishedYear||''].join('|');
+function workIdentifiers(work:Pick<LocalWork,'tracks'>){
+  const values:string[]=[];
+  for(const track of work.tracks){
+    if(track.isbn)values.push(track.isbn);
+    for(const value of track.identifiers||[])values.push(value);
+  }
+  return [...new Set(values.map(clean).filter(Boolean))].sort();
+}
+
+function workIsbn(work:Pick<LocalWork,'tracks'>){
+  const values=workIdentifiers(work);
+  return values.find(value=>{
+    const normalized=value.toUpperCase().replace(/[^0-9X]/g,'');
+    return normalized.length===10||normalized.length===13;
+  });
+}
+
+export function localWorkQuerySignature(work:Pick<LocalWork,'title'|'author'|'series'|'publishedYear'|'tracks'>){
+  return [
+    normal(work.title),
+    normal(work.author),
+    normal(work.series),
+    work.publishedYear||'',
+    ...workIdentifiers(work).map(normal),
+  ].join('|');
 }
 
 export function publishableLocalWork(work:Pick<LocalWork,'title'|'needsReview'|'coverUri'>){
@@ -209,7 +232,15 @@ export async function enrichLocalCatalogue(
     let match:MetadataMatch|null=null;
     if(needsOnline&&resolvedTitle&&resolvedTitle.toLowerCase()!=='untitled'){
       try{
-        match=await lookup({title:resolvedTitle,author:resolvedAuthor||undefined,series:resolvedSeries||undefined,publishedYear:resolvedYear},0.86);
+        const identifiers=workIdentifiers(work);
+        match=await lookup({
+          title:resolvedTitle,
+          author:resolvedAuthor||undefined,
+          series:resolvedSeries||undefined,
+          publishedYear:resolvedYear,
+          isbn:workIsbn(work),
+          identifiers:identifiers.length?identifiers:undefined,
+        },0.86);
       }catch{}
       await delay(lookupDelayMs);
     }
