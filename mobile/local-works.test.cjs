@@ -69,8 +69,14 @@ const review = groupLocalWorks([
   book(5,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F01.mp3',{needsReview:true,reviewReason:'Check author'}),
   book(6,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F02.mp3'),
 ]);
-assert.equal(review[0].needsReview,true);
-assert.equal(review[0].reviewReason,'Check author');
+assert.equal(review[0].needsReview,false,'resolved work identity should not inherit a stale per-track review flag');
+
+const conflictReview=groupLocalWorks([
+  book(7,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F01.mp3',{metadataConflicts:[{field:'author'}],reviewReason:'Conflicting metadata needs review.'}),
+  book(8,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F02.mp3'),
+]);
+assert.equal(conflictReview[0].needsReview,true,'important metadata conflicts must still surface at work level');
+assert.equal(conflictReview[0].reviewReason,'Conflicting metadata needs review.');
 
 const hugeAudiobook=groupLocalWorks(Array.from({length:1000},(_,index)=>
   book(index+5000,'content://root/document/primary:Audiobooks%2FLong%20Book%2F'+String(index+1).padStart(4,'0')+'%20-%20Chapter.mp3',{
