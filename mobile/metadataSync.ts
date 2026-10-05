@@ -65,15 +65,46 @@ function sourceFor(book:SynchronizableBook,field:SyncField):SyncSource{
 function confidenceFor(book:SynchronizableBook,field:SyncField):SyncConfidence{
   return book.metadataFieldConfidence?.[field]||book.identificationConfidence||'low';
 }
-function audioGroupKey(book:SynchronizableBook){
-  if(book.format!=='Audio')return '';
+function audioDirectoryKey(book:SynchronizableBook){
   const parts=decodedPathParts(book.uri);
   const dirs=parts.slice(0,-1).filter(Boolean);
   while(dirs.length&&/^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(clean(dirs[0])))dirs.shift();
-  if(!dirs.length)return 'audio-file:'+book.uri;
-  const parent=dirs[dirs.length-1];
-  if(/^(audiobooks?|media|library|libraries)$/i.test(clean(parent)))return 'audio-file:'+book.uri;
-  return 'audio-dir:'+(book.space||'')+':'+dirs.map(normal).join('/');
+  if(!dirs.length)return '';
+  return (book.space||'')+':'+dirs.map(normal).join('/');
+}
+function fileStem(uri:string){
+  const parts=decodedPathParts(uri);
+  return clean((parts[parts.length-1]||'').replace(/\.[^.]+$/,''));
+}
+function shouldGroupAudioBooks(books:SynchronizableBook[]){
+  if(books.length<=1)return true;
+  const trackLike=books.every(book=>isGenericMediaTitle(fileStem(book.uri),'Audio',books.length));
+  if(trackLike)return true;
+  const inferred=new Set(books.map(book=>{
+    const identity=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length});
+    return [normal(identity.title),normal(identity.author),normal(identity.series),identity.seriesNumber??''].join('|');
+  }));
+  if(inferred.size===1)return true;
+  const explicit=new Set(books.map(book=>String(book.workKey||'')).filter(key=>key&&key!=='unknown'));
+  return explicit.size===1&&explicit.size>0;
+}
+export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
+  const result=new Map<string,string>();
+  const directories=new Map<string,T[]>();
+  for(const book of books){
+    if(book.format!=='Audio')continue;
+    const dir=audioDirectoryKey(book);
+    if(!dir){result.set(book.uri,'audio-file:'+book.uri);continue;}
+    const group=directories.get(dir)||[];group.push(book);directories.set(dir,group);
+  }
+  for(const [dir,group] of directories){
+    if(shouldGroupAudioBooks(group)){
+      for(const book of group)result.set(book.uri,'audio-dir:'+dir);
+    }else{
+      for(const book of group)result.set(book.uri,'audio-file:'+book.uri);
+    }
+  }
+  return result;
 }
 function coverScore(uri:string){
   const value=String(uri||'');
@@ -217,9 +248,10 @@ function applyCanonical<T extends SynchronizableBook>(book:T,canonical:Canonical
 export function synchronizeLocalMetadata<T extends SynchronizableBook>(books:T[]):{books:T[];updated:number;audioGroups:number}{
   let next=books.slice();
   const audioGroups=new Map<string,number[]>();
+  const audioKeys=audioWorkGroupKeys(next);
   next.forEach((book,index)=>{
     if(book.format!=='Audio')return;
-    const key=audioGroupKey(book);
+    const key=audioKeys.get(book.uri)||('audio-file:'+book.uri);
     const indexes=audioGroups.get(key)||[];
     indexes.push(index);audioGroups.set(key,indexes);
   });
