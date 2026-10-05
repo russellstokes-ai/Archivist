@@ -148,16 +148,18 @@ export async function applyLocalWorkSortCopies(previews:LocalWorkSortPreview[]):
   for(const preview of previews){
     if(preview.state!=='ready')continue;
     const created:Array<{id:string;title:string;uri:string}>=[];
+    const createdTargets:string[]=[];
     try{
       for(const member of preview.members){
         const target=await createTargetFile(member.rootUri,member.relativePath);
+        createdTargets.push(target);
         await StorageAccessFramework.copyAsync({from:member.sourceUri,to:target});
         created.push({id:member.id,title:preview.title,uri:target});
       }
       copied.push(...created);
     }catch(error){
-      for(const item of created.reverse()){
-        try{await StorageAccessFramework.deleteAsync(item.uri);}catch{}
+      for(const uri of createdTargets.reverse()){
+        try{await StorageAccessFramework.deleteAsync(uri);}catch{}
       }
       failed.push({
         id:preview.id,
