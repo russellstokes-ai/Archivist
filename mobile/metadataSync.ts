@@ -1,4 +1,4 @@
-import {decodedPathParts,editionKey,inferLocalBookMetadata,isGenericMediaTitle,logicalWorkKey} from './libraryIntelligence';
+import {decodedPathParts,editionKey,inferLocalBookMetadata,isGenericMediaTitle,isLibraryRootLabel,logicalWorkKey} from './libraryIntelligence';
 
 export type SyncSource='manual'|'sidecar'|'embedded'|'online'|'path';
 export type SyncConfidence='high'|'medium'|'low';
@@ -96,7 +96,7 @@ function confidenceFor(book:SynchronizableBook,field:SyncField):SyncConfidence{
 function audioDirectoryKey(book:SynchronizableBook){
   const parts=decodedPathParts(book.uri);
   const dirs=parts.slice(0,-1).filter(Boolean);
-  while(dirs.length&&/^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(clean(dirs[0])))dirs.shift();
+  while(dirs.length&&isLibraryRootLabel(dirs[0]))dirs.shift();
   if(!dirs.length)return '';
   return (book.space||'')+':'+dirs.map(normal).join('/');
 }
@@ -107,7 +107,7 @@ function fileStem(uri:string){
 function audioBookFolderTitle(uri:string){
   const parts=decodedPathParts(uri);
   const parent=clean(parts[parts.length-2]||'');
-  if(!parent||/^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(parent))return '';
+  if(!parent||isLibraryRootLabel(parent))return '';
   const indexed=parent.match(/^(?:(?:book|bk|vol(?:ume)?)\s*)?#?\s*\d+(?:\.\d+)?\s*[-._:]\s*(.+)$/i);
   return clean(indexed?.[1]||parent);
 }
