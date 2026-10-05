@@ -948,7 +948,11 @@ export async function enrichLocalBookCovers(
       await options.onBatch?.(next,{attempted,updated,timedOut,skipped,current:book.title});
     }
     if(consecutiveTimeouts>=maxConsecutiveTimeouts){
-      skipped=Math.max(0,next.length-(index+1));
+      skipped=next.slice(index+1).filter(candidate=>{
+        if(candidate.coverUri)return false;
+        const candidateExt=extension(candidate.uri);
+        return ['epub','pdf','cbz','cbr','cbt','zip','mp3','m4a','m4b'].includes(candidateExt);
+      }).length;
       await options.onBatch?.(next,{attempted,updated,timedOut,skipped,current:'Skipped remaining cover reads after repeated timeouts'});
       break;
     }
