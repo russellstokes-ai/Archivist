@@ -442,6 +442,7 @@ func (a *app) routes() http.Handler {
 	a.epubResourceRoutes(mux)
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
+	a.metadataOnlineRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
 	static, _ := fs.Sub(web, "web")
@@ -849,6 +850,9 @@ func main() {
 		log.Printf("catalogue migration: %v", e)
 	}
 	if e = a.initPreferences(); e != nil {
+		log.Fatal(e)
+	}
+	if e = a.initMetadataOnline(); e != nil {
 		log.Fatal(e)
 	}
 	if e = a.initProgress(); e != nil {
