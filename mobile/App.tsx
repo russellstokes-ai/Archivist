@@ -779,6 +779,7 @@ function Client() {
   const [serverBooksHasMore, setServerBooksHasMore] = useState(false);
   const [serverBooksLoadingMore, setServerBooksLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
+  const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
   useEffect(()=>{
@@ -1014,7 +1015,6 @@ function Client() {
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localFoldersReady,setLocalFoldersReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
-  const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
   const [offlineWorksReady,setOfflineWorksReady]=useState(false);
   const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
