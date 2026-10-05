@@ -120,6 +120,14 @@ const nestedAmbiguousBooks = groupLocalWorks([
 ]);
 assert.equal(nestedAmbiguousBooks.length,2,'ambiguous numbered standalone books in a series folder must remain separate');
 
+
+const standaloneTracksInSeriesFolder = groupLocalWorks([
+  book(155,'content://root/document/primary:Audiobooks%2FDune%20Series%2FDune.m4b',{title:'Dune',series:'Dune',trackNumber:1}),
+  book(156,'content://root/document/primary:Audiobooks%2FDune%20Series%2FDune%20Messiah.m4b',{title:'Dune Messiah',series:'Dune',trackNumber:1}),
+  book(157,'content://root/document/primary:Audiobooks%2FDune%20Series%2FChildren%20of%20Dune.m4b',{title:'Children of Dune',series:'Dune',trackNumber:1}),
+]);
+assert.equal(standaloneTracksInSeriesFolder.length,3,'track tags alone must not merge standalone M4B books');
+
 const numberedFolderChapters = groupLocalWorks([
   book(160,'content://root/document/primary:Audiobooks%2FDune%2F001%20-%20Opening.mp3',{title:'Opening'}),
   book(161,'content://root/document/primary:Audiobooks%2FDune%2F002%20-%20Arrakis.mp3',{title:'Arrakis'}),
