@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -45,6 +46,16 @@ class ArchivistAutoService : MediaLibraryService() {
       .setSeekBackIncrementMs(15_000)
       .setSeekForwardIncrementMs(15_000)
       .build()
+      .apply {
+        setAudioAttributes(
+          AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+            .build(),
+          true
+        )
+        setHandleAudioBecomingNoisy(true)
+      }
     player.addListener(object : Player.Listener {
       override fun onIsPlayingChanged(isPlaying: Boolean) {
         progressHandler.removeCallbacks(progressTicker)
@@ -102,9 +113,12 @@ class ArchivistAutoService : MediaLibraryService() {
       val snapshot = loadSnapshot()
       val items = when {
         parentId == ROOT_ID -> rootChildren(snapshot)
-        parentId == CONTINUE_ID -> snapshot.works.filter { it.readingState == "in-progress" }.map(::workItem)
-        parentId == AUDIOBOOKS_ID -> snapshot.works.map(::workItem)
-        parentId == FAVOURITES_ID -> snapshot.works.filter { it.favourite }.map(::workItem)
+        parentId == CONTINUE_ID -> snapshot.works
+          .filter { it.readingState == "in-progress" || it.key == snapshot.resumeWorkKey }
+          .sortedWith(compareBy<AutoWork> { it.key != snapshot.resumeWorkKey }.thenBy { it.title.lowercase() })
+          .map(::workItem)
+        parentId == AUDIOBOOKS_ID -> snapshot.works.sortedBy { it.title.lowercase() }.map(::workItem)
+        parentId == FAVOURITES_ID -> snapshot.works.filter { it.favourite }.sortedBy { it.title.lowercase() }.map(::workItem)
         parentId == SERIES_ID -> snapshot.works.map { it.series }.filter { it.isNotBlank() }.distinct()
           .sortedBy { it.lowercase() }.map(::seriesItem)
         parentId.startsWith(SERIES_PREFIX) -> snapshot.works.filter { seriesId(it.series) == parentId }.map(::workItem)
@@ -114,7 +128,7 @@ class ArchivistAutoService : MediaLibraryService() {
         }
         else -> emptyList()
       }
-      return Futures.immediateFuture(LibraryResult.ofItemList(items.take(MAX_BROWSE_ITEMS), params))
+      return Futures.immediateFuture(LibraryResult.ofItemList(paged(items, page, pageSize, MAX_BROWSE_ITEMS), params))
     }
 
     override fun onGetItem(
@@ -147,10 +161,35 @@ class ArchivistAutoService : MediaLibraryService() {
       page: Int,
       pageSize: Int,
       params: LibraryParams?
-    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
-      Futures.immediateFuture(
-        LibraryResult.ofItemList(searchWorks(loadSnapshot(), query).take(MAX_SEARCH_ITEMS).map(::workItem), params)
+    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+      val items = searchWorks(loadSnapshot(), query).map(::workItem)
+      return Futures.immediateFuture(
+        LibraryResult.ofItemList(paged(items, page, pageSize, MAX_SEARCH_ITEMS), params)
       )
+    }
+
+    override fun onPlaybackResumption(
+      mediaSession: MediaSession,
+      controller: MediaSession.ControllerInfo,
+      isForPlayback: Boolean
+    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+      val snapshot = loadSnapshot()
+      val work = defaultWork(snapshot)
+        ?: return Futures.immediateFuture(
+          MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET)
+        )
+      val playable = playableWorkItems(work)
+      if (playable.mediaItems.isEmpty()) {
+        return Futures.immediateFuture(
+          MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET)
+        )
+      }
+      val items = if (isForPlayback) playable.mediaItems else listOf(playable.mediaItems[playable.startIndex])
+      val index = if (isForPlayback) playable.startIndex else 0
+      return Futures.immediateFuture(
+        MediaSession.MediaItemsWithStartPosition(items, index, playable.startPositionMs)
+      )
+    }
 
     override fun onAddMediaItems(
       mediaSession: MediaSession,
@@ -223,7 +262,7 @@ class ArchivistAutoService : MediaLibraryService() {
   }
 
   private fun rootChildren(snapshot: AutoSnapshot): List<MediaItem> = buildList {
-    if (snapshot.works.any { it.readingState == "in-progress" }) add(folder(CONTINUE_ID, "Continue listening", "Resume on this device"))
+    if (snapshot.resumeWorkKey != null || snapshot.works.any { it.readingState == "in-progress" }) add(folder(CONTINUE_ID, "Continue listening", "Resume where you left off"))
     add(folder(AUDIOBOOKS_ID, "Audiobooks", snapshot.works.size.toString() + " available"))
     if (snapshot.works.any { it.series.isNotBlank() }) add(folder(SERIES_ID, "Series", "Browse by series"))
     if (snapshot.works.any { it.favourite }) add(folder(FAVOURITES_ID, "Favourites", "Your saved audiobooks"))
@@ -294,11 +333,15 @@ class ArchivistAutoService : MediaLibraryService() {
   }
 
   private fun trackItem(work: AutoWork, track: AutoTrack): MediaItem {
+    val chapterIndex = work.tracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+    val chapterTitle = track.title.ifBlank { "Chapter " + (chapterIndex + 1) }
     val metadata = MediaMetadata.Builder()
-      .setTitle(work.title)
-      .setSubtitle(track.title.ifBlank { null })
+      .setTitle(chapterTitle)
+      .setSubtitle(work.title + if (work.tracks.size > 1) " · " + (chapterIndex + 1) + "/" + work.tracks.size else "")
       .setArtist(work.author.ifBlank { null })
-      .setAlbumTitle(work.series.ifBlank { work.title })
+      .setAlbumTitle(work.title)
+      .setTrackNumber(chapterIndex + 1)
+      .setTotalTrackCount(work.tracks.size)
       .setMediaType(MediaMetadata.MEDIA_TYPE_AUDIO_BOOK_CHAPTER)
       .setIsBrowsable(false)
       .setIsPlayable(true)
@@ -369,9 +412,22 @@ class ArchivistAutoService : MediaLibraryService() {
   private fun bestSearchWork(snapshot: AutoSnapshot, query: String): AutoWork? = searchWorks(snapshot, query).firstOrNull()
 
   private fun defaultWork(snapshot: AutoSnapshot): AutoWork? =
-    snapshot.works.firstOrNull { it.readingState == "in-progress" }
+    snapshot.resumeWorkKey?.let { key -> snapshot.works.firstOrNull { it.key == key } }
+      ?: snapshot.works.firstOrNull { it.readingState == "in-progress" }
       ?: snapshot.works.firstOrNull { it.favourite }
       ?: snapshot.works.firstOrNull()
+
+  private fun <T> paged(items: List<T>, page: Int, pageSize: Int, maxItems: Int): List<T> {
+    if (items.isEmpty()) return emptyList()
+    val capped = items.take(maxItems)
+    val safeSize = pageSize.coerceIn(1, maxItems)
+    val safePage = page.coerceAtLeast(0)
+    val start = safePage.toLong() * safeSize.toLong()
+    if (start >= capped.size) return emptyList()
+    val from = start.toInt()
+    val to = (from + safeSize).coerceAtMost(capped.size)
+    return capped.subList(from, to)
+  }
 
   private fun searchScore(work: AutoWork, q: String): Int {
     fun score(value: String, exact: Int, contains: Int): Int {
@@ -428,7 +484,7 @@ class ArchivistAutoService : MediaLibraryService() {
     return try {
       val root = JSONObject(file.readText())
       val version = root.optInt("version", 0)
-      if (version != 1 && version != 2) return AutoSnapshot(emptyList())
+      if (version !in 1..3) return AutoSnapshot(emptyList())
       val works = root.optJSONArray("works")
       val parsed = mutableListOf<AutoWork>()
       if (works != null) {
@@ -464,13 +520,21 @@ class ArchivistAutoService : MediaLibraryService() {
           )
         }
       }
-      AutoSnapshot(parsed)
+      AutoSnapshot(
+        works = parsed,
+        resumeWorkKey = root.optString("resumeWorkKey").trim().takeIf { it.isNotBlank() },
+        resumeUpdatedAt = root.optLong("resumeUpdatedAt", 0L).coerceAtLeast(0L)
+      )
     } catch (_: Throwable) {
       AutoSnapshot(emptyList())
     }
   }
 
-  private data class AutoSnapshot(val works: List<AutoWork>)
+  private data class AutoSnapshot(
+    val works: List<AutoWork>,
+    val resumeWorkKey: String? = null,
+    val resumeUpdatedAt: Long = 0L
+  )
   private data class AutoWork(
     val id: String,
     val key: String,
