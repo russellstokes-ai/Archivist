@@ -104,6 +104,10 @@ const rootKeys=audioWorkGroupKeys(rootMixed);
 assert.equal(rootKeys.get(rootMixed[0].uri),rootKeys.get(rootMixed[1].uri),'root-level chapter files sharing one embedded work title must group together');
 assert.equal(rootKeys.get(rootMixed[2].uri),rootKeys.get(rootMixed[3].uri),'a second root-level audiobook must form its own work');
 assert.notEqual(rootKeys.get(rootMixed[0].uri),rootKeys.get(rootMixed[2].uri),'two different audiobooks in one root must never be merged');
+const rootSynced=synchronizeLocalMetadata(rootMixed).books;
+const rootWorks=groupLocalWorks(rootSynced);
+assert.equal(rootWorks.find(item=>item.author==='Frank Herbert')?.title,'Dune','embedded album/work title must become the canonical root audiobook identity');
+assert.equal(rootWorks.find(item=>item.author==='Andy Weir')?.title,'Project Hail Mary','each root audiobook must retain its own canonical work title');
 
 const rootByName=[
   track(74,'Leviathan Wakes - Part 01',{uri:'content://root/document/primary:Audiobooks%2FLeviathan%20Wakes%20-%20Part%2001.mp3',title:'Part 01',author:''}),
