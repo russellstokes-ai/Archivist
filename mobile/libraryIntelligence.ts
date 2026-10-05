@@ -181,7 +181,7 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     author: cleanLabel(author || '') || undefined,
     series: cleanLabel(series || '') || undefined,
     genre: cleanLabel(genre || '') || undefined,
-    publisher: cleanLabel(publisher || '') || undefined,
+    ...(cleanLabel(publisher || '')?{publisher:cleanLabel(publisher)}:{}),
     ...(seriesIndex!==undefined?{seriesIndex}:{}),
     ...(publicationYear(xmlValue(text,['dc:date','date','year','Year']))?{publishedYear:publicationYear(xmlValue(text,['dc:date','date','year','Year']))}:{}),
     ...(isbnValue?{isbn:isbnValue}:{}),
