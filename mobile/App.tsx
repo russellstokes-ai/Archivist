@@ -43,7 +43,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
@@ -67,7 +67,7 @@ import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal}
 import {shelfRecommendations} from './shelfRecommendations';
 import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
 import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from './bulkMetadata';
-import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanPhaseStep} from './scanFeedback';
+import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanProgressPercent} from './scanFeedback';
 import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
@@ -762,6 +762,7 @@ function Client() {
     return()=>clearTimeout(timer);
   },[localFolderNotice,localScanning]);
   const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
+  const [enrichmentProgress,setEnrichmentProgress]=useState<LocalScanProgress|null>(null);
   const scanCommitGate=useRef(new ScanCommitGate()).current;
   const autoLocalScanAttempted=useRef(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -2344,6 +2345,7 @@ function Client() {
     autoLocalScanAttempted.current=true;
     const generation=scanCommitGate.begin();
     setLocalScanning(true);
+    setEnrichmentProgress(null);
     setScanResultSummary(null);
     return generation;
   };
@@ -2397,21 +2399,56 @@ function Client() {
   }
 
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false){
-    await enrichPublishedLocalCovers(baseBooks,generation);
-    if(!scanCommitGate.isCurrent(generation))return;
-    if(!metadataSettings.onlineEnabled||(!metadataSettings.automaticEnrichment&&!forceOnline))return;
-    const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
-    if(!scanCommitGate.isCurrent(generation))return;
-    const latest=Array.isArray(stored)?stored:baseBooks;
-    if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
-      await enrichPublishedLocalBookMetadata(latest,generation);
+    try{
+      await enrichPublishedLocalEmbeddedMetadata(baseBooks,generation,forceOnline);
+      if(!scanCommitGate.isCurrent(generation))return;
+      const afterEmbedded=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
+      const embeddedBooks=Array.isArray(afterEmbedded)?afterEmbedded:baseBooks;
+      await enrichPublishedLocalCovers(embeddedBooks,generation);
+      if(!scanCommitGate.isCurrent(generation))return;
+      if(metadataSettings.onlineEnabled&&(metadataSettings.automaticEnrichment||forceOnline)){
+        const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
+        if(!scanCommitGate.isCurrent(generation))return;
+        const latest=Array.isArray(stored)?stored:embeddedBooks;
+        if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
+          await enrichPublishedLocalBookMetadata(latest,generation);
+        }
+        if(!scanCommitGate.isCurrent(generation))return;
+        const afterBooks=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
+        if(!scanCommitGate.isCurrent(generation))return;
+        if(metadataSettings.comics.enabled&&metadataSettings.comics.metron){
+          await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation);
+        }
+      }
+    }finally{
+      if(scanCommitGate.isCurrent(generation)){
+        const current=(await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null))||baseBooks;
+        const review=current.filter(book=>book.needsReview).length;
+        setEnrichmentProgress({phase:'complete',currentFolder:'',entriesVisited:current.length,found:current.length,review,processed:current.length,total:current.length});
+        setTimeout(()=>{if(scanCommitGate.isCurrent(generation))setEnrichmentProgress(null);},2200);
+      }
     }
+  }
+
+  async function enrichPublishedLocalEmbeddedMetadata(baseBooks:LocalBook[],generation:number,refreshMetadata=false){
     if(!scanCommitGate.isCurrent(generation))return;
-    const afterBooks=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
-    if(!scanCommitGate.isCurrent(generation))return;
-    if(metadataSettings.comics.enabled&&metadataSettings.comics.metron){
-      await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation);
-    }
+    const eligible=baseBooks.filter(book=>book.format==='EPUB'||book.format==='Comic'||book.format==='Audio');
+    if(!eligible.length)return;
+    setEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length});
+    const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
+      refreshMetadata,
+      batchSize:8,
+      shouldContinue:()=>scanCommitGate.isCurrent(generation),
+      onBatch:async(batch,progress)=>{
+        if(!scanCommitGate.isCurrent(generation))return;
+        setEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
+        setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
+        await scanFrame();
+      },
+    }).catch(()=>null);
+    if(!enriched||!scanCommitGate.isCurrent(generation))return;
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],enriched.books).map(book=>({...book,source:'local' as const})));
+    await setPersistedJSON(localCatalogKey,enriched.books).catch(()=>undefined);
   }
 
   async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number){
@@ -2422,6 +2459,8 @@ function Client() {
       ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
       : undefined;
     if(!metadataSettings.books.openLibrary&&!googleBooksApiKey)return;
+    const total=baseBooks.filter(book=>book.format==='EPUB'||book.format==='PDF'||book.format==='Audio').length;
+    setEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
     const enriched=await enrichLocalBookMetadataOnline(baseBooks,{
       cache,
       googleBooksApiKey,
@@ -2432,11 +2471,8 @@ function Client() {
       onBatch:async(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
         setLocalFolderNotice(`Metadata · ${progress.attempted} checked · ${progress.matched} matched · ${progress.review} need review`);
+        setEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
         setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
-        await Promise.all([
-          setPersistedJSON(localCatalogKey,batch),
-          setPersistedJSON(onlineBookMetadataCacheKey,progress.cache),
-        ]).catch(()=>undefined);
         await scanFrame();
       },
     }).catch(()=>null);
@@ -2470,6 +2506,8 @@ function Client() {
     if(!token||!scanCommitGate.isCurrent(generation))return;
     const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
     if(!scanCommitGate.isCurrent(generation))return;
+    const total=baseBooks.filter(book=>book.format==='Comic').length;
+    setEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
     const enriched=await enrichLocalComicMetadataOnline(baseBooks,{
       token,
       cache,
@@ -2479,11 +2517,8 @@ function Client() {
       onBatch:async(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
         setLocalFolderNotice(`Metadata · ${progress.attempted} checked · ${progress.matched} matched · ${progress.review} need review`);
+        setEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
         setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
-        await Promise.all([
-          setPersistedJSON(localCatalogKey,batch),
-          setPersistedJSON(onlineComicMetadataCacheKey,progress.cache),
-        ]).catch(()=>undefined);
         await scanFrame();
       },
     }).catch(()=>null);
@@ -2516,12 +2551,15 @@ function Client() {
 
   async function enrichPublishedLocalCovers(baseBooks:LocalBook[],generation:number){
     if(!baseBooks.some(book=>!book.coverUri)||!scanCommitGate.isCurrent(generation))return;
+    const total=baseBooks.filter(book=>!book.coverUri).length;
+    setEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
     const enriched=await enrichLocalBookCovers(baseBooks,{
       batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
         setLocalFolderNotice(`Covers · ${progress.attempted} checked · ${progress.updated} found`);
+        setEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total});
         setLocalBooks(current=>applyCoverEnrichment(current,batch));
         await scanFrame();
       },
@@ -2566,7 +2604,7 @@ function Client() {
       }
       setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal,{deferEmbeddedCovers:true});
+      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
@@ -2598,7 +2636,7 @@ function Client() {
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,refreshMetadata});
+      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata});
       const summary=await finaliseLocalScan(result,previousLocal,generation,refreshMetadata);
       if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
@@ -2639,7 +2677,7 @@ function Client() {
       const nextOverrides=Object.fromEntries(Object.entries(localMetadataOverrides).filter(([uri])=>!removedUris.has(uri)));
       setLocalMetadataOverrides(nextOverrides);
       await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
-      const result=await scanLocalFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal,{deferEmbeddedCovers:true});
+      const result=await scanLocalFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       if(sourceFilter==='local'&&space===folder.name&&libraryFolderExact){
@@ -3414,14 +3452,20 @@ function Client() {
   }
 
   function LocalScanStatus(){
-    if(localScanning&&scanProgress){
-      const copy=scanStatusCopy({...scanProgress,publishedCount:localBooks.length});
+    const activeProgress=scanProgress||enrichmentProgress;
+    if(activeProgress){
+      const copy=scanStatusCopy({...activeProgress,publishedCount:localBooks.length});
+      const percent=scanProgressPercent(activeProgress);
+      const count=activeProgress.total&&activeProgress.total>0?`${Math.min(activeProgress.processed||0,activeProgress.total)} / ${activeProgress.total}`:'';
       return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
-        <View style={{flex:1,minWidth:0,gap:2}}>
-          <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{copy.title}</Text>
-          <Text numberOfLines={3} style={[styles.scanBannerDetail,{color:p.muted}]}>{copy.detail}</Text>
-          <View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:`${scanPhaseStep(scanProgress.phase)*20}%` as `${number}%`}]} /></View>
+        <View style={{flex:1,minWidth:0,gap:3}}>
+          <View style={styles.scanProgressHeading}>
+            <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{scanPhaseLabel(activeProgress.phase)}</Text>
+            <Text style={[styles.scanProgressPercent,{color:p.muted}]}>{count?count+' · ':''}{percent}%</Text>
+          </View>
+          <Text numberOfLines={2} style={[styles.scanBannerDetail,{color:p.muted}]}>{copy.detail}</Text>
+          <View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:`${percent}%` as `${number}%`}]} /></View>
         </View>
       </View>;
     }
@@ -7419,8 +7463,10 @@ const styles = StyleSheet.create({
   scanBannerStable: {minHeight:68},
   scanBannerTitle: {fontSize:12.5,lineHeight:18,fontWeight:'700'},
   scanBannerDetail: {fontSize:11.5,lineHeight:16},
-  scanProgressTrack: {height:2,borderRadius:1,overflow:'hidden',marginTop:5},
-  scanProgressFill: {height:2,borderRadius:1},
+  scanProgressHeading: {flexDirection:'row',alignItems:'baseline',justifyContent:'space-between',gap:10},
+  scanProgressPercent: {fontSize:10.5,lineHeight:15,fontVariant:['tabular-nums']},
+  scanProgressTrack: {height:4,borderRadius:2,overflow:'hidden',marginTop:5},
+  scanProgressFill: {height:4,borderRadius:2},
   onboardingCard: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:16,gap:12},
   onboardingEyebrow: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.5},
   onboardingTitle: {fontFamily:'ArchivistEditorial',fontSize:20,lineHeight:25,fontWeight:'500',letterSpacing:-.15},
