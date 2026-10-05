@@ -181,7 +181,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
                 val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
                 val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
                 session.found.incrementAndGet()
-                offer(session, ScanEntry(documentUri.toString(), name, parentId, mime, size, modified, role.first, role.second))
+                offer(session, ScanEntry(documentUri.toString(), documentId, name, parentId, mime, size, modified, role.first, role.second))
               }
             } ?: run {
               session.errors.incrementAndGet()
