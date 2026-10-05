@@ -38,7 +38,7 @@ assert.ok(source.includes("function Profile()"), 'Profile screen is not implemen
 
 // Reader Stats visual contract: keep the approved stats destination distinct and data-led.
 assert.ok(source.includes(">Reader Stats</Text>"), 'Reader Stats title is missing');
-assert.ok(source.includes(">Reading Rhythm</Text>"), 'Reader Stats rhythm visual is missing');
+assert.ok(source.includes('CardHeader title="Reading Rhythm"') || source.includes('>Reading Rhythm</Text>'), 'Reader Stats rhythm visual is missing');
 assert.ok(source.includes("['Overview','Time','Books','Genres','Formats','Places']"), 'Reader Stats section tabs are missing');
 assert.ok(source.includes('statsRhythmDial') && source.includes('statsHeatCell'), 'Reader Stats rhythm ring or activity heatmap is missing');
 assert.ok(source.includes("{id:'insights',label:'Stats',icon:'insights'}"), 'Bottom navigation must expose Reader Stats as Stats');
