@@ -1074,7 +1074,10 @@ function Client() {
     if(!shouldCheckpoint)return;
     localAudioCheckpointBucket.current=bucket;
     void persistLocalPlaybackPosition(seconds);
-    void persistNowSession('audio',playing,seconds,{trackUri:activeLocalWork?.tracks[localWorkIndex]?.uri||playing.uri,wasPlaying:!!audio.playing}).catch(()=>undefined);
+    const currentNow=nowSessionRef.current;
+    if(currentNow?.kind==='audio'&&sameNowMedia(currentNow.media,nowMediaFromBook(playing))){
+      void persistNowSession('audio',playing,seconds,{trackUri:activeLocalWork?.tracks[localWorkIndex]?.uri||playing.uri,wasPlaying:!!audio.playing}).catch(()=>undefined);
+    }
   },[audio.currentTime,audio.playing,playing?.uri,playing?.source,activeLocalWork,localWorkIndex]);
   useEffect(()=>{
     if(!playing||playing.source!=='server'||!playback)return;
@@ -1083,11 +1086,17 @@ function Client() {
     const shouldCheckpoint=bucket!==serverAudioCheckpointBucket.current||!playback.playing;
     if(!shouldCheckpoint)return;
     serverAudioCheckpointBucket.current=bucket;
-    void persistNowSession('audio',playing,seconds,{trackId:playback.tracks[playback.index]?.id,wasPlaying:!!playback.playing}).catch(()=>undefined);
+    const currentNow=nowSessionRef.current;
+    if(currentNow?.kind==='audio'&&sameNowMedia(currentNow.media,nowMediaFromBook(playing))){
+      void persistNowSession('audio',playing,seconds,{trackId:playback.tracks[playback.index]?.id,wasPlaying:!!playback.playing}).catch(()=>undefined);
+    }
   },[playback?.seconds,playback?.playing,playback?.index,playing?.id,playing?.source]);
   useEffect(()=>{
     if(!reading)return;
-    void persistNowSession('reader',reading,readerPage,{wasPlaying:false}).catch(()=>undefined);
+    const currentNow=nowSessionRef.current;
+    if(currentNow?.kind==='reader'&&sameNowMedia(currentNow.media,nowMediaFromBook(reading))){
+      void persistNowSession('reader',reading,readerPage,{wasPlaying:false}).catch(()=>undefined);
+    }
   },[reading?.id,reading?.uri,readerPage]);
   const [playerVisualPlaying,setPlayerVisualPlaying]=useState(false);
   useEffect(()=>{
@@ -3040,6 +3049,11 @@ function Client() {
 
     setError('Your last Now item is not currently available. Archivist kept its saved position and will resume it when the source is available again.');
   }
+
+  useEffect(()=>{
+    if(!nowSessionReady||activeTab!=='now'||playing||reading||!nowSessionRef.current)return;
+    void resumeNowSession(nowSessionRef.current);
+  },[nowSessionReady,activeTab,playing,reading]);
 
   async function openNowTab(){
     setActiveTab('now');
