@@ -79,6 +79,7 @@ function bestGenre(match:MetadataMatch|undefined,current:string){
 
 function applyEntry(books:LocalBook[],work:LocalWork,entry:LocalEnrichmentCacheEntry){
   const uris=new Set(work.tracks.map(track=>track.uri));
+  const reviewUri=work.tracks[0]?.uri;
   return books.map(book=>{
     if(!uris.has(book.uri))return book;
     const manual=book.metadataSource==='manual';
@@ -100,8 +101,8 @@ function applyEntry(books:LocalBook[],work:LocalWork,entry:LocalEnrichmentCacheE
       metadataProviderId:entry.metadataProviderId,
       metadataSource:manual?'manual':entry.metadataProvider?'online':book.metadataSource,
       identificationConfidence:entry.identityReady?'high':book.identificationConfidence,
-      needsReview:!entry.publishReady,
-      reviewReason:entry.publishReady?'':entry.reviewReason,
+      needsReview:!entry.publishReady&&book.uri===reviewUri,
+      reviewReason:entry.publishReady||book.uri!==reviewUri?'':entry.reviewReason,
     };
   });
 }
