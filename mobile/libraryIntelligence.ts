@@ -6,6 +6,8 @@ export type LocalIdentity = {
   series: string;
   genre: string;
   publishedYear?: number;
+  isbn?: string;
+  identifiers?: string[];
   confidence: IdentificationConfidence;
   needsReview: boolean;
   reviewReason: string;
@@ -19,6 +21,8 @@ export type LocalMetadataFields = {
   series?: string;
   genre?: string;
   publishedYear?: number;
+  isbn?: string;
+  identifiers?: string[];
 };
 
 export function inferLocalBookMetadata(uri: string, format: string): LocalIdentity {
@@ -128,6 +132,8 @@ export function applyLocalMetadata(
     series,
     genre,
     publishedYear: fields.publishedYear || base.publishedYear,
+    isbn: fields.isbn || base.isbn,
+    identifiers: fields.identifiers?.length ? fields.identifiers : base.identifiers,
     confidence: 'high',
     needsReview: !completeEnough,
     reviewReason: completeEnough ? '' : 'Metadata was found, but the author still needs review.',
@@ -154,12 +160,19 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     }
   }
 
+  const identifiers=xmlValues(text,['dc:identifier','identifier','isbn','ISBN'])
+    .map(value=>cleanIdentifier(value))
+    .filter(Boolean);
+  const isbnValue=identifiers.find(value=>isIsbn(value));
+
   return {
     title: cleanLabel(title || '') || undefined,
     author: cleanLabel(author || '') || undefined,
     series: cleanLabel(series || '') || undefined,
     genre: cleanLabel(genre || '') || undefined,
     ...(publicationYear(xmlValue(text,['dc:date','date','year','Year']))?{publishedYear:publicationYear(xmlValue(text,['dc:date','date','year','Year']))}:{}),
+    ...(isbnValue?{isbn:isbnValue}:{}),
+    ...(identifiers.length?{identifiers:[...new Set(identifiers)]}:{}),
   };
 }
 
@@ -171,6 +184,31 @@ export function decodedPathParts(uri: string): string[] {
   if (value.includes(marker)) value = value.split(marker).pop() || value;
   value = value.replace(/^primary:/, '');
   return value.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
+}
+
+function xmlValues(text:string,tags:string[]){
+  const values:string[]=[];
+  for(const tag of tags){
+    const expression=new RegExp('<'+tag+'\\b[^>]*>([\\s\\S]*?)<\\/'+tag+'>','gi');
+    let match:RegExpExecArray|null;
+    while((match=expression.exec(text))!==null){
+      const value=stripXml(match[1]);
+      if(value)values.push(value);
+    }
+  }
+  return values;
+}
+
+function cleanIdentifier(value:string){
+  return cleanLabel(value)
+    .replace(/^urn:isbn:/i,'')
+    .replace(/^isbn(?:-1[03])?:?\s*/i,'')
+    .trim();
+}
+
+function isIsbn(value:string){
+  const normalized=String(value||'').toUpperCase().replace(/[^0-9X]/g,'');
+  return normalized.length===10||normalized.length===13;
 }
 
 function xmlValue(text: string, tags: string[]) {
