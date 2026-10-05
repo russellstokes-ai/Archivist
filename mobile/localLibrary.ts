@@ -147,7 +147,7 @@ type NativeLibraryScanItem = {
   mimeType: string;
   size: number;
   modified: number;
-  role: 'media' | 'sidecar' | 'artwork';
+  role: 'media' | 'sidecar' | 'artwork' | 'directory-context' | 'directory-end';
   format: string;
 };
 
@@ -195,6 +195,7 @@ async function scanLocalFoldersNative(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
+  onBooks?: (books: LocalBook[], progress: LocalScanProgress) => void | Promise<void>,
 ): Promise<LocalScanResult> {
   if (!nativeLibraryScanner) throw Error('Native library scanner is unavailable.');
   const books: LocalBook[] = [];
@@ -203,6 +204,13 @@ async function scanLocalFoldersNative(
   let entriesVisited = 0;
   let visitedBeforeFolder = 0;
   const sidecarCache = new Map<string, LocalMetadataFields>();
+  let fallbackBatch:LocalBook[]=[];
+  const flushFallbackBatch=async(currentFolder:string)=>{
+    if(!fallbackBatch.length)return;
+    const current=fallbackBatch;
+    fallbackBatch=[];
+    await onBooks?.(current,{phase:'identifying',currentFolder,entriesVisited,found:books.length,review});
+  };
 
   async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
     const cached = sidecarCache.get(uri);
@@ -214,173 +222,208 @@ async function scanLocalFoldersNative(
         fields = parseLocalSidecar(await readAsStringAsync(uri), extension(uri));
       }
     } catch {}
-    sidecarCache.set(uri, fields);
+    sidecarCache.set(uri,fields);
     return fields;
   }
 
+  const progress = (phase: LocalScanProgress['phase'], currentFolder: string): LocalScanProgress => ({
+    phase,currentFolder,entriesVisited,found:books.length,review,
+  });
   const report = (phase: LocalScanProgress['phase'], currentFolder: string) => {
-    onProgress?.({phase, currentFolder, entriesVisited, found: books.length, review});
+    onProgress?.(progress(phase,currentFolder));
   };
   const nextFolders: LocalFolder[] = [];
 
   for (const folder of folders) {
-    const pending: NativeLibraryScanItem[] = [];
-    const sidecarsByParent = new Map<string, Map<string, string>>();
-    const coversByParent = new Map<string, string>();
+    const contexts = new Map<string,{
+      sidecars:Map<string,string>;
+      coverUri?:string;
+      mediaCount:number;
+      audioOnly:boolean;
+    }>();
+    let mediaBuffer:NativeLibraryScanItem[]=[];
+    let mediaParent='';
     let scanId = '';
     let lastVisited = 0;
     let nativeErrors = 0;
-    report('discovering', folder.name);
+    const before = books.length;
+    report('discovering',folder.name);
 
-    try {
-      scanId = await nativeLibraryScanner.startTreeScan(folder.uri);
-      let done = false;
-      while (!done) {
-        const batch = await nativeLibraryScanner.readTreeScanBatch(scanId, 240);
-        lastVisited = batch.visited;
-        nativeErrors = batch.errors;
-        entriesVisited = visitedBeforeFolder + batch.visited;
+    const contextFor=(parentId:string)=>{
+      const existing=contexts.get(parentId);
+      if(existing)return existing;
+      const created={sidecars:new Map<string,string>(),mediaCount:0,audioOnly:false};
+      contexts.set(parentId,created);
+      return created;
+    };
 
-        for (const item of batch.items || []) {
-          if (item.role === 'media') {
-            pending.push(item);
-            continue;
-          }
-          if (item.role === 'sidecar') {
-            const byStem = sidecarsByParent.get(item.parentId) || new Map<string, string>();
-            byStem.set(fileStem(item.name).toLowerCase(), item.uri);
-            sidecarsByParent.set(item.parentId, byStem);
-            continue;
-          }
-          if (item.role === 'artwork') {
-            const stem = fileStem(item.name).toLowerCase();
-            if (stem === 'cover' || (!coversByParent.has(item.parentId) && stem === 'folder')) {
-              coversByParent.set(item.parentId, item.uri);
-            }
+    const identifyMedia=async(items:NativeLibraryScanItem[])=>{
+      if(!items.length)return;
+      report('identifying',folder.name);
+      const audioMetadataByUri=new Map<string,NativeAudioMetadata>();
+      const audioItems=items.filter(item=>item.format==='Audio');
+      if(nativeLibraryScanner.readAudioMetadataBatch&&audioItems.length){
+        try{
+          const metadata=await nativeLibraryScanner.readAudioMetadataBatch(audioItems.map(item=>item.uri));
+          for(const item of metadata||[])audioMetadataByUri.set(item.uri,item);
+        }catch{
+          // Embedded tags improve identity but never make discovery fail.
+        }
+      }
+
+      const produced:LocalBook[]=[];
+      for(const item of items){
+        const context=contextFor(item.parentId);
+        let identity=inferLocalBookMetadata(item.uri,item.format);
+        const embedded=item.format==='Audio'?audioMetadataByUri.get(item.uri):undefined;
+        const embeddedAuthor=embedded?.albumArtist||embedded?.author||embedded?.artist||'';
+        const oneFileWork=context.mediaCount===1;
+        const embeddedWorkTitle=embedded?.album||(oneFileWork?embedded?.title:'')||'';
+        if(embeddedWorkTitle||embeddedAuthor||embedded?.genre||embedded?.year){
+          identity=applyLocalMetadata(identity,{
+            ...(embeddedWorkTitle?{title:embeddedWorkTitle}:{}),
+            ...(embeddedAuthor?{author:embeddedAuthor}:{}),
+            ...(embedded?.genre?{genre:embedded.genre}:{}),
+            ...(metadataYear(embedded?.year)?{publishedYear:metadataYear(embedded?.year)}:{}),
+          },'embedded');
+        }
+
+        const stem=fileStem(item.name).toLowerCase();
+        const genericAllowed=context.mediaCount===1||context.audioOnly;
+        const sidecarUri=context.sidecars.get(stem)||(genericAllowed?(context.sidecars.get('metadata')||context.sidecars.get('book')):undefined);
+        if(sidecarUri){
+          const fields=await cachedSidecarFields(sidecarUri);
+          if(fields.title||fields.author||fields.series||fields.genre){
+            identity=applyLocalMetadata(identity,fields,'sidecar');
           }
         }
 
-        report('discovering', folder.name);
-        done = !!batch.done;
-        if (!done && (!batch.items || batch.items.length === 0)) {
-          await new Promise<void>(resolve => setTimeout(resolve, 12));
-        } else {
+        const override=overrides[item.uri];
+        if(override)identity=applyLocalMetadata(identity,override,'manual');
+        if(identity.needsReview)review+=1;
+
+        const book:LocalBook={
+          id:books.length+1,
+          uri:item.uri,
+          title:identity.title||titleFromUri(item.uri),
+          author:identity.author,
+          series:identity.series,
+          genre:identity.genre,
+          publishedYear:identity.publishedYear,
+          format:item.format,
+          space:folder.name,
+          available:true,
+          identificationConfidence:identity.confidence,
+          needsReview:identity.needsReview,
+          reviewReason:identity.reviewReason,
+          coverShape:identity.coverShape,
+          metadataSource:identity.metadataSource,
+          coverUri:context.coverUri,
+          workTitleHint:embedded?.album||undefined,
+          trackTitle:embedded?.title||undefined,
+          trackNumber:metadataIndex(embedded?.track),
+          discNumber:metadataIndex(embedded?.disc),
+        };
+        books.push(book);
+        produced.push(book);
+      }
+
+      if(produced.length)await onBooks?.(produced,progress('identifying',folder.name));
+      report('identifying',folder.name);
+      await yieldToUi();
+    };
+
+    const flushMedia=async(parentId?:string)=>{
+      if(!mediaBuffer.length)return;
+      if(parentId&&mediaParent&&parentId!==mediaParent)return;
+      const current=mediaBuffer;
+      mediaBuffer=[];
+      mediaParent='';
+      await identifyMedia(current);
+    };
+
+    try {
+      scanId=await nativeLibraryScanner.startTreeScan(folder.uri);
+      let done=false;
+      while(!done){
+        const batch=await nativeLibraryScanner.readTreeScanBatch(scanId,240);
+        lastVisited=batch.visited;
+        nativeErrors=batch.errors;
+        entriesVisited=visitedBeforeFolder+batch.visited;
+
+        for(const item of batch.items||[]){
+          if(item.role==='sidecar'){
+            const context=contextFor(item.parentId);
+            context.sidecars.set(fileStem(item.name).toLowerCase(),item.uri);
+            continue;
+          }
+          if(item.role==='artwork'){
+            const context=contextFor(item.parentId);
+            const stem=fileStem(item.name).toLowerCase();
+            if(stem==='cover'||(!context.coverUri&&stem==='folder'))context.coverUri=item.uri;
+            continue;
+          }
+          if(item.role==='directory-context'){
+            const context=contextFor(item.parentId);
+            context.mediaCount=Math.max(0,Math.round(item.size||0));
+            context.audioOnly=item.format==='audio-only';
+            continue;
+          }
+          if(item.role==='media'){
+            if(mediaParent&&mediaParent!==item.parentId)await flushMedia(mediaParent);
+            mediaParent=item.parentId;
+            mediaBuffer.push(item);
+            if(mediaBuffer.length>=48)await flushMedia(item.parentId);
+            continue;
+          }
+          if(item.role==='directory-end'){
+            await flushMedia(item.parentId);
+            contexts.delete(item.parentId);
+          }
+        }
+
+        report('discovering',folder.name);
+        done=!!batch.done;
+        if(!done&&(!batch.items||batch.items.length===0)){
+          await new Promise<void>(resolve=>setTimeout(resolve,12));
+        }else{
           await yieldToUi();
         }
       }
+      await flushMedia();
     } catch {
-      skipped += 1;
-      if (scanId) { try { await nativeLibraryScanner.cancelTreeScan(scanId); } catch {} }
+      skipped+=1;
+      mediaBuffer=[];
+      if(scanId){try{await nativeLibraryScanner.cancelTreeScan(scanId);}catch{}}
     }
 
-    skipped += nativeErrors;
-    visitedBeforeFolder += lastVisited;
-    entriesVisited = visitedBeforeFolder;
-
-    const audioMetadataByUri = new Map<string, NativeAudioMetadata>();
-    const audioItems = pending.filter(item => item.format === 'Audio');
-    if (nativeLibraryScanner.readAudioMetadataBatch && audioItems.length) {
-      for (let offset = 0; offset < audioItems.length; offset += 48) {
-        report('identifying', folder.name);
-        try {
-          const metadata = await nativeLibraryScanner.readAudioMetadataBatch(audioItems.slice(offset, offset + 48).map(item => item.uri));
-          for (const item of metadata || []) audioMetadataByUri.set(item.uri, item);
-        } catch {
-          // Embedded tags are evidence, not a reason to fail the scan.
-        }
-        await yieldToUi();
-      }
-    }
-
-    const mediaCountByParent = new Map<string, number>();
-    const audioOnlyByParent = new Map<string, boolean>();
-    for (const item of pending) {
-      mediaCountByParent.set(item.parentId, (mediaCountByParent.get(item.parentId) || 0) + 1);
-      audioOnlyByParent.set(item.parentId, (audioOnlyByParent.get(item.parentId) ?? true) && item.format === 'Audio');
-    }
-
-    const before = books.length;
-    for (let index = 0; index < pending.length; index += 1) {
-      const item = pending[index];
-      let identity = inferLocalBookMetadata(item.uri, item.format);
-      const embedded = item.format === 'Audio' ? audioMetadataByUri.get(item.uri) : undefined;
-      const embeddedAuthor = embedded?.albumArtist || embedded?.author || embedded?.artist || '';
-      const oneFileWork = (mediaCountByParent.get(item.parentId) || 0) === 1;
-      const embeddedWorkTitle = embedded?.album || (oneFileWork ? embedded?.title : '') || '';
-      if (embeddedWorkTitle || embeddedAuthor || embedded?.genre || embedded?.year) {
-        identity = applyLocalMetadata(identity, {
-          ...(embeddedWorkTitle ? {title: embeddedWorkTitle} : {}),
-          ...(embeddedAuthor ? {author: embeddedAuthor} : {}),
-          ...(embedded?.genre ? {genre: embedded.genre} : {}),
-          ...(metadataYear(embedded?.year) ? {publishedYear: metadataYear(embedded?.year)} : {}),
-        }, 'embedded');
-      }
-      const sidecars = sidecarsByParent.get(item.parentId);
-      const stem = fileStem(item.name).toLowerCase();
-      const genericAllowed = (mediaCountByParent.get(item.parentId) || 0) === 1 || !!audioOnlyByParent.get(item.parentId);
-      const sidecarUri = sidecars?.get(stem) || (genericAllowed ? (sidecars?.get('metadata') || sidecars?.get('book')) : undefined);
-
-      if (sidecarUri) {
-        const fields = await cachedSidecarFields(sidecarUri);
-        if (fields.title || fields.author || fields.series || fields.genre) {
-          identity = applyLocalMetadata(identity, fields, 'sidecar');
-        }
-      }
-      const override = overrides[item.uri];
-      if (override) identity = applyLocalMetadata(identity, override, 'manual');
-      if (identity.needsReview) review += 1;
-
-      books.push({
-        id: books.length + 1,
-        uri: item.uri,
-        title: identity.title || titleFromUri(item.uri),
-        author: identity.author,
-        series: identity.series,
-        genre: identity.genre,
-        publishedYear: identity.publishedYear,
-        format: item.format,
-        space: folder.name,
-        available: true,
-        identificationConfidence: identity.confidence,
-        needsReview: identity.needsReview,
-        reviewReason: identity.reviewReason,
-        coverShape: identity.coverShape,
-        metadataSource: identity.metadataSource,
-        coverUri: coversByParent.get(item.parentId),
-        workTitleHint: embedded?.album || undefined,
-        trackTitle: embedded?.title || undefined,
-        trackNumber: metadataIndex(embedded?.track),
-        discNumber: metadataIndex(embedded?.disc),
-      });
-
-      if (index % 80 === 79) {
-        report('discovering', folder.name);
-        await yieldToUi();
-      }
-    }
-
-    const count = books.length - before;
-    nextFolders.push({...folder, status: `Scanned ${count} items`, itemCount: count, scannedAt: new Date().toISOString()});
+    skipped+=nativeErrors;
+    visitedBeforeFolder+=lastVisited;
+    entriesVisited=visitedBeforeFolder;
+    const count=books.length-before;
+    nextFolders.push({...folder,status:`Scanned ${count} items`,itemCount:count,scannedAt:new Date().toISOString()});
     await yieldToUi();
   }
 
-  report('complete', '');
+  report('complete','');
   return {
-    folders: nextFolders.concat(folders.slice(nextFolders.length)),
+    folders:nextFolders.concat(folders.slice(nextFolders.length)),
     books,
     skipped,
-    truncated: false,
-    identified: books.length - review,
+    truncated:false,
+    identified:books.length-review,
     review,
   };
 }
+
 export async function scanLocalFolders(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
+  onBooks?: (books: LocalBook[], progress: LocalScanProgress) => void | Promise<void>,
 ): Promise<LocalScanResult> {
   if (Platform.OS === 'android' && nativeLibraryScanner?.startTreeScan) {
-    return scanLocalFoldersNative(folders, onProgress, overrides);
+    return scanLocalFoldersNative(folders, onProgress, overrides, onBooks);
   }
   const books: LocalBook[] = [];
   let skipped = 0;
@@ -502,6 +545,8 @@ export async function scanLocalFolders(
           metadataSource: identity.metadataSource,
           coverUri,
         });
+        fallbackBatch.push(books[books.length-1]);
+        if(fallbackBatch.length>=25)await flushFallbackBatch(space);
         if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
       } else if (depth < maxDepth) {
         if (!ext) {
@@ -528,6 +573,7 @@ export async function scanLocalFolders(
       itemCount: count,
       scannedAt: new Date().toISOString(),
     });
+    await flushFallbackBatch(folder.name);
     if (truncated) break;
   }
 
