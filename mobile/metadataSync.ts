@@ -167,7 +167,8 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
   const entries=books.flatMap(book=>{
     const values:Array<{book:SynchronizableBook;value:any;source:SyncSource;confidence:SyncConfidence;key:string;workHint?:boolean}>=[];
     const value=(book as any)[field];
-    if(present(value)){
+    const genericRootValue=field==='author'&&present(value)&&isLibraryRootLabel(String(value));
+    if(present(value)&&!genericRootValue){
       const source=sourceFor(book,field);
       const confidence=confidenceFor(book,field);
       values.push({book,value,source,confidence,key:normal(value)});
