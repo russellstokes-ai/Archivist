@@ -160,6 +160,14 @@ func firstOnlineValue(values []string) string {
 	return ""
 }
 
+func joinOnlineAuthors(values []string) string {
+	cleaned:=make([]string,0,len(values))
+	for _,value:=range values {
+		if author:=normalizeAuthor(value);author!="" { cleaned=append(cleaned,author) }
+	}
+	return cleanMetadata(strings.Join(cleaned,", "))
+}
+
 func preferredISBN(values []string, preferred string) string {
 	preferred = normalizeIdentifier(preferred)
 	for _, value := range values {
@@ -276,7 +284,7 @@ func openLibraryCandidates(ctx context.Context, client *http.Client, target meta
 		if cleanMetadata(doc.Title)=="" { continue }
 		out=append(out,onlineMetadataCandidate{
 			Title:cleanMetadata(doc.Title),
-			Author:normalizeAuthor(strings.Join(doc.AuthorName,", ")),
+			Author:joinOnlineAuthors(doc.AuthorName),
 			Genre:firstOnlineValue(doc.Subject),
 			PublishedYear:doc.FirstPublishYear,
 			Publisher:firstOnlineValue(doc.Publisher),
@@ -326,7 +334,7 @@ func googleBooksCandidates(ctx context.Context, client *http.Client, target meta
 		for _,id:=range info.IndustryIdentifiers { ids=append(ids,id.Identifier) }
 		out=append(out,onlineMetadataCandidate{
 			Title:cleanMetadata(info.Title),
-			Author:normalizeAuthor(strings.Join(info.Authors,", ")),
+			Author:joinOnlineAuthors(info.Authors),
 			Genre:firstOnlineValue(info.Categories),
 			PublishedYear:yearFromText(info.PublishedDate),
 			Publisher:cleanMetadata(info.Publisher),
