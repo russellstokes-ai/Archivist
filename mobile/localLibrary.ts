@@ -204,13 +204,6 @@ async function scanLocalFoldersNative(
   let entriesVisited = 0;
   let visitedBeforeFolder = 0;
   const sidecarCache = new Map<string, LocalMetadataFields>();
-  let fallbackBatch:LocalBook[]=[];
-  const flushFallbackBatch=async(currentFolder:string)=>{
-    if(!fallbackBatch.length)return;
-    const current=fallbackBatch;
-    fallbackBatch=[];
-    await onBooks?.(current,{phase:'identifying',currentFolder,entriesVisited,found:books.length,review});
-  };
 
   async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
     const cached = sidecarCache.get(uri);
@@ -252,7 +245,11 @@ async function scanLocalFoldersNative(
     const contextFor=(parentId:string)=>{
       const existing=contexts.get(parentId);
       if(existing)return existing;
-      const created={sidecars:new Map<string,string>(),mediaCount:0,audioOnly:false};
+      const created:{sidecars:Map<string,string>;coverUri?:string;mediaCount:number;audioOnly:boolean}={
+        sidecars:new Map<string,string>(),
+        mediaCount:0,
+        audioOnly:false,
+      };
       contexts.set(parentId,created);
       return created;
     };
@@ -433,6 +430,13 @@ export async function scanLocalFolders(
   let review = 0;
   const seen = new Set<string>();
   const sidecarCache = new Map<string, LocalMetadataFields>();
+  let fallbackBatch:LocalBook[]=[];
+  const flushFallbackBatch=async(currentFolder:string)=>{
+    if(!fallbackBatch.length)return;
+    const current=fallbackBatch;
+    fallbackBatch=[];
+    await onBooks?.(current,{phase:'identifying',currentFolder,entriesVisited,found:books.length,review});
+  };
 
   async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
     const cached = sidecarCache.get(uri);
