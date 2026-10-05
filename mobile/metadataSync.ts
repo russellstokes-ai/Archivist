@@ -291,6 +291,27 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
   const audio=books.some(book=>book.format==='Audio');
   const selected:Partial<Record<SyncField,ReturnType<typeof canonicalField>>>={};
   for(const field of fields)selected[field]=canonicalField(books,field,audio);
+
+  // Album/work title is work-level evidence, while TIT2/©nam is commonly a
+  // chapter title. When the grouped tracks agree on one embedded work title,
+  // use it explicitly unless the user supplied a manual title.
+  if(audio&&selected.title?.source!=='manual'){
+    const workTitles=books.map(book=>clean(book.embeddedMetadata?.workTitle||'')).filter(Boolean);
+    const normalized=[...new Set(workTitles.map(normal))];
+    if(workTitles.length>0&&normalized.length===1){
+      selected.title={
+        book:books.find(book=>normal(book.embeddedMetadata?.workTitle||'')===normalized[0])||books[0],
+        value:workTitles[0],
+        source:'embedded',
+        confidence:'high',
+        key:normalized[0],
+        workHint:true,
+        score:Number.MAX_SAFE_INTEGER,
+        authority:1,
+      } as any;
+    }
+  }
+
   const value=(field:SyncField)=>selected[field]?.value;
   const provenance:CanonicalMetadata['provenance']={};
   const confidence:CanonicalMetadata['confidence']={};
