@@ -72,6 +72,7 @@ import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
+import {synchronizeLocalMetadata} from './metadataSync';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -2411,13 +2412,13 @@ function Client() {
         if(!scanCommitGate.isCurrent(generation))return;
         const latest=Array.isArray(stored)?stored:embeddedBooks;
         if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
-          await enrichPublishedLocalBookMetadata(latest,generation);
+          await enrichPublishedLocalBookMetadata(latest,generation,forceOnline);
         }
         if(!scanCommitGate.isCurrent(generation))return;
         const afterBooks=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
         if(!scanCommitGate.isCurrent(generation))return;
         if(metadataSettings.comics.enabled&&metadataSettings.comics.metron){
-          await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation);
+          await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation,forceOnline);
         }
       }
     }finally{
@@ -2447,11 +2448,12 @@ function Client() {
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],enriched.books).map(book=>({...book,source:'local' as const})));
-    await setPersistedJSON(localCatalogKey,enriched.books).catch(()=>undefined);
+    const synchronized=synchronizeLocalMetadata(enriched.books).books as LocalBook[];
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],synchronized).map(book=>({...book,source:'local' as const})));
+    await setPersistedJSON(localCatalogKey,synchronized).catch(()=>undefined);
   }
 
-  async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number){
+  async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number,forceRefresh=false){
     if(!baseBooks.some(book=>book.format==='EPUB'||book.format==='PDF'||book.format==='Audio')||!scanCommitGate.isCurrent(generation))return;
     const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
     if(!scanCommitGate.isCurrent(generation))return;
@@ -2466,6 +2468,7 @@ function Client() {
       googleBooksApiKey,
       openLibraryEnabled:metadataSettings.books.openLibrary,
       applyHighConfidence:metadataSettings.applyHighConfidence,
+      ignoreCache:forceRefresh,
       batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
@@ -2485,7 +2488,7 @@ function Client() {
       deleteAsync,
     },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
     if(!scanCommitGate.isCurrent(generation))return;
-    const finalBooks=cachedCovers?.books||enriched.books;
+    const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
     await Promise.all([
       setPersistedJSON(localCatalogKey,finalBooks),
@@ -2499,7 +2502,7 @@ function Client() {
     }
   }
 
-  async function enrichPublishedLocalComicMetadata(baseBooks:LocalBook[],generation:number){
+  async function enrichPublishedLocalComicMetadata(baseBooks:LocalBook[],generation:number,forceRefresh=false){
     if(!baseBooks.some(book=>book.format==='Comic')||!scanCommitGate.isCurrent(generation))return;
     if(!metadataSettings.comics.metron)return;
     const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim();
@@ -2512,6 +2515,7 @@ function Client() {
       token,
       cache,
       applyHighConfidence:metadataSettings.applyHighConfidence,
+      ignoreCache:forceRefresh,
       batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:async(batch,progress)=>{
@@ -2531,7 +2535,7 @@ function Client() {
       deleteAsync,
     },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
     if(!scanCommitGate.isCurrent(generation))return;
-    const finalBooks=cachedCovers?.books||enriched.books;
+    const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
     await Promise.all([
       setPersistedJSON(localCatalogKey,finalBooks),
@@ -2571,7 +2575,9 @@ function Client() {
     if(!scanCommitGate.isCurrent(generation))return;
     const currentStored=Array.isArray(stored)?stored:baseBooks;
     const patched=applyCoverEnrichment(currentStored,enriched.books);
-    if(patched!==currentStored)await setPersistedJSON(localCatalogKey,patched).catch(()=>undefined);
+    const synchronized=synchronizeLocalMetadata(patched).books as LocalBook[];
+    setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],synchronized).map(book=>({...book,source:'local' as const})));
+    if(patched!==currentStored||synchronized!==patched)await setPersistedJSON(localCatalogKey,synchronized).catch(()=>undefined);
   }
 
   function scanNotice(result:LocalScanResult) {
