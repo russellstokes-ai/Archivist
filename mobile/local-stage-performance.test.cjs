@@ -45,7 +45,7 @@ assert.equal(
 assert(enrichment.includes('indexByUri=new Map<string,number>()'),'Enrichment must index assets once.');
 assert(enrichment.includes('applyEntryIndexed'),'Enrichment must update only the current work tracks.');
 assert(enrichment.includes('entry.version!==2'),'Only current-schema enrichment entries may be reused.');
-assert(enrichment.indexOf('entry.querySignature!==querySignature') < enrichment.indexOf('entry.publishReady'),'Successful entries must validate their evidence signature before reuse.');
+assert(enrichment.includes('if(entry.querySignature!==querySignature)return false;'),'Successful entries must validate their evidence signature before reuse.');
 assert(enrichment.includes('const seedCache=inputCache'),'Prior cache must be read-only seed data during reconciliation.');
 assert(enrichment.includes("const cache:{[key:string]:LocalEnrichmentCacheEntry}={}"),'Reconciliation output must contain active fingerprints only.');
 assert(enrichment.includes('workConcurrency=Math.max(1,Math.min(3'),'Enrichment worker count must remain explicitly bounded.');
