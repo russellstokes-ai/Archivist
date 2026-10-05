@@ -6,6 +6,7 @@ export type MetadataLookupInput = {
   series?: string;
   publishedYear?: number;
   isbn?: string;
+  identifiers?: string[];
 };
 
 export type MetadataMatch = {
@@ -19,6 +20,8 @@ export type MetadataMatch = {
   genres?: string[];
   description?: string;
   isbns?: string[];
+  identifiers?: string[];
+  series?: string[];
   coverUri?: string;
   confidence: number;
 };
@@ -58,23 +61,69 @@ function isbn(value: string) {
 }
 
 function authorSimilarity(requested: string, authors: string[]) {
-  if (!requested) return authors.length ? 0.7 : 0;
-  if (!authors.length) return 0;
+  if (!requested || !authors.length) return 0;
   return Math.max(...authors.map(author => textSimilarity(requested, author)));
 }
 
+function identifierSet(input: MetadataLookupInput) {
+  const values = [input.isbn || '', ...(input.identifiers || [])]
+    .map(value => isbn(value))
+    .filter(value => value.length === 10 || value.length === 13);
+  return new Set(values);
+}
+
+function candidateIdentifiers(candidate: Omit<MetadataMatch,'confidence'>) {
+  return new Set(
+    [...(candidate.isbns || []), ...(candidate.identifiers || [])]
+      .map(value => isbn(value))
+      .filter(value => value.length === 10 || value.length === 13),
+  );
+}
+
+function seriesSimilarity(requested: string, candidate: Omit<MetadataMatch,'confidence'>) {
+  if (!requested) return 0.5;
+  const values = candidate.series || [];
+  if (!values.length) return 0.5;
+  return Math.max(...values.map(value => textSimilarity(requested, value)));
+}
+
 export function scoreMetadataMatch(input: MetadataLookupInput, candidate: Omit<MetadataMatch,'confidence'>) {
-  const requestedIsbn = isbn(input.isbn || '');
-  if (requestedIsbn && (candidate.isbns || []).some(value => isbn(value) === requestedIsbn)) return 1;
+  const requestedIds = identifierSet(input);
+  const candidateIds = candidateIdentifiers(candidate);
+  if (requestedIds.size) {
+    for (const value of requestedIds) if (candidateIds.has(value)) return 1;
+  }
+
   const title = textSimilarity(input.title, candidate.title);
-  if (title < 0.68) return Math.min(0.55, title * 0.7);
-  const author = authorSimilarity(input.author || '', candidate.authors || []);
-  if (input.author && author < 0.45) return Math.min(0.69, title * 0.62 + author * 0.18);
+  if (title < 0.82) return Math.min(0.59, title * 0.7);
+
+  // Automatic fuzzy publication is never title-only. Missing author evidence is
+  // deliberately capped below the default acceptance threshold.
+  const requestedAuthor = String(input.author || '').trim();
+  const author = authorSimilarity(requestedAuthor, candidate.authors || []);
+  if (!requestedAuthor || author < 0.72) {
+    return Math.min(0.79, title * 0.62 + author * 0.24);
+  }
+
+  const series = seriesSimilarity(input.series || '', candidate);
+  if (input.series && candidate.series?.length && series < 0.58) {
+    return Math.min(0.81, title * 0.52 + author * 0.25 + series * 0.08);
+  }
+
   const year = input.publishedYear && candidate.publishedYear
-    ? Math.max(0, 1 - Math.min(10, Math.abs(input.publishedYear - candidate.publishedYear)) / 10)
-    : 0.55;
+    ? Math.max(0, 1 - Math.min(12, Math.abs(input.publishedYear - candidate.publishedYear)) / 12)
+    : 0.6;
   const cover = candidate.coverUri ? 1 : 0;
-  return Math.max(0, Math.min(1, title * 0.68 + author * 0.23 + year * 0.04 + cover * 0.05));
+
+  // Title + author carry almost all identity weight. Series/year/cover can
+  // resolve close candidates, but cannot rescue a weak author or title.
+  return Math.max(0, Math.min(1,
+    title * 0.60 +
+    author * 0.28 +
+    series * 0.06 +
+    year * 0.04 +
+    cover * 0.02
+  ));
 }
 
 export function bestMetadataMatch(input: MetadataLookupInput, candidates: Array<Omit<MetadataMatch,'confidence'>>, minimum = 0.86): MetadataMatch | null {
@@ -108,7 +157,7 @@ export async function lookupOpenLibrary(input: MetadataLookupInput): Promise<Arr
     params.set('title', input.title);
     if (input.author) params.set('author', input.author);
   }
-  params.set('fields', 'key,title,author_name,cover_i,first_publish_year,isbn,edition_key');
+  params.set('fields', 'key,title,author_name,cover_i,first_publish_year,isbn,edition_key,series');
   params.set('limit', '8');
   const data = await fetchJson('https://openlibrary.org/search.json?' + params.toString());
   return (Array.isArray(data?.docs) ? data.docs : []).map((doc:any) => ({
@@ -120,6 +169,8 @@ export async function lookupOpenLibrary(input: MetadataLookupInput): Promise<Arr
     authors: Array.isArray(doc.author_name) ? doc.author_name.map(String) : [],
     publishedYear: Number(doc.first_publish_year) || undefined,
     isbns: Array.isArray(doc.isbn) ? doc.isbn.map(String) : [],
+    identifiers: Array.isArray(doc.isbn) ? doc.isbn.map(String) : [],
+    series: Array.isArray(doc.series) ? doc.series.map(String) : [],
     coverUri: doc.cover_i ? 'https://covers.openlibrary.org/b/id/' + encodeURIComponent(String(doc.cover_i)) + '-L.jpg?default=false' : undefined,
   })).filter((item:any) => item.providerId && item.title);
 }
@@ -145,6 +196,7 @@ export async function lookupGoogleBooks(input: MetadataLookupInput): Promise<Arr
       genres: Array.isArray(info.categories) ? info.categories.map(String) : [],
       description: typeof info.description === 'string' ? info.description : undefined,
       isbns: identifiers,
+      identifiers,
       coverUri: secureImage(image.extraLarge || image.large || image.medium || image.small || image.thumbnail),
     };
   }).filter((item:any) => item.providerId && item.title);
