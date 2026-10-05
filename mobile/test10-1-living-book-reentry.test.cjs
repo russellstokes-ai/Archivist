@@ -20,6 +20,8 @@ assert.ok(app.includes('preserveCurrentOnStop:false'),'page turn cancellation mu
 assert.ok(app.includes("const ambientPageLoopStopRef=useRef<(()=>void)|null>(null)")&&app.includes('ambientPageLoopStopRef.current?.();'),'manual skip must take exclusive ownership from the ambient page loop');
 assert.ok(app.includes("bookOpenProgressRef.current<.95"),'manual page skips must not animate beside a partially opened cover');
 assert.ok(app.includes('setAmbientPageLoopEpoch(value=>value+1)'),'ambient turning must restart from a fresh schedule only after a manual skip completes');
+assert.ok(app.includes("if(!playbackVisible||!playbackIsPlaying||reduceMotion)")&&app.includes('pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);'),'Pause must stop ambient paper immediately even while the cover-close grace remains active');
+assert.ok(app.includes('if(playerVisualPlaying&&bookOpenProgressRef.current>=.95)setAmbientPageLoopEpoch(value=>value+1)'),'rapid Pause→Play must restart a fresh ambient schedule instead of resuming a stopped leaf');
 
 const visibleReset=app.indexOf('// Every visible player session starts with a clean page layer.');
 const timing=app.indexOf('Animated.timing(bookOpenAnim,{',visibleReset);
