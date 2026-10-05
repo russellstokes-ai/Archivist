@@ -538,7 +538,7 @@ export async function scanLocalFolders(
           metadataProvenance: resolvedMetadata.provenance,
           metadataFieldConfidence: resolvedMetadata.confidence,
           metadataConflicts: resolvedMetadata.conflicts,
-          embeddedMetadata: embeddedFields,
+          embeddedMetadata: options.deferEmbeddedMetadata && !unchanged ? undefined : embeddedFields,
           fileSize,
           modificationTime,
           rootUri: folderRoot,
