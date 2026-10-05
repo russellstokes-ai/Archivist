@@ -1,4 +1,4 @@
-import {decodedPathParts, logicalWorkKey} from './libraryIntelligence';
+import {decodedPathParts, isLibraryRootLabel, logicalWorkKey} from './libraryIntelligence';
 import {audioWorkGroupKeys, canonicalMetadataForBooks} from './metadataSync';
 import {LocalBook} from './localLibrary';
 
@@ -86,9 +86,9 @@ function localWorkKey(book: LocalBook,audioKeys:Map<string,string>) {
 function audioFolderTitle(uri: string) {
   const parts = decodedPathParts(uri);
   const dirs = parts.slice(0, -1).filter(Boolean);
-  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
+  while (dirs.length && isLibraryRootLabel(dirs[0])) dirs.shift();
   const parent = dirs[dirs.length - 1] || '';
-  return isLibraryRoot(parent) ? '' : cleanLabel(parent);
+  return isLibraryRootLabel(parent) ? '' : cleanLabel(parent);
 }
 
 function commonValue(values: string[]) {
@@ -104,10 +104,6 @@ function naturalCompare(a: string, b: string) {
 
 function cleanLabel(value: string) {
   return String(value || '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function isLibraryRoot(value: string) {
-  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
 }
 
 function decode(value: string) {
