@@ -26,7 +26,7 @@ for(const offset of G.depthOffsets){
   );
 }
 assert.match(source,/internalClip:{[^}]*overflow:'hidden'/s,'internal pages must be clipped inside the hardcover silhouette');
-assert.match(source,/inputRange:[0,G\.internalRevealStart,G\.internalRevealEnd,1]/,'internal spread must remain invisible at full closure');
+assert.ok(source.includes("inputRange:[0,G.internalRevealStart,G.internalRevealEnd,1]"),'internal spread must remain invisible at full closure');
 assert.match(source,/backfaceVisibility:'hidden'/,'folded page/cover backfaces must be hidden');
 assert.equal(source.includes("rotateX:'9deg'"),false,'whole spread must not be tilted out of level');
 assert.match(source,/Animated\.multiply\(\s*open,\s*turn\.interpolate/s,'ambient turn leaves must disappear as the book closes');
