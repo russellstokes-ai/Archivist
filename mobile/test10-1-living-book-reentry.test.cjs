@@ -7,7 +7,7 @@ const geometry=fs.readFileSync(__dirname+'/livingBookGeometry.ts','utf8');
 
 assert.ok(app.includes("if(!playbackVisible){"),'leaving Now must have an explicit Living Book lifecycle boundary');
 assert.ok(app.includes('const livingBookWasVisibleRef=useRef(false)')&&app.includes('const enteringVisible=playbackVisible&&!wasVisible'),'returning to Now must be tracked explicitly as a new visual session');
-assert.ok(app.includes('playerMotionState({playing:playbackIsPlaying||playerVisualPlaying,visible:true,reduceMotion})'),'background playback must reopen the book immediately on return');
+assert.ok(app.includes('playerMotionState({playing:playerMotionPlaying,visible:true,reduceMotion})'),'Living Book motion must follow immediate transport intent or confirmed playback without pause grace');
 assert.ok(app.includes('// Resolve visibility/playback state before paint'),'visual playback state must synchronise in the layout phase before a returned frame paints');
 assert.ok(app.includes('useLayoutEffect(()=>{')&&app.includes('const livingBookMotionGeneration=useRef(0)'),'Living Book reset must occur in the layout phase before a stale native frame can paint');
 assert.ok(app.includes('bookOpenAnim.stopAnimation();')&&app.includes('bookOpenAnim.setValue(0);'),'hidden player must abandon and reset any partial hinge frame');
@@ -24,8 +24,10 @@ assert.ok(app.includes('preserveCurrentOnStop:false'),'page turn cancellation mu
 assert.ok(app.includes("const ambientPageLoopStopRef=useRef<(()=>void)|null>(null)")&&app.includes('ambientPageLoopStopRef.current?.();'),'manual skip must take exclusive ownership from the ambient page loop');
 assert.ok(app.includes("bookOpenProgressRef.current<.95"),'manual page skips must not animate beside a partially opened cover');
 assert.ok(app.includes('setAmbientPageLoopEpoch(value=>value+1)'),'ambient turning must restart from a fresh schedule only after a manual skip completes');
-assert.ok(app.includes("if(!playbackVisible||!playbackIsPlaying||reduceMotion)")&&app.includes('pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);'),'Pause must stop ambient paper immediately even while the cover-close grace remains active');
-assert.ok(app.includes('if(playerVisualPlaying&&bookOpenProgressRef.current>=.95)setAmbientPageLoopEpoch(value=>value+1)'),'rapid Pause→Play must restart a fresh ambient schedule instead of resuming a stopped leaf');
+assert.ok(app.includes("if(!playbackVisible||!playerMotionPlaying||reduceMotion)")&&app.includes('pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);'),'Pause must stop ambient paper immediately as the close begins');
+assert.ok(app.includes('const [playerMotionIntent,setPlayerMotionIntent]=useState<boolean|null>(null)'),'play/pause must have an immediate visual intent independent of transport status latency');
+assert.ok(app.includes('setPlayerMotionIntent(targetPlaying)'),'the transport tap must drive the cover on the same interaction rather than waiting for audio status');
+assert.equal(app.includes('pauseGraceMs'),false,'the old pause grace must not keep the book open after Pause');
 
 const visibleReset=app.indexOf('// Every visible player session starts with a clean page layer.');
 const timing=app.indexOf('Animated.timing(bookOpenAnim,{',visibleReset);
