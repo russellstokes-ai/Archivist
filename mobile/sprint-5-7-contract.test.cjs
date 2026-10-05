@@ -12,7 +12,7 @@ assert.ok(source.includes('local.tracks.map(track=>track.uri)'),'Grouped local w
 assert.ok(source.includes('Choose image from device') && source.includes('Other local artwork') && source.includes('Use scanned metadata & cover') && source.includes('Publication year'),'Metadata/cover editor must retain Sprint 5 metadata fields and the approved Sprint 9 cover chooser');
 assert.ok(source.includes('Manual override') && source.includes('Sidecar metadata') && source.includes('Filename / folder scan'),'Work details must expose metadata provenance');
 assert.ok(localLibrary.includes('coverUri?: string;') && localLibrary.includes('override?.coverUri?.trim() || discoveredCoverUri'),'Manual local cover overrides must survive rescans');
-assert.ok(localWorks.includes("first.metadataSource!=='manual'"),'Manual audiobook titles must override folder-derived work titles');
+assert.ok(localWorks.includes('canonicalMetadataForBooks(tracks)') && localWorks.includes("const title = audio ? (canonical.title || folderTitle || first.title)"),'Audiobook titles must use canonical metadata before folder fallback, preserving manual metadata priority');
 
 assert.ok(source.includes('function ArchivistLogo(') && source.includes("require('./assets/icon.png')"),'Canonical in-app Archivist logo component is missing');
 assert.equal(/styles\.emptyMark[\s\S]{0,80}>A<\/Text>/.test(source),false,'Generic A empty-state branding remains');
