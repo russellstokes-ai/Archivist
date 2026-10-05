@@ -630,16 +630,30 @@ function Client() {
   const livingBookMotionRef=useRef<LivingBookMotion>(livingBookMotion);
   livingBookMotionRef.current=livingBookMotion;
   const livingBookGeneration=useRef(0);
-  const livingBookPageLoop=useRef<Animated.CompositeAnimation|null>(null);
+  const livingBookPageLoop=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const livingBookSettleTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
   const [skipTurning,setSkipTurning]=useState(false);
   const skipGeneration=useRef(0);
   function turnThreePages(direction:1|-1){
-    if(reduceMotion||!playbackVisible)return;
+    if(reduceMotion||!playbackVisible||livingBookMotionRef.current.phase!=='open')return;
+    stopLivingBookPageLoop();
+    const motion=transitionLivingBook({type:'turn-request'});
+    if(motion.phase!=='turning')return;
     const generation=++skipGeneration.current;
     skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipTurning(true);
-    Animated.timing(skipTurnAnim,{toValue:3,duration:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
+    Animated.timing(skipTurnAnim,{toValue:3,duration:780,useNativeDriver:true}).start(({finished})=>{
+      if(!finished||generation!==skipGeneration.current)return;
+      transitionLivingBook({type:'turn-complete'});
+      scheduleLivingBookSettle(()=>{
+        if(generation!==skipGeneration.current)return;
+        skipTurnAnim.setValue(0);
+        setSkipTurning(false);
+        const next=transitionLivingBook({type:'settle-complete'});
+        if(next.phase==='closing')animateLivingBookCoverClose();
+      });
+    });
   }
 
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
@@ -783,74 +797,110 @@ function Client() {
   }
 
   function stopLivingBookPageLoop(){
-    livingBookPageLoop.current?.stop();
-    livingBookPageLoop.current=null;
+    if(livingBookPageLoop.current!==null){
+      clearTimeout(livingBookPageLoop.current);
+      livingBookPageLoop.current=null;
+    }
+  }
+
+  function clearLivingBookSettle(){
+    if(livingBookSettleTimer.current!==null){
+      clearTimeout(livingBookSettleTimer.current);
+      livingBookSettleTimer.current=null;
+    }
+  }
+
+  function scheduleLivingBookSettle(callback:()=>void){
+    clearLivingBookSettle();
+    if(reduceMotion){callback();return;}
+    livingBookSettleTimer.current=setTimeout(()=>{
+      livingBookSettleTimer.current=null;
+      callback();
+    },180);
+  }
+
+  function animateLivingBookCoverClose(){
+    const generation=++livingBookGeneration.current;
+    bookOpenAnim.stopAnimation(value=>{
+      if(generation!==livingBookGeneration.current)return;
+      if(reduceMotion){
+        bookOpenAnim.setValue(0);
+        transitionLivingBook({type:'close-complete'});
+        return;
+      }
+      Animated.timing(bookOpenAnim,{
+        toValue:0,
+        duration:Math.max(180,Math.round(value*1500)),
+        useNativeDriver:true,
+      }).start(({finished})=>{
+        if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'close-complete'});
+      });
+    });
   }
 
   function animateLivingBookOpen(){
-    const generation=++livingBookGeneration.current;
     stopLivingBookPageLoop();
-    transitionLivingBook({type:'play-request'});
-    pageTurnAnim.stopAnimation();
-    pageTurnAnim.setValue(0);
+    clearLivingBookSettle();
+    const next=transitionLivingBook({type:'play-request'});
+    if(next.phase!=='opening')return;
+    const generation=++livingBookGeneration.current;
     bookOpenAnim.stopAnimation(value=>{
       if(generation!==livingBookGeneration.current)return;
-      if(reduceMotion){bookOpenAnim.setValue(1);transitionLivingBook({type:'open-complete'});return;}
-      Animated.timing(bookOpenAnim,{toValue:1,duration:Math.max(180,Math.round((1-value)*1500)),useNativeDriver:true}).start(({finished})=>{
+      if(reduceMotion){
+        bookOpenAnim.setValue(1);
+        transitionLivingBook({type:'open-complete'});
+        return;
+      }
+      Animated.timing(bookOpenAnim,{
+        toValue:1,
+        duration:Math.max(180,Math.round((1-value)*1500)),
+        useNativeDriver:true,
+      }).start(({finished})=>{
         if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'open-complete'});
       });
     });
   }
 
   function animateLivingBookClose(){
-    const generation=++livingBookGeneration.current;
     stopLivingBookPageLoop();
-    const closeCover=()=>{
-      if(generation!==livingBookGeneration.current)return;
-      if(livingBookMotionRef.current.phase!=='closing')transitionLivingBook({type:'pause-request'});
-      bookOpenAnim.stopAnimation(value=>{
+    const next=transitionLivingBook({type:'pause-request'});
+    if(next.phase==='turning'||next.phase==='settling')return;
+    if(next.phase==='closing')animateLivingBookCoverClose();
+  }
+
+  function animateLivingBookPageTurn(){
+    stopLivingBookPageLoop();
+    if(reduceMotion||livingBookMotionRef.current.phase!=='open')return;
+    const next=transitionLivingBook({type:'turn-request'});
+    if(next.phase!=='turning')return;
+    const generation=++livingBookGeneration.current;
+    pageTurnAnim.stopAnimation();
+    pageTurnAnim.setValue(0);
+    Animated.timing(pageTurnAnim,{toValue:1,duration:1900,useNativeDriver:true}).start(({finished})=>{
+      if(!finished||generation!==livingBookGeneration.current)return;
+      transitionLivingBook({type:'turn-complete'});
+      scheduleLivingBookSettle(()=>{
         if(generation!==livingBookGeneration.current)return;
-        if(reduceMotion){bookOpenAnim.setValue(0);transitionLivingBook({type:'close-complete'});return;}
-        Animated.timing(bookOpenAnim,{toValue:0,duration:Math.max(180,Math.round(value*1500)),useNativeDriver:true}).start(({finished})=>{
-          if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'close-complete'});
-        });
+        const settled=transitionLivingBook({type:'settle-complete'});
+        pageTurnAnim.setValue(0);
+        if(settled.phase==='closing')animateLivingBookCoverClose();
       });
-    };
-    pageTurnAnim.stopAnimation(value=>{
-      if(generation!==livingBookGeneration.current)return;
-      if(!reduceMotion&&value>0.02&&value<0.98){
-        if(livingBookMotionRef.current.phase==='open')transitionLivingBook({type:'turn-request'});
-        transitionLivingBook({type:'pause-request'});
-        Animated.timing(pageTurnAnim,{toValue:1,duration:Math.max(220,Math.round((1-value)*1900)),useNativeDriver:true}).start(({finished})=>{
-          if(!finished||generation!==livingBookGeneration.current)return;
-          pageTurnAnim.setValue(0);
-          transitionLivingBook({type:'settle-complete'});
-          closeCover();
-        });
-        return;
-      }
-      pageTurnAnim.setValue(0);
-      transitionLivingBook({type:'pause-request'});
-      closeCover();
     });
   }
 
   useEffect(()=>{
     if(!playing){
       ++livingBookGeneration.current;
+      ++skipGeneration.current;
       stopLivingBookPageLoop();
+      clearLivingBookSettle();
       bookOpenAnim.stopAnimation();bookOpenAnim.setValue(0);
       pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
+      skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
       transitionLivingBook({type:'restore',playing:false});
       return;
     }
-    if(!playbackVisible){
-      stopLivingBookPageLoop();
-      bookOpenAnim.stopAnimation();bookOpenAnim.setValue(playbackIsPlaying?1:0);
-      pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
-      transitionLivingBook({type:'restore',playing:playbackIsPlaying});
-      return;
-    }
+    transitionLivingBook({type:'visibility-change',visible:playbackVisible});
     const phase=livingBookMotionRef.current.phase;
     if(playbackIsPlaying&&(phase==='closed'||phase==='closing'))animateLivingBookOpen();
     if(!playbackIsPlaying&&phase!=='closed'&&phase!=='closing')animateLivingBookClose();
@@ -858,22 +908,12 @@ function Client() {
 
   useEffect(()=>{
     stopLivingBookPageLoop();
-    if(!playbackVisible||!playbackIsPlaying||reduceMotion||livingBookMotion.phase!=='open'){
-      pageTurnAnim.stopAnimation();
-      pageTurnAnim.setValue(0);
-      return;
-    }
-    pageTurnAnim.setValue(0);
-    const loop=Animated.loop(Animated.sequence([
-      Animated.delay(7200),
-      Animated.timing(pageTurnAnim,{toValue:1,duration:1900,useNativeDriver:true}),
-      Animated.delay(180),
-      Animated.timing(pageTurnAnim,{toValue:0,duration:0,useNativeDriver:true}),
-      Animated.delay(1100),
-    ]));
-    livingBookPageLoop.current=loop;
-    loop.start();
-    return()=>{if(livingBookPageLoop.current===loop)livingBookPageLoop.current=null;loop.stop();};
+    if(!playbackVisible||!playbackIsPlaying||reduceMotion||livingBookMotion.phase!=='open')return;
+    livingBookPageLoop.current=setTimeout(()=>{
+      livingBookPageLoop.current=null;
+      animateLivingBookPageTurn();
+    },7200);
+    return()=>stopLivingBookPageLoop();
   },[livingBookMotion.phase,playbackIsPlaying,playbackVisible,reduceMotion]);
 
   const allPhoneWorks = useMemo(() => {
