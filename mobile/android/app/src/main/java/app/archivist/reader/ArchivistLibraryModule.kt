@@ -25,6 +25,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
 
   private data class ScanEntry(
     val uri: String,
+    val documentId: String,
     val name: String,
     val parentId: String,
     val mime: String,
@@ -131,7 +132,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
               val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
               val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
               val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
-              offer(session, ScanEntry(documentUri.toString(), name, parentId, mime, size, modified, role.first, role.second))
+              offer(session, ScanEntry(documentUri.toString(), documentId, name, parentId, mime, size, modified, role.first, role.second))
             }
             contextReady = true
           } ?: run {
@@ -143,6 +144,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
             offer(
               session,
               ScanEntry(
+                "",
                 "",
                 "",
                 parentId,
@@ -185,7 +187,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           session.lastError = error.message ?: "A folder could not be read."
         } finally {
           if (!session.cancelled.get()) {
-            offer(session, ScanEntry("", "", parentId, "", 0L, 0L, "directory-end", ""))
+            offer(session, ScanEntry("", "", "", parentId, "", 0L, 0L, "directory-end", ""))
           }
         }
       }
@@ -225,6 +227,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
       val entry = session.queue.poll() ?: return@repeat
       val map = Arguments.createMap()
       map.putString("uri", entry.uri)
+      map.putString("documentId", entry.documentId)
       map.putString("name", entry.name)
       map.putString("parentId", entry.parentId)
       map.putString("mimeType", entry.mime)
