@@ -194,6 +194,17 @@ const supported = new Map<string, string>([
 
 const maxEntriesPerScan = 100000;
 const maxVisitedEntriesPerScan = 250000;
+const uiFrameBudgetMs = 8;
+
+function cooperativeYieldFactory(frameBudgetMs=uiFrameBudgetMs){
+  let lastYield=Date.now();
+  return async(force=false)=>{
+    const now=Date.now();
+    if(!force&&now-lastYield<frameBudgetMs)return;
+    await new Promise<void>(resolve=>setTimeout(resolve,0));
+    lastYield=Date.now();
+  };
+}
 const knownNonDirectoryExtensions = new Set([
   ...supported.keys(),
   'cbr','cbt','opf','nfo','jpg','jpeg','png','webp','gif','txt','cue','m3u','m3u8','json','xml','srt',
@@ -333,6 +344,7 @@ export async function scanLocalFolders(
   const sidecarCache = new Map<string, LocalMetadataFields>();
   const visitedDirectories = new Set<string>();
   const previousByUri = new Map(previousBooks.filter(book=>!!book.uri).map(book=>[book.uri,book]));
+  const yieldToUi=cooperativeYieldFactory();
 
   async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
     const cached = sidecarCache.get(uri);
@@ -405,7 +417,7 @@ export async function scanLocalFolders(
 
     for (const child of children) {
       entriesVisited += 1;
-      if(entriesVisited%12===0)await new Promise(resolve=>setTimeout(resolve,0));
+      await yieldToUi();
       if (entriesVisited > maxVisitedEntriesPerScan) {
         truncated = true;
         truncatedReason = 'entry-limit';
@@ -732,6 +744,7 @@ export async function enrichLocalEmbeddedMetadata(
   let attempted=0,processed=0,updated=0,pending=0;
   let review=next.filter(book=>book.needsReview).length;
   let lastPublish=Date.now();
+  const yieldToUi=cooperativeYieldFactory();
 
   for(let index=0;index<next.length;index+=1){
     if(!shouldContinue())break;
@@ -741,14 +754,14 @@ export async function enrichLocalEmbeddedMetadata(
     if(book.embeddedMetadata&&!options.refreshMetadata){
       if(pending>=batchSize||Date.now()-lastPublish>=900){
         lastPublish=Date.now();pending=0;
-        await options.onBatch?.(next.slice(),{attempted,processed,total:eligible.length,updated,review});
+        await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review});
       }
       continue;
     }
     attempted+=1;pending+=1;
-    // Yield before every potentially expensive archive/tag parse so gestures,
-    // navigation and playback get a frame between files.
-    await new Promise(resolve=>setTimeout(resolve,0));
+    // Yield before and after potentially expensive archive/tag parsing so the
+    // JS thread never monopolises a frame budget during large refreshes.
+    await yieldToUi(true);
     if(!shouldContinue())break;
     const ext=extension(book.uri);
     const raw=book.format==='Audio'
@@ -759,19 +772,18 @@ export async function enrichLocalEmbeddedMetadata(
     const siblingCount=book.format==='Audio'?(audioFolderCounts.get(parts.slice(0,-1).join('/'))||1):1;
     const fields=sanitizeDiscoveredMetadata(raw,book.format,book.title,siblingCount);
     const patch=mergeEmbeddedMetadata(book,fields);
-    if(JSON.stringify(patch)!==JSON.stringify(book)){
-      next[index]=patch;
-      updated+=1;
-    }
-    review=next.reduce((count,item)=>count+(item.needsReview?1:0),0);
+    next[index]=patch;
+    if(Object.keys(fields).length)updated+=1;
+    if(!!book.needsReview!==!!patch.needsReview)review+=patch.needsReview?1:-1;
+    await yieldToUi();
     if(pending>=batchSize||Date.now()-lastPublish>=900){
       lastPublish=Date.now();pending=0;
-      await options.onBatch?.(next.slice(),{attempted,processed,total:eligible.length,updated,review});
-      await new Promise(resolve=>setTimeout(resolve,0));
+      await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review});
+      await yieldToUi(true);
     }
   }
   if((pending>0||processed===eligible.length)&&shouldContinue()){
-    await options.onBatch?.(next.slice(),{attempted,processed,total:eligible.length,updated,review});
+    await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review});
   }
   return {books:next,attempted,processed,updated,review};
 }
@@ -811,6 +823,7 @@ export async function enrichLocalBookCovers(
   let updated=0;
   let pendingSinceBatch=0;
   let lastPublish=Date.now();
+  const yieldToUi=cooperativeYieldFactory();
   const audioKeys=audioWorkGroupKeys(next);
   const audioGroupCover=new Map<string,string>();
   for(const book of next){
@@ -822,7 +835,7 @@ export async function enrichLocalBookCovers(
 
   for(let index=0;index<next.length;index+=1){
     if(!shouldContinue())break;
-    await new Promise(resolve=>setTimeout(resolve,0));
+    await yieldToUi();
     const book=next[index];
     if(book.coverUri)continue;
     const ext=extension(book.uri);
@@ -838,7 +851,7 @@ export async function enrichLocalBookCovers(
       updated+=1;
       if(pendingSinceBatch>=batchSize||Date.now()-lastPublish>=1200){
         lastPublish=Date.now();pendingSinceBatch=0;
-        await options.onBatch?.(next.slice(),{attempted,updated});
+        await options.onBatch?.(next,{attempted,updated});
       }
       continue;
     }
@@ -858,12 +871,12 @@ export async function enrichLocalBookCovers(
     if(pendingSinceBatch>=batchSize||Date.now()-lastPublish>=1200){
       lastPublish=Date.now();
       pendingSinceBatch=0;
-      await options.onBatch?.(next.slice(),{attempted,updated});
+      await options.onBatch?.(next,{attempted,updated});
     }
   }
 
   if(pendingSinceBatch>0&&shouldContinue()){
-    await options.onBatch?.(next.slice(),{attempted,updated});
+    await options.onBatch?.(next,{attempted,updated});
   }
   return {books:next,attempted,updated};
 }
@@ -975,6 +988,7 @@ export async function enrichLocalBookMetadataOnline(
   const units=localBookLookupUnits(next);
   let attempted=0,matched=0,review=0,updated=0,pending=0;
   let lastPublish=Date.now();
+  const yieldToUi=cooperativeYieldFactory();
 
   for(const unit of units){
     if(!shouldContinue())break;
@@ -1001,10 +1015,8 @@ export async function enrichLocalBookMetadataOnline(
             onlineMetadataMatch:candidate,
             onlineMetadataAlternatives:result.candidates.slice(1,5),
           };
-          if(JSON.stringify(patch)!==JSON.stringify(book)){
-            next[index]=patch;
-            updated+=1;
-          }
+          next[index]=patch;
+          updated+=1;
         }
         matched+=1;
       }else if(result.status==='review'||result.status==='matched'){
@@ -1024,11 +1036,11 @@ export async function enrichLocalBookMetadataOnline(
     if(pending>=batchSize||Date.now()-lastPublish>=1200){
       lastPublish=Date.now();
       pending=0;
-      await options.onBatch?.(next.slice(),{attempted,matched,review,updated,cache});
-      await new Promise(resolve=>setTimeout(resolve,0));
+      await options.onBatch?.(next,{attempted,matched,review,updated,cache});
+      await yieldToUi(true);
     }
   }
-  if(pending&&shouldContinue())await options.onBatch?.(next.slice(),{attempted,matched,review,updated,cache});
+  if(pending&&shouldContinue())await options.onBatch?.(next,{attempted,matched,review,updated,cache});
   return {books:next,attempted,matched,review,updated,cache};
 }
 
@@ -1050,6 +1062,7 @@ export async function enrichLocalComicMetadataOnline(
   let next=books.slice();
   let attempted=0,matched=0,review=0,updated=0,pending=0,rateLimited=false;
   let lastPublish=Date.now();
+  const yieldToUi=cooperativeYieldFactory();
 
   for(let index=0;index<next.length;index+=1){
     if(!shouldContinue()||rateLimited)break;
@@ -1070,7 +1083,7 @@ export async function enrichLocalComicMetadataOnline(
           onlineComicMetadataMatch:candidate,
           onlineComicMetadataAlternatives:result.candidates.slice(1,5),
         };
-        if(JSON.stringify(patch)!==JSON.stringify(book)){next[index]=patch;updated+=1;}
+        next[index]=patch;updated+=1;
         matched+=1;
       }else if(result.status==='review'||result.status==='matched'){
         next[index]={...book,needsReview:true,reviewReason:'A possible online comic issue match needs review.',onlineComicMetadataMatch:candidate,onlineComicMetadataAlternatives:result.candidates.slice(1,5)};
@@ -1080,11 +1093,11 @@ export async function enrichLocalComicMetadataOnline(
     if(pending>=batchSize||Date.now()-lastPublish>=1200){
       lastPublish=Date.now();
       pending=0;
-      await options.onBatch?.(next.slice(),{attempted,matched,review,updated,rateLimited,cache});
-      await new Promise(resolve=>setTimeout(resolve,0));
+      await options.onBatch?.(next,{attempted,matched,review,updated,rateLimited,cache});
+      await yieldToUi(true);
     }
   }
-  if(pending&&shouldContinue())await options.onBatch?.(next.slice(),{attempted,matched,review,updated,rateLimited,cache});
+  if(pending&&shouldContinue())await options.onBatch?.(next,{attempted,matched,review,updated,rateLimited,cache});
   return {books:next,attempted,matched,review,updated,rateLimited,cache};
 }
 
