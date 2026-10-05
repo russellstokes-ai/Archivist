@@ -174,9 +174,16 @@ type NativeLibraryScanner = {
   readTreeScanBatch: (scanId: string, limit: number) => Promise<NativeLibraryScanBatch>;
   cancelTreeScan: (scanId: string) => Promise<boolean>;
   readAudioMetadataBatch?: (uris: string[]) => Promise<NativeAudioMetadata[]>;
+  extractAudioArtwork?: (uri: string) => Promise<{uri:string;mimeType:string;width:number;height:number}|null>;
 };
 
 const nativeLibraryScanner = (NativeModules.ArchivistLibrary || null) as NativeLibraryScanner | null;
+
+export async function extractLocalAudioArtwork(uri:string){
+  if(Platform.OS!=='android'||!nativeLibraryScanner?.extractAudioArtwork)return null;
+  return nativeLibraryScanner.extractAudioArtwork(uri);
+}
+
 const yieldToUi = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
 async function scanLocalFoldersNative(
