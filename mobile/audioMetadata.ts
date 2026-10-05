@@ -86,7 +86,10 @@ export function parseID3v2Base64(base64:string):LocalMetadataFields{
     }
     offset+=10+frameSize;
   }
-  if(album&&(!fields.title||isGenericMediaTitle(fields.title,'Audio',2)))fields.title=album;
+  if(album){
+    fields.workTitle=album;
+    if(!fields.title||isGenericMediaTitle(fields.title,'Audio',2))fields.title=album;
+  }
   return compact(fields);
 }
 
@@ -103,6 +106,7 @@ export function parseMP4MetadataBase64(base64:string):LocalMetadataFields{
   const fields:LocalMetadataFields={};
   const chosenTitle=title&&isGenericMediaTitle(title,'Audio',2)&&album?album:title||album;
   if(chosenTitle)fields.title=chosenTitle;
+  if(album)fields.workTitle=album;
   if(artist||albumArtist)fields.author=artist||albumArtist;
   if(genre)fields.genre=genre;
   if(grouping)fields.series=grouping;
