@@ -78,14 +78,28 @@ function workIsbn(work:Pick<LocalWork,'tracks'>){
   });
 }
 
-export function localWorkQuerySignature(work:Pick<LocalWork,'title'|'author'|'series'|'publishedYear'|'tracks'>){
+function workQuerySignature(
+  title:string,
+  author:string,
+  series:string,
+  publishedYear:number|undefined,
+  tracks:LocalBook[],
+){
   return [
-    normal(work.title),
-    normal(work.author),
-    normal(work.series),
-    work.publishedYear||'',
-    ...workIdentifiers(work).map(normal),
+    normal(title),
+    normal(author),
+    normal(series),
+    publishedYear||'',
+    ...workIdentifiers({tracks}).map(normal),
+    ...tracks
+      .map(track=>track.metadataContextSignature||'')
+      .filter(Boolean)
+      .sort(),
   ].join('|');
+}
+
+export function localWorkQuerySignature(work:Pick<LocalWork,'title'|'author'|'series'|'publishedYear'|'tracks'>){
+  return workQuerySignature(work.title,work.author,work.series,work.publishedYear,work.tracks);
 }
 
 export function publishableLocalWork(work:Pick<LocalWork,'title'|'needsReview'|'coverUri'>){
@@ -283,8 +297,11 @@ export async function enrichLocalCatalogue(
 
     const publishReady=readyIdentity&&!!coverUri;
     const reviewReason=!readyIdentity?'Archivist could not confidently identify this work.':!coverUri?'Archivist could not resolve cover artwork.':'';
+    const storedQuerySignature=publishReady
+      ? workQuerySignature(resolvedTitle,resolvedAuthor,resolvedSeries,resolvedYear,work.tracks)
+      : querySignature;
     const entry:LocalEnrichmentCacheEntry={
-      version:2,fingerprint,querySignature,title:resolvedTitle,author:resolvedAuthor,series:resolvedSeries,genre:resolvedGenre,
+      version:2,fingerprint,querySignature:storedQuerySignature,title:resolvedTitle,author:resolvedAuthor,series:resolvedSeries,genre:resolvedGenre,
       publishedYear:resolvedYear,coverUri,coverShape,livingBookCoverUri,livingBookCoverSource,livingBookCoverConfidence,
       metadataProvider:provider,metadataProviderId:providerId,identityReady:readyIdentity,publishReady,reviewReason,
       updatedAt:now.toISOString(),
