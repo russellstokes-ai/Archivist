@@ -20,7 +20,7 @@ assert(canvas.includes('androidLayerType="hardware"'),'Android Canvas WebView mu
 assert(canvas.includes("coverMode==='jacket'"),'Canvas renderer must preserve the audiobook portrait-jacket fallback');
 assert.equal(canvas.includes('rotateY'),false,'Canvas renderer must not regress to flat rotateY page animation');
 
-assert(app.includes("import {LivingBookCanvas} from './LivingBookCanvas';"),'Now Playing must use the Canvas Living Book renderer');
+assert(/import\s*\{[^}]*LivingBookCanvas[^}]*\}\s*from\s*['"]\.\/LivingBookCanvas['"]/.test(app),'Now Playing must import the Canvas Living Book renderer');
 assert(app.includes('<LivingBookCanvas'),'Player must render the Canvas Living Book');
 assert.equal(app.includes('<LivingBookArtwork'),false,'obsolete flat renderer must stay out of the Player');
 
