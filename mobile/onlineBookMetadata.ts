@@ -57,6 +57,7 @@ export type OnlineBookLookupOptions={
   cache?:OnlineBookCache;
   now?:()=>number;
   timeoutMs?:number;
+  ignoreCache?:boolean;
 };
 
 const positiveTtl=30*24*60*60*1000;
@@ -192,7 +193,11 @@ function descriptionValue(value:any){
 }
 function coverUrlOpenLibrary(doc:any){
   const id=Number(doc?.cover_i);
-  return Number.isFinite(id)&&id>0?'https://covers.openlibrary.org/b/id/'+id+'-L.jpg?default=false':undefined;
+  if(Number.isFinite(id)&&id>0)return 'https://covers.openlibrary.org/b/id/'+id+'-L.jpg?default=false';
+  const isbn=openLibraryIdentifiers(doc).find(value=>value.length===13)||openLibraryIdentifiers(doc)[0];
+  if(isbn)return 'https://covers.openlibrary.org/b/isbn/'+encodeURIComponent(isbn)+'-L.jpg?default=false';
+  const olid=firstString(doc?.cover_edition_key)||firstString(doc?.edition_key);
+  return olid?'https://covers.openlibrary.org/b/olid/'+encodeURIComponent(olid)+'-L.jpg?default=false':undefined;
 }
 function parseSeriesValue(value:unknown){
   const raw=firstString(value);
@@ -302,8 +307,8 @@ function openLibraryQuery(plan:QueryPlan){
 async function searchOpenLibrary(fetcher:FetchLike,plan:QueryPlan,timeoutMs:number){
   await throttleOpenLibrary();
   const q=openLibraryQuery(plan);
-  const url='https://openlibrary.org/search.json?'+new URLSearchParams({q,limit:'8',fields:'key,title,author_name,first_publish_year,publish_year,publisher,isbn,language,subject,cover_i,series,first_sentence'}).toString();
-  const json=await fetchJson(fetcher,url,timeoutMs,{headers:{Accept:'application/json'}});
+  const url='https://openlibrary.org/search.json?'+new URLSearchParams({q,limit:'8',fields:'key,title,author_name,first_publish_year,publish_year,publisher,isbn,language,subject,cover_i,cover_edition_key,edition_key,series,first_sentence'}).toString();
+  const json=await fetchJson(fetcher,url,timeoutMs,{headers:{Accept:'application/json','User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'}});
   const docs=Array.isArray(json?.docs)?json.docs:[];
   return docs.map((doc:any)=>({provider:'openlibrary' as const,providerId:clean(doc?.key)||clean(doc?.edition_key?.[0])||normalize(openLibraryFields(doc).title),fields:openLibraryFields(doc),coverUri:coverUrlOpenLibrary(doc),exactIdentifier:false,identifiers:openLibraryIdentifiers(doc),query:q}));
 }
@@ -312,7 +317,7 @@ async function hydrateOpenLibrary(fetcher:FetchLike,candidate:OnlineBookCandidat
   if(candidate.fields.description&&candidate.fields.genre)return candidate;
   try{
     await throttleOpenLibrary();
-    const json=await fetchJson(fetcher,'https://openlibrary.org'+candidate.providerId+'.json',timeoutMs,{headers:{Accept:'application/json'}});
+    const json=await fetchJson(fetcher,'https://openlibrary.org'+candidate.providerId+'.json',timeoutMs,{headers:{Accept:'application/json','User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'}});
     return {...candidate,fields:compact({...candidate.fields,description:candidate.fields.description||descriptionValue(json?.description),genre:candidate.fields.genre||selectGenre(json?.subjects)})};
   }catch{return candidate;}
 }
@@ -346,7 +351,7 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
   const now=options.now||Date.now;
   const key=onlineBookCacheKey(input);
   const cached=options.cache?.[key];
-  if(cached&&cached.expiresAt>now())return cached.result;
+  if(!options.ignoreCache&&cached&&cached.expiresAt>now())return cached.result;
   const fetcher=options.fetcher||(globalThis.fetch as unknown as FetchLike);
   if(typeof fetcher!=='function')return {key,status:'offline',candidates:[],autoApply:false,queried:[]};
   const timeoutMs=Math.max(2500,Math.min(20000,options.timeoutMs||8000));
