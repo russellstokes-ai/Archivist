@@ -69,7 +69,7 @@ jobs:
           for file in *.go go.mod go.sum; do
             cmp "$file" "archivist/app/$file"
           done
-          for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js reader.html reader.js reader.css speech-focus.js; do
+          for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js metadata.js reader.html reader.js reader.css speech-focus.js; do
             cmp "web/$file" "archivist/app/web/$file"
           done
 
