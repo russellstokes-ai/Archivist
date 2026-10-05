@@ -1,3 +1,4 @@
+import {Image} from 'react-native';
 import {deleteAsync,documentDirectory,downloadAsync,getInfoAsync,makeDirectoryAsync} from 'expo-file-system/legacy';
 
 const root=(documentDirectory||'')+'archivist-covers/';
@@ -48,6 +49,20 @@ export async function cacheRemoteCover(key:string,remoteUri:string){
   return target;
 }
 
+export function imageDimensions(uri:string):Promise<{width:number;height:number}>{
+  return new Promise((resolve,reject)=>{
+    Image.getSize(uri,(width,height)=>resolve({width,height}),reject);
+  });
+}
+
+export async function cachePortraitCover(key:string,remoteUri:string){
+  const dimensions=await imageDimensions(remoteUri);
+  if(!dimensions.width||!dimensions.height)throw Error('Cover dimensions are unavailable.');
+  const ratio=dimensions.width/dimensions.height;
+  if(ratio<0.48||ratio>0.80)throw Error('Cover is not a suitable portrait book jacket.');
+  const uri=await cacheRemoteCover(key,remoteUri);
+  return {uri,...dimensions,aspectRatio:ratio};
+}
 export async function removeCachedCover(uri:string){
   if(!uri.startsWith(root))return false;
   await deleteAsync(uri,{idempotent:true});
