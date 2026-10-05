@@ -6,6 +6,8 @@ export const LIVING_BOOK_GEOMETRY = Object.freeze({
   coverHeight:244,
   pageInsetY:3,
   spineX:171,
+  spineOverlap:3,
+  gutterWidth:14,
   closedTranslateX:-85.5,
   openTranslateX:0,
   internalRevealStart:0.035,
@@ -67,6 +69,8 @@ export function livingBookGeometryIsLevel(){
   return g.bookWidth===g.pageWidth*2
     && g.coverWidth===g.pageWidth
     && g.pageInsetY*2+g.pageHeight===g.coverHeight
+    && g.spineOverlap>=2
+    && g.gutterWidth>=g.spineOverlap*3
     && g.leafEnvelopePad>=12
     && layers.every(layer=>layer.top+layer.bottom===g.pageInsetY*2);
 }
