@@ -10,6 +10,55 @@ export type PlayerBookmark = {
 
 export type PlayerMotionState = 'closed'|'open'|'turning';
 
+/**
+ * Physical Living Book phases are intentionally separate from playback state.
+ * Playback requests start the visual transition immediately; audio/server state
+ * only confirms/reconciles the result. Hiding the Player must not close the book.
+ */
+export type LivingBookPhase = 'closed'|'opening'|'open'|'turning'|'settling'|'closing';
+export type LivingBookMotion = {phase:LivingBookPhase;closeAfterSettle:boolean};
+export type LivingBookMotionEvent =
+  | {type:'play-request'}
+  | {type:'pause-request'}
+  | {type:'open-complete'}
+  | {type:'close-complete'}
+  | {type:'turn-request'}
+  | {type:'turn-complete'}
+  | {type:'settle-complete'}
+  | {type:'restore';playing:boolean}
+  | {type:'visibility-change';visible:boolean};
+
+export function initialLivingBookMotion(playing=false):LivingBookMotion{
+  return {phase:playing?'open':'closed',closeAfterSettle:false};
+}
+
+export function reduceLivingBookMotion(state:LivingBookMotion,event:LivingBookMotionEvent):LivingBookMotion{
+  switch(event.type){
+    case 'restore':
+      return {phase:event.playing?'open':'closed',closeAfterSettle:false};
+    case 'visibility-change':
+      return state;
+    case 'play-request':
+      if(state.phase==='open'||state.phase==='turning'||state.phase==='settling')return {...state,closeAfterSettle:false};
+      return {phase:'opening',closeAfterSettle:false};
+    case 'pause-request':
+      if(state.phase==='closed'||state.phase==='closing')return {phase:state.phase,closeAfterSettle:false};
+      if(state.phase==='turning'||state.phase==='settling')return {phase:'settling',closeAfterSettle:true};
+      return {phase:'closing',closeAfterSettle:false};
+    case 'open-complete':
+      return state.phase==='opening'?{phase:'open',closeAfterSettle:false}:state;
+    case 'turn-request':
+      return state.phase==='open'?{phase:'turning',closeAfterSettle:false}:state;
+    case 'turn-complete':
+      return state.phase==='turning'?{phase:'settling',closeAfterSettle:state.closeAfterSettle}:state;
+    case 'settle-complete':
+      if(state.phase!=='settling')return state;
+      return state.closeAfterSettle?{phase:'closing',closeAfterSettle:false}:{phase:'open',closeAfterSettle:false};
+    case 'close-complete':
+      return state.phase==='closing'?{phase:'closed',closeAfterSettle:false}:state;
+  }
+}
+
 export function playerMotionState(input:{playing:boolean;visible:boolean;reduceMotion:boolean}):PlayerMotionState{
   if(!input.visible)return 'closed';
   if(input.reduceMotion)return input.playing?'open':'closed';
