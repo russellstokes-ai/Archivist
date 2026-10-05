@@ -214,7 +214,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
       clearTurn();
     },duration);
   }
-  let lastTapAt=0,lastTapX=0,lastTapY=0,suppressClickUntil=0;
+  let lastTapAt=0,lastTapX=0,lastTapY=0,suppressClickUntil=0,singleTapTimer=null;
 
   document.documentElement.style.setProperty('--reader-scale', String(Math.max(.78, Math.min(1.5, pinchStartScale))));
 
@@ -324,19 +324,21 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   reader.addEventListener('click',event=>{
     if(turning||Date.now()<suppressClickUntil)return;
     const x=event.clientX;
-    if(event.detail===1)post({type:'reader-chrome-toggle'});
+    if(event.detail===1){clearTimeout(singleTapTimer);singleTapTimer=setTimeout(()=>post({type:'reader-chrome-toggle'}),330);}
     refreshHud();
   });
 
   reader.addEventListener('dblclick',event=>{
     event.preventDefault();
     if(Date.now()<suppressClickUntil)return;
+    clearTimeout(singleTapTimer);
     suppressClickUntil=Date.now()+420;
     focusAt(event.target,event.clientX,event.clientY);
     refreshHud();
   });
 
   reader.addEventListener('touchstart',event=>{
+    clearTimeout(singleTapTimer);
     pinchGesture=event.touches.length>1;
     touchStart=event.touches.length===1?{x:event.touches[0].clientX,y:event.touches[0].clientY}:null;
     if(event.touches.length===2){
@@ -394,6 +396,7 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
     const delta=now-lastTapAt;
     const distanceFromLast=Math.hypot(tap.clientX-lastTapX,tap.clientY-lastTapY);
     if(delta>0&&delta<=320&&distanceFromLast<=30){
+      clearTimeout(singleTapTimer);
       event.preventDefault();
       suppressClickUntil=now+440;
       lastTapAt=0;

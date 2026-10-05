@@ -79,6 +79,13 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
   assert.equal(messages.find(m=>m.type==='reader-page-request').page,0,'first page must be requested even with blocked storage');
   window.__archivistSetComicPage(0,'image/jpeg','AQID');
   assert.equal(img.src,'data:image/jpeg;base64,AQID');
+  // Single-tap chrome waits until double-tap recognition has expired.
+  const beforeChrome=messages.filter(m=>m.type==='reader-chrome-toggle').length;
+  elements.reader.click({clientX:100,detail:1});
+  assert.equal(messages.filter(m=>m.type==='reader-chrome-toggle').length,beforeChrome);
+  const singleTap=[...timers.values()].find(timer=>timer.ms===330);assert(singleTap);
+  elements.reader.touchstart({touches:[{clientX:100,clientY:100}]});
+  assert(![...timers.values()].includes(singleTap),'second touch cancels single-tap chrome before it changes bubble geometry');
   function swipe(from,to){elements.reader.touchstart({touches:[{clientX:from,clientY:100}]});elements.reader.touchmove({touches:[{clientX:to,clientY:105}],preventDefault(){}});assert(layers.at(-1).style.transform.includes('rotateY'),'page follows finger before release');elements.reader.touchend({touches:[],changedTouches:[{clientX:to,clientY:105}],preventDefault(){}});for(const [id,timer] of [...timers])if(timer.ms<1000){timers.delete(id);timer.fn();}}
   swipe(350,50);
   assert.equal(messages.filter(m=>m.type==='reader-position').at(-1).page,1,'left swipe advances');
