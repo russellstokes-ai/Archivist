@@ -21,6 +21,6 @@ assert.ok(apkWorkflow.includes('Launch test APK in Android emulator'),'release g
 assert.ok(androidWorkflow.includes('Compile Android Kotlin')&&androidWorkflow.includes('Merge Android manifest'),'native Kotlin and manifest gates must remain active');
 assert.ok(source.includes('const brandedLaunchHoldMs=1600')&&source.includes('const brandedLaunchFadeMs=380'),'Build 6 must retain the deliberate branded cold launch');
 assert.ok(source.includes("import {cacheOnlineCoverUris} from './onlineCoverCache'"),'Build 6 must retain durable provider-cover caching');
-assert.ok(source.includes('void enrichment.catch')&&source.includes('continues in the background'),'refresh must report background enrichment truthfully');
+assert.ok(source.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)')&&source.includes('libraryRefreshRunningRef'),'refresh must keep discovery and enrichment inside one cancellable job');
 
 console.log('PASS: Build 6 release metadata, APK verification, native gates and commercial refinements are locked');
