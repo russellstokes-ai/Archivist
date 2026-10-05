@@ -946,12 +946,23 @@ function Client() {
   const [skipTurning,setSkipTurning]=useState(false);
   const [skipPageCount,setSkipPageCount]=useState(3);
   const skipGeneration=useRef(0);
+  const ambientPageLoopStopRef=useRef<(()=>void)|null>(null);
+  const [ambientPageLoopEpoch,setAmbientPageLoopEpoch]=useState(0);
   function turnPages(pages:number,direction:1|-1){
-    if(reduceMotion||!playbackVisible)return;
+    if(reduceMotion||!playbackVisible||bookOpenProgressRef.current<.95)return;
     const count=Math.max(1,Math.min(6,Math.round(pages)));
     const generation=++skipGeneration.current;
+    ambientPageLoopStopRef.current?.();
+    ambientPageLoopStopRef.current=null;
+    pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
     skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
-    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=6?1040:780,useNativeDriver:true}).start(({finished})=>{if(finished&&generation===skipGeneration.current)setSkipTurning(false);});
+    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=6?1040:780,useNativeDriver:true}).start(({finished})=>{
+      if(finished&&generation===skipGeneration.current){
+        skipTurnAnim.setValue(0);
+        setSkipTurning(false);
+        setAmbientPageLoopEpoch(value=>value+1);
+      }
+    });
   }
 
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
@@ -1252,6 +1263,7 @@ function Client() {
       return()=>{if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();};
     }
 
+    ambientPageLoopStopRef.current?.();
     const stop=startPageTurnLoop({
       firstDelay:hingeDuration+PLAYER_MOTION_TIMING.firstTurnDelayMs,
       restDelay:PLAYER_MOTION_TIMING.pageRestMs,
@@ -1264,8 +1276,13 @@ function Client() {
       stop:()=>pageTurnAnim.stopAnimation(),
       preserveCurrentOnStop:false,
     });
-    return()=>{stop();if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();};
-  },[bookOpenAnim,livingBookWorkKey,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
+    ambientPageLoopStopRef.current=stop;
+    return()=>{
+      stop();
+      if(ambientPageLoopStopRef.current===stop)ambientPageLoopStopRef.current=null;
+      if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();
+    };
+  },[ambientPageLoopEpoch,bookOpenAnim,livingBookWorkKey,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
