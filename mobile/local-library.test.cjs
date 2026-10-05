@@ -44,7 +44,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyLocalSortCopies, previewLocalSort, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {applyLocalSortCopies, previewLocalSort, removeLocalSortCopies, localAssetSignature, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
 const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
 
 const books = [
@@ -54,6 +54,28 @@ const books = [
 ];
 
 assert.equal(localFolderName('content://root/tree/primary:Comics/document/primary:Comics'), 'Comics');
+assert.equal(
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1234,modified:1700000000,contextSignature:'abc'}),
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1234,modified:1700000000,contextSignature:'abc'}),
+  'unchanged Android document evidence must produce a stable signature',
+);
+assert.notEqual(
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1234,modified:1700000000,contextSignature:'abc'}),
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1235,modified:1700000000,contextSignature:'abc'}),
+  'size changes must invalidate scan reuse',
+);
+assert.notEqual(
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1234,modified:1700000000,contextSignature:'abc'}),
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1234,modified:1700000001,contextSignature:'abc'}),
+  'mtime changes must invalidate scan reuse',
+);
+assert.notEqual(
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1234,modified:1700000000,contextSignature:'abc'}),
+  localAssetSignature({documentId:'primary:Books/Dune.epub',size:1234,modified:1700000000,contextSignature:'changed-sidecar'}),
+  'sidecar/cover context changes must invalidate scan reuse',
+);
+assert.equal(localAssetSignature({documentId:'x',size:1,modified:0,contextSignature:'none'}),'','providers without mtime must not be treated as safely unchanged');
+
 
 const hierarchy = inferLocalBookMetadata(
   'content://root/document/primary:Books%2FFrank%20Herbert%2FDune%2FDune%20Messiah.epub',
