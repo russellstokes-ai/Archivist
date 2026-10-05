@@ -44,6 +44,6 @@ assert(nextSession!==session&&nextSession.decision.uri==='messiah.jpg','switchin
 const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
 assert(app.includes("lockLivingBookCoverSession(livingBookCoverSessionRef.current,key,next)"),'Player must use the keyed Living Book cover session lock');
 assert(app.includes('resolveLivingBookCover({'),'Player must use the production Living Book cover resolver');
-assert.equal(app.includes("current.livingBookCoverSource==='jacket'||(current.format==='Audio'&&!current.livingBookCoverUri)"),false,'Player must not maintain a parallel cover decision path');
+assert(!app.includes("current.livingBookCoverSource==='jacket'||(current.format==='Audio'&&!current.livingBookCoverUri)"),'Player must not maintain a parallel cover decision path');
 
 console.log('living-book-cover.test.cjs passed');
