@@ -53,6 +53,15 @@ const conservativeRoot = groupLocalWorks([
 ]);
 assert.equal(conservativeRoot.length,2);
 
+const metadataGrouped = groupLocalWorks([
+  book(40,'content://root/document/primary:Audiobooks%2Fx01.mp3',{title:'Opening',author:'Ursula Le Guin',workTitleHint:'A Wizard of Earthsea',trackNumber:1}),
+  book(41,'content://root/document/primary:Audiobooks%2Fx02.mp3',{title:'The School',author:'Ursula Le Guin',workTitleHint:'A Wizard of Earthsea',trackNumber:2}),
+]);
+assert.equal(metadataGrouped.length,1);
+assert.equal(metadataGrouped[0].title,'A Wizard of Earthsea');
+assert.equal(metadataGrouped[0].files,2);
+assert.equal(metadataGrouped[0].tracks[0].id,40);
+
 const ebooks = groupLocalWorks([
   {...book(3,'content://root/document/primary:Books%2FAuthor%2FSeries%2FOne.epub'),format:'EPUB',title:'One',coverShape:'portrait'},
   {...book(4,'content://root/document/primary:Books%2FAuthor%2FSeries%2FTwo.epub'),format:'EPUB',title:'Two',coverShape:'portrait'},
