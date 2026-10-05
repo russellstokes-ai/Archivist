@@ -17,8 +17,13 @@ export type LocalBook = {
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
-  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded';
+  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'online';
   coverUri?: string;
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: 'embedded' | 'open-library' | 'google-books' | 'manual' | 'jacket' | 'none';
+  livingBookCoverConfidence?: number;
+  metadataProvider?: 'open-library' | 'google-books';
+  metadataProviderId?: string;
   workTitleHint?: string;
   trackTitle?: string;
   trackNumber?: number;
