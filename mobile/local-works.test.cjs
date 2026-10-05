@@ -38,6 +38,21 @@ const flat = groupLocalWorks([
 ]);
 assert.equal(flat.length,2);
 
+const rootChapters = groupLocalWorks([
+  book(20,'content://root/document/primary:Audiobooks%2FDune%20-%20Chapter%2001.mp3',{title:'Chapter 1'}),
+  book(21,'content://root/document/primary:Audiobooks%2FDune%20-%20Chapter%2002.mp3',{title:'Chapter 2'}),
+  book(22,'content://root/document/primary:Audiobooks%2FDune%20-%20Chapter%2003.mp3',{title:'Chapter 3'}),
+]);
+assert.equal(rootChapters.length,1);
+assert.equal(rootChapters[0].title,'Dune');
+assert.equal(rootChapters[0].files,3);
+
+const conservativeRoot = groupLocalWorks([
+  book(30,'content://root/document/primary:Audiobooks%2FBook%201.m4b',{title:'Book 1'}),
+  book(31,'content://root/document/primary:Audiobooks%2FBook%202.m4b',{title:'Book 2'}),
+]);
+assert.equal(conservativeRoot.length,2);
+
 const ebooks = groupLocalWorks([
   {...book(3,'content://root/document/primary:Books%2FAuthor%2FSeries%2FOne.epub'),format:'EPUB',title:'One',coverShape:'portrait'},
   {...book(4,'content://root/document/primary:Books%2FAuthor%2FSeries%2FTwo.epub'),format:'EPUB',title:'Two',coverShape:'portrait'},
