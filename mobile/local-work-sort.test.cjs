@@ -90,8 +90,10 @@ assert.equal(previews[0].state,'ready');
 assert.equal(previews[0].files,2);
 assert.equal(previews[0].to,'Frank Herbert/Dune/Dune');
 assert.equal(previews[0].members.length,2);
-assert.equal(previews[0].members[0].rootUri,root,'sorter must use the selected SAF source URI directly');
+assert.equal(previews[0].members[0].sourceTreeUri,root,'sorter must use the exact selected SAF source tree URI directly');
 assert.equal(previews[0].members[0].relativePath,'Frank Herbert/Dune/Dune/Dune - Chapter 01.mp3');
+assert.equal(previews[0].members[0].fileUri,complete.tracks[0].uri,'member file URI must remain distinct from the source tree URI');
+assert.notEqual(previews[0].members[0].fileUri,previews[0].members[0].sourceTreeUri);
 
 const unresolved=work([
   track(3,'Unknown 01.mp3',{identificationConfidence:'medium',needsReview:true}),
@@ -154,6 +156,51 @@ assert.equal(previews.every(preview=>preview.state==='conflict'),true,'two works
   assert.equal(failed.copied.length,0,'a failed work must not report partial successful copies');
   assert.equal(failed.failed.length,1);
   assert.equal(saf.deleted.length,3,'all destination files created before or during a work failure must be rolled back');
+
+  const realTree='content://com.android.externalstorage.documents/tree/primary%3ABooks%2FMy%20Library';
+  const realFile=realTree+'/document/primary%3ABooks%2FMy%20Library%2FFrank%20Herbert%2FDune.epub';
+  const realWork={
+    key:'epub:dune',
+    source:'local',
+    title:'Dune',
+    author:'Frank Herbert',
+    series:'Dune',
+    genre:'Science Fiction',
+    format:'EPUB',
+    space:'Books',
+    available:true,
+    files:1,
+    tracks:[{
+      id:900,
+      uri:realFile,
+      title:'Dune',
+      author:'Frank Herbert',
+      series:'Dune',
+      genre:'Science Fiction',
+      format:'EPUB',
+      space:'Books',
+      available:true,
+      identificationConfidence:'high',
+      needsReview:false,
+      coverShape:'portrait',
+      coverUri:'file://dune-portrait.jpg',
+      sourceUri:realTree,
+    }],
+    needsReview:false,
+    reviewReason:'',
+    coverUri:'file://dune-portrait.jpg',
+    coverShape:'portrait',
+  };
+  const realPreview=previewLocalWorkSort([realWork],'author-series-title');
+  assert.equal(realPreview[0].state,'ready');
+  assert.equal(realPreview[0].members[0].sourceTreeUri,realTree,'nested SAF tree selections must be preserved byte-for-byte');
+  assert.equal(realPreview[0].members[0].fileUri,realFile,'document URI must remain the file locator');
+  assert.equal(realPreview[0].members[0].sourceTreeUri.includes('/document/'),false,'tree URI must never be synthesized from the child document URI');
+
+  const localLibrarySource=fs.readFileSync(__dirname+'/localLibrary.ts','utf8');
+  assert.equal(localLibrarySource.includes('rootUriFromFileUri'),false,'SAF source roots must never be reconstructed from child file URIs');
+  assert.equal(localLibrarySource.includes('previewLocalSort('),false,'legacy asset-level sorter must stay removed');
+  assert.equal(localLibrarySource.includes('applyLocalSortCopies('),false,'legacy asset-level copy path must stay removed');
 
   const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
   assert.equal(app.includes('previewLocalSort(localBooks'),false,'App must not use the legacy asset-level sorter');
