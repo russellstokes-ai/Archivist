@@ -32,6 +32,9 @@ assert(app.includes('commitLocalStageScan(generation,options.replaceSources)'),'
 assert(app.includes('async function rescanLocalFolders(forceMetadata=false)'),'Normal refresh and deliberate full rescan must be distinct operations.');
 assert(app.includes('rescanLocalFolders(true)'),'Settings must expose an explicit full metadata rescan.');
 assert(app.includes('book.scanReused'),'Refresh status must distinguish signature-reused assets from changed/new assets.');
+assert(app.includes('await replaceLocalEnrichmentCache(result.cache)'),'A completed enrichment pass must atomically prune stale SQLite cache rows.');
+assert(app.includes('runLocalEnrichment(committedBooks,localEnrichmentCache)'),'Adding one folder must reconcile enrichment against the full committed catalogue before pruning.');
+assert(app.includes('await replaceLocalEnrichmentCache({})'),'An empty committed catalogue must clear stale enrichment rows.');
 
 const enrichment=fs.readFileSync(path.join(__dirname,'localEnrichment.ts'),'utf8');
 assert.equal(
@@ -41,5 +44,9 @@ assert.equal(
 );
 assert(enrichment.includes('indexByUri=new Map<string,number>()'),'Enrichment must index assets once.');
 assert(enrichment.includes('applyEntryIndexed'),'Enrichment must update only the current work tracks.');
+assert(enrichment.includes('entry.version!==2'),'Only current-schema enrichment entries may be reused.');
+assert(enrichment.indexOf('entry.querySignature!==querySignature') < enrichment.indexOf('entry.publishReady'),'Successful entries must validate their evidence signature before reuse.');
+assert(enrichment.includes('const seedCache=inputCache'),'Prior cache must be read-only seed data during reconciliation.');
+assert(enrichment.includes("const cache:{[key:string]:LocalEnrichmentCacheEntry}={}"),'Reconciliation output must contain active fingerprints only.');
 
 console.log('PASS: local catalogue persistence and enrichment remain keyed/delta-based');
