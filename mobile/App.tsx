@@ -7317,6 +7317,7 @@ function Client() {
       localReadingCurrentComplete,
       localWorkProgress,
       localAudioCompleted,
+      achievementLedger:achievementLedgerRef.current,
     };
     return JSON.stringify(snapshot,null,2);
   }
@@ -7353,6 +7354,8 @@ function Client() {
     try{
       const raw=JSON.parse(text);
       if(!raw||raw.archivistBackup!==1)throw Error('This is not an Archivist backup snapshot.');
+      rewardRestoreGuard.current=true;
+      rewardRestoreReleaseRequested.current=false;
       if(raw.theme==='system'||raw.theme==='light'||raw.theme==='dark')await chooseTheme(raw.theme);
       if(raw.accessibility&&typeof raw.accessibility==='object')await saveAccessibilityPreferences({reduceMotion:!!raw.accessibility.reduceMotion,highContrast:!!raw.accessibility.highContrast,largeText:!!raw.accessibility.largeText});
       if(raw.profileAvatar&&typeof raw.profileAvatar==='object')await saveProfileAvatar({initials:String(raw.profileAvatar.initials||''),color:String(raw.profileAvatar.color||'#47736F')});
@@ -7372,8 +7375,18 @@ function Client() {
       if(raw.localReadingCurrentComplete&&typeof raw.localReadingCurrentComplete==='object'){setLocalReadingCurrentComplete(raw.localReadingCurrentComplete);await setPersistedJSON(localReadingCurrentCompleteKey,raw.localReadingCurrentComplete);}
       if(raw.localWorkProgress&&typeof raw.localWorkProgress==='object'){setLocalWorkProgress(raw.localWorkProgress);await setPersistedJSON(localWorkProgressKey,raw.localWorkProgress);}
       if(raw.localAudioCompleted&&typeof raw.localAudioCompleted==='object'){setLocalAudioCompleted(raw.localAudioCompleted);await setPersistedJSON(localAudioCompletedKey,raw.localAudioCompleted);}
+      if(raw.achievementLedger&&typeof raw.achievementLedger==='object'){
+        const merged=mergeAchievementLedgers(achievementLedgerRef.current,sanitizeAchievementLedger(raw.achievementLedger));
+        achievementLedgerRef.current=merged;setAchievementLedger(merged);await setPersistedJSON(achievementLedgerKey,merged);
+      }
+      rewardRestoreReleaseRequested.current=true;
+      setRewardRestoreEpoch(value=>value+1);
       setPrivacyDataNotice('Backup restored. Server credentials and access keys were left unchanged.');
-    }catch(e){setPrivacyDataNotice('Backup could not be restored: '+(e as Error).message);}
+    }catch(e){
+      rewardRestoreGuard.current=false;
+      rewardRestoreReleaseRequested.current=false;
+      setPrivacyDataNotice('Backup could not be restored: '+(e as Error).message);
+    }
   }
 
   async function restorePrivacyBackup(){
