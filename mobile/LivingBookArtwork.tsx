@@ -30,10 +30,14 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
     outputRange:[...M.leftPageAngles],
     extrapolate:'clamp',
   });
-  // Use the same broad reveal/fade envelope as the interior spread.
-  // Multiplying a second narrow opacity ramp here made Pause look like the
-  // paper block vanished halfway through the otherwise smooth cover close.
-  const leftPaperOpacity=internalOpacity;
+  // The left paper appears only once it has crossed the edge-on hinge,
+  // but uses one broad interpolation rather than two multiplied fades. This
+  // keeps phantom paper hidden while making Pause close recede smoothly.
+  const leftPaperOpacity=open.interpolate({
+    inputRange:[0,.46,.72,1],
+    outputRange:[0,0,1,1],
+    extrapolate:'clamp',
+  });
   const coverAngle=open.interpolate({
     inputRange:[...M.coverProgress],
     outputRange:[...M.coverAngles],
