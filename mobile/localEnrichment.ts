@@ -58,7 +58,7 @@ function hash(value:string){
 function delay(ms:number){return ms>0?new Promise<void>(resolve=>setTimeout(resolve,ms)):Promise.resolve();}
 
 export function localWorkFingerprint(work:Pick<LocalWork,'tracks'|'format'|'space'>){
-  return hash(work.format+'|'+work.space+'|'+work.tracks.map(track=>track.uri).sort().join('|'));
+  return hash(work.format+'|'+work.space+'|'+work.tracks.map(track=>track.uri+'@'+(track.assetSignature||'unversioned')).sort().join('|'));
 }
 
 export function localWorkQuerySignature(work:Pick<LocalWork,'title'|'author'|'series'|'publishedYear'>){
