@@ -1066,6 +1066,29 @@ function Client() {
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
   const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
+  useEffect(()=>{
+    if(!playing||playing.source==='server'||!playing.uri)return;
+    const seconds=Math.max(0,audio.currentTime||0);
+    const bucket=Math.floor(seconds/5);
+    const shouldCheckpoint=bucket!==localAudioCheckpointBucket.current||!audio.playing;
+    if(!shouldCheckpoint)return;
+    localAudioCheckpointBucket.current=bucket;
+    void persistLocalPlaybackPosition(seconds);
+    void persistNowSession('audio',playing,seconds,{trackUri:activeLocalWork?.tracks[localWorkIndex]?.uri||playing.uri,wasPlaying:!!audio.playing}).catch(()=>undefined);
+  },[audio.currentTime,audio.playing,playing?.uri,playing?.source,activeLocalWork,localWorkIndex]);
+  useEffect(()=>{
+    if(!playing||playing.source!=='server'||!playback)return;
+    const seconds=Math.max(0,playback.seconds||0);
+    const bucket=Math.floor(seconds/10);
+    const shouldCheckpoint=bucket!==serverAudioCheckpointBucket.current||!playback.playing;
+    if(!shouldCheckpoint)return;
+    serverAudioCheckpointBucket.current=bucket;
+    void persistNowSession('audio',playing,seconds,{trackId:playback.tracks[playback.index]?.id,wasPlaying:!!playback.playing}).catch(()=>undefined);
+  },[playback?.seconds,playback?.playing,playback?.index,playing?.id,playing?.source]);
+  useEffect(()=>{
+    if(!reading)return;
+    void persistNowSession('reader',reading,readerPage,{wasPlaying:false}).catch(()=>undefined);
+  },[reading?.id,reading?.uri,readerPage]);
   const [playerVisualPlaying,setPlayerVisualPlaying]=useState(false);
   useEffect(()=>{
     if(!playbackVisible){setPlayerVisualPlaying(false);return;}
@@ -1202,7 +1225,7 @@ function Client() {
     return()=>clearTimeout(timer);
   },[localPersonalWorks,localWorkProgress]);
   useEffect(()=>{
-    if(!appActive)return;
+    if(!appActive||!localCatalogReady||!localPersonalWorks.length)return;
     let cancelled=false;
     void consumeAndroidAutoProgress().then(progress=>{
       if(cancelled||!progress)return;
@@ -1211,6 +1234,12 @@ function Client() {
         setPersistedJSON(localWorkProgressKey,next).catch(()=>undefined);
         return next;
       });
+      const work=localPersonalWorks.find(item=>item.key===progress.workKey);
+      const track=work?.tracks.find(item=>item.uri===progress.trackUri);
+      if(work&&track){
+        const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
+        void persistNowSession('audio',display,progress.complete?0:progress.seconds,{trackUri:progress.trackUri,wasPlaying:false}).catch(()=>undefined);
+      }
       if(progress.complete){
         setLocalAudioCompleted(current=>{
           if(current[progress.workKey])return current;
@@ -1221,7 +1250,7 @@ function Client() {
       }
     }).catch(()=>undefined);
     return()=>{cancelled=true;};
-  },[appActive]);
+  },[appActive,localCatalogReady,localPersonalWorks]);
 
   const sourceWorks = useMemo<UnifiedWork[]>(() => {
     const phone:UnifiedWork[] = phonePersonalWorks.map(work => {
@@ -1552,10 +1581,10 @@ function Client() {
       setAppActive(state==='active');
       controller.tick();
       void controller.save();
-      if(state!=='active'){void pauseActiveOfflineDownload();void persistLocalPlaybackPosition();}
+      if(state!=='active'){void pauseActiveOfflineDownload();void checkpointNowRef.current();}
     });
     const timer = setInterval(() => controller.tick(),1000);
-    return () => { subscription.remove(); lifecycle.remove(); clearInterval(timer); loadCancel.current?.(); void controller.stop(); };
+    return () => { subscription.remove(); lifecycle.remove(); clearInterval(timer); loadCancel.current?.(); void checkpointNowRef.current(); void controller.stop(); };
   }, [controller, player]);
 
   useEffect(() => {
@@ -1691,6 +1720,14 @@ function Client() {
     getPersistedJSON<ProfileAvatarConfig>(profileAvatarKey).then(value=>{if(value&&typeof value==='object')setProfileAvatar({initials:String(value.initials||'').slice(0,2).toUpperCase(),color:String(value.color||'#47736F'),photoUri:typeof value.photoUri==='string'?value.photoUri:undefined});}).catch(()=>undefined);
     getPersistedJSON<Book>(lastReadingKey).then(value=>{if(value&&typeof value==='object')setLastReading(value);}).catch(()=>undefined);
     getPersistedJSON<Book>(lastPlayingKey).then(value=>{if(value&&typeof value==='object')setLastPlaying(value);}).catch(()=>undefined);
+    getPersistedJSON<DurableNowSession>(nowSessionKey).then(value=>{
+      const restored=sanitizeNowSession(value);
+      if(restored){
+        nowSessionRef.current=restored;setNowSession(restored);
+        const book=bookFromNowMedia(restored.media);
+        if(restored.kind==='audio')setLastPlaying(book);else setLastReading(book);
+      }
+    }).catch(()=>undefined).finally(()=>setNowSessionReady(true));
     AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
@@ -7627,7 +7664,7 @@ function Client() {
           const selected=activeTab===tab.id;
           const centre=tab.id==='now';
           const accent=tab.id==='insights'?p.gold:p.sage;
-          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){if(!playing&&reading)setLiveMode('reader');setActiveTab('now')}else{if(tab.id==='library'){setReviewOnly(false);setMetadataGapFilter('');}setActiveTab(tab.id)}}} style={[styles.tab,phoneLayout&&styles.tabPhone,narrowPhone&&styles.tabNarrow,centre&&styles.tabCenter]}>
+          return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={centre?'Player and Reader':tab.label} accessibilityState={{selected}} onPress={()=>{if(centre){void openNowTab()}else{if(tab.id==='library'){setReviewOnly(false);setMetadataGapFilter('');}setActiveTab(tab.id)}}} style={[styles.tab,phoneLayout&&styles.tabPhone,narrowPhone&&styles.tabNarrow,centre&&styles.tabCenter]}>
             <View pointerEvents="none" style={[styles.tabIndicator,{backgroundColor:accent,opacity:selected?1:0}]}/>
             {centre?<View style={[styles.tabCenterOrb,{backgroundColor:selected?p.sage:p.card,borderColor:selected?p.sage:p.line}]}><UiIcon name={tab.icon} color={selected?'#FFFFFF':p.ink} size={25}/></View>:<UiIcon name={tab.icon} color={selected?accent:p.muted} size={22}/>}
             <Text style={[styles.tabText,phoneLayout&&styles.tabTextPhone,narrowPhone&&styles.tabTextNarrow,centre&&styles.tabCenterText,accessibilityPrefs.largeText&&styles.tabTextLarge,{color:selected?accent:p.muted}]}>{tab.label}</Text>
