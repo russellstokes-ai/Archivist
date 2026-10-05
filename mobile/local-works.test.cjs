@@ -62,6 +62,79 @@ assert.equal(metadataGrouped[0].title,'A Wizard of Earthsea');
 assert.equal(metadataGrouped[0].files,2);
 assert.equal(metadataGrouped[0].tracks[0].id,40);
 
+
+const authorFolderStandalone = groupLocalWorks([
+  book(100,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune.m4b',{title:'Dune'}),
+  book(101,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%20Messiah.m4b',{title:'Dune Messiah'}),
+  book(102,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FChildren%20of%20Dune.m4b',{title:'Children of Dune'}),
+]);
+assert.equal(authorFolderStandalone.length,3,'an author folder containing standalone M4Bs must not collapse into one work');
+assert.deepEqual(authorFolderStandalone.map(work=>work.title),['Dune','Dune Messiah','Children of Dune']);
+
+const mixedChapterBooks = groupLocalWorks([
+  book(110,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%20-%20Chapter%2001.mp3',{title:'Chapter 1'}),
+  book(111,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%20-%20Chapter%2002.mp3',{title:'Chapter 2'}),
+  book(112,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%20Messiah%20-%20Chapter%2001.mp3',{title:'Chapter 1'}),
+  book(113,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%20Messiah%20-%20Chapter%2002.mp3',{title:'Chapter 2'}),
+]);
+assert.equal(mixedChapterBooks.length,2,'two chapter-pattern books in one author folder must form two works');
+assert.equal(mixedChapterBooks[0].title,'Dune');
+assert.equal(mixedChapterBooks[0].files,2);
+assert.equal(mixedChapterBooks[1].title,'Dune Messiah');
+assert.equal(mixedChapterBooks[1].files,2);
+
+const embeddedAlbumsSameFolder = groupLocalWorks([
+  book(120,'content://root/document/primary:Audiobooks%2FUrsula%20Le%20Guin%2Fx01.mp3',{title:'Opening',author:'Ursula Le Guin',workTitleHint:'A Wizard of Earthsea',trackNumber:1,metadataSource:'embedded'}),
+  book(121,'content://root/document/primary:Audiobooks%2FUrsula%20Le%20Guin%2Fx02.mp3',{title:'School',author:'Ursula Le Guin',workTitleHint:'A Wizard of Earthsea',trackNumber:2,metadataSource:'embedded'}),
+  book(122,'content://root/document/primary:Audiobooks%2FUrsula%20Le%20Guin%2Fy01.mp3',{title:'Shadow',author:'Ursula Le Guin',workTitleHint:'The Tombs of Atuan',trackNumber:1,metadataSource:'embedded'}),
+  book(123,'content://root/document/primary:Audiobooks%2FUrsula%20Le%20Guin%2Fy02.mp3',{title:'Labyrinth',author:'Ursula Le Guin',workTitleHint:'The Tombs of Atuan',trackNumber:2,metadataSource:'embedded'}),
+]);
+assert.equal(embeddedAlbumsSameFolder.length,2,'embedded album/work identity must split different books in the same folder');
+assert.equal(embeddedAlbumsSameFolder[0].title,'A Wizard of Earthsea');
+assert.equal(embeddedAlbumsSameFolder[1].title,'The Tombs of Atuan');
+
+const multiDiscEmbedded = groupLocalWorks([
+  book(130,'content://root/document/primary:Audiobooks%2FDune%2FDisc%201%2F01.mp3',{title:'Opening',workTitleHint:'Dune',trackNumber:1,discNumber:1,metadataSource:'embedded'}),
+  book(131,'content://root/document/primary:Audiobooks%2FDune%2FDisc%201%2F02.mp3',{title:'Arrakis',workTitleHint:'Dune',trackNumber:2,discNumber:1,metadataSource:'embedded'}),
+  book(132,'content://root/document/primary:Audiobooks%2FDune%2FDisc%202%2F01.mp3',{title:'Desert',workTitleHint:'Dune',trackNumber:1,discNumber:2,metadataSource:'embedded'}),
+]);
+assert.equal(multiDiscEmbedded.length,1,'Disc 1 / Disc 2 subfolders with the same embedded work must merge');
+assert.equal(multiDiscEmbedded[0].title,'Dune');
+assert.equal(multiDiscEmbedded[0].files,3);
+assert.deepEqual(multiDiscEmbedded[0].tracks.map(track=>track.id),[130,131,132]);
+
+const sidecarChapters = groupLocalWorks([
+  book(140,'content://root/document/primary:Audiobooks%2FThe%20Left%20Hand%20of%20Darkness%2F01%20-%20Winter.mp3',{
+    title:'The Left Hand of Darkness',author:'Ursula Le Guin',metadataSource:'sidecar',trackNumber:1,
+  }),
+  book(141,'content://root/document/primary:Audiobooks%2FThe%20Left%20Hand%20of%20Darkness%2F02%20-%20Karhide.mp3',{
+    title:'The Left Hand of Darkness',author:'Ursula Le Guin',metadataSource:'sidecar',trackNumber:2,
+  }),
+]);
+assert.equal(sidecarChapters.length,1,'shared trusted sidecar identity must group chapter assets');
+assert.equal(sidecarChapters[0].title,'The Left Hand of Darkness');
+
+const nestedAmbiguousBooks = groupLocalWorks([
+  book(150,'content://root/document/primary:Audiobooks%2FSeries%2FBook%201.m4b',{title:'Book 1',series:'Series'}),
+  book(151,'content://root/document/primary:Audiobooks%2FSeries%2FBook%202.m4b',{title:'Book 2',series:'Series'}),
+]);
+assert.equal(nestedAmbiguousBooks.length,2,'ambiguous numbered standalone books in a series folder must remain separate');
+
+const numberedFolderChapters = groupLocalWorks([
+  book(160,'content://root/document/primary:Audiobooks%2FDune%2F001%20-%20Opening.mp3',{title:'Opening'}),
+  book(161,'content://root/document/primary:Audiobooks%2FDune%2F002%20-%20Arrakis.mp3',{title:'Arrakis'}),
+  book(162,'content://root/document/primary:Audiobooks%2FDune%2F003%20-%20Desert.mp3',{title:'Desert'}),
+]);
+assert.equal(numberedFolderChapters.length,1,'strong numeric chapter evidence inside a book folder must still group');
+assert.equal(numberedFolderChapters[0].title,'Dune');
+assert.equal(numberedFolderChapters[0].files,3);
+
+const isolatedSameAlbumDifferentFolders = groupLocalWorks([
+  book(170,'content://root/document/primary:Audiobooks%2FCopy%20A%2F01.mp3',{title:'One',workTitleHint:'Dune',trackNumber:1,metadataSource:'embedded'}),
+  book(171,'content://root/document/primary:Audiobooks%2FCopy%20B%2F01.mp3',{title:'One',workTitleHint:'Dune',trackNumber:1,metadataSource:'embedded'}),
+]);
+assert.equal(isolatedSameAlbumDifferentFolders.length,2,'duplicate copies in distinct ordinary folders must not be merged merely because embedded album names match');
+
 const ebooks = groupLocalWorks([
   {...book(3,'content://root/document/primary:Books%2FAuthor%2FSeries%2FOne.epub'),format:'EPUB',title:'One',coverShape:'portrait'},
   {...book(4,'content://root/document/primary:Books%2FAuthor%2FSeries%2FTwo.epub'),format:'EPUB',title:'Two',coverShape:'portrait'},
