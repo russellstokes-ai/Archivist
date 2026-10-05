@@ -767,6 +767,7 @@ function Client() {
   const activeLibraryProgress=scanProgress||enrichmentProgress;
   const libraryRefreshActive=localScanning||!!activeLibraryProgress;
   const libraryRefreshRunningRef=useRef(false);
+  const libraryRefreshWarningsRef=useRef<string[]>([]);
   const enrichmentProgressClock=useRef(0);
   const scanCommitGate=useRef(new ScanCommitGate()).current;
   const autoLocalScanAttempted=useRef(false);
@@ -1952,7 +1953,10 @@ function Client() {
     setMetadataSettingsNotice('Refreshing metadata and covers…');
     try{
       const completed=await rescanLocalFolders(localMetadataOverrides,true);
-      if(completed)setMetadataSettingsNotice('Metadata and covers refresh complete.');
+      if(completed){
+        const warnings=libraryRefreshWarningsRef.current;
+        setMetadataSettingsNotice(warnings.length?`Refresh complete with ${warnings.length} stage warning${warnings.length===1?'':'s'}. See Library status for details.`:'Metadata and covers refresh complete.');
+      }
     }catch(e){
       setMetadataSettingsNotice('Metadata refresh could not complete: '+(e as Error).message);
     }
@@ -2354,6 +2358,7 @@ function Client() {
   const beginLocalScan=()=>{
     if(libraryRefreshRunningRef.current)return null;
     libraryRefreshRunningRef.current=true;
+    libraryRefreshWarningsRef.current=[];
     autoLocalScanAttempted.current=true;
     enrichmentProgressClock.current=0;
     const generation=scanCommitGate.begin();
@@ -2372,6 +2377,11 @@ function Client() {
     libraryRefreshRunningRef.current=false;
     setLocalScanning(false);
     setScanProgress(null);
+  };
+  const recordLibraryRefreshWarning=(label:string,error:unknown)=>{
+    const detail=String((error as any)?.message||error||'unknown error').trim();
+    const message=detail?label+' · '+detail:label;
+    if(!libraryRefreshWarningsRef.current.includes(message))libraryRefreshWarningsRef.current.push(message);
   };
   const cancelLibraryRefresh=()=>{
     if(!libraryRefreshRunningRef.current&&!activeLibraryProgress)return;
@@ -2471,7 +2481,7 @@ function Client() {
         if(!scanCommitGate.isCurrent(generation))return;
         reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
       },
-    }).catch(()=>null);
+    }).catch(error=>{recordLibraryRefreshWarning('Embedded metadata',error);return null;});
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
     const synchronized=synchronizeLocalMetadata(enriched.books).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],synchronized).map(book=>({...book,source:'local' as const})));
@@ -2500,7 +2510,7 @@ function Client() {
         if(!scanCommitGate.isCurrent(generation))return;
         reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
       },
-    }).catch(()=>null);
+    }).catch(error=>{recordLibraryRefreshWarning('Book/audiobook metadata',error);return null;});
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
     const cachedCovers=await cacheOnlineCoverUris(enriched.books,{
       documentDirectory,
@@ -2508,7 +2518,7 @@ function Client() {
       downloadAsync:downloadCoverWithDeadline,
       getInfoAsync,
       deleteAsync,
-    },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
+    },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(error=>{recordLibraryRefreshWarning('Book cover cache',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return;
     const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
@@ -2544,7 +2554,7 @@ function Client() {
         if(!scanCommitGate.isCurrent(generation))return;
         reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
       },
-    }).catch(()=>null);
+    }).catch(error=>{recordLibraryRefreshWarning('Comic metadata',error);return null;});
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
     const cachedCovers=await cacheOnlineCoverUris(enriched.books,{
       documentDirectory,
@@ -2552,7 +2562,7 @@ function Client() {
       downloadAsync:downloadCoverWithDeadline,
       getInfoAsync,
       deleteAsync,
-    },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
+    },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(error=>{recordLibraryRefreshWarning('Comic cover cache',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return;
     const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
@@ -2583,7 +2593,7 @@ function Client() {
         if(!scanCommitGate.isCurrent(generation))return;
         reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total});
       },
-    }).catch(()=>null);
+    }).catch(error=>{recordLibraryRefreshWarning('Local cover recovery',error);return null;});
     if(!enriched?.updated||!scanCommitGate.isCurrent(generation))return;
 
     setLocalBooks(current=>applyCoverEnrichment(current,enriched.books));
@@ -2603,6 +2613,16 @@ function Client() {
         ? ' · library safety limit reached'
         : '';
     return `${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`;
+  }
+  async function completedLibraryRefreshNotice(result:LocalScanResult){
+    const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null);
+    const books=Array.isArray(stored)?stored:result.books;
+    const review=books.filter(book=>book.needsReview).length;
+    const missingCovers=books.filter(book=>!book.coverUri).length;
+    const warnings=libraryRefreshWarningsRef.current;
+    const warningText=warnings.length?` · ${warnings.length} stage warning${warnings.length===1?'':'s'}`:'';
+    const coverText=missingCovers?` · ${missingCovers} cover${missingCovers===1?'':'s'} still need attention`:' · covers complete';
+    return `${books.length} found · ${Math.max(0,books.length-review)} identified · ${review} need review${coverText}${warningText}.`;
   }
 
   async function addLocalFolder() {
@@ -2631,7 +2651,7 @@ function Client() {
       const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,shouldContinue:()=>scanCommitGate.isCurrent(generation)});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
-      setLocalFolderNotice(scanNotice(result));
+      setLocalFolderNotice(await completedLibraryRefreshNotice(result));
       if(result.books.length&&celebrationEligible){
         setCelebrating(true);
         setCelebrationEligible(false);
@@ -2664,7 +2684,7 @@ function Client() {
       const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata,shouldContinue:()=>scanCommitGate.isCurrent(generation)});
       const summary=await finaliseLocalScan(result,previousLocal,generation,refreshMetadata);
       if(!summary)return false;
-      setLocalFolderNotice(scanNotice(result));
+      setLocalFolderNotice(await completedLibraryRefreshNotice(result));
       return true;
     }catch(e){
       if(scanCommitGate.isCurrent(generation)){
