@@ -19,7 +19,7 @@ assert.equal(app.includes('setPersistedJSON(localCatalogKey'),false,'Do not rewr
 assert.equal(app.includes('setPersistedJSON(localEnrichmentKey'),false,'Do not rewrite the whole enrichment cache JSON during progress.');
 assert(app.includes('beginLocalStageScan()'),'A scan must start an isolated SQLite generation.');
 assert(app.includes('stageLocalScanBooks(generation,batch,ordinal)'),'Discovery batches must be persisted incrementally.');
-assert(app.includes('commitLocalStageScan(generation)'),'Only a complete scan may replace the committed catalogue.');
+assert(app.includes('commitLocalStageScan(generation,options.replaceSources)'),'Only a complete scan may commit its staged generation, with optional source-scoped replacement.');
 assert(app.includes('abandonLocalStageScan(generation)'),'Failed scans must discard their partial generation.');
 assert(app.includes('upsertLocalStageBooks(books)'),'Enrichment must checkpoint only changed asset rows.');
 assert(app.includes('upsertLocalEnrichmentEntries(entries)'),'Enrichment must checkpoint only changed work rows.');
