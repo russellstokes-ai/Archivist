@@ -317,7 +317,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
   private fun xmlValues(xml: String, tags: List<String>): List<String> {
     val values = ArrayList<String>()
     for (tag in tags) {
-      val regex = Regex("<\${Regex.escape(tag)}\\b[^>]*>([\\s\\S]*?)</\${Regex.escape(tag)}>", RegexOption.IGNORE_CASE)
+      val regex = Regex("<${Regex.escape(tag)}\\b[^>]*>([\\s\\S]*?)</${Regex.escape(tag)}>", RegexOption.IGNORE_CASE)
       for (match in regex.findAll(xml)) {
         val value = stripXml(match.groupValues[1])
         if (value.isNotBlank()) values.add(value)
@@ -331,7 +331,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
 
   private fun xmlAttribute(xml: String, element: String, attribute: String): String {
     val direct = Regex(
-      "<\${Regex.escape(element)}\\b[^>]*\${Regex.escape(attribute)}\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>",
+      "<${Regex.escape(element)}\\b[^>]*${Regex.escape(attribute)}\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>",
       RegexOption.IGNORE_CASE
     ).find(xml)
     return direct?.groupValues?.getOrNull(1)?.let(::decodeXml).orEmpty()
@@ -339,17 +339,17 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
 
   private fun metaContent(xml: String, key: String): String {
     val first = Regex(
-      "<meta\\b[^>]*(?:name|property)\\s*=\\s*[\"']\${Regex.escape(key)}[\"'][^>]*content\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>",
+      "<meta\\b[^>]*(?:name|property)\\s*=\\s*[\"']${Regex.escape(key)}[\"'][^>]*content\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>",
       RegexOption.IGNORE_CASE
     ).find(xml)
     if (first != null) return decodeXml(first.groupValues[1]).trim()
     val reversed = Regex(
-      "<meta\\b[^>]*content\\s*=\\s*[\"']([^\"']+)[\"'][^>]*(?:name|property)\\s*=\\s*[\"']\${Regex.escape(key)}[\"'][^>]*>",
+      "<meta\\b[^>]*content\\s*=\\s*[\"']([^\"']+)[\"'][^>]*(?:name|property)\\s*=\\s*[\"']${Regex.escape(key)}[\"'][^>]*>",
       RegexOption.IGNORE_CASE
     ).find(xml)
     if (reversed != null) return decodeXml(reversed.groupValues[1]).trim()
     val body = Regex(
-      "<meta\\b[^>]*property\\s*=\\s*[\"']\${Regex.escape(key)}[\"'][^>]*>([\\s\\S]*?)</meta>",
+      "<meta\\b[^>]*property\\s*=\\s*[\"']${Regex.escape(key)}[\"'][^>]*>([\\s\\S]*?)</meta>",
       RegexOption.IGNORE_CASE
     ).find(xml)
     return body?.groupValues?.getOrNull(1)?.let(::stripXml).orEmpty()
