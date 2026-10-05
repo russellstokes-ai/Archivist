@@ -1911,9 +1911,26 @@ function Client() {
   }
   async function scanFoldersIntoStage(folders:LocalFolder[]){
     const generation=await beginLocalStageScan();
-    const streamed:LocalBook[]=[];
+    const uiPending:LocalBook[]=[];
+    const scanSpaces=new Set<string>();
     let ordinal=0;
     let lastUiPublish=0;
+    let firstUiPublish=true;
+    const publishUiBatch=(force=false)=>{
+      const now=Date.now();
+      if(!uiPending.length)return;
+      if(!force&&!firstUiPublish&&(uiPending.length<192||now-lastUiPublish<900))return;
+      const current=uiPending.splice(0,uiPending.length).map(book=>({...book,source:'local' as const}));
+      lastUiPublish=now;
+      setLocalBooks(previous=>{
+        if(firstUiPublish){
+          firstUiPublish=false;
+          return current;
+        }
+        return [...previous,...current];
+      });
+      setSpaces([...scanSpaces]);
+    };
     try{
       const result=await scanLocalFolders(
         folders,
@@ -1923,16 +1940,14 @@ function Client() {
           if(!batch.length)return;
           await stageLocalScanBooks(generation,batch,ordinal);
           ordinal+=batch.length;
-          streamed.push(...batch);
-          const now=Date.now();
-          if(streamed.length===batch.length||now-lastUiPublish>=450){
-            lastUiPublish=now;
-            const snapshot=streamed.map(book=>({...book,source:'local' as const}));
-            setLocalBooks(snapshot);
-            setSpaces([...new Set(streamed.map(book=>book.space).filter(Boolean))]);
+          for(const book of batch){
+            uiPending.push(book);
+            if(book.space)scanSpaces.add(book.space);
           }
+          publishUiBatch(false);
         },
       );
+      publishUiBatch(true);
       await commitLocalStageScan(generation);
       return result;
     }catch(error){
