@@ -50,6 +50,7 @@ import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} f
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
+import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {AtlasChartRing} from './AtlasChartRing';
@@ -324,6 +325,7 @@ const ritualDaysKey = 'archivist.dailyRitual.v1';
 const lastReadingKey = 'archivist.lastReading.v1';
 const lastPlayingKey = 'archivist.lastPlaying.v1';
 const nowSessionKey = 'archivist.nowSession.v1';
+const achievementLedgerKey = 'archivist.achievementLedger.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'favourites',title:'Favourites',visible:true},
@@ -800,9 +802,17 @@ function Client() {
   const [ritualToday,setRitualToday]=useState(localDay());
   const ritual=useMemo(()=>streakStats(ritualDays,ritualToday),[ritualDays,ritualToday]);
   const [achievementCelebration,setAchievementCelebration]=useState<Achievement|null>(null);
+  const achievementCelebrationRef=useRef<Achievement|null>(null);achievementCelebrationRef.current=achievementCelebration;
   const [recentAchievementId,setRecentAchievementId]=useState<string|null>(null);
   const [ratingPrompt,setRatingPrompt]=useState<RatingPrompt|null>(null);
-  const achievementBaseline=useRef<{key:string;ids:Set<string>}|null>(null);
+  const [achievementLedger,setAchievementLedger]=useState<AchievementLedger>(emptyAchievementLedger());
+  const achievementLedgerRef=useRef<AchievementLedger>(achievementLedger);achievementLedgerRef.current=achievementLedger;
+  const [achievementLedgerReady,setAchievementLedgerReady]=useState(false);
+  const achievementLedgerBootstrapRef=useRef(false);
+  const achievementLedgerQueue=useRef<Promise<void>>(Promise.resolve());
+  const rewardRestoreGuard=useRef(false);
+  const rewardRestoreReleaseRequested=useRef(false);
+  const [rewardRestoreEpoch,setRewardRestoreEpoch]=useState(0);
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState<LibrarySource>('all');
   const [librarySort,setLibrarySort]=useState<LibrarySort>('title');
