@@ -41,7 +41,7 @@ import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {possibleLocalDuplicateGroups} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {deletePersistedJSON, getPersistedJSON, setPersistedJSON} from './stateStore';
-import {abandonLocalStageScan, beginLocalStageScan, commitLocalStageScan, loadLocalStage, migrateLegacyLocalStage, stageLocalScanBooks, upsertLocalEnrichmentEntries, upsertLocalStageBooks} from './localStageStore';
+import {abandonLocalStageScan, beginLocalStageScan, commitLocalStageScan, loadLocalStage, migrateLegacyLocalStage, replaceLocalEnrichmentCache, stageLocalScanBooks, upsertLocalEnrichmentEntries, upsertLocalStageBooks} from './localStageStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, LivingBookMotion, LivingBookMotionEvent, addBookmark, applyTrackOrder, initialLivingBookMotion, mergeChapter, moveTrackOrder, reduceLivingBookMotion, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
