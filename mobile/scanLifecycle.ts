@@ -15,10 +15,12 @@ export function scanStatusCopy(input:{
   found:number;
   review:number;
   publishedCount:number;
+  processed?:number;
+  total?:number;
 }){
   const place=input.currentFolder?' · '+input.currentFolder:'';
-  const count=('processed' in input&&'total' in input&&(input as any).total>0)
-    ? Math.min((input as any).processed||0,(input as any).total)+' of '+(input as any).total
+  const count=input.total&&input.total>0
+    ? Math.min(input.processed||0,input.total)+' of '+input.total
     : input.entriesVisited+' checked';
   const progress=count+' · '+input.found+' found · '+input.review+' need review'+place;
   if(input.publishedCount>0){
