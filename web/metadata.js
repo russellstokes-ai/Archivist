@@ -10,6 +10,7 @@
 
   const form=document.createElement('form');form.className='metadata-provider-form';
   const online=document.createElement('input');online.type='checkbox';online.id='metadata-online-enabled';
+  const auto=document.createElement('input');auto.type='checkbox';auto.id='metadata-auto-enrich';
   const openLibrary=document.createElement('input');openLibrary.type='checkbox';openLibrary.id='metadata-openlibrary-enabled';
   const googleBooks=document.createElement('input');googleBooks.type='checkbox';googleBooks.id='metadata-googlebooks-enabled';
   const threshold=document.createElement('select');threshold.id='metadata-minimum-match';threshold.setAttribute('aria-label','Minimum metadata match');
@@ -21,7 +22,8 @@
     label.append(input,body);return label;
   };
   form.append(
-    toggle(online,'Online metadata','Allow server-side lookups when you request enrichment.'),
+    toggle(online,'Online metadata','Allow server-side catalogue matching.'),
+    toggle(auto,'Enrich after scans','Queue matching after a successful local scan. Scanning itself never depends on the internet.'),
     toggle(openLibrary,'Open Library','Strong open catalogue coverage for books and editions.'),
     toggle(googleBooks,'Google Books','Additional book and graphic-novel matching.'),
   );
@@ -33,8 +35,9 @@
   const actions=document.createElement('div');actions.className='metadata-enrich-actions';
   const enrich=document.createElement('button');enrich.type='button';enrich.textContent='Enrich books & comics now';
   const result=element('p','');result.className='note';result.setAttribute('role','status');
-  actions.append(enrich,result);panel.append(actions);
-  const note=element('p','Online enrichment sends only the current title/author search terms to the enabled catalogue providers. Original media files are never modified.');
+  const jobStatus=element('p','');jobStatus.className='note metadata-job-status';jobStatus.setAttribute('role','status');
+  actions.append(enrich,result);panel.append(actions,jobStatus);
+  const note=element('p','Online enrichment sends title, author and ISBN search terms when available to the enabled catalogue providers. Original media files are never modified.');
   note.className='note';panel.append(note);
 
   root.prepend(panel);
@@ -42,6 +45,7 @@
   async function loadSettings(){
     const settings=await api('./api/metadata/settings');
     online.checked=!!settings.onlineEnabled;
+    auto.checked=!!settings.autoEnrich;
     openLibrary.checked=!!settings.openLibraryEnabled;
     googleBooks.checked=!!settings.googleBooksEnabled;
     threshold.value=String(settings.minimumMatch||72);
@@ -49,7 +53,7 @@
   }
   function syncDisabled(){
     const disabled=!online.checked;
-    openLibrary.disabled=disabled;googleBooks.disabled=disabled;threshold.disabled=disabled;enrich.disabled=disabled;
+    auto.disabled=disabled;openLibrary.disabled=disabled;googleBooks.disabled=disabled;threshold.disabled=disabled;enrich.disabled=disabled;
   }
   online.addEventListener('change',syncDisabled);
 
@@ -58,6 +62,7 @@
     try{
       await api('./api/metadata/settings','PUT',{
         onlineEnabled:online.checked,
+        autoEnrich:auto.checked,
         openLibraryEnabled:openLibrary.checked,
         googleBooksEnabled:googleBooks.checked,
         minimumMatch:Number(threshold.value)
@@ -76,13 +81,30 @@
         : 'Nothing currently needs online enrichment.';
       if(summary.errors?.length)result.textContent+=' · Some providers were unavailable; local metadata was kept.';
       await Promise.all([loadBooks(false),loadLibrarySummary()]);
+      await refreshMetadataJobs();
       message(summary.updated?'Metadata enrichment complete.':'No confident metadata changes were applied.');
     }catch(error){result.textContent=error.message;message(error.message)}
     finally{activity('');enrich.disabled=!online.checked}
   };
 
+  let jobTimer=0;
+  async function refreshMetadataJobs(){
+    clearTimeout(jobTimer);
+    try{
+      const jobs=await api('./api/metadata/jobs');
+      const current=jobs.find(job=>job.state==='running'||job.state==='queued')||jobs[0];
+      if(!current){jobStatus.textContent='No automatic enrichment activity yet.';return}
+      const progress=current.total>0?' · '+current.progress+' of '+current.total:'';
+      jobStatus.textContent=current.space+' · '+current.message+progress;
+      if(current.state==='running'||current.state==='queued')jobTimer=setTimeout(refreshMetadataJobs,1800);
+    }catch(error){jobStatus.textContent='Metadata activity unavailable.'}
+  }
+
   window.addEventListener('archivist-ready',()=>{
     panel.hidden=!currentProfile?.owner;
-    if(currentProfile?.owner)loadSettings().catch(error=>{result.textContent=error.message});
+    if(currentProfile?.owner){
+      loadSettings().catch(error=>{result.textContent=error.message});
+      refreshMetadataJobs();
+    }
   });
 })();
