@@ -6,13 +6,14 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,file);
 
-const {LIVING_BOOK_GEOMETRY:G,livingBookDepthLayers,livingBookGeometryIsLevel}=require('./livingBookGeometry.ts');
+const {LIVING_BOOK_GEOMETRY:G,LIVING_BOOK_MOTION:M,livingBookDepthLayers,livingBookGeometryIsLevel,livingBookVisualFrame}=require('./livingBookGeometry.ts');
 const source=fs.readFileSync(__dirname+'/LivingBookArtwork.tsx','utf8');
 
 assert.equal(G.bookWidth,G.pageWidth*2,'spread must be exactly two equal page widths');
 assert.equal(G.coverWidth,G.pageWidth,'closed cover must match one page width');
 assert.equal(G.pageInsetY*2+G.pageHeight,G.coverHeight,'page faces must be vertically centred inside both covers');
 assert.equal(G.spineX,G.pageWidth,'hinge must sit exactly between equal page halves');
+assert.ok(G.leafEnvelopePad>=12,'turning leaf envelope must extend beyond the hardcover bounds');
 assert.equal(livingBookGeometryIsLevel(),true,'shared book geometry must stay level and symmetric');
 
 const layers=livingBookDepthLayers();
@@ -25,12 +26,30 @@ for(const offset of G.depthOffsets){
     'left/right page depth must be symmetric at offset '+offset,
   );
 }
-assert.match(source,/internalClip:{[^}]*overflow:'hidden'/s,'internal pages must be clipped inside the hardcover silhouette');
-assert.ok(source.includes("inputRange:[0,G.internalRevealStart,G.internalRevealEnd,1]"),'internal spread must remain invisible at full closure');
-assert.match(source,/backfaceVisibility:'hidden'/,'folded page/cover backfaces must be hidden');
-assert.equal(source.includes("rotateX:'9deg'"),false,'whole spread must not be tilted out of level');
-assert.match(source,/Animated\.multiply\(\s*open,\s*turn\.interpolate/s,'ambient turn leaves must disappear as the book closes');
-assert.match(source,/livingBookDepthLayers\(\)\.map/,'page depth must come from symmetric shared geometry');
-assert.match(source,/top:G\.pageInsetY,width:G\.pageWidth,height:G\.pageHeight/,'both page faces must share one baseline and height');
 
-console.log('PASS: Living Book closes cleanly and opens on one level symmetric spread');
+const checkpoints=[0,.05,.1,.5,.9,.95,1].map(livingBookVisualFrame);
+assert.equal(checkpoints[0].internalReveal,0);
+assert.equal(checkpoints[0].leafReveal,0);
+assert.equal(checkpoints.at(-1).internalReveal,1);
+assert.equal(checkpoints.at(-1).leafReveal,1);
+for(let i=1;i<checkpoints.length;i++){
+  assert.ok(checkpoints[i].internalReveal>=checkpoints[i-1].internalReveal,'internal reveal must be monotonic');
+  assert.ok(checkpoints[i].leafReveal>=checkpoints[i-1].leafReveal,'leaf visibility gate must be monotonic');
+  assert.ok(checkpoints[i].shadowScale>=checkpoints[i-1].shadowScale,'shadow footprint must widen monotonically');
+  assert.ok(checkpoints[i].shadowTranslateX>=checkpoints[i-1].shadowTranslateX,'shadow must move continuously with the hinge');
+}
+assert.ok(M.coverAngles[0]==='0deg'&&M.coverAngles.at(-1)==='-180deg','cover hinge must span one continuous half turn');
+
+assert.match(source,/baseSpread:\{[^}]*overflow:'hidden'/s,'static internal spread may clip to the hardcover');
+assert.match(source,/leafEnvelope:\{[^}]*overflow:'visible'/s,'turning leaves must render in an oversized unclipped envelope');
+assert.ok(source.includes('top:G.leafEnvelopePad+G.pageInsetY'),'turning pages must be inset inside the oversized envelope rather than clipped at the cover top');
+assert.ok(source.includes('const leafGate=open.interpolate'),'turning leaves must be gated by the same hinge state');
+assert.ok(source.includes("inputRange:[0,G.leafRevealStart,G.leafRevealEnd,1]"),'leaf gate must hide turns during open/close edges');
+assert.ok(source.includes('coverFrontFace')&&source.includes('coverInsideFace'),'cover must have continuous front and inside faces across the 90-degree hinge');
+assert.equal(source.includes('shadowColor'),false,'rotating book layers must not use native shadows that can remain on the wrong side');
+assert.ok(source.includes("transformOrigin:'right center'")&&source.includes('groundShadow'),'ground shadow must stay anchored to the visible footprint');
+assert.equal(source.includes("rotateX:'9deg'"),false,'whole spread must not tilt out of level');
+assert.match(source,/Animated\.multiply\(\s*leafGate,\s*turn\.interpolate/s,'ambient turns must disappear before the book closes');
+assert.match(source,/livingBookDepthLayers\(\)\.map/,'page depth must come from symmetric shared geometry');
+
+console.log('PASS: Living Book uses one continuous hinge, unclipped turns and footprint-bound shadow geometry');
