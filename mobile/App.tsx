@@ -1951,8 +1951,8 @@ function Client() {
     if(libraryRefreshRunningRef.current||!localFolders.length)return;
     setMetadataSettingsNotice('Refreshing metadata and covers…');
     try{
-      await rescanLocalFolders(localMetadataOverrides,true);
-      if(!libraryRefreshRunningRef.current)setMetadataSettingsNotice('Metadata and covers refresh complete.');
+      const completed=await rescanLocalFolders(localMetadataOverrides,true);
+      if(completed)setMetadataSettingsNotice('Metadata and covers refresh complete.');
     }catch(e){
       setMetadataSettingsNotice('Metadata refresh could not complete: '+(e as Error).message);
     }
@@ -2462,14 +2462,14 @@ function Client() {
     if(!scanCommitGate.isCurrent(generation))return;
     const eligible=baseBooks.filter(book=>book.format==='EPUB'||book.format==='Comic'||book.format==='Audio');
     if(!eligible.length)return;
-    reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length});
+    reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length},true);
     const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
       refreshMetadata,
       batchSize:8,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
+        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total},true);
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2487,7 +2487,7 @@ function Client() {
       : undefined;
     if(!metadataSettings.books.openLibrary&&!googleBooksApiKey)return;
     const total=countLocalBookOnlineLookupUnits(baseBooks);
-    reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
+    reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total},true);
     const enriched=await enrichLocalBookMetadataOnline(baseBooks,{
       cache,
       googleBooksApiKey,
@@ -2498,7 +2498,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
+        reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total},true);
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2508,7 +2508,7 @@ function Client() {
       downloadAsync:downloadCoverWithDeadline,
       getInfoAsync,
       deleteAsync,
-    },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
+    },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
     if(!scanCommitGate.isCurrent(generation))return;
     const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
@@ -2532,7 +2532,7 @@ function Client() {
     const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
     if(!scanCommitGate.isCurrent(generation))return;
     const total=baseBooks.filter(book=>book.format==='Comic').length;
-    reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
+    reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total},true);
     const enriched=await enrichLocalComicMetadataOnline(baseBooks,{
       token,
       cache,
@@ -2542,7 +2542,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
+        reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total},true);
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2552,7 +2552,7 @@ function Client() {
       downloadAsync:downloadCoverWithDeadline,
       getInfoAsync,
       deleteAsync,
-    },{concurrency:3,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
+    },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)}).catch(()=>null);
     if(!scanCommitGate.isCurrent(generation))return;
     const finalBooks=synchronizeLocalMetadata(cachedCovers?.books||enriched.books).books as LocalBook[];
     setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],finalBooks).map(book=>({...book,source:'local' as const})));
@@ -2575,13 +2575,13 @@ function Client() {
   async function enrichPublishedLocalCovers(baseBooks:LocalBook[],generation:number){
     if(!baseBooks.some(book=>!book.coverUri)||!scanCommitGate.isCurrent(generation))return;
     const total=baseBooks.filter(book=>!book.coverUri).length;
-    reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
+    reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total},true);
     const enriched=await enrichLocalBookCovers(baseBooks,{
       batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total});
+        reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total},true);
       },
     }).catch(()=>null);
     if(!enriched?.updated||!scanCommitGate.isCurrent(generation))return;
@@ -2657,18 +2657,21 @@ function Client() {
     setError('');
     setLocalFolderNotice('');
     const generation=beginLocalScan();
+    if(generation===null)return false;
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
       const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata});
       const summary=await finaliseLocalScan(result,previousLocal,generation,refreshMetadata);
-      if(!summary)return;
+      if(!summary)return false;
       setLocalFolderNotice(scanNotice(result));
+      return true;
     }catch(e){
       if(scanCommitGate.isCurrent(generation)){
         setLocalFolderNotice(scanFailureCopy(localBooks.length>0));
         setError((e as Error).message);
       }
+      return false;
     }finally{
       endLocalScan(generation);
     }
@@ -2689,10 +2692,11 @@ function Client() {
   }
 
   async function removeLocalFolder(folder:LocalFolder){
-    if(localScanning)return;
+    if(libraryRefreshRunningRef.current)return;
     setError('');
     setLocalFolderNotice('');
     const generation=beginLocalScan();
+    if(generation===null)return;
     try{
       await removeLocalFolderSource(folder);
       const remaining=localFolders.filter(item=>item.uri!==folder.uri);
@@ -3463,12 +3467,12 @@ function Client() {
         </View>
 
         {!hasFolder?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label={localScanning?'Scanning…':addLocalFolderShortLabel} disabled={localScanning} onPress={()=>void addLocalFolder()}/></View>
+          <View style={styles.shelfSetupAction}><Button label={libraryRefreshActive?'Refreshing…':addLocalFolderShortLabel} disabled={libraryRefreshActive} onPress={()=>void addLocalFolder()}/></View>
           {!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
         </View>:null}
         {!hasFolder&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {hasFolder&&!hasBooks?<Button label={localScanning?'Scanning…':'Scan again'} disabled={localScanning} onPress={()=>void rescanLocalFolders()}/>:null}
+        {hasFolder&&!hasBooks?<Button label={libraryRefreshActive?'Refreshing…':'Scan again'} disabled={libraryRefreshActive} onPress={()=>void rescanLocalFolders()}/>:null}
         {hasBooks&&reviewCount>0?<Button label={`Review ${reviewCount} uncertain item${reviewCount===1?'':'s'}`} tone="quiet" onPress={()=>{setReviewOnly(true);setQuery('');setActiveTab('library')}}/>:null}
         {hasBooks?<Button label="Finish setup" onPress={()=>void finishOnboarding()}/>:null}
       </View>
