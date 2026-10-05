@@ -26,6 +26,12 @@ assert(app.includes('upsertLocalEnrichmentEntries(entries)'),'Enrichment must ch
 assert.equal(app.includes('const streamed:LocalBook[]=[]'),false,'Progressive scan UI must not keep a second full-library accumulator.');
 assert.equal(app.includes('const snapshot=streamed.map'),false,'Progressive scan UI must not remap the full discovered catalogue repeatedly.');
 assert(app.includes('uiPending.length<192||now-lastUiPublish<900'),'Progressive scan UI updates must be batched and throttled.');
+assert(app.includes('{reuse,forceMetadata:!!options.forceMetadata}'),'Normal native scans must pass the persisted asset reuse map into discovery.');
+assert(app.includes('scanFoldersIntoStage([picked],{replaceSources:[picked.uri]})'),'Adding one folder must scan only that selected source.');
+assert(app.includes('commitLocalStageScan(generation,options.replaceSources)'),'Source-only scans must replace only their source rows.');
+assert(app.includes('async function rescanLocalFolders(forceMetadata=false)'),'Normal refresh and deliberate full rescan must be distinct operations.');
+assert(app.includes('rescanLocalFolders(true)'),'Settings must expose an explicit full metadata rescan.');
+assert(app.includes('book.scanReused'),'Refresh status must distinguish signature-reused assets from changed/new assets.');
 
 const enrichment=fs.readFileSync(path.join(__dirname,'localEnrichment.ts'),'utf8');
 assert.equal(
