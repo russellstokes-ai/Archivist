@@ -59,6 +59,25 @@ const confidenceRank:Record<SyncConfidence,number>={high:30,medium:15,low:0};
 function clean(value:unknown){return String(value??'').replace(/[_]+/g,' ').replace(/\s+/g,' ').trim();}
 function normal(value:unknown){return clean(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'');}
 function present(value:unknown){return value!==undefined&&value!==null&&clean(value)!=='';}
+
+function shallowRecordEqual(a:unknown,b:unknown){
+  const left=a&&typeof a==='object'?a as Record<string,unknown>:{};
+  const right=b&&typeof b==='object'?b as Record<string,unknown>:{};
+  const keys=new Set([...Object.keys(left),...Object.keys(right)]);
+  for(const key of keys)if(left[key]!==right[key])return false;
+  return true;
+}
+function syncMateriallyChanged(a:SynchronizableBook,b:SynchronizableBook){
+  for(const field of fields)if((a as any)[field]!== (b as any)[field])return true;
+  return a.coverUri!==b.coverUri
+    ||a.workKey!==b.workKey
+    ||a.editionKey!==b.editionKey
+    ||a.needsReview!==b.needsReview
+    ||a.reviewReason!==b.reviewReason
+    ||!shallowRecordEqual(a.metadataProvenance,b.metadataProvenance)
+    ||!shallowRecordEqual(a.metadataFieldConfidence,b.metadataFieldConfidence);
+}
+
 function sourceFor(book:SynchronizableBook,field:SyncField):SyncSource{
   const explicit=book.metadataProvenance?.[field];
   if(explicit){
@@ -312,7 +331,7 @@ export function synchronizeLocalMetadata<T extends SynchronizableBook>(books:T[]
     for(const index of indexes){
       const before=next[index];
       const after=applyCanonical(before,canonical,indexes.length);
-      if(JSON.stringify(after)!==JSON.stringify(before)){next[index]=after;updated++;}
+      if(syncMateriallyChanged(before,after)){next[index]=after;updated++;}
     }
   }
 
