@@ -764,6 +764,7 @@ export async function enrichLocalEmbeddedMetadata(
     batchSize?:number;
     itemTimeoutMs?:number;
     maxConsecutiveTimeouts?:number;
+    shouldInspect?:(book:LocalBook)=>boolean;
     onBatch?:(books:LocalBook[],progress:{attempted:number;processed:number;total:number;updated:number;review:number;timedOut:number;skipped:number;current?:string})=>void|Promise<void>;
   }={},
 ):Promise<LocalEmbeddedMetadataEnrichmentResult>{
@@ -772,7 +773,9 @@ export async function enrichLocalEmbeddedMetadata(
   const itemTimeoutMs=Math.max(25,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
   const maxConsecutiveTimeouts=Math.max(1,Math.min(10,Math.trunc(options.maxConsecutiveTimeouts||3)));
   let next=books.slice();
-  const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format));
+  const inspect=options.shouldInspect||(()=>true);
+  const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format)&&inspect(book));
+  const eligibleUris=new Set(eligible.map(book=>book.uri));
   const audioFolderCounts=new Map<string,number>();
   for(const book of eligible.filter(book=>book.format==='Audio')){
     const parts=decodedPathParts(book.uri);
@@ -794,7 +797,7 @@ export async function enrichLocalEmbeddedMetadata(
   for(let index=0;index<next.length;index+=1){
     if(!shouldContinue())break;
     const book=next[index];
-    if(!['EPUB','Comic','Audio'].includes(book.format))continue;
+    if(!eligibleUris.has(book.uri))continue;
     if(book.embeddedMetadata&&!options.refreshMetadata){
       processed+=1;pending+=1;
       await publish(book.title);
