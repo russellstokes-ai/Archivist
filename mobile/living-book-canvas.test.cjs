@@ -33,4 +33,11 @@ assert.equal(coverEffect.includes('props.phase'),false,'page/phase updates must 
 assert.equal(coverEffect.includes('props.number'),false,'chapter/page updates must not reload physical cover artwork');
 assert(canvas.includes("[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]"),'cover materialization must depend only on cover identity/auth, not playback progress');
 
+
+assert(canvas.includes('createDownloadResumable'),'authenticated server covers must use a cancellable download task');
+assert(canvas.includes('task.cancelAsync()'),'authenticated server cover timeout/oversize handling must cancel transfer');
+assert(canvas.includes('10_000'),'authenticated server cover downloads must retain a finite timeout');
+assert(canvas.includes('12*1024*1024'),'authenticated server cover downloads must retain a hard size ceiling');
+assert.equal(canvas.includes('downloadAsync(uri,target,{headers})'),false,'authenticated server covers must not use an unbounded raw download');
+
 console.log('PASS: Living Book Canvas preserves mesh physics, landing continuity and production Player wiring');
