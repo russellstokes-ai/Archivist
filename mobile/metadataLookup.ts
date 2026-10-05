@@ -92,6 +92,9 @@ export function scoreMetadataMatch(input: MetadataLookupInput, candidate: Omit<M
   const candidateIds = candidateIdentifiers(candidate);
   if (requestedIds.size) {
     for (const value of requestedIds) if (candidateIds.has(value)) return 1;
+    // A known ISBN is stronger evidence than fuzzy text. Do not silently
+    // substitute a different edition/work when identifier lookup misses.
+    return 0.25;
   }
 
   const title = textSimilarity(input.title, candidate.title);
