@@ -11,11 +11,10 @@ export type PlayerBookmark = {
 export type PlayerMotionState = 'closed'|'open'|'turning';
 
 export const PLAYER_MOTION_TIMING = {
-  pauseGraceMs: 420,
   openMs: 900,
-  closeMs: 700,
-  firstTurnDelayMs: 520,
-  pageTurnMs: 1500,
+  closeMs: 1000,
+  firstTurnDelayMs: 650,
+  pageTurnMs: 3000,
   pageRestMs: 300,
 } as const;
 
