@@ -42,20 +42,16 @@ class ArchivistAutoService : MediaLibraryService() {
 
   override fun onCreate() {
     super.onCreate()
+    val audioAttributes = AudioAttributes.Builder()
+      .setUsage(C.USAGE_MEDIA)
+      .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+      .build()
     player = ExoPlayer.Builder(this)
       .setSeekBackIncrementMs(15_000)
       .setSeekForwardIncrementMs(15_000)
+      .setAudioAttributes(audioAttributes, true)
+      .setHandleAudioBecomingNoisy(true)
       .build()
-      .apply {
-        setAudioAttributes(
-          AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
-            .build(),
-          true
-        )
-        setHandleAudioBecomingNoisy(true)
-      }
     player.addListener(object : Player.Listener {
       override fun onIsPlayingChanged(isPlaying: Boolean) {
         progressHandler.removeCallbacks(progressTicker)
