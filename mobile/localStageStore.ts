@@ -14,6 +14,7 @@ async function database(){
       PRAGMA synchronous = NORMAL;
       CREATE TABLE IF NOT EXISTS local_assets (
         uri TEXT PRIMARY KEY NOT NULL,
+        source_uri TEXT NOT NULL DEFAULT '',
         payload TEXT NOT NULL,
         scan_generation TEXT NOT NULL,
         ordinal INTEGER NOT NULL,
@@ -24,6 +25,7 @@ async function database(){
       CREATE TABLE IF NOT EXISTS local_scan_assets (
         scan_generation TEXT NOT NULL,
         uri TEXT NOT NULL,
+        source_uri TEXT NOT NULL DEFAULT '',
         payload TEXT NOT NULL,
         ordinal INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -39,6 +41,17 @@ async function database(){
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
       );
+    `);
+    const ensureColumn=async(table:'local_assets'|'local_scan_assets',column:string,definition:string)=>{
+      const columns=await db.getAllAsync<{name:string}>(`PRAGMA table_info(${table})`);
+      if(columns.some(item=>item.name===column))return;
+      await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    };
+    await ensureColumn('local_assets','source_uri',"TEXT NOT NULL DEFAULT ''");
+    await ensureColumn('local_scan_assets','source_uri',"TEXT NOT NULL DEFAULT ''");
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS local_assets_source_idx ON local_assets(source_uri);
+      CREATE INDEX IF NOT EXISTS local_scan_assets_source_idx ON local_scan_assets(scan_generation,source_uri);
     `);
     return db;
   })();
@@ -92,9 +105,10 @@ export async function stageLocalScanBooks(
   const updatedAt=Date.now();
   await db.withExclusiveTransactionAsync(async txn=>{
     const statement=await txn.prepareAsync(`
-      INSERT INTO local_scan_assets(scan_generation,uri,payload,ordinal,updated_at)
-      VALUES ($generation,$uri,$payload,$ordinal,$updatedAt)
+      INSERT INTO local_scan_assets(scan_generation,uri,source_uri,payload,ordinal,updated_at)
+      VALUES ($generation,$uri,$sourceUri,$payload,$ordinal,$updatedAt)
       ON CONFLICT(scan_generation,uri) DO UPDATE SET
+        source_uri=excluded.source_uri,
         payload=excluded.payload,
         ordinal=excluded.ordinal,
         updated_at=excluded.updated_at
@@ -106,6 +120,7 @@ export async function stageLocalScanBooks(
         await statement.executeAsync({
           $generation:generation,
           $uri:book.uri,
+          $sourceUri:book.sourceUri||'',
           $payload:JSON.stringify(book),
           $ordinal:ordinalStart+index,
           $updatedAt:updatedAt,
@@ -117,23 +132,41 @@ export async function stageLocalScanBooks(
   });
 }
 
-export async function commitLocalStageScan(generation:string){
+export async function commitLocalStageScan(
+  generation:string,
+  replaceSources?:string[],
+){
   const db=await database();
   await db.withExclusiveTransactionAsync(async txn=>{
-    const row=await txn.getFirstAsync<{count:number}>(
-      'SELECT COUNT(*) AS count FROM local_scan_assets WHERE scan_generation = ?',
-      generation,
-    );
-    const count=Number(row?.count||0);
-    await txn.runAsync('DELETE FROM local_assets');
-    if(count>0){
+    const sourceList=[...new Set((replaceSources||[]).filter(Boolean))];
+    if(replaceSources===undefined){
+      await txn.runAsync('DELETE FROM local_assets');
       await txn.runAsync(`
-        INSERT INTO local_assets(uri,payload,scan_generation,ordinal,updated_at)
-        SELECT uri,payload,scan_generation,ordinal,updated_at
+        INSERT INTO local_assets(uri,source_uri,payload,scan_generation,ordinal,updated_at)
+        SELECT uri,source_uri,payload,scan_generation,ordinal,updated_at
         FROM local_scan_assets
         WHERE scan_generation = ?
         ORDER BY ordinal ASC
       `,generation);
+    }else{
+      for(const sourceUri of sourceList){
+        await txn.runAsync('DELETE FROM local_assets WHERE source_uri = ?',sourceUri);
+      }
+      const maxRow=await txn.getFirstAsync<{ordinal:number|null}>('SELECT MAX(ordinal) AS ordinal FROM local_assets');
+      const offset=(Number(maxRow?.ordinal)||0)+1;
+      await txn.runAsync(`
+        INSERT INTO local_assets(uri,source_uri,payload,scan_generation,ordinal,updated_at)
+        SELECT uri,source_uri,payload,scan_generation,ordinal + ?,updated_at
+        FROM local_scan_assets
+        WHERE scan_generation = ?
+        ORDER BY ordinal ASC
+        ON CONFLICT(uri) DO UPDATE SET
+          source_uri=excluded.source_uri,
+          payload=excluded.payload,
+          scan_generation=excluded.scan_generation,
+          ordinal=excluded.ordinal,
+          updated_at=excluded.updated_at
+      `,offset,generation);
     }
     await txn.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
     await txn.runAsync(
@@ -170,7 +203,7 @@ export async function upsertLocalStageBooks(books:LocalBook[]){
   await db.withExclusiveTransactionAsync(async txn=>{
     const statement=await txn.prepareAsync(`
       UPDATE local_assets
-      SET payload=$payload,updated_at=$updatedAt
+      SET source_uri=$sourceUri,payload=$payload,updated_at=$updatedAt
       WHERE uri=$uri
     `);
     try{
@@ -178,6 +211,7 @@ export async function upsertLocalStageBooks(books:LocalBook[]){
         if(!book.uri)continue;
         await statement.executeAsync({
           $uri:book.uri,
+          $sourceUri:book.sourceUri||'',
           $payload:JSON.stringify(book),
           $updatedAt:updatedAt,
         });
