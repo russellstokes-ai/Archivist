@@ -43,7 +43,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortMode, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSort, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, recoverLocalSortOperation, removeLocalFolderSource, scanLocalFolders} from './localLibrary';
 import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
@@ -993,6 +993,7 @@ function Client() {
   const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null;fileSize?:number}|null>(null);
   const [coverPicking,setCoverPicking]=useState(false);
   const [sortTemplate,setSortTemplate]=useState('author-title');
+  const [localSortMode,setLocalSortMode]=useState<LocalSortMode>('copy');
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalSortPreview[]>([]);
   const [localMoveSelection,setLocalMoveSelection]=useState<string[]>([]);
@@ -2538,14 +2539,16 @@ function Client() {
 
     const summary=reconcileScan(previousLocal,result.books);
     const nextBooks=result.books.map(book=>({...book,source:'local' as const}));
-    const reconciledHistory=localSortHistory.map(item=>item.complete===false?{...item,complete:true}:item);
-    const historyChanged=reconciledHistory.some((item,index)=>item.complete!==localSortHistory[index]?.complete);
+    // Interrupted organisation transactions remain incomplete until the user
+    // explicitly recovers them. A rescan must never silently bless a half-finished
+    // copy/move transaction.
+    const reconciledHistory=localSortHistory;
+    const historyChanged=false;
 
     // Persist a safe discovery baseline before enrichment. The large catalogue is
     // encoded cooperatively so persistence cannot monopolise the JS thread.
     await Promise.all([
       setPersistedJSON(localFoldersKey,result.folders),
-      historyChanged?setPersistedJSON(localSortHistoryKey,reconciledHistory):Promise.resolve(),
     ]);
     const baselinePersisted=await setPersistedJSONArrayCooperative(localCatalogKey,result.books,{
       batchSize:48,
@@ -2627,15 +2630,22 @@ function Client() {
     reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length},true);
     const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
       refreshMetadata,
-      batchSize:8,
+      batchSize:4,
+      itemTimeoutMs:8000,
+      maxConsecutiveTimeouts:3,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
+        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:progress.current||'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
       },
     }).catch(error=>{recordLibraryRefreshWarning('Embedded metadata',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return null;
     if(!enriched)return baseBooks;
+    if(enriched.timedOut||enriched.skipped){
+      recordLibraryRefreshWarning('Embedded metadata',new Error(
+        [enriched.timedOut?enriched.timedOut+' file read'+(enriched.timedOut===1?'':'s')+' timed out':'',enriched.skipped?enriched.skipped+' remaining read'+(enriched.skipped===1?' was':'s were')+' skipped to keep the refresh responsive':''].filter(Boolean).join('; ')
+      ));
+    }
     const synchronized=(await synchronizeLocalMetadataCooperative(enriched.books,{
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
     })).books as LocalBook[];
@@ -2771,15 +2781,22 @@ function Client() {
     if(!missing)return baseBooks;
     reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:missing},true);
     const enriched=await enrichLocalBookCovers(baseBooks,{
-      batchSize:24,
+      batchSize:8,
+      itemTimeoutMs:8000,
+      maxConsecutiveTimeouts:3,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total:missing});
+        reportEnrichmentProgress({phase:'covers',currentFolder:progress.current||'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:Math.min(progress.attempted,missing),total:missing});
       },
     }).catch(error=>{recordLibraryRefreshWarning('Local cover recovery',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return null;
     if(!enriched)return baseBooks;
+    if(enriched.timedOut||enriched.skipped){
+      recordLibraryRefreshWarning('Local cover recovery',new Error(
+        [enriched.timedOut?enriched.timedOut+' cover read'+(enriched.timedOut===1?'':'s')+' timed out':'',enriched.skipped?enriched.skipped+' remaining cover read'+(enriched.skipped===1?' was':'s were')+' skipped':''].filter(Boolean).join('; ')
+      ));
+    }
 
     const synchronized=(await synchronizeLocalMetadataCooperative(enriched.books,{
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
