@@ -1,6 +1,7 @@
 import {publicationYear} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {
   AccessibilityInfo,
@@ -632,6 +633,7 @@ function Client() {
   const livingBookGeneration=useRef(0);
   const livingBookPageLoop=useRef<ReturnType<typeof setTimeout>|null>(null);
   const livingBookSettleTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const livingBookCoverSessionRef=useRef<LivingBookCoverSession|undefined>(undefined);
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
   const [skipTurning,setSkipTurning]=useState(false);
@@ -754,6 +756,29 @@ function Client() {
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
   const playbackVisible = activeTab==='player' && appActive && !!playing;
+  function lockedLivingBookCover(book:Book){
+    const serverEdition=book.source==='server'&&session
+      ? session.server+'/api/assets/'+book.id+'/cover'
+      : undefined;
+    const next=resolveLivingBookCover({
+      format:book.format,
+      editionCoverUri:book.coverUri||serverEdition,
+      editionCoverShape:book.coverShape,
+      livingBookCoverUri:book.livingBookCoverUri,
+      livingBookCoverSource:book.livingBookCoverSource,
+      livingBookCoverConfidence:book.livingBookCoverConfidence,
+    });
+    const key=[
+      book.source||'local',
+      book.originServer||session?.server||'device',
+      book.localWorkKey||book.serverWorkId||book.id,
+    ].join('|');
+    const locked=lockLivingBookCoverSession(livingBookCoverSessionRef.current,key,next);
+    livingBookCoverSessionRef.current=locked;
+    return locked.decision;
+  }
+  useEffect(()=>{if(!playing)livingBookCoverSessionRef.current=undefined;},[playing]);
+
   useEffect(()=>{if(!playbackVisible||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,reduceMotion]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>('archivist.dailyRitual.v1').then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
@@ -3497,6 +3522,7 @@ function Client() {
     const nativeSleepSupported = typeof (player as typeof player & {setSleepTimer?: (seconds:number)=>void}).setSleepTimer === 'function';
     const currentServerWork=current?.serverWorkId?serverWorks.find(work=>work.id===current.serverWorkId):undefined;
     const offlineCopy=currentServerWork?downloadedServerWork(currentServerWork):current?.source==='downloaded'?Object.values(offlineWorks).find(item=>item.server===current.originServer&&item.workId===current.serverWorkId):undefined;
+    const livingCover=current?lockedLivingBookCover(current):null;
 
     async function togglePlayback(){
       if(isPlaying){
@@ -3552,11 +3578,8 @@ function Client() {
               direction={skipDirection}
               skipping={skipTurning}
               reduceMotion={reduceMotion}
-              coverUri={
-                current.livingBookCoverUri ||
-                (current.source==='server'&&session ? session.server+'/api/assets/'+current.id+'/cover' : current.coverUri)
-              }
-              coverMode={current.livingBookCoverSource==='jacket'||(current.format==='Audio'&&!current.livingBookCoverUri)?'jacket':'portrait'}
+              coverUri={livingCover?.uri}
+              coverMode={livingCover?.kind==='jacket'?'jacket':livingCover?.kind==='portrait'?'portrait':'fallback'}
               coverHeaders={current.source==='server'&&session?{Authorization:'Bearer '+session.token}:undefined}
             />
             <View style={styles.playerIdentity}>
