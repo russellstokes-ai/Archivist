@@ -3,7 +3,7 @@ import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
-import React, {useEffect, useMemo, useState, useRef} from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -1189,7 +1189,7 @@ function Client() {
   const livingBookMotionGeneration=useRef(0);
   const livingBookVisualWorkRef=useRef('');
   const livingBookWorkKey=playbackWorkKey(playing);
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     const generation=++livingBookMotionGeneration.current;
     const previousWorkKey=livingBookVisualWorkRef.current;
     const workChanged=!!livingBookWorkKey&&!!previousWorkKey&&livingBookWorkKey!==previousWorkKey;
