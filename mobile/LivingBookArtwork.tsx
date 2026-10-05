@@ -30,10 +30,10 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
     outputRange:[...M.leftPageAngles],
     extrapolate:'clamp',
   });
-  const leftPaperOpacity=Animated.multiply(
-    internalOpacity,
-    open.interpolate({inputRange:[0,.44,.60,1],outputRange:[0,0,1,1],extrapolate:'clamp'}),
-  );
+  // Use the same broad reveal/fade envelope as the interior spread.
+  // Multiplying a second narrow opacity ramp here made Pause look like the
+  // paper block vanished halfway through the otherwise smooth cover close.
+  const leftPaperOpacity=internalOpacity;
   const coverAngle=open.interpolate({
     inputRange:[...M.coverProgress],
     outputRange:[...M.coverAngles],
