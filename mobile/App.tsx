@@ -2389,7 +2389,7 @@ function Client() {
     setSpaces([...new Set([...result.books.map(book=>book.space),...sources.map(source=>source.space)].filter(Boolean))]);
     if(historyChanged)setLocalSortHistory(reconciledHistory);
     setRescanPromptOpen(false);
-    setScanProgress({phase:'complete',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
+    setScanProgress({phase:'preparing',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review,processed:result.books.length,total:result.books.length});
     await scanFrame();
     if(scanCommitGate.isCurrent(generation)){
       const enrichment=enrichPublishedLocalLibrary(result.books,generation,forceOnline);
