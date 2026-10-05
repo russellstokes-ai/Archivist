@@ -764,6 +764,10 @@ function Client() {
   },[localFolderNotice,localScanning]);
   const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
   const [enrichmentProgress,setEnrichmentProgress]=useState<LocalScanProgress|null>(null);
+  const activeLibraryProgress=scanProgress||enrichmentProgress;
+  const libraryRefreshActive=localScanning||!!activeLibraryProgress;
+  const libraryRefreshRunningRef=useRef(false);
+  const enrichmentProgressClock=useRef(0);
   const scanCommitGate=useRef(new ScanCommitGate()).current;
   const autoLocalScanAttempted=useRef(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -1944,12 +1948,11 @@ function Client() {
   }
 
   async function refreshAllMetadataAndCovers(){
-    if(localScanning||!localFolders.length)return;
+    if(libraryRefreshRunningRef.current||!localFolders.length)return;
     setMetadataSettingsNotice('Refreshing metadata and covers…');
     try{
-      await clearMetadataCaches(false);
       await rescanLocalFolders(localMetadataOverrides,true);
-      setMetadataSettingsNotice(metadataSettings.onlineEnabled?'Local refresh complete · online enrichment continues in the background.':'Local refresh complete · cover recovery continues in the background.');
+      if(!libraryRefreshRunningRef.current)setMetadataSettingsNotice('Metadata and covers refresh complete.');
     }catch(e){
       setMetadataSettingsNotice('Metadata refresh could not complete: '+(e as Error).message);
     }
@@ -2341,11 +2344,21 @@ function Client() {
   }
 
   const scanFrame=()=>new Promise<void>(resolve=>setTimeout(resolve,16));
+  const reportEnrichmentProgress=(progress:LocalScanProgress,force=false)=>{
+    const now=Date.now();
+    if(!force&&now-enrichmentProgressClock.current<220)return;
+    enrichmentProgressClock.current=now;
+    setEnrichmentProgress(progress);
+  };
 
   const beginLocalScan=()=>{
+    if(libraryRefreshRunningRef.current)return null;
+    libraryRefreshRunningRef.current=true;
     autoLocalScanAttempted.current=true;
+    enrichmentProgressClock.current=0;
     const generation=scanCommitGate.begin();
     setLocalScanning(true);
+    setScanProgress(null);
     setEnrichmentProgress(null);
     setScanResultSummary(null);
     return generation;
@@ -2356,8 +2369,19 @@ function Client() {
   };
   const endLocalScan=(generation:number)=>{
     if(!scanCommitGate.isCurrent(generation))return;
+    libraryRefreshRunningRef.current=false;
     setLocalScanning(false);
     setScanProgress(null);
+  };
+  const cancelLibraryRefresh=()=>{
+    if(!libraryRefreshRunningRef.current&&!activeLibraryProgress)return;
+    scanCommitGate.invalidate();
+    libraryRefreshRunningRef.current=false;
+    setLocalScanning(false);
+    setScanProgress(null);
+    setEnrichmentProgress(null);
+    setLocalFolderNotice('Refresh cancelled · the last completed library stage was kept.');
+    setMetadataSettingsNotice('Metadata refresh cancelled.');
   };
 
   async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[], generation:number, forceOnline=false) {
@@ -2392,9 +2416,12 @@ function Client() {
     setRescanPromptOpen(false);
     setScanProgress({phase:'preparing',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review,processed:result.books.length,total:result.books.length});
     await scanFrame();
-    if(scanCommitGate.isCurrent(generation)){
-      const enrichment=enrichPublishedLocalLibrary(result.books,generation,forceOnline);
-      void enrichment.catch(error=>{if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String(error?.message||error));});
+    if(!scanCommitGate.isCurrent(generation))return null;
+    setScanProgress(null);
+    try{
+      await enrichPublishedLocalLibrary(result.books,generation,forceOnline);
+    }catch(error){
+      if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
     }
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
@@ -2425,8 +2452,8 @@ function Client() {
       if(scanCommitGate.isCurrent(generation)){
         const current=(await getPersistedJSON<LocalBook[]>(localCatalogKey).catch(()=>null))||baseBooks;
         const review=current.filter(book=>book.needsReview).length;
-        setEnrichmentProgress({phase:'complete',currentFolder:'',entriesVisited:current.length,found:current.length,review,processed:current.length,total:current.length});
-        setTimeout(()=>{if(scanCommitGate.isCurrent(generation))setEnrichmentProgress(null);},2200);
+        reportEnrichmentProgress({phase:'complete',currentFolder:'',entriesVisited:current.length,found:current.length,review,processed:current.length,total:current.length},true);
+        setTimeout(()=>{if(scanCommitGate.isCurrent(generation))setEnrichmentProgress(null);},1600);
       }
     }
   }
@@ -2435,16 +2462,14 @@ function Client() {
     if(!scanCommitGate.isCurrent(generation))return;
     const eligible=baseBooks.filter(book=>book.format==='EPUB'||book.format==='Comic'||book.format==='Audio');
     if(!eligible.length)return;
-    setEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length});
+    reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length});
     const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
       refreshMetadata,
       batchSize:8,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
-      onBatch:async(batch,progress)=>{
+      onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        setEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
-        setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
-        await scanFrame();
+        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2462,7 +2487,7 @@ function Client() {
       : undefined;
     if(!metadataSettings.books.openLibrary&&!googleBooksApiKey)return;
     const total=countLocalBookOnlineLookupUnits(baseBooks);
-    setEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
+    reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
     const enriched=await enrichLocalBookMetadataOnline(baseBooks,{
       cache,
       googleBooksApiKey,
@@ -2471,12 +2496,9 @@ function Client() {
       ignoreCache:forceRefresh,
       batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
-      onBatch:async(batch,progress)=>{
+      onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        setLocalFolderNotice(`Metadata · ${progress.attempted} checked · ${progress.matched} matched · ${progress.review} need review`);
-        setEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
-        setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
-        await scanFrame();
+        reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2510,7 +2532,7 @@ function Client() {
     const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
     if(!scanCommitGate.isCurrent(generation))return;
     const total=baseBooks.filter(book=>book.format==='Comic').length;
-    setEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
+    reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
     const enriched=await enrichLocalComicMetadataOnline(baseBooks,{
       token,
       cache,
@@ -2518,12 +2540,9 @@ function Client() {
       ignoreCache:forceRefresh,
       batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
-      onBatch:async(batch,progress)=>{
+      onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        setLocalFolderNotice(`Metadata · ${progress.attempted} checked · ${progress.matched} matched · ${progress.review} need review`);
-        setEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
-        setLocalBooks(current=>applyOnlineMetadataEnrichment(current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],batch).map(book=>({...book,source:'local' as const})));
-        await scanFrame();
+        reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2556,16 +2575,13 @@ function Client() {
   async function enrichPublishedLocalCovers(baseBooks:LocalBook[],generation:number){
     if(!baseBooks.some(book=>!book.coverUri)||!scanCommitGate.isCurrent(generation))return;
     const total=baseBooks.filter(book=>!book.coverUri).length;
-    setEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
+    reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
     const enriched=await enrichLocalBookCovers(baseBooks,{
       batchSize:24,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
-      onBatch:async(batch,progress)=>{
+      onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        setLocalFolderNotice(`Covers · ${progress.attempted} checked · ${progress.updated} found`);
-        setEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total});
-        setLocalBooks(current=>applyCoverEnrichment(current,batch));
-        await scanFrame();
+        reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total});
       },
     }).catch(()=>null);
     if(!enriched?.updated||!scanCommitGate.isCurrent(generation))return;
@@ -2590,6 +2606,7 @@ function Client() {
   }
 
   async function addLocalFolder() {
+    if(libraryRefreshRunningRef.current)return;
     setError('');
     setLocalFolderNotice('');
     const picked=await pickLocalFolder().catch(e=>{setError((e as Error).message);return null;});
@@ -2602,6 +2619,7 @@ function Client() {
     const stagedFolder:LocalFolder={...picked,status:'Scanning…'};
     const folders=exists?localFolders:[...localFolders,stagedFolder];
     const generation=beginLocalScan();
+    if(generation===null)return;
     try {
       if(!exists){
         // Show the source immediately; the published catalogue remains untouched until commit.
@@ -2634,7 +2652,7 @@ function Client() {
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
-    if(localScanning)return;
+    if(libraryRefreshRunningRef.current)return;
     if(!localFolders.length)return;
     setError('');
     setLocalFolderNotice('');
@@ -3458,7 +3476,7 @@ function Client() {
   }
 
   function LocalScanStatus(){
-    const activeProgress=scanProgress||enrichmentProgress;
+    const activeProgress=activeLibraryProgress;
     if(activeProgress){
       const copy=scanStatusCopy({...activeProgress,publishedCount:localBooks.length});
       const percent=scanProgressPercent(activeProgress);
@@ -3473,6 +3491,7 @@ function Client() {
           <Text numberOfLines={2} style={[styles.scanBannerDetail,{color:p.muted}]}>{copy.detail}</Text>
           <View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:`${percent}%` as `${number}%`}]} /></View>
         </View>
+        {activeProgress.phase!=='complete'?<Pressable accessibilityRole="button" accessibilityLabel="Cancel library refresh" onPress={cancelLibraryRefresh} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Cancel</Text></Pressable>:null}
       </View>;
     }
     if(!localFolderNotice)return null;
@@ -7068,9 +7087,10 @@ function Client() {
                 </View>:null}
 
                 <View style={styles.settingsInlineActions}>
-                  <Pressable accessibilityRole="button" disabled={localScanning||!localFolders.length} onPress={()=>void refreshAllMetadataAndCovers()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Refreshing…':'Refresh metadata & covers'}</Text></Pressable>
-                  <Pressable accessibilityRole="button" onPress={()=>void clearMetadataCaches()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Clear metadata cache</Text></Pressable>
+                  <Pressable accessibilityRole="button" disabled={libraryRefreshActive||!localFolders.length} onPress={()=>void refreshAllMetadataAndCovers()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{libraryRefreshActive?'Refreshing…':'Refresh metadata & covers'}</Text></Pressable>
+                  <Pressable accessibilityRole="button" disabled={libraryRefreshActive} onPress={()=>void clearMetadataCaches()} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Clear metadata cache</Text></Pressable>
                 </View>
+                {LocalScanStatus()}
                 {metadataSettingsNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:metadataSettingsNotice.includes('could not')?p.danger:p.sage}]}>{metadataSettingsNotice}</Text>:null}
               </View>
 
@@ -7078,10 +7098,10 @@ function Client() {
                 <View style={styles.settingsSubgroupHeading}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Local folders</Text><Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder{localFolders.length===1?'':'s'} · {localBooks.length} files</Text></View>
                 {localFolders.map(folder=><View key={folder.uri} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>{folder.name}</Text><Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{folder.uri}</Text></View>
-                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove local folder '+folder.name} disabled={localScanning} onPress={()=>confirmRemoveLocalFolder(folder)} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={'Remove local folder '+folder.name} disabled={libraryRefreshActive} onPress={()=>confirmRemoveLocalFolder(folder)} style={styles.settingsTextAction}><Text style={{color:p.danger,fontWeight:'700'}}>Remove</Text></Pressable>
                 </View>)}
                 <View style={styles.settingsInlineActions}>
-                  <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{localScanning?'Scanning…':'Add folder'}</Text></Pressable>
+                  <Pressable accessibilityRole="button" disabled={libraryRefreshActive} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{libraryRefreshActive?'Refreshing…':'Add folder'}</Text></Pressable>
                 </View>
                 {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
               </View>
