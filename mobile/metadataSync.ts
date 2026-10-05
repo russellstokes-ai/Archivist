@@ -285,9 +285,28 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
   const selected:Partial<Record<SyncField,ReturnType<typeof canonicalField>>>={};
   for(const field of fields)selected[field]=canonicalField(books,field,audio);
 
-  // Album/work title is work-level evidence, while TIT2/©nam is commonly a
-  // chapter title. When the grouped tracks agree on one embedded work title,
-  // use it explicitly unless the user supplied a manual title.
+  // Multipart filenames can carry a reliable work title even when each
+  // per-track title is only "Chapter 01". Require every grouped track to agree.
+  if(audio&&selected.title?.source!=='manual'){
+    const filenameTitles=books.map(book=>audioMultipartWorkTitle(fileStem(book.uri))).filter(Boolean);
+    const filenameNormalized=[...new Set(filenameTitles.map(normal))];
+    if(filenameTitles.length===books.length&&filenameNormalized.length===1){
+      selected.title={
+        book:books[0],
+        value:filenameTitles[0],
+        source:'path',
+        confidence:'high',
+        key:filenameNormalized[0],
+        workHint:true,
+        score:Number.MAX_SAFE_INTEGER-1,
+        authority:0,
+      } as any;
+    }
+  }
+
+  // Album/work title is stronger work-level evidence, while TIT2/©nam is
+  // commonly a chapter title. When grouped tracks agree on one embedded work
+  // title, use it explicitly unless the user supplied a manual title.
   if(audio&&selected.title?.source!=='manual'){
     const workTitles=books.map(book=>clean(book.embeddedMetadata?.workTitle||'')).filter(Boolean);
     const normalized=[...new Set(workTitles.map(normal))];
