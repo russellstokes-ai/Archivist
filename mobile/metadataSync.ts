@@ -178,9 +178,11 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
     let score=sourceRank[entry.source]+confidenceRank[entry.confidence]+Math.min(90,Math.max(0,(frequency.get(entry.key)||1)-1)*18)+(entry.workHint?120:0);
     if(audio&&field==='title'){
       const repeated=(frequency.get(entry.key)||1)/groupSize;
-      // TIT2/©nam often contains chapter names. Treat a one-off embedded title
-      // as track metadata, not as the audiobook/work title.
-      if(groupSize>1&&entry.source==='embedded'&&repeated<.5)score-=280;
+      // TIT2/©nam often contains chapter names. An embedded title must have a
+      // strict majority across a multi-track audiobook before it can beat the
+      // folder/path work identity. This keeps chapter names on tracks without
+      // allowing a 2-track 50/50 split to become the book title.
+      if(groupSize>1&&entry.source==='embedded'&&repeated<=.5)score-=280;
       if(isGenericMediaTitle(String(entry.value),'Audio',groupSize))score-=320;
     }
     return {...entry,score};
