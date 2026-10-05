@@ -60,7 +60,7 @@ import {getPersistedJSON, setPersistedJSON, setPersistedJSONArrayCooperative} fr
 import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
-import {PLAYER_MOTION_TIMING, PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {PLAYER_MOTION_TIMING, PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, livingBookHingeDuration, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
@@ -1116,7 +1116,7 @@ function Client() {
     const current=Math.max(0,Math.min(1,bookOpenProgressRef.current));
     const distance=Math.abs(target-current);
     const baseDuration=motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs;
-    const hingeDuration=reduceMotion?0:Math.max(90,Math.round(baseDuration*distance));
+    const hingeDuration=livingBookHingeDuration(current,target,baseDuration,reduceMotion);
 
     bookOpenAnim.stopAnimation();
     Animated.timing(bookOpenAnim,{
