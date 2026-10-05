@@ -7,6 +7,7 @@ import {extractAudioMetadata} from './audioMetadata';
 import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
+import {synchronizeLocalMetadata} from './metadataSync';
 
 export type LocalBook = {
   id: number;
@@ -598,13 +599,15 @@ export async function scanLocalFolders(
   }
 
   report('matching', '');
+  const synchronized=synchronizeLocalMetadata(books).books;
+  review=synchronized.filter(book=>book.needsReview).length;
   return {
     folders: nextFolders.concat(folders.slice(nextFolders.length)),
-    books,
+    books:synchronized,
     skipped,
     truncated,
     truncatedReason,
-    identified: books.length - review,
+    identified: synchronized.length - review,
     review,
     entriesVisited,
   };
@@ -880,6 +883,7 @@ export async function enrichLocalBookMetadataOnline(
     googleBooksApiKey?:string;
     openLibraryEnabled?:boolean;
     applyHighConfidence?:boolean;
+    ignoreCache?:boolean;
     shouldContinue?:()=>boolean;
     batchSize?:number;
     onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;cache:OnlineBookCache})=>void|Promise<void>;
@@ -897,7 +901,7 @@ export async function enrichLocalBookMetadataOnline(
     const book=next[index];
     if(!shouldLookupBookOnline(book))continue;
     attempted+=1;pending+=1;
-    const result=await lookupOnlineBook(book,{cache,googleBooksApiKey:options.googleBooksApiKey,openLibraryEnabled:options.openLibraryEnabled});
+    const result=await lookupOnlineBook(book,{cache,googleBooksApiKey:options.googleBooksApiKey,openLibraryEnabled:options.openLibraryEnabled,ignoreCache:options.ignoreCache});
     if(!shouldContinue())break;
     if(result.best){
       const candidate=result.best;
@@ -936,6 +940,7 @@ export async function enrichLocalComicMetadataOnline(
     token?:string;
     cache?:OnlineComicCache;
     applyHighConfidence?:boolean;
+    ignoreCache?:boolean;
     shouldContinue?:()=>boolean;
     batchSize?:number;
     onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;rateLimited:boolean;cache:OnlineComicCache})=>void|Promise<void>;
@@ -953,7 +958,7 @@ export async function enrichLocalComicMetadataOnline(
     const book=next[index];
     if(!shouldLookupComicOnline(book))continue;
     attempted+=1;pending+=1;
-    const result=await lookupOnlineComic(book,{token:options.token,cache});
+    const result=await lookupOnlineComic(book,{token:options.token,cache,ignoreCache:options.ignoreCache});
     if(!shouldContinue())break;
     if(result.status==='rate-limited'){rateLimited=true;break;}
     if(result.best){
