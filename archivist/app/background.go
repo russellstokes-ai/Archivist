@@ -94,6 +94,10 @@ func (a *app) worker(ctx context.Context) {
 			}
 			if e := a.scanWithProgress(source, progressFn); e != nil {
 				state, msg = "failed", e.Error()
+			} else if queued, queueErr := a.enqueueAutomaticMetadataEnrichment(source); queueErr != nil {
+				msg = "Scan complete · metadata enrichment could not be queued"
+			} else if queued {
+				msg = "Scan complete · metadata enrichment queued"
 			}
 			a.db.Exec("UPDATE jobs SET state=?,message=?,progress=CASE WHEN ?='complete' THEN total ELSE progress END WHERE id=?", state, msg, state, id)
 		}
