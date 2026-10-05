@@ -84,24 +84,33 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
       val pending = ArrayDeque<String>()
       val seenDirectories = HashSet<String>()
       pending.add(rootId)
+
+      val projection = arrayOf(
+        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        DocumentsContract.Document.COLUMN_MIME_TYPE,
+        DocumentsContract.Document.COLUMN_SIZE,
+        DocumentsContract.Document.COLUMN_LAST_MODIFIED
+      )
+
       while (pending.isNotEmpty() && !session.cancelled.get()) {
         val parentId = pending.removeFirst()
         if (!seenDirectories.add(parentId)) continue
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
-        val projection = arrayOf(
-          DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-          DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-          DocumentsContract.Document.COLUMN_MIME_TYPE,
-          DocumentsContract.Document.COLUMN_SIZE,
-          DocumentsContract.Document.COLUMN_LAST_MODIFIED
-        )
+        var contextReady = false
+
         try {
+          // Pass one discovers directory structure and lightweight context first.
+          // Media is deliberately not queued here so JS never has to retain a
+          // complete directory just to wait for cover/sidecar files that may
+          // appear at the end of a provider cursor.
           context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
             val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
             val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
             val sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
             val modifiedCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+
             while (cursor.moveToNext() && !session.cancelled.get()) {
               session.visited.incrementAndGet()
               val documentId = cursor.getString(idCol) ?: continue
@@ -112,19 +121,53 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
                 continue
               }
               val role = roleFor(name) ?: continue
+              if (role.first == "media") continue
               val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
               val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
               val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
-              if (role.first == "media") session.found.incrementAndGet()
               offer(session, ScanEntry(documentUri.toString(), name, parentId, mime, size, modified, role.first, role.second))
             }
+            contextReady = true
           } ?: run {
             session.errors.incrementAndGet()
             session.lastError = "A folder could not be queried by Android."
           }
+
+          if (contextReady && !session.cancelled.get()) {
+            // Pass two streams media only. Context for this parent is already
+            // ahead of it in the bounded queue.
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+              val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+              val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+              val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+              val sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+              val modifiedCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+
+              while (cursor.moveToNext() && !session.cancelled.get()) {
+                val documentId = cursor.getString(idCol) ?: continue
+                val name = cursor.getString(nameCol) ?: ""
+                val mime = cursor.getString(mimeCol) ?: ""
+                if (mime == DocumentsContract.Document.MIME_TYPE_DIR) continue
+                val role = roleFor(name) ?: continue
+                if (role.first != "media") continue
+                val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
+                val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
+                val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
+                session.found.incrementAndGet()
+                offer(session, ScanEntry(documentUri.toString(), name, parentId, mime, size, modified, role.first, role.second))
+              }
+            } ?: run {
+              session.errors.incrementAndGet()
+              session.lastError = "A folder's media files could not be queried by Android."
+            }
+          }
         } catch (error: Throwable) {
           session.errors.incrementAndGet()
           session.lastError = error.message ?: "A folder could not be read."
+        } finally {
+          if (!session.cancelled.get()) {
+            offer(session, ScanEntry("", "", parentId, "", 0L, 0L, "directory-end", ""))
+          }
         }
       }
     } catch (error: Throwable) {
