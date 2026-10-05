@@ -37,23 +37,6 @@ export type LocalBook = {
   scanReused?: boolean;
 };
 
-export type LocalSortPreview = {
-  id: string;
-  asset: number;
-  title: string;
-  sourceUri: string;
-  rootUri: string;
-  relativePath: string;
-  from: string;
-  to: string;
-  state: 'ready' | 'same' | 'conflict' | 'review';
-};
-
-export type LocalSortApplyResult = {
-  copied: Array<{id: string; title: string; uri: string}>;
-  failed: Array<{id: string; title: string; error: string}>;
-};
-
 export type LocalSortHistory = {
   id: string;
   createdAt: string;
@@ -567,6 +550,7 @@ export async function scanLocalFolders(
     onProgress?.({phase, currentFolder, entriesVisited, found: books.length, review});
   };
 
+  let currentSourceUri = '';
   async function scanDir(uri: string, space: string, depth: number, countUnreadable = true) {
     if (truncated || depth > maxDepth) return;
     let children: string[];
@@ -656,6 +640,7 @@ export async function scanLocalFolders(
           coverShape: identity.coverShape,
           metadataSource: identity.metadataSource,
           coverUri,
+          sourceUri: currentSourceUri,
         });
         fallbackBatch.push(books[books.length-1]);
         if(fallbackBatch.length>=25)await flushFallbackBatch(space);
@@ -676,6 +661,7 @@ export async function scanLocalFolders(
   const nextFolders: LocalFolder[] = [];
   for (const folder of folders) {
     const before = books.length;
+    currentSourceUri = folder.uri;
     report('discovering', folder.name);
     await scanDir(folder.uri, folder.name, 0);
     const count = books.length - before;
@@ -699,45 +685,6 @@ export async function scanLocalFolders(
     identified: books.length - review,
     review,
   };
-}
-
-export function previewLocalSort(books: LocalBook[], template: string): LocalSortPreview[] {
-  const destinations = new Map<string, number>();
-  const previews = books.map(book => {
-    const filename = fileNameFromUri(book.uri);
-    const target = targetPath(book, filename, template);
-    const from = displayPath(book.uri);
-    const count = destinations.get(target) || 0;
-    destinations.set(target, count + 1);
-    return {
-      id: `local-${book.id}`,
-      asset: book.id,
-      title: book.title,
-      sourceUri: book.uri,
-      rootUri: rootUriFromFileUri(book.uri),
-      relativePath: target,
-      from,
-      to: target,
-      state: book.needsReview ? 'review' as const : from.endsWith(target) ? 'same' as const : 'ready' as const,
-    };
-  });
-  return previews.map(preview => preview.state === 'review' ? preview : destinations.get(preview.to)! > 1 ? {...preview, state: 'conflict'} : preview);
-}
-
-export async function applyLocalSortCopies(previews: LocalSortPreview[]): Promise<LocalSortApplyResult> {
-  const copied: LocalSortApplyResult['copied'] = [];
-  const failed: LocalSortApplyResult['failed'] = [];
-  for (const preview of previews) {
-    if (preview.state !== 'ready') continue;
-    try {
-      const target = await createTargetFile(preview.rootUri, preview.relativePath);
-      await StorageAccessFramework.copyAsync({from: preview.sourceUri, to: target});
-      copied.push({id: preview.id, title: preview.title, uri: target});
-    } catch (e) {
-      failed.push({id: preview.id, title: preview.title, error: (e as Error).message});
-    }
-  }
-  return {copied, failed};
 }
 
 export async function removeLocalSortCopies(history: LocalSortHistory): Promise<LocalSortApplyResult> {
@@ -781,16 +728,6 @@ function titleFromUri(uri: string) {
   return withoutExt.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Untitled';
 }
 
-function targetPath(book: LocalBook, filename: string, template: string) {
-  const author = cleanPart(book.author || 'Unknown author');
-  const series = cleanPart(book.series || 'Standalone');
-  const title = cleanPart(book.title || filename.replace(/\.[^.]+$/, ''));
-  const format = cleanPart(book.format || 'Books');
-  if (template === 'author-series-title') return `${author}/${series}/${title}/${filename}`;
-  if (template === 'format-author-title') return `${format}/${author}/${title}/${filename}`;
-  return `${author}/${title}/${filename}`;
-}
-
 function fileNameFromUri(uri: string) {
   const clean = decodeUriPart(uri).split('?')[0];
   return clean.split('/').pop() || 'item';
@@ -798,61 +735,6 @@ function fileNameFromUri(uri: string) {
 
 function fileStem(uri: string) {
   return fileNameFromUri(uri).replace(/\.[^.]+$/, '');
-}
-
-async function createTargetFile(rootUri: string, relativePath: string) {
-  const parts = relativePath.split('/').filter(Boolean);
-  if (!parts.length) throw Error('Missing destination file name');
-  const filename = parts.pop()!;
-  let dir = rootUri;
-  for (const part of parts) {
-    dir = await ensureDirectory(dir, part);
-  }
-  const dot = filename.lastIndexOf('.');
-  const name = dot > 0 ? filename.slice(0, dot) : filename;
-  const ext = dot > 0 ? filename.slice(dot + 1).toLowerCase() : '';
-  return StorageAccessFramework.createFileAsync(dir, name, mimeType(ext));
-}
-
-async function ensureDirectory(parent: string, name: string) {
-  const children = await StorageAccessFramework.readDirectoryAsync(parent);
-  const existing = children.find(child => lastPathPart(child) === name && !extension(child));
-  if (existing) return existing;
-  return StorageAccessFramework.makeDirectoryAsync(parent, name);
-}
-
-function rootUriFromFileUri(uri: string) {
-  const marker = '/document/';
-  if (!uri.includes(marker)) return uri;
-  const prefix = uri.split(marker)[0];
-  const doc = uri.split(marker)[1] || '';
-  const root = doc.split('%2F')[0].split('/')[0];
-  return `${prefix}/tree/${root}/document/${root}`;
-}
-
-function lastPathPart(uri: string) {
-  const clean = displayPath(uri);
-  return clean.split('/').filter(Boolean).pop() || clean;
-}
-
-function mimeType(ext: string) {
-  if (ext === 'epub') return 'application/epub+zip';
-  if (ext === 'pdf') return 'application/pdf';
-  if (ext === 'cbz' || ext === 'zip') return 'application/zip';
-  if (ext === 'mp3') return 'audio/mpeg';
-  if (ext === 'm4a' || ext === 'm4b') return 'audio/mp4';
-  if (ext === 'flac') return 'audio/flac';
-  if (ext === 'ogg' || ext === 'opus') return 'audio/ogg';
-  return 'application/octet-stream';
-}
-
-function displayPath(uri: string) {
-  const clean = decodeUriPart(uri).split('/document/').pop() || decodeUriPart(uri);
-  return clean.replace(/^primary:/, '');
-}
-
-function cleanPart(value: string) {
-  return value.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Unknown';
 }
 
 function decodeUriPart(uri: string) {
