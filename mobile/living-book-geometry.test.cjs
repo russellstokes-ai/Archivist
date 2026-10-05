@@ -13,6 +13,8 @@ assert.equal(G.bookWidth,G.pageWidth*2,'spread must be exactly two equal page wi
 assert.equal(G.coverWidth,G.pageWidth,'closed cover must match one page width');
 assert.equal(G.pageInsetY*2+G.pageHeight,G.coverHeight,'page faces must be vertically centred inside both covers');
 assert.equal(G.spineX,G.pageWidth,'hinge must sit exactly between equal page halves');
+assert.ok(G.spineOverlap>=2,'paper blocks must overlap under the spine so there is no visible centre gap');
+assert.ok(G.gutterWidth>=G.spineOverlap*3,'the visual gutter must be wider than the hidden overlap so it reads as curvature, not a slit');
 assert.ok(G.leafEnvelopePad>=12,'turning leaf envelope must extend beyond the hardcover bounds');
 assert.equal(livingBookGeometryIsLevel(),true,'shared book geometry must stay level and symmetric');
 
@@ -51,5 +53,9 @@ assert.ok(source.includes("transformOrigin:'right center'")&&source.includes('gr
 assert.equal(source.includes("rotateX:'9deg'"),false,'whole spread must not tilt out of level');
 assert.match(source,/Animated\.multiply\(\s*leafGate,\s*turn\.interpolate/s,'ambient turns must disappear before the book closes');
 assert.match(source,/livingBookDepthLayers\(\)\.map/,'page depth must come from symmetric shared geometry');
+assert.ok(source.includes('s.rightPage')&&source.includes('G.pageWidth+G.spineOverlap'),'right paper must overlap beneath the centre crease');
+assert.ok(source.includes('gutterLeftShadow')&&source.includes('gutterCrease')&&source.includes('gutterRightShadow'),'centre must render as a layered concave gutter rather than a dark physical gap');
+assert.ok(source.includes('borderRightWidth:0')&&source.includes('borderLeftWidth:0'),'inner paper edges must not draw competing borders through the spine');
+assert.ok(source.includes('leafFrontFace')&&source.includes('leafBackFace'),'animated paper must render as two-sided material');
 
 console.log('PASS: Living Book uses one continuous hinge, unclipped turns and footprint-bound shadow geometry');
