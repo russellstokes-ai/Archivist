@@ -292,7 +292,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           if (seen > metadataArchiveEntryLimit) throw IllegalArgumentException("Archive contains too many entries for metadata inspection.")
           val name = entry.name ?: ""
           if (!entry.isDirectory && wanted(name)) {
-            if (entry.size > metadataTextLimit) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
+            if (entry.size > metadataTextLimit.toLong()) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
             return name to readBounded(zip).toString(Charsets.UTF_8)
           }
           zip.closeEntry()
@@ -451,7 +451,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           if (header.isDirectory) continue
           val name = header.fileName ?: continue
           if (!name.substringAfterLast('/').equals("ComicInfo.xml", ignoreCase = true)) continue
-          if (header.fullUnpackSize > metadataTextLimit) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
+          if (header.fullUnpackSize > metadataTextLimit.toLong()) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
           val xml = archive.getInputStream(header).use { source -> readBounded(source).toString(Charsets.UTF_8) }
           return comicInfoFields(xml)
         }
