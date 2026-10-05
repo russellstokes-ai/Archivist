@@ -5,7 +5,7 @@ export function AmbientGlow({color='#47736F',size=520,strength=1}:{color?:string
   return <View pointerEvents="none" accessibilityElementsHidden style={{position:'absolute',width:size,height:size,left:'50%',top:0,marginLeft:-size/2}}>{Array.from({length:24},(_,i)=>{const inset=i*size/64;return <View key={i} style={{position:'absolute',left:inset,top:inset,right:inset,bottom:inset,borderRadius:size,backgroundColor:color,opacity:.009*strength}}/>})}</View>;
 }
 import {WebView} from 'react-native-webview';
-import {EncodingType,StorageAccessFramework,cacheDirectory,downloadAsync,getInfoAsync,readAsStringAsync} from 'expo-file-system/legacy';
+import {EncodingType,StorageAccessFramework,cacheDirectory,createDownloadResumable,deleteAsync,getInfoAsync,moveAsync,readAsStringAsync} from 'expo-file-system/legacy';
 import type {LivingBookPhase} from './playerExperience';
 
 export type LivingBookCanvasProps={
@@ -19,7 +19,47 @@ function mimeFrom(uri:string,data:string){if(data.startsWith('/9j/'))return'imag
 async function localDataUri(uri:string){const data=uri.startsWith('content://')?await StorageAccessFramework.readAsStringAsync(uri,{encoding:EncodingType.Base64}):await readAsStringAsync(uri,{encoding:EncodingType.Base64});return data?'data:'+mimeFrom(uri,data)+';base64,'+data:'';}
 async function coverSource(uri?:string,headers?:Record<string,string>){
   if(!uri)return'';if(uri.startsWith('data:'))return uri;
-  if(/^https:\/\//i.test(uri)){if(!headers||!Object.keys(headers).length)return uri;if(!cacheDirectory)return'';const target=cacheDirectory+'archivist-living-'+hash(uri)+'.img';const info=await getInfoAsync(target).catch(()=>({exists:false} as const));if(!info.exists){const result=await downloadAsync(uri,target,{headers});if(result.status<200||result.status>=300)return'';}return localDataUri(target);}
+  if(/^https:\/\//i.test(uri)){
+    if(!headers||!Object.keys(headers).length)return uri;
+    if(!cacheDirectory)return'';
+    const target=cacheDirectory+'archivist-living-'+hash(uri)+'.img';
+    const info=await getInfoAsync(target).catch(()=>({exists:false} as const));
+    if(!info.exists){
+      const temp=target+'.download';
+      await deleteAsync(temp,{idempotent:true}).catch(()=>undefined);
+      let oversized=false;
+      const task=createDownloadResumable(uri,temp,{headers},progress=>{
+        const total=Number(progress.totalBytesExpectedToWrite)||0;
+        const written=Number(progress.totalBytesWritten)||0;
+        if((total>12*1024*1024||written>12*1024*1024)&&!oversized){
+          oversized=true;
+          void task.cancelAsync().catch(()=>undefined);
+        }
+      });
+      let timer:ReturnType<typeof setTimeout>|undefined;
+      try{
+        const result=await Promise.race([
+          task.downloadAsync(),
+          new Promise<never>((_,reject)=>{
+            timer=setTimeout(()=>{
+              void task.cancelAsync().catch(()=>undefined);
+              reject(Error('Living Book cover download timed out.'));
+            },10_000);
+          }),
+        ]);
+        if(oversized)throw Error('Living Book cover exceeds the 12 MB safety limit.');
+        if(!result||result.status<200||result.status>=300)throw Error('Living Book cover download failed.');
+        await deleteAsync(target,{idempotent:true}).catch(()=>undefined);
+        await moveAsync({from:temp,to:target});
+      }catch{
+        await deleteAsync(temp,{idempotent:true}).catch(()=>undefined);
+        return'';
+      }finally{
+        if(timer)clearTimeout(timer);
+      }
+    }
+    return localDataUri(target);
+  }
   try{return await localDataUri(uri);}catch{return'';}
 }
 function js(value:unknown){return JSON.stringify(value).replace(/</g,'\\u003c');}
