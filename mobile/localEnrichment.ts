@@ -35,6 +35,11 @@ export type LocalEnrichmentProgress={
   currentTitle:string;
 };
 
+export type LocalEnrichmentDelta={
+  books:LocalBook[];
+  entry:LocalEnrichmentCacheEntry;
+};
+
 type Dependencies={
   lookup?:(input:{title:string;author?:string;series?:string;publishedYear?:number;isbn?:string},minimum?:number)=>Promise<MetadataMatch|null>;
   extractAudioArtwork?:(uri:string)=>Promise<{uri:string;mimeType:string;width:number;height:number}|null>;
@@ -77,34 +82,59 @@ function bestGenre(match:MetadataMatch|undefined,current:string){
   return clean(current)||clean(match?.genres?.[0]||'');
 }
 
-function applyEntry(books:LocalBook[],work:LocalWork,entry:LocalEnrichmentCacheEntry){
-  const uris=new Set(work.tracks.map(track=>track.uri));
+function enrichBook(book:LocalBook,reviewUri:string|undefined,entry:LocalEnrichmentCacheEntry){
+  const manual=book.metadataSource==='manual';
+  const audio=book.format==='Audio';
+  return {
+    ...book,
+    title:audio?book.title:(manual?book.title:entry.title||book.title),
+    workTitleHint:audio?(entry.title||book.workTitleHint):book.workTitleHint,
+    author:manual&&book.author?book.author:(entry.author||book.author),
+    series:manual&&book.series?book.series:(entry.series||book.series),
+    genre:manual&&book.genre?book.genre:(entry.genre||book.genre),
+    publishedYear:book.publishedYear||entry.publishedYear,
+    coverUri:entry.coverUri||book.coverUri,
+    coverShape:entry.coverUri?entry.coverShape:book.coverShape,
+    livingBookCoverUri:entry.livingBookCoverUri,
+    livingBookCoverSource:entry.livingBookCoverSource,
+    livingBookCoverConfidence:entry.livingBookCoverConfidence,
+    metadataProvider:entry.metadataProvider,
+    metadataProviderId:entry.metadataProviderId,
+    metadataSource:manual?'manual':entry.metadataProvider?'online':book.metadataSource,
+    identificationConfidence:entry.identityReady?'high':book.identificationConfidence,
+    needsReview:!entry.publishReady&&book.uri===reviewUri,
+    reviewReason:entry.publishReady||book.uri!==reviewUri?'':entry.reviewReason,
+  };
+}
+
+function applyEntryIndexed(
+  books:LocalBook[],
+  indexByUri:Map<string,number>,
+  work:LocalWork,
+  entry:LocalEnrichmentCacheEntry,
+){
+  const changed:LocalBook[]=[];
   const reviewUri=work.tracks[0]?.uri;
-  return books.map(book=>{
-    if(!uris.has(book.uri))return book;
-    const manual=book.metadataSource==='manual';
-    const audio=book.format==='Audio';
-    return {
-      ...book,
-      title:audio?book.title:(manual?book.title:entry.title||book.title),
-      workTitleHint:audio?(entry.title||book.workTitleHint):book.workTitleHint,
-      author:manual&&book.author?book.author:(entry.author||book.author),
-      series:manual&&book.series?book.series:(entry.series||book.series),
-      genre:manual&&book.genre?book.genre:(entry.genre||book.genre),
-      publishedYear:book.publishedYear||entry.publishedYear,
-      coverUri:entry.coverUri||book.coverUri,
-      coverShape:entry.coverUri?entry.coverShape:book.coverShape,
-      livingBookCoverUri:entry.livingBookCoverUri,
-      livingBookCoverSource:entry.livingBookCoverSource,
-      livingBookCoverConfidence:entry.livingBookCoverConfidence,
-      metadataProvider:entry.metadataProvider,
-      metadataProviderId:entry.metadataProviderId,
-      metadataSource:manual?'manual':entry.metadataProvider?'online':book.metadataSource,
-      identificationConfidence:entry.identityReady?'high':book.identificationConfidence,
-      needsReview:!entry.publishReady&&book.uri===reviewUri,
-      reviewReason:entry.publishReady||book.uri!==reviewUri?'':entry.reviewReason,
-    };
+  for(const track of work.tracks){
+    const index=indexByUri.get(track.uri);
+    if(index===undefined)continue;
+    const updated=enrichBook(books[index],reviewUri,entry);
+    books[index]=updated;
+    changed.push(updated);
+  }
+  return changed;
+}
+
+function currentWorkFor(
+  originalWork:LocalWork,
+  books:LocalBook[],
+  indexByUri:Map<string,number>,
+){
+  const tracks=originalWork.tracks.map(track=>{
+    const index=indexByUri.get(track.uri);
+    return index===undefined?track:books[index];
   });
+  return groupLocalWorks(tracks)[0]||{...originalWork,tracks};
 }
 
 function cacheReusable(entry:LocalEnrichmentCacheEntry|undefined,querySignature:string,now:Date){
@@ -117,7 +147,7 @@ function cacheReusable(entry:LocalEnrichmentCacheEntry|undefined,querySignature:
 export async function enrichLocalCatalogue(
   inputBooks:LocalBook[],
   inputCache:LocalEnrichmentCache={},
-  onProgress?:(progress:LocalEnrichmentProgress,books:LocalBook[],cache:LocalEnrichmentCache)=>void|Promise<void>,
+  onProgress?:(progress:LocalEnrichmentProgress,delta:LocalEnrichmentDelta)=>void|Promise<void>,
   dependencies:Dependencies={},
 ){
   const lookup=dependencies.lookup||lookupBookMetadata;
@@ -125,22 +155,27 @@ export async function enrichLocalCatalogue(
   const cachePortrait=dependencies.cachePortrait||cachePortraitCover;
   const nowFn=dependencies.now||(()=>new Date());
   const lookupDelayMs=dependencies.lookupDelayMs??425;
-  let books=inputBooks.map(book=>({...book}));
+  const books=inputBooks.map(book=>({...book}));
+  const indexByUri=new Map<string,number>();
+  for(let index=0;index<books.length;index++)if(books[index].uri)indexByUri.set(books[index].uri,index);
   const cache:{[key:string]:LocalEnrichmentCacheEntry}={...inputCache};
   const works=groupLocalWorks(books);
   let processed=0,published=0,attention=0;
 
   for(const originalWork of works){
-    let work=groupLocalWorks(books.filter(book=>originalWork.tracks.some(track=>track.uri===book.uri)))[0]||originalWork;
+    const work=currentWorkFor(originalWork,books,indexByUri);
     const fingerprint=localWorkFingerprint(originalWork);
     const querySignature=localWorkQuerySignature(work);
     const now=nowFn();
     const cached=cache[fingerprint];
     if(cacheReusable(cached,querySignature,now)){
-      books=applyEntry(books,work,cached);
+      const changedBooks=applyEntryIndexed(books,indexByUri,work,cached);
       processed++;
       if(cached.publishReady)published++;else attention++;
-      await onProgress?.({total:works.length,processed,published,attention,currentTitle:cached.title||work.title},books,{...cache});
+      await onProgress?.(
+        {total:works.length,processed,published,attention,currentTitle:cached.title||work.title},
+        {books:changedBooks,entry:cached},
+      );
       continue;
     }
 
@@ -223,10 +258,13 @@ export async function enrichLocalCatalogue(
       ...(!publishReady?{retryAfter:new Date(now.getTime()+6*60*60*1000).toISOString()}:{}),
     };
     cache[fingerprint]=entry;
-    books=applyEntry(books,work,entry);
+    const changedBooks=applyEntryIndexed(books,indexByUri,work,entry);
     processed++;
     if(publishReady)published++;else attention++;
-    await onProgress?.({total:works.length,processed,published,attention,currentTitle:resolvedTitle||work.title},books,{...cache});
+    await onProgress?.(
+      {total:works.length,processed,published,attention,currentTitle:resolvedTitle||work.title},
+      {books:changedBooks,entry},
+    );
   }
 
   return {books,cache,progress:{total:works.length,processed,published,attention,currentTitle:''}};
