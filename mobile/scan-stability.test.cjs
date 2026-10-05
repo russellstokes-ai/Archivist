@@ -22,8 +22,8 @@ assert.ok(source.includes('const enrichment=enrichPublishedLocalLibrary(result.b
 assert.ok(source.includes('void enrichment.catch')&&!source.includes('if(forceOnline)await enrichment'),'explicit and automatic enrichment must release the scan UI and report background failures');
 assert.ok(source.includes('await enrichPublishedLocalEmbeddedMetadata(baseBooks,generation,forceOnline)'),'background enrichment must move embedded archive/audio parsing out of the foreground scan');
 assert.ok(source.includes('await enrichPublishedLocalCovers(embeddedBooks,generation)'),'background library enrichment must recover covers after embedded metadata');
-assert.ok(source.includes('await enrichPublishedLocalBookMetadata(latest,generation)'),'background library enrichment must continue into online book metadata after the latest persisted cover state');
-assert.ok(source.includes('await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation)'),'comic enrichment must run after books against the latest persisted catalogue');
+assert.ok(source.includes('await enrichPublishedLocalBookMetadata(latest,generation,forceOnline)'),'background library enrichment must continue into online book metadata after the latest persisted cover state and carry explicit refresh intent');
+assert.ok(source.includes('await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation,forceOnline)'),'comic enrichment must run after books against the latest persisted catalogue and carry explicit refresh intent');
 assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron credentials must come from secure storage rather than app source or persisted catalogue files');
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'stale enrichment must stop when a newer scan begins');
 assert.ok(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),'background enrichment must patch the current catalogue rather than replace it');
