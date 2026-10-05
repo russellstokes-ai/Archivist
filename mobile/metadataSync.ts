@@ -29,6 +29,7 @@ export type SynchronizableBook={
   needsReview?:boolean;
   reviewReason?:string;
   identificationConfidence?:SyncConfidence;
+  onlineMetadataMatch?:{fields?:Partial<Record<string,unknown>>;confidence?:SyncConfidence};
 };
 
 export type CanonicalMetadata={
@@ -152,7 +153,18 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
       const confidence=confidenceFor(book,field);
       values.push({book,value,source,confidence,key:normal(value)});
     }
-    if(audio&&['title','author','series','seriesNumber','genre','publishedYear','narrator','isbn','asin'].includes(field)){
+    if(audio&&['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'].includes(field)){
+      const onlineValue=book.onlineMetadataMatch?.fields?.[field];
+      if(present(onlineValue)&&normal(onlineValue)!==normal(value)){
+        values.push({
+          book,
+          value:onlineValue,
+          source:'online',
+          confidence:book.onlineMetadataMatch?.confidence||'high',
+          key:normal(onlineValue),
+          workHint:true,
+        });
+      }
       const inferred=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length});
       const pathValue=(inferred as any)[field];
       if(present(pathValue)&&normal(pathValue)!==normal(value)){
