@@ -55,6 +55,14 @@ assert.equal(work.seriesNumber,4);
 assert.equal(work.coverUri,'file:///app/covers/embedded-blackops.jpg');
 assert.equal(work.needsReview,false);
 
+const cachedMusicAuthor=synchronizeLocalMetadata([
+  track(35,'01 - Opening',{title:'Opening',author:'Music',metadataProvenance:{title:'embedded',author:'embedded'},metadataFieldConfidence:{title:'high',author:'high'}}),
+  track(36,'02 - Trouble',{title:'Trouble',author:'Music',metadataProvenance:{title:'embedded',author:'embedded'},metadataFieldConfidence:{title:'high',author:'high'}}),
+]).books;
+assert.equal(groupLocalWorks(cachedMusicAuthor)[0].author,'Craig Alanson','cached Android Music root metadata must be repaired from stronger path identity');
+assert.equal(cachedMusicAuthor.every(item=>item.author==='Craig Alanson'),true,'repaired author must synchronize across audiobook tracks');
+
+
 const outlier=synchronizeLocalMetadata([
   track(40,'01 - Opening',{
     title:'Opening',
