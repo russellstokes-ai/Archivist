@@ -48,7 +48,7 @@ import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
-import {persistAndroidAutoLibrary} from './androidAuto';
+import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
@@ -1129,7 +1129,6 @@ function Client() {
   }, [localBooks]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
-  useEffect(()=>{const timer=setTimeout(()=>void persistAndroidAutoLibrary(localWorks).catch(()=>undefined),2000);return()=>clearTimeout(timer);},[localWorks]);
 
   const personaliseLocalWorks = (items: LocalWork[]): PersonalLocalWork[] => items.map(work => {
     let readingState:ReadingState='not-started';
@@ -1148,6 +1147,31 @@ function Client() {
   const phonePersonalWorks = useMemo(() => personaliseLocalWorks(phoneWorks), [localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress,phoneWorks]);
   const downloadedPersonalWorks = useMemo(() => personaliseLocalWorks(downloadedWorks), [downloadedWorks,localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress]);
   const localPersonalWorks = useMemo(() => [...phonePersonalWorks,...downloadedPersonalWorks], [downloadedPersonalWorks,phonePersonalWorks]);
+  useEffect(()=>{
+    const timer=setTimeout(()=>void persistAndroidAutoLibrary(localPersonalWorks,localWorkProgress).catch(()=>undefined),900);
+    return()=>clearTimeout(timer);
+  },[localPersonalWorks,localWorkProgress]);
+  useEffect(()=>{
+    if(!appActive)return;
+    let cancelled=false;
+    void consumeAndroidAutoProgress().then(progress=>{
+      if(cancelled||!progress)return;
+      setLocalWorkProgress(current=>{
+        const next={...current,[progress.workKey]:{uri:progress.trackUri,seconds:progress.complete?0:progress.seconds,complete:progress.complete}};
+        setPersistedJSON(localWorkProgressKey,next).catch(()=>undefined);
+        return next;
+      });
+      if(progress.complete){
+        setLocalAudioCompleted(current=>{
+          if(current[progress.workKey])return current;
+          const next={...current,[progress.workKey]:true};
+          setPersistedJSON(localAudioCompletedKey,next).catch(()=>undefined);
+          return next;
+        });
+      }
+    }).catch(()=>undefined);
+    return()=>{cancelled=true;};
+  },[appActive]);
 
   const sourceWorks = useMemo<UnifiedWork[]>(() => {
     const phone:UnifiedWork[] = phonePersonalWorks.map(work => {
