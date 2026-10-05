@@ -62,9 +62,9 @@ export function scanPhaseStep(phase:LocalScanProgress['phase']) {
     'checking-duplicates':3,
     preparing:4,
     'reading-metadata':5,
-    covers:6,
-    'online-books':7,
-    'online-comics':8,
+    'online-books':6,
+    'online-comics':7,
+    covers:8,
     complete:8,
   };
   return steps[phase];
@@ -81,10 +81,10 @@ export function scanProgressPercent(progress:LocalScanProgress){
     matching:[18,22],
     'checking-duplicates':[22,24],
     preparing:[24,28],
-    'reading-metadata':[28,52],
-    covers:[52,68],
-    'online-books':[68,88],
-    'online-comics':[88,97],
+    'reading-metadata':[28,46],
+    'online-books':[46,72],
+    'online-comics':[72,86],
+    covers:[86,97],
     complete:[100,100],
   };
   const [start,end]=ranges[progress.phase];
