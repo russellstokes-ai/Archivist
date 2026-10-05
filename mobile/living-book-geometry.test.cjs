@@ -52,7 +52,7 @@ assert.equal(source.includes('shadowColor'),false,'rotating book layers must not
 assert.ok(source.includes("transformOrigin:'right center'")&&source.includes('groundShadow'),'ground shadow must stay anchored to the visible footprint');
 assert.equal(source.includes("rotateX:'9deg'"),false,'whole spread must not tilt out of level');
 assert.match(source,/Animated\.multiply\(\s*leafGate,\s*turn\.interpolate/s,'ambient turns must disappear before the book closes');
-assert.match(source,/livingBookDepthLayers\(\)\.map/,'page depth must come from symmetric shared geometry');
+assert.ok((source.match(/livingBookDepthLayers\(\)\.filter\(/g)||[]).length===2,'left and right page depth must both derive from the same shared geometry before being assigned to their physical blocks');
 assert.ok(source.includes('s.rightPage')&&source.includes('G.pageWidth+G.spineOverlap'),'right paper must overlap beneath the centre crease');
 assert.ok(source.includes('gutterLeftShadow')&&source.includes('gutterCrease')&&source.includes('gutterRightShadow'),'centre must render as a layered concave gutter rather than a dark physical gap');
 assert.ok(source.includes('spinePaperBridge'),'a continuous paper bridge must sit beneath the gutter so the hardcover binding cannot appear as a centre slit');
