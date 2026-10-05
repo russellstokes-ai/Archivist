@@ -53,6 +53,15 @@ assert.equal(numberedParts.length,1,'numbered chapter files inside one book fold
 assert.equal(numberedParts[0].title,'Black Ops');
 assert.equal(numberedParts[0].author,'Craig Alanson');
 
+const rootMultipart = groupLocalWorks([
+  book(40,'content://root/document/primary:Audiobooks%2FDune%20-%20Part%2001.mp3',{title:'Opening',author:'Frank Herbert',embeddedMetadata:{workTitle:'Dune'}}),
+  book(41,'content://root/document/primary:Audiobooks%2FDune%20-%20Part%2002.mp3',{title:'Arrakis',author:'Frank Herbert',embeddedMetadata:{workTitle:'Dune'}}),
+  book(42,'content://root/document/primary:Audiobooks%2FProject%20Hail%20Mary%20-%20Part%2001.mp3',{title:'Opening',author:'Andy Weir',embeddedMetadata:{workTitle:'Project Hail Mary'}}),
+  book(43,'content://root/document/primary:Audiobooks%2FProject%20Hail%20Mary%20-%20Part%2002.mp3',{title:'First Contact',author:'Andy Weir',embeddedMetadata:{workTitle:'Project Hail Mary'}}),
+]);
+assert.equal(rootMultipart.length,2,'two multi-file audiobooks mixed in the library root must become two logical works');
+assert.deepEqual(rootMultipart.map(item=>item.files).sort(),[2,2]);
+
 const flat = groupLocalWorks([
   book(1,'content://root/document/primary:Audiobooks%2FBook%20One.m4b',{title:'Book One'}),
   book(2,'content://root/document/primary:Audiobooks%2FBook%20Two.m4b',{title:'Book Two'}),
