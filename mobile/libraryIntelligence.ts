@@ -57,6 +57,21 @@ export type LocalMetadataContext = {
   siblingMediaCount?: number;
 };
 
+export function audioMultipartWorkTitle(value:string){
+  const stem=cleanLabel(String(value||'').replace(/\.[^.]+$/,''));
+  const patterns=[
+    /^(.*?)\s*[-._:]?\s*(?:part|pt|chapter|ch|track|disc|disk|cd)\s*[-_.:#]?\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
+    /^(.*?)\s*[-._:]\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
+    /^(.*?)\s*\((?:part|pt|chapter|ch|track)\s*\d{1,4}\)\s*$/i,
+  ];
+  for(const pattern of patterns){
+    const match=stem.match(pattern);
+    const title=cleanLabel(match?.[1]||'');
+    if(title.length>=3)return title;
+  }
+  return '';
+}
+
 export function inferLocalBookMetadata(uri: string, format: string, context: LocalMetadataContext = {}): LocalIdentity {
   const parts = decodedPathParts(uri);
   const filename = parts[parts.length - 1] || 'Untitled';
@@ -72,7 +87,8 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
   const grandparent = cleanLabel(semanticDirs[semanticDirs.length - 2] || '');
   const greatGrandparent = cleanLabel(semanticDirs[semanticDirs.length - 3] || '');
 
-  let title = stem || 'Untitled';
+  const rootMultipartTitle=format==='Audio'&&!parent?audioMultipartWorkTitle(stem):'';
+  let title = rootMultipartTitle || stem || 'Untitled';
   let author = '';
   let series = '';
   let seriesNumber: number | undefined;
@@ -85,8 +101,12 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
   let reviewReason = 'Could not confidently identify author and series from the file path.';
 
   const genericAudioTrack = format === 'Audio' && (
-    genericAudioTrackTitle(stem) || ((context.siblingMediaCount || 0) > 1 && numberedAudioTrackTitle(stem))
+    !!rootMultipartTitle || genericAudioTrackTitle(stem) || ((context.siblingMediaCount || 0) > 1 && numberedAudioTrackTitle(stem))
   );
+  if(rootMultipartTitle){
+    confidence='medium';
+    reviewReason='Audiobook title inferred from multipart filenames; author still needs metadata or review.';
+  }
   const indexedParent = indexedFolderLabel(parent);
   if (genericAudioTrack && sensibleFolder(parent, stem)) {
     title = indexedParent?.title || parent;
@@ -180,7 +200,7 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
   series = cleanLabel(series);
   genre = cleanLabel(genre);
 
-  const needsReview = confidence === 'low' || title === 'Untitled';
+  const needsReview = confidence === 'low' || title === 'Untitled' || (format === 'Audio' && !author);
   return {
     title,
     author,
