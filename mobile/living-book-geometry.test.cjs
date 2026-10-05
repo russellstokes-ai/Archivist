@@ -56,6 +56,9 @@ assert.match(source,/livingBookDepthLayers\(\)\.map/,'page depth must come from 
 assert.ok(source.includes('s.rightPage')&&source.includes('G.pageWidth+G.spineOverlap'),'right paper must overlap beneath the centre crease');
 assert.ok(source.includes('gutterLeftShadow')&&source.includes('gutterCrease')&&source.includes('gutterRightShadow'),'centre must render as a layered concave gutter rather than a dark physical gap');
 assert.ok(source.includes('spinePaperBridge'),'a continuous paper bridge must sit beneath the gutter so the hardcover binding cannot appear as a centre slit');
+assert.ok(source.includes("livingBookDepthLayers().filter(layer=>layer.side==='right')"),'only the right paper depth may remain static in the open spread');
+assert.ok(source.includes("livingBookDepthLayers().filter(layer=>layer.side==='left')")&&source.includes('leftPaperBlock'),'left page depth must rotate with the left page as one physical block');
+assert.ok(source.includes('leftPaperOpacity=Animated.multiply('),'left paper must fade in only after it has crossed the edge-on hinge region');
 assert.ok(source.includes('borderRightWidth:0')&&source.includes('borderLeftWidth:0'),'inner paper edges must not draw competing borders through the spine');
 assert.ok(source.includes('leafFrontFace')&&source.includes('leafBackFace'),'animated paper must render as two-sided material');
 
