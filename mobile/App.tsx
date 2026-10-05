@@ -899,6 +899,7 @@ function Client() {
     return()=>{loop.stop();interfacePulse.setValue(0);};
   },[appActive,interfacePulse,reduceMotion]);
   const bookOpenAnim=useRef(new Animated.Value(0)).current;
+  const bookOpenProgressRef=useRef(0);
   const pageTurnAnim=useRef(new Animated.Value(0)).current;
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
@@ -1105,32 +1106,49 @@ function Client() {
   },[appActive,reduceMotion,shelfLoading,shelfSkeletonPulse]);
 
   useEffect(()=>{
+    const listener=bookOpenAnim.addListener(({value})=>{bookOpenProgressRef.current=value;});
+    return()=>bookOpenAnim.removeListener(listener);
+  },[bookOpenAnim]);
+
+  useEffect(()=>{
     const motion=playerMotionState({playing:playerVisualPlaying,visible:playbackVisible,reduceMotion});
+    const target=motion==='closed'?0:1;
+    const current=Math.max(0,Math.min(1,bookOpenProgressRef.current));
+    const distance=Math.abs(target-current);
+    const baseDuration=motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs;
+    const hingeDuration=reduceMotion?0:Math.max(90,Math.round(baseDuration*distance));
+
     bookOpenAnim.stopAnimation();
     Animated.timing(bookOpenAnim,{
-      toValue:motion==='closed'?0:1,
+      toValue:target,
       isInteraction:false,
-      duration:reduceMotion?0:motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs,
+      duration:hingeDuration,
       easing:Easing.inOut(Easing.cubic),
       useNativeDriver:true,
-    }).start();
+    }).start(({finished})=>{
+      if(finished&&target===0){
+        pageTurnAnim.setValue(0);
+        skipTurnAnim.setValue(0);
+      }
+    });
 
-    pageTurnAnim.stopAnimation();
     if(motion!=='turning'){
-      pageTurnAnim.setValue(0);
-      return;
+      // Do not snap a visible half-turned leaf back to zero. The leaf gate
+      // fades it out with the closing hinge, then the closed callback resets it.
+      return()=>{bookOpenAnim.stopAnimation();};
     }
 
-    pageTurnAnim.setValue(0);
+    if(current<.88)pageTurnAnim.setValue(0);
     const stop=startPageTurnLoop({
-      firstDelay:PLAYER_MOTION_TIMING.openMs+PLAYER_MOTION_TIMING.firstTurnDelayMs,
+      firstDelay:hingeDuration+PLAYER_MOTION_TIMING.firstTurnDelayMs,
       restDelay:PLAYER_MOTION_TIMING.pageRestMs,
       reset:()=>pageTurnAnim.setValue(0),
       animate:done=>Animated.timing(pageTurnAnim,{toValue:1,duration:PLAYER_MOTION_TIMING.pageTurnMs,easing:Easing.bezier(.22,.72,.2,1),useNativeDriver:true,isInteraction:false}).start(({finished})=>done(finished)),
       stop:()=>pageTurnAnim.stopAnimation(),
+      preserveCurrentOnStop:true,
     });
     return()=>{stop();bookOpenAnim.stopAnimation();};
-  },[bookOpenAnim,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion]);
+  },[bookOpenAnim,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
