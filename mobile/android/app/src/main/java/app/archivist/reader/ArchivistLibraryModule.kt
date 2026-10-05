@@ -515,8 +515,8 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     }
   }
 
-  private fun documentMetadata(uri: String, format: String): Map<String, Any?> {
-    val ext = extension(Uri.parse(uri).lastPathSegment ?: uri)
+  private fun documentMetadata(uri: String, format: String, name: String): Map<String, Any?> {
+    val ext = extension(name)
     return when {
       format == "EPUB" || ext == "epub" -> epubMetadata(uri)
       format == "Comic" && (ext == "cbz" || ext == "zip") -> cbzMetadata(uri)
@@ -536,8 +536,9 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           val item: ReadableMap = items.getMap(index) ?: continue
           val uri = item.getString("uri") ?: continue
           val format = item.getString("format") ?: ""
+          val name = item.getString("name") ?: (Uri.parse(uri).lastPathSegment ?: uri)
           try {
-            result.pushMap(metadataMap(uri, documentMetadata(uri, format)))
+            result.pushMap(metadataMap(uri, documentMetadata(uri, format, name)))
           } catch (error: Throwable) {
             val map = Arguments.createMap()
             map.putString("uri", uri)
