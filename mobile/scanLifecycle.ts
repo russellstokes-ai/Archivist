@@ -1,4 +1,4 @@
-export type ScanPhase='discovering'|'reading-metadata'|'matching'|'checking-duplicates'|'preparing'|'complete';
+export type ScanPhase='discovering'|'reading-metadata'|'matching'|'checking-duplicates'|'covers'|'online-books'|'online-comics'|'preparing'|'complete';
 
 export class ScanCommitGate {
   private generation=0;
@@ -17,7 +17,10 @@ export function scanStatusCopy(input:{
   publishedCount:number;
 }){
   const place=input.currentFolder?' · '+input.currentFolder:'';
-  const progress=input.entriesVisited+' checked · '+input.found+' found · '+input.review+' need review'+place;
+  const count=('processed' in input&&'total' in input&&(input as any).total>0)
+    ? Math.min((input as any).processed||0,(input as any).total)+' of '+(input as any).total
+    : input.entriesVisited+' checked';
+  const progress=count+' · '+input.found+' found · '+input.review+' need review'+place;
   if(input.publishedCount>0){
     return {
       title:'Refreshing your library',
