@@ -44,5 +44,9 @@ assert.equal(autoDescriptor.includes('<uses name="media"/>'),true,'Android autom
 assert.equal(appGradle.includes('androidx.media3:media3-session:1.8.0'),true,'Android Auto must use the Media3 version aligned with Expo Audio SDK 55.');
 assert.equal(appGradle.includes('androidx.media3:media3-exoplayer:1.8.0'),true,'Android Auto playback requires Media3 ExoPlayer.');
 assert.equal(autoService.includes('class ArchivistAutoService : MediaLibraryService()'),true,'Android Auto service must implement MediaLibraryService.');
-assert.equal(autoService.includes('onGetLibraryRoot')&&autoService.includes('onGetChildren')&&autoService.includes('onAddMediaItems'),true,'Android Auto service must browse and resolve playable media items.');
+assert.equal(autoService.includes('onGetLibraryRoot')&&autoService.includes('onGetChildren')&&autoService.includes('onAddMediaItems')&&autoService.includes('onSetMediaItems'),true,'Android Auto service must browse, resolve and resume playable media items.');
+assert.equal(autoService.includes('onSearch')&&autoService.includes('onGetSearchResult')&&autoService.includes('requestMetadata.searchQuery'),true,'Android Auto must support browsable and voice search.');
+assert.equal(autoService.includes('MEDIA_TYPE_AUDIO_BOOK')&&autoService.includes('MEDIA_TYPE_AUDIO_BOOK_CHAPTER'),true,'Android Auto must advertise audiobook media semantics.');
+assert.equal(autoService.includes('ICON_SKIP_BACK_15')&&autoService.includes('ICON_SKIP_FORWARD_15'),true,'Audiobook controls must prefer 15-second seek actions.');
+assert.equal(manifest.includes('android:appCategory="audio"'),true,'Android application category must identify Archivist as an audio media app.');
 console.log('PASS: Android Auto native service and discovery contract are present');
