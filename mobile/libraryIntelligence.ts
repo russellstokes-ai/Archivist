@@ -64,7 +64,7 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
   const stem = qualifiers.stem;
   const rawDirs = parts.slice(0, -1).filter(Boolean).map(cleanLabel);
   const dirs = [...rawDirs];
-  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
+  while (dirs.length && isLibraryRootLabel(dirs[0])) dirs.shift();
   const inferredGenre = inferGenreFromDirectories(dirs);
   const semanticDirs = dirs.filter((value,index) => !(index < dirs.length - 1 && canonicalGenre(value)));
   const parent = cleanLabel(semanticDirs[semanticDirs.length - 1] || '');
@@ -159,7 +159,7 @@ export function inferLocalBookMetadata(uri: string, format: string, context: Loc
       seriesNumber = numericIndex(numbered[1]);
       title = cleanLabel(numbered[2]);
       const possibleAuthor = cleanLabel(grandparent);
-      if (possibleAuthor && !isLibraryRoot(possibleAuthor) && looksAuthorLike(possibleAuthor)) {
+      if (possibleAuthor && !isLibraryRootLabel(possibleAuthor) && looksAuthorLike(possibleAuthor)) {
         author = possibleAuthor;
         confidence = 'high';
         reviewReason = '';
@@ -650,11 +650,11 @@ function equivalent(a: string, b: string) {
 
 function sensibleFolder(value: string, title: string) {
   if (!value || equivalent(value, title)) return false;
-  return !isLibraryRoot(value);
+  return !isLibraryRootLabel(value);
 }
 
-function isLibraryRoot(value: string) {
-  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
+export function isLibraryRootLabel(value: string) {
+  return /^(books?|ebooks?|audiobooks?|audio|music|recordings?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
 }
 
 function looksIndex(value: string) {
