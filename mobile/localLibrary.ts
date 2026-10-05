@@ -7,7 +7,7 @@ import {extractAudioMetadata} from './audioMetadata';
 import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
-import {synchronizeLocalMetadata} from './metadataSync';
+import {audioWorkGroupKeys, synchronizeLocalMetadata} from './metadataSync';
 
 export type LocalBook = {
   id: number;
@@ -811,6 +811,14 @@ export async function enrichLocalBookCovers(
   let updated=0;
   let pendingSinceBatch=0;
   let lastPublish=Date.now();
+  const audioKeys=audioWorkGroupKeys(next);
+  const audioGroupCover=new Map<string,string>();
+  for(const book of next){
+    if(book.format==='Audio'&&book.coverUri){
+      const key=audioKeys.get(book.uri);
+      if(key&&!audioGroupCover.has(key))audioGroupCover.set(key,book.coverUri);
+    }
+  }
 
   for(let index=0;index<next.length;index+=1){
     if(!shouldContinue())break;
@@ -822,6 +830,18 @@ export async function enrichLocalBookCovers(
 
     attempted+=1;
     pendingSinceBatch+=1;
+    const audioKey=book.format==='Audio'?audioKeys.get(book.uri):undefined;
+    const sharedCover=audioKey?audioGroupCover.get(audioKey):undefined;
+    if(sharedCover){
+      const candidates=[sharedCover,...(book.coverCandidates||[]).filter(uri=>uri!==sharedCover)];
+      next[index]={...book,coverUri:sharedCover,coverCandidates:candidates};
+      updated+=1;
+      if(pendingSinceBatch>=batchSize||Date.now()-lastPublish>=1200){
+        lastPublish=Date.now();pendingSinceBatch=0;
+        await options.onBatch?.(next.slice(),{attempted,updated});
+      }
+      continue;
+    }
     const info=await getInfoAsync(book.uri).catch(()=>null);
     if(!shouldContinue())break;
     const fileSize=info&&'size' in info&&typeof info.size==='number'?info.size:book.fileSize;
@@ -832,6 +852,7 @@ export async function enrichLocalBookCovers(
       const candidates=[...(book.coverCandidates||[])];
       if(!candidates.includes(coverUri))candidates.push(coverUri);
       next[index]={...book,coverUri,coverCandidates:candidates};
+      if(audioKey)audioGroupCover.set(audioKey,coverUri);
       updated+=1;
     }
     if(pendingSinceBatch>=batchSize||Date.now()-lastPublish>=1200){
