@@ -2,9 +2,15 @@ const fs=require('fs'),vm=require('vm'),ts=require('typescript'),assert=require(
 const src=fs.readFileSync(__dirname+'/localEnrichment.ts','utf8');
 const out=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 function groupLocalWorks(books){
-  if(!books.length)return [];
-  const first=books[0];
-  return [{key:'audio:test',title:first.workTitleHint||first.title,author:first.author||'',series:first.series||'',genre:first.genre||'',publishedYear:first.publishedYear,format:first.format,space:first.space,available:true,files:books.length,tracks:books,needsReview:books.some(x=>x.needsReview),reviewReason:'',coverUri:books.find(x=>x.coverUri)?.coverUri,coverShape:first.format==='Audio'?'square':'portrait'}];
+  const groups=new Map();
+  for(const book of books){
+    const key=book.format==='Audio'?'audio:'+(book.workTitleHint||book.space||'book'):'asset:'+book.uri;
+    const group=groups.get(key)||[];group.push(book);groups.set(key,group);
+  }
+  return [...groups.entries()].map(([key,tracks])=>{
+    const first=tracks[0];
+    return {key,title:first.workTitleHint||first.title,author:first.author||'',series:first.series||'',genre:first.genre||'',publishedYear:first.publishedYear,format:first.format,space:first.space,available:true,files:tracks.length,tracks,needsReview:tracks.some(x=>x.needsReview),reviewReason:'',coverUri:tracks.find(x=>x.coverUri)?.coverUri,coverShape:first.format==='Audio'?'square':'portrait'};
+  });
 }
 const mod={exports:{}};
 const req=id=>{
@@ -40,5 +46,38 @@ assert(!x.publishableLocalWork({title:'Untitled',needsReview:false,coverUri:'cov
   assert.equal(entry.publishReady,true);
   assert.equal(entry.coverUri,'file://square-audio.jpg');
   assert.equal(entry.livingBookCoverUri,'file://portrait-book.jpg');
-  console.log('PASS: enrichment keeps audiobook edition art separate from portrait Living Book art and gates publication');
+  const many=Array.from({length:3000},(_,index)=>({
+    id:10000+index,
+    uri:'file://book-'+index+'.epub',
+    title:'Book '+index,
+    author:'Author '+index,
+    series:'',
+    genre:'',
+    format:'EPUB',
+    space:'Books',
+    available:true,
+    coverShape:'portrait',
+    coverUri:'file://cover-'+index+'.jpg',
+    metadataSource:'path',
+    identificationConfidence:'high',
+    needsReview:false,
+    reviewReason:'',
+  }));
+  let callbacks=0,deltaRows=0,maxDelta=0;
+  const large=await x.enrichLocalCatalogue(many,{},async(_progress,delta)=>{
+    callbacks++;
+    deltaRows+=delta.books.length;
+    maxDelta=Math.max(maxDelta,delta.books.length);
+  },{
+    lookup:async()=>{throw Error('online lookup should not run for complete works')},
+    extractAudioArtwork:async()=>null,
+    cachePortrait:async()=>{throw Error('cover cache should not run for complete EPUBs')},
+    lookupDelayMs:0,
+    now:()=>new Date('2026-10-05T20:00:00Z'),
+  });
+  assert.equal(large.books.length,3000);
+  assert.equal(callbacks,3000,'one bounded delta is emitted per work');
+  assert.equal(deltaRows,3000,'progress deltas contain changed rows only, not repeated full catalogues');
+  assert.equal(maxDelta,1,'independent works never emit the full catalogue');
+  console.log('PASS: enrichment stays work-delta based across 3,000 independent works');
 })().catch(e=>{console.error(e);process.exitCode=1});
