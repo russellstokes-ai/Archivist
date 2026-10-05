@@ -2703,12 +2703,21 @@ function Client() {
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
 
+  async function checkpointLocalEnrichment(books:LocalBook[],generation:number){
+    if(!scanCommitGate.isCurrent(generation))return false;
+    return setPersistedJSONArrayCooperative(localCatalogKey,books,{
+      batchSize:64,
+      shouldContinue:()=>scanCommitGate.isCurrent(generation),
+    }).catch(error=>{recordLibraryRefreshWarning('Enrichment checkpoint',error);return false;});
+  }
+
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false):Promise<LocalBook[]>{
     let currentBooks=baseBooks;
     try{
       const embedded=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline);
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(embedded)currentBooks=embedded;
+      if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
       // Prefer network metadata/cover matches before opening every local archive.
       // Fast providers can resolve most well-named items; embedded cover extraction
@@ -2718,11 +2727,13 @@ function Client() {
           const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline);
           if(!scanCommitGate.isCurrent(generation))return currentBooks;
           if(enrichedBooks)currentBooks=enrichedBooks;
+          if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
         }
         if(metadataSettings.comics.enabled&&metadataSettings.comics.metron){
           const enrichedComics=await enrichPublishedLocalComicMetadata(currentBooks,generation,forceOnline);
           if(!scanCommitGate.isCurrent(generation))return currentBooks;
           if(enrichedComics)currentBooks=enrichedComics;
+          if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
         }
       }
 
