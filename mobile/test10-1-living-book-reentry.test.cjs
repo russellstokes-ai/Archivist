@@ -36,7 +36,7 @@ assert.ok(visibleReset>=0&&pageReset>visibleReset&&pageReset<timing,'returning t
 
 assert.ok(geometry.includes('internalRevealStart:0.30')&&geometry.includes('internalRevealEnd:0.58'),'static interior paper must remain hidden until the cover swing physically exposes it');
 assert.ok(artwork.includes('opacity:internalOpacity'),'the static spread must use the delayed interior reveal rather than appear beside the closed cover');
-assert.ok(artwork.includes('const leftPaperOpacity=internalOpacity'),'Pause close must use one broad paper fade instead of multiplying a second snap-prone opacity ramp');
+assert.ok(artwork.includes('const leftPaperOpacity=open.interpolate'),'Pause close must use one smooth paper-opacity ramp rather than multiplied fades');
 assert.ok(artwork.includes('const turnOpacity=Animated.multiply(')&&artwork.includes('leafGate'),'turning leaf visibility must remain gated by the cover hinge');
 assert.ok(artwork.includes("inputRange:[0,.04,.94,1],outputRange:[0,1,1,0]"),'a reset turn value must render no ambient leaf before the first real page turn');
 assert.ok(artwork.includes('leafFrontFace')&&artwork.includes('leafBackFace'),'turning paper must have explicit front and back faces rather than a mirrored visible backface');
