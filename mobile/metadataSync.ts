@@ -30,6 +30,7 @@ export type SynchronizableBook={
   reviewReason?:string;
   identificationConfidence?:SyncConfidence;
   onlineMetadataMatch?:{fields?:Partial<Record<string,unknown>>;confidence?:SyncConfidence};
+  embeddedMetadata?:{workTitle?:string};
 };
 
 export type CanonicalMetadata={
@@ -111,6 +112,37 @@ function audioBookFolderTitle(uri:string){
   const indexed=parent.match(/^(?:(?:book|bk|vol(?:ume)?)\s*)?#?\s*\d+(?:\.\d+)?\s*[-._:]\s*(.+)$/i);
   return clean(indexed?.[1]||parent);
 }
+function rootAudioTrackFamily(stem:string){
+  const value=clean(stem);
+  const patterns=[
+    /^(.*?)\s*[-._:]?\s*(?:part|pt|chapter|ch|track|disc|disk|cd)\s*[-_.:#]?\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
+    /^(.*?)\s*[-._:]\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
+    /^(.*?)\s*\((?:part|pt|chapter|ch|track)\s*\d{1,4}\)\s*$/i,
+  ];
+  for(const pattern of patterns){
+    const match=value.match(pattern);
+    const family=clean(match?.[1]||'');
+    if(normal(family).length>=3)return family;
+  }
+  return '';
+}
+function rootAudioIdentityKey(book:SynchronizableBook){
+  const scope=normal(book.space||'library');
+  const id=normal(book.asin||book.isbn||'');
+  if(id)return 'audio-root:'+scope+':id:'+id;
+  const workTitle=clean(book.embeddedMetadata?.workTitle||'');
+  if(workTitle){
+    const author=normal(book.author||'');
+    return 'audio-root:'+scope+':work:'+normal(workTitle)+(author?'|'+author:'');
+  }
+  const family=rootAudioTrackFamily(fileStem(book.uri));
+  if(family){
+    const author=normal(book.author||'');
+    return 'audio-root:'+scope+':name:'+normal(family)+(author?'|'+author:'');
+  }
+  return '';
+}
+
 function shouldGroupAudioBooks(books:SynchronizableBook[]){
   if(books.length<=1)return true;
   const trackLike=books.every(book=>isGenericMediaTitle(fileStem(book.uri),'Audio',books.length));
@@ -126,10 +158,19 @@ function shouldGroupAudioBooks(books:SynchronizableBook[]){
 export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
   const result=new Map<string,string>();
   const directories=new Map<string,T[]>();
+  const rootCandidates=new Map<string,T[]>();
+  const rootUngrouped:T[]=[];
   for(const book of books){
     if(book.format!=='Audio')continue;
     const dir=audioDirectoryKey(book);
-    if(!dir){result.set(book.uri,'audio-file:'+book.uri);continue;}
+    if(!dir){
+      const rootKey=rootAudioIdentityKey(book);
+      if(rootKey){
+        const group=rootCandidates.get(rootKey)||[];
+        group.push(book);rootCandidates.set(rootKey,group);
+      }else rootUngrouped.push(book);
+      continue;
+    }
     const group=directories.get(dir)||[];group.push(book);directories.set(dir,group);
   }
   for(const [dir,group] of directories){
@@ -139,6 +180,12 @@ export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
       for(const book of group)result.set(book.uri,'audio-file:'+book.uri);
     }
   }
+  for(const [key,group] of rootCandidates){
+    if(group.length>1){
+      for(const book of group)result.set(book.uri,key);
+    }else result.set(group[0].uri,'audio-file:'+group[0].uri);
+  }
+  for(const book of rootUngrouped)result.set(book.uri,'audio-file:'+book.uri);
   return result;
 }
 function coverScore(uri:string){
