@@ -10,6 +10,8 @@ export type LocalBook = {
   series: string;
   genre: string;
   publishedYear?: number;
+  isbn?: string;
+  identifiers?: string[];
   format: string;
   space: string;
   available: boolean;
@@ -396,6 +398,8 @@ async function scanLocalFoldersNative(
           series:identity.series,
           genre:identity.genre,
           publishedYear:identity.publishedYear,
+          isbn:identity.isbn,
+          identifiers:identity.identifiers,
           format:item.format,
           space:folder.name,
           available:true,
@@ -636,6 +640,8 @@ export async function scanLocalFolders(
           series: identity.series,
           genre: identity.genre,
           publishedYear: identity.publishedYear,
+          isbn:identity.isbn,
+          identifiers:identity.identifiers,
           format,
           space,
           available: true,
