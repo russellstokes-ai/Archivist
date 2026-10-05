@@ -5,7 +5,7 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true},
 }).outputText,file);
 
-const {canonicalMetadataForBooks,synchronizeLocalMetadata,synchronizeLocalMetadataCooperative}=require('./metadataSync.ts');
+const {audioWorkGroupKeys,canonicalMetadataForBooks,synchronizeLocalMetadata,synchronizeLocalMetadataCooperative}=require('./metadataSync.ts');
 const {groupLocalWorks}=require('./localWorks.ts');
 
 function track(id,name,extra={}){
@@ -93,6 +93,24 @@ const manual=synchronizeLocalMetadata([
   track(5,'02 - More',{title:'More',onlineMetadataMatch:{fields:{title:'Black Ops Online'},confidence:'high'}}),
 ]).books;
 assert.equal(groupLocalWorks(manual)[0].title,'Black Ops Director Cut','manual work title must outrank inferred/provider metadata');
+
+const rootMixed=[
+  track(70,'Dune - Part 01',{uri:'content://root/document/primary:Audiobooks%2FDune%20-%20Part%2001.mp3',title:'Opening',author:'Frank Herbert',embeddedMetadata:{workTitle:'Dune'}}),
+  track(71,'Dune - Part 02',{uri:'content://root/document/primary:Audiobooks%2FDune%20-%20Part%2002.mp3',title:'Arrakis',author:'Frank Herbert',embeddedMetadata:{workTitle:'Dune'}}),
+  track(72,'Project Hail Mary - Part 01',{uri:'content://root/document/primary:Audiobooks%2FProject%20Hail%20Mary%20-%20Part%2001.mp3',title:'Chapter 1',author:'Andy Weir',embeddedMetadata:{workTitle:'Project Hail Mary'}}),
+  track(73,'Project Hail Mary - Part 02',{uri:'content://root/document/primary:Audiobooks%2FProject%20Hail%20Mary%20-%20Part%2002.mp3',title:'Chapter 2',author:'Andy Weir',embeddedMetadata:{workTitle:'Project Hail Mary'}}),
+];
+const rootKeys=audioWorkGroupKeys(rootMixed);
+assert.equal(rootKeys.get(rootMixed[0].uri),rootKeys.get(rootMixed[1].uri),'root-level chapter files sharing one embedded work title must group together');
+assert.equal(rootKeys.get(rootMixed[2].uri),rootKeys.get(rootMixed[3].uri),'a second root-level audiobook must form its own work');
+assert.notEqual(rootKeys.get(rootMixed[0].uri),rootKeys.get(rootMixed[2].uri),'two different audiobooks in one root must never be merged');
+
+const rootByName=[
+  track(74,'Leviathan Wakes - Part 01',{uri:'content://root/document/primary:Audiobooks%2FLeviathan%20Wakes%20-%20Part%2001.mp3',title:'Part 01',author:''}),
+  track(75,'Leviathan Wakes - Part 02',{uri:'content://root/document/primary:Audiobooks%2FLeviathan%20Wakes%20-%20Part%2002.mp3',title:'Part 02',author:''}),
+];
+const rootNameKeys=audioWorkGroupKeys(rootByName);
+assert.equal(rootNameKeys.get(rootByName[0].uri),rootNameKeys.get(rootByName[1].uri),'strong filename part patterns must group a root-level audiobook even before online enrichment');
 
 const crossFormat=synchronizeLocalMetadata([
   {id:10,uri:'file:///Dune.epub',title:'Dune',author:'Frank Herbert',series:'Dune',seriesNumber:1,genre:'Science Fiction',description:'Arrakis.',format:'EPUB',space:'Books',available:true,metadataSource:'embedded',metadataProvenance:{title:'embedded',author:'embedded',series:'embedded',genre:'embedded',description:'embedded'},metadataFieldConfidence:{title:'high',author:'high',series:'high',genre:'high',description:'high'}},
