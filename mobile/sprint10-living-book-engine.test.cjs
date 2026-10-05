@@ -28,6 +28,7 @@ assert.ok(artwork.includes('groundShadow')&&artwork.includes("transformOrigin:'r
 assert.equal(artwork.includes('shadowColor'),false,'rotating book layers must not use native shadows');
 assert.equal(artwork.includes('elevation:'),false,'rotating book layers must not use Android elevation shadows');
 assert.ok(artwork.includes('leftPageAngle=open.interpolate')&&artwork.includes('coverAngle=open.interpolate'),'cover and page geometry must derive from one hinge value');
+assert.ok(geometry.includes('internalRevealStart:0.30')&&geometry.includes('internalRevealEnd:0.58'),'interior paper must stay hidden until the cover physically exposes the spread');
 assert.ok(geometry.includes('leafRevealStart:0.88')&&geometry.includes('leafRevealEnd:0.97'),'turning leaves must disappear before close-edge rendering becomes visible');
 assert.ok(geometry.includes('leafEnvelopePad:18'),'turn envelope must protect page perspective from top/edge clipping');
 assert.ok(geometry.includes('spineOverlap:3')&&geometry.includes('gutterWidth:14'),'open pages must overlap beneath a narrow rendered gutter instead of exposing a centre gap');
