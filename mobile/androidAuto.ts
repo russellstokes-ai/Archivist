@@ -42,7 +42,7 @@ export function buildAndroidAutoLibrary(
       const foundIndex=tracks.findIndex(track=>track.uri===point?.uri);
       const resumeIndex=foundIndex>=0?foundIndex:0;
       const inferredState=point?.complete?'finished':(Number(point?.seconds)||0)>0?'in-progress':'not-started';
-      const state=work.readingState==='in-progress'||work.readingState==='finished'?work.readingState:inferredState;
+      const state:AndroidAutoWork['readingState']=work.readingState==='in-progress'||work.readingState==='finished'?work.readingState:inferredState;
       return {
         id:'work:'+work.key,
         key:work.key,
