@@ -1195,9 +1195,26 @@ export function previewLocalSort(books: LocalBook[], template: string): LocalSor
 
 export function previewLocalSortToRoot(books: LocalBook[], template: string, destinationRootUri?: string): LocalSortPreview[] {
   const destinations = new Map<string, number>();
+  const audioKeys=audioWorkGroupKeys(books);
+  const audioGroups=new Map<string,LocalBook[]>();
+  for(const book of books){
+    if(book.format!=='Audio')continue;
+    const key=audioKeys.get(book.uri)||('audio-file:'+book.uri);
+    const group=audioGroups.get(key)||[];group.push(book);audioGroups.set(key,group);
+  }
+  const audioCanonical=new Map([...audioGroups.entries()].map(([key,group])=>[key,canonicalMetadataForBooks(group)]));
   const previews = books.map(book => {
     const filename = fileNameFromUri(book.uri);
-    const target = targetPath(book, filename, template);
+    const audioKey=book.format==='Audio'?(audioKeys.get(book.uri)||('audio-file:'+book.uri)):'';
+    const canonical=audioKey?audioCanonical.get(audioKey):undefined;
+    const sortBook=canonical?{
+      ...book,
+      title:canonical.title||book.title,
+      author:canonical.author||book.author,
+      series:canonical.series||book.series,
+      seriesNumber:canonical.seriesNumber??book.seriesNumber,
+    }:book;
+    const target = targetPath(sortBook, filename, template);
     const sourceRootUri = book.rootUri || rootUriFromFileUri(book.uri);
     const rootUri = destinationRootUri || sourceRootUri;
     const from = displayPath(book.uri);
@@ -1221,9 +1238,9 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
       state: book.needsReview ? 'review' as const : same ? 'same' as const : 'ready' as const,
       reason: book.needsReview ? (book.reviewReason || 'Review metadata before organising this file.') : same ? 'Already matches the selected layout.' : undefined,
       metadataSummary: [
-        book.author ? 'Author: '+book.author : '',
-        book.series ? 'Series: '+book.series+(book.seriesNumber !== undefined ? ' #'+book.seriesNumber : '') : '',
-        book.format ? 'Format: '+book.format : '',
+        sortBook.author ? 'Author: '+sortBook.author : '',
+        sortBook.series ? 'Series: '+sortBook.series+(sortBook.seriesNumber !== undefined ? ' #'+sortBook.seriesNumber : '') : '',
+        sortBook.format ? 'Format: '+sortBook.format : '',
       ].filter(Boolean).join(' · '),
     };
   });
