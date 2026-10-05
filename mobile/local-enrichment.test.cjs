@@ -80,6 +80,151 @@ assert(!x.publishableLocalWork({title:'Untitled',needsReview:false,coverUri:'cov
   assert.equal(capturedLookup.identifiers.includes('9780441172719'),true);
   assert.equal(capturedLookup.identifiers.includes('urn:custom:dune'),true);
 
+  const staleBook={
+    id:91,
+    uri:'file://same.epub',
+    title:'Dune Messiah',
+    author:'Frank Herbert',
+    series:'Dune',
+    genre:'Science Fiction',
+    publishedYear:1969,
+    format:'EPUB',
+    space:'Books',
+    available:true,
+    coverShape:'portrait',
+    metadataSource:'path',
+    identificationConfidence:'high',
+    needsReview:false,
+    reviewReason:'',
+    assetSignature:'stable-file',
+  };
+  const staleWork=groupLocalWorks([staleBook])[0];
+  const staleFingerprint=x.localWorkFingerprint(staleWork);
+  const staleCache={
+    [staleFingerprint]:{
+      version:2,
+      fingerprint:staleFingerprint,
+      querySignature:'dune|frank herbert|dune|1965',
+      title:'Dune',
+      author:'Frank Herbert',
+      series:'Dune',
+      genre:'Science Fiction',
+      publishedYear:1965,
+      coverUri:'file://stale-cover.jpg',
+      coverShape:'portrait',
+      livingBookCoverUri:'file://stale-cover.jpg',
+      livingBookCoverSource:'open-library',
+      livingBookCoverConfidence:.99,
+      metadataProvider:'open-library',
+      metadataProviderId:'OLD-DUNE',
+      identityReady:true,
+      publishReady:true,
+      reviewReason:'',
+      updatedAt:'2026-10-01T00:00:00.000Z',
+    },
+    orphan:{
+      version:2,
+      fingerprint:'orphan',
+      querySignature:'orphan',
+      title:'Deleted Book',
+      author:'Nobody',
+      series:'',
+      genre:'',
+      coverUri:'file://orphan.jpg',
+      coverShape:'portrait',
+      identityReady:true,
+      publishReady:true,
+      reviewReason:'',
+      updatedAt:'2026-10-01T00:00:00.000Z',
+    },
+  };
+  let staleLookupCalls=0;
+  const staleResult=await x.enrichLocalCatalogue([staleBook],staleCache,undefined,{
+    lookup:async input=>{
+      staleLookupCalls++;
+      assert.equal(input.title,'Dune Messiah');
+      return {
+        provider:'open-library',
+        providerId:'DUNE-MESSIAH',
+        title:'Dune Messiah',
+        authors:['Frank Herbert'],
+        publishedYear:1969,
+        genres:['Science Fiction'],
+        coverUri:'https://covers.example/dune-messiah.jpg',
+        confidence:.99,
+      };
+    },
+    extractAudioArtwork:async()=>null,
+    cachePortrait:async()=>({uri:'file://dune-messiah.jpg',width:640,height:1000,aspectRatio:.64}),
+    lookupDelayMs:0,
+    now:()=>new Date('2026-10-05T21:00:00Z'),
+  });
+  assert.equal(staleLookupCalls,1,'successful cache entries must invalidate when identity evidence changes');
+  assert.equal(staleResult.books[0].title,'Dune Messiah');
+  assert.equal(staleResult.books[0].coverUri,'file://dune-messiah.jpg');
+  assert.equal(Object.prototype.hasOwnProperty.call(staleResult.cache,'orphan'),false,'orphaned enrichment fingerprints must be dropped from the active result cache');
+
+  const firstUnresolved={
+    id:92,
+    uri:'file://mystery.epub',
+    title:'mystery',
+    author:'',
+    series:'',
+    genre:'',
+    format:'EPUB',
+    space:'Books',
+    available:true,
+    coverShape:'portrait',
+    metadataSource:'path',
+    identificationConfidence:'low',
+    needsReview:true,
+    reviewReason:'Unknown',
+    assetSignature:'mystery-v1',
+    metadataContextSignature:'ctx-a',
+  };
+  let resolvingLookups=0;
+  const resolvedOnce=await x.enrichLocalCatalogue([firstUnresolved],{},undefined,{
+    lookup:async()=>{
+      resolvingLookups++;
+      return {
+        provider:'open-library',
+        providerId:'RESOLVED-1',
+        title:'The Left Hand of Darkness',
+        authors:['Ursula K. Le Guin'],
+        publishedYear:1969,
+        coverUri:'https://covers.example/left-hand.jpg',
+        confidence:.99,
+      };
+    },
+    extractAudioArtwork:async()=>null,
+    cachePortrait:async()=>({uri:'file://left-hand.jpg',width:640,height:1000,aspectRatio:.64}),
+    lookupDelayMs:0,
+    now:()=>new Date('2026-10-05T21:00:00Z'),
+  });
+  assert.equal(resolvingLookups,1);
+  const resolvedAgain=await x.enrichLocalCatalogue(resolvedOnce.books,resolvedOnce.cache,undefined,{
+    lookup:async()=>{throw Error('resolved cache should be reusable without another lookup')},
+    extractAudioArtwork:async()=>null,
+    cachePortrait:async()=>{throw Error('resolved cache should not rebuild portrait art')},
+    lookupDelayMs:0,
+    now:()=>new Date('2026-10-05T21:05:00Z'),
+  });
+  assert.equal(resolvedAgain.books[0].title,'The Left Hand of Darkness','resolved cache signature must remain stable across restart');
+  assert.equal(Object.values(resolvedAgain.cache)[0].version,2,'active cache entries must use the current schema version');
+
+  const sameIdentityA={
+    ...staleBook,
+    id:93,
+    uri:'file://context.epub',
+    metadataContextSignature:'ctx-one',
+  };
+  const sameIdentityB={...sameIdentityA,metadataContextSignature:'ctx-two'};
+  assert.notEqual(
+    x.localWorkQuerySignature(groupLocalWorks([sameIdentityA])[0]),
+    x.localWorkQuerySignature(groupLocalWorks([sameIdentityB])[0]),
+    'sidecar/cover context changes must invalidate enrichment even when title and author stay unchanged',
+  );
+
   const many=Array.from({length:3000},(_,index)=>({
     id:10000+index,
     uri:'file://book-'+index+'.epub',
