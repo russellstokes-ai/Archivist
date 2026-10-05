@@ -1,4 +1,4 @@
-import {decodedPathParts,editionKey,inferLocalBookMetadata,isGenericMediaTitle,isLibraryRootLabel,logicalWorkKey} from './libraryIntelligence';
+import {audioMultipartWorkTitle,decodedPathParts,editionKey,inferLocalBookMetadata,isGenericMediaTitle,isLibraryRootLabel,logicalWorkKey} from './libraryIntelligence';
 
 export type SyncSource='manual'|'sidecar'|'embedded'|'online'|'path';
 export type SyncConfidence='high'|'medium'|'low';
@@ -6,6 +6,7 @@ export type SynchronizableBook={
   uri:string;
   format:string;
   space?:string;
+  rootUri?:string;
   title:string;
   author?:string;
   series?:string;
@@ -97,6 +98,11 @@ function confidenceFor(book:SynchronizableBook,field:SyncField):SyncConfidence{
 function audioDirectoryKey(book:SynchronizableBook){
   const parts=decodedPathParts(book.uri);
   const dirs=parts.slice(0,-1).filter(Boolean);
+  if(book.rootUri){
+    const root=decodedPathParts(book.rootUri).filter(Boolean);
+    const sameRoot=dirs.length===root.length&&dirs.every((value,index)=>normal(value)===normal(root[index]||''));
+    if(sameRoot)return '';
+  }
   while(dirs.length&&isLibraryRootLabel(dirs[0]))dirs.shift();
   if(!dirs.length)return '';
   return (book.space||'')+':'+dirs.map(normal).join('/');
@@ -225,7 +231,7 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
           workHint:true,
         });
       }
-      const inferred=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length});
+      const inferred=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length,rootUri:book.rootUri});
       const pathValue=(inferred as any)[field];
       if(present(pathValue)&&normal(pathValue)!==normal(value)){
         values.push({book,value:pathValue,source:'path',confidence:inferred.confidence,key:normal(pathValue)});
