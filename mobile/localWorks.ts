@@ -25,24 +25,46 @@ export type LocalWork = {
   livingBookCoverConfidence?: number;
 };
 
+type AudioEvidence={
+  embeddedKey:string;
+  embeddedTitle:string;
+  filenameKey:string;
+  filenameTitle:string;
+  directoryKey:string;
+  directoryTitle:string;
+  anchorKey:string;
+  chapterLike:boolean;
+  resolvedTitleKey:string;
+  resolvedTitle:string;
+  resolvedSharedIdentity:boolean;
+};
+
 export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   const groups = new Map<string, LocalBook[]>();
   const order: string[] = [];
-  const rootAudioCandidates = new Map<string, string>();
-  const rootAudioCounts = new Map<string, number>();
-  for (const book of books) {
-    if (book.format !== 'Audio') continue;
-    const metadataCandidate = book.workTitleHint ? 'meta:' + normalKey(book.author) + '|' + normalKey(book.workTitleHint) : '';
-    const filenameCandidate = rootAudioClusterCandidate(book.uri);
-    const candidate = metadataCandidate || filenameCandidate;
-    if (!candidate) continue;
-    rootAudioCandidates.set(book.uri, candidate);
-    rootAudioCounts.set(candidate, (rootAudioCounts.get(candidate) || 0) + 1);
+  const evidence = new Map<string,AudioEvidence>();
+  const directoryMembers=new Map<string,LocalBook[]>();
+
+  for(const book of books){
+    if(book.format!=='Audio')continue;
+    const item=audioEvidence(book);
+    evidence.set(book.uri,item);
+    const members=directoryMembers.get(item.directoryKey)||[];
+    members.push(book);
+    directoryMembers.set(item.directoryKey,members);
+  }
+
+  const directoryFallback=new Map<string,string>();
+  for(const [directoryKey,members] of directoryMembers){
+    if(members.length<2)continue;
+    const fallback=folderFallbackCandidate(members,evidence);
+    if(fallback)directoryFallback.set(directoryKey,fallback);
   }
 
   for (const book of books) {
-    const candidate = rootAudioCandidates.get(book.uri) || '';
-    const key = localWorkKey(book, candidate && (rootAudioCounts.get(candidate) || 0) > 1 ? candidate : '');
+    const key = book.format==='Audio'
+      ? audioWorkKey(book,evidence.get(book.uri)!,directoryFallback)
+      : 'asset:' + book.uri;
     if (!groups.has(key)) {
       groups.set(key, []);
       order.push(key);
@@ -55,9 +77,12 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
     const first = tracks[0];
     const audio = first.format === 'Audio';
     const embeddedTitle = audio ? commonValue(tracks.map(item => item.workTitleHint || '')) : '';
-    const folderTitle = audio ? audioFolderTitle(first.uri) : '';
-    const rootTitle = audio && !folderTitle && tracks.length > 1 ? rootAudioClusterTitle(first.uri) : '';
-    const title = audio && (embeddedTitle || folderTitle || rootTitle) ? (embeddedTitle || folderTitle || rootTitle) : first.title;
+    const sharedResolvedTitle=audio ? commonValue(tracks.filter(item=>isResolvedSharedIdentity(item)).map(item=>item.title||'')) : '';
+    const filenameTitle=audio ? commonValue(tracks.map(item=>evidence.get(item.uri)?.filenameTitle||'')) : '';
+    const folderTitle = audio && tracks.length>1 ? commonValue(tracks.map(item=>evidence.get(item.uri)?.directoryTitle||'')) : '';
+    const title = audio && (embeddedTitle || sharedResolvedTitle || filenameTitle || folderTitle)
+      ? (embeddedTitle || sharedResolvedTitle || filenameTitle || folderTitle)
+      : first.title;
     const author = commonValue(tracks.map(item => item.author));
     const series = commonValue(tracks.map(item => item.series));
     const genre = commonValue(tracks.map(item => item.genre));
@@ -86,50 +111,155 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   });
 }
 
-function localWorkKey(book: LocalBook, rootCandidate = '') {
-  if (book.format !== 'Audio') return 'asset:' + book.uri;
-  const parts = decodedPathParts(book.uri);
-  const dirs = parts.slice(0, -1).filter(Boolean);
-  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
-  if (!dirs.length) return rootCandidate ? 'audio-root:' + book.space + ':' + rootCandidate : 'audio-file:' + book.uri;
-  const parent = dirs[dirs.length - 1];
-  if (isLibraryRoot(parent)) return rootCandidate ? 'audio-root:' + book.space + ':' + rootCandidate : 'audio-file:' + book.uri;
-  return 'audio-dir:' + book.space + ':' + dirs.join('/');
+function audioEvidence(book:LocalBook):AudioEvidence{
+  const directory=audioDirectory(book.uri);
+  const anchor=audioAnchor(book.uri);
+  const embeddedTitle=cleanLabel(book.workTitleHint||'');
+  const embeddedKey=embeddedTitle
+    ? ['meta',sourceScope(book),anchor.key,normalKey(book.author),normalKey(embeddedTitle)].join(':')
+    : '';
+  const filenameTitle=filenameClusterTitle(book.uri);
+  const filenameKey=filenameTitle
+    ? ['name',sourceScope(book),anchor.key,normalKey(book.author),normalKey(filenameTitle)].join(':')
+    : '';
+  const resolvedTitle=cleanLabel(book.title||'');
+  return {
+    embeddedKey,
+    embeddedTitle,
+    filenameKey,
+    filenameTitle,
+    directoryKey:['dir',sourceScope(book),directory.key].join(':'),
+    directoryTitle:directory.title,
+    anchorKey:anchor.key,
+    chapterLike:chapterEvidence(book),
+    resolvedTitleKey:normalKey(resolvedTitle),
+    resolvedTitle,
+    resolvedSharedIdentity:isResolvedSharedIdentity(book),
+  };
 }
 
-function rootAudioClusterCandidate(uri: string) {
-  const title = rootAudioClusterTitle(uri);
-  return title ? normalKey(title) : '';
+function audioWorkKey(
+  book:LocalBook,
+  item:AudioEvidence,
+  directoryFallback:Map<string,string>,
+){
+  if(item.embeddedKey)return item.embeddedKey;
+  if(item.filenameKey)return item.filenameKey;
+  const fallback=directoryFallback.get(item.directoryKey);
+  if(fallback)return fallback;
+  return 'audio-file:'+sourceScope(book)+':'+book.uri;
 }
 
-function rootAudioClusterTitle(uri: string) {
-  const parts = decodedPathParts(uri);
-  const filename = cleanLabel(parts[parts.length - 1] || '').replace(/\.[^.]+$/, '');
-  const patterns = [
+function folderFallbackCandidate(
+  members:LocalBook[],
+  evidence:Map<string,AudioEvidence>,
+){
+  const items=members.map(book=>evidence.get(book.uri)!).filter(Boolean);
+  if(items.length<2)return '';
+
+  const sharedIdentity=commonValue(
+    members
+      .filter(isResolvedSharedIdentity)
+      .map(book=>book.title||''),
+  );
+  if(sharedIdentity && members.filter(isResolvedSharedIdentity).length===members.length){
+    return ['identity',sourceScope(members[0]),items[0].directoryKey,normalKey(members[0].author),normalKey(sharedIdentity)].join(':');
+  }
+
+  const chapterCount=items.filter(item=>item.chapterLike).length;
+  const trackEvidence=members.filter(book=>(book.trackNumber||0)>0||(book.discNumber||0)>0).length;
+  const strongChapterEvidence=
+    chapterCount>=2 &&
+    chapterCount>=Math.ceil(members.length*.6);
+  const strongTrackEvidence=
+    trackEvidence>=2 &&
+    trackEvidence>=Math.ceil(members.length*.6);
+
+  if(!strongChapterEvidence&&!strongTrackEvidence)return '';
+  const directoryTitle=items[0].directoryTitle;
+  if(!directoryTitle||isLibraryRoot(directoryTitle)||looksLikeAuthorContainer(directoryTitle,members))return '';
+  return ['folder',sourceScope(members[0]),items[0].directoryKey,normalKey(directoryTitle)].join(':');
+}
+
+function isResolvedSharedIdentity(book:LocalBook){
+  return (
+    (book.metadataSource==='sidecar'||book.metadataSource==='manual'||book.metadataSource==='embedded'||book.metadataSource==='online') &&
+    !!cleanLabel(book.title)
+  );
+}
+
+function chapterEvidence(book:LocalBook){
+  if((book.trackNumber||0)>0||(book.discNumber||0)>0)return true;
+  const parts=decodedPathParts(book.uri);
+  const filename=cleanLabel(parts[parts.length-1]||'').replace(/\.[^.]+$/,'');
+  if(/^(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}\b/i.test(filename))return true;
+  if(/^0*\d{1,4}\s*(?:[-._ ]|$)/i.test(filename))return true;
+  if(/(?:^|\s)(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b|$)/i.test(filename))return true;
+  return !!filenameClusterTitle(book.uri);
+}
+
+function filenameClusterTitle(uri:string){
+  const parts=decodedPathParts(uri);
+  const filename=cleanLabel(parts[parts.length-1]||'').replace(/\.[^.]+$/,'');
+  const patterns=[
     /^(.+?)\s+-\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
     /^(.+?)\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
     /^(.+?)\s+-\s+0*\d{2,4}(?:\s*[-._].*)?$/i,
-    /^(.+?)[._-](?:ch|pt|track)?0*\d{2,4}$/i,
+    /^(.+?)[._-](?:ch|pt|track)0*\d{1,4}$/i,
     /^(.+?)\s+0*\d{2,4}\s+-\s+.+$/i,
   ];
-  for (const pattern of patterns) {
-    const match = filename.match(pattern);
-    const base = cleanLabel(match?.[1] || '');
-    if (base.length >= 4 && !/^chapter|part|track$/i.test(base)) return base;
+  for(const pattern of patterns){
+    const match=filename.match(pattern);
+    const base=cleanLabel(match?.[1]||'');
+    if(validClusterBase(base))return base;
   }
   return '';
 }
 
-function normalKey(value: string) {
-  return cleanLabel(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function validClusterBase(value:string){
+  const key=normalKey(value);
+  if(key.length<4)return false;
+  if(/^(book|books|volume|vol|chapter|chap|part|track|disc|disk|cd|audio|audiobook|untitled)$/i.test(key))return false;
+  return true;
 }
 
-function audioFolderTitle(uri: string) {
-  const parts = decodedPathParts(uri);
-  const dirs = parts.slice(0, -1).filter(Boolean);
-  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
-  const parent = dirs[dirs.length - 1] || '';
-  return isLibraryRoot(parent) ? '' : cleanLabel(parent);
+function audioDirectory(uri:string){
+  const dirs=relativeAudioDirs(uri);
+  const title=cleanLabel(dirs[dirs.length-1]||'');
+  return {key:dirs.join('/'),title};
+}
+
+function audioAnchor(uri:string){
+  const dirs=relativeAudioDirs(uri);
+  const trimmed=dirs.slice();
+  while(trimmed.length&&isDiscFolder(trimmed[trimmed.length-1]))trimmed.pop();
+  return {key:trimmed.join('/'),title:cleanLabel(trimmed[trimmed.length-1]||'')};
+}
+
+function relativeAudioDirs(uri:string){
+  const parts=decodedPathParts(uri);
+  const dirs=parts.slice(0,-1).filter(Boolean);
+  while(dirs.length&&isLibraryRoot(dirs[0]))dirs.shift();
+  return dirs;
+}
+
+function sourceScope(book:LocalBook){
+  return normalKey(book.sourceUri||book.space||'local');
+}
+
+function isDiscFolder(value:string){
+  return /^(?:cd|disc|disk)\s*[-_. ]*0*\d{1,3}$/i.test(cleanLabel(value));
+}
+
+function looksLikeAuthorContainer(directoryTitle:string,members:LocalBook[]){
+  const directory=normalKey(directoryTitle);
+  if(!directory)return false;
+  const authors=[...new Set(members.map(book=>normalKey(book.author)).filter(Boolean))];
+  return authors.length===1&&authors[0]===directory;
+}
+
+function normalKey(value: string) {
+  return cleanLabel(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function commonValue(values: string[]) {
