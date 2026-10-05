@@ -58,13 +58,13 @@ export function scanPhaseLabel(phase:LocalScanProgress['phase']) {
 export function scanPhaseStep(phase:LocalScanProgress['phase']) {
   const steps:Record<LocalScanProgress['phase'],number>={
     discovering:1,
-    'reading-metadata':2,
-    matching:3,
-    'checking-duplicates':4,
-    covers:5,
-    'online-books':6,
-    'online-comics':7,
-    preparing:8,
+    matching:2,
+    'checking-duplicates':3,
+    preparing:4,
+    'reading-metadata':5,
+    covers:6,
+    'online-books':7,
+    'online-comics':8,
     complete:8,
   };
   return steps[phase];
@@ -78,13 +78,13 @@ export function scanProgressPercent(progress:LocalScanProgress){
     : 0;
   const ranges:Record<LocalScanProgress['phase'],[number,number]>={
     discovering:[3,18],
-    'reading-metadata':[18,42],
-    matching:[42,48],
-    'checking-duplicates':[48,52],
+    matching:[18,22],
+    'checking-duplicates':[22,24],
+    preparing:[24,28],
+    'reading-metadata':[28,52],
     covers:[52,68],
     'online-books':[68,88],
     'online-comics':[88,97],
-    preparing:[97,99],
     complete:[100,100],
   };
   const [start,end]=ranges[progress.phase];
