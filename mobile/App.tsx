@@ -61,6 +61,7 @@ import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} fro
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PLAYER_MOTION_TIMING, PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, livingBookHingeDuration, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {DurableNowSession, NowSessionMedia, refreshNowSession, sanitizeNowSession, sameNowMedia} from './nowSession';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
 import {ProfileActivity, buildInsights, defaultInsightGoal, sanitizeInsightGoal} from './insights';
@@ -322,6 +323,7 @@ const profileAvatarKey = 'archivist.profileAvatar.v1';
 const ritualDaysKey = 'archivist.dailyRitual.v1';
 const lastReadingKey = 'archivist.lastReading.v1';
 const lastPlayingKey = 'archivist.lastPlaying.v1';
+const nowSessionKey = 'archivist.nowSession.v1';
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'favourites',title:'Favourites',visible:true},
@@ -882,6 +884,11 @@ function Client() {
 
   const [lastReading,setLastReading]=useState<Book|null>(null);
   const [lastPlaying,setLastPlaying]=useState<Book|null>(null);
+  const [nowSession,setNowSession]=useState<DurableNowSession|null>(null);
+  const nowSessionRef=useRef<DurableNowSession|null>(null);nowSessionRef.current=nowSession;
+  const [nowSessionReady,setNowSessionReady]=useState(false);
+  const nowResumeGeneration=useRef(0);
+  const checkpointNowRef=useRef<()=>Promise<void>>(async()=>undefined);
   const tabTransition=useRef(new Animated.Value(1)).current;
   const liveModeTransition=useRef(new Animated.Value(1)).current;
   const shelfSkeletonPulse=useRef(new Animated.Value(.45)).current;
@@ -935,6 +942,8 @@ function Client() {
   const [localAudioCompleted, setLocalAudioCompleted] = useState<Record<string, boolean>>({});
   const [activeLocalWork, setActiveLocalWork] = useState<LocalWork | null>(null);
   const [localWorkIndex, setLocalWorkIndex] = useState(0);
+  const localAudioCheckpointBucket=useRef(-1);
+  const serverAudioCheckpointBucket=useRef(-1);
   const [localReadingProgress, setLocalReadingProgress] = useState<Record<string, number>>({});
   const [localReadingComplete, setLocalReadingComplete] = useState<Record<string, boolean>>({});
   const [localReadingCurrentComplete, setLocalReadingCurrentComplete] = useState<Record<string, boolean>>({});
