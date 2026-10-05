@@ -43,7 +43,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSortCopies, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
@@ -2461,7 +2461,7 @@ function Client() {
       ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
       : undefined;
     if(!metadataSettings.books.openLibrary&&!googleBooksApiKey)return;
-    const total=baseBooks.filter(book=>book.format==='EPUB'||book.format==='PDF'||book.format==='Audio').length;
+    const total=countLocalBookOnlineLookupUnits(baseBooks);
     setEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total});
     const enriched=await enrichLocalBookMetadataOnline(baseBooks,{
       cache,
