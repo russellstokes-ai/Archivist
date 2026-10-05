@@ -3,8 +3,12 @@ const fs=require('node:fs');
 
 const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
 const artwork=fs.readFileSync(__dirname+'/LivingBookArtwork.tsx','utf8');
+const geometry=fs.readFileSync(__dirname+'/livingBookGeometry.ts','utf8');
 
 assert.ok(app.includes("if(!playbackVisible){"),'leaving Now must have an explicit Living Book lifecycle boundary');
+assert.ok(app.includes('const livingBookWasVisibleRef=useRef(false)')&&app.includes('const enteringVisible=playbackVisible&&!wasVisible'),'returning to Now must be tracked explicitly as a new visual session');
+assert.ok(app.includes('playerMotionState({playing:playbackIsPlaying||playerVisualPlaying,visible:true,reduceMotion})'),'background playback must reopen the book immediately on return');
+assert.ok(app.includes('// Resolve visibility/playback state before paint'),'visual playback state must synchronise in the layout phase before a returned frame paints');
 assert.ok(app.includes('useLayoutEffect(()=>{')&&app.includes('const livingBookMotionGeneration=useRef(0)'),'Living Book reset must occur in the layout phase before a stale native frame can paint');
 assert.ok(app.includes('bookOpenAnim.stopAnimation();')&&app.includes('bookOpenAnim.setValue(0);'),'hidden player must abandon and reset any partial hinge frame');
 assert.ok(app.includes('bookOpenProgressRef.current=0;'),'hidden player must reset the tracked native hinge position too');
@@ -12,7 +16,7 @@ assert.ok(app.includes('pageTurnAnim.stopAnimation();')&&app.includes('pageTurnA
 assert.ok(app.includes('skipTurnAnim.stopAnimation();')&&app.includes('skipTurnAnim.setValue(0);')&&app.includes('setSkipTurning(false);'),'hidden player must discard skip-page layers');
 assert.ok(app.includes('const livingBookMotionGeneration=useRef(0)'),'Living Book transitions must identify the current visible session');
 assert.ok(app.includes("const livingBookVisualWorkRef=useRef('')")&&app.includes('const livingBookWorkKey=playbackWorkKey(playing)'),'visual state must track the logical audiobook, not individual chapter files');
-assert.ok(app.includes('if(workChanged)')&&app.includes("livingBookVisualWorkRef.current=livingBookWorkKey"),'switching audiobooks must reset the old cover/leaf frame without reopening on ordinary chapter changes');
+assert.ok(app.includes('if(workChanged||enteringVisible)')&&app.includes("livingBookVisualWorkRef.current=livingBookWorkKey"),'switching audiobooks or returning to the player must reset old cover/leaf state without reopening on ordinary chapter changes');
 assert.ok(app.includes("key={workKey||'living-book'}"),'each logical audiobook must own a fresh Living Book renderer while chapter changes keep the same work key');
 assert.ok(app.includes('++skipGeneration.current')&&app.includes('ambientPageLoopStopRef.current=null'),'leaving or changing books must invalidate stale manual and ambient page callbacks');
 assert.ok(app.includes('generation!==livingBookMotionGeneration.current'),'stale animation callbacks from the previous screen session must be ignored');
@@ -28,6 +32,8 @@ const timing=app.indexOf('Animated.timing(bookOpenAnim,{',visibleReset);
 const pageReset=app.indexOf('pageTurnAnim.setValue(0);',visibleReset);
 assert.ok(visibleReset>=0&&pageReset>visibleReset&&pageReset<timing,'returning to Now must clear leaf state before the cover starts opening');
 
+assert.ok(geometry.includes('internalRevealStart:0.30')&&geometry.includes('internalRevealEnd:0.58'),'static interior paper must remain hidden until the cover swing physically exposes it');
+assert.ok(artwork.includes('opacity:internalOpacity'),'the static spread must use the delayed interior reveal rather than appear beside the closed cover');
 assert.ok(artwork.includes('const turnOpacity=Animated.multiply(')&&artwork.includes('leafGate'),'turning leaf visibility must remain gated by the cover hinge');
 assert.ok(artwork.includes("inputRange:[0,.04,.94,1],outputRange:[0,1,1,0]"),'a reset turn value must render no ambient leaf before the first real page turn');
 assert.ok(artwork.includes('leafFrontFace')&&artwork.includes('leafBackFace'),'turning paper must have explicit front and back faces rather than a mirrored visible backface');
