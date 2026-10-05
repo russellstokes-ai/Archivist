@@ -2739,12 +2739,10 @@ function Client() {
       if(refreshMetadata)return book.format==='EPUB'||book.format==='Comic'||book.format==='Audio';
       if(!(book.format==='EPUB'||book.format==='Comic'||book.format==='Audio'))return false;
       if(book.embeddedMetadata)return false;
-      // The normal preparation pass deep-opens only files where embedded tags can
-      // materially improve identification. Full Refresh metadata remains exhaustive.
-      if(book.needsReview||!book.title?.trim()||!book.author?.trim())return true;
-      if(book.format==='Audio'&&!book.narrator?.trim())return true;
-      if(book.format==='Comic'&&(!book.series?.trim()||book.seriesNumber===undefined))return true;
-      return false;
+      // Preparation is complete, not shallow: every new/changed supported file
+      // gets its embedded details once. Unchanged files reuse the persisted
+      // embedded metadata fingerprint on later scans.
+      return true;
     };
     const eligible=baseBooks.filter(needsEmbeddedRead);
     if(!eligible.length)return baseBooks;
@@ -2755,7 +2753,8 @@ function Client() {
       // First-run preparation must fail forward quickly on a slow/broken archive.
       // A single pathological EPUB/CBZ/M4B must never hold the UI at 28%.
       itemTimeoutMs:refreshMetadata?5000:2500,
-      maxConsecutiveTimeouts:refreshMetadata?2:1,
+      maxConsecutiveTimeouts:refreshMetadata?6:6,
+      concurrency:refreshMetadata?3:4,
       shouldInspect:needsEmbeddedRead,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
@@ -2799,6 +2798,7 @@ function Client() {
       applyHighConfidence:metadataSettings.applyHighConfidence,
       ignoreCache:forceRefresh,
       batchSize:24,
+      concurrency:4,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
@@ -3953,13 +3953,18 @@ function Client() {
   }
 
   function OnboardingGuide() {
-    if (session || recoverableSession || onboardingDone) return null;
+    if (onboardingDone) return null;
     const reviewCount = localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
-    const hasBooks = localBooks.length > 0;
+    const hasServer = !!session;
+    const hasServerFolders = sources.length > 0;
+    const hasSource = hasFolder || hasServerFolders;
+    const hasBooks = localBooks.length > 0 || serverWorks.length > 0;
     const progress=activeLibraryProgress;
     const progressPercent=progress?scanProgressPercent(progress):0;
     const preparing=hasFolder&&!libraryPreparationReady;
+    const serverReady=hasServerFolders;
+    const setupReady=libraryPreparationReady||(!hasFolder&&serverReady);
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
@@ -3967,35 +3972,37 @@ function Client() {
         <Text style={[styles.onboardingIntro,{color:p.muted}]}>Three simple steps prepare your library for reading, listening and safe file organisation.</Text>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
+          <Text style={[styles.onboardingNumber,{color:hasSource?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Add folders</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder
-              ? localFolders.length+' folder'+(localFolders.length===1?'':'s')+' added'
-              : Platform.OS==='ios'?'Choose your Books, Comics or Audiobooks folder from Files.':'Choose your Books, Comics or Audiobooks folder.'}</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Add library folders</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{hasSource
+              ? [hasFolder?localFolders.length+' device folder'+(localFolders.length===1?'':'s'):'',hasServerFolders?sources.length+' server folder'+(sources.length===1?'':'s'):''].filter(Boolean).join(' · ')
+              : hasServer
+                ? 'Server connected. Add server folders, device folders, or both.'
+                : Platform.OS==='ios'?'Add folders from Files, or connect Archivist Server.':'Add device folders, or connect Archivist Server.'}</Text>
           </View>
-          {hasFolder?<Text accessibilityLabel="Step 1 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
+          {hasSource?<Text accessibilityLabel="Step 1 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:libraryPreparationReady?p.sage:hasFolder?p.gold:p.muted}]}>02</Text>
+          <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:hasSource?p.gold:p.muted}]}>02</Text>
           <View style={{flex:1,gap:4}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Prepare library</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{libraryPreparationReady
-              ? localBooks.length+' items ready'+(reviewCount?' · '+reviewCount+' need review':'')
+            <Text style={[styles.meta,{color:p.muted}]}>{setupReady
+              ? (localBooks.length+serverWorks.length)+' items ready'+(reviewCount?' · '+reviewCount+' local items need review':'')
               : progress
                 ? scanPhaseLabel(progress.phase)+' · '+progressPercent+'%'
-                : hasFolder?'Ready to prepare metadata and covers.':'Starts after folders are added.'}</Text>
+                : hasSource?'Ready to prepare metadata and covers.':'Starts after library folders are added.'}</Text>
             {progress?<View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:(progressPercent+'%') as `${number}%`}]} /></View>:null}
           </View>
-          {libraryPreparationReady?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
+          {setupReady?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:libraryPreparationReady?p.sage:p.muted}]}>03</Text>
+          <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Organise files</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{libraryPreparationReady
+            <Text style={[styles.meta,{color:p.muted}]}>{setupReady
               ? 'Preview your preferred layout, then copy or move eligible files.'
               : 'Available when preparation finishes.'}</Text>
           </View>
@@ -4004,22 +4011,23 @@ function Client() {
         <View style={styles.shelfSetupActions}>
           <Animated.View style={[
             styles.shelfSetupAction,
-            !hasFolder&&!reduceMotion&&{
+            !hasSource&&!reduceMotion&&{
               transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
             },
           ]}>
             <Button
-              label={libraryRefreshActive?'Preparing…':hasFolder?'Add another folder':addLocalFolderShortLabel}
+              label={libraryRefreshActive?'Preparing…':hasFolder?'Add another device folder':addLocalFolderShortLabel}
               disabled={libraryRefreshActive}
               onPress={()=>void addLocalFolder()}
             />
           </Animated.View>
-          {!hasFolder&&!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
+          {!hasServer&&!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
+          {hasServer&&owner?<View style={styles.shelfSetupAction}><Button label={hasServerFolders?'Add another server folder':'Add server folders'} tone="quiet" onPress={()=>setActiveTab('settings')}/></View>:null}
         </View>
-        {!hasFolder&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
+        {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
         {preparing&&!libraryRefreshActive?<Button label="Prepare library" onPress={()=>void rescanLocalFolders()}/>:null}
-        {libraryPreparationReady&&hasBooks?<View style={styles.shelfSetupActions}>
+        {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
           <View style={styles.shelfSetupAction}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></View>
           <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
         </View>:null}
