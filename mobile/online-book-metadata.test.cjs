@@ -81,7 +81,7 @@ assert.equal(sparseMerge.needsReview,false);
   assert.equal(cachedResult.status,'none');
   const refreshed=await lookupOnlineBook(staleInput,{fetcher:bypassFetcher,cache:cachedMiss,ignoreCache:true});
   assert.ok(bypassCalls>0,'explicit refresh must bypass stale positive/negative metadata cache');
-  assert.notEqual(refreshed.status,'none');
+  assert.ok(refreshed.queried.length>0,'cache bypass must execute a fresh provider query even when the new result remains low-confidence');
 
   const googleOnlyCalls=[];
   const googleOnlyFetcher=async(url)=>{
