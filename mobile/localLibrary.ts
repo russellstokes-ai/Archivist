@@ -44,6 +44,11 @@ export type LocalSortHistory = {
   failed: Array<{id: string; title: string; error: string}>;
 };
 
+export type LocalSortRecoveryResult = {
+  copied: Array<{id: string; title: string; uri: string}>;
+  failed: Array<{id: string; title: string; error: string}>;
+};
+
 export type LocalFolder = {
   id: string;
   uri: string;
@@ -687,9 +692,9 @@ export async function scanLocalFolders(
   };
 }
 
-export async function removeLocalSortCopies(history: LocalSortHistory): Promise<LocalSortApplyResult> {
-  const removed: LocalSortApplyResult['copied'] = [];
-  const failed: LocalSortApplyResult['failed'] = [];
+export async function removeLocalSortCopies(history: LocalSortHistory): Promise<LocalSortRecoveryResult> {
+  const removed: LocalSortRecoveryResult['copied'] = [];
+  const failed: LocalSortRecoveryResult['failed'] = [];
   for (const item of history.copied) {
     try {
       await StorageAccessFramework.deleteAsync(item.uri);
