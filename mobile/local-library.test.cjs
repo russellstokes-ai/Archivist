@@ -261,10 +261,13 @@ assert.equal(audioPath.series, '');
 
 assert.equal(parseLocalSidecar('<metadata><dc:date>1998-06-01</dc:date></metadata>','opf').publishedYear,1998);
 const identifierSidecar=parseLocalSidecar(
-  '<package><metadata><dc:title>Dune</dc:title><dc:creator>Frank Herbert</dc:creator><dc:identifier>urn:isbn:9780441172719</dc:identifier><dc:identifier>uuid:ignore-me</dc:identifier></metadata></package>',
+  '<package><metadata><dc:title>Dune</dc:title><dc:creator>Frank Herbert</dc:creator><dc:publisher>Ace</dc:publisher><dc:identifier>urn:isbn:9780441172719</dc:identifier><dc:identifier>uuid:ignore-me</dc:identifier><meta name="calibre:series" content="Dune"/><meta name="calibre:series_index" content="1"/></metadata></package>',
   'opf',
 );
 assert.equal(identifierSidecar.isbn,'9780441172719');
 assert.equal(identifierSidecar.identifiers.includes('9780441172719'),true);
 assert.equal(identifierSidecar.identifiers.includes('uuid:ignore-me'),true);
+assert.equal(identifierSidecar.publisher,'Ace');
+assert.equal(identifierSidecar.series,'Dune');
+assert.equal(identifierSidecar.seriesIndex,1);
 assert.equal(parseLocalSidecar('<metadata><year>unknown</year></metadata>','nfo').publishedYear,undefined);
