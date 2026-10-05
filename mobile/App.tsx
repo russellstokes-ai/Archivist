@@ -997,6 +997,7 @@ function Client() {
   const [localFoldersReady,setLocalFoldersReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
+  const [offlineWorksReady,setOfflineWorksReady]=useState(false);
   const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
   const [offlineStorage,setOfflineStorage]=useState<OfflineStorageSummary|null>(null);
   const [offlineStorageBusy,setOfflineStorageBusy]=useState(false);
@@ -1675,7 +1676,7 @@ function Client() {
     }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
       if (value && typeof value === 'object') setOfflineWorks(value);
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(()=>setOfflineWorksReady(true));
     getPersistedJSON<Record<string, OfflineDownloadCheckpoint>>(offlineCheckpointsKey).then(value => {
       if (value && typeof value === 'object') setOfflineCheckpoints(value);
     }).catch(() => undefined);
@@ -2980,27 +2981,25 @@ function Client() {
       const canUseServer=!!session&&(!media.originServer||session.server===media.originServer);
       if(canUseServer){
         const work=serverWorks.find(item=>item.id===media.serverWorkId);
-        if(work){
-          try{
-            const tracks=await request(session!,'/api/works/'+work.id+'/tracks') as WorkTrack[];
-            if(generation!==nowResumeGeneration.current)return;
-            const available=tracks.filter(track=>track.available);
-            const track=available.find(item=>item.id===snapshot.trackId||item.id===media.id)
-              ||available.find(item=>item.format===media.format)
-              ||available[0];
-            if(track){
-              const current:Book={
-                id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre||'',
-                format:track.format,space:work.space,available:true,serverWorkId:work.id,
-                coverShape:track.format==='Audio'?'square':'portrait',source:'server',originServer:session!.server,
-              };
-              if(snapshot.kind==='audio')await playBook(current,snapshot.position);
-              else openBook(current,snapshot.position);
-              return;
-            }
-          }catch(error){
-            if(!offline){setError(error instanceof Error?error.message:String(error));return;}
+        try{
+          const tracks=await request(session!,'/api/works/'+media.serverWorkId+'/tracks') as WorkTrack[];
+          if(generation!==nowResumeGeneration.current)return;
+          const available=tracks.filter(track=>track.available);
+          const track=available.find(item=>item.id===snapshot.trackId||item.id===media.id)
+            ||available.find(item=>item.format===media.format)
+            ||available[0];
+          if(track){
+            const current:Book={
+              id:track.id,title:work?.title||media.title,author:work?.author||media.author,series:work?.series||media.series,genre:work?.genre||media.genre||'',
+              format:track.format,space:work?.space||media.space,available:true,serverWorkId:media.serverWorkId,
+              coverShape:track.format==='Audio'?'square':'portrait',source:'server',originServer:session!.server,
+            };
+            if(snapshot.kind==='audio')await playBook(current,snapshot.position);
+            else openBook(current,snapshot.position);
+            return;
           }
+        }catch(error){
+          if(!offline){setError(error instanceof Error?error.message:String(error));return;}
         }
       }
       if(offline){
@@ -7575,7 +7574,7 @@ function Client() {
     return Settings();
   }
 
-  if (restoring||!localFoldersReady||!localCatalogReady||!localOverridesReady) {
+  if (restoring||!localFoldersReady||!localCatalogReady||!localOverridesReady||!offlineWorksReady||!nowSessionReady) {
     return (
       <SafeAreaView style={[styles.screen,{backgroundColor:p.paper}]}>
         <View style={styles.restoreScreen}>
