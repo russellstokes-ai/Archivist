@@ -52,6 +52,7 @@ const partFrames=Buffer.concat([
 const partTag=Buffer.concat([Buffer.from('ID3'),Buffer.from([3,0,0,...syncsafe(partFrames.length)]),partFrames]);
 const partFields=parseID3v2Base64(partTag.toString('base64'));
 assert.equal(partFields.title,'Dune');
+assert.equal(partFields.workTitle,'Dune');
 assert.equal(partFields.author,'Frank Herbert');
 
 function mp4Atom(type,payload){
@@ -72,6 +73,7 @@ const mp4=Buffer.concat([
 ]);
 const mp4Fields=parseMP4MetadataBase64(mp4.toString('base64'));
 assert.equal(mp4Fields.title,'Dune');
+assert.equal(mp4Fields.workTitle,'Dune');
 assert.equal(mp4Fields.author,'Frank Herbert');
 assert.equal(mp4Fields.genre,'Science Fiction');
 assert.equal(mp4Fields.publishedYear,1965);
