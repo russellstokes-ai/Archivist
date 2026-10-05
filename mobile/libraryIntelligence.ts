@@ -10,7 +10,7 @@ export type LocalIdentity = {
   needsReview: boolean;
   reviewReason: string;
   coverShape: 'portrait' | 'square';
-  metadataSource: 'path' | 'sidecar' | 'manual';
+  metadataSource: 'path' | 'sidecar' | 'manual' | 'embedded';
 };
 
 export type LocalMetadataFields = {
@@ -113,7 +113,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
 export function applyLocalMetadata(
   base: LocalIdentity,
   fields: LocalMetadataFields,
-  source: 'sidecar' | 'manual',
+  source: 'sidecar' | 'manual' | 'embedded',
 ): LocalIdentity {
   const title = cleanLabel(fields.title || '') || base.title;
   const author = fields.author === undefined ? base.author : cleanLabel(fields.author);
