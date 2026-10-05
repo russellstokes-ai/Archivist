@@ -2742,8 +2742,10 @@ function Client() {
     const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
       refreshMetadata,
       batchSize:4,
-      itemTimeoutMs:8000,
-      maxConsecutiveTimeouts:3,
+      // First-run preparation must fail forward quickly on a slow/broken archive.
+      // A single pathological EPUB/CBZ/M4B must never hold the UI at 28%.
+      itemTimeoutMs:refreshMetadata?5000:2500,
+      maxConsecutiveTimeouts:refreshMetadata?2:1,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
@@ -2950,39 +2952,22 @@ function Client() {
     }
 
     const exists=localFolders.some(folder=>folder.uri===picked.uri);
-    const stagedFolder:LocalFolder={...picked,status:'Scanning…'};
-    const folders=exists?localFolders:[...localFolders,stagedFolder];
-    const generation=beginLocalScan();
-    if(generation===null)return;
-    try {
-      if(!exists){
-        // Show the source immediately; the published catalogue remains untouched until commit.
-        setLocalFolders(folders);
-        await setPersistedJSON(localFoldersKey,folders);
-      }
-      setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
-      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,shouldContinue:()=>scanCommitGate.isCurrent(generation)});
-      const summary=await finaliseLocalScan(result,previousLocal,generation);
-      if(!summary)return;
-      setLocalFolderNotice(await completedLibraryRefreshNotice(result));
-      if(result.books.length&&celebrationEligible){
-        setCelebrating(true);
-        setCelebrationEligible(false);
-        void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1');
-        setTimeout(()=>setCelebrating(false),1900);
-      }
-    }catch(e){
-      if(scanCommitGate.isCurrent(generation)){
-        const failedFolders=folders.map(folder=>folder.uri===picked.uri?{...folder,status:'Scan failed · tap Refresh'}:folder);
-        setLocalFolders(failedFolders);
-        await setPersistedJSON(localFoldersKey,failedFolders).catch(()=>undefined);
-        setLocalFolderNotice(scanFailureCopy(localBooks.length>0));
-        setError((e as Error).message);
-      }
-    }finally{
-      endLocalScan(generation);
+    if(exists){
+      setLocalFolderNotice('“'+picked.name+'” is already in your library setup.');
+      return;
     }
+
+    const stagedFolder:LocalFolder={...picked,status:'Ready to prepare'};
+    const folders=[...localFolders,stagedFolder];
+    // Step 1 only collects sources. Preparation is deliberately started by
+    // Step 2 so users can add every library folder before any heavy scan begins.
+    setLocalFolders(folders);
+    setLibraryPreparedSignature('');
+    await Promise.all([
+      setPersistedJSON(localFoldersKey,folders),
+      setPersistedJSON(librarySetupPreparedKey,{signature:'',completedAt:''}),
+    ]).catch(()=>undefined);
+    setLocalFolderNotice(picked.name+' added. Add another folder, or continue to Prepare library.');
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
@@ -4005,10 +3990,21 @@ function Client() {
           </View>
         </View>
 
-        {!hasFolder?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label={libraryRefreshActive?'Preparing…':addLocalFolderShortLabel} disabled={libraryRefreshActive} onPress={()=>void addLocalFolder()}/></View>
-          {!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
-        </View>:null}
+        <View style={styles.shelfSetupActions}>
+          <Animated.View style={[
+            styles.shelfSetupAction,
+            !hasFolder&&!reduceMotion&&{
+              transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
+            },
+          ]}>
+            <Button
+              label={libraryRefreshActive?'Preparing…':hasFolder?'Add another folder':addLocalFolderShortLabel}
+              disabled={libraryRefreshActive}
+              onPress={()=>void addLocalFolder()}
+            />
+          </Animated.View>
+          {!hasFolder&&!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
+        </View>
         {!hasFolder&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
         {preparing&&!libraryRefreshActive?<Button label="Prepare library" onPress={()=>void rescanLocalFolders()}/>:null}
