@@ -3371,7 +3371,11 @@ function Client() {
         ? `${moved} moved; ${copiedOnly} verified copies retained; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}.`
         : `${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
       setLocalMoveSelection([]);
-      await rescanLocalFolders();
+      const refreshed=await rescanLocalFolders();
+      if(!onboardingDone&&refreshed&&result.failed.length===0){
+        await finishOnboarding();
+        setLibraryManageOpen(false);
+      }
     } catch (e) {
       setRescanPromptOpen(true);
       setError((e as Error).message);
@@ -3866,45 +3870,61 @@ function Client() {
     const reviewCount = localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
     const hasBooks = localBooks.length > 0;
+    const progress=activeLibraryProgress;
+    const progressPercent=progress?scanProgressPercent(progress):0;
+    const preparing=hasFolder&&!libraryPreparationReady;
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
-        <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your Shelf</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>{Platform.OS==='ios'?'Import media from Files, connect your private Archivist Server, or use both.':'Add media from this device, connect your private Archivist Server, or use both.'} Archivist keeps the Shelf focused on what you want to read or listen to next.</Text>
+        <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
+        <Text style={[styles.onboardingTitle,{color:p.ink}]}>Set up your library</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Three simple steps prepare your library for reading, listening and safe file organisation.</Text>
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Choose where your media lives</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} ${Platform.OS==='ios'?'imported':'device'} folder${localFolders.length===1?'':'s'} added` : shelfServerPromptHidden ? (Platform.OS==='ios'?'Import a Books, Comics or Audiobooks folder from Files. Server prompts are hidden on Shelf.':'Add a Books, Comics or Audiobooks folder. Server prompts are hidden on Shelf.') : (Platform.OS==='ios'?'Import a folder from Files or connect an Archivist Server. You can add the other later.':'Add a device folder or connect an Archivist Server. You can add the other later.')}</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Add folders</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder
+              ? localFolders.length+' folder'+(localFolders.length===1?'':'s')+' added'
+              : Platform.OS==='ios'?'Choose your Books, Comics or Audiobooks folder from Files.':'Choose your Books, Comics or Audiobooks folder.'}</Text>
           </View>
+          {hasFolder?<Text accessibilityLabel="Step 1 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:hasBooks?p.sage:p.muted}]}>02</Text>
-          <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist scans and identifies it</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{localScanning&&scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${localBooks.length} items found` : 'Scanning starts immediately after you add a folder.'}</Text>
+          <Text style={[styles.onboardingNumber,{color:libraryPreparationReady?p.sage:hasFolder?p.gold:p.muted}]}>02</Text>
+          <View style={{flex:1,gap:4}}>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Prepare library</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{libraryPreparationReady
+              ? localBooks.length+' items ready'+(reviewCount?' · '+reviewCount+' need review':'')
+              : progress
+                ? scanPhaseLabel(progress.phase)+' · '+progressPercent+'%'
+                : hasFolder?'Ready to prepare metadata and covers.':'Starts after folders are added.'}</Text>
+            {progress?<View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:(progressPercent+'%') as `${number}%`}]} /></View>:null}
           </View>
+          {libraryPreparationReady?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:hasBooks&&reviewCount===0?p.sage:p.muted}]}>03</Text>
+          <Text style={[styles.onboardingNumber,{color:libraryPreparationReady?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Confident matches stay out of your way.' : reviewCount ? `${reviewCount} item${reviewCount===1?'':'s'} need a quick check.` : 'Everything found so far looks good.'}</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Organise files</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{libraryPreparationReady
+              ? 'Preview your preferred layout, then copy or move eligible files.'
+              : 'Available when preparation finishes.'}</Text>
           </View>
         </View>
 
         {!hasFolder?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label={libraryRefreshActive?'Refreshing…':addLocalFolderShortLabel} disabled={libraryRefreshActive} onPress={()=>void addLocalFolder()}/></View>
+          <View style={styles.shelfSetupAction}><Button label={libraryRefreshActive?'Preparing…':addLocalFolderShortLabel} disabled={libraryRefreshActive} onPress={()=>void addLocalFolder()}/></View>
           {!shelfServerPromptHidden?<View style={styles.shelfSetupAction}><Button label="Connect to Archivist Server" tone="quiet" onPress={connectServerFromShelf}/></View>:null}
         </View>:null}
         {!hasFolder&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {hasFolder&&!hasBooks?<Button label={libraryRefreshActive?'Refreshing…':'Scan again'} disabled={libraryRefreshActive} onPress={()=>void rescanLocalFolders()}/>:null}
-        {hasBooks&&reviewCount>0?<Button label={`Review ${reviewCount} uncertain item${reviewCount===1?'':'s'}`} tone="quiet" onPress={()=>{setReviewOnly(true);setQuery('');setActiveTab('library')}}/>:null}
-        {hasBooks?<Button label="Finish setup" onPress={()=>void finishOnboarding()}/>:null}
+        {preparing&&!libraryRefreshActive?<Button label="Prepare library" onPress={()=>void rescanLocalFolders()}/>:null}
+        {libraryPreparationReady&&hasBooks?<View style={styles.shelfSetupActions}>
+          <View style={styles.shelfSetupAction}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></View>
+          <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
+        </View>:null}
       </View>
     );
   }
