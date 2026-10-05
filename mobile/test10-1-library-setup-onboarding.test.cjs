@@ -21,7 +21,7 @@ assert.ok(app.includes("Available when preparation finishes."),'Step 3 must stay
 assert.ok(app.includes('disabled={busy||localBooks.length===0||!libraryPreparationReady}'),'sorting preview must be gated by completed preparation');
 assert.ok(app.includes('disabled={busy||selectedReady.length===0||!libraryPreparationReady}'),'sorting apply must be gated by completed preparation');
 
-assert.ok(app.includes("if (session || recoverableSession || onboardingDone) return null;"),'completed onboarding must never remain on Shelf');
+assert.ok(app.includes("if (onboardingDone) return null;"),'completed onboarding must never remain on Shelf');
 assert.ok(app.includes("await SecureStore.setItemAsync(onboardingDoneKey, '1')"),'onboarding completion must survive relaunch');
 assert.ok(app.includes('label="Keep current layout"'),'users must be able to complete setup without reorganising files');
 assert.ok(app.includes("if(!onboardingDone&&refreshed&&result.failed.length===0)"),'successful organisation and refresh must complete onboarding automatically');
