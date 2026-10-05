@@ -184,6 +184,25 @@ assert.equal(protectedMerged.coverUri,'https://static.metron.cloud/sandman.jpg')
   await lookupOnlineComic({format:'Comic',series:'Example',comicIssueNumber:'1',comicUpc:'759606095582'},{token:'metron-test-token',fetcher:upcFetcher,cache:{}});
   assert(upcCalls.some(url=>url.includes('upc_starts_with=759606095582')));
 
+  const staleComicInput={format:'Comic',series:'Amazing Spider-Man',comicIssueNumber:'1',comicVolume:5,publishedYear:2018};
+  const staleComicKey=require('./onlineComicMetadata.ts').onlineComicCacheKey(staleComicInput);
+  const staleComicCache={
+    [staleComicKey]:{expiresAt:Date.now()+60000,result:{key:staleComicKey,status:'none',candidates:[],autoApply:false,queried:['cached']}},
+  };
+  let comicBypassCalls=0;
+  const comicBypassFetcher=async(url)=>{
+    comicBypassCalls++;
+    if(url.includes('/api/issue/?'))return {ok:true,status:200,json:async()=>({results:[{id:50,series:{id:15,name:'Amazing Spider-Man',volume:5,year_began:2018},number:'1',image:'https://static.metron.cloud/asm1.jpg'}]})};
+    if(url.includes('/api/issue/50/'))return {ok:true,status:200,json:async()=>({id:50,series:{id:15,name:'Amazing Spider-Man',volume:5,year_began:2018},number:'1',image:'https://static.metron.cloud/asm1.jpg'})};
+    return {ok:false,status:404,json:async()=>({})};
+  };
+  const cachedComic=await lookupOnlineComic(staleComicInput,{token:'metron-test-token',fetcher:comicBypassFetcher,cache:staleComicCache});
+  assert.equal(comicBypassCalls,0,'normal comic enrichment should respect its live cache');
+  assert.equal(cachedComic.status,'none');
+  const refreshedComic=await lookupOnlineComic(staleComicInput,{token:'metron-test-token',fetcher:comicBypassFetcher,cache:staleComicCache,ignoreCache:true});
+  assert.ok(comicBypassCalls>0,'manual comic refresh must bypass stale cache');
+  assert.notEqual(refreshedComic.status,'none');
+
   const unconfigured=await lookupOnlineComic(input,{fetcher,cache:{}});
   assert.equal(unconfigured.status,'unconfigured');
   assert.equal(unconfigured.candidates.length,0);
