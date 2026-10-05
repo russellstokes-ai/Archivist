@@ -119,6 +119,12 @@ function audioBookFolderTitle(uri:string){
   return clean(indexed?.[1]||parent);
 }
 function rootAudioTrackFamily(stem:string){return audioMultipartWorkTitle(stem);}
+function looksLikeLibraryContainer(value:string){
+  const label=clean(value);
+  if(!label)return true;
+  if(isLibraryRootLabel(label))return true;
+  return /\b(?:library|collection|media|audiobooks?|audio\s*books?|ebooks?|books?|comics?)\b/i.test(label);
+}
 function rootAudioIdentityKey(book:SynchronizableBook){
   const scope=normal(book.space||'library');
   const id=normal(book.asin||book.isbn||'');
@@ -132,6 +138,18 @@ function rootAudioIdentityKey(book:SynchronizableBook){
   if(family){
     const author=normal(book.author||'');
     return 'audio-root:'+scope+':name:'+normal(family)+(author?'|'+author:'');
+  }
+
+  // If the selected source is the audiobook folder itself, generic tracks such
+  // as "01 - Opening" have no filename family. The selected folder title is
+  // still strong work evidence, provided it does not look like a library-level
+  // container. This deliberately refuses ambiguous roots such as "Audiobooks".
+  if(book.rootUri&&isGenericMediaTitle(fileStem(book.uri),'Audio',2)){
+    const inferred=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:2,rootUri:book.rootUri});
+    const folderWorkTitle=clean(inferred.title);
+    if(folderWorkTitle&&!looksLikeLibraryContainer(folderWorkTitle)){
+      return 'audio-root:'+scope+':folder:'+normal(folderWorkTitle);
+    }
   }
   return '';
 }
