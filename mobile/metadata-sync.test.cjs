@@ -71,9 +71,18 @@ assert.equal(outlierWork.author,'Craig Alanson','one bad embedded author must no
 assert.equal(outlierWork.series,'Expeditionary Force','one bad embedded series must not override repeated work evidence');
 assert.equal(outlier[0].title,'Opening','track chapter title must remain intact after work-level consensus');
 
+const providerMatched=synchronizeLocalMetadata([
+  track(50,'01 - Opening',{title:'Opening',onlineMetadataMatch:{fields:{title:'Black Ops: Expeditionary Force #4',author:'Craig Alanson',series:'Expeditionary Force',seriesNumber:4},confidence:'high'}}),
+  track(51,'02 - Trouble',{title:'Trouble',onlineMetadataMatch:{fields:{title:'Black Ops: Expeditionary Force #4',author:'Craig Alanson',series:'Expeditionary Force',seriesNumber:4},confidence:'high'}}),
+]).books;
+assert.equal(groupLocalWorks(providerMatched)[0].title,'Black Ops: Expeditionary Force #4','high-confidence provider work title may improve the work identity');
+assert.equal(providerMatched[0].title,'Opening','provider work title must not overwrite chapter title');
+assert.equal(providerMatched[1].title,'Trouble','provider work title must not overwrite sibling chapter title');
+
+
 const manual=synchronizeLocalMetadata([
-  track(4,'01 - Opening',{title:'Black Ops Director Cut',author:'Craig Alanson',metadataSource:'manual',metadataProvenance:{title:'manual',author:'manual'},metadataFieldConfidence:{title:'high',author:'high'}}),
-  track(5,'02 - More',{title:'More'}),
+  track(4,'01 - Opening',{title:'Black Ops Director Cut',author:'Craig Alanson',metadataSource:'manual',metadataProvenance:{title:'manual',author:'manual'},metadataFieldConfidence:{title:'high',author:'high'},onlineMetadataMatch:{fields:{title:'Black Ops Online'},confidence:'high'}}),
+  track(5,'02 - More',{title:'More',onlineMetadataMatch:{fields:{title:'Black Ops Online'},confidence:'high'}}),
 ]).books;
 assert.equal(groupLocalWorks(manual)[0].title,'Black Ops Director Cut','manual work title must outrank inferred/provider metadata');
 
