@@ -34,6 +34,7 @@ export type LocalBook = {
   modified?: number;
   metadataContextSignature?: string;
   assetSignature?: string;
+  scanReused?: boolean;
 };
 
 export type LocalSortPreview = {
@@ -362,6 +363,7 @@ async function scanLocalFoldersNative(
             modified:item.modified,
             metadataContextSignature:signature.contextSignature,
             assetSignature:signature.assetSignature,
+            scanReused:true,
             available:true,
           };
           if(reused.needsReview)review+=1;
@@ -425,6 +427,7 @@ async function scanLocalFoldersNative(
           modified:item.modified,
           metadataContextSignature:signature.contextSignature,
           assetSignature:signature.assetSignature||undefined,
+          scanReused:false,
         };
         books.push(book);
         produced.push(book);
