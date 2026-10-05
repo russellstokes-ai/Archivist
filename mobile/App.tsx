@@ -3543,7 +3543,22 @@ function Client() {
         {current ? (
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} direction={skipDirection} skipping={skipTurning} cover={<LivingBookCoverTexture book={current}/>}/>
+            <LivingBookCanvas
+              title={current.title}
+              author={current.author}
+              chapter={currentChapter?.title}
+              number={Math.max(1,currentChapterIndex+1)}
+              phase={livingBookMotion.phase}
+              direction={skipDirection}
+              skipping={skipTurning}
+              reduceMotion={reduceMotion}
+              coverUri={
+                current.livingBookCoverUri ||
+                (current.source==='server'&&session ? session.server+'/api/assets/'+current.id+'/cover' : current.coverUri)
+              }
+              coverMode={current.livingBookCoverSource==='jacket'||(current.format==='Audio'&&!current.livingBookCoverUri)?'jacket':'portrait'}
+              coverHeaders={current.source==='server'&&session?{Authorization:'Bearer '+session.token}:undefined}
+            />
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
