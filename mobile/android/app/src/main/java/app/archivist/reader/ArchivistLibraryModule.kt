@@ -1,5 +1,6 @@
 package app.archivist.reader
 
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 import com.facebook.react.bridge.Arguments
@@ -7,6 +8,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
@@ -179,6 +181,47 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     if (finished) sessions.remove(scanId)
   }
 
+  private fun putMetadata(map: com.facebook.react.bridge.WritableMap, key: String, retriever: MediaMetadataRetriever, metadataKey: Int) {
+    val value = retriever.extractMetadata(metadataKey)?.trim()
+    if (!value.isNullOrEmpty()) map.putString(key, value)
+  }
+
+  @ReactMethod
+  fun readAudioMetadataBatch(uris: ReadableArray, promise: Promise) {
+    thread(name = "archivist-audio-metadata") {
+      try {
+        val result = Arguments.createArray()
+        val limit = uris.size().coerceAtMost(64)
+        for (index in 0 until limit) {
+          val uri = uris.getString(index) ?: continue
+          val map = Arguments.createMap()
+          map.putString("uri", uri)
+          val retriever = MediaMetadataRetriever()
+          try {
+            retriever.setDataSource(context, Uri.parse(uri))
+            putMetadata(map, "title", retriever, MediaMetadataRetriever.METADATA_KEY_TITLE)
+            putMetadata(map, "album", retriever, MediaMetadataRetriever.METADATA_KEY_ALBUM)
+            putMetadata(map, "artist", retriever, MediaMetadataRetriever.METADATA_KEY_ARTIST)
+            putMetadata(map, "albumArtist", retriever, MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+            putMetadata(map, "author", retriever, MediaMetadataRetriever.METADATA_KEY_AUTHOR)
+            putMetadata(map, "genre", retriever, MediaMetadataRetriever.METADATA_KEY_GENRE)
+            putMetadata(map, "track", retriever, MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
+            putMetadata(map, "disc", retriever, MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)
+            putMetadata(map, "year", retriever, MediaMetadataRetriever.METADATA_KEY_YEAR)
+            putMetadata(map, "duration", retriever, MediaMetadataRetriever.METADATA_KEY_DURATION)
+          } catch (error: Throwable) {
+            map.putString("error", error.message ?: "Metadata unavailable")
+          } finally {
+            try { retriever.release() } catch (_: Throwable) {}
+          }
+          result.pushMap(map)
+        }
+        promise.resolve(result)
+      } catch (error: Throwable) {
+        promise.reject("AUDIO_METADATA_FAILED", error.message ?: "Unable to inspect audiobook metadata", error)
+      }
+    }
+  }
   @ReactMethod
   fun cancelTreeScan(scanId: String, promise: Promise) {
     val session = sessions.remove(scanId)
