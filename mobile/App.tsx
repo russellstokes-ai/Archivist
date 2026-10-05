@@ -3327,10 +3327,10 @@ function Client() {
     }
     setBusy(true);
     setError('');
-    setMoveStatus('Copying organised files...');
+    setMoveStatus(localSortMode==='move'?'Moving organised files safely...':'Copying organised files...');
     try {
       const transactionId = String(Date.now());
-      const started: LocalSortHistory = {id: transactionId, createdAt: new Date().toISOString(), copied: [], failed: [], complete:false};
+      const started: LocalSortHistory = {id: transactionId, createdAt: new Date().toISOString(), mode:localSortMode, copied: [], failed: [], complete:false};
       let history = [started, ...localSortHistory].slice(0, 20);
       setLocalSortHistory(history);
       await setPersistedJSON(localSortHistoryKey, history);
@@ -3340,12 +3340,16 @@ function Client() {
         setMoveStatus(`Organising · ${partial.copied.length+partial.failed.length} / ${ready.length} · ${partial.failed.length} need review`);
         await setPersistedJSON(localSortHistoryKey, history);
       };
-      const result = await applyLocalSortCopies(ready, checkpoint);
-      const entry: LocalSortHistory = {id: transactionId, createdAt: started.createdAt, copied: result.copied, failed: result.failed, complete:true};
+      const result = await applyLocalSort(ready,localSortMode,checkpoint);
+      const entry: LocalSortHistory = {id: transactionId, createdAt: started.createdAt, mode:localSortMode, copied: result.copied, failed: result.failed, complete:true};
       history = history.map(item => item.id === transactionId ? entry : item);
       setLocalSortHistory(history);
       await setPersistedJSON(localSortHistoryKey, history);
-      setMoveStatus(`${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
+      const moved=result.copied.filter(item=>item.sourceRemoved).length;
+      const copiedOnly=result.copied.length-moved;
+      setMoveStatus(localSortMode==='move'
+        ? `${moved} moved; ${copiedOnly} verified copies retained; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}.`
+        : `${result.copied.length} copied; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}. Originals were left in place.`);
       setLocalMoveSelection([]);
       await rescanLocalFolders();
     } catch (e) {
@@ -3359,13 +3363,22 @@ function Client() {
   async function recoverLocalSort(history: LocalSortHistory) {
     setBusy(true);
     setError('');
-    setMoveStatus('Removing copied files...');
+    const mode=history.mode==='move'?'move':'copy';
+    setMoveStatus(mode==='move'?'Restoring original file locations...':'Removing copied files...');
     try {
-      const result = await removeLocalSortCopies(history);
-      const next = localSortHistory.filter(item => item.id !== history.id);
-      setLocalSortHistory(next);
-      await setPersistedJSON(localSortHistoryKey, next);
-      setMoveStatus(`${result.copied.length} copied files removed; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}.`);
+      const result = await recoverLocalSortOperation(history);
+      if(result.failed.length===0){
+        const next = localSortHistory.filter(item => item.id !== history.id);
+        setLocalSortHistory(next);
+        await setPersistedJSON(localSortHistoryKey, next);
+      }else{
+        const next=localSortHistory.map(item=>item.id===history.id?{...item,failed:result.failed}:item);
+        setLocalSortHistory(next);
+        await setPersistedJSON(localSortHistoryKey,next);
+      }
+      setMoveStatus(mode==='move'
+        ? `${result.copied.length} move${result.copied.length===1?'':'s'} restored; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}.`
+        : `${result.copied.length} copied files removed; ${result.failed.length} need review${result.failed[0] ? ': ' + result.failed[0].error : ''}.`);
       await rescanLocalFolders();
     } catch (e) {
       setError((e as Error).message);
@@ -7106,7 +7119,14 @@ function Client() {
     return (
       <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist shows the current path, proposed path and metadata used. Only selected Ready items are applied; originals remain untouched until the verified copy succeeds.</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Choose whether Archivist keeps the originals or moves them after a verified copy. Move never deletes a source until the destination has been verified.</Text>
+        <View style={styles.segment}>
+          {[
+            ['copy','Copy · keep originals'],
+            ['move','Move · remove originals'],
+          ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:localSortMode===id}} onPress={()=>setLocalSortMode(id as LocalSortMode)} style={[styles.segmentItem,{backgroundColor:localSortMode===id?p.card:'transparent'}]}><Text style={{color:localSortMode===id?p.sage:p.muted,textAlign:'center',fontWeight:localSortMode===id?'700':'500'}}>{label}</Text></Pressable>)}
+        </View>
+        <Text style={[styles.meta,{color:localSortMode==='move'?p.gold:p.muted}]}>{localSortMode==='move'?'Move mode: each destination is copied and verified first; only then is its original removed.':'Copy mode: organised copies are created and your originals stay where they are.'}</Text>
         <View style={styles.segment}>
           {[
             ['author-title','Author / Title'],
@@ -7149,12 +7169,16 @@ function Client() {
           </Pressable>;
         })}
         {localMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {localMovePreviews.length} proposed changes.</Text>:null}
-        {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Copy history</Text>:null}
-        {localSortHistory.slice(0,3).map(item=><View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
-          <Text style={{color:p.ink,fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
-          <Text style={{color:p.muted}}>{item.copied.length} copied; {item.failed.length} failed</Text>
-          <Button label="Remove copied files" disabled={busy||item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)}/>
-        </View>)}
+        {localSortHistory.length?<Text style={[styles.sectionTitle,{color:p.ink}]}>Organisation history</Text>:null}
+        {localSortHistory.slice(0,3).map(item=>{
+          const mode=item.mode==='move'?'move':'copy';
+          const moved=item.copied.filter(file=>file.sourceRemoved).length;
+          return <View key={item.id} style={[styles.sourceRow,{borderColor:p.line}]}>
+            <Text style={{color:p.ink,fontWeight:'700'}}>{new Date(item.createdAt).toLocaleString()}</Text>
+            <Text style={{color:p.muted}}>{mode==='move'?moved+' moved · '+(item.copied.length-moved)+' verified copies retained':item.copied.length+' copied'}; {item.failed.length} failed{item.complete===false?' · interrupted':''}</Text>
+            <Button label={mode==='move'?'Restore originals':'Remove copied files'} disabled={busy||item.copied.length===0} tone="quiet" onPress={()=>void recoverLocalSort(item)}/>
+          </View>;
+        })}
       </View>
     );
   }
@@ -7218,7 +7242,7 @@ function Client() {
 
             <View style={[styles.libraryManageSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>ADVANCED ORGANISATION</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>For advanced users: choose a layout, preview proposed copies, then apply only ready items. Originals remain untouched until you explicitly clean up copy history.</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Choose a layout, preview the exact changes, then apply only Ready items. Local files can be copied or safely moved; Move removes an original only after its destination verifies successfully.</Text>
               {LocalSortingPanel()}
               <View style={styles.settingsSubgroup}>
                 <View style={styles.settingsRow}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Duplicate review</Text><Text style={[styles.meta,{color:p.muted}]}>{localDuplicateCount?localDuplicateCount+' local candidates found. ':''}Archivist never removes duplicate candidates automatically.</Text></View><Pressable accessibilityRole="button" onPress={()=>void openDuplicateReview()} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Check</Text></Pressable></View>
