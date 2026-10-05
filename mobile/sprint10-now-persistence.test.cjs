@@ -12,6 +12,7 @@ assert.ok(app.includes('void checkpointNowRef.current(); void controller.stop();
 assert.ok(app.includes('Math.floor(seconds/5)')&&app.includes('persistLocalPlaybackPosition(seconds)'),'local audio must checkpoint while playing, not only on Pause');
 assert.ok(app.includes('Math.floor(seconds/10)')&&app.includes("persistNowSession('audio',playing,seconds"),'server audio must mirror progress into durable Now state');
 assert.ok(app.includes("persistNowSession('reader',reading,readerPage"),'reader page changes must update the same durable Now state');
+assert.ok(app.includes("if(message?.type==='archivist-reader-ready')")&&app.includes('const page=Number(message.part),count=Number(message.total)'), 'server reader page changes must feed the same reader position used by Now');
 assert.ok(app.includes("async function playBook(book: Book, resumeSeconds?:number)")&&app.includes('savedSeconds=Math.max(0,resumeSeconds??localProgress[book.uri]??0)'),'local playback must support exact durable resume seconds');
 assert.ok(app.includes("function openBook(book: Book, resumePage?:number)")&&app.includes('const initialPage=Math.max(0,Math.floor(resumePage??'), 'reader must support exact durable resume page');
 assert.ok(app.includes('async function resumeNowSession(snapshot:DurableNowSession)'),'Now must have one direct resume engine');
