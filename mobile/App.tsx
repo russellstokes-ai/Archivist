@@ -1130,12 +1130,14 @@ function Client() {
     }
   },[reading?.id,reading?.uri,readerPage]);
   const [playerVisualPlaying,setPlayerVisualPlaying]=useState(false);
-  useEffect(()=>{
+  useLayoutEffect(()=>{
+    // Resolve visibility/playback state before paint so returning to Now cannot
+    // render one stale closed/turning frame before the book reopens.
     if(!playbackVisible){setPlayerVisualPlaying(false);return;}
     if(playbackIsPlaying){setPlayerVisualPlaying(true);return;}
     const timer=setTimeout(()=>setPlayerVisualPlaying(false),PLAYER_MOTION_TIMING.pauseGraceMs);
     return()=>clearTimeout(timer);
-  },[playbackIsPlaying,playbackVisible,reduceMotion]);
+  },[playbackIsPlaying,playbackVisible]);
   useLayoutEffect(()=>{
     if(!playbackVisible||!playbackIsPlaying||reduceMotion){
       ++skipGeneration.current;
@@ -1212,9 +1214,13 @@ function Client() {
 
   const livingBookMotionGeneration=useRef(0);
   const livingBookVisualWorkRef=useRef('');
+  const livingBookWasVisibleRef=useRef(false);
   const livingBookWorkKey=playbackWorkKey(playing);
   useLayoutEffect(()=>{
     const generation=++livingBookMotionGeneration.current;
+    const wasVisible=livingBookWasVisibleRef.current;
+    const enteringVisible=playbackVisible&&!wasVisible;
+    livingBookWasVisibleRef.current=playbackVisible;
     const previousWorkKey=livingBookVisualWorkRef.current;
     const workChanged=!!livingBookWorkKey&&!!previousWorkKey&&livingBookWorkKey!==previousWorkKey;
     if(livingBookWorkKey)livingBookVisualWorkRef.current=livingBookWorkKey;
@@ -1238,13 +1244,16 @@ function Client() {
       return;
     }
 
-    if(workChanged){
+    if(workChanged||enteringVisible){
       ++skipGeneration.current;
       ambientPageLoopStopRef.current?.();
       ambientPageLoopStopRef.current=null;
       bookOpenAnim.stopAnimation();
       pageTurnAnim.stopAnimation();
       skipTurnAnim.stopAnimation();
+      // A newly visible Living Book always begins from a physically valid
+      // closed frame. This prevents native Animated state from a previous
+      // screen visit resurrecting a half-open cover or detached paper layer.
       bookOpenAnim.setValue(0);
       bookOpenProgressRef.current=0;
       pageTurnAnim.setValue(0);
@@ -1261,7 +1270,7 @@ function Client() {
     skipTurnAnim.setValue(0);
     setSkipTurning(false);
 
-    const motion=playerMotionState({playing:playerVisualPlaying,visible:true,reduceMotion});
+    const motion=playerMotionState({playing:playbackIsPlaying||playerVisualPlaying,visible:true,reduceMotion});
     const target=motion==='closed'?0:1;
     const current=Math.max(0,Math.min(1,bookOpenProgressRef.current));
     const baseDuration=motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs;
@@ -1306,7 +1315,7 @@ function Client() {
       if(ambientPageLoopStopRef.current===stop)ambientPageLoopStopRef.current=null;
       if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();
     };
-  },[ambientPageLoopEpoch,bookOpenAnim,livingBookWorkKey,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
+  },[ambientPageLoopEpoch,bookOpenAnim,livingBookWorkKey,pageTurnAnim,playbackIsPlaying,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
