@@ -25,9 +25,18 @@ export type LocalWork = {
 export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   const groups = new Map<string, LocalBook[]>();
   const order: string[] = [];
+  const rootAudioCandidates = new Map<string, string>();
+  const rootAudioCounts = new Map<string, number>();
+  for (const book of books) {
+    const candidate = book.format === 'Audio' ? rootAudioClusterCandidate(book.uri) : '';
+    if (!candidate) continue;
+    rootAudioCandidates.set(book.uri, candidate);
+    rootAudioCounts.set(candidate, (rootAudioCounts.get(candidate) || 0) + 1);
+  }
 
   for (const book of books) {
-    const key = localWorkKey(book);
+    const candidate = rootAudioCandidates.get(book.uri) || '';
+    const key = localWorkKey(book, candidate && (rootAudioCounts.get(candidate) || 0) > 1 ? candidate : '');
     if (!groups.has(key)) {
       groups.set(key, []);
       order.push(key);
@@ -40,7 +49,8 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
     const first = tracks[0];
     const audio = first.format === 'Audio';
     const folderTitle = audio ? audioFolderTitle(first.uri) : '';
-    const title = audio && folderTitle ? folderTitle : first.title;
+    const rootTitle = audio && !folderTitle && tracks.length > 1 ? rootAudioClusterTitle(first.uri) : '';
+    const title = audio && (folderTitle || rootTitle) ? (folderTitle || rootTitle) : first.title;
     const author = commonValue(tracks.map(item => item.author));
     const series = commonValue(tracks.map(item => item.series));
     const genre = commonValue(tracks.map(item => item.genre));
@@ -66,15 +76,42 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   });
 }
 
-function localWorkKey(book: LocalBook) {
+function localWorkKey(book: LocalBook, rootCandidate = '') {
   if (book.format !== 'Audio') return 'asset:' + book.uri;
   const parts = decodedPathParts(book.uri);
   const dirs = parts.slice(0, -1).filter(Boolean);
   while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
-  if (!dirs.length) return 'audio-file:' + book.uri;
+  if (!dirs.length) return rootCandidate ? 'audio-root:' + book.space + ':' + rootCandidate : 'audio-file:' + book.uri;
   const parent = dirs[dirs.length - 1];
-  if (isLibraryRoot(parent)) return 'audio-file:' + book.uri;
+  if (isLibraryRoot(parent)) return rootCandidate ? 'audio-root:' + book.space + ':' + rootCandidate : 'audio-file:' + book.uri;
   return 'audio-dir:' + book.space + ':' + dirs.join('/');
+}
+
+function rootAudioClusterCandidate(uri: string) {
+  const title = rootAudioClusterTitle(uri);
+  return title ? normalKey(title) : '';
+}
+
+function rootAudioClusterTitle(uri: string) {
+  const parts = decodedPathParts(uri);
+  const filename = cleanLabel(parts[parts.length - 1] || '').replace(/\.[^.]+$/, '');
+  const patterns = [
+    /^(.+?)\s+-\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
+    /^(.+?)\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
+    /^(.+?)\s+-\s+0*\d{2,4}(?:\s*[-._].*)?$/i,
+    /^(.+?)[._-](?:ch|pt|track)?0*\d{2,4}$/i,
+    /^(.+?)\s+0*\d{2,4}\s+-\s+.+$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = filename.match(pattern);
+    const base = cleanLabel(match?.[1] || '');
+    if (base.length >= 4 && !/^chapter|part|track$/i.test(base)) return base;
+  }
+  return '';
+}
+
+function normalKey(value: string) {
+  return cleanLabel(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function audioFolderTitle(uri: string) {
