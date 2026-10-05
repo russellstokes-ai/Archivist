@@ -6,6 +6,8 @@ export type LocalIdentity = {
   series: string;
   genre: string;
   publishedYear?: number;
+  publisher?: string;
+  seriesIndex?: number;
   isbn?: string;
   identifiers?: string[];
   confidence: IdentificationConfidence;
@@ -21,6 +23,8 @@ export type LocalMetadataFields = {
   series?: string;
   genre?: string;
   publishedYear?: number;
+  publisher?: string;
+  seriesIndex?: number;
   isbn?: string;
   identifiers?: string[];
 };
@@ -132,6 +136,8 @@ export function applyLocalMetadata(
     series,
     genre,
     publishedYear: fields.publishedYear || base.publishedYear,
+    publisher: fields.publisher === undefined ? base.publisher : cleanLabel(fields.publisher),
+    seriesIndex: fields.seriesIndex === undefined ? base.seriesIndex : fields.seriesIndex,
     isbn: fields.isbn || base.isbn,
     identifiers: fields.identifiers?.length ? fields.identifiers : base.identifiers,
     confidence: 'high',
