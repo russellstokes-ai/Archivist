@@ -141,6 +141,7 @@ export type LocalScanOptions = {
   deferEmbeddedCovers?: boolean;
   deferEmbeddedMetadata?: boolean;
   refreshMetadata?: boolean;
+  shouldContinue?:()=>boolean;
 };
 
 export type LocalEmbeddedMetadataEnrichmentResult = {
@@ -334,6 +335,7 @@ export async function scanLocalFolders(
   options: LocalScanOptions = {},
 ): Promise<LocalScanResult> {
   const books: LocalBook[] = [];
+  const shouldContinue=options.shouldContinue||(()=>true);
   let skipped = 0;
   let truncated = false;
   let truncatedReason: 'book-limit' | 'entry-limit' | undefined;
@@ -368,11 +370,12 @@ export async function scanLocalFolders(
   };
 
   async function scanDir(uri: string, space: string, depth: number, folderRoot: string, countUnreadable = true) {
-    if (truncated || visitedDirectories.has(uri)) return;
+    if (!shouldContinue() || truncated || visitedDirectories.has(uri)) return;
     visitedDirectories.add(uri);
     let children: string[];
     try {
       children = await listDirectoryEntries(uri);
+      if(!shouldContinue())return;
     } catch {
       if (countUnreadable) skipped += 1;
       return;
@@ -416,8 +419,10 @@ export async function scanLocalFolders(
     if (!genericBookLevelFilesAllowed) genericSidecar = '';
 
     for (const child of children) {
+      if(!shouldContinue())return;
       entriesVisited += 1;
       await yieldToUi();
+      if(!shouldContinue())return;
       if (entriesVisited > maxVisitedEntriesPerScan) {
         truncated = true;
         truncatedReason = 'entry-limit';
@@ -589,7 +594,7 @@ export async function scanLocalFolders(
           // SAF does not tell us whether a child is a file or directory.
           // Unknown extensions may be dotted folder names (for example "J.R.R. Tolkien"),
           // so probe them as directories without reporting ordinary unsupported files as errors.
-          await scanDir(child, space, depth + 1, folderRoot, false);
+          if(shouldContinue())await scanDir(child, space, depth + 1, folderRoot, false);
         }
       }
     }
