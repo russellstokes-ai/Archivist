@@ -61,13 +61,16 @@ export type LocalMetadataContext = {
 export function audioMultipartWorkTitle(value:string){
   const stem=cleanLabel(String(value||'').replace(/\.[^.]+$/,''));
   const patterns=[
-    /^(.*?)\s*[-._:]?\s*(?:part|pt|chapter|ch|track|disc|disk|cd)\s*[-_.:#]?\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
-    /^(.*?)\s*[-._:]\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
-    /^(.*?)\s*\((?:part|pt|chapter|ch|track)\s*\d{1,4}\)\s*$/i,
+    {pattern:/^(.*?)\s*[-._:]?\s*(?:part|pt|chapter|ch|track|disc|disk|cd)\s*[-_.:#]?\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,numericOnly:false},
+    {pattern:/^(.*?)\s*[-._:]\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,numericOnly:true},
+    {pattern:/^(.*?)\s*\((?:part|pt|chapter|ch|track)\s*\d{1,4}\)\s*$/i,numericOnly:false},
   ];
-  for(const pattern of patterns){
+  for(const {pattern,numericOnly} of patterns){
     const match=stem.match(pattern);
     const title=cleanLabel(match?.[1]||'');
+    // Numeric-only suffixes are ambiguous with established
+    // Author - Series - 01 - Title naming. Do not steal those structured names.
+    if(numericOnly&&/\s+-\s+/.test(title))continue;
     if(title.length>=3)return title;
   }
   return '';
