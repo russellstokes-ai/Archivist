@@ -229,7 +229,7 @@ assert.ok(source.includes("relation.availability || []"), 'Atlas relationship vi
 
 assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'"), 'Local catalogue cache key is missing');
 assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold start must restore the cached local catalogue');
-assert.ok(source.includes("setPersistedJSON(localCatalogKey,result.books)") || source.includes("setPersistedJSON(localCatalogKey, result.books)"), 'Successful scans must refresh the cached local catalogue');
+assert.ok(source.includes("setPersistedJSONArrayCooperative(localCatalogKey,result.books") && source.includes("setPersistedJSONArrayCooperative(localCatalogKey,currentBooks"), 'Successful scans must persist a safe baseline and final enriched local catalogue cooperatively');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
 assert.ok(source.includes('function LibraryManagementPanel()'), 'Library management workspace is missing');
