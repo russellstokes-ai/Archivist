@@ -72,6 +72,7 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
             },
           ]}/>)}
           <View style={[s.binding,{left:G.spineX-4}]}/>
+          <View style={s.spinePaperBridge}/>
           <View style={[s.page,s.rightPage,{right:0}]}>{page(1)}</View>
           <View pointerEvents="none" style={s.gutter}>
             <View style={s.gutterLeftShadow}/>
@@ -142,6 +143,7 @@ const s=StyleSheet.create({
   baseSpread:{position:'absolute',left:0,top:0,width:G.bookWidth,height:G.coverHeight,overflow:'hidden',zIndex:2},
   coverBacking:{position:'absolute',top:0,width:G.coverWidth,height:G.coverHeight,backgroundColor:'#183337',borderRadius:5},
   binding:{position:'absolute',top:0,bottom:0,width:8,backgroundColor:'#183337',opacity:.88,zIndex:1},
+  spinePaperBridge:{position:'absolute',left:G.spineX-G.gutterWidth/2,top:G.pageInsetY,bottom:G.pageInsetY,width:G.gutterWidth,backgroundColor:'#e9e3cd',zIndex:3},
   groundShadow:{position:'absolute',width:G.bookWidth-14,height:14,bottom:28,backgroundColor:'#000',borderRadius:170},
   fallbackCover:{flex:1,padding:16,borderWidth:1,borderColor:'#B99A68',margin:7,justifyContent:'space-between',backgroundColor:'#183337'},
   fallbackKicker:{color:'#B99A68',fontSize:7,letterSpacing:2,textAlign:'center'},
