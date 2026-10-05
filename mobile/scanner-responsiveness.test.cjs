@@ -8,10 +8,14 @@ const root='content://root/tree/primary:Library/document/primary:Library';
 const epub=root+'%2FWriter%2FSeries%2FBook.epub';
 const audio=root+'%2FWriter%2FAudio%20Book.m4b';
 const dirs=new Map([[root,[epub,audio]]]);
+const cancelRoot='content://root/tree/primary:Cancel/document/primary:Cancel';
+const cancelFiles=Array.from({length:240},(_,index)=>cancelRoot+'%2FWriter%2FBook%20'+String(index+1)+'.epub');
+dirs.set(cancelRoot,cancelFiles);
 const info=new Map([
   [epub,{exists:true,size:1024,modificationTime:1}],
   [audio,{exists:true,size:2048,modificationTime:1}],
 ]);
+for(const uri of cancelFiles)info.set(uri,{exists:true,size:512,modificationTime:1});
 const load=Module._load;
 Module._load=function(request,parent,isMain){
   if(request==='react-native')return {Platform:{OS:'android'}};
@@ -81,5 +85,16 @@ const {scanLocalFolders,enrichLocalEmbeddedMetadata}=require('./localLibrary.ts'
   assert.equal(enriched.books.find(book=>book.uri===audio).title,'Embedded Audio');
   assert.equal(enriched.books.find(book=>book.uri===audio).narrator,'Narrator');
 
-  console.log('PASS: foreground scan defers heavy metadata and background enrichment yields between files');
+  let continueChecks=0;
+  const cancelled=await scanLocalFolders(
+    [{id:cancelRoot,uri:cancelRoot,name:'Cancel',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    [],
+    {deferEmbeddedCovers:true,deferEmbeddedMetadata:true,shouldContinue:()=>++continueChecks<18},
+  );
+  assert.ok(cancelled.books.length<cancelFiles.length,'cancellation must stop foreground directory discovery rather than merely discard its eventual result');
+  assert.ok(continueChecks<80,'cancelled discovery must stop promptly');
+
+  console.log('PASS: foreground scan defers heavy metadata, yields between files and stops promptly when cancelled');
 })().catch(error=>{console.error(error);process.exitCode=1;});
