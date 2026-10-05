@@ -25,6 +25,14 @@ export function playerMotionState(input:{playing:boolean;visible:boolean;reduceM
   return 'turning';
 }
 
+export function livingBookHingeDuration(current:number,target:0|1,baseDuration:number,reduceMotion=false){
+  if(reduceMotion)return 0;
+  const value=Math.max(0,Math.min(1,Number(current)||0));
+  const distance=Math.abs(target-value);
+  if(distance<.001)return 0;
+  return Math.max(90,Math.round(Math.max(0,baseDuration)*distance));
+}
+
 export function sanitizeBookmarks(value:unknown):PlayerBookmark[]{
   if(!Array.isArray(value))return [];
   return value.flatMap((raw:any)=>{
