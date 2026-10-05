@@ -4,7 +4,7 @@ import {LocalWork,groupLocalWorks} from './localWorks';
 import {lookupBookMetadata,MetadataMatch} from './metadataLookup';
 
 export type LocalEnrichmentCacheEntry={
-  version:1;
+  version:2;
   fingerprint:string;
   querySignature:string;
   title:string;
@@ -161,9 +161,9 @@ function currentWorkFor(
 }
 
 function cacheReusable(entry:LocalEnrichmentCacheEntry|undefined,querySignature:string,now:Date){
-  if(!entry||entry.version!==1)return false;
-  if(entry.publishReady)return true;
+  if(!entry||entry.version!==2)return false;
   if(entry.querySignature!==querySignature)return false;
+  if(entry.publishReady)return true;
   return !!entry.retryAfter&&Date.parse(entry.retryAfter)>now.getTime();
 }
 
@@ -181,7 +181,8 @@ export async function enrichLocalCatalogue(
   const books=inputBooks.map(book=>({...book}));
   const indexByUri=new Map<string,number>();
   for(let index=0;index<books.length;index++)if(books[index].uri)indexByUri.set(books[index].uri,index);
-  const cache:{[key:string]:LocalEnrichmentCacheEntry}={...inputCache};
+  const seedCache=inputCache;
+  const cache:{[key:string]:LocalEnrichmentCacheEntry}={};
   const works=groupLocalWorks(books);
   let processed=0,published=0,attention=0;
 
@@ -190,8 +191,9 @@ export async function enrichLocalCatalogue(
     const fingerprint=localWorkFingerprint(originalWork);
     const querySignature=localWorkQuerySignature(work);
     const now=nowFn();
-    const cached=cache[fingerprint];
+    const cached=seedCache[fingerprint];
     if(cacheReusable(cached,querySignature,now)){
+      cache[fingerprint]=cached;
       const changedBooks=applyEntryIndexed(books,indexByUri,work,cached);
       processed++;
       if(cached.publishReady)published++;else attention++;
@@ -282,7 +284,7 @@ export async function enrichLocalCatalogue(
     const publishReady=readyIdentity&&!!coverUri;
     const reviewReason=!readyIdentity?'Archivist could not confidently identify this work.':!coverUri?'Archivist could not resolve cover artwork.':'';
     const entry:LocalEnrichmentCacheEntry={
-      version:1,fingerprint,querySignature,title:resolvedTitle,author:resolvedAuthor,series:resolvedSeries,genre:resolvedGenre,
+      version:2,fingerprint,querySignature,title:resolvedTitle,author:resolvedAuthor,series:resolvedSeries,genre:resolvedGenre,
       publishedYear:resolvedYear,coverUri,coverShape,livingBookCoverUri,livingBookCoverSource,livingBookCoverConfidence,
       metadataProvider:provider,metadataProviderId:providerId,identityReady:readyIdentity,publishReady,reviewReason,
       updatedAt:now.toISOString(),
