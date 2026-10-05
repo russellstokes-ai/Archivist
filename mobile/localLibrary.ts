@@ -381,7 +381,7 @@ async function scanLocalFoldersNative(
         const sidecar=context.sidecars.get(stem)||(genericAllowed?(context.sidecars.get('metadata')||context.sidecars.get('book')):undefined);
         if(sidecar){
           const fields=await cachedSidecarFields(sidecar.uri);
-          if(fields.title||fields.author||fields.series||fields.genre){
+          if(fields.title||fields.author||fields.series||fields.genre||fields.isbn||fields.identifiers?.length){
             identity=applyLocalMetadata(identity,fields,'sidecar');
           }
         }
@@ -622,7 +622,7 @@ export async function scanLocalFolders(
         const sidecarUri = sidecarByStem.get(fileStem(child).toLowerCase()) || genericSidecar;
         if (sidecarUri) {
           const fields = await cachedSidecarFields(sidecarUri);
-          if (fields.title || fields.author || fields.series || fields.genre) {
+          if (fields.title || fields.author || fields.series || fields.genre || fields.isbn || fields.identifiers?.length) {
             identity = applyLocalMetadata(identity, fields, 'sidecar');
           }
         }
