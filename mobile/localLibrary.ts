@@ -471,7 +471,7 @@ export async function scanLocalFolders(
           metadataStarted = true;
           report(options.deferEmbeddedMetadata ? 'discovering' : 'reading-metadata', space);
         }
-        let identity = inferLocalBookMetadata(child, format, {siblingMediaCount: format === 'Audio' ? audioSiblingCount : 1});
+        let identity = inferLocalBookMetadata(child, format, {siblingMediaCount: format === 'Audio' ? audioSiblingCount : 1,rootUri:folderRoot});
         const evidence: MetadataCandidate[] = [{
           source: 'path' as const,
           confidence: identity.confidence,
