@@ -71,6 +71,7 @@ export type LocalSortPreview = {
   asset: number;
   title: string;
   sourceUri: string;
+  sourceRootUri: string;
   rootUri: string;
   sourceRelativePath: string;
   relativePath: string;
@@ -86,6 +87,7 @@ export type LocalSortAppliedItem = {
   title: string;
   uri: string;
   sourceUri: string;
+  sourceRootUri: string;
   rootUri: string;
   sourceRelativePath: string;
   sourceRemoved: boolean;
@@ -1187,18 +1189,21 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
   const previews = books.map(book => {
     const filename = fileNameFromUri(book.uri);
     const target = targetPath(book, filename, template);
-    const rootUri = destinationRootUri || book.rootUri || rootUriFromFileUri(book.uri);
+    const sourceRootUri = book.rootUri || rootUriFromFileUri(book.uri);
+    const rootUri = destinationRootUri || sourceRootUri;
     const from = displayPath(book.uri);
-    const currentRelative = relativePathWithinRoot(book.uri, rootUri);
+    const currentRelative = relativePathWithinRoot(book.uri, sourceRootUri);
     const destinationKey = normalizePathKey(rootUri)+'|'+normalizePathKey(target);
     const count = destinations.get(destinationKey) || 0;
     destinations.set(destinationKey, count + 1);
-    const same = normalizePathKey(currentRelative) === normalizePathKey(target);
+    const same = normalizePathKey(sourceRootUri)===normalizePathKey(rootUri)
+      && normalizePathKey(currentRelative) === normalizePathKey(target);
     return {
       id: `local-${book.id}`,
       asset: book.id,
       title: book.title,
       sourceUri: book.uri,
+      sourceRootUri,
       rootUri,
       sourceRelativePath: currentRelative,
       relativePath: target,
@@ -1273,7 +1278,7 @@ export async function applyLocalSort(
       await verifyLocalCopy(preview.sourceUri,target);
       applied={
         id:preview.id,title:preview.title,uri:target,sourceUri:preview.sourceUri,
-        rootUri:preview.rootUri,sourceRelativePath:preview.sourceRelativePath,sourceRemoved:false,
+        sourceRootUri:preview.sourceRootUri,rootUri:preview.rootUri,sourceRelativePath:preview.sourceRelativePath,sourceRemoved:false,
       };
       copied.push(applied);
       // Persist a verified-copy checkpoint before a destructive source delete.
@@ -1337,8 +1342,8 @@ export async function recoverLocalSortOperation(history: LocalSortHistory): Prom
         continue;
       }
       if(sourceInfo===null)throw Error('Original file state cannot be verified safely.');
-      if(!item.rootUri||!item.sourceRelativePath)throw Error('Original path is unavailable for this move history item.');
-      const restoredUri=await createTargetFile(item.rootUri,item.sourceRelativePath);
+      if(!item.sourceRootUri||!item.sourceRelativePath)throw Error('Original path is unavailable for this move history item.');
+      const restoredUri=await createTargetFile(item.sourceRootUri,item.sourceRelativePath);
       try{
         await copyLocalUri(item.uri,restoredUri);
         await verifyLocalCopy(item.uri,restoredUri);
