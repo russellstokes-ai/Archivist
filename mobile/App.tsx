@@ -2855,6 +2855,171 @@ function Client() {
     return book.uri?'asset:'+book.uri:'book:'+book.id+':'+book.title;
   }
 
+  function nowMediaFromBook(book:Book):NowSessionMedia{
+    return {
+      id:book.id,title:book.title,author:book.author,series:book.series,genre:book.genre,
+      format:book.format,space:book.space,available:book.available,uri:book.uri,
+      localWorkKey:book.localWorkKey,serverWorkId:book.serverWorkId,source:book.source,
+      originServer:book.originServer,coverShape:book.coverShape,coverUri:book.coverUri,
+    };
+  }
+
+  function bookFromNowMedia(media:NowSessionMedia):Book{
+    return {
+      id:media.id,title:media.title,author:media.author,series:media.series,genre:media.genre,
+      format:media.format,space:media.space,available:media.available,uri:media.uri,
+      localWorkKey:media.localWorkKey,serverWorkId:media.serverWorkId,source:media.source,
+      originServer:media.originServer,coverShape:media.coverShape,coverUri:media.coverUri,
+    };
+  }
+
+  function persistNowSession(
+    kind:'audio'|'reader',
+    book:Book,
+    position=0,
+    options:{trackUri?:string;trackId?:number;wasPlaying?:boolean}={},
+  ){
+    const next=refreshNowSession(nowSessionRef.current,nowMediaFromBook(book),kind,position,{
+      trackUri:options.trackUri,
+      trackId:options.trackId,
+      wasPlaying:options.wasPlaying,
+      updatedAt:Date.now(),
+    });
+    nowSessionRef.current=next;
+    setNowSession(next);
+    if(kind==='audio'){setLastPlaying(book);void setPersistedJSON(lastPlayingKey,book).catch(()=>undefined);}
+    else {setLastReading(book);void setPersistedJSON(lastReadingKey,book).catch(()=>undefined);}
+    return setPersistedJSON(nowSessionKey,next);
+  }
+
+  async function checkpointCurrentNow(){
+    const preferred=nowSessionRef.current?.kind;
+    if(preferred==='reader'&&reading){
+      await persistNowSession('reader',reading,readerPage,{wasPlaying:false});
+      return;
+    }
+    if(playing){
+      const server=playing.source==='server';
+      const seconds=server?(playback?.seconds||0):(audio.currentTime||0);
+      if(!server)await persistLocalPlaybackPosition(seconds);
+      await persistNowSession('audio',playing,seconds,{
+        trackUri:server?undefined:(activeLocalWork?.tracks[localWorkIndex]?.uri||playing.uri),
+        trackId:server?playback?.tracks[playback.index]?.id:undefined,
+        wasPlaying:server?!!playback?.playing:!!audio.playing,
+      });
+      return;
+    }
+    if(reading)await persistNowSession('reader',reading,readerPage,{wasPlaying:false});
+  }
+  checkpointNowRef.current=checkpointCurrentNow;
+
+  function currentLocalResume(work:LocalWork,snapshot:DurableNowSession){
+    const ordered=orderedLocalWork(work);
+    const wanted=snapshot.trackUri||snapshot.media.uri;
+    const index=Math.max(0,wanted?ordered.tracks.findIndex(track=>track.uri===wanted):-1);
+    const resolved=index>=0?index:0;
+    const saved=localWorkProgress[ordered.key];
+    const savedSameTrack=saved&&!saved.complete&&saved.uri===ordered.tracks[resolved]?.uri?saved.seconds:0;
+    return {work:ordered,index:resolved,seconds:Math.max(snapshot.position||0,savedSameTrack||0)};
+  }
+
+  async function resumeNowSession(snapshot:DurableNowSession){
+    const generation=++nowResumeGeneration.current;
+    const media=snapshot.media;
+    const source=media.source;
+    setLiveMode(snapshot.kind==='reader'?'reader':'player');
+
+    if(source==='server'&&media.serverWorkId){
+      const offline=Object.values(offlineWorks).find(item=>item.server===media.originServer&&item.workId===media.serverWorkId);
+      const canUseServer=!!session&&(!media.originServer||session.server===media.originServer);
+      if(canUseServer){
+        const work=serverWorks.find(item=>item.id===media.serverWorkId);
+        if(work){
+          try{
+            const tracks=await request(session!,'/api/works/'+work.id+'/tracks') as WorkTrack[];
+            if(generation!==nowResumeGeneration.current)return;
+            const available=tracks.filter(track=>track.available);
+            const track=available.find(item=>item.id===snapshot.trackId||item.id===media.id)
+              ||available.find(item=>item.format===media.format)
+              ||available[0];
+            if(track){
+              const current:Book={
+                id:track.id,title:work.title,author:work.author,series:work.series,genre:work.genre||'',
+                format:track.format,space:work.space,available:true,serverWorkId:work.id,
+                coverShape:track.format==='Audio'?'square':'portrait',source:'server',originServer:session!.server,
+              };
+              if(snapshot.kind==='audio')await playBook(current,snapshot.position);
+              else openBook(current,snapshot.position);
+              return;
+            }
+          }catch(error){
+            if(!offline){setError(error instanceof Error?error.message:String(error));return;}
+          }
+        }
+      }
+      if(offline){
+        const work=downloadedWorks.find(item=>item.originServer===offline.server&&item.originWorkId===offline.workId);
+        if(work){
+          const sourceTrack=offline.tracks.find(track=>track.id===snapshot.trackId||track.id===media.id)
+            ||offline.tracks.find(track=>track.localFormat===media.format)
+            ||offline.tracks[0];
+          const localTrack=work.tracks.find(track=>track.uri===sourceTrack?.uri)||work.tracks[0];
+          if(snapshot.kind==='audio'){
+            const resolved=currentLocalResume(work,{...snapshot,trackUri:localTrack?.uri});
+            await controller.stop();
+            if(generation!==nowResumeGeneration.current)return;
+            await loadLocalWorkTrack(resolved.work,resolved.index,resolved.seconds);
+          }else if(localTrack){
+            openBook({...localTrack,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,localWorkKey:work.key,source:'downloaded',originServer:work.originServer,serverWorkId:work.originWorkId},snapshot.position);
+          }
+          return;
+        }
+      }
+    }
+
+    const localWork=media.localWorkKey?localWorks.find(item=>item.key===media.localWorkKey):localWorks.find(item=>item.tracks.some(track=>track.uri===media.uri||track.uri===snapshot.trackUri));
+    if(localWork){
+      if(snapshot.kind==='audio'){
+        const resolved=currentLocalResume(localWork,snapshot);
+        await controller.stop();
+        if(generation!==nowResumeGeneration.current)return;
+        await loadLocalWorkTrack(resolved.work,resolved.index,resolved.seconds);
+      }else{
+        const track=localWork.tracks.find(item=>item.uri===media.uri)||localWork.tracks.find(item=>item.format===media.format)||localWork.tracks[0];
+        if(track)openBook({...track,title:localWork.title,author:localWork.author,series:localWork.series,genre:localWork.genre,coverUri:localWork.coverUri,localWorkKey:localWork.key,source:localWork.originServer?'downloaded':'local',originServer:localWork.originServer,serverWorkId:localWork.originWorkId},snapshot.position);
+      }
+      return;
+    }
+
+    if(media.uri){
+      const current=localBooks.find(item=>item.uri===media.uri);
+      if(current){
+        const book={...bookFromNowMedia(media),...current,source:source==='downloaded'?'downloaded':'local' as WorkSource};
+        if(snapshot.kind==='audio')await playBook(book,snapshot.position);
+        else openBook(book,snapshot.position);
+        return;
+      }
+    }
+
+    setError('Your last Now item is not currently available. Archivist kept its saved position and will resume it when the source is available again.');
+  }
+
+  async function openNowTab(){
+    setActiveTab('now');
+    const snapshot=nowSessionRef.current;
+    if(snapshot){
+      if(snapshot.kind==='audio'&&playing&&sameNowMedia(snapshot.media,nowMediaFromBook(playing))){setLiveMode('player');return;}
+      if(snapshot.kind==='reader'&&reading&&sameNowMedia(snapshot.media,nowMediaFromBook(reading))){setLiveMode('reader');return;}
+      await resumeNowSession(snapshot);
+      return;
+    }
+    if(playing){setLiveMode('player');return;}
+    if(reading){setLiveMode('reader');return;}
+    if(lastPlaying){setLiveMode('player');await playBook(lastPlaying);return;}
+    if(lastReading){setLiveMode('reader');openBook(lastReading);return;}
+    setLiveMode('player');
+  }
+
   async function savePlayerBookmarks(next:PlayerBookmark[]){
     setPlayerBookmarks(next);await setPersistedJSON(playerBookmarksKey,next);
   }
