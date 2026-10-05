@@ -2694,10 +2694,9 @@ function Client() {
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(embedded)currentBooks=embedded;
 
-      const covered=await enrichPublishedLocalCovers(currentBooks,generation);
-      if(!scanCommitGate.isCurrent(generation))return currentBooks;
-      if(covered)currentBooks=covered;
-
+      // Prefer network metadata/cover matches before opening every local archive.
+      // Fast providers can resolve most well-named items; embedded cover extraction
+      // then becomes a fallback only for the remaining gaps.
       if(metadataSettings.onlineEnabled&&(metadataSettings.automaticEnrichment||forceOnline)){
         if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
           const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline);
@@ -2710,6 +2709,10 @@ function Client() {
           if(enrichedComics)currentBooks=enrichedComics;
         }
       }
+
+      const covered=await enrichPublishedLocalCovers(currentBooks,generation);
+      if(!scanCommitGate.isCurrent(generation))return currentBooks;
+      if(covered)currentBooks=covered;
 
       if(scanCommitGate.isCurrent(generation)){
         const persisted=await setPersistedJSONArrayCooperative(localCatalogKey,currentBooks,{
@@ -2736,7 +2739,18 @@ function Client() {
 
   async function enrichPublishedLocalEmbeddedMetadata(baseBooks:LocalBook[],generation:number,refreshMetadata=false):Promise<LocalBook[]|null>{
     if(!scanCommitGate.isCurrent(generation))return null;
-    const eligible=baseBooks.filter(book=>book.format==='EPUB'||book.format==='Comic'||book.format==='Audio');
+    const needsEmbeddedRead=(book:LocalBook)=>{
+      if(refreshMetadata)return book.format==='EPUB'||book.format==='Comic'||book.format==='Audio';
+      if(!(book.format==='EPUB'||book.format==='Comic'||book.format==='Audio'))return false;
+      if(book.embeddedMetadata)return false;
+      // The normal preparation pass deep-opens only files where embedded tags can
+      // materially improve identification. Full Refresh metadata remains exhaustive.
+      if(book.needsReview||!book.title?.trim()||!book.author?.trim())return true;
+      if(book.format==='Audio'&&!book.narrator?.trim())return true;
+      if(book.format==='Comic'&&(!book.series?.trim()||book.seriesNumber===undefined))return true;
+      return false;
+    };
+    const eligible=baseBooks.filter(needsEmbeddedRead);
     if(!eligible.length)return baseBooks;
     reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length},true);
     const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
@@ -2746,6 +2760,7 @@ function Client() {
       // A single pathological EPUB/CBZ/M4B must never hold the UI at 28%.
       itemTimeoutMs:refreshMetadata?5000:2500,
       maxConsecutiveTimeouts:refreshMetadata?2:1,
+      shouldInspect:needsEmbeddedRead,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
