@@ -188,25 +188,29 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
   const groupSize=Math.max(1,books.length);
   const ranked=entries.map(entry=>{
     let score=sourceRank[entry.source]+confidenceRank[entry.confidence]+Math.min(90,Math.max(0,(frequency.get(entry.key)||1)-1)*18)+(entry.workHint?120:0);
+    const repeated=(frequency.get(entry.key)||1)/groupSize;
+    let authority=entry.source==='manual'?3:entry.source==='sidecar'?2:entry.source==='embedded'?1:0;
     if(audio){
-      const repeated=(frequency.get(entry.key)||1)/groupSize;
       if(field==='title'){
         // TIT2/©nam often contains chapter names. An embedded title must have a
         // strict majority across a multi-track audiobook before it can beat the
         // folder/path work identity. This keeps chapter names on tracks without
         // allowing a 2-track 50/50 split to become the book title.
-        if(groupSize>1&&entry.source==='embedded'&&repeated<=.5)score-=280;
+        if(groupSize>1&&entry.source==='embedded'&&repeated<=.5){score-=280;authority=0;}
         if(isGenericMediaTitle(String(entry.value),'Audio',groupSize))score-=320;
       }else if(groupSize>1&&['author','series','seriesNumber','genre','publishedYear','narrator','isbn','asin'].includes(field)){
         // Work-level audiobook tags should converge across tracks. A single
         // embedded/provider outlier may still fill an otherwise empty field,
         // but it must not overrule repeated work evidence from the library path
         // or the majority of sibling tracks.
-        if((entry.source==='embedded'||entry.source==='online')&&repeated<=.5)score-=250;
+        if((entry.source==='embedded'||entry.source==='online')&&repeated<=.5){
+          score-=250;
+          if(entry.source==='embedded')authority=0;
+        }
       }
     }
-    return {...entry,score};
-  }).sort((a,b)=>b.score-a.score);
+    return {...entry,score,authority};
+  }).sort((a,b)=>b.authority-a.authority||b.score-a.score);
   return ranked[0];
 }
 
