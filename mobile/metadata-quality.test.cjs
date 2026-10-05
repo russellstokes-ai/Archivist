@@ -23,6 +23,26 @@ assert.equal(genrePath.series,'Dune');
 assert.equal(genrePath.genre,'Science Fiction');
 assert.equal(genrePath.needsReview,false);
 
+const musicRootAudio=inferLocalBookMetadata(
+  'content://root/document/primary:Music%2FCraig%20Alanson%2FExpeditionary%20Force%2F04%20-%20Black%20Ops%2F01%20-%20Opening.mp3',
+  'Audio',
+  {siblingMediaCount:24},
+);
+assert.equal(musicRootAudio.title,'Black Ops');
+assert.equal(musicRootAudio.author,'Craig Alanson');
+assert.equal(musicRootAudio.series,'Expeditionary Force');
+assert.equal(musicRootAudio.seriesNumber,4);
+assert.notEqual(musicRootAudio.author,'Music');
+
+const genericRootAuthor=sanitizeDiscoveredMetadata(
+  {title:'Black Ops',author:'Music'},
+  'Audio',
+  'Black Ops',
+  24,
+);
+assert.equal(genericRootAuthor.author,undefined,'generic Android media-root names must never become audiobook authors');
+
+
 const indexedAudio=inferLocalBookMetadata(
   'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%20Saga%2F01%20-%20Dune%2FPart%2036.mp3',
   'Audio',
