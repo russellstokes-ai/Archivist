@@ -1860,13 +1860,15 @@ function Client() {
   }
 
   async function runLocalEnrichment(catalogue:LocalBook[],cacheSeed:LocalEnrichmentCache=localEnrichmentCache){
+    const generation=++localEnrichmentGeneration.current;
     if(!catalogue.length){
+      localEnrichmentActive.current=false;
       await replaceLocalEnrichmentCache({});
+      if(generation!==localEnrichmentGeneration.current)return;
       setLocalEnrichmentCache({});
       setLocalEnrichmentProgress(null);
       return;
     }
-    const generation=++localEnrichmentGeneration.current;
     localEnrichmentActive.current=true;
     const total=groupLocalWorks(catalogue).length;
     setLocalEnrichmentProgress({total,processed:0,published:0,attention:0,currentTitle:''});
