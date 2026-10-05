@@ -1136,7 +1136,20 @@ function Client() {
     const timer=setTimeout(()=>setPlayerVisualPlaying(false),PLAYER_MOTION_TIMING.pauseGraceMs);
     return()=>clearTimeout(timer);
   },[playbackIsPlaying,playbackVisible,reduceMotion]);
-  useEffect(()=>{if(!playbackVisible||!playbackIsPlaying||reduceMotion){++skipGeneration.current;skipTurnAnim.stopAnimation();setSkipTurning(false);}},[playbackVisible,playbackIsPlaying,reduceMotion]);
+  useLayoutEffect(()=>{
+    if(!playbackVisible||!playbackIsPlaying||reduceMotion){
+      ++skipGeneration.current;
+      ambientPageLoopStopRef.current?.();
+      ambientPageLoopStopRef.current=null;
+      pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
+      skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
+      return;
+    }
+    // A quick Pause→Play inside the cover-close grace period leaves
+    // playerVisualPlaying true. Restart a fresh ambient schedule rather than
+    // resuming a page that was stopped at Pause.
+    if(playerVisualPlaying&&bookOpenProgressRef.current>=.95)setAmbientPageLoopEpoch(value=>value+1);
+  },[pageTurnAnim,playbackIsPlaying,playbackVisible,playerVisualPlaying,reduceMotion,skipTurnAnim]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>(ritualDaysKey).then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
     if(!ritualReady)return;
