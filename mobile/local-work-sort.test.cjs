@@ -153,7 +153,7 @@ assert.equal(previews.every(preview=>preview.state==='conflict'),true,'two works
   const failed=await applyLocalWorkSortCopies(rollbackPreview);
   assert.equal(failed.copied.length,0,'a failed work must not report partial successful copies');
   assert.equal(failed.failed.length,1);
-  assert.equal(saf.deleted.length,2,'copies created before a work failure must be rolled back');
+  assert.equal(saf.deleted.length,3,'all destination files created before or during a work failure must be rolled back');
 
   const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
   assert.equal(app.includes('previewLocalSort(localBooks'),false,'App must not use the legacy asset-level sorter');
