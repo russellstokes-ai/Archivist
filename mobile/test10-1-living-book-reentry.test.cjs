@@ -8,7 +8,7 @@ const geometry=fs.readFileSync(__dirname+'/livingBookGeometry.ts','utf8');
 assert.ok(app.includes("if(!playbackVisible){"),'leaving Now must have an explicit Living Book lifecycle boundary');
 assert.ok(app.includes('const livingBookWasVisibleRef=useRef(false)')&&app.includes('const enteringVisible=playbackVisible&&!wasVisible'),'returning to Now must be tracked explicitly as a new visual session');
 assert.ok(app.includes('playerMotionState({playing:playerMotionPlaying,visible:true,reduceMotion})'),'Living Book motion must follow immediate transport intent or confirmed playback without pause grace');
-assert.ok(app.includes('// Resolve visibility/playback state before paint'),'visual playback state must synchronise in the layout phase before a returned frame paints');
+assert.ok(app.includes('// Transport taps drive the Living Book immediately'),'visual playback state must be driven immediately by the transport intent');
 assert.ok(app.includes('useLayoutEffect(()=>{')&&app.includes('const livingBookMotionGeneration=useRef(0)'),'Living Book reset must occur in the layout phase before a stale native frame can paint');
 assert.ok(app.includes('bookOpenAnim.stopAnimation();')&&app.includes('bookOpenAnim.setValue(0);'),'hidden player must abandon and reset any partial hinge frame');
 assert.ok(app.includes('bookOpenProgressRef.current=0;'),'hidden player must reset the tracked native hinge position too');
