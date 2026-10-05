@@ -3352,7 +3352,12 @@ function Client() {
       if(message?.type==='reader-selection')setReaderSelection(String(message.text||'').slice(0,4000));
       if(message?.type==='reader-chrome-toggle')setReaderChromeVisible(value=>!value);
       if(message?.type==='reader-search-results')setReaderSearchCount(Math.max(0,Number(message.count)||0));
-      if(message?.type==='archivist-reader-ready'){setReaderLoading(false);setReaderLoadError('');}
+      if(message?.type==='archivist-reader-ready'){
+        setReaderLoading(false);setReaderLoadError('');
+        const page=Number(message.part),count=Number(message.total);
+        if(Number.isInteger(page)&&page>=0)setReaderPage(page);
+        if(Number.isInteger(count)&&count>=0)setReaderCount(count);
+      }
       if((message?.type==='archivist-reader-complete'||message?.complete===true)&&reading.serverWorkId&&reading.source==='server')setRatingPrompt({title:reading.title,serverWorkId:reading.serverWorkId});
       if(message?.type==='reader-position'&&reading.uri){
         const page=Number(message.page);if(Number.isInteger(page)&&page>=0){
