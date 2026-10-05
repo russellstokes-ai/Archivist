@@ -2469,7 +2469,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total},true);
+        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:progress.processed,found:batch.length,review:progress.review,processed:progress.processed,total:progress.total});
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2498,7 +2498,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total},true);
+        reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2542,7 +2542,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total},true);
+        reportEnrichmentProgress({phase:'online-comics',currentFolder:'',entriesVisited:progress.attempted,found:batch.length,review:progress.review,processed:progress.attempted,total});
       },
     }).catch(()=>null);
     if(!enriched||!scanCommitGate.isCurrent(generation))return;
@@ -2581,7 +2581,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
-        reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total},true);
+        reportEnrichmentProgress({phase:'covers',currentFolder:'',entriesVisited:progress.attempted,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:progress.attempted,total});
       },
     }).catch(()=>null);
     if(!enriched?.updated||!scanCommitGate.isCurrent(generation))return;
@@ -2628,7 +2628,7 @@ function Client() {
       }
       setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true});
+      const result=await scanLocalFolders(folders,reportLocalScan(generation),localMetadataOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,shouldContinue:()=>scanCommitGate.isCurrent(generation)});
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       setLocalFolderNotice(scanNotice(result));
@@ -2661,7 +2661,7 @@ function Client() {
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata});
+      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata,shouldContinue:()=>scanCommitGate.isCurrent(generation)});
       const summary=await finaliseLocalScan(result,previousLocal,generation,refreshMetadata);
       if(!summary)return false;
       setLocalFolderNotice(scanNotice(result));
@@ -6787,7 +6787,7 @@ function Client() {
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SCAN & REPAIR</Text>
               <Text style={[styles.meta,{color:p.muted}]}>Rescanning refreshes embedded, sidecar and folder-derived details and covers. Anything still uncertain stays in review rather than being guessed.</Text>
               <View style={styles.toolRow}>
-                <Button label={localScanning?'Scanning…':rescanLocalFoldersLabel} disabled={localScanning||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
+                <Button label={libraryRefreshActive?'Refreshing…':rescanLocalFoldersLabel} disabled={libraryRefreshActive||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
@@ -7300,7 +7300,7 @@ function Client() {
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library may be out of date" style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Library may be out of date</Text>
             <Text style={[styles.meta,{color:p.muted}]}>Some files changed while Archivist was organising your library. Rescan to make sure everything is correctly indexed.</Text>
-            <Button label="Rescan" disabled={localScanning||!localFolders.length} onPress={()=>{setRescanPromptOpen(false);void rescanLocalFolders();}}/>
+            <Button label="Rescan" disabled={libraryRefreshActive||!localFolders.length} onPress={()=>{setRescanPromptOpen(false);void rescanLocalFolders();}}/>
             <Button label="Not now" tone="quiet" onPress={()=>setRescanPromptOpen(false)}/>
           </Pressable>
         </Pressable>
