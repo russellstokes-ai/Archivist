@@ -40,8 +40,9 @@ const localCopies = [];
 const localDeletes = [];
 const localMade = [];
 const embeddedCoverResults = new Map();
+const embeddedCoverCalls = [];
 Module._load = function(request, parent, isMain) {
-  if (request === './coverDiscovery') return {discoverEmbeddedCover: async uri => embeddedCoverResults.get(uri)};
+  if (request === './coverDiscovery') return {discoverEmbeddedCover: async uri => {embeddedCoverCalls.push(uri);return embeddedCoverResults.get(uri)}};
   if (request === 'react-native') return {Platform: {OS: 'android'}};
   if (request === 'expo-file-system/legacy') return {
     EncodingType: {Base64:'base64'},
@@ -383,6 +384,25 @@ assert.equal(previews[0].state, 'review');
   assert.equal(enrichedCoverScan.updated,1);
   assert.equal(coverBatches,1);
   assert.match(enrichedCoverScan.books[0].coverUri,/^data:image\/jpeg;base64,/);
+
+  const sharedCoverRoot='content://root/tree/primary:Audiobooks/document/primary:Audiobooks%2FSharedCoverBook';
+  const sharedTrack1=sharedCoverRoot+'%2F01%20-%20Opening.mp3';
+  const sharedTrack2=sharedCoverRoot+'%2F02%20-%20Chapter.mp3';
+  saf.dirs.set(sharedCoverRoot,[sharedTrack1,sharedTrack2]);
+  fileInfo.set(sharedTrack1,{exists:true,size:32000,modificationTime:1});
+  fileInfo.set(sharedTrack2,{exists:true,size:33000,modificationTime:1});
+  embeddedCoverResults.set(sharedTrack1,'file:///app/Documents/covers/embedded-shared.jpg');
+  const sharedScan=await scanLocalFolders(
+    [{id:sharedCoverRoot,uri:sharedCoverRoot,name:'Audiobooks',status:'Ready',itemCount:0}],
+    undefined,
+    {},
+    [],
+    {deferEmbeddedCovers:true,deferEmbeddedMetadata:true},
+  );
+  const coverCallsBefore=embeddedCoverCalls.length;
+  const sharedEnriched=await enrichLocalBookCovers(sharedScan.books,{batchSize:1});
+  assert.equal(sharedEnriched.books.every(book=>book.coverUri==='file:///app/Documents/covers/embedded-shared.jpg'),true,'one embedded audiobook cover must synchronize across sibling tracks');
+  assert.deepEqual(embeddedCoverCalls.slice(coverCallsBefore),[sharedTrack1],'cover recovery must not reopen every sibling track after a work cover is found');
 
   const manualCoverCurrent=[{...deferredCoverScan.books[0],title:'User title',coverUri:'file:///manual-cover.jpg'}];
   const protectedMerge=applyCoverEnrichment(manualCoverCurrent,enrichedCoverScan.books);
