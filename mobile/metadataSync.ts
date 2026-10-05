@@ -59,7 +59,15 @@ function clean(value:unknown){return String(value??'').replace(/[_]+/g,' ').repl
 function normal(value:unknown){return clean(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'');}
 function present(value:unknown){return value!==undefined&&value!==null&&clean(value)!=='';}
 function sourceFor(book:SynchronizableBook,field:SyncField):SyncSource{
-  const source=String(book.metadataProvenance?.[field]||book.metadataSource||'path');
+  const explicit=book.metadataProvenance?.[field];
+  if(explicit){
+    const source=String(explicit);
+    return source==='manual'||source==='sidecar'||source==='embedded'||source==='online'?source:'path';
+  }
+  // Once field-level provenance exists, a coarse legacy metadataSource must not
+  // claim unrelated fields. Unlabelled fields remain path-derived evidence.
+  if(book.metadataProvenance&&Object.keys(book.metadataProvenance).length)return 'path';
+  const source=String(book.metadataSource||'path');
   return source==='manual'||source==='sidecar'||source==='embedded'||source==='online'?source:'path';
 }
 function confidenceFor(book:SynchronizableBook,field:SyncField):SyncConfidence{
