@@ -215,7 +215,7 @@ export function sanitizeDiscoveredMetadata(
   const out: LocalMetadataFields = {...fields};
   const placeholder = (value: unknown) => /^(?:unknown(?: author| artist| genre| series)?|unclassified|n\/?a|none|null|untitled)$/i.test(cleanLabel(String(value ?? '')));
   if (out.title && (placeholder(out.title) || (isGenericMediaTitle(out.title, format, siblingMediaCount) && !isGenericMediaTitle(fallbackTitle, format, siblingMediaCount)))) delete out.title;
-  if (out.author && placeholder(out.author)) delete out.author;
+  if (out.author && (placeholder(out.author) || isLibraryRootLabel(out.author))) delete out.author;
   if (out.series && placeholder(out.series)) delete out.series;
   if (out.genre && placeholder(out.genre)) delete out.genre;
   if (out.genre) out.genre = canonicalGenre(out.genre) || cleanLabel(out.genre);
