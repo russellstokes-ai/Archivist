@@ -4505,6 +4505,28 @@ function Client() {
             </View>
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
+              <View style={styles.settingsRow}>
+                <View style={{flex:1,minWidth:0}}>
+                  <Text style={[styles.bookTitle,{color:p.ink}]}>On this device</Text>
+                  <Text style={[styles.meta,{color:p.muted}]}>{localFolders.length} folder{localFolders.length===1?'':'s'} · {phoneWorks.length} book{phoneWorks.length===1?'':'s'} ready</Text>
+                </View>
+              </View>
+              <View style={styles.settingsInlineActions}>
+                <Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void addLocalFolder()} style={styles.settingsTextAction}><Text style={{color:localScanning?p.muted:p.sage,fontWeight:'600'}}>Add folder</Text></Pressable>
+                {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders(false)} style={styles.settingsTextAction}><Text style={{color:localScanning?p.muted:p.sage,fontWeight:'600'}}>Refresh</Text></Pressable>:null}
+                {localFolders.length?<Pressable accessibilityRole="button" disabled={localScanning} onPress={()=>void rescanLocalFolders(true)} style={styles.settingsTextAction}><Text style={{color:localScanning?p.muted:p.muted,fontWeight:'600'}}>Full rescan</Text></Pressable>:null}
+              </View>
+              {localFolders.map(folder=><View key={folder.uri} style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                <View style={{flex:1,minWidth:0}}>
+                  <Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{folder.name}</Text>
+                  <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>{folder.itemCount} files · {folder.status}</Text>
+                </View>
+              </View>)}
+              {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
+            </View>
+
+            <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY HEALTH</Text>
               <View style={styles.settingsRow}>
                 <View style={{flex:1}}>
