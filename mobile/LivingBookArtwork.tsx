@@ -30,6 +30,10 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
     outputRange:[...M.leftPageAngles],
     extrapolate:'clamp',
   });
+  const leftPaperOpacity=Animated.multiply(
+    internalOpacity,
+    open.interpolate({inputRange:[0,.44,.60,1],outputRange:[0,0,1,1],extrapolate:'clamp'}),
+  );
   const coverAngle=open.interpolate({
     inputRange:[...M.coverProgress],
     outputRange:[...M.coverAngles],
@@ -61,13 +65,13 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
         <Animated.View style={[s.baseSpread,{opacity:internalOpacity}]}>
           <View style={[s.coverBacking,{left:0}]}/>
           <View style={[s.coverBacking,{right:0}]}/>
-          {livingBookDepthLayers().map(layer=><View key={layer.side+'-'+layer.offset} style={[
+          {livingBookDepthLayers().filter(layer=>layer.side==='right').map(layer=><View key={layer.side+'-'+layer.offset} style={[
             s.pageEdge,
             {
               top:layer.top,
               bottom:layer.bottom,
-              left:layer.side==='left'?0:G.spineX-G.spineOverlap,
-              width:layer.side==='left'?G.pageWidth:G.pageWidth+G.spineOverlap,
+              left:G.spineX-G.spineOverlap,
+              width:G.pageWidth+G.spineOverlap,
               opacity:.48-layer.offset*.07,
             },
           ]}/>)}
@@ -92,11 +96,18 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
           <View style={[s.coverInsideFace,{transform:[{rotateY:'180deg'}]}]}><View style={s.insidePanel}/><View style={s.coverSpineShade}/></View>
         </Animated.View>
 
-        {/* The left page sits above the inside cover only after the book reveals it. */}
-        <Animated.View style={[s.page,s.leftPage,{opacity:internalOpacity,transformOrigin:'right center',transform:[
+        {/* The entire left paper block rotates out of the closed book as one object.
+            Static left-side page edges would appear early as a detached/phantom page. */}
+        <Animated.View style={[s.leftPaperBlock,{opacity:leftPaperOpacity,transformOrigin:'right center',transform:[
           {perspective:1400},
           {rotateY:leftPageAngle},
-        ]} as any]}>{page(0)}</Animated.View>
+        ]} as any]}>
+          {livingBookDepthLayers().filter(layer=>layer.side==='left').map(layer=><View key={layer.side+'-'+layer.offset} style={[
+            s.pageEdge,
+            {top:layer.top,bottom:layer.bottom,left:0,width:G.pageWidth,opacity:.48-layer.offset*.07},
+          ]}/>)}
+          <View style={[s.page,s.leftPageFace]}>{page(0)}</View>
+        </Animated.View>
 
         {/* Oversized, unclipped envelope prevents perspective turns being cut at the top/edges. */}
         <View pointerEvents="none" style={s.leafEnvelope}>
@@ -151,7 +162,8 @@ const s=StyleSheet.create({
   fallbackAuthor:{color:'#BDB99E',fontSize:9,textAlign:'center'},
   pageEdge:{position:'absolute',backgroundColor:'#c8c2ad',borderBottomWidth:.7,borderColor:'#aaa38e',zIndex:1},
   page:{position:'absolute',top:G.pageInsetY,width:G.pageWidth,height:G.pageHeight,backgroundColor:'#eee9d5',borderWidth:.5,borderColor:'#cec9b5',overflow:'hidden',zIndex:2},
-  leftPage:{left:0,zIndex:6,backfaceVisibility:'hidden',borderRightWidth:0,borderTopRightRadius:2,borderBottomRightRadius:2},
+  leftPaperBlock:{position:'absolute',left:0,top:0,width:G.pageWidth,height:G.coverHeight,zIndex:6,overflow:'visible',backfaceVisibility:'hidden'},
+  leftPageFace:{left:0,borderRightWidth:0,borderTopRightRadius:2,borderBottomRightRadius:2},
   rightPage:{width:G.pageWidth+G.spineOverlap,borderLeftWidth:0,borderTopLeftRadius:2,borderBottomLeftRadius:2},
   pageContent:{flex:1,paddingHorizontal:14,paddingTop:11},
   runningHead:{fontFamily:'ArchivistEditorial',fontSize:5.5,lineHeight:7.5,color:'#696555',textAlign:'center'},
