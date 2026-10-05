@@ -224,13 +224,15 @@ function signatureHash(value:string){
 
 function directoryContextSignature(context:{
   sidecars:Map<string,NativeDirectoryContextFile>;
-  cover?:NativeDirectoryContextFile;
+  artwork:Map<string,NativeDirectoryContextFile>;
 }){
   const parts:string[]=[];
   for(const [stem,file] of context.sidecars){
     parts.push('s:'+stem+':'+file.uri+':'+file.size+':'+file.modified);
   }
-  if(context.cover)parts.push('c:'+context.cover.uri+':'+context.cover.size+':'+context.cover.modified);
+  for(const [stem,file] of context.artwork){
+    parts.push('a:'+stem+':'+file.uri+':'+file.size+':'+file.modified);
+  }
   if(!parts.length)return 'none';
   return signatureHash(parts.sort().join('|'));
 }
@@ -297,7 +299,7 @@ async function scanLocalFoldersNative(
   for (const folder of folders) {
     const contexts = new Map<string,{
       sidecars:Map<string,NativeDirectoryContextFile>;
-      cover?:NativeDirectoryContextFile;
+      artwork:Map<string,NativeDirectoryContextFile>;
       mediaCount:number;
       audioOnly:boolean;
     }>();
@@ -312,8 +314,9 @@ async function scanLocalFoldersNative(
     const contextFor=(parentId:string)=>{
       const existing=contexts.get(parentId);
       if(existing)return existing;
-      const created:{sidecars:Map<string,NativeDirectoryContextFile>;cover?:NativeDirectoryContextFile;mediaCount:number;audioOnly:boolean}={
+      const created:{sidecars:Map<string,NativeDirectoryContextFile>;artwork:Map<string,NativeDirectoryContextFile>;mediaCount:number;audioOnly:boolean}={
         sidecars:new Map<string,NativeDirectoryContextFile>(),
+        artwork:new Map<string,NativeDirectoryContextFile>(),
         mediaCount:0,
         audioOnly:false,
       };
@@ -466,7 +469,10 @@ async function scanLocalFoldersNative(
           reviewReason:identity.reviewReason,
           coverShape:identity.coverShape,
           metadataSource:identity.metadataSource,
-          coverUri:context.cover?.uri,
+          coverUri:(
+            context.artwork.get(stem) ||
+            (genericAllowed?(context.artwork.get('cover')||context.artwork.get('folder')):undefined)
+          )?.uri,
           workTitleHint:embedded?.album||undefined,
           trackTitle:embedded?.title||undefined,
           trackNumber:metadataIndex(embedded?.track),
@@ -514,7 +520,7 @@ async function scanLocalFoldersNative(
           if(item.role==='artwork'){
             const context=contextFor(item.parentId);
             const stem=fileStem(item.name).toLowerCase();
-            if(stem==='cover'||(!context.cover&&stem==='folder'))context.cover={uri:item.uri,size:item.size,modified:item.modified};
+            if(stem&&!context.artwork.has(stem))context.artwork.set(stem,{uri:item.uri,size:item.size,modified:item.modified});
             continue;
           }
           if(item.role==='directory-context'){
