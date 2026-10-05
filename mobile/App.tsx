@@ -1891,6 +1891,7 @@ function Client() {
       });
       if(generation!==localEnrichmentGeneration.current)return;
       await flushDeltas();
+      await replaceLocalEnrichmentCache(result.cache);
       const next=result.books.map(book=>({...book,source:'local' as const}));
       setLocalBooks(next);
       setLocalEnrichmentCache(result.cache);
@@ -2000,7 +2001,7 @@ function Client() {
       setLocalFolders(folders);
       setLocalMovePreviews([]);
       await setPersistedJSON(localFoldersKey,folders);
-      void runLocalEnrichment(result.books,localEnrichmentCache);
+      void runLocalEnrichment(committedBooks,localEnrichmentCache);
       setLocalFolderNotice(`${result.books.length} files found in ${picked.name} · ${committedBooks.length} local files indexed${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
     } catch (e) {
       setError((e as Error).message);
