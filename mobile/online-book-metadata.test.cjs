@@ -46,7 +46,9 @@ assert.equal(sparseMerge.coverUri,'https://covers/dune.jpg');
 assert.equal(sparseMerge.needsReview,false);
 
 (async()=>{
-  const fetcher=async(url)=>{
+  const openLibraryCalls=[];
+  const fetcher=async(url,init)=>{
+    openLibraryCalls.push({url,headers:init?.headers||{}});
     if(url.includes('/search.json'))return {ok:true,status:200,json:async()=>({docs:[{key:'/works/OL262758W',title:'Dune',author_name:['Frank Herbert'],first_publish_year:1965,publisher:['Ace'],isbn:['9780441172719'],subject:['Science Fiction'],cover_i:8231856,series:['Dune'],first_sentence:['Set on Arrakis.']} ]})};
     return {ok:false,status:404,json:async()=>({})};
   };
@@ -57,6 +59,30 @@ assert.equal(sparseMerge.needsReview,false);
   assert.equal(result.best.fields.genre,'Science Fiction');
   assert.equal(result.best.fields.series,'Dune');
   assert.match(result.best.coverUri,/covers\.openlibrary\.org/);
+  assert(openLibraryCalls.filter(call=>call.url.includes('openlibrary.org')).every(call=>/^Archivist\//.test(call.headers['User-Agent'])),'Open Library calls must identify Archivist');
+  let isbnFallbackCalls=0;
+  const isbnCoverFetcher=async(url,init)=>{
+    isbnFallbackCalls++;
+    return {ok:true,status:200,json:async()=>({docs:[{key:'/works/OLXW',title:'Example Book',author_name:['Example Author'],isbn:['9781234567897']} ]})};
+  };
+  const isbnCover=await lookupOnlineBook({title:'Example Book',author:'Example Author',format:'EPUB'},{fetcher:isbnCoverFetcher,cache:{},openLibraryEnabled:true});
+  assert.match(isbnCover.best.coverUri,/\/b\/isbn\/9781234567897-L\.jpg\?default=false$/,'ISBN must provide a cover fallback when Open Library has no cover_i');
+
+  const cachedMiss={
+    'stale||||epub':{expiresAt:Date.now()+60000,result:{key:'stale||||epub',status:'none',candidates:[],autoApply:false,queried:['cached']}},
+  };
+  let bypassCalls=0;
+  const bypassFetcher=async()=>{bypassCalls++;return {ok:true,status:200,json:async()=>({docs:[{key:'/works/OLSW',title:'Stale',author_name:['Author'],cover_i:42}]})}};
+  const staleInput={title:'Stale',author:'',series:'',format:'EPUB'};
+  const staleKey=require('./onlineBookMetadata.ts').onlineBookCacheKey(staleInput);
+  cachedMiss[staleKey]={expiresAt:Date.now()+60000,result:{key:staleKey,status:'none',candidates:[],autoApply:false,queried:['cached']}};
+  const cachedResult=await lookupOnlineBook(staleInput,{fetcher:bypassFetcher,cache:cachedMiss});
+  assert.equal(bypassCalls,0,'normal enrichment should respect a live metadata cache');
+  assert.equal(cachedResult.status,'none');
+  const refreshed=await lookupOnlineBook(staleInput,{fetcher:bypassFetcher,cache:cachedMiss,ignoreCache:true});
+  assert.ok(bypassCalls>0,'explicit refresh must bypass stale positive/negative metadata cache');
+  assert.notEqual(refreshed.status,'none');
+
   const googleOnlyCalls=[];
   const googleOnlyFetcher=async(url)=>{
     googleOnlyCalls.push(url);
