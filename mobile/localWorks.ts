@@ -45,7 +45,9 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
     const audio = first.format === 'Audio';
     const folderTitle = audio ? audioFolderTitle(first.uri) : '';
     const canonical = canonicalMetadataForBooks(tracks);
-    const title = audio ? (canonical.title || folderTitle || first.title) : first.title;
+    const chapterTitles=audio?new Set(tracks.map(item=>cleanLabel(item.title).toLowerCase()).filter(Boolean)):new Set<string>();
+    const canonicalLooksLikeOneChapter=audio&&tracks.length>1&&chapterTitles.size>1&&chapterTitles.has(cleanLabel(canonical.title).toLowerCase());
+    const title = audio ? (canonicalLooksLikeOneChapter&&folderTitle?folderTitle:(canonical.title || folderTitle || first.title)) : first.title;
     const author = audio ? canonical.author : commonValue(tracks.map(item => item.author));
     const series = audio ? canonical.series : commonValue(tracks.map(item => item.series));
     const genre = audio ? canonical.genre : commonValue(tracks.map(item => item.genre));
