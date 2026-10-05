@@ -449,7 +449,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           seen++
           if (seen > metadataArchiveEntryLimit) throw IllegalArgumentException("Archive contains too many entries for metadata inspection.")
           if (header.isDirectory) continue
-          val name = header.fileName ?: continue
+          val name = (header.fileName ?: continue).replace('\\', '/')
           if (!name.substringAfterLast('/').equals("ComicInfo.xml", ignoreCase = true)) continue
           if (header.fullUnpackSize > metadataTextLimit.toLong()) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
           val xml = archive.getInputStream(header).use { source -> readBounded(source).toString(Charsets.UTF_8) }
