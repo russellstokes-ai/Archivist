@@ -46,6 +46,40 @@ assert(!x.publishableLocalWork({title:'Untitled',needsReview:false,coverUri:'cov
   assert.equal(entry.publishReady,true);
   assert.equal(entry.coverUri,'file://square-audio.jpg');
   assert.equal(entry.livingBookCoverUri,'file://portrait-book.jpg');
+  let capturedLookup;
+  const identifiedBook={
+    id:90,
+    uri:'file://dune.epub',
+    title:'Dune',
+    author:'Frank Herbert',
+    series:'Dune',
+    genre:'Science Fiction',
+    publishedYear:1965,
+    isbn:'9780441172719',
+    identifiers:['9780441172719','urn:custom:dune'],
+    format:'EPUB',
+    space:'Books',
+    available:true,
+    coverShape:'portrait',
+    metadataSource:'sidecar',
+    identificationConfidence:'high',
+    needsReview:false,
+    reviewReason:'',
+  };
+  await x.enrichLocalCatalogue([identifiedBook],{},undefined,{
+    lookup:async input=>{
+      capturedLookup=input;
+      return {provider:'open-library',providerId:'OLDUNE',title:'Dune',authors:['Frank Herbert'],isbns:['9780441172719'],coverUri:'https://covers.example/dune.jpg',confidence:1};
+    },
+    extractAudioArtwork:async()=>null,
+    cachePortrait:async()=>({uri:'file://dune-portrait.jpg',width:640,height:1000,aspectRatio:.64}),
+    lookupDelayMs:0,
+    now:()=>new Date('2026-10-05T20:00:00Z'),
+  });
+  assert.equal(capturedLookup.isbn,'9780441172719','work ISBN must be passed to online enrichment');
+  assert.equal(capturedLookup.identifiers.includes('9780441172719'),true);
+  assert.equal(capturedLookup.identifiers.includes('urn:custom:dune'),true);
+
   const many=Array.from({length:3000},(_,index)=>({
     id:10000+index,
     uri:'file://book-'+index+'.epub',
