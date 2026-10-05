@@ -125,30 +125,33 @@ func archiveCover(root, rel, format string) ([]byte,string,error) {
 }
 
 func (a *app) assetCover(id string) ([]byte,string,error) {
-	var root, rel, format string
+	if cached,err:=a.cachedAssetCover(id);err==nil{return cached.Data,cached.MIME,nil}
+	var root,rel,format string
 	err:=a.db.QueryRow(`SELECT s.path,a.relative_path,a.format
 		FROM assets a JOIN sources s ON s.id=a.source_id
 		WHERE a.id=? AND a.available=1`,id).Scan(&root,&rel,&format)
 	if err!=nil{return nil,"",err}
-	if data,mime,e:=externalCover(root,rel);e==nil{return data,mime,nil}
-	if format=="Comic" || format=="Ebook" {
-		if data,mime,e:=archiveCover(root,rel,format);e==nil{return data,mime,nil}
+	if data,mime,e:=externalCover(root,rel);e==nil{
+		_ = a.storeCoverCache(id,data,mime,"local","Local artwork","")
+		return data,mime,nil
+	}
+	if format=="Comic"||format=="Ebook"{
+		if data,mime,e:=archiveCover(root,rel,format);e==nil{
+			_ = a.storeCoverCache(id,data,mime,"embedded","Embedded artwork","")
+			return data,mime,nil
+		}
 	}
 	return nil,"",errors.New("cover unavailable")
 }
 
 func (a *app) workCover(id string) ([]byte,string,error) {
-	var root, rel, format string
-	err:=a.db.QueryRow(`SELECT s.path,a.relative_path,a.format FROM works w
+	var assetID string
+	err:=a.db.QueryRow(`SELECT a.id FROM works w
 		JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id
-		JOIN assets a ON a.id=ea.asset_id JOIN sources s ON s.id=a.source_id
-		WHERE w.id=? AND a.available=1 ORDER BY e.id,ea.position LIMIT 1`,id).Scan(&root,&rel,&format)
+		JOIN assets a ON a.id=ea.asset_id
+		WHERE w.id=? AND a.available=1 ORDER BY e.id,ea.position LIMIT 1`,id).Scan(&assetID)
 	if err!=nil{return nil,"",err}
-	if data,mime,e:=externalCover(root,rel);e==nil{return data,mime,nil}
-	if format=="Comic" || format=="Ebook" {
-		if data,mime,e:=archiveCover(root,rel,format);e==nil{return data,mime,nil}
-	}
-	return nil,"",errors.New("cover unavailable")
+	return a.assetCover(assetID)
 }
 
 func writeCoverResponse(w http.ResponseWriter,data []byte,mime string) {
