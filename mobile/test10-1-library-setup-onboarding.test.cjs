@@ -10,6 +10,9 @@ assert.ok(app.includes("setPersistedJSON(librarySetupPreparedKey,{signature,comp
 
 assert.ok(app.includes('LIBRARY SETUP'),'Shelf onboarding must be a dedicated Library Setup journey');
 assert.ok(app.includes('>Add folders<'),'step 1 must be Add folders');
+assert.ok(app.includes("hasFolder?'Add another folder':addLocalFolderShortLabel"),'step 1 must keep an Add another folder action after the first source is selected');
+assert.ok(app.includes("Step 1 only collects sources"),'adding a folder must not automatically start the heavy preparation scan');
+assert.ok(app.includes("inputRange:[0,.5,1],outputRange:[1,1.045,1]"),'the first folder CTA should pulse subtly while respecting reduced motion');
 assert.ok(app.includes('>Prepare library<'),'step 2 must be Prepare library');
 assert.ok(app.includes('>Organise files<'),'step 3 must be Organise files');
 assert.ok(app.includes("Available when preparation finishes."),'Step 3 must stay quiet and unavailable while preparation is incomplete');
@@ -20,6 +23,8 @@ assert.ok(app.includes("if (session || recoverableSession || onboardingDone) ret
 assert.ok(app.includes("await SecureStore.setItemAsync(onboardingDoneKey, '1')"),'onboarding completion must survive relaunch');
 assert.ok(app.includes('label="Keep current layout"'),'users must be able to complete setup without reorganising files');
 assert.ok(app.includes("if(!onboardingDone&&refreshed&&result.failed.length===0)"),'successful organisation and refresh must complete onboarding automatically');
+assert.ok(app.includes("itemTimeoutMs:refreshMetadata?5000:2500"),'first-run embedded metadata must fail forward quickly instead of appearing frozen at 28%');
+assert.ok(app.includes("maxConsecutiveTimeouts:refreshMetadata?2:1"),'first-run metadata should skip the remaining pathological reads after the first timeout');
 
 assert.ok(app.includes('>Library management<'),'ongoing library maintenance must live in Settings');
 assert.ok(app.includes('Folders, metadata, scanning and file organisation.'),'Settings must clearly own post-onboarding library maintenance');
