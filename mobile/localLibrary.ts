@@ -10,6 +10,8 @@ export type LocalBook = {
   series: string;
   genre: string;
   publishedYear?: number;
+  publisher?: string;
+  seriesIndex?: number;
   isbn?: string;
   identifiers?: string[];
   format: string;
@@ -163,6 +165,20 @@ type NativeLibraryScanBatch = {
   lastError?: string;
 };
 
+type NativeDocumentMetadata = {
+  uri:string;
+  title?:string;
+  author?:string;
+  series?:string;
+  seriesIndex?:number;
+  genre?:string;
+  publisher?:string;
+  year?:number;
+  isbn?:string;
+  identifiers?:string[];
+  error?:string;
+};
+
 type NativeAudioMetadata = {
   uri: string;
   title?: string;
@@ -182,6 +198,7 @@ type NativeLibraryScanner = {
   readTreeScanBatch: (scanId: string, limit: number) => Promise<NativeLibraryScanBatch>;
   cancelTreeScan: (scanId: string) => Promise<boolean>;
   readAudioMetadataBatch?: (uris: string[]) => Promise<NativeAudioMetadata[]>;
+  readDocumentMetadataBatch?: (items: Array<{uri:string;format:string}>) => Promise<NativeDocumentMetadata[]>;
   extractAudioArtwork?: (uri: string) => Promise<{uri:string;mimeType:string;width:number;height:number}|null>;
 };
 
@@ -339,6 +356,26 @@ async function scanLocalFoldersNative(
         }
       }
 
+      const documentMetadataByUri=new Map<string,NativeDocumentMetadata>();
+      const changedDocuments=items.filter(item=>{
+        if(item.format!=='EPUB'&&item.format!=='Comic')return false;
+        const signature=signatures.get(item.uri);
+        return !!signature&&(options.forceMetadata||!reusableScanBook(signature.previous,signature.assetSignature,folder.uri));
+      });
+      if(nativeLibraryScanner.readDocumentMetadataBatch&&changedDocuments.length){
+        for(let offset=0;offset<changedDocuments.length;offset+=24){
+          try{
+            const chunk=changedDocuments.slice(offset,offset+24);
+            const metadata=await nativeLibraryScanner.readDocumentMetadataBatch(
+              chunk.map(item=>({uri:item.uri,format:item.format})),
+            );
+            for(const item of metadata||[])documentMetadataByUri.set(item.uri,item);
+          }catch{
+            // Embedded document metadata is evidence only; path/sidecar fallback remains available.
+          }
+        }
+      }
+
       const produced:LocalBook[]=[];
       for(const item of items){
         const context=contextFor(item.parentId);
@@ -363,6 +400,25 @@ async function scanLocalFoldersNative(
         }
 
         let identity=inferLocalBookMetadata(item.uri,item.format);
+        const embeddedDocument=documentMetadataByUri.get(item.uri);
+        if(
+          embeddedDocument&&
+          (embeddedDocument.title||embeddedDocument.author||embeddedDocument.series||embeddedDocument.genre||
+           embeddedDocument.publisher||embeddedDocument.year||embeddedDocument.isbn||embeddedDocument.identifiers?.length)
+        ){
+          identity=applyLocalMetadata(identity,{
+            ...(embeddedDocument.title?{title:embeddedDocument.title}:{}),
+            ...(embeddedDocument.author?{author:embeddedDocument.author}:{}),
+            ...(embeddedDocument.series?{series:embeddedDocument.series}:{}),
+            ...(embeddedDocument.genre?{genre:embeddedDocument.genre}:{}),
+            ...(embeddedDocument.publisher?{publisher:embeddedDocument.publisher}:{}),
+            ...(embeddedDocument.seriesIndex!==undefined?{seriesIndex:embeddedDocument.seriesIndex}:{}),
+            ...(embeddedDocument.year?{publishedYear:embeddedDocument.year}:{}),
+            ...(embeddedDocument.isbn?{isbn:embeddedDocument.isbn}:{}),
+            ...(embeddedDocument.identifiers?.length?{identifiers:embeddedDocument.identifiers}:{}),
+          },'embedded');
+        }
+
         const embedded=item.format==='Audio'?audioMetadataByUri.get(item.uri):undefined;
         const embeddedAuthor=embedded?.albumArtist||embedded?.author||embedded?.artist||'';
         const oneFileWork=context.mediaCount===1;
@@ -398,6 +454,8 @@ async function scanLocalFoldersNative(
           series:identity.series,
           genre:identity.genre,
           publishedYear:identity.publishedYear,
+          publisher:identity.publisher,
+          seriesIndex:identity.seriesIndex,
           isbn:identity.isbn,
           identifiers:identity.identifiers,
           format:item.format,
@@ -640,6 +698,8 @@ export async function scanLocalFolders(
           series: identity.series,
           genre: identity.genre,
           publishedYear: identity.publishedYear,
+          publisher:identity.publisher,
+          seriesIndex:identity.seriesIndex,
           isbn:identity.isbn,
           identifiers:identity.identifiers,
           format,
