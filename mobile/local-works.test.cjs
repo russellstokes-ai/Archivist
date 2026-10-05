@@ -39,6 +39,20 @@ const manuallyNamed = groupLocalWorks([
 assert.equal(manuallyNamed.length,1);
 assert.equal(manuallyNamed[0].title,'Dune (Author Cut)');
 
+const nestedStandalone = groupLocalWorks([
+  book(20,'content://root/document/primary:Audiobooks%2FCraig%20Alanson%2FColumbus%20Day.m4b',{title:'Columbus Day'}),
+  book(21,'content://root/document/primary:Audiobooks%2FCraig%20Alanson%2FSpecOps.m4b',{title:'SpecOps'}),
+]);
+assert.equal(nestedStandalone.length,2,'separate named audiobooks in one author folder must never be merged');
+
+const numberedParts = groupLocalWorks([
+  book(30,'content://root/document/primary:Audiobooks%2FCraig%20Alanson%2FBlack%20Ops%2F01%20-%20Opening.mp3',{title:'Opening',metadataSource:'embedded',metadataProvenance:{title:'embedded'},metadataFieldConfidence:{title:'high'}}),
+  book(31,'content://root/document/primary:Audiobooks%2FCraig%20Alanson%2FBlack%20Ops%2F02%20-%20Trouble.mp3',{title:'Trouble',metadataSource:'embedded',metadataProvenance:{title:'embedded'},metadataFieldConfidence:{title:'high'}}),
+]);
+assert.equal(numberedParts.length,1,'numbered chapter files inside one book folder must remain one audiobook');
+assert.equal(numberedParts[0].title,'Black Ops');
+assert.equal(numberedParts[0].author,'Craig Alanson');
+
 const flat = groupLocalWorks([
   book(1,'content://root/document/primary:Audiobooks%2FBook%20One.m4b',{title:'Book One'}),
   book(2,'content://root/document/primary:Audiobooks%2FBook%20Two.m4b',{title:'Book Two'}),
