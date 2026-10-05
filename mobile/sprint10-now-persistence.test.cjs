@@ -22,6 +22,8 @@ assert.ok(app.includes("if(centre){void openNowTab()}"),'tapping Now must reopen
 assert.ok(app.includes("currentNow?.kind==='audio'&&sameNowMedia(currentNow.media,nowMediaFromBook(playing))"),'background audio checkpoints must never steal Now back from a newer reader session');
 assert.ok(app.includes("currentNow?.kind==='reader'&&sameNowMedia(currentNow.media,nowMediaFromBook(reading))"),'hidden reader updates must never steal Now back from a newer audio session');
 assert.ok(app.includes("if(!nowSessionReady||activeTab!=='now'||playing||reading||!nowSessionRef.current)return;"),'an early Now tap must auto-resume once launch restoration finishes');
+assert.ok(app.includes("restoring||!localFoldersReady||!localCatalogReady||!localOverridesReady||!offlineWorksReady||!nowSessionReady"),'main UI must not open before durable Now and offline sources finish restoring');
+assert.ok(app.includes("request(session!,'/api/works/'+media.serverWorkId+'/tracks')"),'server Now resume must not depend on the work list having refreshed first');
 assert.ok(model.includes('sameNowMedia')&&model.includes('serverWorkId')&&model.includes('localWorkKey')&&model.includes('uri'),'Now identity must survive metadata renames and asset refreshes');
 
 console.log('PASS: Test 10 Sprint 4 durable Now/player persistence contract is locked');
