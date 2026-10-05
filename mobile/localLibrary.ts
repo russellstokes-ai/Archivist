@@ -1,4 +1,4 @@
-import {Platform} from 'react-native';
+import {NativeModules,Platform} from 'react-native';
 import {getInfoAsync, readAsStringAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, LocalMetadataFields, parseLocalSidecar} from './libraryIntelligence';
 
@@ -85,6 +85,8 @@ const supported = new Map<string, string>([
   ['pdf', 'PDF'],
   ['cbz', 'Comic'],
   ['zip', 'Comic'],
+  ['cbr', 'Comic'],
+  ['cbt', 'Comic'],
   ['mp3', 'Audio'],
   ['m4a', 'Audio'],
   ['m4b', 'Audio'],
@@ -92,6 +94,7 @@ const supported = new Map<string, string>([
   ['ogg', 'Audio'],
   ['opus', 'Audio'],
   ['flac', 'Audio'],
+  ['wav', 'Audio'],
 ]);
 
 const maxEntriesPerScan = 10000;
@@ -128,11 +131,195 @@ export async function pickLocalFolder(): Promise<LocalFolder | null> {
   };
 }
 
+type NativeLibraryScanItem = {
+  uri: string;
+  name: string;
+  parentId: string;
+  mimeType: string;
+  size: number;
+  modified: number;
+  role: 'media' | 'sidecar' | 'artwork';
+  format: string;
+};
+
+type NativeLibraryScanBatch = {
+  items: NativeLibraryScanItem[];
+  done: boolean;
+  visited: number;
+  found: number;
+  errors: number;
+  lastError?: string;
+};
+
+type NativeLibraryScanner = {
+  startTreeScan: (uri: string) => Promise<string>;
+  readTreeScanBatch: (scanId: string, limit: number) => Promise<NativeLibraryScanBatch>;
+  cancelTreeScan: (scanId: string) => Promise<boolean>;
+};
+
+const nativeLibraryScanner = (NativeModules.ArchivistLibrary || null) as NativeLibraryScanner | null;
+const yieldToUi = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+async function scanLocalFoldersNative(
+  folders: LocalFolder[],
+  onProgress?: (progress: LocalScanProgress) => void,
+  overrides: Record<string, LocalMetadataOverride> = {},
+): Promise<LocalScanResult> {
+  if (!nativeLibraryScanner) throw Error('Native library scanner is unavailable.');
+  const books: LocalBook[] = [];
+  let skipped = 0;
+  let review = 0;
+  let entriesVisited = 0;
+  let visitedBeforeFolder = 0;
+  const sidecarCache = new Map<string, LocalMetadataFields>();
+
+  async function cachedSidecarFields(uri: string): Promise<LocalMetadataFields> {
+    const cached = sidecarCache.get(uri);
+    if (cached) return cached;
+    let fields: LocalMetadataFields = {};
+    try {
+      const info = await getInfoAsync(uri);
+      if (info.exists && (!('size' in info) || typeof info.size !== 'number' || info.size <= 2 * 1024 * 1024)) {
+        fields = parseLocalSidecar(await readAsStringAsync(uri), extension(uri));
+      }
+    } catch {}
+    sidecarCache.set(uri, fields);
+    return fields;
+  }
+
+  const report = (phase: LocalScanProgress['phase'], currentFolder: string) => {
+    onProgress?.({phase, currentFolder, entriesVisited, found: books.length, review});
+  };
+  const nextFolders: LocalFolder[] = [];
+
+  for (const folder of folders) {
+    const pending: NativeLibraryScanItem[] = [];
+    const sidecarsByParent = new Map<string, Map<string, string>>();
+    const coversByParent = new Map<string, string>();
+    let scanId = '';
+    let lastVisited = 0;
+    let nativeErrors = 0;
+    report('discovering', folder.name);
+
+    try {
+      scanId = await nativeLibraryScanner.startTreeScan(folder.uri);
+      let done = false;
+      while (!done) {
+        const batch = await nativeLibraryScanner.readTreeScanBatch(scanId, 240);
+        lastVisited = batch.visited;
+        nativeErrors = batch.errors;
+        entriesVisited = visitedBeforeFolder + batch.visited;
+
+        for (const item of batch.items || []) {
+          if (item.role === 'media') {
+            pending.push(item);
+            continue;
+          }
+          if (item.role === 'sidecar') {
+            const byStem = sidecarsByParent.get(item.parentId) || new Map<string, string>();
+            byStem.set(fileStem(item.name).toLowerCase(), item.uri);
+            sidecarsByParent.set(item.parentId, byStem);
+            continue;
+          }
+          if (item.role === 'artwork') {
+            const stem = fileStem(item.name).toLowerCase();
+            if (stem === 'cover' || (!coversByParent.has(item.parentId) && stem === 'folder')) {
+              coversByParent.set(item.parentId, item.uri);
+            }
+          }
+        }
+
+        report('discovering', folder.name);
+        done = !!batch.done;
+        if (!done && (!batch.items || batch.items.length === 0)) {
+          await new Promise<void>(resolve => setTimeout(resolve, 12));
+        } else {
+          await yieldToUi();
+        }
+      }
+    } catch {
+      skipped += 1;
+      if (scanId) { try { await nativeLibraryScanner.cancelTreeScan(scanId); } catch {} }
+    }
+
+    skipped += nativeErrors;
+    visitedBeforeFolder += lastVisited;
+    entriesVisited = visitedBeforeFolder;
+
+    const mediaCountByParent = new Map<string, number>();
+    const audioOnlyByParent = new Map<string, boolean>();
+    for (const item of pending) {
+      mediaCountByParent.set(item.parentId, (mediaCountByParent.get(item.parentId) || 0) + 1);
+      audioOnlyByParent.set(item.parentId, (audioOnlyByParent.get(item.parentId) ?? true) && item.format === 'Audio');
+    }
+
+    const before = books.length;
+    for (let index = 0; index < pending.length; index += 1) {
+      const item = pending[index];
+      let identity = inferLocalBookMetadata(item.uri, item.format);
+      const sidecars = sidecarsByParent.get(item.parentId);
+      const stem = fileStem(item.name).toLowerCase();
+      const genericAllowed = (mediaCountByParent.get(item.parentId) || 0) === 1 || !!audioOnlyByParent.get(item.parentId);
+      const sidecarUri = sidecars?.get(stem) || (genericAllowed ? (sidecars?.get('metadata') || sidecars?.get('book')) : undefined);
+
+      if (sidecarUri) {
+        const fields = await cachedSidecarFields(sidecarUri);
+        if (fields.title || fields.author || fields.series || fields.genre) {
+          identity = applyLocalMetadata(identity, fields, 'sidecar');
+        }
+      }
+      const override = overrides[item.uri];
+      if (override) identity = applyLocalMetadata(identity, override, 'manual');
+      if (identity.needsReview) review += 1;
+
+      books.push({
+        id: books.length + 1,
+        uri: item.uri,
+        title: identity.title || titleFromUri(item.uri),
+        author: identity.author,
+        series: identity.series,
+        genre: identity.genre,
+        publishedYear: identity.publishedYear,
+        format: item.format,
+        space: folder.name,
+        available: true,
+        identificationConfidence: identity.confidence,
+        needsReview: identity.needsReview,
+        reviewReason: identity.reviewReason,
+        coverShape: identity.coverShape,
+        metadataSource: identity.metadataSource,
+        coverUri: coversByParent.get(item.parentId),
+      });
+
+      if (index % 80 === 79) {
+        report('discovering', folder.name);
+        await yieldToUi();
+      }
+    }
+
+    const count = books.length - before;
+    nextFolders.push({...folder, status: `Scanned ${count} items`, itemCount: count, scannedAt: new Date().toISOString()});
+    await yieldToUi();
+  }
+
+  report('complete', '');
+  return {
+    folders: nextFolders.concat(folders.slice(nextFolders.length)),
+    books,
+    skipped,
+    truncated: false,
+    identified: books.length - review,
+    review,
+  };
+}
 export async function scanLocalFolders(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
 ): Promise<LocalScanResult> {
+  if (Platform.OS === 'android' && nativeLibraryScanner?.startTreeScan) {
+    return scanLocalFoldersNative(folders, onProgress, overrides);
+  }
   const books: LocalBook[] = [];
   let skipped = 0;
   let truncated = false;
