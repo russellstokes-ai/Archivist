@@ -154,11 +154,16 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
   const author = xmlValue(text, ['dc:creator', 'creator', 'author', 'writer']);
 
   let series = xmlValue(text, ['series']);
+  let seriesIndex:number|undefined;
   const genre = xmlValue(text, ['dc:subject', 'subject', 'genre']);
+  const publisher = xmlValue(text, ['dc:publisher','publisher']);
   if (!series && ext === 'opf') {
     const calibre = text.match(/<meta\b[^>]*name\s*=\s*["']calibre:series["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
       || text.match(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']calibre:series["'][^>]*>/i);
     if (calibre) series = decodeXml(calibre[1]);
+    const calibreIndex = text.match(/<meta\b[^>]*name\s*=\s*["']calibre:series_index["'][^>]*content\s*=\s*["']([^"']+)["'][^>]*>/i)
+      || text.match(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*name\s*=\s*["']calibre:series_index["'][^>]*>/i);
+    if(calibreIndex)seriesIndex=Number(calibreIndex[1])||undefined;
 
     if (!series) {
       const collection = text.match(/<meta\b[^>]*property\s*=\s*["'][^"']*belongs-to-collection["'][^>]*>([\s\S]*?)<\/meta>/i);
@@ -176,6 +181,8 @@ export function parseLocalSidecar(text: string, extension: string): LocalMetadat
     author: cleanLabel(author || '') || undefined,
     series: cleanLabel(series || '') || undefined,
     genre: cleanLabel(genre || '') || undefined,
+    publisher: cleanLabel(publisher || '') || undefined,
+    ...(seriesIndex!==undefined?{seriesIndex}:{}),
     ...(publicationYear(xmlValue(text,['dc:date','date','year','Year']))?{publishedYear:publicationYear(xmlValue(text,['dc:date','date','year','Year']))}:{}),
     ...(isbnValue?{isbn:isbnValue}:{}),
     ...(identifiers.length?{identifiers:[...new Set(identifiers)]}:{}),
