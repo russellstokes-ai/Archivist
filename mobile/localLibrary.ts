@@ -769,7 +769,7 @@ export async function enrichLocalEmbeddedMetadata(
 ):Promise<LocalEmbeddedMetadataEnrichmentResult>{
   const shouldContinue=options.shouldContinue||(()=>true);
   const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize||8)));
-  const itemTimeoutMs=Math.max(2500,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
+  const itemTimeoutMs=Math.max(25,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
   const maxConsecutiveTimeouts=Math.max(1,Math.min(10,Math.trunc(options.maxConsecutiveTimeouts||3)));
   let next=books.slice();
   const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format));
@@ -885,7 +885,7 @@ export async function enrichLocalBookCovers(
   let updated=0;
   let pendingSinceBatch=0;
   let timedOut=0,skipped=0,consecutiveTimeouts=0;
-  const itemTimeoutMs=Math.max(2500,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
+  const itemTimeoutMs=Math.max(25,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
   const maxConsecutiveTimeouts=Math.max(1,Math.min(10,Math.trunc(options.maxConsecutiveTimeouts||3)));
   let lastPublish=Date.now();
   const yieldToUi=cooperativeYieldFactory();
