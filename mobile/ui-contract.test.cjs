@@ -109,3 +109,13 @@ assert.ok(source.includes('accessibilityState={{selected:theme===mode}}'), 'Them
 assert.ok(source.includes('accessibilityState={{selected:sortTemplate===id}}'), 'Sort layout choices must expose selected state');
 
 assert.ok(source.includes('name="zoomIn"') && source.includes('name="zoomOut"'), 'Atlas zoom must use drawn native controls');
+
+// Living Book physical-state contract: visibility may stop future scheduling but
+// must never reset an in-flight/open physical book.
+assert.equal(source.includes('Animated.loop(Animated.sequence(['),false,'Living Book turns must not bypass the physical state machine with an independent Animated.loop');
+assert.ok(source.includes("transitionLivingBook({type:'turn-request'})"),'Living Book automatic/manual turns must enter the shared turning phase');
+assert.ok(source.includes("transitionLivingBook({type:'turn-complete'})"),'Living Book turns must explicitly enter settling after the sheet lands');
+assert.ok(source.includes("transitionLivingBook({type:'settle-complete'})"),'Living Book settling must explicitly resolve back to open/closing');
+const visibilityBranch=source.slice(source.indexOf("transitionLivingBook({type:'visibility-change'"),source.indexOf('const allPhoneWorks'));
+assert.equal(visibilityBranch.includes("transitionLivingBook({type:'restore',playing:playbackIsPlaying})"),false,'Leaving Now Playing must not restore/reset physical Living Book state');
+assert.equal(visibilityBranch.includes('pageTurnAnim.setValue(0);\n      transitionLivingBook({type:\'restore\''),false,'Visibility changes must not snap an in-flight page back to zero');
