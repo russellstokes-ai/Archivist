@@ -39,7 +39,8 @@ import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {possibleLocalDuplicateGroups} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
-import {getPersistedJSON, setPersistedJSON} from './stateStore';
+import {deletePersistedJSON, getPersistedJSON, setPersistedJSON} from './stateStore';
+import {loadLocalStage, migrateLegacyLocalStage, replaceLocalStageBooks, upsertLocalEnrichmentEntries, upsertLocalStageBooks} from './localStageStore';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
 import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, LivingBookMotion, LivingBookMotionEvent, addBookmark, applyTrackOrder, initialLivingBookMotion, mergeChapter, moveTrackOrder, reduceLivingBookMotion, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
@@ -1216,12 +1217,39 @@ function Client() {
     getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
     }).catch(() => undefined);
-    getPersistedJSON<Book[]>(localCatalogKey).then(saved => {
-      if (!Array.isArray(saved)) return;
-      const normalized=saved.map(book=>({...book,genre:book.genre || ''}));
-      setLocalBooks(normalized.map(book=>({...book,source:'local' as const})));
-      setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
-    }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
+    void (async()=>{
+      try{
+        let stage=await loadLocalStage();
+        if(!stage.books.length && !Object.keys(stage.cache).length){
+          const [legacyBooks,legacyCache]=await Promise.all([
+            getPersistedJSON<Book[]>(localCatalogKey).catch(()=>null),
+            getPersistedJSON<LocalEnrichmentCache>(localEnrichmentKey).catch(()=>null),
+          ]);
+          const books=Array.isArray(legacyBooks)
+            ? legacyBooks.filter((book):book is Book & {uri:string}=>!!book?.uri).map(book=>({...book,genre:book.genre||''}) as LocalBook)
+            : [];
+          const cache=legacyCache&&typeof legacyCache==='object'?legacyCache:{};
+          if(books.length||Object.keys(cache).length){
+            await migrateLegacyLocalStage(books,cache);
+            stage={books,cache};
+            void Promise.all([
+              deletePersistedJSON(localCatalogKey),
+              deletePersistedJSON(localEnrichmentKey),
+            ]).catch(()=>undefined);
+          }
+        }
+        const normalized=stage.books.map(book=>({...book,genre:book.genre||''}));
+        setLocalBooks(normalized.map(book=>({...book,source:'local' as const})));
+        setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
+        setLocalEnrichmentCache(stage.cache);
+      }catch{
+        // A database failure must not make the rest of the app unusable.
+        // The next explicit rescan can rebuild the local stage.
+      }finally{
+        setLocalCatalogReady(true);
+        setLocalEnrichmentReady(true);
+      }
+    })();
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
       if (value && typeof value === 'object') setOfflineWorks(value);
     }).catch(() => undefined);
@@ -1258,9 +1286,7 @@ function Client() {
     getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(value => {
       if (value && typeof value === 'object') setLocalMetadataOverrides(value);
     }).catch(() => undefined).finally(() => setLocalOverridesReady(true));
-    getPersistedJSON<LocalEnrichmentCache>(localEnrichmentKey).then(value => {
-      if (value && typeof value === 'object') setLocalEnrichmentCache(value);
-    }).catch(() => undefined).finally(() => setLocalEnrichmentReady(true));
+
     getPersistedJSON<SmartShelfDefinition[]>(smartShelvesKey).then(value => setSmartShelves(sanitizeSmartShelves(value))).catch(() => undefined);
     getPersistedJSON<LibraryCollection[]>(collectionsKey).then(value => setCollections(sanitizeCollections(value))).catch(() => undefined);
     getPersistedJSON<ShelfSectionPref[]>(shelfSectionsKey).then(value => {
@@ -1836,32 +1862,38 @@ function Client() {
     if(!catalogue.length)return;
     const generation=++localEnrichmentGeneration.current;
     localEnrichmentActive.current=true;
-    setLocalEnrichmentProgress({total:groupLocalWorks(catalogue).length,processed:0,published:0,attention:0,currentTitle:''});
+    const total=groupLocalWorks(catalogue).length;
+    setLocalEnrichmentProgress({total,processed:0,published:0,attention:0,currentTitle:''});
+    const pendingBooks=new Map<string,LocalBook>();
+    const pendingEntries=new Map<string,LocalEnrichmentCache[keyof LocalEnrichmentCache]>();
+    const flushDeltas=async()=>{
+      if(generation!==localEnrichmentGeneration.current)return;
+      const books=[...pendingBooks.values()];
+      const entries=[...pendingEntries.values()];
+      pendingBooks.clear();
+      pendingEntries.clear();
+      await Promise.all([
+        upsertLocalStageBooks(books),
+        upsertLocalEnrichmentEntries(entries),
+      ]);
+    };
     try{
-      const result=await enrichLocalCatalogue(catalogue,cacheSeed,async(progress,books,cache)=>{
+      const result=await enrichLocalCatalogue(catalogue,cacheSeed,async(progress,delta)=>{
         if(generation!==localEnrichmentGeneration.current)return;
-        const publishBatch=progress.processed===1||progress.processed===progress.total||progress.processed%4===0;
-        if(!publishBatch)return;
-        const next=books.map(book=>({...book,source:'local' as const}));
-        setLocalBooks(next);
-        setLocalEnrichmentCache(cache);
-        setLocalEnrichmentProgress(progress);
-        if(progress.processed===progress.total||progress.processed%8===0){
-          await Promise.all([
-            setPersistedJSON(localCatalogKey,books),
-            setPersistedJSON(localEnrichmentKey,cache),
-          ]).catch(()=>undefined);
+        for(const book of delta.books)if(book.uri)pendingBooks.set(book.uri,book);
+        pendingEntries.set(delta.entry.fingerprint,delta.entry);
+        const checkpoint=progress.processed===progress.total||progress.processed%24===0;
+        if(checkpoint)await flushDeltas();
+        if(progress.processed===1||progress.processed===progress.total||progress.processed%8===0){
+          setLocalEnrichmentProgress(progress);
         }
       });
       if(generation!==localEnrichmentGeneration.current)return;
+      await flushDeltas();
       const next=result.books.map(book=>({...book,source:'local' as const}));
       setLocalBooks(next);
       setLocalEnrichmentCache(result.cache);
       setSpaces([...new Set(result.books.map(book=>book.space).filter(Boolean))]);
-      await Promise.all([
-        setPersistedJSON(localCatalogKey,result.books),
-        setPersistedJSON(localEnrichmentKey,result.cache),
-      ]);
       if(result.progress.published>0&&celebrationEligible){
         setCelebrating(true);
         setCelebrationEligible(false);
@@ -1896,7 +1928,7 @@ function Client() {
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await Promise.all([
         setPersistedJSON(localFoldersKey, result.folders),
-        setPersistedJSON(localCatalogKey, result.books),
+        replaceLocalStageBooks(result.books),
       ]);
       void runLocalEnrichment(result.books,localEnrichmentCache);
       setLocalFolderNotice(`${result.books.length} files found · Archivist is identifying works and resolving covers${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
@@ -1921,7 +1953,7 @@ function Client() {
       setSpaces([...new Set(result.books.map(book => book.space))]);
       await Promise.all([
         setPersistedJSON(localFoldersKey, result.folders),
-        setPersistedJSON(localCatalogKey, result.books),
+        replaceLocalStageBooks(result.books),
       ]);
       void runLocalEnrichment(result.books,localEnrichmentCache);
       setLocalFolderNotice(`${result.books.length} files found · Archivist is identifying works and resolving covers${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
@@ -2902,7 +2934,8 @@ function Client() {
           .then(()=>{
             setLocalBooks(old=>{
               const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
-              void setPersistedJSON(localCatalogKey,updated);
+              const changed=updated.find(book=>book.uri===editing.uri);
+              if(changed?.uri)void upsertLocalStageBooks([changed as LocalBook]).catch(()=>undefined);
               void runLocalEnrichment(updated.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],localEnrichmentCache);
               return updated;
             });
