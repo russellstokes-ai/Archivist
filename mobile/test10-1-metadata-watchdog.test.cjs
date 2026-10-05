@@ -82,13 +82,13 @@ const books=Array.from({length:1000},(_,index)=>({
   const elapsed=Date.now()-started;
   clearInterval(ticker);
 
-  assert.equal(embedded.timedOut,1,'a hung embedded parser must be cut off by the item watchdog');
-  assert.equal(embedded.skipped,999,'after the timeout threshold the remaining heavy local reads must be skipped for this refresh');
+  assert.equal(embedded.timedOut,4,'the first bounded parallel batch of hung parsers must be cut off by per-item watchdogs');
+  assert.equal(embedded.skipped,996,'after the timeout circuit opens, the remaining heavy local reads must be deferred for this refresh');
   assert.equal(embedded.processed,1000,'stage progress must advance to its terminal state rather than remain at 28%');
   assert.ok(elapsed<1000,'a hung first parser must not pin a large library refresh');
   assert.ok(ticks>0,'watchdog path must yield to the event loop');
   assert.equal(progress.at(-1).processed,1000);
-  assert.match(progress.find(item=>item.current)?.current||'',/Book 1|Skipped remaining/);
+  assert.match(progress.find(item=>item.current)?.current||'',/Book [1-4]|Deferred remaining/);
 
   const coverProgress=[];
   const coverStarted=Date.now();
