@@ -1210,6 +1210,9 @@ function Client() {
     // in-flight visual frame. Normalising here prevents a half-closed hinge or
     // half-turned page from being resurrected when Now is opened again.
     if(!playbackVisible){
+      ++skipGeneration.current;
+      ambientPageLoopStopRef.current?.();
+      ambientPageLoopStopRef.current=null;
       bookOpenAnim.stopAnimation();
       pageTurnAnim.stopAnimation();
       skipTurnAnim.stopAnimation();
@@ -1223,9 +1226,17 @@ function Client() {
     }
 
     if(workChanged){
+      ++skipGeneration.current;
+      ambientPageLoopStopRef.current?.();
+      ambientPageLoopStopRef.current=null;
       bookOpenAnim.stopAnimation();
+      pageTurnAnim.stopAnimation();
+      skipTurnAnim.stopAnimation();
       bookOpenAnim.setValue(0);
       bookOpenProgressRef.current=0;
+      pageTurnAnim.setValue(0);
+      skipTurnAnim.setValue(0);
+      setSkipTurning(false);
     }
 
     // Every visible player session starts with a clean page layer. Playback may
@@ -5549,7 +5560,7 @@ function Client() {
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?Cover({book:current,fill:true}):null}/>
+            <LivingBookArtwork key={workKey||'living-book'} title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?Cover({book:current,fill:true}):null}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               {(current.narrator||current.author)?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>{current.narrator?'Narrated by '+current.narrator:'By '+current.author}</Text>:null}
