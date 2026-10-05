@@ -1187,8 +1187,13 @@ function Client() {
   },[bookOpenAnim]);
 
   const livingBookMotionGeneration=useRef(0);
+  const livingBookVisualWorkRef=useRef('');
+  const livingBookWorkKey=playbackWorkKey(playing);
   useEffect(()=>{
     const generation=++livingBookMotionGeneration.current;
+    const previousWorkKey=livingBookVisualWorkRef.current;
+    const workChanged=!!livingBookWorkKey&&!!previousWorkKey&&livingBookWorkKey!==previousWorkKey;
+    if(livingBookWorkKey)livingBookVisualWorkRef.current=livingBookWorkKey;
 
     // When the player is not on screen there is no reason to preserve an
     // in-flight visual frame. Normalising here prevents a half-closed hinge or
@@ -1202,7 +1207,14 @@ function Client() {
       pageTurnAnim.setValue(0);
       skipTurnAnim.setValue(0);
       setSkipTurning(false);
+      if(!livingBookWorkKey)livingBookVisualWorkRef.current='';
       return;
+    }
+
+    if(workChanged){
+      bookOpenAnim.stopAnimation();
+      bookOpenAnim.setValue(0);
+      bookOpenProgressRef.current=0;
     }
 
     // Every visible player session starts with a clean page layer. Playback may
@@ -1253,7 +1265,7 @@ function Client() {
       preserveCurrentOnStop:false,
     });
     return()=>{stop();if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();};
-  },[bookOpenAnim,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
+  },[bookOpenAnim,livingBookWorkKey,pageTurnAnim,playerVisualPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
