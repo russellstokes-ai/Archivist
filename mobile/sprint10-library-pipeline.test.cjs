@@ -15,7 +15,8 @@ assert.ok(app.includes('accessibilityLabel="Cancel library refresh"'),'refresh m
 assert.ok(app.includes('scanCommitGate.invalidate()'),'cancel must invalidate stale work');
 assert.equal(app.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover progress batches must not republish the full catalogue');
 assert.equal(/onBatch:[\s\S]{0,600}setPersistedJSON\(localCatalogKey/.test(app),false,'metadata progress batches must not persist the full catalogue');
-assert.equal((app.match(/setPersistedJSONArrayCooperative\(localCatalogKey/g)||[]).length,2,'large catalogue persistence must happen only at the safe discovery baseline and final enriched commit');
+assert.equal((app.match(/setPersistedJSONArrayCooperative\(localCatalogKey/g)||[]).length,3,'large catalogue persistence must be limited to discovery, the stage-checkpoint helper and the final enriched commit');
+assert.ok((app.match(/checkpointLocalEnrichment\(currentBooks,generation\)/g)||[]).length>=3,'completed enrichment stages must checkpoint so interrupted preparation resumes without throwing away finished work');
 assert.equal(app.includes('getPersistedJSON<LocalBook[]>(localCatalogKey)'),false,'enrichment stages must pass the catalogue in memory rather than reparsing the large persisted catalogue');
 
 assert.ok(library.includes('cooperativeYieldFactory'),'scanner must enforce a cooperative UI frame budget');
