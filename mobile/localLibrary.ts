@@ -7,7 +7,7 @@ import {extractAudioMetadata} from './audioMetadata';
 import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
-import {audioWorkGroupKeys, synchronizeLocalMetadata} from './metadataSync';
+import {audioWorkGroupKeys, canonicalMetadataForBooks, synchronizeLocalMetadata} from './metadataSync';
 
 export type LocalBook = {
   id: number;
@@ -897,6 +897,64 @@ export function applyOnlineMetadataEnrichment(current:LocalBook[],enriched:Local
   return changed?next:current;
 }
 
+type LocalBookLookupUnit={indexes:number[];target:LocalBook};
+
+function localBookLookupUnits(books:LocalBook[]):LocalBookLookupUnit[]{
+  const units:LocalBookLookupUnit[]=[];
+  const audioKeys=audioWorkGroupKeys(books);
+  const audioGroups=new Map<string,number[]>();
+
+  books.forEach((book,index)=>{
+    const format=String(book.format||'').toLowerCase();
+    if(format==='audio'){
+      const key=audioKeys.get(book.uri)||('audio-file:'+book.uri);
+      const indexes=audioGroups.get(key)||[];
+      indexes.push(index);
+      audioGroups.set(key,indexes);
+      return;
+    }
+    if(format==='epub'||format==='pdf')units.push({indexes:[index],target:book});
+  });
+
+  for(const indexes of audioGroups.values()){
+    const group=indexes.map(index=>books[index]);
+    const first=group[0];
+    const canonical=canonicalMetadataForBooks(group);
+    const metadataProvenance={...(first.metadataProvenance||{})};
+    const metadataFieldConfidence={...(first.metadataFieldConfidence||{})};
+    for(const [field,source] of Object.entries(canonical.provenance)){
+      if(source)metadataProvenance[field]=source as MetadataSource;
+    }
+    for(const [field,confidence] of Object.entries(canonical.confidence)){
+      if(confidence)metadataFieldConfidence[field]=confidence as IdentificationConfidence;
+    }
+    const target:LocalBook={
+      ...first,
+      title:canonical.title||first.title,
+      author:canonical.author||first.author,
+      series:canonical.series||first.series,
+      seriesNumber:canonical.seriesNumber??first.seriesNumber,
+      genre:canonical.genre||first.genre,
+      publishedYear:canonical.publishedYear??first.publishedYear,
+      narrator:canonical.narrator||first.narrator,
+      publisher:canonical.publisher||first.publisher,
+      isbn:canonical.isbn||first.isbn,
+      asin:canonical.asin||first.asin,
+      language:canonical.language||first.language,
+      description:canonical.description||first.description,
+      coverUri:canonical.coverUri||first.coverUri,
+      metadataProvenance,
+      metadataFieldConfidence,
+    };
+    units.push({indexes,target});
+  }
+  return units.filter(unit=>shouldLookupBookOnline(unit.target));
+}
+
+export function countLocalBookOnlineLookupUnits(books:LocalBook[]){
+  return localBookLookupUnits(books).length;
+}
+
 export async function enrichLocalBookMetadataOnline(
   books:LocalBook[],
   options:{
@@ -914,34 +972,53 @@ export async function enrichLocalBookMetadataOnline(
   const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize||4)));
   const cache:OnlineBookCache={...(options.cache||{})};
   let next=books.slice();
+  const units=localBookLookupUnits(next);
   let attempted=0,matched=0,review=0,updated=0,pending=0;
   let lastPublish=Date.now();
 
-  for(let index=0;index<next.length;index+=1){
+  for(const unit of units){
     if(!shouldContinue())break;
-    const book=next[index];
-    if(!shouldLookupBookOnline(book))continue;
-    attempted+=1;pending+=1;
-    const result=await lookupOnlineBook(book,{cache,googleBooksApiKey:options.googleBooksApiKey,openLibraryEnabled:options.openLibraryEnabled,ignoreCache:options.ignoreCache});
+    attempted+=1;
+    pending+=1;
+    const result=await lookupOnlineBook(unit.target,{
+      cache,
+      googleBooksApiKey:options.googleBooksApiKey,
+      openLibraryEnabled:options.openLibraryEnabled,
+      ignoreCache:options.ignoreCache,
+    });
     if(!shouldContinue())break;
     if(result.best){
       const candidate=result.best;
-      let patch:LocalBook;
       if(result.autoApply&&options.applyHighConfidence!==false){
-        patch=mergeOnlineBookCandidate(book,candidate,true);
-        patch={
-          ...patch,
-          workKey:logicalWorkKey(patch),
-          editionKey:editionKey(patch,patch.format),
-          metadataSource:(patch.metadataProvenance?.title==='online'||patch.metadataProvenance?.author==='online')?'online':patch.metadataSource,
-          onlineMetadataMatch:candidate,
-          onlineMetadataAlternatives:result.candidates.slice(1,5),
-        };
-        if(JSON.stringify(patch)!==JSON.stringify(book)){next[index]=patch;updated+=1;}
+        for(const index of unit.indexes){
+          const book=next[index];
+          let patch=mergeOnlineBookCandidate(book,candidate,true);
+          patch={
+            ...patch,
+            workKey:logicalWorkKey({...patch,title:unit.target.title||patch.title}),
+            editionKey:editionKey({...patch,title:unit.target.title||patch.title},patch.format),
+            metadataSource:(patch.metadataProvenance?.title==='online'||patch.metadataProvenance?.author==='online')?'online':patch.metadataSource,
+            onlineMetadataMatch:candidate,
+            onlineMetadataAlternatives:result.candidates.slice(1,5),
+          };
+          if(JSON.stringify(patch)!==JSON.stringify(book)){
+            next[index]=patch;
+            updated+=1;
+          }
+        }
         matched+=1;
       }else if(result.status==='review'||result.status==='matched'){
-        patch={...book,needsReview:true,reviewReason:'A possible online metadata match needs review.',onlineMetadataMatch:candidate,onlineMetadataAlternatives:result.candidates.slice(1,5)};
-        next[index]=patch;review+=1;
+        for(const index of unit.indexes){
+          const book=next[index];
+          next[index]={
+            ...book,
+            needsReview:true,
+            reviewReason:'A possible online metadata match needs review.',
+            onlineMetadataMatch:candidate,
+            onlineMetadataAlternatives:result.candidates.slice(1,5),
+          };
+        }
+        review+=1;
       }
     }
     if(pending>=batchSize||Date.now()-lastPublish>=1200){
