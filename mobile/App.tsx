@@ -33,6 +33,7 @@ import {reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, LocalSortPreview, applyLocalSortCopies, pickLocalFolder, previewLocalSort, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
+import {enrichLocalCatalogue, LocalEnrichmentCache, LocalEnrichmentProgress, publishableLocalWork} from './localEnrichment';
 import {Achievement, achievementsFor, clampProgress, localDay, streakStats, VerifiedProfileStats} from './profileStats';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
@@ -76,7 +77,12 @@ type Book = {
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
-  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'legacy';
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: 'embedded' | 'open-library' | 'google-books' | 'manual' | 'jacket' | 'none';
+  livingBookCoverConfidence?: number;
+  metadataProvider?: 'open-library' | 'google-books';
+  metadataProviderId?: string;
+  metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'online' | 'legacy';
   localWorkKey?: string;
   serverWorkId?: number;
   source?: WorkSource;
@@ -196,6 +202,7 @@ const localAudioCompletedKey = 'archivist.localAudioCompleted.v1';
 const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
+const localEnrichmentKey = 'archivist.localEnrichment.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
@@ -669,6 +676,12 @@ function Client() {
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
+  const [localEnrichmentCache,setLocalEnrichmentCache]=useState<LocalEnrichmentCache>({});
+  const [localEnrichmentReady,setLocalEnrichmentReady]=useState(false);
+  const [localEnrichmentProgress,setLocalEnrichmentProgress]=useState<LocalEnrichmentProgress|null>(null);
+  const localEnrichmentGeneration=useRef(0);
+  const localEnrichmentActive=useRef(false);
+  const startupEnrichmentStarted=useRef(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
   const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
@@ -861,10 +874,11 @@ function Client() {
     return()=>{if(livingBookPageLoop.current===loop)livingBookPageLoop.current=null;loop.stop();};
   },[livingBookMotion.phase,playbackIsPlaying,playbackVisible,reduceMotion]);
 
-  const phoneWorks = useMemo(() => {
+  const allPhoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
   }, [localBooks]);
+  const phoneWorks = useMemo(() => allPhoneWorks.filter(publishableLocalWork), [allPhoneWorks]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
 
@@ -1244,6 +1258,9 @@ function Client() {
     getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(value => {
       if (value && typeof value === 'object') setLocalMetadataOverrides(value);
     }).catch(() => undefined).finally(() => setLocalOverridesReady(true));
+    getPersistedJSON<LocalEnrichmentCache>(localEnrichmentKey).then(value => {
+      if (value && typeof value === 'object') setLocalEnrichmentCache(value);
+    }).catch(() => undefined).finally(() => setLocalEnrichmentReady(true));
     getPersistedJSON<SmartShelfDefinition[]>(smartShelvesKey).then(value => setSmartShelves(sanitizeSmartShelves(value))).catch(() => undefined);
     getPersistedJSON<LibraryCollection[]>(collectionsKey).then(value => setCollections(sanitizeCollections(value))).catch(() => undefined);
     getPersistedJSON<ShelfSectionPref[]>(shelfSectionsKey).then(value => {
@@ -1482,6 +1499,12 @@ function Client() {
     if (restoring || !localOverridesReady || !localCatalogReady || !localFolders.length || localBooks.length || localScanning) return;
     void rescanLocalFolders();
   }, [localBooks.length, localCatalogReady, localFolders, localOverridesReady, localScanning, restoring]);
+
+  useEffect(()=>{
+    if(restoring||!localCatalogReady||!localEnrichmentReady||localScanning||!localBooks.length||startupEnrichmentStarted.current)return;
+    startupEnrichmentStarted.current=true;
+    void runLocalEnrichment(localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],localEnrichmentCache);
+  },[localCatalogReady,localEnrichmentReady,localScanning,localBooks.length,restoring]);
 
   useEffect(()=>{
     if(activeTab!=='settings')return;
@@ -1809,6 +1832,51 @@ function Client() {
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
 
+  async function runLocalEnrichment(catalogue:LocalBook[],cacheSeed:LocalEnrichmentCache=localEnrichmentCache){
+    if(!catalogue.length)return;
+    const generation=++localEnrichmentGeneration.current;
+    localEnrichmentActive.current=true;
+    setLocalEnrichmentProgress({total:groupLocalWorks(catalogue).length,processed:0,published:0,attention:0,currentTitle:''});
+    try{
+      const result=await enrichLocalCatalogue(catalogue,cacheSeed,async(progress,books,cache)=>{
+        if(generation!==localEnrichmentGeneration.current)return;
+        const publishBatch=progress.processed===1||progress.processed===progress.total||progress.processed%4===0;
+        if(!publishBatch)return;
+        const next=books.map(book=>({...book,source:'local' as const}));
+        setLocalBooks(next);
+        setLocalEnrichmentCache(cache);
+        setLocalEnrichmentProgress(progress);
+        if(progress.processed===progress.total||progress.processed%8===0){
+          await Promise.all([
+            setPersistedJSON(localCatalogKey,books),
+            setPersistedJSON(localEnrichmentKey,cache),
+          ]).catch(()=>undefined);
+        }
+      });
+      if(generation!==localEnrichmentGeneration.current)return;
+      const next=result.books.map(book=>({...book,source:'local' as const}));
+      setLocalBooks(next);
+      setLocalEnrichmentCache(result.cache);
+      setSpaces([...new Set(result.books.map(book=>book.space).filter(Boolean))]);
+      await Promise.all([
+        setPersistedJSON(localCatalogKey,result.books),
+        setPersistedJSON(localEnrichmentKey,result.cache),
+      ]);
+      if(result.progress.published>0&&celebrationEligible){
+        setCelebrating(true);
+        setCelebrationEligible(false);
+        void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1');
+        setTimeout(()=>setCelebrating(false),1900);
+      }
+    }catch(error){
+      if(generation===localEnrichmentGeneration.current)setError((error as Error).message);
+    }finally{
+      if(generation===localEnrichmentGeneration.current){
+        localEnrichmentActive.current=false;
+        setLocalEnrichmentProgress(null);
+      }
+    }
+  }
   async function addLocalFolder() {
     setError('');
     setLocalFolderNotice('');
@@ -1830,14 +1898,8 @@ function Client() {
         setPersistedJSON(localFoldersKey, result.folders),
         setPersistedJSON(localCatalogKey, result.books),
       ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
-      if (result.books.length && celebrationEligible) {
-        setCelebrating(true);
-        setCelebrationEligible(false);
-        void SecureStore.setItemAsync(firstLibraryCelebratedKey, '1');
-        setTimeout(() => setCelebrating(false), 1900);
-      }
+      void runLocalEnrichment(result.books,localEnrichmentCache);
+      setLocalFolderNotice(`${result.books.length} files found · Archivist is identifying works and resolving covers${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1861,8 +1923,8 @@ function Client() {
         setPersistedJSON(localFoldersKey, result.folders),
         setPersistedJSON(localCatalogKey, result.books),
       ]);
-      const limitNotice=result.truncatedReason==='entry-limit' ? ' · scan safety limit reached' : result.truncated ? ' · first 10,000 books shown' : '';
-      setLocalFolderNotice(`${result.books.length} found · ${result.identified} confidently identified · ${result.review} need review${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}${limitNotice}.`);
+      void runLocalEnrichment(result.books,localEnrichmentCache);
+      setLocalFolderNotice(`${result.books.length} files found · Archivist is identifying works and resolving covers${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -2455,7 +2517,7 @@ function Client() {
     if (session || onboardingDone) return null;
     const reviewCount = localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
-    const hasBooks = localBooks.length > 0;
+    const hasBooks = phoneWorks.length > 0;
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
@@ -2473,7 +2535,7 @@ function Client() {
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist finds and identifies everything</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
-              {localScanning && scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} found, ${scanProgress.review} need review` : hasBooks ? `${localBooks.length} items found` : 'Scanning starts immediately after you choose a folder.'}
+              {localScanning && scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} files found` : localEnrichmentProgress ? `${localEnrichmentProgress.published} books ready · ${localEnrichmentProgress.processed} of ${localEnrichmentProgress.total} checked` : hasBooks ? `${phoneWorks.length} books ready` : localBooks.length ? 'Finishing identification and cover artwork…' : 'Scanning starts immediately after you choose a folder.'}
             </Text>
           </View>
         </View>
@@ -2816,6 +2878,7 @@ function Client() {
             setLocalBooks(old=>{
               const updated=old.map(b=>b.uri===editing.uri?{...b,title,author,series:seriesName,genre,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const}:b);
               void setPersistedJSON(localCatalogKey,updated);
+              void runLocalEnrichment(updated.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],localEnrichmentCache);
               return updated;
             });
             setEditing(null);
@@ -3118,6 +3181,11 @@ function Client() {
       {localScanning&&scanProgress?<View style={[styles.scanBanner,{backgroundColor:p.card}]}>
         <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
         <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Scanning {scanProgress.currentFolder||'library'}…</Text><Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found</Text></View>
+      </View>:null}
+
+      {!localScanning&&localEnrichmentProgress?<View style={[styles.scanBanner,{backgroundColor:p.card}]}>
+        <ActivityIndicator accessibilityLabel="Preparing local library" color={p.sage}/>
+        <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'600'}}>Preparing your library…</Text><Text style={{color:p.muted}}>{localEnrichmentProgress.published} ready · {localEnrichmentProgress.processed} of {localEnrichmentProgress.total} checked</Text></View>
       </View>:null}
 
       {!base.length&&!shelfLoading?<View style={styles.designedEmpty}>
