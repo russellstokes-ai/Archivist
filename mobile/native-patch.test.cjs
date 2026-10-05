@@ -47,6 +47,12 @@ assert.equal(autoService.includes('class ArchivistAutoService : MediaLibraryServ
 assert.equal(autoService.includes('onGetLibraryRoot')&&autoService.includes('onGetChildren')&&autoService.includes('onAddMediaItems')&&autoService.includes('onSetMediaItems'),true,'Android Auto service must browse, resolve and resume playable media items.');
 assert.equal(autoService.includes('onSearch')&&autoService.includes('onGetSearchResult')&&autoService.includes('requestMetadata.searchQuery'),true,'Android Auto must support browsable and voice search.');
 assert.equal(autoService.includes('MEDIA_TYPE_AUDIO_BOOK')&&autoService.includes('MEDIA_TYPE_AUDIO_BOOK_CHAPTER'),true,'Android Auto must advertise audiobook media semantics.');
+assert.equal(manifest.includes('androidx.media3.session.MediaButtonReceiver')&&manifest.includes('android.intent.action.MEDIA_BUTTON'),true,'Android media-button playback resumption must survive service/process loss.');
+assert.equal(autoService.includes('onPlaybackResumption')&&autoService.includes('resumeWorkKey'),true,'Android Auto must restore the last authoritative audiobook and position.');
+assert.equal(autoService.includes('AUDIO_CONTENT_TYPE_SPEECH')&&autoService.includes('setHandleAudioBecomingNoisy(true)'),true,'Audiobook playback must use speech audio semantics, focus handling and headphone-disconnect safety.');
+assert.equal(autoService.includes('setSeekBackIncrementMs(15_000)')&&autoService.includes('setSeekForwardIncrementMs(15_000)'),true,'Android Auto must retain audiobook-friendly 15 second seek controls.');
+assert.equal(autoService.includes('setTrackNumber(chapterIndex + 1)')&&autoService.includes('setTotalTrackCount(work.tracks.size)'),true,'Now Playing must expose chapter-aware audiobook metadata.');
+assert.equal(autoService.includes('private fun <T> paged('),true,'Android Auto browsing and search must honour controller pagination instead of repeating page one.');
 assert.equal(autoService.includes('ICON_SKIP_BACK_15')&&autoService.includes('ICON_SKIP_FORWARD_15'),true,'Audiobook controls must prefer 15-second seek actions.');
 assert.equal(manifest.includes('android:appCategory="audio"'),true,'Android application category must identify Archivist as an audio media app.');
 console.log('PASS: Android Auto native service and discovery contract are present');
