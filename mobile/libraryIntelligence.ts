@@ -24,6 +24,7 @@ export type LocalIdentity = {
 
 export type LocalMetadataFields = {
   title?: string;
+  workTitle?: string;
   author?: string;
   series?: string;
   seriesNumber?: number;
