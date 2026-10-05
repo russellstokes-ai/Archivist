@@ -267,6 +267,7 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
 function canPropagate(book:SynchronizableBook,field:SyncField,canonical:CanonicalMetadata){
   const target=(book as any)[field];
   if(!present(target))return true;
+  if(field==='author'&&isLibraryRootLabel(String(target)))return true;
   const targetSource=sourceFor(book,field);
   if(targetSource==='manual')return false;
   const canonicalSource=canonical.provenance[field]||'path';
