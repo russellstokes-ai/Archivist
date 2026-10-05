@@ -46,6 +46,7 @@ type Dependencies={
   cachePortrait?:(key:string,uri:string)=>Promise<{uri:string;width:number;height:number;aspectRatio:number}>;
   now?:()=>Date;
   lookupDelayMs?:number;
+  workConcurrency?:number;
 };
 
 function clean(value:string){return String(value||'').replace(/\s+/g,' ').trim();}
@@ -192,6 +193,7 @@ export async function enrichLocalCatalogue(
   const cachePortrait=dependencies.cachePortrait||cachePortraitCover;
   const nowFn=dependencies.now||(()=>new Date());
   const lookupDelayMs=dependencies.lookupDelayMs??425;
+  const workConcurrency=Math.max(1,Math.min(3,Math.floor(dependencies.workConcurrency??2)));
   const books=inputBooks.map(book=>({...book}));
   const indexByUri=new Map<string,number>();
   for(let index=0;index<books.length;index++)if(books[index].uri)indexByUri.set(books[index].uri,index);
@@ -199,8 +201,21 @@ export async function enrichLocalCatalogue(
   const cache:{[key:string]:LocalEnrichmentCacheEntry}={};
   const works=groupLocalWorks(books);
   let processed=0,published=0,attention=0;
+  let progressChain=Promise.resolve();
+  const reportResult=(
+    entry:LocalEnrichmentCacheEntry,
+    changedBooks:LocalBook[],
+    currentTitle:string,
+  )=>{
+    processed++;
+    if(entry.publishReady)published++;else attention++;
+    const progress={total:works.length,processed,published,attention,currentTitle};
+    const delta={books:changedBooks,entry};
+    progressChain=progressChain.then(async()=>{await onProgress?.(progress,delta);});
+    return progressChain;
+  };
 
-  for(const originalWork of works){
+  async function processWork(originalWork:LocalWork){
     const work=currentWorkFor(originalWork,books,indexByUri);
     const fingerprint=localWorkFingerprint(originalWork);
     const querySignature=localWorkQuerySignature(work);
@@ -209,13 +224,8 @@ export async function enrichLocalCatalogue(
     if(cacheReusable(cached,querySignature,now)){
       cache[fingerprint]=cached;
       const changedBooks=applyEntryIndexed(books,indexByUri,work,cached);
-      processed++;
-      if(cached.publishReady)published++;else attention++;
-      await onProgress?.(
-        {total:works.length,processed,published,attention,currentTitle:cached.title||work.title},
-        {books:changedBooks,entry:cached},
-      );
-      continue;
+      await reportResult(cached,changedBooks,cached.title||work.title);
+      return;
     }
 
     let coverUri=work.coverUri;
@@ -309,13 +319,19 @@ export async function enrichLocalCatalogue(
     };
     cache[fingerprint]=entry;
     const changedBooks=applyEntryIndexed(books,indexByUri,work,entry);
-    processed++;
-    if(publishReady)published++;else attention++;
-    await onProgress?.(
-      {total:works.length,processed,published,attention,currentTitle:resolvedTitle||work.title},
-      {books:changedBooks,entry},
-    );
+    await reportResult(entry,changedBooks,resolvedTitle||work.title);
   }
+
+  let cursor=0;
+  const workers=Array.from({length:Math.min(workConcurrency,Math.max(1,works.length))},async()=>{
+    while(true){
+      const index=cursor++;
+      if(index>=works.length)return;
+      await processWork(works[index]);
+    }
+  });
+  await Promise.all(workers);
+  await progressChain;
 
   return {books,cache,progress:{total:works.length,processed,published,attention,currentTitle:''}};
 }
