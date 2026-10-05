@@ -64,12 +64,15 @@ export type LocalBook = {
   onlineComicMetadataAlternatives?: OnlineComicCandidate[];
 };
 
+export type LocalSortMode = 'copy' | 'move';
+
 export type LocalSortPreview = {
   id: string;
   asset: number;
   title: string;
   sourceUri: string;
   rootUri: string;
+  sourceRelativePath: string;
   relativePath: string;
   from: string;
   to: string;
@@ -78,15 +81,26 @@ export type LocalSortPreview = {
   metadataSummary?: string;
 };
 
+export type LocalSortAppliedItem = {
+  id: string;
+  title: string;
+  uri: string;
+  sourceUri: string;
+  rootUri: string;
+  sourceRelativePath: string;
+  sourceRemoved: boolean;
+};
+
 export type LocalSortApplyResult = {
-  copied: Array<{id: string; title: string; uri: string}>;
+  copied: LocalSortAppliedItem[];
   failed: Array<{id: string; title: string; error: string}>;
 };
 
 export type LocalSortHistory = {
   id: string;
   createdAt: string;
-  copied: Array<{id: string; title: string; uri: string}>;
+  mode?: LocalSortMode;
+  copied: LocalSortAppliedItem[];
   failed: Array<{id: string; title: string; error: string}>;
   complete?: boolean;
 };
@@ -150,12 +164,16 @@ export type LocalEmbeddedMetadataEnrichmentResult = {
   processed: number;
   updated: number;
   review: number;
+  timedOut: number;
+  skipped: number;
 };
 
 export type LocalCoverEnrichmentResult = {
   books: LocalBook[];
   attempted: number;
   updated: number;
+  timedOut: number;
+  skipped: number;
 };
 
 export type LocalOnlineMetadataEnrichmentResult = {
@@ -205,6 +223,15 @@ function cooperativeYieldFactory(frameBudgetMs=uiFrameBudgetMs){
     await new Promise<void>(resolve=>setTimeout(resolve,0));
     lastYield=Date.now();
   };
+}
+
+async function withOperationTimeout<T>(operation:Promise<T>,timeoutMs:number,label:string):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const timeout=new Promise<never>((_,reject)=>{
+    timer=setTimeout(()=>reject(Object.assign(new Error(label+' timed out'),{code:'operation-timeout'})),timeoutMs);
+  });
+  try{return await Promise.race([operation,timeout]);}
+  finally{if(timer)clearTimeout(timer);}
 }
 const knownNonDirectoryExtensions = new Set([
   ...supported.keys(),
@@ -733,11 +760,15 @@ export async function enrichLocalEmbeddedMetadata(
     shouldContinue?:()=>boolean;
     refreshMetadata?:boolean;
     batchSize?:number;
-    onBatch?:(books:LocalBook[],progress:{attempted:number;processed:number;total:number;updated:number;review:number})=>void|Promise<void>;
+    itemTimeoutMs?:number;
+    maxConsecutiveTimeouts?:number;
+    onBatch?:(books:LocalBook[],progress:{attempted:number;processed:number;total:number;updated:number;review:number;timedOut:number;skipped:number;current?:string})=>void|Promise<void>;
   }={},
 ):Promise<LocalEmbeddedMetadataEnrichmentResult>{
   const shouldContinue=options.shouldContinue||(()=>true);
   const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize||8)));
+  const itemTimeoutMs=Math.max(2500,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
+  const maxConsecutiveTimeouts=Math.max(1,Math.min(10,Math.trunc(options.maxConsecutiveTimeouts||3)));
   let next=books.slice();
   const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format));
   const audioFolderCounts=new Map<string,number>();
@@ -746,33 +777,53 @@ export async function enrichLocalEmbeddedMetadata(
     const key=parts.slice(0,-1).join('/');
     audioFolderCounts.set(key,(audioFolderCounts.get(key)||0)+1);
   }
-  let attempted=0,processed=0,updated=0,pending=0;
+  let attempted=0,processed=0,updated=0,pending=0,timedOut=0,skipped=0,consecutiveTimeouts=0;
   let review=next.filter(book=>book.needsReview).length;
   let lastPublish=Date.now();
   const yieldToUi=cooperativeYieldFactory();
+
+  const publish=async(current?:string,force=false)=>{
+    if(!force&&pending<batchSize&&Date.now()-lastPublish<700)return;
+    lastPublish=Date.now();pending=0;
+    await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped,current});
+    await yieldToUi(true);
+  };
 
   for(let index=0;index<next.length;index+=1){
     if(!shouldContinue())break;
     const book=next[index];
     if(!['EPUB','Comic','Audio'].includes(book.format))continue;
-    processed+=1;
     if(book.embeddedMetadata&&!options.refreshMetadata){
-      if(pending>=batchSize||Date.now()-lastPublish>=900){
-        lastPublish=Date.now();pending=0;
-        await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review});
-      }
+      processed+=1;pending+=1;
+      await publish(book.title);
       continue;
     }
-    attempted+=1;pending+=1;
-    // Yield before and after potentially expensive archive/tag parsing so the
-    // JS thread never monopolises a frame budget during large refreshes.
+    attempted+=1;
+    await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped,current:book.title});
     await yieldToUi(true);
     if(!shouldContinue())break;
+
     const ext=extension(book.uri);
-    const raw=book.format==='Audio'
-      ? await extractAudioMetadata(book.uri,ext,{size:book.fileSize})
-      : await extractEmbeddedMetadata(book.uri,ext,{exists:true,size:book.fileSize});
+    let raw:LocalMetadataFields={};
+    try{
+      raw=await withOperationTimeout(
+        book.format==='Audio'
+          ? extractAudioMetadata(book.uri,ext,{size:book.fileSize})
+          : extractEmbeddedMetadata(book.uri,ext,{exists:true,size:book.fileSize}),
+        itemTimeoutMs,
+        'Embedded metadata read',
+      );
+      consecutiveTimeouts=0;
+    }catch(error:any){
+      if(error?.code==='operation-timeout'){
+        timedOut+=1;
+        consecutiveTimeouts+=1;
+      }else{
+        consecutiveTimeouts=0;
+      }
+    }
     if(!shouldContinue())break;
+
     const parts=decodedPathParts(book.uri);
     const siblingCount=book.format==='Audio'?(audioFolderCounts.get(parts.slice(0,-1).join('/'))||1):1;
     const fields=sanitizeDiscoveredMetadata(raw,book.format,book.title,siblingCount);
@@ -780,19 +831,21 @@ export async function enrichLocalEmbeddedMetadata(
     next[index]=patch;
     if(Object.keys(fields).length)updated+=1;
     if(!!book.needsReview!==!!patch.needsReview)review+=patch.needsReview?1:-1;
-    await yieldToUi();
-    if(pending>=batchSize||Date.now()-lastPublish>=900){
-      lastPublish=Date.now();pending=0;
-      await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review});
-      await yieldToUi(true);
+    processed+=1;pending+=1;
+    await publish(book.title,true);
+
+    if(consecutiveTimeouts>=maxConsecutiveTimeouts){
+      skipped=Math.max(0,eligible.length-processed);
+      processed=eligible.length;
+      await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped,current:'Skipped remaining embedded reads after repeated timeouts'});
+      break;
     }
   }
-  if((pending>0||processed===eligible.length)&&shouldContinue()){
-    await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review});
+  if(shouldContinue()){
+    await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped});
   }
-  return {books:next,attempted,processed,updated,review};
+  return {books:next,attempted,processed,updated,review,timedOut,skipped};
 }
-
 
 export function applyCoverEnrichment<T extends {uri?:string;coverUri?:string;coverCandidates?:string[]}>(
   current: T[],
@@ -818,7 +871,9 @@ export async function enrichLocalBookCovers(
   options: {
     shouldContinue?: () => boolean;
     batchSize?: number;
-    onBatch?: (books: LocalBook[], progress: {attempted:number;updated:number}) => void | Promise<void>;
+    itemTimeoutMs?: number;
+    maxConsecutiveTimeouts?: number;
+    onBatch?: (books: LocalBook[], progress: {attempted:number;updated:number;timedOut:number;skipped:number;current?:string}) => void | Promise<void>;
   } = {},
 ): Promise<LocalCoverEnrichmentResult> {
   const shouldContinue=options.shouldContinue || (()=>true);
@@ -827,6 +882,9 @@ export async function enrichLocalBookCovers(
   let attempted=0;
   let updated=0;
   let pendingSinceBatch=0;
+  let timedOut=0,skipped=0,consecutiveTimeouts=0;
+  const itemTimeoutMs=Math.max(2500,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
+  const maxConsecutiveTimeouts=Math.max(1,Math.min(10,Math.trunc(options.maxConsecutiveTimeouts||3)));
   let lastPublish=Date.now();
   const yieldToUi=cooperativeYieldFactory();
   const audioKeys=audioWorkGroupKeys(next);
@@ -856,15 +914,24 @@ export async function enrichLocalBookCovers(
       updated+=1;
       if(pendingSinceBatch>=batchSize||Date.now()-lastPublish>=1200){
         lastPublish=Date.now();pendingSinceBatch=0;
-        await options.onBatch?.(next,{attempted,updated});
+        await options.onBatch?.(next,{attempted,updated,timedOut,skipped,current:book.title});
       }
       continue;
     }
-    const info=await getInfoAsync(book.uri).catch(()=>null);
-    if(!shouldContinue())break;
-    const fileSize=info&&'size' in info&&typeof info.size==='number'?info.size:book.fileSize;
-    const modificationTime=info&&'modificationTime' in info&&typeof info.modificationTime==='number'?info.modificationTime:book.modificationTime;
-    const coverUri=await discoverEmbeddedCover(book.uri,ext,{size:fileSize,modificationTime});
+    await options.onBatch?.(next,{attempted,updated,timedOut,skipped,current:book.title});
+    let coverUri:string|undefined;
+    try{
+      coverUri=await withOperationTimeout((async()=>{
+        const info=await getInfoAsync(book.uri).catch(()=>null);
+        const fileSize=info&&'size' in info&&typeof info.size==='number'?info.size:book.fileSize;
+        const modificationTime=info&&'modificationTime' in info&&typeof info.modificationTime==='number'?info.modificationTime:book.modificationTime;
+        return discoverEmbeddedCover(book.uri,ext,{size:fileSize,modificationTime});
+      })(),itemTimeoutMs,'Embedded cover read');
+      consecutiveTimeouts=0;
+    }catch(error:any){
+      if(error?.code==='operation-timeout'){timedOut+=1;consecutiveTimeouts+=1;}
+      else consecutiveTimeouts=0;
+    }
     if(!shouldContinue())break;
     if(coverUri){
       const candidates=[...(book.coverCandidates||[])];
@@ -876,14 +943,19 @@ export async function enrichLocalBookCovers(
     if(pendingSinceBatch>=batchSize||Date.now()-lastPublish>=1200){
       lastPublish=Date.now();
       pendingSinceBatch=0;
-      await options.onBatch?.(next,{attempted,updated});
+      await options.onBatch?.(next,{attempted,updated,timedOut,skipped,current:book.title});
+    }
+    if(consecutiveTimeouts>=maxConsecutiveTimeouts){
+      skipped=Math.max(0,next.length-(index+1));
+      await options.onBatch?.(next,{attempted,updated,timedOut,skipped,current:'Skipped remaining cover reads after repeated timeouts'});
+      break;
     }
   }
 
   if(pendingSinceBatch>0&&shouldContinue()){
-    await options.onBatch?.(next,{attempted,updated});
+    await options.onBatch?.(next,{attempted,updated,timedOut,skipped});
   }
-  return {books:next,attempted,updated};
+  return {books:next,attempted,updated,timedOut,skipped};
 }
 
 export function applyOnlineMetadataEnrichment(current:LocalBook[],enriched:LocalBook[]):LocalBook[] {
@@ -1128,6 +1200,7 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
       title: book.title,
       sourceUri: book.uri,
       rootUri,
+      sourceRelativePath: currentRelative,
       relativePath: target,
       from,
       to: target,
@@ -1172,8 +1245,19 @@ export async function previewLocalSortSafely(
   return checked;
 }
 
-export async function applyLocalSortCopies(
+async function verifyLocalCopy(sourceUri:string,targetUri:string){
+  const sourceInfo=await getInfoAsync(sourceUri).catch(()=>null);
+  const verification=await getInfoAsync(targetUri);
+  if(!verification.exists)throw Error('Destination verification failed after copy');
+  if(sourceInfo?.exists&&typeof sourceInfo.size==='number'&&sourceInfo.size>0
+    &&typeof verification.size==='number'&&verification.size!==sourceInfo.size){
+    throw Error('Destination size verification failed after copy');
+  }
+}
+
+export async function applyLocalSort(
   previews: LocalSortPreview[],
+  mode:LocalSortMode='copy',
   onCheckpoint?: (result: LocalSortApplyResult) => void | Promise<void>,
 ): Promise<LocalSortApplyResult> {
   const copied: LocalSortApplyResult['copied'] = [];
@@ -1182,40 +1266,98 @@ export async function applyLocalSortCopies(
     if (preview.state !== 'ready') continue;
     await new Promise(resolve=>setTimeout(resolve,0));
     let target:string|undefined;
+    let applied:LocalSortAppliedItem|undefined;
     try {
       target = await createTargetFile(preview.rootUri, preview.relativePath);
-      const sourceInfo = await getInfoAsync(preview.sourceUri).catch(() => null);
       await copyLocalUri(preview.sourceUri,target);
-      const verification = await getInfoAsync(target);
-      if (!verification.exists) throw Error('Destination verification failed after copy');
-      if (sourceInfo?.exists && typeof sourceInfo.size === 'number' && sourceInfo.size > 0
-        && typeof verification.size === 'number' && verification.size !== sourceInfo.size) {
-        await StorageAccessFramework.deleteAsync(target).catch(() => undefined);
-        throw Error('Destination size verification failed after copy');
+      await verifyLocalCopy(preview.sourceUri,target);
+      applied={
+        id:preview.id,title:preview.title,uri:target,sourceUri:preview.sourceUri,
+        rootUri:preview.rootUri,sourceRelativePath:preview.sourceRelativePath,sourceRemoved:false,
+      };
+      copied.push(applied);
+      // Persist a verified-copy checkpoint before a destructive source delete.
+      await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
+
+      if(mode==='move'){
+        let removed=false;
+        try{
+          await deleteLocalUri(preview.sourceUri);
+          const sourceAfter=await getInfoAsync(preview.sourceUri).catch(()=>null);
+          removed=sourceAfter?.exists===false;
+          if(!removed)throw Error('Source deletion could not be verified');
+        }catch(error){
+          const sourceAfter=await getInfoAsync(preview.sourceUri).catch(()=>null);
+          removed=sourceAfter?.exists===false;
+          if(!removed){
+            failed.push({id:preview.id,title:preview.title,error:'Verified copy was kept, but the original could not be removed safely: '+((error as Error).message||'unknown error')});
+            await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
+            continue;
+          }
+        }
+        applied.sourceRemoved=true;
+        await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
       }
-      copied.push({id: preview.id, title: preview.title, uri: target});
-      await onCheckpoint?.({copied: copied.slice(), failed: failed.slice()});
     } catch (e) {
-      if(target)await deleteLocalUri(target).catch(()=>undefined);
+      if(target&&!applied)await deleteLocalUri(target).catch(()=>undefined);
       failed.push({id: preview.id, title: preview.title, error: (e as Error).message});
-      await onCheckpoint?.({copied: copied.slice(), failed: failed.slice()});
+      await onCheckpoint?.({copied: copied.map(item=>({...item})), failed: failed.slice()});
     }
   }
   return {copied, failed};
 }
 
-export async function removeLocalSortCopies(history: LocalSortHistory): Promise<LocalSortApplyResult> {
-  const removed: LocalSortApplyResult['copied'] = [];
+export async function applyLocalSortCopies(
+  previews: LocalSortPreview[],
+  onCheckpoint?: (result: LocalSortApplyResult) => void | Promise<void>,
+): Promise<LocalSortApplyResult> {
+  return applyLocalSort(previews,'copy',onCheckpoint);
+}
+
+export async function recoverLocalSortOperation(history: LocalSortHistory): Promise<LocalSortApplyResult> {
+  const recovered: LocalSortApplyResult['copied'] = [];
   const failed: LocalSortApplyResult['failed'] = [];
+  const mode:LocalSortMode=history.mode==='move'?'move':'copy';
   for (const item of history.copied) {
     try {
+      if(mode==='copy'){
+        await deleteLocalUri(item.uri);
+        recovered.push(item);
+        continue;
+      }
+      const sourceInfo=await getInfoAsync(item.sourceUri).catch(()=>null);
+      const targetInfo=await getInfoAsync(item.uri).catch(()=>null);
+      if(targetInfo?.exists!==true){
+        if(sourceInfo?.exists===true){recovered.push(item);continue;}
+        throw Error('Cannot restore this move because neither the original nor organised copy can be verified.');
+      }
+      if(sourceInfo?.exists===true){
+        await deleteLocalUri(item.uri);
+        recovered.push({...item,sourceRemoved:false});
+        continue;
+      }
+      if(sourceInfo===null)throw Error('Original file state cannot be verified safely.');
+      if(!item.rootUri||!item.sourceRelativePath)throw Error('Original path is unavailable for this move history item.');
+      const restoredUri=await createTargetFile(item.rootUri,item.sourceRelativePath);
+      try{
+        await copyLocalUri(item.uri,restoredUri);
+        await verifyLocalCopy(item.uri,restoredUri);
+      }catch(error){
+        await deleteLocalUri(restoredUri).catch(()=>undefined);
+        throw error;
+      }
       await deleteLocalUri(item.uri);
-      removed.push(item);
+      recovered.push({...item,sourceUri:restoredUri,sourceRemoved:false});
     } catch (e) {
       failed.push({id: item.id, title: item.title, error: (e as Error).message});
     }
   }
-  return {copied: removed, failed};
+  return {copied: recovered, failed};
+}
+
+export async function removeLocalSortCopies(history: LocalSortHistory): Promise<LocalSortApplyResult> {
+  if(history.mode==='move')throw Error('Move history must be restored, not deleted.');
+  return recoverLocalSortOperation({...history,mode:'copy'});
 }
 
 function extension(uri: string) {
