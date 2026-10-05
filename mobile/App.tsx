@@ -307,6 +307,7 @@ const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
+const librarySetupPreparedKey = 'archivist.librarySetupPrepared.v1';
 const shelfServerPromptKey = 'archivist.shelfServerPrompt.v1';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 const smartShelvesKey = 'archivist.smartShelves.v1';
@@ -326,6 +327,10 @@ const lastReadingKey = 'archivist.lastReading.v1';
 const lastPlayingKey = 'archivist.lastPlaying.v1';
 const nowSessionKey = 'archivist.nowSession.v1';
 const achievementLedgerKey = 'archivist.achievementLedger.v1';
+function localFolderSetSignature(folders:LocalFolder[]){
+  return folders.map(folder=>String(folder.uri||'')).filter(Boolean).sort().join('|');
+}
+
 const defaultShelfSections:ShelfSectionPref[] = [
   {id:'continue',title:'Continue',visible:true},
   {id:'favourites',title:'Favourites',visible:true},
@@ -785,6 +790,8 @@ function Client() {
   const [enrichmentProgress,setEnrichmentProgress]=useState<LocalScanProgress|null>(null);
   const activeLibraryProgress=scanProgress||enrichmentProgress;
   const libraryRefreshActive=localScanning||!!activeLibraryProgress;
+  const currentLibraryFolderSignature=useMemo(()=>localFolderSetSignature(localFolders),[localFolders]);
+  const libraryPreparationReady=!!currentLibraryFolderSignature&&libraryPreparedSignature===currentLibraryFolderSignature&&!libraryRefreshActive;
   const libraryRefreshRunningRef=useRef(false);
   const libraryRefreshWarningsRef=useRef<string[]>([]);
   const completedLibraryBooksRef=useRef<LocalBook[]|null>(null);
@@ -1007,6 +1014,7 @@ function Client() {
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localFoldersReady,setLocalFoldersReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
+  const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
   const [offlineWorksReady,setOfflineWorksReady]=useState(false);
   const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
@@ -1709,6 +1717,9 @@ function Client() {
       setLocalBooks(normalized.map(book=>({...book,source:'local' as const})));
       setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
     }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
+    getPersistedJSON<{signature?:string}>(librarySetupPreparedKey).then(value=>{
+      if(value&&typeof value.signature==='string')setLibraryPreparedSignature(value.signature);
+    }).catch(()=>undefined);
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
       if (value && typeof value === 'object') setOfflineWorks(value);
     }).catch(() => undefined).finally(()=>setOfflineWorksReady(true));
@@ -2492,6 +2503,8 @@ function Client() {
     if(libraryRefreshRunningRef.current)return null;
     libraryRefreshRunningRef.current=true;
     libraryRefreshWarningsRef.current=[];
+    setLibraryPreparedSignature('');
+    void setPersistedJSON(librarySetupPreparedKey,{signature:'',completedAt:''}).catch(()=>undefined);
     completedLibraryBooksRef.current=null;
     autoLocalScanAttempted.current=true;
     enrichmentProgressClock.current=0;
@@ -2568,10 +2581,17 @@ function Client() {
     await scanFrame();
     if(!scanCommitGate.isCurrent(generation))return null;
     setScanProgress(null);
+    let enrichmentCompleted=false;
     try{
       await enrichPublishedLocalLibrary(result.books,generation,forceOnline);
+      enrichmentCompleted=scanCommitGate.isCurrent(generation);
     }catch(error){
       if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
+    }
+    if(enrichmentCompleted){
+      const signature=localFolderSetSignature(result.folders);
+      setLibraryPreparedSignature(signature);
+      await setPersistedJSON(librarySetupPreparedKey,{signature,completedAt:new Date().toISOString()}).catch(()=>undefined);
     }
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
@@ -5258,9 +5278,6 @@ function Client() {
         <PageHeader title="Library" subtitle="Every book. In its place."/>
         <View style={styles.libraryHeaderSummary}>
           <Text style={[styles.pageHeaderMeta,{color:p.muted}]}>{maintenanceMode?visibleBooks.length:sortedUnifiedWorks.length} {maintenanceMode?'file':'work'}{(maintenanceMode?visibleBooks.length:sortedUnifiedWorks.length)===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Manage Library scanning metadata and organisation" onPress={()=>setLibraryManageOpen(true)} style={styles.libraryManageAction}>
-            <UiIcon name="more" color={p.sage} size={17}/><Text style={[styles.libraryManageActionText,{color:p.sage}]}>Manage</Text>
-          </Pressable>
         </View>
       </View>
       {LocalScanStatus()}
@@ -7134,9 +7151,12 @@ function Client() {
             ['format-author-title','Format / Author / Title'],
           ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:sortTemplate===id}} onPress={()=>setSortTemplate(id)} style={[styles.segmentItem,{backgroundColor:sortTemplate===id?p.card:'transparent'}]}><Text style={{color:sortTemplate===id?p.sage:p.muted,textAlign:'center',fontWeight:sortTemplate===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
+        {!libraryPreparationReady?<View style={styles.toolRow}>
+          <Button label={libraryRefreshActive?'Preparing…':'Prepare library'} disabled={libraryRefreshActive||!localFolders.length} tone="quiet" onPress={()=>void rescanLocalFolders()}/>
+        </View>:null}
         <View style={styles.toolRow}>
-          <Button label={busy?'Checking…':'Preview'} disabled={busy||localBooks.length===0} tone="quiet" onPress={()=>void previewLocalSortBatch()}/>
-          <Button label={'Apply selected'+(selectedReady.length?' ('+selectedReady.length+')':'')} disabled={busy||selectedReady.length===0} onPress={()=>void applyLocalSortBatch()}/>
+          <Button label={busy?'Checking…':'Preview'} disabled={busy||localBooks.length===0||!libraryPreparationReady} tone="quiet" onPress={()=>void previewLocalSortBatch()}/>
+          <Button label={'Apply selected'+(selectedReady.length?' ('+selectedReady.length+')':'')} disabled={busy||selectedReady.length===0||!libraryPreparationReady} onPress={()=>void applyLocalSortBatch()}/>
         </View>
         {readyIds.length?<View style={styles.toolRow}>
           <Button label="Select all Ready" tone="quiet" onPress={()=>setLocalMoveSelection(readyIds)}/>
@@ -7476,6 +7496,10 @@ function Client() {
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
+              <View style={styles.settingsRow}>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Library management</Text><Text style={[styles.meta,{color:p.muted}]}>Folders, metadata, scanning and file organisation.</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Open Library management" onPress={()=>setLibraryManageOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Open</Text></Pressable>
+              </View>
               <View style={styles.settingsSubgroup}>
                 <View style={styles.settingsSubgroupHeading}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Books and comics</Text></View>
