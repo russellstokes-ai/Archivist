@@ -1,6 +1,6 @@
 import {publicationYear} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
-import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
+import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {
   AccessibilityInfo,
