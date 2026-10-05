@@ -58,7 +58,7 @@ assert.ok(source.includes('gutterLeftShadow')&&source.includes('gutterCrease')&&
 assert.ok(source.includes('spinePaperBridge'),'a continuous paper bridge must sit beneath the gutter so the hardcover binding cannot appear as a centre slit');
 assert.ok(source.includes("livingBookDepthLayers().filter(layer=>layer.side==='right')"),'only the right paper depth may remain static in the open spread');
 assert.ok(source.includes("livingBookDepthLayers().filter(layer=>layer.side==='left')")&&source.includes('leftPaperBlock'),'left page depth must rotate with the left page as one physical block');
-assert.ok(source.includes('leftPaperOpacity=Animated.multiply('),'left paper must fade in only after it has crossed the edge-on hinge region');
+assert.ok(source.includes('const leftPaperOpacity=open.interpolate')&&source.includes('inputRange:[0,.46,.72,1]'),'left paper must cross the edge-on hinge before a single smooth opacity ramp reveals it');
 assert.ok(source.includes('borderRightWidth:0')&&source.includes('borderLeftWidth:0'),'inner paper edges must not draw competing borders through the spine');
 assert.ok(source.includes('leafFrontFace')&&source.includes('leafBackFace'),'animated paper must render as two-sided material');
 
