@@ -1,5 +1,9 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {StyleSheet,View} from 'react-native';
+
+export function AmbientGlow({color='#47736F',size=520,strength=1}:{color?:string;size?:number;strength?:number}){
+  return <View pointerEvents="none" accessibilityElementsHidden style={{position:'absolute',width:size,height:size,left:'50%',top:0,marginLeft:-size/2}}>{Array.from({length:24},(_,i)=>{const inset=i*size/64;return <View key={i} style={{position:'absolute',left:inset,top:inset,right:inset,bottom:inset,borderRadius:size,backgroundColor:color,opacity:.009*strength}}/>})}</View>;
+}
 import {WebView} from 'react-native-webview';
 import {EncodingType,StorageAccessFramework,cacheDirectory,downloadAsync,getInfoAsync,readAsStringAsync} from 'expo-file-system/legacy';
 import type {LivingBookPhase} from './playerExperience';
