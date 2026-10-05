@@ -1,4 +1,4 @@
-import {decodedPathParts,editionKey,isGenericMediaTitle,logicalWorkKey} from './libraryIntelligence';
+import {decodedPathParts,editionKey,inferLocalBookMetadata,isGenericMediaTitle,logicalWorkKey} from './libraryIntelligence';
 
 export type SyncSource='manual'|'sidecar'|'embedded'|'online'|'path';
 export type SyncConfidence='high'|'medium'|'low';
@@ -99,11 +99,21 @@ function bestCover(books:SynchronizableBook[]){
 
 function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean){
   const entries=books.flatMap(book=>{
+    const values:Array<{book:SynchronizableBook;value:any;source:SyncSource;confidence:SyncConfidence;key:string}>=[];
     const value=(book as any)[field];
-    if(!present(value))return [];
-    const source=sourceFor(book,field);
-    const confidence=confidenceFor(book,field);
-    return [{book,value,source,confidence,key:normal(value)}];
+    if(present(value)){
+      const source=sourceFor(book,field);
+      const confidence=confidenceFor(book,field);
+      values.push({book,value,source,confidence,key:normal(value)});
+    }
+    if(audio&&['title','author','series','seriesNumber','genre','publishedYear','narrator','isbn','asin'].includes(field)){
+      const inferred=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length});
+      const pathValue=(inferred as any)[field];
+      if(present(pathValue)&&normal(pathValue)!==normal(value)){
+        values.push({book,value:pathValue,source:'path',confidence:inferred.confidence,key:normal(pathValue)});
+      }
+    }
+    return values;
   });
   if(!entries.length)return undefined;
   const frequency=new Map<string,number>();
