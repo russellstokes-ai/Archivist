@@ -225,6 +225,55 @@ assert(!x.publishableLocalWork({title:'Untitled',needsReview:false,coverUri:'cov
     'sidecar/cover context changes must invalidate enrichment even when title and author stay unchanged',
   );
 
+  const concurrentBooks=Array.from({length:6},(_,index)=>({
+    id:500+index,
+    uri:'file://concurrent-'+index+'.epub',
+    title:'Concurrent Book '+index,
+    author:'Author '+index,
+    series:'',
+    genre:'',
+    format:'EPUB',
+    space:'Books',
+    available:true,
+    coverShape:'portrait',
+    metadataSource:'path',
+    identificationConfidence:'high',
+    needsReview:false,
+    reviewReason:'',
+    assetSignature:'concurrent-'+index,
+  }));
+  let activeCovers=0,maxActiveCovers=0;
+  let activeProgress=0,maxActiveProgress=0;
+  const concurrentResult=await x.enrichLocalCatalogue(concurrentBooks,{},async()=>{
+    activeProgress++;
+    maxActiveProgress=Math.max(maxActiveProgress,activeProgress);
+    await new Promise(resolve=>setTimeout(resolve,4));
+    activeProgress--;
+  },{
+    lookup:async input=>({
+      provider:'open-library',
+      providerId:'provider-'+input.title,
+      title:input.title,
+      authors:[input.author],
+      coverUri:'https://covers.example/'+encodeURIComponent(input.title)+'.jpg',
+      confidence:.99,
+    }),
+    extractAudioArtwork:async()=>null,
+    cachePortrait:async(key)=>{
+      activeCovers++;
+      maxActiveCovers=Math.max(maxActiveCovers,activeCovers);
+      await new Promise(resolve=>setTimeout(resolve,12));
+      activeCovers--;
+      return {uri:'file://'+key+'.jpg',width:640,height:1000,aspectRatio:.64};
+    },
+    lookupDelayMs:0,
+    workConcurrency:2,
+    now:()=>new Date('2026-10-05T21:10:00Z'),
+  });
+  assert.equal(concurrentResult.progress.processed,6);
+  assert.equal(maxActiveCovers,2,'enrichment must allow bounded parallel work instead of a serial cover queue');
+  assert.equal(maxActiveProgress,1,'progress/persistence callbacks must remain serialized even when works finish concurrently');
+
   const many=Array.from({length:3000},(_,index)=>({
     id:10000+index,
     uri:'file://book-'+index+'.epub',
