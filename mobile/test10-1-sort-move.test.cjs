@@ -108,8 +108,11 @@ const {applyLocalSort,previewLocalSortToRoot,recoverLocalSortOperation}=require(
   const recovered=await recoverLocalSortOperation(staleHistory);
   assert.equal(recovered.failed.length,0,'interrupted move must be recoverable');
   assert.equal(recovered.copied.length,1);
-  assert.equal(info.get(source).exists,true,'recovery must recreate the original at its original root/path');
-  assert.equal(info.get(source).size,4096);
+  const restoredSource=recovered.copied[0].sourceUri;
+  assert.equal(recovered.copied[0].sourceRootUri,sourceRoot,'recovery must preserve the original storage root');
+  assert.equal(recovered.copied[0].sourceRelativePath,'Book.epub','recovery must preserve the original relative filename');
+  assert.equal(info.get(restoredSource)?.exists,true,'recovery must recreate and verify an original source file');
+  assert.equal(info.get(restoredSource)?.size,4096);
   assert.equal(info.get(organised).exists,false,'recovery must remove the organised copy only after the original verifies');
 
   // A delete failure must never turn Move into data loss. Keep both verified
