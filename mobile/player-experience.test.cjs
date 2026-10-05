@@ -17,3 +17,9 @@ let chapters=[{title:'One',start:0,end:100},{title:'Two',start:100,end:200}];cha
 console.log('player-experience.test.cjs passed');
 
 assert(x.PLAYER_MOTION_TIMING.pageTurnMs+x.PLAYER_MOTION_TIMING.pageRestMs<=2000,'user requested a complete turn every one to two seconds');
+assert(x.livingBookHingeDuration(0,1,900,false)===900,'full open must use the full opening duration');
+assert(x.livingBookHingeDuration(.5,1,900,false)===450,'half-open reversal must use only remaining hinge travel');
+assert(x.livingBookHingeDuration(.75,0,700,false)===525,'closing duration must scale from current hinge position');
+assert(x.livingBookHingeDuration(.5,1,900,true)===0,'reduced motion must remove hinge animation');
+assert(x.livingBookHingeDuration(1,1,900,false)===0,'settled hinge must not restart an animation');
+
