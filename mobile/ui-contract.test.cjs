@@ -54,7 +54,10 @@ assert.ok(source.includes("relation.availability || []"), 'Atlas relationship vi
 assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'"), 'Legacy local catalogue migration key is missing');
 assert.ok(source.includes("await loadLocalStage()"), 'Cold start must restore the keyed SQLite local catalogue');
 assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold start must retain one-time migration from the legacy JSON catalogue');
-assert.ok(source.includes("replaceLocalStageBooks(result.books)"), 'Successful scans must replace the keyed SQLite catalogue transactionally');
+assert.ok(source.includes("const generation=await beginLocalStageScan()"), 'Successful scans must begin an isolated SQLite staging generation');
+assert.ok(source.includes("await stageLocalScanBooks(generation,batch,ordinal)"), 'Successful scans must persist discovered batches incrementally');
+assert.ok(source.includes("await commitLocalStageScan(generation)"), 'Only a complete scan may atomically replace the committed SQLite catalogue');
+assert.ok(source.includes("await abandonLocalStageScan(generation)"), 'Interrupted scans must abandon their partial SQLite generation');
 assert.equal(source.includes("setPersistedJSON(localCatalogKey, result.books)"),false,'Successful scans must not rewrite the legacy whole-catalogue JSON cache');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
