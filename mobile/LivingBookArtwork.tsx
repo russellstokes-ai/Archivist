@@ -66,14 +66,20 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
             {
               top:layer.top,
               bottom:layer.bottom,
-              left:layer.side==='left'?0:G.spineX,
-              width:G.pageWidth,
+              left:layer.side==='left'?0:G.spineX-G.spineOverlap,
+              width:layer.side==='left'?G.pageWidth:G.pageWidth+G.spineOverlap,
               opacity:.48-layer.offset*.07,
             },
           ]}/>)}
           <View style={[s.binding,{left:G.spineX-4}]}/>
-          <View style={[s.page,{right:0}]}>{page(1)}</View>
-          <View pointerEvents="none" style={s.gutter}/>
+          <View style={[s.page,s.rightPage,{right:0}]}>{page(1)}</View>
+          <View pointerEvents="none" style={s.gutter}>
+            <View style={s.gutterLeftShadow}/>
+            <View style={s.gutterLeftHighlight}/>
+            <View style={s.gutterCrease}/>
+            <View style={s.gutterRightHighlight}/>
+            <View style={s.gutterRightShadow}/>
+          </View>
         </Animated.View>
 
         {/* Two-sided cover: the front never pops out at the 90-degree hinge crossing. */}
@@ -137,12 +143,18 @@ const s=StyleSheet.create({
   fallbackAuthor:{color:'#BDB99E',fontSize:9,textAlign:'center'},
   pageEdge:{position:'absolute',backgroundColor:'#c8c2ad',borderBottomWidth:.7,borderColor:'#aaa38e',zIndex:1},
   page:{position:'absolute',top:G.pageInsetY,width:G.pageWidth,height:G.pageHeight,backgroundColor:'#eee9d5',borderWidth:.5,borderColor:'#cec9b5',overflow:'hidden',zIndex:2},
-  leftPage:{left:0,zIndex:6,backfaceVisibility:'hidden'},
+  leftPage:{left:0,zIndex:6,backfaceVisibility:'hidden',borderRightWidth:0,borderTopRightRadius:2,borderBottomRightRadius:2},
+  rightPage:{width:G.pageWidth+G.spineOverlap,borderLeftWidth:0,borderTopLeftRadius:2,borderBottomLeftRadius:2},
   pageContent:{flex:1,paddingHorizontal:14,paddingTop:11},
   runningHead:{fontFamily:'ArchivistEditorial',fontSize:5.5,lineHeight:7.5,color:'#696555',textAlign:'center'},
   chapter:{fontFamily:'ArchivistEditorial',fontSize:7.5,lineHeight:9.5,color:'#575344',marginTop:9,textAlign:'center'},
   pageNumber:{position:'absolute',bottom:9,alignSelf:'center',fontSize:5.5,color:'#77715f'},
-  gutter:{position:'absolute',left:G.spineX-6,top:G.pageInsetY,bottom:G.pageInsetY,width:12,backgroundColor:'rgba(74,63,34,.08)',borderLeftWidth:1,borderRightWidth:1,borderColor:'rgba(74,63,34,.11)',zIndex:4},
+  gutter:{position:'absolute',left:G.spineX-G.gutterWidth/2,top:G.pageInsetY,bottom:G.pageInsetY,width:G.gutterWidth,zIndex:7,overflow:'hidden'},
+  gutterLeftShadow:{position:'absolute',left:0,top:0,bottom:0,width:G.gutterWidth/2,backgroundColor:'rgba(58,48,24,.075)'},
+  gutterLeftHighlight:{position:'absolute',left:G.gutterWidth/2-4,top:0,bottom:0,width:3,backgroundColor:'rgba(255,252,232,.16)'},
+  gutterCrease:{position:'absolute',left:G.gutterWidth/2-.5,top:0,bottom:0,width:1,backgroundColor:'rgba(48,38,19,.24)'},
+  gutterRightHighlight:{position:'absolute',left:G.gutterWidth/2+1,top:0,bottom:0,width:3,backgroundColor:'rgba(255,252,232,.13)'},
+  gutterRightShadow:{position:'absolute',right:0,top:0,bottom:0,width:G.gutterWidth/2,backgroundColor:'rgba(58,48,24,.055)'},
   coverLeaf:{position:'absolute',right:0,top:0,width:G.coverWidth,height:G.coverHeight,zIndex:5,overflow:'visible'},
   coverFrontFace:{...StyleSheet.absoluteFillObject,overflow:'hidden',backgroundColor:'#183337',borderRadius:6,backfaceVisibility:'hidden'},
   coverInsideFace:{...StyleSheet.absoluteFillObject,overflow:'hidden',backgroundColor:'#29484A',borderRadius:6,backfaceVisibility:'hidden',borderWidth:1,borderColor:'rgba(185,154,104,.24)',padding:10},
