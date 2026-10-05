@@ -27,7 +27,7 @@ assert.equal(source.includes('metronTokenDraft,\n      smartShelves'),false,'Met
 assert.ok(source.includes('async function refreshAllMetadataAndCovers')&&source.includes('await clearMetadataCaches(false)')&&source.includes('rescanLocalFolders(localMetadataOverrides,true)'),'explicit refresh must bypass provider caches before rescanning');
 assert.ok(source.includes('metadataSettingsReady')&&source.includes('!metadataSettingsReady'),'initial auto scan must wait for metadata settings hydration');
 assert.ok(source.includes('metadataSettingsRef.current=next')&&source.includes('mutator(metadataSettingsRef.current)'),'rapid settings changes must serialize from the latest in-memory preferences rather than stale render state');
-assert.ok(source.includes('forceOnline=false')&&source.includes('!metadataSettings.automaticEnrichment&&!forceOnline'),'manual refresh must be able to run online enrichment while background enrichment is off');
+assert.ok(source.includes('forceOnline=false')&&source.includes('metadataSettings.automaticEnrichment||forceOnline'),'manual refresh must be able to run online enrichment while background enrichment is off');
 assert.ok(source.includes('metadataSettings.books.openLibrary')&&source.includes('metadataSettings.books.googleBooks')&&source.includes('metadataSettings.comics.metron'),'provider choices must control the enrichment pipeline');
 
 assert.ok(settings.includes('onlineEnabled:true')&&settings.includes('automaticEnrichment:true')&&settings.includes('applyHighConfidence:true'),'commercial defaults must enable safe metadata enrichment');
