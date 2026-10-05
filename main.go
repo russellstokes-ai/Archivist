@@ -489,6 +489,7 @@ func (a *app) routes() http.Handler {
 	a.epubResourceRoutes(mux)
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
+	a.metadataOnlineRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
 	static, _ := fs.Sub(web, "web")
@@ -920,6 +921,9 @@ func main() {
 	if e = a.initPreferences(); e != nil {
 		log.Fatal(e)
 	}
+	if e = a.initMetadataOnline(); e != nil {
+		log.Fatal(e)
+	}
 	if e = a.initProgress(); e != nil {
 		log.Fatal(e)
 	}
@@ -948,6 +952,7 @@ func main() {
 		log.Fatal(e)
 	}
 	go a.worker(context.Background())
+	go a.metadataWorker(context.Background())
 	go a.watcher(context.Background())
 	handler := a.routes()
 	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
