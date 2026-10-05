@@ -23,6 +23,9 @@ assert(app.includes('commitLocalStageScan(generation)'),'Only a complete scan ma
 assert(app.includes('abandonLocalStageScan(generation)'),'Failed scans must discard their partial generation.');
 assert(app.includes('upsertLocalStageBooks(books)'),'Enrichment must checkpoint only changed asset rows.');
 assert(app.includes('upsertLocalEnrichmentEntries(entries)'),'Enrichment must checkpoint only changed work rows.');
+assert.equal(app.includes('const streamed:LocalBook[]=[]'),false,'Progressive scan UI must not keep a second full-library accumulator.');
+assert.equal(app.includes('const snapshot=streamed.map'),false,'Progressive scan UI must not remap the full discovered catalogue repeatedly.');
+assert(app.includes('uiPending.length<192||now-lastUiPublish<900'),'Progressive scan UI updates must be batched and throttled.');
 
 const enrichment=fs.readFileSync(path.join(__dirname,'localEnrichment.ts'),'utf8');
 assert.equal(
