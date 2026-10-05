@@ -24,7 +24,8 @@ assert.ok(source.includes('async function clearMetadataCaches')&&source.includes
 assert.ok(source.includes('metadataSettings,')&&source.includes("raw.metadataSettings&&typeof raw.metadataSettings==='object'"),'non-secret metadata provider preferences must participate in backup/restore');
 assert.equal(source.includes('googleBooksKeyDraft,\n      smartShelves'),false,'Google Books credential material must never be added to backup snapshots');
 assert.equal(source.includes('metronTokenDraft,\n      smartShelves'),false,'Metron credential material must never be added to backup snapshots');
-assert.ok(source.includes('async function refreshAllMetadataAndCovers')&&source.includes('await clearMetadataCaches(false)')&&source.includes('rescanLocalFolders(localMetadataOverrides,true)'),'explicit refresh must bypass provider caches before rescanning');
+assert.ok(source.includes('async function refreshAllMetadataAndCovers')&&source.includes('rescanLocalFolders(localMetadataOverrides,true)')&&source.includes('ignoreCache:forceRefresh'),'explicit refresh must bypass provider caches without destroying the last working cache before replacement results exist');
+assert.equal(source.includes('await clearMetadataCaches(false)'),false,'explicit refresh must retain the previous cache until fresh provider results are available');
 assert.ok(source.includes('metadataSettingsReady')&&source.includes('!metadataSettingsReady'),'initial auto scan must wait for metadata settings hydration');
 assert.ok(source.includes('metadataSettingsRef.current=next')&&source.includes('mutator(metadataSettingsRef.current)'),'rapid settings changes must serialize from the latest in-memory preferences rather than stale render state');
 assert.ok(source.includes('forceOnline=false')&&source.includes('metadataSettings.automaticEnrichment||forceOnline'),'manual refresh must be able to run online enrichment while background enrichment is off');
