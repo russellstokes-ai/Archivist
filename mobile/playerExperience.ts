@@ -43,7 +43,8 @@ export function reduceLivingBookMotion(state:LivingBookMotion,event:LivingBookMo
       return {phase:'opening',closeAfterSettle:false};
     case 'pause-request':
       if(state.phase==='closed'||state.phase==='closing')return {phase:state.phase,closeAfterSettle:false};
-      if(state.phase==='turning'||state.phase==='settling')return {phase:'settling',closeAfterSettle:true};
+      if(state.phase==='turning')return {...state,closeAfterSettle:true};
+      if(state.phase==='settling')return {phase:'settling',closeAfterSettle:true};
       return {phase:'closing',closeAfterSettle:false};
     case 'open-complete':
       return state.phase==='opening'?{phase:'open',closeAfterSettle:false}:state;
