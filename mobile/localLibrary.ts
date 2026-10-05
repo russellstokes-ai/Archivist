@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
-import {applyLocalMetadata, applyResolvedLocalMetadata, inferLocalBookMetadata, IdentificationConfidence, isGenericMediaTitle, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey, sanitizeDiscoveredMetadata} from './libraryIntelligence';
+import {applyLocalMetadata, applyResolvedLocalMetadata, decodedPathParts, inferLocalBookMetadata, IdentificationConfidence, isGenericMediaTitle, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey, sanitizeDiscoveredMetadata} from './libraryIntelligence';
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
 import {extractEmbeddedMetadata} from './embeddedMetadata';
 import {extractAudioMetadata} from './audioMetadata';
@@ -100,11 +100,13 @@ export type LocalFolder = {
 };
 
 export type LocalScanProgress = {
-  phase: 'discovering' | 'reading-metadata' | 'matching' | 'checking-duplicates' | 'preparing' | 'complete';
+  phase: 'discovering' | 'reading-metadata' | 'matching' | 'checking-duplicates' | 'preparing' | 'covers' | 'online-books' | 'online-comics' | 'complete';
   currentFolder: string;
   entriesVisited: number;
   found: number;
   review: number;
+  processed?: number;
+  total?: number;
 };
 
 export type LocalMetadataOverride = {
@@ -136,7 +138,16 @@ export type LocalScanResult = {
 
 export type LocalScanOptions = {
   deferEmbeddedCovers?: boolean;
+  deferEmbeddedMetadata?: boolean;
   refreshMetadata?: boolean;
+};
+
+export type LocalEmbeddedMetadataEnrichmentResult = {
+  books: LocalBook[];
+  attempted: number;
+  processed: number;
+  updated: number;
+  review: number;
 };
 
 export type LocalCoverEnrichmentResult = {
@@ -399,7 +410,7 @@ export async function scanLocalFolders(
         truncatedReason = 'entry-limit';
         return;
       }
-      if (entriesVisited === 1 || entriesVisited % 20 === 0) report(metadataStarted ? 'reading-metadata' : 'discovering', space);
+      if (entriesVisited === 1 || entriesVisited % 20 === 0) report(metadataStarted && !options.deferEmbeddedMetadata ? 'reading-metadata' : 'discovering', space);
       if (books.length >= maxEntriesPerScan) {
         truncated = true;
         truncatedReason = 'book-limit';
@@ -411,7 +422,7 @@ export async function scanLocalFolders(
         seen.add(child);
         if (!metadataStarted) {
           metadataStarted = true;
-          report('reading-metadata', space);
+          report(options.deferEmbeddedMetadata ? 'discovering' : 'reading-metadata', space);
         }
         let identity = inferLocalBookMetadata(child, format, {siblingMediaCount: format === 'Audio' ? audioSiblingCount : 1});
         const evidence: MetadataCandidate[] = [{
@@ -442,11 +453,16 @@ export async function scanLocalFolders(
         const previous = previousByUri.get(child);
         const unchanged = !!previous && fileSize !== undefined && previous.fileSize === fileSize
           && modificationTime !== undefined && previous.modificationTime === modificationTime;
-        const embeddedRawFields = !options.refreshMetadata && unchanged && previous?.embeddedMetadata
+        // Initial catalogue publication deliberately avoids archive/audio parsing for new files.
+        // Reuse known-good embedded metadata when the file is unchanged; otherwise the
+        // bounded enrichment queue below reads it after the catalogue is already usable.
+        const embeddedRawFields = unchanged && previous?.embeddedMetadata
           ? previous.embeddedMetadata
-          : format === 'Audio'
-            ? await extractAudioMetadata(child, ext, {size:fileSize})
-            : await extractEmbeddedMetadata(child, ext, {exists:fileInfo?.exists,size:fileSize});
+          : options.deferEmbeddedMetadata
+            ? {}
+            : format === 'Audio'
+              ? await extractAudioMetadata(child, ext, {size:fileSize})
+              : await extractEmbeddedMetadata(child, ext, {exists:fileInfo?.exists,size:fileSize});
         const embeddedFields = sanitizeDiscoveredMetadata(embeddedRawFields, format, identity.title, format === 'Audio' ? audioSiblingCount : 1);
         if (Object.keys(embeddedFields).length) {
           evidence.push({source:'embedded' as const, confidence:'high' as const, fields:embeddedFields});
@@ -552,7 +568,7 @@ export async function scanLocalFolders(
           comicPageCount: comicFields.comicPageCount,
           comicMetadataProvenance: format==='Comic'?comicMetadataProvenance:undefined,
         });
-        if (books.length === 1 || books.length % 25 === 0) report('discovering', space);
+        if (books.length === 1 || books.length % 25 === 0) report(options.deferEmbeddedMetadata ? 'discovering' : 'reading-metadata', space);
       } else {
         if (!ext) {
           await scanDir(child, space, depth + 1, folderRoot);
@@ -592,6 +608,169 @@ export async function scanLocalFolders(
     review,
     entriesVisited,
   };
+}
+
+
+const resolvableMetadataFields:Array<keyof LocalMetadataFields>=[
+  'title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description',
+];
+
+function metadataFieldsForSource(book:LocalBook,source:MetadataSource):LocalMetadataFields{
+  const fields:LocalMetadataFields={};
+  for(const field of resolvableMetadataFields){
+    const provenance=book.metadataProvenance?.[field as string];
+    const fallback=!provenance && (
+      book.metadataSource===source ||
+      (source==='path' && (!book.metadataSource || book.metadataSource==='online'))
+    );
+    if(provenance!==source&&!fallback)continue;
+    const value=(book as any)[field];
+    if(value!==undefined&&value!==null&&String(value).trim()!=='')(fields as any)[field]=value;
+  }
+  return fields;
+}
+
+function mergeEmbeddedMetadata(book:LocalBook,fields:LocalMetadataFields):LocalBook{
+  if(!Object.keys(fields).length)return {...book,embeddedMetadata:{}};
+  const candidates:MetadataCandidate[]=[];
+  for(const source of ['manual','embedded','sidecar','path','online'] as MetadataSource[]){
+    if(source==='embedded')continue;
+    const candidate=metadataFieldsForSource(book,source);
+    if(Object.keys(candidate).length)candidates.push({
+      source,
+      confidence:source==='path'?(book.identificationConfidence||'low'):'high',
+      fields:candidate,
+    });
+  }
+  candidates.push({source:'embedded',confidence:'high',fields});
+  const resolution=resolveMetadataCandidates(candidates);
+  const base={
+    title:book.title,
+    author:book.author,
+    series:book.series,
+    seriesNumber:book.seriesNumber,
+    genre:book.genre,
+    publishedYear:book.publishedYear,
+    narrator:book.narrator,
+    publisher:book.publisher,
+    isbn:book.isbn,
+    asin:book.asin,
+    language:book.language,
+    description:book.description,
+    confidence:book.identificationConfidence||'low' as IdentificationConfidence,
+    needsReview:!!book.needsReview,
+    reviewReason:book.reviewReason||'',
+    coverShape:book.coverShape||((book.format==='Audio')?'square':'portrait') as 'portrait'|'square',
+    metadataSource:(book.metadataSource==='manual'||book.metadataSource==='embedded'||book.metadataSource==='sidecar'||book.metadataSource==='path')
+      ? book.metadataSource
+      : 'path' as const,
+  };
+  const identity=applyResolvedLocalMetadata(base,resolution);
+  const patch:LocalBook={
+    ...book,
+    title:identity.title,
+    author:identity.author,
+    series:identity.series,
+    seriesNumber:identity.seriesNumber,
+    genre:identity.genre,
+    publishedYear:identity.publishedYear,
+    narrator:identity.narrator,
+    publisher:identity.publisher,
+    isbn:identity.isbn,
+    asin:identity.asin,
+    language:identity.language,
+    description:identity.description,
+    workKey:logicalWorkKey(identity),
+    editionKey:editionKey(identity,book.format),
+    identificationConfidence:identity.confidence,
+    needsReview:identity.needsReview,
+    reviewReason:identity.reviewReason,
+    metadataSource:identity.metadataSource,
+    metadataProvenance:resolution.provenance,
+    metadataFieldConfidence:resolution.confidence,
+    metadataConflicts:resolution.conflicts,
+    embeddedMetadata:fields,
+  };
+  if(book.format==='Comic'){
+    const provenance={...(book.comicMetadataProvenance||{})};
+    const copyComic=(field:keyof LocalMetadataFields,target=field)=>{
+      if((fields as any)[field]===undefined||provenance[String(target)]==='sidecar')return;
+      (patch as any)[target]=(fields as any)[field];
+      provenance[String(target)]='embedded';
+    };
+    for(const field of ['comicIssueNumber','comicVolume','comicSeriesAliases','comicCreators','comicStoryArcs','comicCharacters','comicTeams','comicUniverses','comicUpc','comicSku','comicStoreDate','comicCoverDate','comicPageCount'] as Array<keyof LocalMetadataFields>)copyComic(field);
+    if(fields.comicVineId!==undefined||fields.comicGcdId!==undefined){
+      patch.comicExternalIds={...(patch.comicExternalIds||{}),...(fields.comicVineId!==undefined?{comicVine:fields.comicVineId}:{}),...(fields.comicGcdId!==undefined?{gcd:fields.comicGcdId}:{})};
+    }
+    patch.comicMetadataProvenance=provenance;
+  }
+  return patch;
+}
+
+export async function enrichLocalEmbeddedMetadata(
+  books:LocalBook[],
+  options:{
+    shouldContinue?:()=>boolean;
+    refreshMetadata?:boolean;
+    batchSize?:number;
+    onBatch?:(books:LocalBook[],progress:{attempted:number;processed:number;total:number;updated:number;review:number})=>void|Promise<void>;
+  }={},
+):Promise<LocalEmbeddedMetadataEnrichmentResult>{
+  const shouldContinue=options.shouldContinue||(()=>true);
+  const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize||8)));
+  let next=books.slice();
+  const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format));
+  const audioFolderCounts=new Map<string,number>();
+  for(const book of eligible.filter(book=>book.format==='Audio')){
+    const parts=decodedPathParts(book.uri);
+    const key=parts.slice(0,-1).join('/');
+    audioFolderCounts.set(key,(audioFolderCounts.get(key)||0)+1);
+  }
+  let attempted=0,processed=0,updated=0,pending=0;
+  let review=next.filter(book=>book.needsReview).length;
+  let lastPublish=Date.now();
+
+  for(let index=0;index<next.length;index+=1){
+    if(!shouldContinue())break;
+    const book=next[index];
+    if(!['EPUB','Comic','Audio'].includes(book.format))continue;
+    processed+=1;
+    if(book.embeddedMetadata&&!options.refreshMetadata){
+      if(pending>=batchSize||Date.now()-lastPublish>=900){
+        lastPublish=Date.now();pending=0;
+        await options.onBatch?.(next.slice(),{attempted,processed,total:eligible.length,updated,review});
+      }
+      continue;
+    }
+    attempted+=1;pending+=1;
+    // Yield before every potentially expensive archive/tag parse so gestures,
+    // navigation and playback get a frame between files.
+    await new Promise(resolve=>setTimeout(resolve,0));
+    if(!shouldContinue())break;
+    const ext=extension(book.uri);
+    const raw=book.format==='Audio'
+      ? await extractAudioMetadata(book.uri,ext,{size:book.fileSize})
+      : await extractEmbeddedMetadata(book.uri,ext,{exists:true,size:book.fileSize});
+    if(!shouldContinue())break;
+    const parts=decodedPathParts(book.uri);
+    const siblingCount=book.format==='Audio'?(audioFolderCounts.get(parts.slice(0,-1).join('/'))||1):1;
+    const fields=sanitizeDiscoveredMetadata(raw,book.format,book.title,siblingCount);
+    const patch=mergeEmbeddedMetadata(book,fields);
+    if(JSON.stringify(patch)!==JSON.stringify(book)){
+      next[index]=patch;
+      updated+=1;
+    }
+    review=next.reduce((count,item)=>count+(item.needsReview?1:0),0);
+    if(pending>=batchSize||Date.now()-lastPublish>=900){
+      lastPublish=Date.now();pending=0;
+      await options.onBatch?.(next.slice(),{attempted,processed,total:eligible.length,updated,review});
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  }
+  if((pending>0||processed===eligible.length)&&shouldContinue()){
+    await options.onBatch?.(next.slice(),{attempted,processed,total:eligible.length,updated,review});
+  }
+  return {books:next,attempted,processed,updated,review};
 }
 
 
