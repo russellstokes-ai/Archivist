@@ -198,7 +198,7 @@ type NativeLibraryScanner = {
   readTreeScanBatch: (scanId: string, limit: number) => Promise<NativeLibraryScanBatch>;
   cancelTreeScan: (scanId: string) => Promise<boolean>;
   readAudioMetadataBatch?: (uris: string[]) => Promise<NativeAudioMetadata[]>;
-  readDocumentMetadataBatch?: (items: Array<{uri:string;format:string}>) => Promise<NativeDocumentMetadata[]>;
+  readDocumentMetadataBatch?: (items: Array<{uri:string;format:string;name:string}>) => Promise<NativeDocumentMetadata[]>;
   extractAudioArtwork?: (uri: string) => Promise<{uri:string;mimeType:string;width:number;height:number}|null>;
 };
 
@@ -367,7 +367,7 @@ async function scanLocalFoldersNative(
           try{
             const chunk=changedDocuments.slice(offset,offset+24);
             const metadata=await nativeLibraryScanner.readDocumentMetadataBatch(
-              chunk.map(item=>({uri:item.uri,format:item.format})),
+              chunk.map(item=>({uri:item.uri,format:item.format,name:item.name})),
             );
             for(const item of metadata||[])documentMetadataByUri.set(item.uri,item);
           }catch{
