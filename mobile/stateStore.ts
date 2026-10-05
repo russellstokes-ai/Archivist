@@ -98,8 +98,7 @@ export async function getPersistedJSON<T>(key:string):Promise<T|null>{
   }
 }
 
-export function setPersistedJSON(key:string,value:unknown):Promise<void>{
-  const encoded=JSON.stringify(value);
+function persistEncoded(key:string,encoded:string):Promise<void>{
   return queueWrite(key,async()=>{
     if(!(await ensureRoot())){
       // Draftbit/web previews have no native document directory. Prefer browser
@@ -120,6 +119,35 @@ export function setPersistedJSON(key:string,value:unknown):Promise<void>{
     }
     await writeAsStringAsync(primary,encoded);
   });
+}
+
+export function setPersistedJSON(key:string,value:unknown):Promise<void>{
+  return persistEncoded(key,JSON.stringify(value));
+}
+
+export async function setPersistedJSONArrayCooperative(
+  key:string,
+  values:unknown[],
+  options:{batchSize?:number;shouldContinue?:()=>boolean}={},
+):Promise<boolean>{
+  const batchSize=Math.max(8,Math.min(256,Math.trunc(options.batchSize||48)));
+  const shouldContinue=options.shouldContinue||(()=>true);
+  const chunks:string[]=['['];
+  for(let index=0;index<values.length;index+=1){
+    if(!shouldContinue())return false;
+    if(index)chunks.push(',');
+    chunks.push(JSON.stringify(values[index]));
+    if((index+1)%batchSize===0)await new Promise<void>(resolve=>setTimeout(resolve,0));
+  }
+  if(!shouldContinue())return false;
+  chunks.push(']');
+  // Joining pre-encoded shallow chunks is far cheaper than recursively stringifying
+  // the complete catalogue in one uninterrupted JS task.
+  const encoded=chunks.join('');
+  await new Promise<void>(resolve=>setTimeout(resolve,0));
+  if(!shouldContinue())return false;
+  await persistEncoded(key,encoded);
+  return true;
 }
 
 export function deletePersistedJSON(key:string):Promise<void>{
