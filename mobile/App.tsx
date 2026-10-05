@@ -6761,14 +6761,14 @@ function Client() {
                 <Button label={localScanning?'Scanning…':rescanLocalFoldersLabel} disabled={localScanning||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
-              {localScanning&&scanProgress?<View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+              {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
                 <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
                 <View style={{flex:1,gap:6}}>
-                  <Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(scanProgress.phase)}</Text>
-                  <Text style={{color:p.muted}}>{scanProgress.entriesVisited} checked · {scanProgress.found} found · {scanProgress.review} review{scanProgress.currentFolder?' · '+scanProgress.currentFolder:''}</Text>
-                  <View style={{height:2,backgroundColor:p.line,overflow:'hidden'}}><View style={{height:2,width:`${scanPhaseStep(scanProgress.phase)*20}%` as `${number}%`,backgroundColor:p.sage}}/></View>
+                  <View style={styles.scanProgressHeading}><Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(progress.phase)}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{percent}%</Text></View>
+                  <Text style={{color:p.muted}}>{progress.total?Math.min(progress.processed||0,progress.total)+' / '+progress.total:progress.entriesVisited+' checked'} · {progress.found} found · {progress.review} review{progress.currentFolder?' · '+progress.currentFolder:''}</Text>
+                  <View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{width:`${percent}%` as `${number}%`,backgroundColor:p.sage}]}/></View>
                 </View>
-              </View>:null}
+              </View>})():null}
               {!localScanning&&scanResultSummary?<View accessibilityLiveRegion="polite" style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
                 <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'700'}}>Library updated</Text><Text style={{color:p.muted}}>{scanResultSummary.unchanged} unchanged · {scanResultSummary.added} new · {scanResultSummary.updated} updated · {scanResultSummary.removed} removed</Text></View>
               </View>:null}
