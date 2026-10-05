@@ -112,20 +112,7 @@ function audioBookFolderTitle(uri:string){
   const indexed=parent.match(/^(?:(?:book|bk|vol(?:ume)?)\s*)?#?\s*\d+(?:\.\d+)?\s*[-._:]\s*(.+)$/i);
   return clean(indexed?.[1]||parent);
 }
-function rootAudioTrackFamily(stem:string){
-  const value=clean(stem);
-  const patterns=[
-    /^(.*?)\s*[-._:]?\s*(?:part|pt|chapter|ch|track|disc|disk|cd)\s*[-_.:#]?\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
-    /^(.*?)\s*[-._:]\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-._:].*)?$/i,
-    /^(.*?)\s*\((?:part|pt|chapter|ch|track)\s*\d{1,4}\)\s*$/i,
-  ];
-  for(const pattern of patterns){
-    const match=value.match(pattern);
-    const family=clean(match?.[1]||'');
-    if(normal(family).length>=3)return family;
-  }
-  return '';
-}
+function rootAudioTrackFamily(stem:string){return audioMultipartWorkTitle(stem);}
 function rootAudioIdentityKey(book:SynchronizableBook){
   const scope=normal(book.space||'library');
   const id=normal(book.asin||book.isbn||'');
