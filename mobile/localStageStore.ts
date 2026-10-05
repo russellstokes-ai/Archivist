@@ -21,6 +21,15 @@ async function database(){
       );
       CREATE INDEX IF NOT EXISTS local_assets_generation_idx ON local_assets(scan_generation);
       CREATE INDEX IF NOT EXISTS local_assets_ordinal_idx ON local_assets(ordinal);
+      CREATE TABLE IF NOT EXISTS local_scan_assets (
+        scan_generation TEXT NOT NULL,
+        uri TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        ordinal INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(scan_generation,uri)
+      );
+      CREATE INDEX IF NOT EXISTS local_scan_assets_generation_idx ON local_scan_assets(scan_generation,ordinal);
       CREATE TABLE IF NOT EXISTS local_enrichment (
         fingerprint TEXT PRIMARY KEY NOT NULL,
         payload TEXT NOT NULL,
@@ -66,17 +75,27 @@ export async function localStageHasAssets(){
   return Number(row?.count||0)>0;
 }
 
-export async function replaceLocalStageBooks(books:LocalBook[]){
+export async function beginLocalStageScan(){
   const db=await database();
-  const generation=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
+  const generation=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+  await db.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
+  return generation;
+}
+
+export async function stageLocalScanBooks(
+  generation:string,
+  books:LocalBook[],
+  ordinalStart:number,
+){
+  if(!books.length)return;
+  const db=await database();
   const updatedAt=Date.now();
   await db.withExclusiveTransactionAsync(async txn=>{
     const statement=await txn.prepareAsync(`
-      INSERT INTO local_assets(uri,payload,scan_generation,ordinal,updated_at)
-      VALUES ($uri,$payload,$generation,$ordinal,$updatedAt)
-      ON CONFLICT(uri) DO UPDATE SET
+      INSERT INTO local_scan_assets(scan_generation,uri,payload,ordinal,updated_at)
+      VALUES ($generation,$uri,$payload,$ordinal,$updatedAt)
+      ON CONFLICT(scan_generation,uri) DO UPDATE SET
         payload=excluded.payload,
-        scan_generation=excluded.scan_generation,
         ordinal=excluded.ordinal,
         updated_at=excluded.updated_at
     `);
@@ -85,23 +104,63 @@ export async function replaceLocalStageBooks(books:LocalBook[]){
         const book=books[index];
         if(!book.uri)continue;
         await statement.executeAsync({
+          $generation:generation,
           $uri:book.uri,
           $payload:JSON.stringify(book),
-          $generation:generation,
-          $ordinal:index,
+          $ordinal:ordinalStart+index,
           $updatedAt:updatedAt,
         });
       }
     }finally{
       await statement.finalizeAsync();
     }
-    await txn.runAsync('DELETE FROM local_assets WHERE scan_generation <> ?',generation);
+  });
+}
+
+export async function commitLocalStageScan(generation:string){
+  const db=await database();
+  await db.withExclusiveTransactionAsync(async txn=>{
+    const row=await txn.getFirstAsync<{count:number}>(
+      'SELECT COUNT(*) AS count FROM local_scan_assets WHERE scan_generation = ?',
+      generation,
+    );
+    const count=Number(row?.count||0);
+    await txn.runAsync('DELETE FROM local_assets');
+    if(count>0){
+      await txn.runAsync(`
+        INSERT INTO local_assets(uri,payload,scan_generation,ordinal,updated_at)
+        SELECT uri,payload,scan_generation,ordinal,updated_at
+        FROM local_scan_assets
+        WHERE scan_generation = ?
+        ORDER BY ordinal ASC
+      `,generation);
+    }
+    await txn.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
     await txn.runAsync(
       `INSERT INTO local_stage_meta(key,value) VALUES ('last_scan_generation',?)
        ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
       generation,
     );
   });
+}
+
+export async function abandonLocalStageScan(generation:string){
+  const db=await database();
+  await db.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
+}
+
+export async function replaceLocalStageBooks(books:LocalBook[]){
+  const generation=await beginLocalStageScan();
+  try{
+    const batchSize=256;
+    for(let offset=0;offset<books.length;offset+=batchSize){
+      await stageLocalScanBooks(generation,books.slice(offset,offset+batchSize),offset);
+    }
+    await commitLocalStageScan(generation);
+  }catch(error){
+    await abandonLocalStageScan(generation).catch(()=>undefined);
+    throw error;
+  }
 }
 
 export async function upsertLocalStageBooks(books:LocalBook[]){
