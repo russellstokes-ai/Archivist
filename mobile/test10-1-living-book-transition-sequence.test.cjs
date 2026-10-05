@@ -29,6 +29,8 @@ for(const step of sequence){
 
 assert.equal(player.livingBookHingeDuration(0,1,player.PLAYER_MOTION_TIMING.openMs,false),player.PLAYER_MOTION_TIMING.openMs,'fresh re-entry must perform a full clean opening');
 assert.equal(player.livingBookHingeDuration(.5,0,player.PLAYER_MOTION_TIMING.closeMs,false),Math.round(player.PLAYER_MOTION_TIMING.closeMs*.5),'pause reversal must close only the remaining hinge distance');
+assert.equal(player.PLAYER_MOTION_TIMING.pageTurnMs,3000,'ambient page turns must run at half the previous visual speed');
+assert.equal(player.PLAYER_MOTION_TIMING.closeMs,1000,'Pause must have a deliberate smooth close duration');
 assert.equal(player.livingBookHingeDuration(.35,1,player.PLAYER_MOTION_TIMING.openMs,false),Math.round(player.PLAYER_MOTION_TIMING.openMs*.65),'rapid play reversal must reopen only the remaining hinge distance');
 
 const pending=new Map();let id=0,oldDone,newDone,stops=0,oldTurns=0,newTurns=0;
