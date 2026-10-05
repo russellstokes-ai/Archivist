@@ -13,6 +13,8 @@ assert.ok(app.includes('skipTurnAnim.stopAnimation();')&&app.includes('skipTurnA
 assert.ok(app.includes('const livingBookMotionGeneration=useRef(0)'),'Living Book transitions must identify the current visible session');
 assert.ok(app.includes("const livingBookVisualWorkRef=useRef('')")&&app.includes('const livingBookWorkKey=playbackWorkKey(playing)'),'visual state must track the logical audiobook, not individual chapter files');
 assert.ok(app.includes('if(workChanged)')&&app.includes("livingBookVisualWorkRef.current=livingBookWorkKey"),'switching audiobooks must reset the old cover/leaf frame without reopening on ordinary chapter changes');
+assert.ok(app.includes("key={workKey||'living-book'}"),'each logical audiobook must own a fresh Living Book renderer while chapter changes keep the same work key');
+assert.ok(app.includes('++skipGeneration.current')&&app.includes('ambientPageLoopStopRef.current=null'),'leaving or changing books must invalidate stale manual and ambient page callbacks');
 assert.ok(app.includes('generation!==livingBookMotionGeneration.current'),'stale animation callbacks from the previous screen session must be ignored');
 assert.ok(app.includes('preserveCurrentOnStop:false'),'page turn cancellation must not preserve a phantom leaf across player lifecycle changes');
 assert.ok(app.includes("const ambientPageLoopStopRef=useRef<(()=>void)|null>(null)")&&app.includes('ambientPageLoopStopRef.current?.();'),'manual skip must take exclusive ownership from the ambient page loop');
