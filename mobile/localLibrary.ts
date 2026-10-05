@@ -28,6 +28,12 @@ export type LocalBook = {
   trackTitle?: string;
   trackNumber?: number;
   discNumber?: number;
+  sourceUri?: string;
+  documentId?: string;
+  size?: number;
+  modified?: number;
+  metadataContextSignature?: string;
+  assetSignature?: string;
 };
 
 export type LocalSortPreview = {
@@ -89,6 +95,11 @@ export type LocalScanResult = {
   review: number;
 };
 
+export type LocalScanOptions = {
+  reuse?: ReadonlyMap<string, LocalBook>;
+  forceMetadata?: boolean;
+};
+
 const supported = new Map<string, string>([
   ['epub', 'EPUB'],
   ['pdf', 'PDF'],
@@ -142,6 +153,7 @@ export async function pickLocalFolder(): Promise<LocalFolder | null> {
 
 type NativeLibraryScanItem = {
   uri: string;
+  documentId: string;
   name: string;
   parentId: string;
   mimeType: string;
@@ -191,11 +203,58 @@ export async function extractLocalAudioArtwork(uri:string){
 
 const yieldToUi = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
+type NativeDirectoryContextFile={uri:string;size:number;modified:number};
+
+function signatureHash(value:string){
+  let h=2166136261;
+  for(let index=0;index<value.length;index++){
+    h^=value.charCodeAt(index);
+    h=Math.imul(h,16777619);
+  }
+  return (h>>>0).toString(16).padStart(8,'0');
+}
+
+function directoryContextSignature(context:{
+  sidecars:Map<string,NativeDirectoryContextFile>;
+  cover?:NativeDirectoryContextFile;
+}){
+  const parts:string[]=[];
+  for(const [stem,file] of context.sidecars){
+    parts.push('s:'+stem+':'+file.uri+':'+file.size+':'+file.modified);
+  }
+  if(context.cover)parts.push('c:'+context.cover.uri+':'+context.cover.size+':'+context.cover.modified);
+  if(!parts.length)return 'none';
+  return signatureHash(parts.sort().join('|'));
+}
+
+export function localAssetSignature(input:{
+  documentId?:string;
+  size?:number;
+  modified?:number;
+  contextSignature?:string;
+}){
+  const modified=Number(input.modified)||0;
+  // A provider that does not expose modification time cannot safely prove the
+  // content is unchanged, so deliberately force metadata inspection.
+  if(modified<=0)return '';
+  return signatureHash([
+    String(input.documentId||''),
+    String(Number(input.size)||0),
+    String(modified),
+    String(input.contextSignature||'none'),
+  ].join('|'));
+}
+
+function reusableScanBook(previous:LocalBook|undefined,signature:string,sourceUri:string){
+  return !!signature&&!!previous&&previous.assetSignature===signature&&previous.sourceUri===sourceUri;
+}
+
 async function scanLocalFoldersNative(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
   onBooks?: (books: LocalBook[], progress: LocalScanProgress) => void | Promise<void>,
+  options: LocalScanOptions = {},
 ): Promise<LocalScanResult> {
   if (!nativeLibraryScanner) throw Error('Native library scanner is unavailable.');
   const books: LocalBook[] = [];
@@ -229,8 +288,8 @@ async function scanLocalFoldersNative(
 
   for (const folder of folders) {
     const contexts = new Map<string,{
-      sidecars:Map<string,string>;
-      coverUri?:string;
+      sidecars:Map<string,NativeDirectoryContextFile>;
+      cover?:NativeDirectoryContextFile;
       mediaCount:number;
       audioOnly:boolean;
     }>();
@@ -245,8 +304,8 @@ async function scanLocalFoldersNative(
     const contextFor=(parentId:string)=>{
       const existing=contexts.get(parentId);
       if(existing)return existing;
-      const created:{sidecars:Map<string,string>;coverUri?:string;mediaCount:number;audioOnly:boolean}={
-        sidecars:new Map<string,string>(),
+      const created:{sidecars:Map<string,NativeDirectoryContextFile>;cover?:NativeDirectoryContextFile;mediaCount:number;audioOnly:boolean}={
+        sidecars:new Map<string,NativeDirectoryContextFile>(),
         mediaCount:0,
         audioOnly:false,
       };
@@ -257,11 +316,32 @@ async function scanLocalFoldersNative(
     const identifyMedia=async(items:NativeLibraryScanItem[])=>{
       if(!items.length)return;
       report('identifying',folder.name);
+
+      const signatures=new Map<string,{contextSignature:string;assetSignature:string;previous?:LocalBook}>();
+      const changedAudio:NativeLibraryScanItem[]=[];
+      for(const item of items){
+        const context=contextFor(item.parentId);
+        const contextSignature=directoryContextSignature(context);
+        const assetSignature=localAssetSignature({
+          documentId:item.documentId,
+          size:item.size,
+          modified:item.modified,
+          contextSignature,
+        });
+        const previous=options.reuse?.get(item.uri);
+        signatures.set(item.uri,{contextSignature,assetSignature,previous});
+        if(
+          item.format==='Audio'&&
+          (!reusableScanBook(previous,assetSignature,folder.uri)||options.forceMetadata)
+        ){
+          changedAudio.push(item);
+        }
+      }
+
       const audioMetadataByUri=new Map<string,NativeAudioMetadata>();
-      const audioItems=items.filter(item=>item.format==='Audio');
-      if(nativeLibraryScanner.readAudioMetadataBatch&&audioItems.length){
+      if(nativeLibraryScanner.readAudioMetadataBatch&&changedAudio.length){
         try{
-          const metadata=await nativeLibraryScanner.readAudioMetadataBatch(audioItems.map(item=>item.uri));
+          const metadata=await nativeLibraryScanner.readAudioMetadataBatch(changedAudio.map(item=>item.uri));
           for(const item of metadata||[])audioMetadataByUri.set(item.uri,item);
         }catch{
           // Embedded tags improve identity but never make discovery fail.
@@ -271,6 +351,25 @@ async function scanLocalFoldersNative(
       const produced:LocalBook[]=[];
       for(const item of items){
         const context=contextFor(item.parentId);
+        const signature=signatures.get(item.uri)!;
+        if(!options.forceMetadata&&reusableScanBook(signature.previous,signature.assetSignature,folder.uri)){
+          const reused:LocalBook={
+            ...signature.previous!,
+            id:books.length+1,
+            sourceUri:folder.uri,
+            documentId:item.documentId,
+            size:item.size,
+            modified:item.modified,
+            metadataContextSignature:signature.contextSignature,
+            assetSignature:signature.assetSignature,
+            available:true,
+          };
+          if(reused.needsReview)review+=1;
+          books.push(reused);
+          produced.push(reused);
+          continue;
+        }
+
         let identity=inferLocalBookMetadata(item.uri,item.format);
         const embedded=item.format==='Audio'?audioMetadataByUri.get(item.uri):undefined;
         const embeddedAuthor=embedded?.albumArtist||embedded?.author||embedded?.artist||'';
@@ -287,9 +386,9 @@ async function scanLocalFoldersNative(
 
         const stem=fileStem(item.name).toLowerCase();
         const genericAllowed=context.mediaCount===1||context.audioOnly;
-        const sidecarUri=context.sidecars.get(stem)||(genericAllowed?(context.sidecars.get('metadata')||context.sidecars.get('book')):undefined);
-        if(sidecarUri){
-          const fields=await cachedSidecarFields(sidecarUri);
+        const sidecar=context.sidecars.get(stem)||(genericAllowed?(context.sidecars.get('metadata')||context.sidecars.get('book')):undefined);
+        if(sidecar){
+          const fields=await cachedSidecarFields(sidecar.uri);
           if(fields.title||fields.author||fields.series||fields.genre){
             identity=applyLocalMetadata(identity,fields,'sidecar');
           }
@@ -315,11 +414,17 @@ async function scanLocalFoldersNative(
           reviewReason:identity.reviewReason,
           coverShape:identity.coverShape,
           metadataSource:identity.metadataSource,
-          coverUri:context.coverUri,
+          coverUri:context.cover?.uri,
           workTitleHint:embedded?.album||undefined,
           trackTitle:embedded?.title||undefined,
           trackNumber:metadataIndex(embedded?.track),
           discNumber:metadataIndex(embedded?.disc),
+          sourceUri:folder.uri,
+          documentId:item.documentId,
+          size:item.size,
+          modified:item.modified,
+          metadataContextSignature:signature.contextSignature,
+          assetSignature:signature.assetSignature||undefined,
         };
         books.push(book);
         produced.push(book);
@@ -329,7 +434,6 @@ async function scanLocalFoldersNative(
       report('identifying',folder.name);
       await yieldToUi();
     };
-
     const flushMedia=async(parentId?:string)=>{
       if(!mediaBuffer.length)return;
       if(parentId&&mediaParent&&parentId!==mediaParent)return;
@@ -351,13 +455,13 @@ async function scanLocalFoldersNative(
         for(const item of batch.items||[]){
           if(item.role==='sidecar'){
             const context=contextFor(item.parentId);
-            context.sidecars.set(fileStem(item.name).toLowerCase(),item.uri);
+            context.sidecars.set(fileStem(item.name).toLowerCase(),{uri:item.uri,size:item.size,modified:item.modified});
             continue;
           }
           if(item.role==='artwork'){
             const context=contextFor(item.parentId);
             const stem=fileStem(item.name).toLowerCase();
-            if(stem==='cover'||(!context.coverUri&&stem==='folder'))context.coverUri=item.uri;
+            if(stem==='cover'||(!context.cover&&stem==='folder'))context.cover={uri:item.uri,size:item.size,modified:item.modified};
             continue;
           }
           if(item.role==='directory-context'){
@@ -418,9 +522,10 @@ export async function scanLocalFolders(
   onProgress?: (progress: LocalScanProgress) => void,
   overrides: Record<string, LocalMetadataOverride> = {},
   onBooks?: (books: LocalBook[], progress: LocalScanProgress) => void | Promise<void>,
+  options: LocalScanOptions = {},
 ): Promise<LocalScanResult> {
   if (Platform.OS === 'android' && nativeLibraryScanner?.startTreeScan) {
-    return scanLocalFoldersNative(folders, onProgress, overrides, onBooks);
+    return scanLocalFoldersNative(folders, onProgress, overrides, onBooks, options);
   }
   const books: LocalBook[] = [];
   let skipped = 0;
