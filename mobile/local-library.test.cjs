@@ -78,8 +78,25 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyCoverEnrichment, applyLocalSortCopies, enrichLocalBookCovers, previewLocalSort, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {applyCoverEnrichment, applyLocalSortCopies, countLocalBookOnlineLookupUnits, enrichLocalBookCovers, previewLocalSort, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
 const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
+
+const lookupTracks=Array.from({length:30},(_,index)=>({
+  id:9000+index,
+  uri:'content://root/document/primary:Audiobooks%2FCraig%20Alanson%2FExpeditionary%20Force%2F04%20-%20Black%20Ops%2F'+String(index+1).padStart(2,'0')+'%20-%20Chapter.mp3',
+  title:'Chapter '+(index+1),
+  author:'Craig Alanson',
+  series:'Expeditionary Force',
+  seriesNumber:4,
+  genre:'',
+  format:'Audio',
+  space:'Audiobooks',
+  available:true,
+  metadataSource:'embedded',
+  metadataProvenance:{title:'embedded',author:'embedded',series:'embedded',seriesNumber:'embedded'},
+  metadataFieldConfidence:{title:'high',author:'high',series:'high',seriesNumber:'high'},
+}));
+assert.equal(countLocalBookOnlineLookupUnits(lookupTracks),1,'a multi-track audiobook must consume one online metadata lookup unit');
 
 const books = [
   {id: 1, uri: 'content://root/document/primary:Books%2FDune.epub', title: 'Dune', author: 'Frank Herbert', series: 'Dune', format: 'EPUB', space: 'Books', available: true},
