@@ -1860,7 +1860,12 @@ function Client() {
   }
 
   async function runLocalEnrichment(catalogue:LocalBook[],cacheSeed:LocalEnrichmentCache=localEnrichmentCache){
-    if(!catalogue.length)return;
+    if(!catalogue.length){
+      await replaceLocalEnrichmentCache({});
+      setLocalEnrichmentCache({});
+      setLocalEnrichmentProgress(null);
+      return;
+    }
     const generation=++localEnrichmentGeneration.current;
     localEnrichmentActive.current=true;
     const total=groupLocalWorks(catalogue).length;
