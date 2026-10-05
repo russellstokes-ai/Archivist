@@ -55,6 +55,22 @@ assert.equal(work.seriesNumber,4);
 assert.equal(work.coverUri,'file:///app/covers/embedded-blackops.jpg');
 assert.equal(work.needsReview,false);
 
+const outlier=synchronizeLocalMetadata([
+  track(40,'01 - Opening',{
+    title:'Opening',
+    author:'Wrong Person',
+    series:'Wrong Series',
+    metadataProvenance:{title:'embedded',author:'embedded',series:'embedded'},
+    metadataFieldConfidence:{title:'high',author:'high',series:'high'},
+  }),
+  track(41,'02 - Trouble',{title:'Trouble'}),
+]).books;
+const outlierWork=groupLocalWorks(outlier)[0];
+assert.equal(outlierWork.title,'Black Ops','folder/work identity must beat a 50/50 chapter-title split');
+assert.equal(outlierWork.author,'Craig Alanson','one bad embedded author must not override repeated work evidence');
+assert.equal(outlierWork.series,'Expeditionary Force','one bad embedded series must not override repeated work evidence');
+assert.equal(outlier[0].title,'Opening','track chapter title must remain intact after work-level consensus');
+
 const manual=synchronizeLocalMetadata([
   track(4,'01 - Opening',{title:'Black Ops Director Cut',author:'Craig Alanson',metadataSource:'manual',metadataProvenance:{title:'manual',author:'manual'},metadataFieldConfidence:{title:'high',author:'high'}}),
   track(5,'02 - More',{title:'More'}),
