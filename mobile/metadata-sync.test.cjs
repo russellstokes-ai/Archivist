@@ -5,7 +5,7 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true},
 }).outputText,file);
 
-const {canonicalMetadataForBooks,synchronizeLocalMetadata}=require('./metadataSync.ts');
+const {canonicalMetadataForBooks,synchronizeLocalMetadata,synchronizeLocalMetadataCooperative}=require('./metadataSync.ts');
 const {groupLocalWorks}=require('./localWorks.ts');
 
 function track(id,name,extra={}){
@@ -95,4 +95,28 @@ assert.equal(crossFormat[1].genre,'Science Fiction');
 assert.equal(crossFormat[1].description,'Arrakis.');
 assert.equal(crossFormat[1].coverUri,undefined,'covers must not leak between different formats/editions');
 
-console.log('PASS: canonical metadata sync preserves chapters, unifies audiobook identity/covers and fills safe cross-format gaps');
+
+(async()=>{
+  const many=[];
+  for(let work=0;work<180;work++){
+    for(let chapter=0;chapter<3;chapter++){
+      many.push(track(
+        10000+work*3+chapter,
+        String(chapter+1).padStart(2,'0')+' - Chapter',
+        {
+          uri:'content://root/document/primary:Audiobooks%2FAuthor%20'+work+'%2FBook%20'+work+'%2F'+String(chapter+1).padStart(2,'0')+'%20-%20Chapter.mp3',
+          title:'Chapter '+(chapter+1),
+        },
+      ));
+    }
+  }
+  let ticks=0;
+  const ticker=setInterval(()=>{ticks++;},0);
+  const cooperative=await synchronizeLocalMetadataCooperative(many,{batchSize:24});
+  clearInterval(ticker);
+  assert.equal(cooperative.books.length,many.length);
+  assert.ok(ticks>0,'large canonical metadata synchronization must yield to the event loop');
+
+  console.log('PASS: canonical metadata sync preserves chapters, unifies audiobook identity/covers, fills safe cross-format gaps and yields on large catalogues');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+
