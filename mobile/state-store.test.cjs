@@ -28,7 +28,7 @@ Module._load=function(request,parent,isMain){
 };
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
 
-const {getPersistedJSON,setPersistedJSON,deletePersistedJSON}=require('./stateStore.ts');
+const {getPersistedJSON,setPersistedJSON,setPersistedJSONArrayCooperative,deletePersistedJSON}=require('./stateStore.ts');
 
 (async()=>{
   const key='archivist.localProgress';
@@ -58,5 +58,22 @@ const {getPersistedJSON,setPersistedJSON,deletePersistedJSON}=require('./stateSt
   await Promise.all([older,newer]);
   assert.deepEqual(await getPersistedJSON(key),{book:101},'overlapping writes must preserve the newest state');
 
-  console.log('PASS: growing mobile state migrates from SecureStore, keeps a backup, recovers corruption, serializes overlapping writes and deletes cleanly');
+  let ticks=0;
+  const ticker=setInterval(()=>{ticks++;},0);
+  const large=Array.from({length:240},(_,index)=>({id:index,title:'Book '+index,description:'x'.repeat(80)}));
+  const wrote=await setPersistedJSONArrayCooperative('archivist.largeCatalog',large,{batchSize:16});
+  clearInterval(ticker);
+  assert.equal(wrote,true);
+  assert.deepEqual(await getPersistedJSON('archivist.largeCatalog'),large);
+  assert.ok(ticks>0,'large catalogue encoding must yield to the event loop');
+
+  let checks=0;
+  const cancelled=await setPersistedJSONArrayCooperative('archivist.cancelledCatalog',large,{
+    batchSize:8,
+    shouldContinue:()=>++checks<25,
+  });
+  assert.equal(cancelled,false,'cancelled catalogue encoding must stop before committing');
+  assert.equal(await getPersistedJSON('archivist.cancelledCatalog'),null);
+
+  console.log('PASS: growing mobile state migrates from SecureStore, keeps a backup, recovers corruption, serializes overlapping writes, cooperatively persists large catalogues and deletes cleanly');
 })().catch(e=>{console.error(e);process.exitCode=1;});
