@@ -185,6 +185,14 @@ assert.equal(genericChapter.title, 'Dune');
 assert.equal(genericChapter.author, 'Frank Herbert');
 assert.equal(genericChapter.series, 'Dune Saga');
 
+const messyRootAudio=[
+  {id:501,uri:'content://root/document/primary:Audiobooks%2FDune%20-%20Part%2001.mp3',title:'Opening',author:'Frank Herbert',series:'Dune',genre:'Science Fiction',format:'Audio',space:'Audiobooks',available:true,embeddedMetadata:{workTitle:'Dune'}},
+  {id:502,uri:'content://root/document/primary:Audiobooks%2FDune%20-%20Part%2002.mp3',title:'Arrakis',author:'Frank Herbert',series:'Dune',genre:'Science Fiction',format:'Audio',space:'Audiobooks',available:true,embeddedMetadata:{workTitle:'Dune'}},
+];
+const messyRootPreview=previewLocalSort(messyRootAudio,'author-title');
+assert.equal(messyRootPreview.length,2);
+assert.equal(messyRootPreview.every(item=>item.to.startsWith('Frank Herbert/Dune/')),true,'grouped audiobook chapters must sort into one canonical book folder instead of chapter-title folders');
+
 let previews = previewLocalSort(books.slice(0, 2), 'format-author-title');
 assert.equal(previews[0].to, 'EPUB/Frank Herbert/Dune/Dune.epub');
 assert.equal(previews[1].to, 'Comic/Frank Herbert/Dune/Dune.cbz');
