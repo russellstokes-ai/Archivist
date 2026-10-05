@@ -11,6 +11,7 @@ on:
       - 'mobile/app.json'
       - 'mobile/native-patch.test.cjs'
       - 'mobile/sprint10-android-auto.test.cjs'
+      - 'mobile/sprint10-final-release-gate.test.cjs'
       - '.github/workflows/android-check.yml'
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - 'mobile/app.json'
       - 'mobile/native-patch.test.cjs'
       - 'mobile/sprint10-android-auto.test.cjs'
+      - 'mobile/sprint10-final-release-gate.test.cjs'
       - '.github/workflows/android-check.yml'
   workflow_dispatch:
 
