@@ -13,6 +13,7 @@ on:
       - build/0.9.4-test8-android-auto-20261005
       - build/0.9.4-test9-20261005
       - build/0.9.4-test10-20261005
+      - build/0.9.4-test11-20261005
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
@@ -22,7 +23,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '10'
+  TEST_BUILD: '11'
 
 concurrency:
   group: android-apk-${{ github.ref }}
