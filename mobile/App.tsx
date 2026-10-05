@@ -2269,6 +2269,26 @@ function Client() {
     } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
   }
 
+  async function prepareOnboardingLibrary(){
+    if(libraryRefreshRunningRef.current||busy)return;
+    if(localFolders.length){
+      const localPrepared=await rescanLocalFolders();
+      if(localPrepared===false)return;
+    }
+    if(!session||!sources.length)return;
+    setBusy(true);setError('');
+    try{
+      for(const source of sources){
+        await request(session,'/api/sources/'+source.id+'/scan','POST');
+      }
+      await refreshSourcesAndShelf();
+    }catch(e){
+      setError((e as Error).message);
+    }finally{
+      setBusy(false);
+    }
+  }
+
   async function removeSource(id: number) {
     if(!session)return;setBusy(true);setError('');
     try {
@@ -3962,9 +3982,9 @@ function Client() {
     const hasBooks = localBooks.length > 0 || serverWorks.length > 0;
     const progress=activeLibraryProgress;
     const progressPercent=progress?scanProgressPercent(progress):0;
-    const preparing=hasFolder&&!libraryPreparationReady;
-    const serverReady=hasServerFolders;
-    const setupReady=libraryPreparationReady||(!hasFolder&&serverReady);
+    const serverReady=hasServerFolders&&sources.every(source=>source.status==='ok');
+    const setupReady=hasSource&&(!hasFolder||libraryPreparationReady)&&(!hasServerFolders||serverReady);
+    const preparing=hasSource&&!setupReady;
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
@@ -4026,7 +4046,7 @@ function Client() {
         </View>
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {preparing&&!libraryRefreshActive?<Button label="Prepare library" onPress={()=>void rescanLocalFolders()}/>:null}
+        {preparing&&!libraryRefreshActive?<Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}
         {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
           <View style={styles.shelfSetupAction}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></View>
           <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
