@@ -142,15 +142,27 @@ function secureImage(uri?: string) {
 }
 
 async function fetchJson(url: string, timeoutMs = 8000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {signal: controller.signal, headers: {'Accept':'application/json'}});
-    if (!response.ok) throw Error('Metadata provider returned ' + response.status);
-    return await response.json() as any;
-  } finally {
-    clearTimeout(timer);
+  let lastError:unknown;
+  for(let attempt=0;attempt<2;attempt++){
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {signal: controller.signal, headers: {'Accept':'application/json'}});
+      if (response.ok) return await response.json() as any;
+      const retryable=response.status===429||response.status>=500;
+      if(!retryable||attempt===1)throw Error('Metadata provider returned ' + response.status);
+      const retryAfter=Number(response.headers?.get?.('retry-after')||0);
+      await new Promise(resolve=>setTimeout(resolve,Math.min(1500,Math.max(250,retryAfter*1000||350))));
+    } catch(error) {
+      lastError=error;
+      const aborted=controller.signal.aborted;
+      if(attempt===1||(!aborted&&!(error instanceof TypeError)))throw error;
+      await new Promise(resolve=>setTimeout(resolve,350));
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError instanceof Error?lastError:Error('Metadata lookup failed.');
 }
 
 export async function lookupOpenLibrary(input: MetadataLookupInput): Promise<Array<Omit<MetadataMatch,'confidence'>>> {
