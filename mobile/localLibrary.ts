@@ -773,6 +773,7 @@ export async function enrichLocalEmbeddedMetadata(
   const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize||8)));
   const itemTimeoutMs=Math.max(25,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
   const concurrency=Math.max(1,Math.min(6,Math.trunc(options.concurrency||4)));
+  const maxConsecutiveTimeouts=Math.max(1,Math.min(24,Math.trunc(options.maxConsecutiveTimeouts||6)));
   let next=books.slice();
   const inspect=options.shouldInspect||(()=>true);
   const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format)&&inspect(book));
@@ -826,7 +827,12 @@ export async function enrichLocalEmbeddedMetadata(
 
     for(const result of results){
       const {book,index,fields,reused}=result;
-      if(result.timedOut)timedOut+=1;
+      if(result.timedOut){
+        timedOut+=1;
+        consecutiveTimeouts+=1;
+      }else if(!reused){
+        consecutiveTimeouts=0;
+      }
       if(!reused){
         const patch=mergeEmbeddedMetadata(book,fields);
         next[index]=patch;
@@ -839,6 +845,16 @@ export async function enrichLocalEmbeddedMetadata(
     await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped,current});
     pending=0;lastPublish=Date.now();
     await yieldToUi(true);
+
+    if(consecutiveTimeouts>=maxConsecutiveTimeouts){
+      skipped=Math.max(0,eligibleEntries.length-(cursor+batch.length));
+      processed=Math.min(eligible.length,processed+skipped);
+      await options.onBatch?.(next,{
+        attempted,processed,total:eligible.length,updated,review,timedOut,skipped,
+        current:'Deferred remaining embedded reads after repeated timeouts',
+      });
+      break;
+    }
   }
   if(shouldContinue()){
     await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped});
