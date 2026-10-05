@@ -109,7 +109,10 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
               {scaleX:turn.interpolate({inputRange:[0,.48,.52,1],outputRange:[1,.88,.88,1]})},
               {rotateY:turn.interpolate({inputRange:[0,.46,.54,1],outputRange:['0deg','-78deg','-102deg','-180deg']})},
             ],
-          } as any]}>{page(1)}<View style={s.leafHingeShade}/></Animated.View>:null}
+          } as any]}>
+            <View style={s.leafFrontFace}>{page(1)}<View style={s.leafHingeShade}/></View>
+            <View style={[s.leafBackFace,{transform:[{rotateY:'180deg'}]}]}>{page(0)}<View style={s.leafHingeShade}/></View>
+          </Animated.View>:null}
           {skipping?Array.from({length:leafCount},(_,i)=>{
             const leafOpacity=Animated.multiply(
               leafGate,
@@ -122,7 +125,10 @@ export function LivingBookArtwork({title,author,chapter,number=1,open,turn,skip,
               opacity:leafOpacity,
               transformOrigin:direction===1?'left center':'right center',
               transform:[{perspective:1200},{rotateY:skip.interpolate({inputRange:[i,i+1],outputRange:['0deg',direction===1?'-180deg':'180deg'],extrapolate:'clamp'})}],
-            } as any]}>{page(direction===1?1:0)}<View style={s.leafHingeShade}/></Animated.View>;
+            } as any]}>
+              <View style={s.leafFrontFace}>{page(direction===1?1:0)}<View style={s.leafHingeShade}/></View>
+              <View style={[s.leafBackFace,{transform:[{rotateY:'180deg'}]}]}>{page(direction===1?0:1)}<View style={s.leafHingeShade}/></View>
+            </Animated.View>;
           }):null}
         </View>
       </Animated.View>
@@ -161,6 +167,8 @@ const s=StyleSheet.create({
   insidePanel:{flex:1,borderWidth:1,borderColor:'rgba(241,234,213,.12)',borderRadius:3,backgroundColor:'rgba(0,0,0,.05)'},
   coverSpineShade:{position:'absolute',left:0,top:0,bottom:0,width:7,backgroundColor:'rgba(0,0,0,.11)'},
   leafEnvelope:{position:'absolute',left:-G.leafEnvelopePad,top:-G.leafEnvelopePad,width:G.bookWidth+G.leafEnvelopePad*2,height:G.coverHeight+G.leafEnvelopePad*2,overflow:'visible',zIndex:8},
-  leafPage:{position:'absolute',top:G.leafEnvelopePad+G.pageInsetY,width:G.pageWidth,height:G.pageHeight,backgroundColor:'#eee9d5',borderWidth:.5,borderColor:'#cec9b5',overflow:'hidden',zIndex:6,backfaceVisibility:'visible'},
+  leafPage:{position:'absolute',top:G.leafEnvelopePad+G.pageInsetY,width:G.pageWidth,height:G.pageHeight,zIndex:6,overflow:'visible'},
+  leafFrontFace:{...StyleSheet.absoluteFillObject,backgroundColor:'#eee9d5',borderWidth:.5,borderColor:'#cec9b5',overflow:'hidden',backfaceVisibility:'hidden'},
+  leafBackFace:{...StyleSheet.absoluteFillObject,backgroundColor:'#e9e3cd',borderWidth:.5,borderColor:'#c9c2aa',overflow:'hidden',backfaceVisibility:'hidden'},
   leafHingeShade:{position:'absolute',left:0,top:0,bottom:0,width:6,backgroundColor:'rgba(55,45,20,.10)'},
 });
