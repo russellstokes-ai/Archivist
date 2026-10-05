@@ -764,6 +764,7 @@ export async function enrichLocalEmbeddedMetadata(
     batchSize?:number;
     itemTimeoutMs?:number;
     maxConsecutiveTimeouts?:number;
+    concurrency?:number;
     shouldInspect?:(book:LocalBook)=>boolean;
     onBatch?:(books:LocalBook[],progress:{attempted:number;processed:number;total:number;updated:number;review:number;timedOut:number;skipped:number;current?:string})=>void|Promise<void>;
   }={},
@@ -771,7 +772,7 @@ export async function enrichLocalEmbeddedMetadata(
   const shouldContinue=options.shouldContinue||(()=>true);
   const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize||8)));
   const itemTimeoutMs=Math.max(25,Math.min(30000,Math.trunc(options.itemTimeoutMs||8000)));
-  const maxConsecutiveTimeouts=Math.max(1,Math.min(10,Math.trunc(options.maxConsecutiveTimeouts||3)));
+  const concurrency=Math.max(1,Math.min(6,Math.trunc(options.concurrency||4)));
   let next=books.slice();
   const inspect=options.shouldInspect||(()=>true);
   const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format)&&inspect(book));
@@ -794,57 +795,50 @@ export async function enrichLocalEmbeddedMetadata(
     await yieldToUi(true);
   };
 
-  for(let index=0;index<next.length;index+=1){
-    if(!shouldContinue())break;
-    const book=next[index];
-    if(!eligibleUris.has(book.uri))continue;
-    if(book.embeddedMetadata&&!options.refreshMetadata){
-      processed+=1;pending+=1;
-      await publish(book.title);
-      continue;
-    }
-    attempted+=1;
-    await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped,current:book.title});
-    await yieldToUi(true);
-    if(!shouldContinue())break;
+  const eligibleEntries=next
+    .map((book,index)=>({book,index}))
+    .filter(({book})=>eligibleUris.has(book.uri));
 
-    const ext=extension(book.uri);
-    let raw:LocalMetadataFields={};
-    try{
-      raw=await withOperationTimeout(
-        book.format==='Audio'
-          ? extractAudioMetadata(book.uri,ext,{size:book.fileSize})
-          : extractEmbeddedMetadata(book.uri,ext,{exists:true,size:book.fileSize}),
-        itemTimeoutMs,
-        'Embedded metadata read',
-      );
-      consecutiveTimeouts=0;
-    }catch(error:any){
-      if(error?.code==='operation-timeout'){
-        timedOut+=1;
-        consecutiveTimeouts+=1;
-      }else{
-        consecutiveTimeouts=0;
+  for(let cursor=0;cursor<eligibleEntries.length;cursor+=concurrency){
+    if(!shouldContinue())break;
+    const batch=eligibleEntries.slice(cursor,cursor+concurrency);
+    const results=await Promise.all(batch.map(async({book,index})=>{
+      if(book.embeddedMetadata&&!options.refreshMetadata)return {book,index,reused:true,fields:{} as LocalMetadataFields,timedOut:false};
+      attempted+=1;
+      const ext=extension(book.uri);
+      try{
+        const raw=await withOperationTimeout(
+          book.format==='Audio'
+            ? extractAudioMetadata(book.uri,ext,{size:book.fileSize})
+            : extractEmbeddedMetadata(book.uri,ext,{exists:true,size:book.fileSize}),
+          itemTimeoutMs,
+          'Embedded metadata read',
+        );
+        const parts=decodedPathParts(book.uri);
+        const siblingCount=book.format==='Audio'?(audioFolderCounts.get(parts.slice(0,-1).join('/'))||1):1;
+        const fields=sanitizeDiscoveredMetadata(raw,book.format,book.title,siblingCount);
+        return {book,index,reused:false,fields,timedOut:false};
+      }catch(error:any){
+        return {book,index,reused:false,fields:{} as LocalMetadataFields,timedOut:error?.code==='operation-timeout'};
       }
-    }
+    }));
     if(!shouldContinue())break;
 
-    const parts=decodedPathParts(book.uri);
-    const siblingCount=book.format==='Audio'?(audioFolderCounts.get(parts.slice(0,-1).join('/'))||1):1;
-    const fields=sanitizeDiscoveredMetadata(raw,book.format,book.title,siblingCount);
-    const patch=mergeEmbeddedMetadata(book,fields);
-    next[index]=patch;
-    if(Object.keys(fields).length)updated+=1;
-    if(!!book.needsReview!==!!patch.needsReview)review+=patch.needsReview?1:-1;
-    processed+=1;pending+=1;
-    await publish(book.title,true);
-
-    if(consecutiveTimeouts>=maxConsecutiveTimeouts){
-      skipped=Math.max(0,eligible.length-processed);
-      processed=eligible.length;
-      await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped,current:'Skipped remaining embedded reads after repeated timeouts'});
-      break;
+    for(const result of results){
+      const {book,index,fields,reused}=result;
+      if(result.timedOut)timedOut+=1;
+      if(!reused){
+        const patch=mergeEmbeddedMetadata(book,fields);
+        next[index]=patch;
+        if(Object.keys(fields).length)updated+=1;
+        if(!!book.needsReview!==!!patch.needsReview)review+=patch.needsReview?1:-1;
+      }
+      processed+=1;pending+=1;
     }
+    const current=results.at(-1)?.book.title;
+    await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped,current});
+    pending=0;lastPublish=Date.now();
+    await yieldToUi(true);
   }
   if(shouldContinue()){
     await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,review,timedOut,skipped});
@@ -1064,11 +1058,13 @@ export async function enrichLocalBookMetadataOnline(
     ignoreCache?:boolean;
     shouldContinue?:()=>boolean;
     batchSize?:number;
+    concurrency?:number;
     onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;cache:OnlineBookCache})=>void|Promise<void>;
   }={},
 ):Promise<LocalOnlineMetadataEnrichmentResult>{
   const shouldContinue=options.shouldContinue||(()=>true);
   const batchSize=Math.max(1,Math.min(24,Math.trunc(options.batchSize||4)));
+  const concurrency=Math.max(1,Math.min(6,Math.trunc(options.concurrency||4)));
   const cache:OnlineBookCache={...(options.cache||{})};
   let next=books.slice();
   const units=localBookLookupUnits(next);
@@ -1076,50 +1072,56 @@ export async function enrichLocalBookMetadataOnline(
   let lastPublish=Date.now();
   const yieldToUi=cooperativeYieldFactory();
 
-  for(const unit of units){
+  for(let cursor=0;cursor<units.length;cursor+=concurrency){
     if(!shouldContinue())break;
-    attempted+=1;
-    pending+=1;
-    const result=await lookupOnlineBook(unit.target,{
-      cache,
-      googleBooksApiKey:options.googleBooksApiKey,
-      openLibraryEnabled:options.openLibraryEnabled,
-      ignoreCache:options.ignoreCache,
-    });
+    const active=units.slice(cursor,cursor+concurrency);
+    attempted+=active.length;
+    pending+=active.length;
+    const results=await Promise.all(active.map(async unit=>({
+      unit,
+      result:await lookupOnlineBook(unit.target,{
+        cache,
+        googleBooksApiKey:options.googleBooksApiKey,
+        openLibraryEnabled:options.openLibraryEnabled,
+        ignoreCache:options.ignoreCache,
+      }),
+    })));
     if(!shouldContinue())break;
-    if(result.best){
-      const candidate=result.best;
-      if(result.autoApply&&options.applyHighConfidence!==false){
-        for(const index of unit.indexes){
-          const book=next[index];
-          let patch=mergeOnlineBookCandidate(book,candidate,true);
-          patch={
-            ...patch,
-            workKey:logicalWorkKey({...patch,title:unit.target.title||patch.title}),
-            editionKey:editionKey({...patch,title:unit.target.title||patch.title},patch.format),
-            metadataSource:(patch.metadataProvenance?.title==='online'||patch.metadataProvenance?.author==='online')?'online':patch.metadataSource,
-            onlineMetadataMatch:candidate,
-            onlineMetadataAlternatives:result.candidates.slice(1,5),
-          };
-          next[index]=patch;
-          updated+=1;
+    for(const {unit,result} of results){
+      if(result.best){
+        const candidate=result.best;
+        if(result.autoApply&&options.applyHighConfidence!==false){
+          for(const index of unit.indexes){
+            const book=next[index];
+            let patch=mergeOnlineBookCandidate(book,candidate,true);
+            patch={
+              ...patch,
+              workKey:logicalWorkKey({...patch,title:unit.target.title||patch.title}),
+              editionKey:editionKey({...patch,title:unit.target.title||patch.title},patch.format),
+              metadataSource:(patch.metadataProvenance?.title==='online'||patch.metadataProvenance?.author==='online')?'online':patch.metadataSource,
+              onlineMetadataMatch:candidate,
+              onlineMetadataAlternatives:result.candidates.slice(1,5),
+            };
+            next[index]=patch;
+            updated+=1;
+          }
+          matched+=1;
+        }else if(result.status==='review'||result.status==='matched'){
+          for(const index of unit.indexes){
+            const book=next[index];
+            next[index]={
+              ...book,
+              needsReview:true,
+              reviewReason:'A possible online metadata match needs review.',
+              onlineMetadataMatch:candidate,
+              onlineMetadataAlternatives:result.candidates.slice(1,5),
+            };
+          }
+          review+=1;
         }
-        matched+=1;
-      }else if(result.status==='review'||result.status==='matched'){
-        for(const index of unit.indexes){
-          const book=next[index];
-          next[index]={
-            ...book,
-            needsReview:true,
-            reviewReason:'A possible online metadata match needs review.',
-            onlineMetadataMatch:candidate,
-            onlineMetadataAlternatives:result.candidates.slice(1,5),
-          };
-        }
-        review+=1;
       }
     }
-    if(pending>=batchSize||Date.now()-lastPublish>=1200){
+    if(pending>=batchSize||Date.now()-lastPublish>=1200||cursor+concurrency>=units.length){
       lastPublish=Date.now();
       pending=0;
       await options.onBatch?.(next,{attempted,matched,review,updated,cache});
