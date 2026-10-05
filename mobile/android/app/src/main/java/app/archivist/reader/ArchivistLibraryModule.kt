@@ -98,6 +98,8 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
         if (!seenDirectories.add(parentId)) continue
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
         var contextReady = false
+        var directoryMediaCount = 0L
+        var directoryAudioOnly = true
 
         try {
           // Pass one discovers directory structure and lightweight context first.
@@ -121,7 +123,11 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
                 continue
               }
               val role = roleFor(name) ?: continue
-              if (role.first == "media") continue
+              if (role.first == "media") {
+                directoryMediaCount += 1
+                if (role.second != "Audio") directoryAudioOnly = false
+                continue
+              }
               val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
               val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
               val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
@@ -134,6 +140,19 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           }
 
           if (contextReady && !session.cancelled.get()) {
+            offer(
+              session,
+              ScanEntry(
+                "",
+                "",
+                parentId,
+                "",
+                directoryMediaCount,
+                0L,
+                "directory-context",
+                if (directoryAudioOnly) "audio-only" else "mixed"
+              )
+            )
             // Pass two streams media only. Context for this parent is already
             // ahead of it in the bounded queue.
             context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
