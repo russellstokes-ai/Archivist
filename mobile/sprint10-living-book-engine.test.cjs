@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+
+const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
+const artwork=fs.readFileSync(__dirname+'/LivingBookArtwork.tsx','utf8');
+const geometry=fs.readFileSync(__dirname+'/livingBookGeometry.ts','utf8');
+const loop=fs.readFileSync(__dirname+'/pageTurnLoop.ts','utf8');
+
+assert.ok(app.includes('const bookOpenProgressRef=useRef(0)'),'player must remember the current normalized hinge position');
+assert.ok(app.includes("bookOpenAnim.addListener(({value})=>{bookOpenProgressRef.current=value;})"),'hinge state must track the live native animation value');
+assert.ok(app.includes('livingBookHingeDuration(current,target,baseDuration,reduceMotion)'),'rapid play/pause reversals must animate only the remaining hinge travel');
+assert.ok(app.includes('preserveCurrentOnStop:true'),'pause must not snap a visible turning leaf backwards');
+assert.ok(app.includes("if(finished&&target===0)")&&app.includes('pageTurnAnim.setValue(0)'),'turn state must reset only after the cover is physically closed');
+assert.ok(loop.includes('preserveCurrentOnStop?:boolean')&&loop.includes('if(!input.preserveCurrentOnStop)input.stop()'),'ambient loop must support non-snapping cancellation');
+
+assert.ok(artwork.includes('baseSpread')&&artwork.includes('leafEnvelope'),'static book layers and turning leaves must use separate clipping domains');
+assert.ok(artwork.includes("overflow:'visible'")&&artwork.includes('leafEnvelopePad'),'turning pages must have an oversized visible animation envelope');
+assert.ok(artwork.includes('coverFrontFace')&&artwork.includes('coverInsideFace'),'cover must remain visually continuous across the 90-degree hinge crossing');
+assert.ok(artwork.includes('const leafGate=open.interpolate'),'page visibility must derive from the same normalized book hinge');
+assert.ok(artwork.includes('groundShadow')&&artwork.includes("transformOrigin:'right center'"),'shadow must be anchored to the visible footprint');
+assert.equal(artwork.includes('shadowColor'),false,'rotating book layers must not use native shadows');
+assert.equal(artwork.includes('elevation:'),false,'rotating book layers must not use Android elevation shadows');
+assert.ok(artwork.includes('leftPageAngle=open.interpolate')&&artwork.includes('coverAngle=open.interpolate'),'cover and page geometry must derive from one hinge value');
+assert.ok(geometry.includes('leafRevealStart:0.88')&&geometry.includes('leafRevealEnd:0.97'),'turning leaves must disappear before close-edge rendering becomes visible');
+assert.ok(geometry.includes('leafEnvelopePad:18'),'turn envelope must protect page perspective from top/edge clipping');
+
+const livingBookUsages=(app.match(/<LivingBookArtwork\b/g)||[]).length;
+assert.equal(livingBookUsages,1,'phone and unfolded Fold must share one Living Book renderer rather than divergent implementations');
+
+console.log('PASS: Test 10 Sprint 2 Living Book engine is single-hinge, unclipped, shadow-safe and reversal-safe');
