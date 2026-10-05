@@ -20,6 +20,9 @@ export type LocalWork = {
   reviewReason: string;
   coverUri?: string;
   coverShape: 'portrait' | 'square';
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: LocalBook['livingBookCoverSource'];
+  livingBookCoverConfidence?: number;
 };
 
 export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
@@ -75,7 +78,10 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       needsReview: !!reviewItem,
       reviewReason: reviewItem?.reviewReason || '',
       coverUri: tracks.find(item => item.coverUri)?.coverUri,
-      coverShape: audio ? 'square' : 'portrait',
+      coverShape: tracks.find(item=>item.coverUri)?.coverShape || (audio ? 'square' : 'portrait'),
+      livingBookCoverUri: tracks.find(item=>item.livingBookCoverUri)?.livingBookCoverUri,
+      livingBookCoverSource: tracks.find(item=>item.livingBookCoverSource)?.livingBookCoverSource,
+      livingBookCoverConfidence: tracks.find(item=>item.livingBookCoverConfidence)?.livingBookCoverConfidence,
     };
   });
 }
