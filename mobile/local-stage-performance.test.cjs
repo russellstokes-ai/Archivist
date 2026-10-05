@@ -48,5 +48,7 @@ assert(enrichment.includes('entry.version!==2'),'Only current-schema enrichment 
 assert(enrichment.indexOf('entry.querySignature!==querySignature') < enrichment.indexOf('entry.publishReady'),'Successful entries must validate their evidence signature before reuse.');
 assert(enrichment.includes('const seedCache=inputCache'),'Prior cache must be read-only seed data during reconciliation.');
 assert(enrichment.includes("const cache:{[key:string]:LocalEnrichmentCacheEntry}={}"),'Reconciliation output must contain active fingerprints only.');
+assert(enrichment.includes('workConcurrency=Math.max(1,Math.min(3'),'Enrichment worker count must remain explicitly bounded.');
+assert(enrichment.includes('let progressChain=Promise.resolve()'),'Concurrent work must serialize progress/persistence callbacks.');
 
 console.log('PASS: local catalogue persistence and enrichment remain keyed/delta-based');
