@@ -109,27 +109,32 @@ const rootWorks=groupLocalWorks(rootSynced);
 assert.equal(rootWorks.find(item=>item.author==='Frank Herbert')?.title,'Dune','embedded album/work title must become the canonical root audiobook identity');
 assert.equal(rootWorks.find(item=>item.author==='Andy Weir')?.title,'Project Hail Mary','each root audiobook must retain its own canonical work title');
 
+const mixedRootUri='content://root/tree/primary%3AMy%20Mixed%20Library/document/primary%3AMy%20Mixed%20Library';
 const mixedRootRealWorld=[
   track(80,'The Martian - Chapter 01',{
-    uri:'content://root/document/primary:Audiobooks%2FThe%20Martian%20-%20Chapter%2001.mp3',
+    uri:'content://root/document/primary:My%20Mixed%20Library%2FThe%20Martian%20-%20Chapter%2001.mp3',
+    rootUri:mixedRootUri,
     title:'Chapter 01',
     author:'',
     embeddedMetadata:{},
   }),
   track(81,'The Martian - Chapter 02',{
-    uri:'content://root/document/primary:Audiobooks%2FThe%20Martian%20-%20Chapter%2002.mp3',
+    uri:'content://root/document/primary:My%20Mixed%20Library%2FThe%20Martian%20-%20Chapter%2002.mp3',
+    rootUri:mixedRootUri,
     title:'Chapter 02',
     author:'',
     embeddedMetadata:{},
   }),
   track(82,'000001',{
-    uri:'content://root/document/primary:Audiobooks%2F000001.mp3',
+    uri:'content://root/document/primary:My%20Mixed%20Library%2F000001.mp3',
+    rootUri:mixedRootUri,
     title:'000001',
     author:'Douglas Adams',
     embeddedMetadata:{workTitle:"The Hitchhiker's Guide to the Galaxy"},
   }),
   track(83,'000002',{
-    uri:'content://root/document/primary:Audiobooks%2F000002.mp3',
+    uri:'content://root/document/primary:My%20Mixed%20Library%2F000002.mp3',
+    rootUri:mixedRootUri,
     title:'000002',
     author:'Douglas Adams',
     embeddedMetadata:{workTitle:"The Hitchhiker's Guide to the Galaxy"},
