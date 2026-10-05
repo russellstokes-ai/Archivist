@@ -10,6 +10,12 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableMap
+import com.github.junrar.Archive
+import java.io.ByteArrayOutputStream
+import java.io.FileInputStream
+import java.io.InputStream
+import java.util.zip.ZipInputStream
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -247,6 +253,303 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     session.lastError?.let { result.putString("lastError", it) }
     promise.resolve(result)
     if (finished) sessions.remove(scanId)
+  }
+
+
+  private val metadataTextLimit = 2 * 1024 * 1024
+  private val metadataArchiveEntryLimit = 20000
+
+  private fun openInput(uri: String): InputStream {
+    val parsed = Uri.parse(uri)
+    return when (parsed.scheme) {
+      "content" -> context.contentResolver.openInputStream(parsed) ?: throw IllegalArgumentException("Unable to open media")
+      "file" -> FileInputStream(File(parsed.path ?: throw IllegalArgumentException("Invalid file URI")))
+      else -> FileInputStream(File(uri))
+    }
+  }
+
+  private fun readBounded(input: InputStream, limit: Int = metadataTextLimit): ByteArray {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(16 * 1024)
+    var total = 0
+    while (true) {
+      val read = input.read(buffer)
+      if (read <= 0) break
+      total += read
+      if (total > limit) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
+      output.write(buffer, 0, read)
+    }
+    return output.toByteArray()
+  }
+
+  private fun readZipText(uri: String, wanted: (String) -> Boolean): Pair<String, String>? {
+    openInput(uri).use { raw ->
+      ZipInputStream(raw).use { zip ->
+        var seen = 0
+        while (true) {
+          val entry = zip.nextEntry ?: break
+          seen++
+          if (seen > metadataArchiveEntryLimit) throw IllegalArgumentException("Archive contains too many entries for metadata inspection.")
+          val name = entry.name ?: ""
+          if (!entry.isDirectory && wanted(name)) {
+            if (entry.size > metadataTextLimit) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
+            return name to readBounded(zip).toString(Charsets.UTF_8)
+          }
+          zip.closeEntry()
+        }
+      }
+    }
+    return null
+  }
+
+  private fun decodeXml(value: String): String =
+    value
+      .replace("&amp;", "&", ignoreCase = true)
+      .replace("&lt;", "<", ignoreCase = true)
+      .replace("&gt;", ">", ignoreCase = true)
+      .replace("&quot;", "\"", ignoreCase = true)
+      .replace("&apos;", "'", ignoreCase = true)
+      .replace("&#39;", "'", ignoreCase = true)
+
+  private fun stripXml(value: String): String =
+    decodeXml(value.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim())
+
+  private fun xmlValues(xml: String, tags: List<String>): List<String> {
+    val values = ArrayList<String>()
+    for (tag in tags) {
+      val regex = Regex("<\${Regex.escape(tag)}\\b[^>]*>([\\s\\S]*?)</\${Regex.escape(tag)}>", RegexOption.IGNORE_CASE)
+      for (match in regex.findAll(xml)) {
+        val value = stripXml(match.groupValues[1])
+        if (value.isNotBlank()) values.add(value)
+      }
+    }
+    return values
+  }
+
+  private fun xmlValue(xml: String, tags: List<String>): String =
+    xmlValues(xml, tags).firstOrNull().orEmpty()
+
+  private fun xmlAttribute(xml: String, element: String, attribute: String): String {
+    val direct = Regex(
+      "<\${Regex.escape(element)}\\b[^>]*\${Regex.escape(attribute)}\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>",
+      RegexOption.IGNORE_CASE
+    ).find(xml)
+    return direct?.groupValues?.getOrNull(1)?.let(::decodeXml).orEmpty()
+  }
+
+  private fun metaContent(xml: String, key: String): String {
+    val first = Regex(
+      "<meta\\b[^>]*(?:name|property)\\s*=\\s*[\"']\${Regex.escape(key)}[\"'][^>]*content\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>",
+      RegexOption.IGNORE_CASE
+    ).find(xml)
+    if (first != null) return decodeXml(first.groupValues[1]).trim()
+    val reversed = Regex(
+      "<meta\\b[^>]*content\\s*=\\s*[\"']([^\"']+)[\"'][^>]*(?:name|property)\\s*=\\s*[\"']\${Regex.escape(key)}[\"'][^>]*>",
+      RegexOption.IGNORE_CASE
+    ).find(xml)
+    if (reversed != null) return decodeXml(reversed.groupValues[1]).trim()
+    val body = Regex(
+      "<meta\\b[^>]*property\\s*=\\s*[\"']\${Regex.escape(key)}[\"'][^>]*>([\\s\\S]*?)</meta>",
+      RegexOption.IGNORE_CASE
+    ).find(xml)
+    return body?.groupValues?.getOrNull(1)?.let(::stripXml).orEmpty()
+  }
+
+  private fun cleanIdentifier(value: String): String =
+    value.trim()
+      .replace(Regex("^urn:isbn:", RegexOption.IGNORE_CASE), "")
+      .replace(Regex("^isbn(?:-1[03])?:?\\s*", RegexOption.IGNORE_CASE), "")
+      .trim()
+
+  private fun isbnValue(values: List<String>): String? =
+    values.map(::cleanIdentifier).firstOrNull {
+      val normalized = it.uppercase().replace(Regex("[^0-9X]"), "")
+      normalized.length == 10 || normalized.length == 13
+    }
+
+  private fun yearValue(value: String): Int? {
+    val match = Regex("(?:^|\\D)(\\d{4})(?:\\D|$)").find(value) ?: return null
+    val year = match.groupValues[1].toIntOrNull() ?: return null
+    return if (year in 1000..2200) year else null
+  }
+
+  private fun numberValue(value: String): Double? =
+    Regex("\\d+(?:\\.\\d+)?").find(value)?.value?.toDoubleOrNull()
+
+  private fun metadataMap(uri: String, fields: Map<String, Any?>): com.facebook.react.bridge.WritableMap {
+    val map = Arguments.createMap()
+    map.putString("uri", uri)
+    for ((key, value) in fields) {
+      when (value) {
+        is String -> if (value.isNotBlank()) map.putString(key, value)
+        is Int -> map.putInt(key, value)
+        is Double -> map.putDouble(key, value)
+        is List<*> -> {
+          val array = Arguments.createArray()
+          value.filterIsInstance<String>().filter { it.isNotBlank() }.forEach(array::pushString)
+          map.putArray(key, array)
+        }
+      }
+    }
+    return map
+  }
+
+  private fun epubMetadata(uri: String): Map<String, Any?> {
+    val container = readZipText(uri) { it.equals("META-INF/container.xml", ignoreCase = true) }?.second.orEmpty()
+    val opfPath = if (container.isNotBlank()) xmlAttribute(container, "rootfile", "full-path") else ""
+    val opfPair = if (opfPath.isNotBlank()) {
+      readZipText(uri) { it.equals(opfPath, ignoreCase = true) }
+    } else {
+      readZipText(uri) { it.lowercase().endsWith(".opf") }
+    } ?: return emptyMap()
+    val opf = opfPair.second
+    val identifiers = xmlValues(opf, listOf("dc:identifier", "identifier")).map(::cleanIdentifier).distinct()
+    val series = metaContent(opf, "calibre:series").ifBlank { metaContent(opf, "belongs-to-collection") }
+    val seriesIndex = metaContent(opf, "calibre:series_index").ifBlank { metaContent(opf, "group-position") }
+    return mapOf(
+      "title" to xmlValue(opf, listOf("dc:title", "title")),
+      "author" to xmlValue(opf, listOf("dc:creator", "creator")),
+      "series" to series,
+      "seriesIndex" to numberValue(seriesIndex),
+      "genre" to xmlValue(opf, listOf("dc:subject", "subject")),
+      "publisher" to xmlValue(opf, listOf("dc:publisher", "publisher")),
+      "year" to yearValue(xmlValue(opf, listOf("dc:date", "date"))),
+      "isbn" to isbnValue(identifiers),
+      "identifiers" to identifiers
+    )
+  }
+
+  private fun comicInfoFields(xml: String): Map<String, Any?> {
+    val identifiers = xmlValues(xml, listOf("ISBN", "isbn", "Identifier", "identifier")).map(::cleanIdentifier).distinct()
+    return mapOf(
+      "title" to xmlValue(xml, listOf("Title")),
+      "author" to xmlValue(xml, listOf("Writer")),
+      "series" to xmlValue(xml, listOf("Series")),
+      "seriesIndex" to numberValue(xmlValue(xml, listOf("Number"))),
+      "genre" to xmlValue(xml, listOf("Genre")),
+      "publisher" to xmlValue(xml, listOf("Publisher")),
+      "year" to yearValue(xmlValue(xml, listOf("Year"))),
+      "isbn" to isbnValue(identifiers),
+      "identifiers" to identifiers
+    )
+  }
+
+  private fun cbzMetadata(uri: String): Map<String, Any?> =
+    readZipText(uri) { it.substringAfterLast('/').equals("ComicInfo.xml", ignoreCase = true) }
+      ?.second
+      ?.let(::comicInfoFields)
+      ?: emptyMap()
+
+  private fun cbrMetadata(uri: String): Map<String, Any?> {
+    openInput(uri).use { input ->
+      Archive(input).use { archive ->
+        var seen = 0
+        while (true) {
+          val header = archive.nextFileHeader() ?: break
+          seen++
+          if (seen > metadataArchiveEntryLimit) throw IllegalArgumentException("Archive contains too many entries for metadata inspection.")
+          if (header.isDirectory) continue
+          val name = header.fileName ?: continue
+          if (!name.substringAfterLast('/').equals("ComicInfo.xml", ignoreCase = true)) continue
+          if (header.fullUnpackSize > metadataTextLimit) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
+          val xml = archive.getInputStream(header).use { source -> readBounded(source).toString(Charsets.UTF_8) }
+          return comicInfoFields(xml)
+        }
+      }
+    }
+    return emptyMap()
+  }
+
+  private fun tarName(header: ByteArray): String {
+    val zero = header.indexOfFirst { it.toInt() == 0 }
+    val end = if (zero < 0) 100 else minOf(zero, 100)
+    return String(header, 0, end, Charsets.UTF_8).trim()
+  }
+
+  private fun tarSize(header: ByteArray): Long {
+    val raw = String(header, 124, 12, Charsets.US_ASCII).trim('\u0000', ' ')
+    return raw.toLongOrNull(8) ?: 0L
+  }
+
+  private fun skipFully(input: InputStream, bytes: Long) {
+    var remaining = bytes
+    val buffer = ByteArray(16 * 1024)
+    while (remaining > 0) {
+      val read = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+      if (read <= 0) break
+      remaining -= read
+    }
+  }
+
+  private fun cbtMetadata(uri: String): Map<String, Any?> {
+    openInput(uri).use { input ->
+      val header = ByteArray(512)
+      var seen = 0
+      while (true) {
+        var filled = 0
+        while (filled < header.size) {
+          val read = input.read(header, filled, header.size - filled)
+          if (read <= 0) return emptyMap()
+          filled += read
+        }
+        if (header.all { it.toInt() == 0 }) return emptyMap()
+        seen++
+        if (seen > metadataArchiveEntryLimit) throw IllegalArgumentException("Archive contains too many entries for metadata inspection.")
+        val name = tarName(header)
+        val size = tarSize(header)
+        if (name.substringAfterLast('/').equals("ComicInfo.xml", ignoreCase = true)) {
+          if (size > metadataTextLimit) throw IllegalArgumentException("Embedded metadata exceeds the 2 MB safety limit.")
+          val data = ByteArray(size.toInt())
+          var offset = 0
+          while (offset < data.size) {
+            val read = input.read(data, offset, data.size - offset)
+            if (read <= 0) break
+            offset += read
+          }
+          return comicInfoFields(String(data, 0, offset, Charsets.UTF_8))
+        }
+        skipFully(input, size)
+        val padding = (512 - (size % 512)) % 512
+        if (padding > 0) skipFully(input, padding)
+      }
+    }
+  }
+
+  private fun documentMetadata(uri: String, format: String): Map<String, Any?> {
+    val ext = extension(Uri.parse(uri).lastPathSegment ?: uri)
+    return when {
+      format == "EPUB" || ext == "epub" -> epubMetadata(uri)
+      format == "Comic" && (ext == "cbz" || ext == "zip") -> cbzMetadata(uri)
+      format == "Comic" && ext == "cbr" -> cbrMetadata(uri)
+      format == "Comic" && ext == "cbt" -> cbtMetadata(uri)
+      else -> emptyMap()
+    }
+  }
+
+  @ReactMethod
+  fun readDocumentMetadataBatch(items: ReadableArray, promise: Promise) {
+    thread(name = "archivist-document-metadata") {
+      try {
+        val result = Arguments.createArray()
+        val limit = items.size().coerceAtMost(32)
+        for (index in 0 until limit) {
+          val item: ReadableMap = items.getMap(index) ?: continue
+          val uri = item.getString("uri") ?: continue
+          val format = item.getString("format") ?: ""
+          try {
+            result.pushMap(metadataMap(uri, documentMetadata(uri, format)))
+          } catch (error: Throwable) {
+            val map = Arguments.createMap()
+            map.putString("uri", uri)
+            map.putString("error", error.message ?: "Embedded metadata unavailable")
+            result.pushMap(map)
+          }
+        }
+        promise.resolve(result)
+      } catch (error: Throwable) {
+        promise.reject("DOCUMENT_METADATA_FAILED", error.message ?: "Unable to inspect embedded book metadata", error)
+      }
+    }
   }
 
   private fun putMetadata(map: com.facebook.react.bridge.WritableMap, key: String, retriever: MediaMetadataRetriever, metadataKey: Int) {
