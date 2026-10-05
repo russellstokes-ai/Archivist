@@ -113,13 +113,13 @@ const mixedRootRealWorld=[
   track(80,'The Martian - Chapter 01',{
     uri:'content://root/document/primary:Audiobooks%2FThe%20Martian%20-%20Chapter%2001.mp3',
     title:'Chapter 01',
-    author:'Andy Weir',
+    author:'',
     embeddedMetadata:{},
   }),
   track(81,'The Martian - Chapter 02',{
     uri:'content://root/document/primary:Audiobooks%2FThe%20Martian%20-%20Chapter%2002.mp3',
     title:'Chapter 02',
-    author:'Andy Weir',
+    author:'',
     embeddedMetadata:{},
   }),
   track(82,'000001',{
@@ -141,7 +141,7 @@ assert.equal(mixedRootKeys.get(mixedRootRealWorld[2].uri),mixedRootKeys.get(mixe
 assert.notEqual(mixedRootKeys.get(mixedRootRealWorld[0].uri),mixedRootKeys.get(mixedRootRealWorld[2].uri),'filename-derived and metadata-derived root audiobooks must remain separate');
 const mixedRootWorks=groupLocalWorks(synchronizeLocalMetadata(mixedRootRealWorld).books);
 assert.equal(mixedRootWorks.length,2,'two real-world root audiobooks must become two logical books');
-assert.ok(mixedRootWorks.some(work=>work.title==='The Martian'&&work.files===2));
+assert.ok(mixedRootWorks.some(work=>work.title==='The Martian'&&work.files===2),'multipart filenames alone must recover the book title without inventing an author');
 assert.ok(mixedRootWorks.some(work=>work.title==="The Hitchhiker's Guide to the Galaxy"&&work.files===2));
 
 const rootByName=[
