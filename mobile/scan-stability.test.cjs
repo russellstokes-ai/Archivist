@@ -8,7 +8,7 @@ assert.match(source,/ListEmptyComponent=\{!shelfLoading&&!localScanning\?<Librar
 assert.ok(source.includes('const scanCommitGate=useRef(new ScanCommitGate()).current'),'scan generation gate must be retained');
 assert.ok(source.includes('if(!scanCommitGate.isCurrent(generation))return null'),'stale scan results must not commit');
 const finalise=source.slice(source.indexOf('async function finaliseLocalScan'),source.indexOf('function scanNotice'));
-assert.ok(finalise.indexOf('setPersistedJSON(localCatalogKey,result.books)')<finalise.indexOf('setLocalBooks(nextBooks)'),'complete catalogue must persist before it is published to the UI');
+assert.ok(finalise.indexOf('setPersistedJSONArrayCooperative(localCatalogKey,result.books')<finalise.indexOf('setLocalBooks(nextBooks)'),'safe discovery baseline must persist cooperatively before it is published to the UI');
 assert.ok(source.includes("status:'Scanning…'")&&source.includes('setLocalFolders(folders)'),'new folder must appear immediately in the source list');
 assert.ok(source.includes("status:'Scan failed · tap Refresh'")&&source.includes('scanFailureCopy(localBooks.length>0)'),'scan failures must preserve recoverable source state and explain that existing content remains safe');
 assert.ok(source.includes('{LocalScanStatus()}'),'Shelf/Library must expose a stable scan state rather than silently changing underneath the user');
@@ -20,15 +20,16 @@ assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan
 assert.ok(source.includes('deferEmbeddedCovers:true')&&source.includes('deferEmbeddedMetadata:true'),'app scans must publish identity before expensive embedded metadata and cover recovery');
 assert.ok(source.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),'catalogue publication and enrichment must share one cancellable refresh job');
 assert.ok(source.includes('setScanProgress(null)')&&source.includes('libraryRefreshRunningRef.current=true'),'foreground discovery must hand off to enrichment without allowing a second refresh to overlap');
-assert.ok(source.includes('await enrichPublishedLocalEmbeddedMetadata(baseBooks,generation,forceOnline)'),'background enrichment must move embedded archive/audio parsing out of the foreground scan');
-assert.ok(source.includes('await enrichPublishedLocalCovers(embeddedBooks,generation)'),'background library enrichment must recover covers after embedded metadata');
-assert.ok(source.includes('await enrichPublishedLocalBookMetadata(latest,generation,forceOnline)'),'background library enrichment must continue into online book metadata after the latest persisted cover state and carry explicit refresh intent');
-assert.ok(source.includes('await enrichPublishedLocalComicMetadata(Array.isArray(afterBooks)?afterBooks:latest,generation,forceOnline)'),'comic enrichment must run after books against the latest persisted catalogue and carry explicit refresh intent');
+assert.ok(source.includes('await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline)'),'enrichment must move embedded archive/audio parsing out of foreground discovery and thread the in-memory catalogue forward');
+assert.ok(source.includes('await enrichPublishedLocalCovers(currentBooks,generation)'),'library enrichment must recover covers from the latest in-memory metadata state');
+assert.ok(source.includes('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)'),'library enrichment must continue into online book metadata using the latest in-memory state and explicit refresh intent');
+assert.ok(source.includes('await enrichPublishedLocalComicMetadata(currentBooks,generation,forceOnline)'),'comic enrichment must run after books against the latest in-memory catalogue and carry explicit refresh intent');
 assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron credentials must come from secure storage rather than app source or persisted catalogue files');
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'stale enrichment must stop when a newer scan begins');
 assert.equal(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover batch progress must not clone/publish the full catalogue on every batch');
 assert.ok(source.includes('reportEnrichmentProgress')&&source.includes('enrichmentProgressClock'),'enrichment progress must be throttled independently of catalogue publication');
-assert.ok(source.includes('const stored=await getPersistedJSON<LocalBook[]>(localCatalogKey)'),'final enrichment persistence must merge with the latest persisted catalogue so user edits are not rolled back');
+assert.ok(source.includes('setPersistedJSONArrayCooperative(localCatalogKey,currentBooks'),'final enriched catalogue must persist once, cooperatively, after all stages complete');
+assert.equal(source.includes('getPersistedJSON<LocalBook[]>(localCatalogKey)'),false,'enrichment stages must not repeatedly parse the large persisted catalogue');
 
 console.log('PASS: Sprint 5/7 scan/catalogue integration contracts');
 
