@@ -1,5 +1,6 @@
 package app.archivist.reader
 
+import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -9,6 +10,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
+import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
@@ -219,6 +222,58 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
         promise.resolve(result)
       } catch (error: Throwable) {
         promise.reject("AUDIO_METADATA_FAILED", error.message ?: "Unable to inspect audiobook metadata", error)
+      }
+    }
+  }
+  private fun bytesHex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
+
+  private fun artworkType(data: ByteArray): Pair<String, String>? {
+    if (data.size >= 3 && data[0] == 0xff.toByte() && data[1] == 0xd8.toByte() && data[2] == 0xff.toByte()) return "jpg" to "image/jpeg"
+    if (data.size >= 8 && data[0] == 0x89.toByte() && data[1] == 0x50.toByte() && data[2] == 0x4e.toByte() && data[3] == 0x47.toByte()) return "png" to "image/png"
+    if (data.size >= 12 && String(data, 0, 4, Charsets.US_ASCII) == "RIFF" && String(data, 8, 4, Charsets.US_ASCII) == "WEBP") return "webp" to "image/webp"
+    return null
+  }
+
+  @ReactMethod
+  fun extractAudioArtwork(uri: String, promise: Promise) {
+    thread(name = "archivist-audio-artwork") {
+      val retriever = MediaMetadataRetriever()
+      try {
+        retriever.setDataSource(context, Uri.parse(uri))
+        val data = retriever.embeddedPicture
+        if (data == null || data.isEmpty() || data.size > 24 * 1024 * 1024) {
+          promise.resolve(null)
+          return@thread
+        }
+        val type = artworkType(data)
+        if (type == null) {
+          promise.resolve(null)
+          return@thread
+        }
+        val digest = bytesHex(MessageDigest.getInstance("SHA-256").digest(data)).take(32)
+        val dir = File(context.filesDir, "archivist-covers")
+        if (!dir.exists() && !dir.mkdirs()) throw IllegalStateException("Unable to create cover cache")
+        val target = File(dir, "audio-$digest.${type.first}")
+        if (!target.exists()) {
+          val temp = File(dir, ".audio-$digest.tmp")
+          temp.writeBytes(data)
+          if (!temp.renameTo(target)) {
+            target.writeBytes(data)
+            temp.delete()
+          }
+        }
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(data, 0, data.size, options)
+        val result = Arguments.createMap()
+        result.putString("uri", Uri.fromFile(target).toString())
+        result.putString("mimeType", type.second)
+        result.putInt("width", options.outWidth.coerceAtLeast(0))
+        result.putInt("height", options.outHeight.coerceAtLeast(0))
+        promise.resolve(result)
+      } catch (error: Throwable) {
+        promise.reject("AUDIO_ARTWORK_FAILED", error.message ?: "Unable to extract audiobook artwork", error)
+      } finally {
+        try { retriever.release() } catch (_: Throwable) {}
       }
     }
   }
