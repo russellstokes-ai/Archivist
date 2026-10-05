@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -158,9 +159,11 @@ class ArchivistAutoService : MediaLibraryService() {
     ): ListenableFuture<List<MediaItem>> {
       val snapshot = loadSnapshot()
       val resolved = mediaItems.flatMap { requested ->
-        val query = requested.requestMetadata.searchQuery?.toString()?.trim().orEmpty()
+        val searchRequest = requested.requestMetadata.searchQuery
+        val query = searchRequest?.toString()?.trim().orEmpty()
         when {
-          query.isNotBlank() -> bestSearchWork(snapshot, query)?.let { playableWorkItems(it).mediaItems } ?: emptyList()
+          searchRequest != null -> (if (query.isBlank()) defaultWork(snapshot) else bestSearchWork(snapshot, query))
+            ?.let { playableWorkItems(it).mediaItems } ?: emptyList()
           requested.mediaId.startsWith(WORK_PREFIX) -> snapshot.works.firstOrNull { it.id == requested.mediaId }?.let { playableWorkItems(it).mediaItems } ?: emptyList()
           requested.mediaId.startsWith(TRACK_PREFIX) -> resolveTrack(snapshot, requested.mediaId)?.let { listOf(trackItem(it.first, it.second)) } ?: emptyList()
           requested.localConfiguration != null -> listOf(requested)
@@ -179,9 +182,10 @@ class ArchivistAutoService : MediaLibraryService() {
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
       val snapshot = loadSnapshot()
       val first = mediaItems.firstOrNull()
-      val query = first?.requestMetadata?.searchQuery?.toString()?.trim().orEmpty()
+      val searchRequest = first?.requestMetadata?.searchQuery
+      val query = searchRequest?.toString()?.trim().orEmpty()
       val work = when {
-        query.isNotBlank() -> bestSearchWork(snapshot, query)
+        searchRequest != null -> if (query.isBlank()) defaultWork(snapshot) else bestSearchWork(snapshot, query)
         first?.mediaId?.startsWith(WORK_PREFIX) == true -> snapshot.works.firstOrNull { it.id == first.mediaId }
         first?.mediaId?.startsWith(TRACK_PREFIX) == true -> resolveTrack(snapshot, first.mediaId)?.first
         else -> null
@@ -315,10 +319,7 @@ class ArchivistAutoService : MediaLibraryService() {
     }
     val uri = Uri.parse(raw)
     try {
-      val bytes = contentResolver.openInputStream(uri)?.use { input ->
-        val data = input.readNBytes(MAX_ARTWORK_BYTES + 1)
-        if (data.size <= MAX_ARTWORK_BYTES) data else null
-      }
+      val bytes = readArtworkBytes(uri)
       if (bytes != null && bytes.isNotEmpty()) {
         artworkCache[raw] = bytes
         builder.setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
@@ -327,6 +328,30 @@ class ArchivistAutoService : MediaLibraryService() {
       }
     } catch (_: Throwable) {
       builder.setArtworkUri(uri)
+    }
+  }
+
+  private fun readArtworkBytes(uri: Uri): ByteArray? {
+    val input = when (uri.scheme?.lowercase()) {
+      "file" -> {
+        val path = uri.path ?: return null
+        File(path).takeIf { it.isFile }?.inputStream()
+      }
+      "content" -> contentResolver.openInputStream(uri)
+      else -> null
+    } ?: return null
+    return input.use { source ->
+      val output = ByteArrayOutputStream()
+      val buffer = ByteArray(32 * 1024)
+      var total = 0
+      while (true) {
+        val count = source.read(buffer)
+        if (count < 0) break
+        total += count
+        if (total > MAX_ARTWORK_BYTES) return@use null
+        output.write(buffer, 0, count)
+      }
+      output.toByteArray()
     }
   }
 
@@ -342,6 +367,11 @@ class ArchivistAutoService : MediaLibraryService() {
   }
 
   private fun bestSearchWork(snapshot: AutoSnapshot, query: String): AutoWork? = searchWorks(snapshot, query).firstOrNull()
+
+  private fun defaultWork(snapshot: AutoSnapshot): AutoWork? =
+    snapshot.works.firstOrNull { it.readingState == "in-progress" }
+      ?: snapshot.works.firstOrNull { it.favourite }
+      ?: snapshot.works.firstOrNull()
 
   private fun searchScore(work: AutoWork, q: String): Int {
     fun score(value: String, exact: Int, contains: Int): Int {
