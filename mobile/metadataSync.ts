@@ -76,6 +76,13 @@ function fileStem(uri:string){
   const parts=decodedPathParts(uri);
   return clean((parts[parts.length-1]||'').replace(/\.[^.]+$/,''));
 }
+function audioBookFolderTitle(uri:string){
+  const parts=decodedPathParts(uri);
+  const parent=clean(parts[parts.length-2]||'');
+  if(!parent||/^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(parent))return '';
+  const indexed=parent.match(/^(?:(?:book|bk|vol(?:ume)?)\s*)?#?\s*\d+(?:\.\d+)?\s*[-._:]\s*(.+)$/i);
+  return clean(indexed?.[1]||parent);
+}
 function shouldGroupAudioBooks(books:SynchronizableBook[]){
   if(books.length<=1)return true;
   const trackLike=books.every(book=>isGenericMediaTitle(fileStem(book.uri),'Audio',books.length));
@@ -130,7 +137,7 @@ function bestCover(books:SynchronizableBook[]){
 
 function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean){
   const entries=books.flatMap(book=>{
-    const values:Array<{book:SynchronizableBook;value:any;source:SyncSource;confidence:SyncConfidence;key:string}>=[];
+    const values:Array<{book:SynchronizableBook;value:any;source:SyncSource;confidence:SyncConfidence;key:string;workHint?:boolean}>=[];
     const value=(book as any)[field];
     if(present(value)){
       const source=sourceFor(book,field);
@@ -143,6 +150,15 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
       if(present(pathValue)&&normal(pathValue)!==normal(value)){
         values.push({book,value:pathValue,source:'path',confidence:inferred.confidence,key:normal(pathValue)});
       }
+      if(field==='title'&&books.length>1&&isGenericMediaTitle(fileStem(book.uri),'Audio',books.length)){
+        const folderTitle=audioBookFolderTitle(book.uri);
+        if(folderTitle&&normal(folderTitle)!==normal(value)&&normal(folderTitle)!==normal(pathValue)){
+          values.push({book,value:folderTitle,source:'path',confidence:'high',key:normal(folderTitle),workHint:true});
+        }else if(folderTitle&&normal(folderTitle)===normal(pathValue)){
+          const candidate=values.find(item=>item.source==='path'&&item.key===normal(folderTitle));
+          if(candidate)candidate.workHint=true;
+        }
+      }
     }
     return values;
   });
@@ -151,7 +167,7 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
   for(const entry of entries)frequency.set(entry.key,(frequency.get(entry.key)||0)+1);
   const groupSize=Math.max(1,books.length);
   const ranked=entries.map(entry=>{
-    let score=sourceRank[entry.source]+confidenceRank[entry.confidence]+Math.min(90,Math.max(0,(frequency.get(entry.key)||1)-1)*18);
+    let score=sourceRank[entry.source]+confidenceRank[entry.confidence]+Math.min(90,Math.max(0,(frequency.get(entry.key)||1)-1)*18)+(entry.workHint?120:0);
     if(audio&&field==='title'){
       const repeated=(frequency.get(entry.key)||1)/groupSize;
       // TIT2/©nam often contains chapter names. Treat a one-off embedded title
