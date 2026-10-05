@@ -1909,10 +1909,22 @@ function Client() {
       }
     }
   }
-  async function scanFoldersIntoStage(folders:LocalFolder[]){
+  async function scanFoldersIntoStage(
+    folders:LocalFolder[],
+    options:{replaceSources?:string[];forceMetadata?:boolean}={},
+  ){
     const generation=await beginLocalStageScan();
     const uiPending:LocalBook[]=[];
-    const scanSpaces=new Set<string>();
+    const replaceSet=new Set((options.replaceSources||[]).filter(Boolean));
+    const reuse=new Map<string,LocalBook>();
+    for(const book of localBooks){
+      if(book.uri)reuse.set(book.uri,book as LocalBook);
+    }
+    const scanSpaces=new Set<string>(
+      options.replaceSources
+        ? localBooks.filter(book=>!replaceSet.has((book as LocalBook).sourceUri||'')).map(book=>book.space).filter(Boolean)
+        : [],
+    );
     let ordinal=0;
     let lastUiPublish=0;
     let firstUiPublish=true;
@@ -1925,7 +1937,9 @@ function Client() {
       setLocalBooks(previous=>{
         if(firstUiPublish){
           firstUiPublish=false;
-          return current;
+          if(!options.replaceSources)return current;
+          const preserved=previous.filter(book=>!replaceSet.has((book as LocalBook).sourceUri||''));
+          return [...preserved,...current];
         }
         return [...previous,...current];
       });
@@ -1946,10 +1960,15 @@ function Client() {
           }
           publishUiBatch(false);
         },
+        {reuse,forceMetadata:!!options.forceMetadata},
       );
       publishUiBatch(true);
-      await commitLocalStageScan(generation);
-      return result;
+      await commitLocalStageScan(generation,options.replaceSources);
+      const committed=await loadLocalStage();
+      setLocalBooks(committed.books.map(book=>({...book,source:'local' as const})));
+      setLocalEnrichmentCache(committed.cache);
+      setSpaces([...new Set(committed.books.map(book=>book.space).filter(Boolean))]);
+      return {result,committedBooks:committed.books};
     }catch(error){
       await abandonLocalStageScan(generation).catch(()=>undefined);
       const committed=await loadLocalStage().catch(()=>({books:[] as LocalBook[],cache:{} as LocalEnrichmentCache}));
@@ -1970,16 +1989,18 @@ function Client() {
         setLocalFolderNotice('Folder selection cancelled.');
         return;
       }
-      const folders = localFolders.some(folder => folder.uri === picked.uri) ? localFolders : [...localFolders, picked];
-      setScanProgress({phase: 'discovering', currentFolder: picked.name, entriesVisited: 0, found: 0, review: 0});
-      const result = await scanFoldersIntoStage(folders);
-      setLocalFolders(result.folders);
-      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
+      const existing=localFolders.find(folder=>folder.uri===picked.uri);
+      setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
+      const {result,committedBooks}=await scanFoldersIntoStage([picked],{replaceSources:[picked.uri]});
+      const scannedFolder=result.folders[0]||picked;
+      const folders=existing
+        ? localFolders.map(folder=>folder.uri===picked.uri?scannedFolder:folder)
+        : [...localFolders,scannedFolder];
+      setLocalFolders(folders);
       setLocalMovePreviews([]);
-      setSpaces([...new Set(result.books.map(book => book.space))]);
-      await setPersistedJSON(localFoldersKey,result.folders);
+      await setPersistedJSON(localFoldersKey,folders);
       void runLocalEnrichment(result.books,localEnrichmentCache);
-      setLocalFolderNotice(`${result.books.length} files found · Archivist is identifying works and resolving covers${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
+      setLocalFolderNotice(`${result.books.length} files found in ${picked.name} · ${committedBooks.length} local files indexed${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1988,20 +2009,23 @@ function Client() {
     }
   }
 
-  async function rescanLocalFolders() {
+  async function rescanLocalFolders(forceMetadata=false) {
     if (!localFolders.length) return;
     setError('');
     setLocalScanning(true);
     try {
-      setScanProgress({phase: 'discovering', currentFolder: localFolders[0]?.name || 'Library', entriesVisited: 0, found: 0, review: 0});
-      const result = await scanFoldersIntoStage(localFolders);
+      setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
+      const {result,committedBooks}=await scanFoldersIntoStage(localFolders,{forceMetadata});
       setLocalFolders(result.folders);
-      setLocalBooks(result.books.map(book=>({...book,source:'local' as const})));
       setLocalMovePreviews([]);
-      setSpaces([...new Set(result.books.map(book => book.space))]);
       await setPersistedJSON(localFoldersKey,result.folders);
-      void runLocalEnrichment(result.books,localEnrichmentCache);
-      setLocalFolderNotice(`${result.books.length} files found · Archivist is identifying works and resolving covers${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
+      void runLocalEnrichment(committedBooks,localEnrichmentCache);
+      const reused=committedBooks.filter(book=>book.scanReused).length;
+      setLocalFolderNotice(
+        forceMetadata
+          ? `Full rescan complete · ${committedBooks.length} files rechecked${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`
+          : `Library refreshed · ${reused} unchanged files reused · ${Math.max(0,committedBooks.length-reused)} changed or new${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`,
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
