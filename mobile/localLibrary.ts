@@ -7,7 +7,7 @@ import {extractAudioMetadata} from './audioMetadata';
 import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
-import {audioWorkGroupKeys, canonicalMetadataForBooks, synchronizeLocalMetadata} from './metadataSync';
+import {audioWorkGroupKeys, canonicalMetadataForBooks, synchronizeLocalMetadataCooperative} from './metadataSync';
 
 export type LocalBook = {
   id: number;
@@ -616,7 +616,7 @@ export async function scanLocalFolders(
   }
 
   report('matching', '');
-  const synchronized=synchronizeLocalMetadata(books).books;
+  const synchronized=(await synchronizeLocalMetadataCooperative(books,{shouldContinue})).books;
   review=synchronized.filter(book=>book.needsReview).length;
   return {
     folders: nextFolders.concat(folders.slice(nextFolders.length)),
