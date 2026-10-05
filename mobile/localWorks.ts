@@ -28,7 +28,10 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   const rootAudioCandidates = new Map<string, string>();
   const rootAudioCounts = new Map<string, number>();
   for (const book of books) {
-    const candidate = book.format === 'Audio' ? rootAudioClusterCandidate(book.uri) : '';
+    if (book.format !== 'Audio') continue;
+    const metadataCandidate = book.workTitleHint ? 'meta:' + normalKey(book.author) + '|' + normalKey(book.workTitleHint) : '';
+    const filenameCandidate = rootAudioClusterCandidate(book.uri);
+    const candidate = metadataCandidate || filenameCandidate;
     if (!candidate) continue;
     rootAudioCandidates.set(book.uri, candidate);
     rootAudioCounts.set(candidate, (rootAudioCounts.get(candidate) || 0) + 1);
@@ -45,12 +48,13 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   }
 
   return order.map(key => {
-    const tracks = groups.get(key)!.slice().sort((a, b) => naturalCompare(a.uri, b.uri));
+    const tracks = groups.get(key)!.slice().sort((a, b) => ((a.discNumber || 0) - (b.discNumber || 0)) || ((a.trackNumber || 0) - (b.trackNumber || 0)) || naturalCompare(a.uri, b.uri));
     const first = tracks[0];
     const audio = first.format === 'Audio';
+    const embeddedTitle = audio ? commonValue(tracks.map(item => item.workTitleHint || '')) : '';
     const folderTitle = audio ? audioFolderTitle(first.uri) : '';
     const rootTitle = audio && !folderTitle && tracks.length > 1 ? rootAudioClusterTitle(first.uri) : '';
-    const title = audio && (folderTitle || rootTitle) ? (folderTitle || rootTitle) : first.title;
+    const title = audio && (embeddedTitle || folderTitle || rootTitle) ? (embeddedTitle || folderTitle || rootTitle) : first.title;
     const author = commonValue(tracks.map(item => item.author));
     const series = commonValue(tracks.map(item => item.series));
     const genre = commonValue(tracks.map(item => item.genre));
