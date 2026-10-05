@@ -1409,22 +1409,33 @@ function Client() {
   const insightSummary=useMemo(()=>buildInsights(insightWorks,readerAnnotations,sourceFilter==='local'||sourceFilter==='downloaded'?[]:serverActivity,insightGoal),[insightGoal,insightWorks,readerAnnotations,serverActivity,sourceFilter]);
 
   useEffect(()=>{
-    if(!profileStats||!ritualReady)return;
-    const key=sourceFilter+'|'+(session?.server||'device')+'|'+profileStats.name;
-    const unlocked=new Set(profileAchievements.filter(item=>item.unlocked).map(item=>item.id));
-    const baseline=achievementBaseline.current;
-    if(!baseline || baseline.key!==key){
-      achievementBaseline.current={key,ids:unlocked};
-      return;
-    }
-    const newly=profileAchievements.find(item=>item.unlocked && item.id!=='first-shelf' && !baseline.ids.has(item.id));
-    achievementBaseline.current={key,ids:unlocked};
-    if(!newly)return;
-    setAchievementCelebration(newly);
-    setRecentAchievementId(newly.id);
-    const timer=setTimeout(()=>setAchievementCelebration(null),1900);
-    return()=>clearTimeout(timer);
-  },[profileAchievements,profileStats,ritualReady,session,sourceFilter]);
+    if(!achievementLedgerReady||!profileStats||!ritualReady||restoring||!localCatalogReady||!offlineWorksReady||shelfLoading)return;
+    const achievements=profileAchievements.map(item=>({...item}));
+    achievementLedgerQueue.current=achievementLedgerQueue.current.catch(()=>undefined).then(async()=>{
+      const suppress=achievementLedgerBootstrapRef.current||rewardRestoreGuard.current;
+      const reconciled=reconcileAchievementLedger(achievements,achievementLedgerRef.current,{suppressNew:suppress});
+      if(reconciled.changed){
+        achievementLedgerRef.current=reconciled.ledger;
+        setAchievementLedger(reconciled.ledger);
+        await setPersistedJSON(achievementLedgerKey,reconciled.ledger);
+      }
+      if(achievementLedgerBootstrapRef.current)achievementLedgerBootstrapRef.current=false;
+      if(rewardRestoreGuard.current){
+        if(rewardRestoreReleaseRequested.current){rewardRestoreReleaseRequested.current=false;rewardRestoreGuard.current=false;}
+        return;
+      }
+      if(achievementCelebrationRef.current)return;
+      const claimed=claimAchievementCelebration(achievements,achievementLedgerRef.current);
+      if(!claimed.id)return;
+      achievementLedgerRef.current=claimed.ledger;
+      setAchievementLedger(claimed.ledger);
+      await setPersistedJSON(achievementLedgerKey,claimed.ledger);
+      const newly=achievements.find(item=>item.id===claimed.id&&item.unlocked);
+      if(!newly)return;
+      setRecentAchievementId(newly.id);
+      setAchievementCelebration(newly);
+    });
+  },[achievementCelebration,achievementLedgerReady,localCatalogReady,offlineWorksReady,profileAchievements,profileStats,restoring,rewardRestoreEpoch,ritualReady,shelfLoading]);
 
   useEffect(()=>{if(!achievementCelebration)return;const timer=setTimeout(()=>setAchievementCelebration(null),3200);return()=>clearTimeout(timer);},[achievementCelebration]);
   useEffect(()=>{if(!recentAchievementId)return;const timer=setTimeout(()=>setRecentAchievementId(null),15000);return()=>clearTimeout(timer);},[recentAchievementId]);
@@ -1748,6 +1759,14 @@ function Client() {
         if(restored.kind==='audio')setLastPlaying(book);else setLastReading(book);
       }
     }).catch(()=>undefined).finally(()=>setNowSessionReady(true));
+    getPersistedJSON<AchievementLedger>(achievementLedgerKey).then(value=>{
+      const restored=sanitizeAchievementLedger(value);
+      achievementLedgerRef.current=restored;setAchievementLedger(restored);
+      achievementLedgerBootstrapRef.current=!value;
+    }).catch(()=>{
+      const empty=emptyAchievementLedger();
+      achievementLedgerRef.current=empty;setAchievementLedger(empty);achievementLedgerBootstrapRef.current=true;
+    }).finally(()=>setAchievementLedgerReady(true));
     AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
