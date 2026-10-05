@@ -1993,7 +1993,10 @@ function Client() {
       author: work.author,
       series: work.series,
       coverUri: work.coverUri,
-      coverShape: 'square',
+      coverShape: work.coverShape,
+      livingBookCoverUri: work.livingBookCoverUri,
+      livingBookCoverSource: work.livingBookCoverSource,
+      livingBookCoverConfidence: work.livingBookCoverConfidence,
       localWorkKey: work.key,
       source: work.originServer ? 'downloaded' : 'local',
       originServer: work.originServer,
@@ -2449,6 +2452,28 @@ function Client() {
     />;
   }
 
+  function LivingBookCoverTexture({book}:{book:Book}){
+    const serverEdition=session&&book.source==='server'
+      ? {uri:session.server+'/api/assets/'+book.id+'/cover',headers:{Authorization:'Bearer '+session.token}}
+      : null;
+    const portrait=book.livingBookCoverUri&&book.livingBookCoverSource!=='jacket'?{uri:book.livingBookCoverUri}:null;
+    const edition=book.coverUri?{uri:book.coverUri}:serverEdition;
+    const jacket=book.livingBookCoverSource==='jacket'||(!portrait&&book.format==='Audio');
+    const [failed,setFailed]=useState(false);
+    useEffect(()=>setFailed(false),[portrait?.uri,edition?.uri,jacket]);
+    if(portrait&&!failed)return <View style={{flex:1,backgroundColor:'#183337'}}><Image accessible={false} source={portrait} resizeMode="cover" style={{width:'100%',height:'100%'}} onError={()=>setFailed(true)}/></View>;
+    if(jacket)return <View style={{flex:1,backgroundColor:'#183337',paddingHorizontal:13,paddingTop:15,paddingBottom:13,justifyContent:'space-between',borderWidth:1,borderColor:'rgba(185,154,104,.65)'}}>
+      <Text numberOfLines={1} style={{color:'#B99A68',fontSize:6,letterSpacing:1.8,textAlign:'center'}}>ARCHIVIST · AUDIOBOOK</Text>
+      <View style={{alignItems:'center',gap:8}}>
+        {edition&&!failed?<Image accessible={false} source={edition} resizeMode="contain" style={{width:104,height:104,borderRadius:2}} onError={()=>setFailed(true)}/>:null}
+        <Text numberOfLines={2} style={{fontFamily:'ArchivistEditorial',color:'#F1EAD5',fontSize:12,lineHeight:15,textAlign:'center'}}>{book.title}</Text>
+      </View>
+      <Text numberOfLines={1} style={{color:'#BDB99E',fontSize:7,textAlign:'center'}}>{book.author}</Text>
+    </View>;
+    if(edition&&!failed)return <View style={{flex:1,backgroundColor:'#183337'}}><Image accessible={false} source={edition} resizeMode="cover" style={{width:'100%',height:'100%'}} onError={()=>setFailed(true)}/></View>;
+    return <View style={{flex:1,padding:14,borderWidth:1,borderColor:'#B99A68',margin:7,justifyContent:'space-between',backgroundColor:'#183337'}}><Text style={{color:'#B99A68',fontSize:7,letterSpacing:2,textAlign:'center'}}>ARCHIVIST</Text><Text numberOfLines={5} style={{fontFamily:'ArchivistEditorial',color:'#F1EAD5',fontSize:22,lineHeight:26,textAlign:'center'}}>{book.title}</Text><Text style={{color:'#BDB99E',fontSize:9,textAlign:'center'}}>{book.author}</Text></View>;
+  }
+
   function MiniArtwork({book}: {book: Book}) {
     const source = session && book.source==='server'
       ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
@@ -2515,7 +2540,7 @@ function Client() {
 
   function OnboardingGuide() {
     if (session || onboardingDone) return null;
-    const reviewCount = localBooks.filter(book => book.needsReview).length;
+    const reviewCount = localEnrichmentProgress ? 0 : localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
     const hasBooks = phoneWorks.length > 0;
     return (
@@ -3018,7 +3043,7 @@ function Client() {
         return order(a)-order(b)||a.localeCompare(b);
       })
       .map(name=>({name,total:base.filter(work=>work.format===name).length,works:base.filter(work=>work.format===name).slice(0,4)}));
-    const localReview=localBooks.filter(book=>book.needsReview).length;
+    const localReview=localEnrichmentProgress?0:localBooks.filter(book=>book.needsReview).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=sourceFilter==='local'?localReview:sourceFilter==='server'?serverReview:sourceFilter==='downloaded'?0:localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
@@ -3367,7 +3392,7 @@ function Client() {
         {current ? (
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} direction={skipDirection} skipping={skipTurning} cover={current.coverUri||current.source==='server'?<Cover book={current}/>:null}/>
+            <LivingBookArtwork title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} direction={skipDirection} skipping={skipTurning} cover={<LivingBookCoverTexture book={current}/>}/>
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               <Text numberOfLines={2} style={[styles.playerByline, {color: p.muted}]}>
