@@ -21,7 +21,7 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#072632"
       },
-      "versionCode": 100,
+      "versionCode": 102,
       "permissions": [
         "android.permission.POST_NOTIFICATIONS"
       ]
