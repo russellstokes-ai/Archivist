@@ -18,7 +18,8 @@ export type AndroidAutoWork={
   resumeSeconds:number;
   tracks:AndroidAutoTrack[];
 };
-export type AndroidAutoLibrarySnapshot={version:2;generatedAt:string;works:AndroidAutoWork[]};
+export type AndroidAutoResumeHint={workKey?:string;updatedAt?:number};
+export type AndroidAutoLibrarySnapshot={version:3;generatedAt:string;resumeWorkKey?:string;resumeUpdatedAt?:number;works:AndroidAutoWork[]};
 export type AndroidAutoProgress={version:1;workKey:string;trackUri:string;seconds:number;complete:boolean;updatedAt:number};
 type PersonalAudioWork=LocalWork&{readingState?:'not-started'|'in-progress'|'finished';favourite?:boolean};
 
@@ -27,6 +28,7 @@ function clean(value:unknown){return typeof value==='string'?value.trim():'';}
 export function buildAndroidAutoLibrary(
   works:PersonalAudioWork[],
   progress:Record<string,AndroidAutoProgressPoint>={},
+  resume:AndroidAutoResumeHint={},
 ):AndroidAutoLibrarySnapshot{
   const audioWorks=works
     .filter(work=>work.format==='Audio'&&work.available)
@@ -60,17 +62,20 @@ export function buildAndroidAutoLibrary(
     })
     .filter(work=>work.tracks.length>0)
     .sort((a,b)=>a.title.localeCompare(b.title,undefined,{numeric:true,sensitivity:'base'}));
-  return {version:2,generatedAt:new Date().toISOString(),works:audioWorks};
+  const resumeWorkKey=clean(resume.workKey);
+  const resumeUpdatedAt=Math.max(0,Number(resume.updatedAt)||0);
+  return {version:3,generatedAt:new Date().toISOString(),...(resumeWorkKey?{resumeWorkKey,resumeUpdatedAt}:{}),works:audioWorks};
 }
 
 export async function persistAndroidAutoLibrary(
   works:PersonalAudioWork[],
   progress:Record<string,AndroidAutoProgressPoint>={},
+  resume:AndroidAutoResumeHint={},
 ){
   if(Platform.OS!=='android'||!documentDirectory)return;
   const root=documentDirectory+'android-auto/';
   await makeDirectoryAsync(root,{intermediates:true});
-  await writeAsStringAsync(root+'library.json',JSON.stringify(buildAndroidAutoLibrary(works,progress)));
+  await writeAsStringAsync(root+'library.json',JSON.stringify(buildAndroidAutoLibrary(works,progress,resume)));
 }
 
 export async function consumeAndroidAutoProgress():Promise<AndroidAutoProgress|null>{
