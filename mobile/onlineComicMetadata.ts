@@ -75,6 +75,7 @@ export type OnlineComicLookupOptions={
   cache?:OnlineComicCache;
   now?:()=>number;
   timeoutMs?:number;
+  ignoreCache?:boolean;
 };
 
 const positiveTtl=30*24*60*60*1000;
@@ -446,7 +447,7 @@ export async function lookupOnlineComic(input:ComicLookupInput,options:OnlineCom
   if(!token)return {key,status:'unconfigured',candidates:[],autoApply:false,queried:[]};
   const now=options.now||Date.now;
   const cached=options.cache?.[key];
-  if(cached&&cached.expiresAt>now())return cached.result;
+  if(!options.ignoreCache&&cached&&cached.expiresAt>now())return cached.result;
   const fetcher=options.fetcher||(globalThis.fetch as unknown as FetchLike);
   if(typeof fetcher!=='function')return {key,status:'offline',candidates:[],autoApply:false,queried:[]};
   const timeoutMs=Math.max(2500,Math.min(20000,options.timeoutMs||8000));
