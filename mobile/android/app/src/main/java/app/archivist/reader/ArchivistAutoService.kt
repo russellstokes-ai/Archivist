@@ -164,10 +164,10 @@ class ArchivistAutoService : MediaLibraryService() {
       )
     }
 
+    @Suppress("DEPRECATION")
     override fun onPlaybackResumption(
       mediaSession: MediaSession,
-      controller: MediaSession.ControllerInfo,
-      isForPlayback: Boolean
+      controller: MediaSession.ControllerInfo
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
       val snapshot = loadSnapshot()
       val work = defaultWork(snapshot)
@@ -180,10 +180,12 @@ class ArchivistAutoService : MediaLibraryService() {
           MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET)
         )
       }
-      val items = if (isForPlayback) playable.mediaItems else listOf(playable.mediaItems[playable.startIndex])
-      val index = if (isForPlayback) playable.startIndex else 0
       return Futures.immediateFuture(
-        MediaSession.MediaItemsWithStartPosition(items, index, playable.startPositionMs)
+        MediaSession.MediaItemsWithStartPosition(
+          playable.mediaItems,
+          playable.startIndex,
+          playable.startPositionMs
+        )
       )
     }
 
