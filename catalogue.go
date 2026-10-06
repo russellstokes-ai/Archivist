@@ -382,6 +382,14 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 200 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
+		afterTitle:=strings.TrimSpace(r.URL.Query().Get("afterTitle"))
+		var afterID int64
+		if raw:=strings.TrimSpace(r.URL.Query().Get("afterId"));raw!="" {
+			n,err:=strconv.ParseInt(raw,10,64)
+			if err!=nil||n<0 { fail(w,400,errors.New("invalid work cursor")); return }
+			afterID=n
+			if afterID>0 { offset=0 }
+		}
 		rows, e := a.db.Query(`SELECT w.id,w.title,w.author,w.series,w.genre,w.space,
 			count(DISTINCT e.id),count(ea.asset_id),
 			CASE WHEN count(DISTINCT e.format)=1 THEN min(e.format) ELSE 'Mixed' END,
@@ -401,11 +409,13 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences fp WHERE fp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND fp.work_id=w.id AND fp.favourite=1))
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences rp WHERE rp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND rp.work_id=w.id AND rp.rating=?))
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+			AND (?=0 OR lower(w.title)>lower(?) OR (lower(w.title)=lower(?) AND w.id>?))
 			GROUP BY w.id
 			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
-			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
+			ORDER BY lower(w.title),w.id LIMIT ? OFFSET ?`,
 			q,q,q,q,space,space,format,format,author,author,series,series,genre,genre,unknownAuthor,
 			reading,reading,favourite,rating,rating,who(r).Owner,who(r).ID,
+			afterID,afterTitle,afterTitle,afterID,
 			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
 		defer rows.Close()
