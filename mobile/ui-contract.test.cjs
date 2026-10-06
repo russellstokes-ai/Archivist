@@ -13,9 +13,11 @@ for (const legacyControl of [">•••</Text>",">⋯</Text>","'Ⅱ'","'▶'","
 }
 assert.ok(source.includes("function UiIcon("), 'Drawn native icon component is missing');
 
-assert.ok(source.includes("Nothing is scanned until you choose Scan folders."), 'Onboarding must keep source selection separate from scanning');
+assert.ok(source.includes("Archivist will not scan device folders until you press Scan."), 'Onboarding must keep source selection separate from scanning');
 assert.ok(source.includes("Add another folder") && source.includes("Connect server"), 'Onboarding must allow multiple folders and optional server connection before scanning');
-assert.ok(source.includes("Your server already uses its own indexed catalogue and metadata"), 'Onboarding must explain that server metadata stays on the server catalogue');
+assert.ok(source.includes("Existing server metadata will be used") && source.includes("The server catalogue is already indexed"), 'Onboarding must keep the connected server catalogue authoritative instead of rescanning it locally');
+assert.ok(source.includes("removeUnscannedLocalFolder") && source.includes("Ready to scan"), 'Unscanned source selections must be removable before the scan begins');
+assert.ok(source.includes("const pendingFolders=localFolders.filter(folder=>!folder.scannedAt)") && source.includes("const allLocalSourcesScanned=hasFolder&&pendingFolders.length===0"), 'Adding a new folder after an earlier scan must return onboarding to the local scan stage');
 assert.ok(source.includes("function RawAssetCard") && source.includes("label={canEdit?'Review':'Open'}"), 'Metadata review must use a clear compact Review action');
 assert.ok(source.includes("const work=item.source==='server'?undefined:localWorkForBook(item)"), 'Metadata review must resolve grouped local-work identity instead of showing a raw chapter asset');
 assert.ok(source.includes("setEditTitle(work?.title || item.title)"), 'Metadata editing must start from the grouped work title when one is available');
@@ -23,9 +25,18 @@ assert.ok(source.includes("const displayTitle=work?.title||item.title||'Unidenti
 assert.ok(source.includes("setError('');setReviewOnly(true)"), 'Opening metadata review must clear stale transient errors before rendering the review queue');
 assert.ok(source.includes("const localReviewBooks=useMemo<Book[]>(()=>allPhoneWorks") && source.includes(".filter(work=>work.needsReview&&work.tracks.length)"), 'Local metadata review must contain grouped works, never raw chapter-file counts');
 assert.ok(source.includes('const ReviewList=()=>reviewOnly?<FlatList'), 'Metadata Review must be a vertically scrollable list');
-assert.ok(source.includes("const stageOneActive=!hasFolder&&!session") && source.includes("const stageTwoActive=hasFolder&&!scanHasRun&&!scanBusy") && source.includes("const stageThreeActive=scanHasRun&&!scanBusy&&reviewCount>0"), 'Onboarding must highlight the next relevant stage in sequence');
+assert.ok(
+  source.includes("const stageOneActive=!hasFolder&&!session") &&
+  source.includes("const stageTwoActive=hasFolder&&!allLocalSourcesScanned&&!scanBusy") &&
+  source.includes("const stageThreeActive=allLocalSourcesScanned&&!scanBusy&&reviewCount>0") &&
+  source.includes("const stageFourActive=hasUsableLibrary&&!scanBusy&&!stageTwoActive&&reviewCount===0"),
+  'Onboarding must highlight Sources → Scan → Review → Enter Library in sequence',
+);
+assert.ok(source.includes('>04</Text>') && source.includes('>Enter your library</Text>'), 'Onboarding must include an explicit final library-entry stage');
 assert.ok(source.includes('tone="gold"') && source.includes('Add another folder') && source.includes('Connect server'), 'Source choices must remain visually prominent during onboarding');
-assert.ok(source.includes('pulseStyle(stageTwoActive)') && source.includes('reduceMotion'), 'Onboarding guidance must respect Reduced Motion while preserving a clear next action');
+assert.ok(source.includes('pulseStyle(stageTwoActive)') && source.includes('pulseStyle(stageThreeActive)') && source.includes('pulseStyle(stageFourActive)') && source.includes('reduceMotion'), 'Each next onboarding action must pulse in sequence while respecting Reduced Motion');
+assert.ok(source.includes("serverSummary!==null") && source.includes("Loading the existing server catalogue"), 'Server-only onboarding must wait for the existing catalogue to load before completion');
+assert.ok(source.includes("Multi-file audiobooks appear here once per book, not once per chapter."), 'Review-stage copy must reinforce work-level review rather than raw-file review');
 assert.ok(source.includes("behavior={Platform.OS==='ios'?'padding':'height'}"), 'Android metadata editing must resize stably above the keyboard');
 assert.ok(source.includes('metadataModalCard') && source.includes('metadataEditorContent'), 'Metadata editor must scroll internally rather than recenter the whole modal while typing');
 assert.ok(source.includes("const siblingPool=editing.format==='Audio'") && source.includes('setMetadataTargetUris(evidenceWork.tracks.map'), 'Deep Scan must regroup likely companion audio files and retain the resolved work membership');
