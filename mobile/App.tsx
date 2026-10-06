@@ -1103,12 +1103,29 @@ function Client() {
   const availabilityMatches = (available: boolean) =>
     availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
 
+  const localReviewBooks=useMemo<Book[]>(()=>allPhoneWorks
+    .filter(work=>work.needsReview&&work.tracks.length)
+    .map(work=>({
+      ...work.tracks[0],
+      source:'local' as const,
+      title:work.title,
+      author:work.author,
+      series:work.series,
+      genre:work.genre,
+      publishedYear:work.publishedYear,
+      publisher:work.publisher,
+      seriesIndex:work.seriesIndex,
+      needsReview:true,
+      reviewReason:work.reviewReason||'Archivist needs you to confirm this work.',
+    })),[allPhoneWorks]);
+
   const reviewAssetPool = useMemo(() => {
-    if(sourceFilter==='server')return serverBooks;
+    const serverReview=serverBooks.filter(book=>book.needsReview);
+    if(sourceFilter==='server')return serverReview;
     if(sourceFilter==='downloaded')return [] as Book[];
-    if(sourceFilter==='local')return localBooks;
-    return [...localBooks,...serverBooks];
-  },[localBooks,serverBooks,sourceFilter]);
+    if(sourceFilter==='local')return localReviewBooks;
+    return [...localReviewBooks,...serverReview];
+  },[localReviewBooks,serverBooks,sourceFilter]);
 
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
