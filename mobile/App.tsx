@@ -4296,7 +4296,7 @@ function Client() {
             {item.reviewReason?<Text numberOfLines={2} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
           </View>
         </Pressable>
-        {item.source!=='server'&&item.uri?<Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={!!deepScanKey} onPress={()=>void deepScanLocalAssets([item.uri!],item.title)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:deepScanKey?.55:1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{deepScanKey===item.uri?'Deep scanning…':'Deep scan'}</Text></Pressable>:null}
+        {item.source!=='server'&&item.uri?<Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={!!deepScanKey} onPress={()=>void deepScanLocalAssets([item.uri!],item.title)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:deepScanKey ? .55 : 1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{deepScanKey===item.uri?'Deep scanning…':'Deep scan'}</Text></Pressable>:null}
         {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
       </View>
     );
