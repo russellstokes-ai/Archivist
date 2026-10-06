@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const ts=require('typescript');
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
-const {assessLocalWorkForPublication,partitionLocalBooksByPublication,isVerifiedLocalArtworkUri}=require('./publicationPipeline.ts');
+const {assessLocalWorkForPublication,partitionLocalBooksByPublication,reconcilePublishedLocalBooks,isVerifiedLocalArtworkUri}=require('./publicationPipeline.ts');
 const {groupLocalWorks}=require('./localWorks.ts');
 
 function audio(id,uri,extra={}){
@@ -52,5 +52,11 @@ assert.equal(partition.published.length,1);
 assert.equal(partition.staged.length,1);
 assert.equal(partition.published[0].title,'Ready');
 assert.equal(partition.staged[0].title,'Waiting');
+
+const previous=[audio(20,'content://root/document/primary:Audiobooks%2FExisting%2F01.mp3',{title:'Existing'})];
+const replacement=[audio(20,'content://root/document/primary:Audiobooks%2FExisting%2F01.mp3',{title:'Existing revised',livingBookCoverUri:undefined})];
+const reconciled=reconcilePublishedLocalBooks(previous,replacement);
+assert.equal(reconciled.published.length,1,'last verified publication remains while replacement is incomplete');
+assert.equal(reconciled.published[0].title,'Existing');
 
 console.log('PASS: publication gate keeps incomplete works staged until identity and both cached covers are complete');
