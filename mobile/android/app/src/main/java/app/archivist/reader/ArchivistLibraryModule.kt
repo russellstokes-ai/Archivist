@@ -97,66 +97,41 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     return null
   }
 
-  private fun mediaRelativePath(parentDocumentId: String): String? {
-    if (Build.VERSION.SDK_INT < 29) return null
-    val colon = parentDocumentId.indexOf(':')
-    if (colon < 0) return null
-    // The system MediaStore index is directly addressable for primary shared
-    // storage. Other document providers simply fall back to filename/folder
-    // evidence; the normal scan never opens their large media just for tags.
-    if (!parentDocumentId.substring(0, colon).equals("primary", ignoreCase = true)) return null
-    val path = parentDocumentId.substring(colon + 1).trim('/')
-    return if (path.isBlank()) "" else "$path/"
-  }
-
-  private fun quickAudioDetails(parentDocumentId: String, signal: CancellationSignal): Map<String, QuickAudioDetails> {
-    val relativePath = mediaRelativePath(parentDocumentId) ?: return emptyMap()
-    if (signal.isCanceled) return emptyMap()
-    val projection = arrayOf(
-      MediaStore.MediaColumns.DISPLAY_NAME,
-      MediaStore.MediaColumns.TITLE,
-      MediaStore.Audio.AudioColumns.ALBUM,
-      MediaStore.Audio.AudioColumns.ARTIST,
-      MediaStore.Audio.AudioColumns.TRACK,
-      MediaStore.Audio.AudioColumns.YEAR,
-      MediaStore.Audio.AudioColumns.DURATION
-    )
-    val result = HashMap<String, QuickAudioDetails>()
-    try {
-      context.contentResolver.query(
-        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-        projection,
-        MediaStore.MediaColumns.RELATIVE_PATH + " = ?",
-        arrayOf(relativePath),
-        null,
-        signal
-      )?.use { cursor ->
-        val nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
-        val titleCol = cursor.getColumnIndex(MediaStore.MediaColumns.TITLE)
-        val albumCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.ALBUM)
-        val artistCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.ARTIST)
-        val trackCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.TRACK)
-        val yearCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.YEAR)
-        val durationCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.DURATION)
-        fun value(column: Int): String = if (column >= 0 && !cursor.isNull(column)) cursor.getString(column)?.trim().orEmpty() else ""
-        while (cursor.moveToNext() && !signal.isCanceled) {
-          val name = value(nameCol)
-          if (name.isBlank()) continue
-          result[name.lowercase()] = QuickAudioDetails(
-            title = value(titleCol),
-            album = value(albumCol),
-            artist = value(artistCol),
-            track = value(trackCol),
-            year = value(yearCol),
-            duration = value(durationCol)
-          )
+  private fun quickAudioDetails(documentUri: Uri, signal: CancellationSignal): QuickAudioDetails? {
+    if (Build.VERSION.SDK_INT < 29 || signal.isCanceled) return null
+    return try {
+      // Translate only this user-granted SAF document to its MediaStore row.
+      // This reads Android's media index, not the audiobook payload, and does
+      // not require broad READ_MEDIA_AUDIO access to the rest of the device.
+      val mediaUri = DocumentsContract.getMediaUri(context, documentUri) ?: return null
+      val projection = arrayOf(
+        MediaStore.MediaColumns.TITLE,
+        MediaStore.Audio.AudioColumns.ALBUM,
+        MediaStore.Audio.AudioColumns.ARTIST,
+        MediaStore.Audio.AudioColumns.TRACK,
+        MediaStore.Audio.AudioColumns.YEAR,
+        MediaStore.Audio.AudioColumns.DURATION
+      )
+      context.contentResolver.query(mediaUri, projection, null, null, null, signal)?.use { cursor ->
+        if (!cursor.moveToFirst()) return null
+        fun value(columnName: String): String {
+          val column = cursor.getColumnIndex(columnName)
+          return if (column >= 0 && !cursor.isNull(column)) cursor.getString(column)?.trim().orEmpty() else ""
         }
+        QuickAudioDetails(
+          title = value(MediaStore.MediaColumns.TITLE),
+          album = value(MediaStore.Audio.AudioColumns.ALBUM),
+          artist = value(MediaStore.Audio.AudioColumns.ARTIST),
+          track = value(MediaStore.Audio.AudioColumns.TRACK),
+          year = value(MediaStore.Audio.AudioColumns.YEAR),
+          duration = value(MediaStore.Audio.AudioColumns.DURATION)
+        )
       }
     } catch (_: Throwable) {
-      // MediaStore is an optimisation only. A provider that cannot be mapped
-      // here must never slow or fail the normal library discovery.
+      // Providers that cannot map to MediaStore simply contribute no indexed
+      // details. Discovery continues with filename/folder/sidecar evidence.
+      null
     }
-    return result
   }
 
   private fun offer(session: ScanSession, entry: ScanEntry) {
@@ -227,7 +202,6 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           }
 
           if (contextReady && !session.cancelled.get()) {
-            val indexedAudio = if (directoryMediaCount > 0L) quickAudioDetails(parentId, session.cancellationSignal) else emptyMap()
             offer(
               session,
               ScanEntry(
@@ -262,7 +236,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
                 val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
                 val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
                 session.found.incrementAndGet()
-                val quick = if (role.second == "Audio") indexedAudio[name.lowercase()] else null
+                val quick = if (role.second == "Audio") quickAudioDetails(documentUri, session.cancellationSignal) else null
                 offer(session, ScanEntry(
                   documentUri.toString(), documentId, name, parentId, mime, size, modified, role.first, role.second,
                   quickTitle = quick?.title.orEmpty(),
