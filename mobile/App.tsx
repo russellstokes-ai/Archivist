@@ -1329,7 +1329,9 @@ function Client() {
 
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
-    return groupLocalWorks(local);
+    // Needs-review assets remain in the maintenance/review pool but are not
+    // published to Shelf, the normal Library catalogue, recommendations or Auto.
+    return groupLocalWorks(local).filter(work=>!work.needsReview);
   }, [localBooks]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
@@ -4028,7 +4030,8 @@ function Client() {
     const hasServer = !!session;
     const hasServerFolders = sources.length > 0;
     const hasSource = hasFolder || hasServerFolders;
-    const hasBooks = localBooks.length > 0 || serverWorks.length > 0;
+    const approvedLocalCount=localBooks.filter(book=>!book.needsReview).length;
+    const hasUsableLibrary = approvedLocalCount > 0 || serverWorks.length > 0;
     const progress=activeLibraryProgress;
     const progressPercent=progress?scanProgressPercent(progress):0;
     const serverReady=hasServerFolders&&sources.every(source=>source.status==='ok');
@@ -4036,7 +4039,8 @@ function Client() {
     const preparing=hasSource&&!setupReady;
     const stepOneActive=!hasSource;
     const stepTwoActive=hasSource&&!setupReady;
-    const stepThreeActive=setupReady&&hasBooks;
+    const stepThreeActive=setupReady&&reviewCount>0;
+    const enterActive=setupReady&&reviewCount===0&&hasUsableLibrary;
     const onboardingPulseStyle=(active:boolean)=>active&&!reduceMotion?{
       opacity:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[.86,1,.86]}),
       transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.035,1]})}],
@@ -4052,7 +4056,7 @@ function Client() {
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
         <Text style={[styles.onboardingTitle,{color:p.ink}]}>Set up your library</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Three simple steps prepare your library for reading, listening and safe file organisation.</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Add your sources, prepare the catalogue, then review only the items Archivist could not identify confidently.</Text>
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasSource?p.sage:p.muted}]}>01</Text>
@@ -4084,9 +4088,11 @@ function Client() {
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Organise files</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review what needs attention</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
-              ? 'Preview your preferred layout, then copy or move eligible files.'
+              ? reviewCount
+                ? reviewCount+' item'+(reviewCount===1?' needs':'s need')+' your confirmation before appearing in the Library.'
+                : 'Everything identified confidently. No review is needed.'
               : 'Available when preparation finishes.'}</Text>
           </View>
         </View>
@@ -4115,10 +4121,12 @@ function Client() {
           })}
         </View>:null}
         {preparing&&!libraryRefreshActive?<Animated.View style={onboardingPulseStyle(stepTwoActive)}><Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/></Animated.View>:null}
-        {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
-          <Animated.View style={[styles.shelfSetupAction,onboardingPulseStyle(stepThreeActive)]}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></Animated.View>
-          <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
-        </View>:null}
+        {setupReady&&reviewCount>0?<Animated.View style={onboardingPulseStyle(stepThreeActive)}>
+          <Button label={'Review '+reviewCount+' item'+(reviewCount===1?'':'s')} onPress={()=>{clearLibraryFilters();setReviewOnly(true);setActiveTab('library')}}/>
+        </Animated.View>:null}
+        {setupReady&&reviewCount===0&&hasUsableLibrary?<Animated.View style={onboardingPulseStyle(enterActive)}>
+          <Button label="Enter my library" onPress={()=>void finishOnboarding()}/>
+        </Animated.View>:null}
       </View>
     );
   }
