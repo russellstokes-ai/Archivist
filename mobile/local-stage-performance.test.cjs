@@ -27,13 +27,20 @@ assert.equal(app.includes('const streamed:LocalBook[]=[]'),false,'Progressive sc
 assert.equal(app.includes('const snapshot=streamed.map'),false,'Progressive scan UI must not remap the full discovered catalogue repeatedly.');
 assert(app.includes('uiPending.length<192||now-lastUiPublish<900'),'Progressive scan UI updates must be batched and throttled.');
 assert(app.includes('{reuse,forceMetadata:!!options.forceMetadata}'),'Normal native scans must pass the persisted asset reuse map into discovery.');
-assert(app.includes('scanFoldersIntoStage([picked],{replaceSources:[picked.uri]})'),'Adding one folder must scan only that selected source.');
+const addFolderStart=app.indexOf('async function addLocalFolder()');
+const addFolderEnd=app.indexOf('async function rescanLocalFolders',addFolderStart);
+const addFolderBlock=app.slice(addFolderStart,addFolderEnd);
+assert(addFolderStart>=0&&addFolderEnd>addFolderStart,'Add-folder workflow must remain explicit.');
+assert.equal(addFolderBlock.includes('scanFoldersIntoStage'),false,'Adding a folder must never start scanning automatically.');
+assert(app.includes("Nothing is scanned until you choose Scan folders."),'Onboarding must explain that source selection happens before scanning.');
+assert(app.includes('Scan ${localFolders.length} folder'),'Onboarding must expose one explicit scan action after multiple folders are selected.');
 assert(app.includes('commitLocalStageScan(generation,options.replaceSources)'),'Source-only scans must replace only their source rows.');
 assert(app.includes('async function rescanLocalFolders(forceMetadata=false)'),'Normal refresh and deliberate full rescan must be distinct operations.');
 assert(app.includes('rescanLocalFolders(true)'),'Settings must expose an explicit full metadata rescan.');
 assert(app.includes('book.scanReused'),'Refresh status must distinguish signature-reused assets from changed/new assets.');
 assert(app.includes('await replaceLocalEnrichmentCache(result.cache)'),'A completed enrichment pass must atomically prune stale SQLite cache rows.');
-assert(app.includes('runLocalEnrichment(committedBooks,localEnrichmentCache)'),'Adding one folder must reconcile enrichment against the full committed catalogue before pruning.');
+assert(app.includes('runLocalEnrichment(committedBooks,localEnrichmentCache)'),'An explicit local scan must reconcile enrichment against the full committed catalogue before pruning.');
+assert(app.includes('await upsertLocalStageBooks(books);')&&app.includes('await upsertLocalEnrichmentEntries(entries);'),'Asset and enrichment checkpoints must be serialized rather than written concurrently.');
 assert(app.includes('await replaceLocalEnrichmentCache({})'),'An empty committed catalogue must clear stale enrichment rows.');
 
 const enrichment=fs.readFileSync(path.join(__dirname,'localEnrichment.ts'),'utf8');
@@ -58,3 +65,5 @@ assert.ok(stageSourceRemoval.includes('export async function removeLocalStageBoo
 assert.ok(stageSourceRemoval.includes('CREATE TABLE IF NOT EXISTS local_hidden_assets'), 'Removed local works must be tombstoned so a normal rescan does not immediately re-add them');
 assert.ok(stageSourceRemoval.includes('if(hiddenSignature===currentSignature)return false'), 'An unchanged hidden source asset must stay out of staged scans');
 assert.ok(stageSourceRemoval.includes('hidden.delete(book.uri)'), 'A materially changed source file must become discoverable again instead of being hidden forever');
+assert.ok(stageSourceRemoval.includes('let writeTail:Promise<void>=Promise.resolve()'), 'SQLite writes must share one serialization queue');
+assert.ok(stageSourceRemoval.includes('function serializeWrite'), 'SQLite writes must pass through a single writer helper');
