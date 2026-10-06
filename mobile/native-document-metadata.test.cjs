@@ -60,7 +60,7 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,file);
 
-const {scanLocalFolders}=require('./localLibrary.ts');
+const {deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
 
 (async()=>{
   const root='content://provider/tree/primary%3ABooks';
@@ -90,6 +90,27 @@ const {scanLocalFolders}=require('./localLibrary.ts');
   assert.equal(comic.publishedYear,2012);
   assert.equal(comic.metadataSource,'embedded');
   assert.equal(comic.needsReview,false);
+
+  const deep=await deepScanLocalTracks([{
+    id:99,
+    uri:dune.uri,
+    title:'Unknown',
+    author:'',
+    series:'',
+    genre:'',
+    format:'EPUB',
+    space:'Books',
+    available:true,
+    coverShape:'portrait',
+    metadataSource:'path',
+    identificationConfidence:'low',
+    needsReview:true,
+    reviewReason:'Unknown',
+  }]);
+  assert.equal(deep[0].title,'Dune','deep scan must re-read embedded metadata for one selected work');
+  assert.equal(deep[0].author,'Frank Herbert');
+  assert.equal(deep[0].isbn,'9780441172719');
+  assert.equal(deep[0].needsReview,false);
 
   const source=fs.readFileSync(__dirname+'/android/app/src/main/java/app/archivist/reader/ArchivistLibraryModule.kt','utf8');
   assert(source.includes('fun readDocumentMetadataBatch'),'Android scanner must expose bounded document metadata extraction');
