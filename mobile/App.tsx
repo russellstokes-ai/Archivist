@@ -2924,6 +2924,7 @@ function Client() {
       ignoreCache:forceRefresh,
       batchSize:24,
       concurrency:4,
+      cachePortrait:cachePortraitCover,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
         if(!scanCommitGate.isCurrent(generation))return;
