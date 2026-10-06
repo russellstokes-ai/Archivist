@@ -25,13 +25,13 @@ const requiredGates=[
 ];
 for(const file of requiredGates)assert.ok(fs.existsSync(here+'/'+file),'missing Test 10 regression gate: '+file);
 
-assert.equal(pkg.version,'0.9.4');
-assert.equal(app.expo.version,'0.9.4');
-assert.equal(app.expo.android.versionCode,102,'Test 13 must install as Android versionCode 102');
-assert.match(gradle,/versionCode\s+102/);
-assert.match(gradle,/versionName\s+"0\.9\.4"/);
-assert.match(apkWorkflow,/TEST_BUILD:\s*'13'/);
-assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'final Test 13 branch must trigger the APK workflow');
+assert.equal(pkg.version,'0.9.5');
+assert.equal(app.expo.version,'0.9.5');
+assert.equal(app.expo.android.versionCode,105,'0.9.5 must install as Android versionCode 105');
+assert.match(gradle,/versionCode\s+105/);
+assert.match(gradle,/versionName\s+"0\.9\.5"/);
+assert.match(apkWorkflow,/TEST_BUILD:\s*'14'/);
+assert.ok(apkWorkflow.includes('workflow_dispatch:'),'0.9.5 APK build must remain an explicit post-review action');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'final APK must pass release lint');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'final APK must verify package/version/signature/alignment');
 assert.ok(apkWorkflow.includes('Launch test APK in Android emulator'),'final APK must cold-launch in the emulator');
@@ -45,4 +45,4 @@ assert.ok(read('sprint10-now-persistence.test.cjs').includes('durable Now'),'Spr
 assert.ok(read('sprint10-reward-idempotency.test.cjs').includes('idempotency'),'Sprint 5 reward closure gate must remain present');
 assert.ok(read('sprint10-android-auto.test.cjs').includes('Android Auto commercial'),'Sprint 6 car closure gate must remain present');
 
-console.log('PASS: Test 13 final release gate retains Test 10 core fixes plus Test 10.1 blockers, versionCode 102 and verified APK packaging');
+console.log('PASS: 0.9.5 release gate retains Test 10/Test 10.1 fixes, versionCode 105 and verified APK packaging controls');
