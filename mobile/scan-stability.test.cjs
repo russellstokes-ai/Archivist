@@ -34,9 +34,9 @@ assert.ok(source.includes('upsertLocalStageBooks(currentBooks)'),'final enriched
 assert.ok(source.includes('changedLocalStageBooks(previous,books)')&&source.includes('upsertLocalStageBooks(changed)'),'enrichment checkpoints must persist only changed assets instead of rewriting every catalogue row');
 assert.equal(source.includes('checkpointLocalEnrichment(books:LocalBook[]'),false,'legacy whole-catalogue enrichment checkpoint must not return');
 assert.ok(source.includes('loadLocalStageBooks()')&&source.includes('migrateLegacyLocalStage(legacyBooks)'),'cold start must use SQLite with a one-time legacy catalogue migration');
-assert.ok(source.includes('async function deepScanLocalAssets(seedUris:string[],label:string)'),'local metadata repair must expose a bounded per-work Deep Scan');
-assert.ok(source.includes('if(libraryRefreshRunningRef.current||deepScanKey)return'),'full scans and Deep Scan must not overlap');
-assert.ok(source.includes("return groupLocalWorks(local).filter(work=>!work.needsReview)"),'unresolved works must remain in review storage without normal publication');
+assert.ok(source.includes("async function searchEditingMetadata(deep=false,seed?:Book)"),'metadata repair must expose a bounded per-work Deep Scan review flow');
+assert.ok(source.includes("applyHighConfidence:false")&&source.includes("setEditingUris(evidenceWork.tracks.map(track=>track.uri)"),'Deep Scan must not auto-publish provider guesses and must recover work-level grouping before save');
+assert.ok(source.includes("const allPhoneWorks = useMemo")&&source.includes("const phoneWorks = useMemo(() => allPhoneWorks.filter(work=>!work.needsReview)")&&source.includes("localWorkReadyForCatalogue"),'unresolved and coverless works must remain in review storage without normal publication');
 
 console.log('PASS: Sprint 5/7 scan/catalogue integration contracts');
 
