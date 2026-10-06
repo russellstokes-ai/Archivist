@@ -305,6 +305,47 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
   private fun imageName(name: String) = Regex("(?i).+\\.(jpe?g|png|gif|webp)$").matches(name)
 
   @ReactMethod
+  fun readRarMetadata(uri: String, promise: Promise) {
+    thread(name = "archivist-rar-metadata") {
+      try {
+        val deadline = System.nanoTime() + 2_000_000_000L
+        var text = ""
+        openInput(uri).use { input ->
+          Archive(input).use { archive ->
+            var entries = 0
+            while (true) {
+              if (System.nanoTime() > deadline) throw IllegalArgumentException("RAR metadata scan timed out.")
+              val header = archive.nextFileHeader() ?: break
+              if (header.isDirectory) continue
+              if (++entries > 4000) throw IllegalArgumentException("RAR contains too many entries for foreground metadata scanning.")
+              val name = header.fileName ?: continue
+              if (!name.replace('\\', '/').endsWith("ComicInfo.xml", ignoreCase = true)) continue
+              val size = header.fullUnpackSize
+              if (size < 0 || size > 2L * 1024 * 1024) throw IllegalArgumentException("ComicInfo.xml is too large.")
+              val output = ByteArrayOutputStream()
+              archive.getInputStream(header).use { source ->
+                val buffer = ByteArray(16 * 1024)
+                while (true) {
+                  if (System.nanoTime() > deadline) throw IllegalArgumentException("RAR metadata scan timed out.")
+                  val count = source.read(buffer)
+                  if (count < 0) break
+                  if (output.size() + count > 2 * 1024 * 1024) throw IllegalArgumentException("ComicInfo.xml is too large.")
+                  output.write(buffer, 0, count)
+                }
+              }
+              text = output.toString("UTF-8")
+              break
+            }
+          }
+        }
+        promise.resolve(text)
+      } catch (error: Throwable) {
+        promise.reject("RAR_METADATA_FAILED", error.message ?: "Unable to read RAR metadata", error)
+      }
+    }
+  }
+
+  @ReactMethod
   fun listRarEntries(uri: String, promise: Promise) {
     thread(name = "archivist-rar-index") {
       try {
