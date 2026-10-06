@@ -4067,7 +4067,7 @@ function Client() {
       <Text style={[styles.libraryTreeGroupLabel,{color:p.muted}]}>ON THIS DEVICE</Text>
       <Row label="On this device" count={sourceCounts.local} active={selected('local')} onPress={()=>choose('local')} icon="shelf"/>
       <View style={styles.libraryTreeChildren}>
-        {localFolders.map(folder=><Row key={folder.id||folder.uri} label={folder.name} count={localFolderCount(folder)} detail={folder.status||undefined} detailTone={folder.status.startsWith('Scan failed')?p.danger:folder.status==='Scanning…'?p.sage:undefined} active={selected('local',folder.name,true)} onPress={()=>choose('local',folder.name,true)} icon="bookOpen"/>)}
+        {localFolders.filter(folder=>localFolderCount(folder)>0).map(folder=><Row key={folder.id||folder.uri} label={folder.name} count={localFolderCount(folder)} detail={folder.status||undefined} detailTone={folder.status.startsWith('Scan failed')?p.danger:folder.status==='Scanning…'?p.sage:undefined} active={selected('local',folder.name,true)} onPress={()=>choose('local',folder.name,true)} icon="bookOpen"/>)}
         {sourceCounts.downloaded>0?<Row label="Offline downloads" count={sourceCounts.downloaded} detail="Saved from Archivist Server" active={selected('downloaded')} onPress={()=>choose('downloaded')} icon="bookmark"/>:null}
         {!localFolders.length&&sourceCounts.downloaded===0?<Text style={[styles.libraryTreeEmpty,{color:p.muted}]}>{Platform.OS==='ios'?'No imported folders yet.':'No device folders added.'}</Text>:null}
       </View>
