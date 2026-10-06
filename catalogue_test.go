@@ -198,6 +198,20 @@ func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 	if e:=json.Unmarshal(res.Body.Bytes(),&works);e!=nil{t.Fatal(e)}
 	if len(works)!=1 || works[0]["title"]!="Unknown"{t.Fatalf("filtered works=%v",works)}
 
+	// Current clients can page large catalogues by the stable title/id cursor.
+	res=call("/api/works?limit=1")
+	if res.Code!=200{t.Fatalf("first cursor page=%d %s",res.Code,res.Body.String())}
+	var firstPage []map[string]any
+	if e:=json.Unmarshal(res.Body.Bytes(),&firstPage);e!=nil{t.Fatal(e)}
+	if len(firstPage)!=1{t.Fatalf("first cursor page=%v",firstPage)}
+	firstTitle,_:=firstPage[0]["title"].(string)
+	firstID:=int64(firstPage[0]["id"].(float64))
+	res=call("/api/works?limit=1&afterTitle="+firstTitle+"&afterId="+strconv.FormatInt(firstID,10))
+	if res.Code!=200{t.Fatalf("second cursor page=%d %s",res.Code,res.Body.String())}
+	var secondPage []map[string]any
+	if e:=json.Unmarshal(res.Body.Bytes(),&secondPage);e!=nil{t.Fatal(e)}
+	if len(secondPage)!=1 || int64(secondPage[0]["id"].(float64))==firstID { t.Fatalf("cursor did not advance: first=%v second=%v",firstPage,secondPage) }
+
 	res=call("/api/library-summary")
 	if res.Code!=200{t.Fatalf("summary=%d %s",res.Code,res.Body.String())}
 	var summary struct{
