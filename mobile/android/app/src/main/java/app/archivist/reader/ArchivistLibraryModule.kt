@@ -5,6 +5,8 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.CancellationSignal
 import android.provider.DocumentsContract
+import android.provider.MediaStore
+import android.os.Build
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -39,7 +41,22 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     val size: Long,
     val modified: Long,
     val role: String,
-    val format: String
+    val format: String,
+    val quickTitle: String = "",
+    val quickAlbum: String = "",
+    val quickArtist: String = "",
+    val quickTrack: String = "",
+    val quickYear: String = "",
+    val quickDuration: String = ""
+  )
+
+  private data class QuickAudioDetails(
+    val title: String = "",
+    val album: String = "",
+    val artist: String = "",
+    val track: String = "",
+    val year: String = "",
+    val duration: String = ""
   )
 
   private class ScanSession {
@@ -78,6 +95,68 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
       return "artwork" to ""
     }
     return null
+  }
+
+  private fun mediaRelativePath(parentDocumentId: String): String? {
+    if (Build.VERSION.SDK_INT < 29) return null
+    val colon = parentDocumentId.indexOf(':')
+    if (colon < 0) return null
+    // The system MediaStore index is directly addressable for primary shared
+    // storage. Other document providers simply fall back to filename/folder
+    // evidence; the normal scan never opens their large media just for tags.
+    if (!parentDocumentId.substring(0, colon).equals("primary", ignoreCase = true)) return null
+    val path = parentDocumentId.substring(colon + 1).trim('/')
+    return if (path.isBlank()) "" else "$path/"
+  }
+
+  private fun quickAudioDetails(parentDocumentId: String, signal: CancellationSignal): Map<String, QuickAudioDetails> {
+    val relativePath = mediaRelativePath(parentDocumentId) ?: return emptyMap()
+    if (signal.isCanceled) return emptyMap()
+    val projection = arrayOf(
+      MediaStore.MediaColumns.DISPLAY_NAME,
+      MediaStore.MediaColumns.TITLE,
+      MediaStore.Audio.AudioColumns.ALBUM,
+      MediaStore.Audio.AudioColumns.ARTIST,
+      MediaStore.Audio.AudioColumns.TRACK,
+      MediaStore.Audio.AudioColumns.YEAR,
+      MediaStore.Audio.AudioColumns.DURATION
+    )
+    val result = HashMap<String, QuickAudioDetails>()
+    try {
+      context.contentResolver.query(
+        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+        projection,
+        MediaStore.MediaColumns.RELATIVE_PATH + " = ?",
+        arrayOf(relativePath),
+        null,
+        signal
+      )?.use { cursor ->
+        val nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+        val titleCol = cursor.getColumnIndex(MediaStore.MediaColumns.TITLE)
+        val albumCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.ALBUM)
+        val artistCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.ARTIST)
+        val trackCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.TRACK)
+        val yearCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.YEAR)
+        val durationCol = cursor.getColumnIndex(MediaStore.Audio.AudioColumns.DURATION)
+        fun value(column: Int): String = if (column >= 0 && !cursor.isNull(column)) cursor.getString(column)?.trim().orEmpty() else ""
+        while (cursor.moveToNext() && !signal.isCanceled) {
+          val name = value(nameCol)
+          if (name.isBlank()) continue
+          result[name.lowercase()] = QuickAudioDetails(
+            title = value(titleCol),
+            album = value(albumCol),
+            artist = value(artistCol),
+            track = value(trackCol),
+            year = value(yearCol),
+            duration = value(durationCol)
+          )
+        }
+      }
+    } catch (_: Throwable) {
+      // MediaStore is an optimisation only. A provider that cannot be mapped
+      // here must never slow or fail the normal library discovery.
+    }
+    return result
   }
 
   private fun offer(session: ScanSession, entry: ScanEntry) {
@@ -148,6 +227,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           }
 
           if (contextReady && !session.cancelled.get()) {
+            val indexedAudio = if (directoryMediaCount > 0L) quickAudioDetails(parentId, session.cancellationSignal) else emptyMap()
             offer(
               session,
               ScanEntry(
@@ -182,7 +262,16 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
                 val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
                 val modified = if (modifiedCol >= 0 && !cursor.isNull(modifiedCol)) cursor.getLong(modifiedCol) else 0L
                 session.found.incrementAndGet()
-                offer(session, ScanEntry(documentUri.toString(), documentId, name, parentId, mime, size, modified, role.first, role.second))
+                val quick = if (role.second == "Audio") indexedAudio[name.lowercase()] else null
+                offer(session, ScanEntry(
+                  documentUri.toString(), documentId, name, parentId, mime, size, modified, role.first, role.second,
+                  quickTitle = quick?.title.orEmpty(),
+                  quickAlbum = quick?.album.orEmpty(),
+                  quickArtist = quick?.artist.orEmpty(),
+                  quickTrack = quick?.track.orEmpty(),
+                  quickYear = quick?.year.orEmpty(),
+                  quickDuration = quick?.duration.orEmpty()
+                ))
               }
             } ?: run {
               session.errors.incrementAndGet()
@@ -242,6 +331,12 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
       map.putDouble("modified", entry.modified.toDouble())
       map.putString("role", entry.role)
       map.putString("format", entry.format)
+      if (entry.quickTitle.isNotEmpty()) map.putString("quickTitle", entry.quickTitle)
+      if (entry.quickAlbum.isNotEmpty()) map.putString("quickAlbum", entry.quickAlbum)
+      if (entry.quickArtist.isNotEmpty()) map.putString("quickArtist", entry.quickArtist)
+      if (entry.quickTrack.isNotEmpty()) map.putString("quickTrack", entry.quickTrack)
+      if (entry.quickYear.isNotEmpty()) map.putString("quickYear", entry.quickYear)
+      if (entry.quickDuration.isNotEmpty()) map.putString("quickDuration", entry.quickDuration)
       items.pushMap(map)
     }
     val finished = session.done.get() && session.queue.isEmpty()
