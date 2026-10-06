@@ -10,7 +10,7 @@ assert.ok(app.includes("import {AmbientGlow,LivingBookCanvas} from './LivingBook
 assert.equal((app.match(/<LivingBookCanvas\b/g)||[]).length,1,'phone and unfolded Fold must share one Living Book renderer');
 assert.ok(app.includes('const [livingBookMotion,setLivingBookMotion]=useState<LivingBookMotion>'),'Living Book must have explicit physical motion state');
 assert.ok(app.includes('const livingBookGeneration=useRef(0)'),'stale cover/page animation callbacks must be generation-guarded');
-assert.ok(app.includes('duration:1900')&&app.includes('},7200);'),'ambient pages must turn slowly and rest between turns');
+assert.ok(app.includes('duration:PLAYER_MOTION_TIMING.pageTurnMs')&&app.includes('PLAYER_MOTION_TIMING.firstTurnDelayMs')&&app.includes('livingBookHasTurned.current?7200'),'ambient pages must start promptly, turn over three seconds and then rest between turns');
 assert.ok(player.includes("type LivingBookPhase = 'closed'|'opening'|'open'|'turning'|'settling'|'closing'"),'motion state must model the complete physical book lifecycle');
 assert.ok(player.includes("if(state.phase==='turning')return {...state,closeAfterSettle:true}"),'Pause during a page turn must defer closing until the sheet lands');
 assert.ok(player.includes("return state.closeAfterSettle?{phase:'closing'"),'settling must hand deferred Pause into a smooth close');
