@@ -37,6 +37,8 @@ assert.ok(source.includes('loadLocalStageBooks()')&&source.includes('migrateLega
 assert.ok(source.includes("async function searchEditingMetadata(deep=false,seed?:Book)"),'metadata repair must expose a bounded per-work Deep Scan review flow');
 assert.ok(source.includes("applyHighConfidence:false")&&source.includes("setEditingUris(evidenceWork.tracks.map(track=>track.uri)"),'Deep Scan must not auto-publish provider guesses and must recover work-level grouping before save');
 assert.ok(source.includes("const allPhoneWorks = useMemo")&&source.includes("const phoneWorks = useMemo(() => allPhoneWorks.filter(work=>!work.needsReview)")&&source.includes("localWorkReadyForCatalogue"),'unresolved and coverless works must remain in review storage without normal publication');
+assert.ok(source.includes("needsReview:!ready")&&source.includes("reviewReason:work.reviewReason||(!work.coverUri?'Cover artwork needs review.':'')")&&source.includes("if (reviewOnly && !(book.needsReview || (book.source!=='server'&&!book.coverUri))) return false"),'onboarding review must surface coverless works instead of dead-ending behind the publication gate');
+assert.equal((source.match(/replaceLocalStageBooks\(/g)||[]).length,1,'only authoritative discovery may replace the entire local catalogue');
 
 console.log('PASS: Sprint 5/7 scan/catalogue integration contracts');
 
