@@ -1111,27 +1111,35 @@ export async function enrichLocalBookMetadataOnline(
       if(result.best){
         const candidate=result.best;
         if(result.autoApply&&options.applyHighConfidence!==false){
+          let livingPortrait:{uri:string;source:'open-library'|'google-books';confidence:number}|undefined;
+          if(candidate.coverUri&&candidate.confidence==='high'){
+            try{
+              const portrait=await cachePortraitCover(
+                'living-'+String(unit.target.workKey||unit.target.uri||unit.target.title)+'-'+candidate.provider,
+                candidate.coverUri,
+              );
+              livingPortrait={
+                uri:portrait.uri,
+                source:candidate.provider==='googlebooks'?'google-books':'open-library',
+                confidence:1,
+              };
+            }catch{
+              // Keep the edition artwork and metadata result. A rejected/non-portrait
+              // provider image must never break enrichment or be stretched as a book.
+            }
+          }
           for(const index of unit.indexes){
             const book=next[index];
             let patch=mergeOnlineBookCandidate(book,candidate,true);
             const providerCoverApplied=!!candidate.coverUri&&!book.coverUri&&patch.coverUri===candidate.coverUri;
             if(providerCoverApplied)patch={...patch,coverShape:'portrait'};
-            if(candidate.coverUri&&candidate.confidence==='high'){
-              try{
-                const portrait=await cachePortraitCover(
-                  'living-'+String(unit.target.workKey||unit.target.uri||unit.target.title)+'-'+candidate.provider,
-                  candidate.coverUri,
-                );
-                patch={
-                  ...patch,
-                  livingBookCoverUri:portrait.uri,
-                  livingBookCoverSource:candidate.provider==='googlebooks'?'google-books':'open-library',
-                  livingBookCoverConfidence:1,
-                };
-              }catch{
-                // Keep the edition artwork and metadata result. A rejected/non-portrait
-                // provider image must never break enrichment or be stretched as a book.
-              }
+            if(livingPortrait){
+              patch={
+                ...patch,
+                livingBookCoverUri:livingPortrait.uri,
+                livingBookCoverSource:livingPortrait.source,
+                livingBookCoverConfidence:livingPortrait.confidence,
+              };
             }
             patch={
               ...patch,
