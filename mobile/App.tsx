@@ -2129,6 +2129,17 @@ function Client() {
     }
   }
 
+  async function removeUnscannedLocalFolder(uri:string) {
+    if(localScanning)return;
+    const folder=localFolders.find(item=>item.uri===uri);
+    if(!folder||folder.scannedAt)return;
+    const folders=localFolders.filter(item=>item.uri!==uri);
+    setLocalFolders(folders);
+    setLocalMovePreviews([]);
+    await setPersistedJSON(localFoldersKey,folders);
+    setLocalFolderNotice(`${folder.name} removed from setup.`);
+  }
+
   async function rescanLocalFolders(forceMetadata=false) {
     if (!localFolders.length) return;
     const hadPreviousScan=localFolders.some(folder=>!!folder.scannedAt);
@@ -2745,15 +2756,22 @@ function Client() {
     if (onboardingDone) return null;
     const reviewCount = localEnrichmentProgress ? 0 : localReviewBooks.length;
     const hasFolder = localFolders.length > 0;
-    const scanHasRun = localFolders.some(folder=>!!folder.scannedAt);
+    const pendingFolders=localFolders.filter(folder=>!folder.scannedAt);
+    const scannedFolders=localFolders.filter(folder=>!!folder.scannedAt);
+    const allLocalSourcesScanned=hasFolder&&pendingFolders.length===0&&scannedFolders.length===localFolders.length;
     const localWorkCount=allPhoneWorks.length;
     const readyCount=phoneWorks.length;
-    const hasUsableLibrary=!!session||scanHasRun||readyCount>0;
     const scanBusy=localScanning||!!localEnrichmentProgress;
+    const serverLoading=!!session&&shelfLoading&&!serverSummary;
+    const serverReady=!!session&&!serverLoading;
+    const hasUsableLibrary=serverReady||allLocalSourcesScanned||readyCount>0;
+
+    // Guided onboarding: only the next required stage pulses. Completed stages
+    // stay bright/legible but become visually quiet so attention moves forward.
     const stageOneActive=!hasFolder&&!session;
-    const stageTwoActive=hasFolder&&!scanHasRun&&!scanBusy;
-    const stageThreeActive=scanHasRun&&!scanBusy&&reviewCount>0;
-    const enterActive=hasUsableLibrary&&!scanBusy&&reviewCount===0;
+    const stageTwoActive=hasFolder&&!allLocalSourcesScanned&&!scanBusy;
+    const stageThreeActive=allLocalSourcesScanned&&!scanBusy&&reviewCount>0;
+    const stageFourActive=hasUsableLibrary&&!scanBusy&&!stageTwoActive&&reviewCount===0;
     const pulseStyle=(active:boolean)=>active
       ? reduceMotion
         ? {opacity:1}
@@ -2762,25 +2780,64 @@ function Client() {
             transform:[{scale:onboardingPulse.interpolate({inputRange:[0,1],outputRange:[1,1.012]})}],
           }
       : undefined;
+
+    const scanButtonLabel=scanBusy
+      ? 'Scanning & identifying…'
+      : scannedFolders.length
+        ? 'Refresh device folders'
+        : `Scan ${localFolders.length} folder${localFolders.length===1?'':'s'}`;
+
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
         <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your library</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Add all the folders you want to use, and optionally connect your Archivist server. Nothing is scanned until you choose Scan folders.</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Choose every source you want first. Archivist will not scan device folders until you press Scan.</Text>
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasFolder||session?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Choose your sources</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
-              {[
-                hasFolder?`${localFolders.length} device folder${localFolders.length===1?'':'s'} added`:'',
-                session?'Archivist server connected':'',
-              ].filter(Boolean).join(' · ') || 'Add one or more device folders, connect a server, or use both.'}
+              {hasFolder||session
+                ? 'Add another source if you want. Your selections stay staged until the next step.'
+                : 'Add one or more device folders, connect an Archivist server, or use both.'}
             </Text>
-            {localFolders.map(folder=><Text key={folder.uri} numberOfLines={1} style={[styles.meta,{color:p.muted}]}>• {folder.name}</Text>)}
           </View>
         </View>
+
+        {(localFolders.length||session)?<View style={styles.onboardingSourceList}>
+          {localFolders.map(folder=><View key={folder.uri} style={[styles.sourceRow,{borderTopColor:p.line}]}>
+            <View style={{flex:1,minWidth:0}}>
+              <Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{folder.name}</Text>
+              <Text numberOfLines={1} style={[styles.meta,{color:p.muted}]}>
+                {folder.scannedAt
+                  ? `${folder.itemCount} media file${folder.itemCount===1?'':'s'} · Scanned`
+                  : 'Device folder · Ready to scan'}
+              </Text>
+            </View>
+            {!folder.scannedAt?<Pressable
+              accessibilityRole="button"
+              accessibilityLabel={'Remove '+folder.name+' from setup'}
+              disabled={localScanning}
+              onPress={()=>void removeUnscannedLocalFolder(folder.uri)}
+              style={styles.onboardingSourceAction}>
+              <Text style={{color:localScanning?p.muted:p.muted,fontWeight:'600'}}>Remove</Text>
+            </Pressable>:null}
+          </View>)}
+          {session?<View style={[styles.sourceRow,{borderTopColor:p.line}]}>
+            <View style={{flex:1,minWidth:0}}>
+              <Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>Archivist server</Text>
+              <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
+                {serverLoading
+                  ? 'Loading the existing server catalogue…'
+                  : serverSummary
+                    ? `${serverSummary.total} work${serverSummary.total===1?'':'s'} · Existing server metadata will be used`
+                    : 'Connected · Existing server catalogue and metadata will be used'}
+              </Text>
+            </View>
+          </View>:null}
+        </View>:null}
+
         <Animated.View style={[styles.onboardingActionStage,pulseStyle(stageOneActive)]}>
           <View style={styles.toolRow}>
             <Button label={hasFolder?'Add another folder':'Add folder'} tone="gold" disabled={localScanning} onPress={()=>void addLocalFolder()} />
@@ -2790,45 +2847,65 @@ function Client() {
         {!session&&serverPanelOpen?<ServerConnect/>:null}
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:scanHasRun||(!hasFolder&&!!session)?p.sage:p.muted}]}>02</Text>
+          <Text style={[styles.onboardingNumber,{color:allLocalSourcesScanned||(!hasFolder&&serverReady)?p.sage:p.muted}]}>02</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Scan your device folders</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Build the local catalogue</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
               {localScanning&&scanProgress
-                ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} files found`
+                ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} media files found`
                 : localEnrichmentProgress
-                  ? `Identifying ${localEnrichmentProgress.processed} of ${localEnrichmentProgress.total} works · ${localEnrichmentProgress.published} ready`
-                  : scanHasRun
-                    ? `${localBooks.length} media files found · ${localWorkCount} books grouped · ${readyCount} ready`
-                    : hasFolder
-                      ? 'Your folders are ready. Add more sources if you want, then scan when you are ready.'
-                      : session
-                        ? 'Your server already uses its own indexed catalogue and metadata; no phone scan is required.'
-                        : 'Add at least one device folder to run a local scan.'}
+                  ? `Identifying ${localEnrichmentProgress.processed} of ${localEnrichmentProgress.total} books · ${localEnrichmentProgress.published} ready`
+                  : hasFolder
+                    ? allLocalSourcesScanned
+                      ? `${localBooks.length} media files · ${localWorkCount} books grouped · ${readyCount} ready`
+                      : scannedFolders.length
+                        ? `${pendingFolders.length} new folder${pendingFolders.length===1?'':'s'} waiting. Refresh when your source list is complete.`
+                        : 'Your folders are staged. Start the scan when you have finished adding sources.'
+                    : session
+                      ? serverLoading
+                        ? 'Loading your existing server catalogue and metadata…'
+                        : 'No device scan is required. The server catalogue is already indexed.'
+                      : 'Add a device folder to run a local scan.'}
             </Text>
           </View>
         </View>
-        {hasFolder?<Animated.View style={[styles.onboardingActionStage,pulseStyle(stageTwoActive)]}><Button label={scanBusy?'Scanning & identifying…':scanHasRun?'Scan folders again':`Scan ${localFolders.length} folder${localFolders.length===1?'':'s'}`} disabled={scanBusy} onPress={()=>void rescanLocalFolders(false)} /></Animated.View>:null}
+        {hasFolder?<Animated.View style={[styles.onboardingActionStage,pulseStyle(stageTwoActive)]}><Button label={scanButtonLabel} disabled={scanBusy} onPress={()=>void rescanLocalFolders(false)} /></Animated.View>:null}
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:(scanHasRun||session)&&!scanBusy?p.sage:p.muted}]}>03</Text>
+          <Text style={[styles.onboardingNumber,{color:(allLocalSourcesScanned||(!hasFolder&&serverReady))&&!scanBusy?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only unresolved books</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
               {scanBusy
-                ? 'Archivist is still identifying books and resolving artwork.'
+                ? 'Archivist is still grouping books, identifying metadata and resolving artwork.'
                 : reviewCount
-                  ? `${reviewCount} book${reviewCount===1?'':'s'} need a quick check before they can enter the local Library.`
-                  : scanHasRun
-                    ? 'Everything found in the local scan is either ready or already resolved.'
-                    : session
-                      ? 'Server metadata comes from the server catalogue. Local review only applies to device folders you scan.'
-                      : 'Review appears after the local scan.'}
+                  ? `${reviewCount} book${reviewCount===1?'':'s'} need a quick check. Multi-file audiobooks appear here once per book, not once per chapter.`
+                  : allLocalSourcesScanned
+                    ? 'No local books need attention.'
+                    : session&&!hasFolder
+                      ? 'No local review is required. The server remains authoritative for its existing metadata.'
+                      : 'Review becomes available after the local scan.'}
             </Text>
           </View>
         </View>
         {!scanBusy&&reviewCount>0?<Animated.View style={[styles.onboardingActionStage,pulseStyle(stageThreeActive)]}><Button label={`Review ${reviewCount} book${reviewCount===1?'':'s'}`} onPress={()=>{setError('');setReviewOnly(true);setQuery('');setActiveTab('library')}} /></Animated.View>:null}
-        {hasUsableLibrary&&!scanBusy?<Animated.View style={[styles.onboardingActionStage,pulseStyle(enterActive)]}><Button label="Enter my library" tone={reviewCount>0?'quiet':'primary'} onPress={()=>void finishOnboarding()} /></Animated.View>:null}
+
+        <View style={styles.onboardingStep}>
+          <Text style={[styles.onboardingNumber,{color:hasUsableLibrary&&!scanBusy?p.sage:p.muted}]}>04</Text>
+          <View style={{flex:1}}>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Enter your library</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>
+              {scanBusy||serverLoading
+                ? 'Finish the current catalogue step first.'
+                : reviewCount
+                  ? 'You can review the remaining books now, or enter the Library and return to them later.'
+                  : hasUsableLibrary
+                    ? 'Setup is ready. Future folders, rescans and metadata controls live in Settings.'
+                    : 'Complete a source step above first.'}
+            </Text>
+          </View>
+        </View>
+        {hasUsableLibrary&&!scanBusy&&!serverLoading?<Animated.View style={[styles.onboardingActionStage,pulseStyle(stageFourActive)]}><Button label="Enter my library" tone={reviewCount>0?'quiet':'primary'} onPress={()=>void finishOnboarding()} /></Animated.View>:null}
         {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
       </View>
     );
@@ -5327,7 +5404,9 @@ const styles = StyleSheet.create({
   onboardingNumber: {width:24,fontSize:11,lineHeight:18,fontWeight:'700',letterSpacing:.7,textAlign:'left'},
   onboardingStepTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600',marginBottom:2},
   onboardingActionStage: {alignSelf:'stretch'},
-  sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:4},
+  onboardingSourceList: {gap:0},
+  onboardingSourceAction: {minHeight:44,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
+  sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:8,flexDirection:'row',alignItems:'center'},
   tabBody: {flex: 1},
   title: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',marginBottom:2,letterSpacing:-.4},
   sectionTitle: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:23,fontWeight:'500',marginTop:8,letterSpacing:-0.1},
