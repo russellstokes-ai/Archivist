@@ -5368,7 +5368,7 @@ const styles = StyleSheet.create({
   screen: {flex: 1},
   launchPrefont: {flex:1,alignItems:'center',justifyContent:'center',gap:18},
   launchPrefontIcon: {width:82,height:82},
-  launchOverlay: {...StyleSheet.absoluteFillObject,zIndex:1000,alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  launchOverlay: {position:'absolute',left:0,top:0,right:0,bottom:0,zIndex:1000,alignItems:'center',justifyContent:'center',overflow:'hidden'},
   launchHalo: {width:360,height:360,alignItems:'center',justifyContent:'center'},
   launchHaloRing: {position:'absolute',width:304,height:304,borderRadius:152,borderWidth:1},
   launchHaloRingInner: {width:230,height:230,borderRadius:115},
