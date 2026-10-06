@@ -2817,7 +2817,15 @@ function Client() {
       // Online enrichment and artwork can safely continue from the staged clues.
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
-      // Prefer bounded network metadata/cover matches after shallow discovery.
+      // Cheap file properties are part of normal identification. Only unresolved
+      // audio is sampled here, using bounded ID3/MP4 header windows; EPUB/comic
+      // archive parsing remains explicit Deep Search work.
+      const propertyBooks=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true);
+      if(!scanCommitGate.isCurrent(generation))return currentBooks;
+      if(propertyBooks)currentBooks=propertyBooks;
+      if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
+
+      // Prefer bounded network metadata/cover matches after file/path evidence.
       if(metadataSettings.onlineEnabled&&(metadataSettings.automaticEnrichment||forceOnline)){
         if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
           const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline);
@@ -2833,11 +2841,23 @@ function Client() {
         }
       }
 
-      // Normal preparation also avoids archive/audio cover extraction. Provider
-      // artwork is already cached above; local forensic cover extraction belongs
-      // to explicit Deep Search/manual repair, not a catalogue-wide scan.
+      // Retry any remote cover already known to the catalogue even when no new
+      // metadata lookup was required. Older scans could otherwise leave an
+      // identified book permanently staged with an uncached remote image.
+      const cachedKnownCovers=await cacheOnlineCoverUris(currentBooks,{
+        documentDirectory,
+        makeDirectoryAsync,
+        downloadAsync:downloadCoverWithDeadline,
+        getInfoAsync,
+        deleteAsync,
+      },{concurrency:2,shouldContinue:()=>scanCommitGate.isCurrent(generation)})
+        .catch(error=>{recordLibraryRefreshWarning('Known cover cache',error);return null;});
+      if(!scanCommitGate.isCurrent(generation))return currentBooks;
+      if(cachedKnownCovers)currentBooks=cachedKnownCovers.books;
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
+      // Normal preparation still avoids archive cover extraction. Local forensic
+      // cover reads belong to explicit Deep Search/manual repair.
       // Publication artwork is work-level: keep an existing local Library image
       // where appropriate, but always resolve and cache the Living Book jacket.
       reportEnrichmentProgress({phase:'covers',currentFolder:'Publication artwork',entriesVisited:0,found:currentBooks.length,review:currentBooks.filter(book=>book.needsReview).length,processed:0,total:currentBooks.length},true);
@@ -2871,15 +2891,16 @@ function Client() {
     }
   }
 
-  async function enrichPublishedLocalEmbeddedMetadata(baseBooks:LocalBook[],generation:number,refreshMetadata=false):Promise<LocalBook[]|null>{
+  async function enrichPublishedLocalEmbeddedMetadata(baseBooks:LocalBook[],generation:number,refreshMetadata=false,fastAudioProperties=false):Promise<LocalBook[]|null>{
     if(!scanCommitGate.isCurrent(generation))return null;
     const needsEmbeddedRead=(book:LocalBook)=>{
+      if(fastAudioProperties){
+        if(book.format!=='Audio'||book.embeddedMetadata)return false;
+        return !!book.needsReview||!String(book.author||'').trim()||!String(book.title||'').trim();
+      }
       if(refreshMetadata)return book.format==='EPUB'||book.format==='Comic'||book.format==='Audio';
       if(!(book.format==='EPUB'||book.format==='Comic'||book.format==='Audio'))return false;
       if(book.embeddedMetadata)return false;
-      // Preparation is complete, not shallow: every new/changed supported file
-      // gets its embedded details once. Unchanged files reuse the persisted
-      // embedded metadata fingerprint on later scans.
       return true;
     };
     const eligible=baseBooks.filter(needsEmbeddedRead);
@@ -2887,12 +2908,13 @@ function Client() {
     reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length},true);
     const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
       refreshMetadata,
-      batchSize:4,
-      // First-run preparation must fail forward quickly on a slow/broken archive.
-      // A single pathological EPUB/CBZ/M4B must never hold the UI at 28%.
-      itemTimeoutMs:refreshMetadata?5000:2500,
-      maxConsecutiveTimeouts:refreshMetadata?6:6,
-      concurrency:refreshMetadata?3:4,
+      fastAudioProperties,
+      batchSize:fastAudioProperties?8:4,
+      // Fast properties are bounded header reads and fail forward aggressively.
+      // Full archive/audio inspection remains explicit or refresh-only.
+      itemTimeoutMs:fastAudioProperties?1200:(refreshMetadata?5000:2500),
+      maxConsecutiveTimeouts:fastAudioProperties?3:6,
+      concurrency:fastAudioProperties?4:(refreshMetadata?3:4),
       shouldInspect:needsEmbeddedRead,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
@@ -3070,12 +3092,22 @@ function Client() {
   }
   async function completedLibraryRefreshNotice(result:LocalScanResult){
     const books=completedLibraryBooksRef.current||result.books;
-    const review=books.filter(book=>book.needsReview).length;
-    const missingCovers=books.filter(book=>!book.coverUri).length;
+    const publication=partitionLocalBooksByPublication(books);
+    const readyWorks=groupLocalWorks(publication.published).length;
+    const blocked=[...publication.assessments.values()].filter(item=>!item.ready);
+    const blockedWorks=blocked.length;
+    const missingAuthor=blocked.filter(item=>item.blockers.includes('missing-author')).length;
+    const missingArtwork=blocked.filter(item=>item.blockers.some(blocker=>blocker.includes('cover'))).length;
+    const metadataReview=blocked.filter(item=>item.blockers.includes('needs-review')).length;
     const warnings=libraryRefreshWarningsRef.current;
+    const reasons=[
+      missingAuthor?`${missingAuthor} missing author`:'',
+      missingArtwork?`${missingArtwork} missing/cached artwork`:'',
+      metadataReview?`${metadataReview} metadata review`:'',
+    ].filter(Boolean);
     const warningText=warnings.length?` · ${warnings.length} stage warning${warnings.length===1?'':'s'}`:'';
-    const coverText=missingCovers?` · ${missingCovers} cover${missingCovers===1?'':'s'} still need attention`:' · covers complete';
-    return `${books.length} found · ${Math.max(0,books.length-review)} identified · ${review} need review${coverText}${warningText}.`;
+    const blockedText=blockedWorks?` · ${blockedWorks} need attention${reasons.length?' ('+reasons.join(' · ')+')':''}`:'';
+    return `${books.length} files found · ${readyWorks} works ready${blockedText}${warningText}.`;
   }
 
   async function addLocalFolder() {
