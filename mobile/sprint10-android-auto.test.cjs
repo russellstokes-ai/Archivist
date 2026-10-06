@@ -18,7 +18,8 @@ assert.ok(service.includes('setAlbumTitle(work.title)')&&service.includes('setAr
 assert.ok(service.includes('attachArtwork(metadata, work.coverUri)'),'cover artwork must flow into Android Auto metadata');
 assert.ok(service.includes('private fun <T> paged('),'browse/search results must paginate correctly');
 assert.ok(auto.includes('version:3')&&auto.includes('resumeWorkKey?:string'),'phone must publish the authoritative Now audiobook into the car snapshot');
-assert.ok(app.includes('persistAndroidAutoLibrary(localPersonalWorks,localWorkProgress,resume)'),'phone-to-car snapshot must include current resume identity');
+assert.ok(app.includes('persistAndroidAutoLibrary(publishedLocalPersonalWorks,localWorkProgress,resume)'),'phone-to-car snapshot must include current resume identity without exposing unresolved/coverless local works');
+assert.ok(app.includes('const publishedLocalPersonalWorks')&&app.includes('localWorkReadyForCatalogue'),'Android Auto publication must share the resolved catalogue gate');
 assert.ok(app.includes('setInterval(()=>void syncAndroidAutoProgress(),4000)'),'active phone app must continuously consume car progress rather than only once');
 assert.ok(app.includes("if((currentNow?.updatedAt||0)>progress.updatedAt)return;"),'stale car progress must never overwrite newer phone/Now progress');
 assert.ok(app.includes("await persistNowSession('audio',display,progress.complete?0:progress.seconds"),'fresh car progress must feed the same durable Now session');
