@@ -81,6 +81,13 @@ export function parseID3v2Base64(base64:string):LocalMetadataFields{
           else if(id==='TCON')fields.genre=value.replace(/^\((\d+)\)$/,'$1');
           else if(id==='TPUB')fields.publisher=value;
           else if(id==='TLAN')fields.language=value;
+          else if(id==='TRCK'){
+            const number=Number(value.match(/\d+/)?.[0]);
+            if(Number.isFinite(number)&&number>0)fields.trackNumber=number;
+          }else if(id==='TPOS'){
+            const number=Number(value.match(/\d+/)?.[0]);
+            if(Number.isFinite(number)&&number>0)fields.discNumber=number;
+          }
         }
       }
     }
@@ -110,9 +117,27 @@ export function parseMP4MetadataBase64(base64:string):LocalMetadataFields{
   if(artist||albumArtist)fields.author=artist||albumArtist;
   if(genre)fields.genre=genre;
   if(grouping)fields.series=grouping;
+  const trackNumber=mp4Index(bytes,'trkn');
+  const discNumber=mp4Index(bytes,'disk');
+  if(trackNumber)fields.trackNumber=trackNumber;
+  if(discNumber)fields.discNumber=discNumber;
   const year=publicationYear(date);
   if(year)fields.publishedYear=year;
   return compact(fields);
+}
+
+function mp4Index(bytes:Uint8Array,name:string){
+  const payload=mp4Data(bytes,name);
+  if(!payload||payload.length<4)return undefined;
+  // Apple trkn/disk atoms normally store the current index in bytes 2-3
+  // of the data payload. Fall back to the first sensible 16-bit value.
+  const preferred=(payload[2]<<8)|payload[3];
+  if(preferred>0&&preferred<100000)return preferred;
+  for(let i=0;i+1<payload.length;i+=2){
+    const value=(payload[i]<<8)|payload[i+1];
+    if(value>0&&value<100000)return value;
+  }
+  return undefined;
 }
 
 function mp4Text(bytes:Uint8Array,name:string){
