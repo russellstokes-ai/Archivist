@@ -169,6 +169,9 @@ type Book = {
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
   coverCandidates?: string[];
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: 'embedded' | 'open-library' | 'google-books' | 'manual' | 'jacket' | 'none';
+  livingBookCoverConfidence?: number;
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'online' | 'legacy';
   localWorkKey?: string;
   serverWorkId?: number;
@@ -1218,6 +1221,9 @@ function Client() {
       format:book.format,
       editionCoverUri,
       editionCoverShape:book.coverShape,
+      livingBookCoverUri:book.livingBookCoverUri,
+      livingBookCoverSource:book.livingBookCoverSource,
+      livingBookCoverConfidence:book.livingBookCoverConfidence,
     });
     const key=[book.source||'local',book.originServer||session?.server||'device',playbackWorkKey(book)||book.id].join('|');
     const locked=lockLivingBookCoverSession(livingBookCoverSessionRef.current,key,next);
@@ -3270,6 +3276,8 @@ function Client() {
       format:book.format,space:book.space,available:book.available,uri:book.uri,
       localWorkKey:book.localWorkKey,serverWorkId:book.serverWorkId,source:book.source,
       originServer:book.originServer,coverShape:book.coverShape,coverUri:book.coverUri,
+      livingBookCoverUri:book.livingBookCoverUri,livingBookCoverSource:book.livingBookCoverSource,
+      livingBookCoverConfidence:book.livingBookCoverConfidence,
     };
   }
 
@@ -3279,6 +3287,8 @@ function Client() {
       format:media.format,space:media.space,available:media.available,uri:media.uri,
       localWorkKey:media.localWorkKey,serverWorkId:media.serverWorkId,source:media.source,
       originServer:media.originServer,coverShape:media.coverShape,coverUri:media.coverUri,
+      livingBookCoverUri:media.livingBookCoverUri,livingBookCoverSource:media.livingBookCoverSource,
+      livingBookCoverConfidence:media.livingBookCoverConfidence,
     };
   }
 
@@ -3483,7 +3493,10 @@ function Client() {
       author: work.author,
       series: work.series,
       coverUri: work.coverUri,
-      coverShape: 'square',
+      coverShape: work.coverShape,
+      livingBookCoverUri: work.livingBookCoverUri,
+      livingBookCoverSource: work.livingBookCoverSource,
+      livingBookCoverConfidence: work.livingBookCoverConfidence,
       localWorkKey: work.key,
       source: work.originServer ? 'downloaded' : 'local',
       originServer: work.originServer,
