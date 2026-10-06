@@ -75,6 +75,7 @@ import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris, persistOnlineCover} from './onlineCoverCache';
+import {cachePortraitCover} from './coverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -4833,8 +4834,31 @@ function Client() {
       const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
       const narrator=editNarrator.trim(),publisher=editPublisher.trim(),isbn=editISBN.trim(),asin=editASIN.trim(),language=editLanguage.trim(),description=editDescription.trim();
       let coverUri=editCoverUri.trim();
+      let coverShape=editing.coverShape;
+      let livingBookCoverUri=editing.livingBookCoverUri;
+      let livingBookCoverSource=editing.livingBookCoverSource;
+      let livingBookCoverConfidence=editing.livingBookCoverConfidence;
+      const selectedCandidate=metadataCandidates.find(candidate=>candidate.key===selectedMetadataCandidate);
+      const providerPortraitSelected=localEdit&&editing.format==='Audio'&&!editPickedCover&&!!selectedCandidate?.coverUri&&editCoverUri.trim()===selectedCandidate.coverUri;
       if(!title)return;
-      if(localEdit&&editPickedCover){
+      if(providerPortraitSelected&&selectedCandidate?.coverUri){
+        try{
+          const portrait=await cachePortraitCover('manual-living-'+String(editing.localWorkKey||editing.uri||editing.title),selectedCandidate.coverUri);
+          livingBookCoverUri=portrait.uri;
+          livingBookCoverSource=selectedCandidate.provider==='googlebooks'?'google-books':selectedCandidate.provider==='openlibrary'?'open-library':'manual';
+          livingBookCoverConfidence=1;
+          if(editing.coverShape==='square'&&editing.coverUri){
+            coverUri=editing.coverUri;
+            coverShape='square';
+          }else{
+            coverUri=portrait.uri;
+            coverShape='portrait';
+          }
+        }catch(e){
+          setError('That match did not provide a usable portrait book cover: '+(e as Error).message);
+          return;
+        }
+      }else if(localEdit&&editPickedCover){
         try{coverUri=await persistPickedCover(editPickedCover.uri,editPickedCover.fileName,editPickedCover.fileSize);}
         catch(e){setError('Could not save the selected cover: '+(e as Error).message);return;}
       }else if(localEdit&&/^https?:\/\//i.test(coverUri)){
@@ -4857,8 +4881,13 @@ function Client() {
           .then(()=>{
             setLocalBooks(old=>{
               const wanted=new Set(targets);
-              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const,metadataConflicts:[]}:b);
-              void replaceLocalStageBooks(updated as LocalBook[]);
+              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{
+                ...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,
+                coverUri:coverUri||b.coverUri,coverShape:coverShape||b.coverShape,
+                livingBookCoverUri,livingBookCoverSource,livingBookCoverConfidence,
+                needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const,metadataConflicts:[],
+              }:b);
+              void upsertLocalStageBooks((updated as LocalBook[]).filter(book=>wanted.has(book.uri)));
               return updated;
             });
             setEditing(null);setEditingUris([]);setEditPickedCover(null);
