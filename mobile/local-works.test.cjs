@@ -4,7 +4,7 @@ const ts = require('typescript');
 require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
-const {groupLocalWorks,groupLogicalLocalWorks,logicalSeriesGroups} = require('./localWorks.ts');
+const {applyLocalPublicationState,groupLocalWorks,groupLogicalLocalWorks,localWorkPublicationReady,logicalSeriesGroups} = require('./localWorks.ts');
 
 function book(id, uri, extra={}) {
   return {
@@ -31,6 +31,23 @@ assert.equal(grouped[0].author,'Frank Herbert');
 assert.equal(grouped[0].files,2);
 assert.equal(grouped[0].tracks[0].id,1);
 assert.equal(grouped[0].coverUri,'content://root/Dune.jpg');
+
+const stagedPublication=applyLocalPublicationState([
+  book(201,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2F01.mp3',{title:'Opening',author:'Frank Herbert',embeddedMetadata:{workTitle:'Dune'},coverUri:'content://root/Dune.jpg',publishReady:false}),
+  book(202,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2F02.mp3',{title:'Arrakis',author:'Frank Herbert',embeddedMetadata:{workTitle:'Dune'},coverUri:'content://root/Dune.jpg',publishReady:false}),
+]);
+assert.ok(stagedPublication.every(item=>item.publishReady===true&&item.publicationState==='published'),'a resolved work with artwork publishes atomically across every track');
+assert.equal(localWorkPublicationReady(groupLocalWorks(stagedPublication)[0]),true,'only explicitly published complete work is visible');
+
+const missingCoverPublication=applyLocalPublicationState([
+  {...book(203,'content://root/document/primary:Books%2FFrank%20Herbert%2FDune.epub',{title:'Dune',author:'Frank Herbert',format:'EPUB',coverShape:'portrait'}),publishReady:false},
+]);
+assert.equal(missingCoverPublication[0].publishReady,false,'a work without artwork must remain backstage');
+assert.equal(missingCoverPublication[0].publicationState,'attention');
+assert.equal(localWorkPublicationReady(groupLocalWorks(missingCoverPublication)[0]),false);
+
+const partialWork=stagedPublication.map((item,index)=>index===0?{...item,publishReady:false,publicationState:'metadata'}:item);
+assert.equal(localWorkPublicationReady(groupLocalWorks(partialWork)[0]),false,'one unfinished track keeps the entire audiobook backstage');
 
 const manuallyNamed = groupLocalWorks([
   book(11,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2F01%20-%20Opening.mp3',{title:'Dune (Author Cut)',metadataSource:'manual'}),
