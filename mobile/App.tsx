@@ -3451,9 +3451,14 @@ function Client() {
       }
     };
     return <Modal transparent animationType="slide" visible onRequestClose={()=>!busy&&!metadataMatchLoading&&setEditing(null)}>
-      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-        <View style={styles.modalBackdrop}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
-          <View accessibilityViewIsModal accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':'height'}>
+        <View style={[styles.modalBackdrop,styles.metadataModalBackdrop]}>
+          <View accessibilityViewIsModal accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,styles.metadataModalCard,{backgroundColor:p.card,borderColor:p.line}]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS==='ios'?'interactive':'on-drag'}
+              contentContainerStyle={styles.metadataEditorContent}
+              showsVerticalScrollIndicator={false}>
             <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{editing.needsReview?'Review details':'Edit book'}</Text>
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
@@ -3500,8 +3505,9 @@ function Client() {
 
             <Button label="Save details" disabled={busy||metadataMatchLoading||!editTitle.trim()} onPress={()=>void save()}/>
             <Button label="Cancel" tone="quiet" disabled={busy||metadataMatchLoading} onPress={()=>setEditing(null)}/>
+            </ScrollView>
           </View>
-        </ScrollView></View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>;
   }
@@ -5348,6 +5354,9 @@ const styles = StyleSheet.create({
   modalBackdrop: {flex:1,backgroundColor:'rgba(0,0,0,.46)',alignItems:'center',justifyContent:'center',padding:20},
   modalScroll: {flexGrow:1,width:'100%',alignItems:'center',justifyContent:'center',paddingVertical:20},
   modalCard: {width:'100%',maxWidth:520,borderWidth:0,borderRadius:18,padding:18,gap:9},
+  metadataModalBackdrop: {paddingVertical:12},
+  metadataModalCard: {maxHeight:'92%',padding:0,overflow:'hidden'},
+  metadataEditorContent: {padding:18,gap:9},
   meta: {fontSize: 13, lineHeight: 19},
   playerScreen: {paddingHorizontal:18,paddingTop:12,gap:14,paddingBottom:96,maxWidth:1120,width:'100%',alignSelf:'center'},
   playerScreenFold: {paddingHorizontal:24,paddingTop:12,gap:14},
