@@ -201,16 +201,9 @@ export async function removeLocalStageBooks(uris:string[]){
   if(!unique.length)return;
   const db=await database();
   await db.withExclusiveTransactionAsync(async txn=>{
-    const active=await txn.prepareAsync('DELETE FROM local_assets WHERE uri = ?');
-    const staged=await txn.prepareAsync('DELETE FROM local_scan_assets WHERE uri = ?');
-    try{
-      for(const uri of unique){
-        await active.executeAsync([uri]);
-        await staged.executeAsync([uri]);
-      }
-    }finally{
-      await active.finalizeAsync();
-      await staged.finalizeAsync();
+    for(const uri of unique){
+      await txn.runAsync('DELETE FROM local_assets WHERE uri = ?',uri);
+      await txn.runAsync('DELETE FROM local_scan_assets WHERE uri = ?',uri);
     }
   });
 }
