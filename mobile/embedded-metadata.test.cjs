@@ -5,6 +5,7 @@ const Module=require('node:module');
 const load=Module._load;
 Module._load=function(request,parent,isMain){
   if(request==='expo-file-system/legacy')return {EncodingType:{Base64:'base64'},async getInfoAsync(){return {exists:true,size:1}},async readAsStringAsync(){return ''}};
+  if(request==='react-native')return {Platform:{OS:'web'},NativeModules:{}};
   return load.call(this,request,parent,isMain);
 };
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{
