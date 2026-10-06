@@ -9,18 +9,29 @@ const native={
   async startTreeScan(){return 'scan-1';},
   async readTreeScanBatch(){
     this.scanReads++;
-    if(this.scanReads>1)return {items:[],done:true,visited:2,found:2,errors:0};
+    if(this.scanReads>1)return {items:[],done:true,visited:4,found:4,errors:0};
     return {
       items:[
         {uri:'content://provider/tree/primary%3ABooks/document/primary%3ABooks%2FDune.epub',documentId:'primary:Books/Dune.epub',name:'Dune.epub',parentId:'primary:Books',mimeType:'application/epub+zip',size:12345,modified:1700000000000,role:'media',format:'EPUB'},
         {uri:'content://provider/tree/primary%3ABooks/document/primary%3ABooks%2FSaga.cbz',documentId:'primary:Books/Saga.cbz',name:'Saga.cbz',parentId:'primary:Books',mimeType:'application/zip',size:54321,modified:1700000001000,role:'media',format:'Comic'},
-        {uri:'',documentId:'',name:'',parentId:'primary:Books',mimeType:'',size:2,modified:0,role:'directory-context',format:'mixed'},
+        {uri:'content://provider/tree/primary%3ABooks/document/primary%3ABooks%2Fx01.mp3',documentId:'primary:Books/x01.mp3',name:'x01.mp3',parentId:'primary:Books',mimeType:'audio/mpeg',size:20001,modified:1700000002000,role:'media',format:'Audio'},
+        {uri:'content://provider/tree/primary%3ABooks/document/primary%3ABooks%2Fx02.mp3',documentId:'primary:Books/x02.mp3',name:'x02.mp3',parentId:'primary:Books',mimeType:'audio/mpeg',size:20002,modified:1700000003000,role:'media',format:'Audio'},
+        {uri:'',documentId:'',name:'',parentId:'primary:Books',mimeType:'',size:4,modified:0,role:'directory-context',format:'mixed'},
         {uri:'',documentId:'',name:'',parentId:'primary:Books',mimeType:'',size:0,modified:0,role:'directory-end',format:''},
       ],
-      done:true,visited:2,found:2,errors:0,
+      done:true,visited:4,found:4,errors:0,
     };
   },
   async cancelTreeScan(){return true;},
+  async readAudioMetadataBatch(uris){
+    return uris.map((uri,index)=>({
+      uri,
+      title:'Slayer - Chapter '+(index+1),
+      author:'William King',
+      track:String(index+1),
+      year:'1999',
+    }));
+  },
   async readDocumentMetadataBatch(items){
     this.documentMetadataReads++;
     assert.equal(items.length,this.documentMetadataReads===1?2:1,'initial scan reads the discovery batch; Deep Scan reads only the selected work');
@@ -62,12 +73,13 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,file);
 
-const {deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
+const {deepScanEvidenceSummary,deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
+const {groupLocalWorks}=require('./localWorks.ts');
 
 (async()=>{
   const root='content://provider/tree/primary%3ABooks';
   const result=await scanLocalFolders([{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}]);
-  assert.equal(result.books.length,2);
+  assert.equal(result.books.length,4);
 
   const dune=result.books.find(book=>book.format==='EPUB');
   assert.equal(dune.title,'Dune');
@@ -82,6 +94,12 @@ const {deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
   assert.equal(dune.identificationConfidence,'high');
   assert.equal(dune.needsReview,false);
   assert.equal(dune.sourceUri,root);
+
+  const initialAudioWorks=groupLocalWorks(result.books.filter(book=>book.format==='Audio'));
+  assert.equal(initialAudioWorks.length,1,'normal scan must group root audio using embedded title+author evidence even without Album');
+  assert.equal(initialAudioWorks[0].title,'Slayer');
+  assert.equal(initialAudioWorks[0].author,'William King');
+  assert.equal(initialAudioWorks[0].files,2);
 
   const comic=result.books.find(book=>book.format==='Comic');
   assert.equal(comic.title,'Saga');
@@ -113,6 +131,30 @@ const {deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
   assert.equal(deep[0].author,'Frank Herbert');
   assert.equal(deep[0].isbn,'9780441172719');
   assert.equal(deep[0].needsReview,false);
+
+  const audioDeep=await deepScanLocalTracks([
+    {
+      id:201,
+      uri:'content://provider/tree/primary%3AMusic/document/primary%3AMusic%2Fx01.mp3',
+      title:'Part 1',author:'',series:'',genre:'',format:'Audio',space:'Music',available:true,
+      coverShape:'square',metadataSource:'path',identificationConfidence:'low',needsReview:true,reviewReason:'Unknown',
+    },
+    {
+      id:202,
+      uri:'content://provider/tree/primary%3AMusic/document/primary%3AMusic%2Fx02.mp3',
+      title:'Part 2',author:'',series:'',genre:'',format:'Audio',space:'Music',available:true,
+      coverShape:'square',metadataSource:'path',identificationConfidence:'low',needsReview:true,reviewReason:'Unknown',
+    },
+  ]);
+  const groupedAudio=groupLocalWorks(audioDeep);
+  assert.equal(groupedAudio.length,1,'Deep Scan must combine compatible root files into one work');
+  assert.equal(groupedAudio[0].title,'Slayer');
+  assert.equal(groupedAudio[0].author,'William King');
+  assert.equal(groupedAudio[0].files,2);
+  const audioEvidence=deepScanEvidenceSummary(audioDeep);
+  assert.equal(audioEvidence.files,2);
+  assert.equal(audioEvidence.embeddedFiles,2);
+  assert.equal(audioEvidence.trackNumbers,2);
 
   const source=fs.readFileSync(__dirname+'/android/app/src/main/java/app/archivist/reader/ArchivistLibraryModule.kt','utf8');
   assert(source.includes('fun readDocumentMetadataBatch'),'Android scanner must expose bounded document metadata extraction');

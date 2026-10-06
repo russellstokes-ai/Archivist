@@ -21,6 +21,15 @@ assert.ok(source.includes("const work=item.source==='server'?undefined:localWork
 assert.ok(source.includes("setEditTitle(work?.title || item.title)"), 'Metadata editing must start from the grouped work title when one is available');
 assert.ok(source.includes("const displayTitle=work?.title||item.title||'Unidentified item'") && source.includes("work.files+' files'"), 'Review rows must show grouped work title and multi-file count');
 assert.ok(source.includes("setError('');setReviewOnly(true)"), 'Opening metadata review must clear stale transient errors before rendering the review queue');
+assert.ok(source.includes("const localReviewBooks=useMemo<Book[]>(()=>allPhoneWorks") && source.includes(".filter(work=>work.needsReview&&work.tracks.length)"), 'Local metadata review must contain grouped works, never raw chapter-file counts');
+assert.ok(source.includes('const ReviewList=()=>reviewOnly?<FlatList'), 'Metadata Review must be a vertically scrollable list');
+assert.ok(source.includes("const stageOneActive=!hasFolder&&!session") && source.includes("const stageTwoActive=hasFolder&&!scanHasRun&&!scanBusy") && source.includes("const stageThreeActive=scanHasRun&&!scanBusy&&reviewCount>0"), 'Onboarding must highlight the next relevant stage in sequence');
+assert.ok(source.includes('tone="gold"') && source.includes('Add another folder') && source.includes('Connect server'), 'Source choices must remain visually prominent during onboarding');
+assert.ok(source.includes('pulseStyle(stageTwoActive)') && source.includes('reduceMotion'), 'Onboarding guidance must respect Reduced Motion while preserving a clear next action');
+assert.ok(source.includes("behavior={Platform.OS==='ios'?'padding':'height'}"), 'Android metadata editing must resize stably above the keyboard');
+assert.ok(source.includes('metadataModalCard') && source.includes('metadataEditorContent'), 'Metadata editor must scroll internally rather than recenter the whole modal while typing');
+assert.ok(source.includes("const siblingPool=editing.format==='Audio'") && source.includes('setMetadataTargetUris(evidenceWork.tracks.map'), 'Deep Scan must regroup likely companion audio files and retain the resolved work membership');
+assert.ok(source.includes("deepEvidenceText=`Deep Scan:") && source.includes('deepScanEvidenceSummary'), 'Deep Scan must report concrete evidence instead of silently appearing to succeed');
 
 assert.ok(source.includes("Vibration.vibrate(12)"), 'Local cover long-press must provide haptic feedback');
 assert.ok(source.includes(">Edit</Text>") && source.includes(">Delete</Text>"), 'Long-press cover actions must expose direct Edit and Delete controls');
@@ -57,6 +66,13 @@ assert.deepEqual(
   'Locked bottom navigation order must remain Shelf, Library, Now, Atlas, Stats',
 );
 assert.ok(source.includes("paper: dark ? '#07111D'"), 'Dark mode must use the locked navy canvas, not pure black');
+assert.ok(source.includes("ink: dark ? '#F3F0E8'"), 'Locked dark-mode ivory text changed');
+assert.ok(source.includes("muted: dark ? '#A9B4C5'"), 'Locked muted text colour changed');
+assert.ok(source.includes("line: dark ? '#26364A'"), 'Locked divider colour changed');
+assert.ok(source.includes("card: dark ? '#0B1725'"), 'Locked card colour changed');
+assert.ok(source.includes("raised: dark ? '#0E1C2C'"), 'Locked raised-surface colour changed');
+assert.ok(source.includes("sage: '#47736F'"), 'Locked teal/sage accent changed');
+assert.ok(source.includes("gold: dark ? '#E3BC67'"), 'Locked dark-mode gold accent changed');
 assert.equal(source.includes("paper: dark ? '#000000'"),false,'Pure black must not replace the locked navy dark canvas');
 assert.ok(
   source.includes("activeTab!=='reader'&&activeTab!=='profile'&&activeTab!=='settings'"),

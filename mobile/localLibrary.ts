@@ -218,6 +218,74 @@ export async function extractLocalAudioArtwork(uri:string){
   return nativeLibraryScanner.extractAudioArtwork(uri);
 }
 
+function embeddedAudioWorkTitle(title:string|undefined,uri:string,oneFileWork:boolean){
+  const raw=cleanMetadataValue(title);
+  if(!raw)return '';
+  if(oneFileWork)return raw;
+  const generic=/^(?:chapter|chap|ch|part|pt|track|disc|disk|cd)\s*[-_. ]*0*\d{1,4}(?:\b.*)?$/i;
+  if(generic.test(raw)||/^0*\d{1,4}(?:\s*[-._:]\s*.*)?$/.test(raw))return '';
+  const patterns=[
+    /^(.+?)\s+-\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
+    /^(.+?)\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
+    /^(.+?)\s+-\s+0*\d{1,4}(?:\s*[-._].*)?$/i,
+    /^(.+?)[._-](?:ch|pt|track)0*\d{1,4}$/i,
+  ];
+  for(const pattern of patterns){
+    const match=raw.match(pattern);
+    const base=cleanMetadataValue(match?.[1]);
+    if(base.length>=4)return base;
+  }
+  const file=fileNameFromUri(uri).replace(/\.[^.]+$/,'');
+  if(file&&raw.toLowerCase()===file.toLowerCase())return '';
+  return '';
+}
+
+function embeddedAudioTitleCounts(metadata:Iterable<NativeAudioMetadata>){
+  const counts=new Map<string,number>();
+  for(const item of metadata){
+    const title=cleanMetadataValue(item.title);
+    if(!title)continue;
+    const author=cleanMetadataValue(item.albumArtist||item.author||item.artist);
+    const key=(author+'|'+title).toLowerCase();
+    counts.set(key,(counts.get(key)||0)+1);
+  }
+  return counts;
+}
+
+function repeatedEmbeddedAudioWorkTitle(item:NativeAudioMetadata|undefined,counts:Map<string,number>){
+  if(!item)return '';
+  const title=cleanMetadataValue(item.title);
+  if(!title)return '';
+  const author=cleanMetadataValue(item.albumArtist||item.author||item.artist);
+  const key=(author+'|'+title).toLowerCase();
+  if((counts.get(key)||0)<2)return '';
+  if(/^(?:chapter|chap|ch|part|pt|track|disc|disk|cd)\b/i.test(title))return '';
+  return title;
+}
+
+export type DeepScanEvidenceSummary={
+  files:number;
+  embeddedFiles:number;
+  titleHints:string[];
+  authors:string[];
+  albums:string[];
+  trackNumbers:number;
+  identifiers:string[];
+};
+
+export function deepScanEvidenceSummary(tracks:LocalBook[]):DeepScanEvidenceSummary{
+  const unique=(values:string[])=>[...new Set(values.map(cleanMetadataValue).filter(Boolean))];
+  return {
+    files:tracks.length,
+    embeddedFiles:tracks.filter(track=>track.metadataSource==='embedded'||!!track.workTitleHint||!!track.trackTitle).length,
+    titleHints:unique(tracks.flatMap(track=>[track.workTitleHint||'',track.title||''])).slice(0,6),
+    authors:unique(tracks.map(track=>track.author||'')).slice(0,6),
+    albums:unique(tracks.map(track=>track.workTitleHint||'')).slice(0,6),
+    trackNumbers:tracks.filter(track=>!!track.trackNumber).length,
+    identifiers:unique(tracks.flatMap(track=>[track.isbn||'',...(track.identifiers||[])])).slice(0,8),
+  };
+}
+
 export async function deepScanLocalTracks(tracks:LocalBook[]):Promise<LocalBook[]>{
   const next=tracks.map(track=>({...track}));
   if(Platform.OS!=='android'||!nativeLibraryScanner||!next.length)return next;
@@ -235,6 +303,8 @@ export async function deepScanLocalTracks(tracks:LocalBook[]):Promise<LocalBook[
       await yieldToUi();
     }
   }
+
+  const deepAudioTitleCounts=embeddedAudioTitleCounts(audioByUri.values());
 
   const documents=next.filter(track=>track.format==='EPUB'||track.format==='Comic');
   const documentByUri=new Map<string,NativeDocumentMetadata>();
@@ -259,7 +329,7 @@ export async function deepScanLocalTracks(tracks:LocalBook[]):Promise<LocalBook[
       if(!embedded)return track;
       const embeddedAuthor=embedded.albumArtist||embedded.author||embedded.artist||'';
       const oneFileWork=audio.length===1;
-      const embeddedWorkTitle=embedded.album||(oneFileWork?embedded.title:'')||'';
+      const embeddedWorkTitle=embedded.album||embeddedAudioWorkTitle(embedded.title,track.uri,oneFileWork)||repeatedEmbeddedAudioWorkTitle(embedded,deepAudioTitleCounts);
       const strong=!!cleanMetadataValue(embeddedWorkTitle||track.title)&&!!cleanMetadataValue(embeddedAuthor||track.author);
       const preserveManual=track.metadataSource==='manual';
       return {
@@ -270,7 +340,7 @@ export async function deepScanLocalTracks(tracks:LocalBook[]):Promise<LocalBook[
         ...(!preserveManual&&metadataYear(embedded.year)?{publishedYear:metadataYear(embedded.year)}:{}),
         ...(!preserveManual&&(embeddedWorkTitle||embeddedAuthor||embedded.genre||embedded.year)?{metadataSource:'embedded' as const}:{}),
         ...(!preserveManual&&strong?{identificationConfidence:'high' as const,needsReview:false,reviewReason:''}:{}),
-        workTitleHint:embedded.album||track.workTitleHint,
+        workTitleHint:embedded.album||embeddedAudioWorkTitle(embedded.title,track.uri,oneFileWork)||repeatedEmbeddedAudioWorkTitle(embedded,deepAudioTitleCounts)||track.workTitleHint,
         trackTitle:embedded.title||track.trackTitle,
         trackNumber:metadataIndex(embedded.track)||track.trackNumber,
         discNumber:metadataIndex(embedded.disc)||track.discNumber,
@@ -454,6 +524,8 @@ async function scanLocalFoldersNative(
         }
       }
 
+      const normalAudioTitleCounts=embeddedAudioTitleCounts(audioMetadataByUri.values());
+
       const documentMetadataByUri=new Map<string,NativeDocumentMetadata>();
       const changedDocuments=items.filter(item=>{
         if(item.format!=='EPUB'&&item.format!=='Comic')return false;
@@ -520,7 +592,7 @@ async function scanLocalFoldersNative(
         const embedded=item.format==='Audio'?audioMetadataByUri.get(item.uri):undefined;
         const embeddedAuthor=embedded?.albumArtist||embedded?.author||embedded?.artist||'';
         const oneFileWork=context.mediaCount===1;
-        const embeddedWorkTitle=embedded?.album||(oneFileWork?embedded?.title:'')||'';
+        const embeddedWorkTitle=embedded?.album||embeddedAudioWorkTitle(embedded?.title,item.uri,oneFileWork)||repeatedEmbeddedAudioWorkTitle(embedded,normalAudioTitleCounts);
         if(embeddedWorkTitle||embeddedAuthor||embedded?.genre||embedded?.year){
           identity=applyLocalMetadata(identity,{
             ...(embeddedWorkTitle?{title:embeddedWorkTitle}:{}),
@@ -568,7 +640,7 @@ async function scanLocalFoldersNative(
             context.artwork.get(stem) ||
             (genericAllowed?(context.artwork.get('cover')||context.artwork.get('folder')):undefined)
           )?.uri,
-          workTitleHint:embedded?.album||undefined,
+          workTitleHint:embedded?.album||embeddedAudioWorkTitle(embedded?.title,item.uri,oneFileWork)||repeatedEmbeddedAudioWorkTitle(embedded,normalAudioTitleCounts)||undefined,
           trackTitle:embedded?.title||undefined,
           trackNumber:metadataIndex(embedded?.track),
           discNumber:metadataIndex(embedded?.disc),
