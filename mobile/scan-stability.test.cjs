@@ -20,10 +20,11 @@ assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan
 assert.ok(source.includes('deferEmbeddedCovers:true')&&source.includes('deferEmbeddedMetadata:true'),'app scans must publish identity before expensive embedded metadata and cover recovery');
 assert.ok(source.includes('await enrichPublishedLocalLibrary(stagedBooks,generation,forceOnline)'),'catalogue publication and enrichment must share one cancellable refresh job');
 assert.ok(source.includes('setScanProgress(null)')&&source.includes('libraryRefreshRunningRef.current=true'),'foreground discovery must hand off to enrichment without allowing a second refresh to overlap');
-assert.ok(source.includes('await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline)'),'enrichment must move embedded archive/audio parsing out of foreground discovery and thread the in-memory catalogue forward');
-assert.ok(source.includes('shouldInspect:needsEmbeddedRead')&&source.includes('return true;'),'normal preparation must collect complete embedded details for each new or changed supported file');
-assert.ok(source.indexOf('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)')<source.indexOf('await enrichPublishedLocalCovers(currentBooks,generation)'),'online matching should run before local cover fallback so fast provider matches avoid unnecessary archive reads');
-assert.ok(source.includes('await enrichPublishedLocalCovers(currentBooks,generation)'),'library enrichment must recover covers from the latest in-memory metadata state');
+const normalPipeline=source.slice(source.indexOf('async function enrichPublishedLocalLibrary'),source.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
+assert.equal(normalPipeline.includes('enrichPublishedLocalEmbeddedMetadata('),false,'normal preparation must not open archive/audio containers automatically');
+assert.equal(normalPipeline.includes('enrichPublishedLocalCovers('),false,'normal preparation must not extract embedded artwork automatically');
+assert.ok(source.includes('async function deepScanLocalFile')&&source.includes('enrichLocalEmbeddedMetadata([target]'),'embedded parsing must remain available as an explicit single-file Deep Scan');
+assert.ok(source.includes('itemTimeoutMs:7000')&&source.includes('maxConsecutiveTimeouts:1')&&source.includes('concurrency:1'),'Deep Scan must be bounded and isolated to one worker');
 assert.ok(source.includes('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)'),'library enrichment must continue into online book metadata using the latest in-memory state and explicit refresh intent');
 assert.ok(source.includes('await enrichPublishedLocalComicMetadata(currentBooks,generation,forceOnline)'),'comic enrichment must run after books against the latest in-memory catalogue and carry explicit refresh intent');
 assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron credentials must come from secure storage rather than app source or persisted catalogue files');
@@ -36,7 +37,7 @@ assert.ok(source.includes('loadLocalStageBooks()')&&source.includes('migrateLega
 console.log('PASS: Sprint 5/7 scan/catalogue integration contracts');
 
 assert.ok(source.includes('const [enrichmentProgress,setEnrichmentProgress]'),'background scan phases must have independent non-blocking progress state');
-assert.ok(source.includes('scanProgressPercent(activeProgress)')&&source.includes("phase:'covers'")&&source.includes("phase:'online-books'")&&source.includes("phase:'online-comics'"),'progress bar must remain live through metadata, covers and provider enrichment');
+assert.ok(source.includes('scanProgressPercent(activeProgress)')&&source.includes("phase:'online-books'")&&source.includes("phase:'online-comics'"),'progress bar must remain live through shallow discovery and provider enrichment');
 
 assert.ok(source.includes('const activeLibraryProgress=scanProgress||enrichmentProgress'),'Shelf, Library and Settings must share one refresh progress source');
 assert.ok(source.includes('accessibilityLabel="Cancel library refresh"')&&source.includes('scanCommitGate.invalidate()'),'library refresh must be cancellable from the shared status surface');
