@@ -238,6 +238,17 @@ export async function enrichLocalCatalogue(
     let livingBookCoverUri=work.tracks.find(track=>track.livingBookCoverUri)?.livingBookCoverUri;
     let livingBookCoverSource=work.tracks.find(track=>track.livingBookCoverSource)?.livingBookCoverSource;
     let livingBookCoverConfidence=work.tracks.find(track=>track.livingBookCoverConfidence)?.livingBookCoverConfidence;
+    if(
+      work.format==='Audio' &&
+      livingBookCoverUri &&
+      coverShape==='square' &&
+      livingBookCoverUri===coverUri &&
+      livingBookCoverSource==='jacket'
+    ){
+      livingBookCoverUri=undefined;
+      livingBookCoverSource=undefined;
+      livingBookCoverConfidence=undefined;
+    }
     let readyIdentity=identityReady(work);
     let resolvedTitle=clean(work.title);
     let resolvedAuthor=clean(work.author);
