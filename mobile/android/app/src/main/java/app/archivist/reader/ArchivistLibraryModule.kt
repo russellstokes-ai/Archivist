@@ -63,7 +63,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     "epub" -> "EPUB"
     "pdf" -> "PDF"
     "cbz", "zip", "cbr", "cbt" -> "Comic"
-    "mp3", "m4a", "m4b", "aac", "ogg", "opus", "flac", "wav" -> "Audio"
+    "mp3", "m4a", "m4b", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "aif", "aiff", "mka" -> "Audio"
     else -> ""
   }
 
