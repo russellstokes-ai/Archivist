@@ -104,7 +104,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   series = cleanLabel(series);
   genre = cleanLabel(genre);
 
-  const needsReview = confidence === 'low' || title === 'Untitled';
+  const needsReview = confidence === 'low' || title === 'Untitled' || !author;
   return {
     title,
     author,
