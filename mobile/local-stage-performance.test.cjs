@@ -1,7 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 
 const pkg=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8'));
-assert.equal(pkg.dependencies?.['expo-sqlite'],'~57.0.3','Local catalogue must use the SDK 57 SQLite package.');
+assert.equal(pkg.dependencies?.['expo-sqlite'],'~57.0.4','Local catalogue must use the SDK 57 SQLite package.');
 
 const store=fs.readFileSync(path.join(__dirname,'localStageStore.ts'),'utf8');
 assert(store.includes('PRAGMA journal_mode = WAL'),'Local catalogue SQLite must use WAL mode.');
