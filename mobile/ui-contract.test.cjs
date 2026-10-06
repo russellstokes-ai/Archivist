@@ -8,6 +8,7 @@ const playerExperienceSource = fs.readFileSync('playerExperience.ts','utf8');
 const localStageStoreSource = fs.readFileSync('localStageStore.ts','utf8');
 const localStageStoreNativeSource = fs.readFileSync('localStageStore.native.ts','utf8');
 const coverManagementSource = fs.readFileSync('coverManagement.ts','utf8');
+const localLibrarySource = fs.readFileSync('localLibrary.ts','utf8');
 const lockedFoldStyles = fs.readFileSync('locked-fold-ui.styles.snapshot.txt','utf8');
 
 for (const banned of ['Coming soon','Not implemented','TODO','FIXME','Genre is currently represented by media format','coverInitials(']) {
@@ -79,6 +80,9 @@ assert.ok(source.includes('const stepOneActive=!hasSource') && source.includes('
 assert.ok(source.includes("scanStageLabels=['Discover','Identify & group','Metadata & covers','Ready']") && source.includes('onboardingScanFlow'), 'Scanner onboarding stages are missing');
 assert.ok(source.includes("const allPhoneWorks = useMemo") && source.includes("const phoneWorks = useMemo(() => allPhoneWorks.filter(work=>!work.needsReview)") && source.includes("const publishedPhonePersonalWorks = useMemo(() => phonePersonalWorks.filter(localWorkReadyForCatalogue)") && source.includes("persistAndroidAutoLibrary(publishedLocalPersonalWorks"), 'Review works must remain addressable while only resolved works with artwork publish to Shelf, Library, Atlas and Android Auto');
 assert.ok(source.includes("async function searchEditingMetadata(deep=false,seed?:Book)") && source.includes("applyHighConfidence:false") && source.includes("setEditingUris(evidenceWork.tracks.map(track=>track.uri)") && source.includes("label={metadataLookupBusy&&metadataLookupMode==='deep'?'Deep scanning…':'Deep Scan'}") && source.includes("persistOnlineCover(coverUri"), 'Per-work Deep Scan must be bounded, review-first, grouped at work level and cache accepted covers before save');
+assert.ok(localLibrarySource.includes('livingBookCoverUri?: string')&&localLibrarySource.includes("cachePortraitCover(")&&localLibrarySource.includes("livingBookCoverSource:candidate.provider==='googlebooks'?'google-books':'open-library'"),'Online book enrichment must keep a validated portrait Living Book cover separately from edition artwork');
+assert.ok(source.includes('livingBookCoverUri: work.livingBookCoverUri')&&source.includes('livingBookCoverUri:book.livingBookCoverUri')&&source.includes('livingBookCoverUri:media.livingBookCoverUri'),'Living Book portrait artwork must survive work playback and durable Now state');
+assert.ok(source.includes('livingBookCoverSource:book.livingBookCoverSource')&&source.includes('livingBookCoverConfidence:book.livingBookCoverConfidence'),'Player resolver must receive separate portrait artwork evidence');
 assert.ok(source.includes("const profileAvatarKey = 'archivist.profileAvatar.v1'"), 'Custom avatar persistence is missing');
 assert.ok(source.includes('async function chooseProfilePhoto()') && source.includes('persistPickedProfilePhoto') && source.includes("label={profileAvatar.photoUri?'Change photo':'Choose photo'}") && source.includes('label="Remove photo"'), 'Profile must support native photo selection and removal');
 assert.ok(source.includes("profileAvatar:{initials:profileAvatar.initials,color:profileAvatar.color}") && !source.includes("profileAvatar,\n      insightGoal"), 'Portable backup must not include a device-local avatar photo URI');
