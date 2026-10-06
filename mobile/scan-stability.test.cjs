@@ -27,8 +27,8 @@ assert.equal(enrichmentBody.includes('enrichPublishedLocalEmbeddedMetadata('),fa
 const deepSearchBody=source.slice(source.indexOf('const runMetadataSearch=async'),source.indexOf('const acceptProposal=async'));
 assert.ok(deepSearchBody.includes('if(deep)')&&deepSearchBody.includes('concurrency:1')&&deepSearchBody.includes('maxConsecutiveTimeouts:1'),'deep local inspection must be explicit, serial and circuit-broken per work');
 assert.ok(deepSearchBody.includes('workBooks[Math.floor(workBooks.length/2)]')&&deepSearchBody.includes('workBooks.slice(0,1)'),'Deep Search must sample multipart audio and inspect only one single-file book/comic instead of scanning the library');
-assert.ok(source.indexOf('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)')<source.indexOf('await enrichPublishedLocalCovers(currentBooks,generation)'),'online matching should run before local cover fallback so fast provider matches avoid unnecessary archive reads');
-assert.ok(source.includes('await enrichPublishedLocalCovers(currentBooks,generation)'),'library enrichment must recover covers from the latest in-memory metadata state');
+assert.equal(enrichmentBody.includes('enrichPublishedLocalCovers(currentBooks,generation)'),false,'normal preparation must not run catalogue-wide local cover extraction');
+assert.ok(enrichmentBody.includes('cacheRequiredWorkArtwork(currentBooks'),'publication artwork must use already-cached/provider artwork rather than reopen every local file');
 assert.ok(source.includes('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)'),'library enrichment must continue into online book metadata using the latest in-memory state and explicit refresh intent');
 assert.ok(source.includes('await enrichPublishedLocalComicMetadata(currentBooks,generation,forceOnline)'),'comic enrichment must run after books against the latest in-memory catalogue and carry explicit refresh intent');
 assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron credentials must come from secure storage rather than app source or persisted catalogue files');
