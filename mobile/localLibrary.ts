@@ -772,6 +772,7 @@ export async function enrichLocalEmbeddedMetadata(
     maxConsecutiveTimeouts?:number;
     concurrency?:number;
     shouldInspect?:(book:LocalBook)=>boolean;
+    fastAudioProperties?:boolean;
     onBatch?:(books:LocalBook[],progress:{attempted:number;processed:number;total:number;updated:number;review:number;timedOut:number;skipped:number;current?:string})=>void|Promise<void>;
   }={},
 ):Promise<LocalEmbeddedMetadataEnrichmentResult>{
@@ -782,7 +783,10 @@ export async function enrichLocalEmbeddedMetadata(
   const maxConsecutiveTimeouts=Math.max(1,Math.min(24,Math.trunc(options.maxConsecutiveTimeouts||6)));
   let next=books.slice();
   const inspect=options.shouldInspect||(()=>true);
-  const eligible=next.filter(book=>['EPUB','Comic','Audio'].includes(book.format)&&inspect(book));
+  const eligible=next.filter(book=>{
+    if(options.fastAudioProperties&&book.format!=='Audio')return false;
+    return ['EPUB','Comic','Audio'].includes(book.format)&&inspect(book);
+  });
   const eligibleUris=new Set(eligible.map(book=>book.uri));
   const audioFolderCounts=new Map<string,number>();
   for(const book of eligible.filter(book=>book.format==='Audio')){
@@ -816,7 +820,7 @@ export async function enrichLocalEmbeddedMetadata(
       try{
         const raw=await withOperationTimeout(
           book.format==='Audio'
-            ? extractAudioMetadata(book.uri,ext,{size:book.fileSize})
+            ? extractAudioMetadata(book.uri,ext,{size:book.fileSize},{fast:!!options.fastAudioProperties})
             : extractEmbeddedMetadata(book.uri,ext,{exists:true,size:book.fileSize}),
           itemTimeoutMs,
           'Embedded metadata read',
