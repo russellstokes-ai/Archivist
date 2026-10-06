@@ -206,7 +206,7 @@ function filenameClusterTitle(uri:string){
   const patterns=[
     /^(.+?)\s+-\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
     /^(.+?)\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
-    /^(.+?)\s+-\s+0*\d{2,4}(?:\s*[-._].*)?$/i,
+    /^(.+?)\s+-\s+0*\d{1,4}(?:\s*[-._].*)?$/i,
     /^(.+?)[._-](?:ch|pt|track)0*\d{1,4}$/i,
     /^(.+?)\s+0*\d{2,4}\s+-\s+.+$/i,
   ];
@@ -280,7 +280,8 @@ function cleanLabel(value: string) {
 }
 
 function isLibraryRoot(value: string) {
-  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
+  const key=cleanLabel(value).toLowerCase().replace(/[^a-z0-9]+/g,'');
+  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|music|library|libraries|spokenword)$/.test(key);
 }
 
 function decode(value: string) {

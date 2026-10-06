@@ -13,6 +13,12 @@ for (const legacyControl of [">•••</Text>",">⋯</Text>","'Ⅱ'","'▶'","
 }
 assert.ok(source.includes("function UiIcon("), 'Drawn native icon component is missing');
 
+assert.ok(source.includes("Nothing is scanned until you choose Scan folders."), 'Onboarding must keep source selection separate from scanning');
+assert.ok(source.includes("Add another folder") && source.includes("Connect server"), 'Onboarding must allow multiple folders and optional server connection before scanning');
+assert.ok(source.includes("Your server already uses its own indexed catalogue and metadata"), 'Onboarding must explain that server metadata stays on the server catalogue');
+assert.ok(source.includes("function RawAssetCard") && source.includes("label={canEdit?'Review':'Open'}"), 'Metadata review must use a clear compact Review action');
+assert.ok(source.includes("setError('');setReviewOnly(true)"), 'Opening metadata review must clear stale transient errors before rendering the review queue');
+
 assert.ok(source.includes("Vibration.vibrate(12)"), 'Local cover long-press must provide haptic feedback');
 assert.ok(source.includes(">Edit</Text>") && source.includes(">Delete</Text>"), 'Long-press cover actions must expose direct Edit and Delete controls');
 assert.ok(source.includes("Find Better Match") && source.includes("Deep Scan"), 'Metadata editor must expose manual match search and per-book Deep Scan');

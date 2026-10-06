@@ -112,6 +112,11 @@ const supported = new Map<string, string>([
   ['opus', 'Audio'],
   ['flac', 'Audio'],
   ['wav', 'Audio'],
+  ['wma', 'Audio'],
+  ['aif', 'Audio'],
+  ['aiff', 'Audio'],
+  ['oga', 'Audio'],
+  ['mka', 'Audio'],
 ]);
 
 const maxEntriesPerScan = 10000;

@@ -104,7 +104,7 @@ export function inferLocalBookMetadata(uri: string, format: string): LocalIdenti
   series = cleanLabel(series);
   genre = cleanLabel(genre);
 
-  const needsReview = confidence === 'low' || title === 'Untitled';
+  const needsReview = confidence === 'low' || title === 'Untitled' || !author;
   return {
     title,
     author,
@@ -265,7 +265,8 @@ function sensibleFolder(value: string, title: string) {
 }
 
 function isLibraryRoot(value: string) {
-  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
+  const key=cleanLabel(value).toLowerCase().replace(/[^a-z0-9]+/g,'');
+  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|music|library|libraries|spokenword)$/.test(key);
 }
 
 function looksIndex(value: string) {

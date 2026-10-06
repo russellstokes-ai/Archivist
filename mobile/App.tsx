@@ -1610,11 +1610,6 @@ function Client() {
     });
   },[localAudioCompleted,localWorkProgress]);
 
-  useEffect(() => {
-    if (restoring || !localOverridesReady || !localCatalogReady || !localFolders.length || localBooks.length || localScanning) return;
-    void rescanLocalFolders();
-  }, [localBooks.length, localCatalogReady, localFolders, localOverridesReady, localScanning, restoring]);
-
   useEffect(()=>{
     if(restoring||!localCatalogReady||!localEnrichmentReady||localScanning||!localBooks.length||startupEnrichmentStarted.current)return;
     startupEnrichmentStarted.current=true;
@@ -1968,10 +1963,8 @@ function Client() {
       const entries=[...pendingEntries.values()];
       pendingBooks.clear();
       pendingEntries.clear();
-      await Promise.all([
-        upsertLocalStageBooks(books),
-        upsertLocalEnrichmentEntries(entries),
-      ]);
+      await upsertLocalStageBooks(books);
+      await upsertLocalEnrichmentEntries(entries);
     };
     try{
       const result=await enrichLocalCatalogue(catalogue,cacheSeed,async(progress,delta)=>{
@@ -2079,7 +2072,6 @@ function Client() {
   async function addLocalFolder() {
     setError('');
     setLocalFolderNotice('');
-    setLocalScanning(true);
     try {
       const picked = await pickLocalFolder();
       if (!picked) {
@@ -2087,27 +2079,25 @@ function Client() {
         return;
       }
       const existing=localFolders.find(folder=>folder.uri===picked.uri);
-      setScanProgress({phase:'discovering',currentFolder:picked.name,entriesVisited:0,found:0,review:0});
-      const {result,committedBooks}=await scanFoldersIntoStage([picked],{replaceSources:[picked.uri]});
-      const scannedFolder=result.folders[0]||picked;
       const folders=existing
-        ? localFolders.map(folder=>folder.uri===picked.uri?scannedFolder:folder)
-        : [...localFolders,scannedFolder];
+        ? localFolders.map(folder=>folder.uri===picked.uri?{...folder,...picked,status:'Ready to scan'}:folder)
+        : [...localFolders,{...picked,status:'Ready to scan',itemCount:0}];
       setLocalFolders(folders);
       setLocalMovePreviews([]);
       await setPersistedJSON(localFoldersKey,folders);
-      void runLocalEnrichment(committedBooks,localEnrichmentCache);
-      setLocalFolderNotice(`${result.books.length} files found in ${picked.name} · ${committedBooks.length} local files indexed${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`);
+      setLocalFolderNotice(
+        existing
+          ? `${picked.name} is ready to scan.`
+          : `${picked.name} added. Add another folder or connect a server, then scan when you are ready.`,
+      );
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setLocalScanning(false);
-      setScanProgress(null);
     }
   }
 
   async function rescanLocalFolders(forceMetadata=false) {
     if (!localFolders.length) return;
+    const hadPreviousScan=localFolders.some(folder=>!!folder.scannedAt);
     setError('');
     setLocalScanning(true);
     try {
@@ -2118,10 +2108,13 @@ function Client() {
       await setPersistedJSON(localFoldersKey,result.folders);
       void runLocalEnrichment(committedBooks,localEnrichmentCache);
       const reused=committedBooks.filter(book=>book.scanReused).length;
+      const grouped=groupLocalWorks(committedBooks).length;
       setLocalFolderNotice(
         forceMetadata
-          ? `Full rescan complete · ${committedBooks.length} files rechecked${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`
-          : `Library refreshed · ${reused} unchanged files reused · ${Math.max(0,committedBooks.length-reused)} changed or new${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`,
+          ? `Full rescan complete · ${committedBooks.length} media files · ${grouped} works rechecked${result.skipped ? ` · ${result.skipped} folders or entries unreadable` : ''}.`
+          : hadPreviousScan
+            ? `Library refreshed · ${committedBooks.length} media files · ${grouped} works · ${reused} unchanged · ${Math.max(0,committedBooks.length-reused)} changed or new${result.skipped ? ` · ${result.skipped} folders or entries unreadable` : ''}.`
+            : `Scan complete · ${committedBooks.length} media files found · ${grouped} works grouped${result.skipped ? ` · ${result.skipped} folders or entries unreadable` : ''}.`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -2715,42 +2708,80 @@ function Client() {
   }
 
   function OnboardingGuide() {
-    if (session || onboardingDone) return null;
+    if (onboardingDone) return null;
     const reviewCount = localEnrichmentProgress ? 0 : localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
-    const hasBooks = phoneWorks.length > 0;
+    const scanHasRun = localFolders.some(folder=>!!folder.scannedAt);
+    const localWorkCount=allPhoneWorks.length;
+    const readyCount=phoneWorks.length;
+    const hasUsableLibrary=!!session||scanHasRun||readyCount>0;
+    const scanBusy=localScanning||!!localEnrichmentProgress;
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
         <Text style={[styles.onboardingTitle,{color:p.ink}]}>Build your library</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Choose your folders once. Archivist will identify the library and only ask about uncertain matches.</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Add all the folders you want to use, and optionally connect your Archivist server. Nothing is scanned until you choose Scan folders.</Text>
+
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:hasFolder?p.sage:p.muted}]}>01</Text>
+          <Text style={[styles.onboardingNumber,{color:hasFolder||session?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle, {color:p.ink}]}>Choose where your books live</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{hasFolder ? `${localFolders.length} folder${localFolders.length === 1 ? '' : 's'} added` : 'Pick a Books, Comics or Audiobooks folder. You can add more later.'}</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Choose your sources</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>
+              {[
+                hasFolder?`${localFolders.length} device folder${localFolders.length===1?'':'s'} added`:'',
+                session?'Archivist server connected':'',
+              ].filter(Boolean).join(' · ') || 'Add one or more device folders, connect a server, or use both.'}
+            </Text>
+            {localFolders.map(folder=><Text key={folder.uri} numberOfLines={1} style={[styles.meta,{color:p.muted}]}>• {folder.name}</Text>)}
           </View>
         </View>
+        <View style={styles.toolRow}>
+          <Button label={hasFolder?'Add another folder':'Add folder'} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()} />
+          {!session?<Button label={serverPanelOpen?'Hide server setup':'Connect server'} tone="quiet" disabled={busy} onPress={()=>setServerPanelOpen(value=>!value)} />:null}
+        </View>
+        {!session&&serverPanelOpen?<ServerConnect/>:null}
+
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:hasBooks?p.sage:p.muted}]}>02</Text>
+          <Text style={[styles.onboardingNumber,{color:scanHasRun||(!hasFolder&&!!session)?p.sage:p.muted}]}>02</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Archivist finds and identifies everything</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Scan your device folders</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
-              {localScanning && scanProgress ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} files found` : localEnrichmentProgress ? `${localEnrichmentProgress.published} books ready · ${localEnrichmentProgress.processed} of ${localEnrichmentProgress.total} checked` : hasBooks ? `${phoneWorks.length} books ready` : localBooks.length ? 'Finishing identification and cover artwork…' : 'Scanning starts immediately after you choose a folder.'}
+              {localScanning&&scanProgress
+                ? `Scanning ${scanProgress.currentFolder}: ${scanProgress.found} files found`
+                : localEnrichmentProgress
+                  ? `Identifying ${localEnrichmentProgress.processed} of ${localEnrichmentProgress.total} works · ${localEnrichmentProgress.published} ready`
+                  : scanHasRun
+                    ? `${localBooks.length} media files found · ${localWorkCount} works grouped · ${readyCount} ready`
+                    : hasFolder
+                      ? 'Your folders are ready. Start the scan when you have finished adding sources.'
+                      : session
+                        ? 'Your server already uses its own indexed catalogue and metadata; no phone scan is required.'
+                        : 'Add at least one device folder to run a local scan.'}
             </Text>
           </View>
         </View>
+        {hasFolder?<Button label={scanBusy?'Scanning & identifying…':scanHasRun?'Scan folders again':`Scan ${localFolders.length} folder${localFolders.length===1?'':'s'}`} disabled={scanBusy} onPress={()=>void rescanLocalFolders(false)} />:null}
+
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:hasBooks&&reviewCount===0?p.sage:p.muted}]}>03</Text>
+          <Text style={[styles.onboardingNumber,{color:(scanHasRun||session)&&!scanBusy?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{!hasBooks ? 'Archivist keeps confident matches out of your way.' : reviewCount ? `${reviewCount} item${reviewCount === 1 ? '' : 's'} need a quick check.` : 'Everything found so far looks good.'}</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>
+              {scanBusy
+                ? 'Archivist is still identifying works and resolving artwork.'
+                : reviewCount
+                  ? `${reviewCount} item${reviewCount===1?'':'s'} need a quick check before they can enter the local Library.`
+                  : scanHasRun
+                    ? 'Everything found in the local scan is either ready or already resolved.'
+                    : session
+                      ? 'Server metadata comes from the server catalogue. Local review only applies to device folders you scan.'
+                      : 'Review appears after the local scan.'}
+            </Text>
           </View>
         </View>
-        {!hasFolder ? <Button label={localScanning ? 'Scanning…' : 'Choose a folder'} disabled={localScanning} onPress={() => void addLocalFolder()} /> : null}
-        {hasFolder && !hasBooks ? <Button label={localScanning ? 'Scanning…' : 'Scan again'} disabled={localScanning} onPress={() => void rescanLocalFolders()} /> : null}
-        {hasBooks && reviewCount > 0 ? <Button label={`Review ${reviewCount} uncertain item${reviewCount === 1 ? '' : 's'}`} tone="quiet" onPress={() => {setReviewOnly(true); setQuery('');}} /> : null}
-        {hasBooks ? <Button label="Enter my library" onPress={() => void finishOnboarding()} /> : null}
+        {!scanBusy&&reviewCount>0?<Button label={`Review ${reviewCount} item${reviewCount===1?'':'s'}`} onPress={()=>{setError('');setReviewOnly(true);setQuery('');setActiveTab('library')}} />:null}
+        {hasUsableLibrary&&!scanBusy?<Button label="Enter my library" tone={reviewCount>0?'quiet':'primary'} onPress={()=>void finishOnboarding()} />:null}
+        {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
       </View>
     );
   }
@@ -2897,15 +2928,24 @@ function Client() {
   }
 
   function RawAssetCard({item}: {item: Book}) {
+    const canEdit=item.source!=='server'||owner;
     return (
-      <View style={styles.book}>
-        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
-          <Cover book={item} />
-          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
-          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
-          <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}{item.genre ? ' · '+item.genre : ''}</Text>
+      <View style={[styles.reviewAssetCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <MiniArtwork book={item}/>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={'Review '+item.title}
+          onPress={()=>canEdit?beginEdit(item):openBook(item)}
+          style={({pressed})=>[styles.reviewAssetCopy,pressed&&{opacity:.72}]}>
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title||'Unidentified item'}</Text>
+          <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
+            {item.reviewReason || [item.format,item.space,item.author,item.series].filter(Boolean).join(' · ')}
+          </Text>
+          <Text numberOfLines={1} style={[styles.metadataConfidence,{color:p.sage}]}>
+            {[item.format,item.author||'Unknown author',item.space].filter(Boolean).join(' · ')}
+          </Text>
         </Pressable>
-        {(item.source!=='server' || owner) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
+        <Button label={canEdit?'Review':'Open'} onPress={()=>canEdit?beginEdit(item):openBook(item)} />
       </View>
     );
   }
@@ -3657,7 +3697,7 @@ function Client() {
 
       <OnboardingGuide/>
 
-      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setError('');setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.reviewBannerCopy}>
           <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerTitle,{color:p.ink}]}>Metadata review</Text>
           <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} item{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
@@ -5595,6 +5635,8 @@ const styles = StyleSheet.create({
   selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   selectionCount: {fontSize:13,fontWeight:'900'},
   reviewQueue: {gap:10,paddingBottom:10},
+  reviewAssetCard: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,paddingHorizontal:2,flexDirection:'row',alignItems:'center',gap:12},
+  reviewAssetCopy: {flex:1,minWidth:0,gap:2},
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
   filterChip: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},

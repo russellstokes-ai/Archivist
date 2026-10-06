@@ -5,6 +5,13 @@ import type {LocalEnrichmentCache,LocalEnrichmentCacheEntry} from './localEnrich
 const databaseName='archivist-local.db';
 let databasePromise:Promise<SQLite.SQLiteDatabase>|null=null;
 let hiddenAssetsCache:Map<string,string>|null=null;
+let writeTail:Promise<void>=Promise.resolve();
+
+function serializeWrite<T>(work:()=>Promise<T>):Promise<T>{
+  const run=writeTail.then(work,work);
+  writeTail=run.then(()=>undefined,()=>undefined);
+  return run;
+}
 
 async function database(){
   if(databasePromise)return databasePromise;
@@ -102,9 +109,11 @@ export async function localStageHasAssets(){
 }
 
 export async function beginLocalStageScan(){
-  const db=await database();
   const generation=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
-  await db.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
+  await serializeWrite(async()=>{
+    const db=await database();
+    await db.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
+  });
   return generation;
 }
 
@@ -114,6 +123,7 @@ export async function stageLocalScanBooks(
   ordinalStart:number,
 ){
   if(!books.length)return;
+  return serializeWrite(async()=>{
   const db=await database();
   const hidden=await hiddenAssets(db);
   const unhide:string[]=[];
@@ -159,12 +169,13 @@ export async function stageLocalScanBooks(
       await statement.finalizeAsync();
     }
   });
+  });
 }
-
 export async function commitLocalStageScan(
   generation:string,
   replaceSources?:string[],
 ){
+  return serializeWrite(async()=>{
   const db=await database();
   await db.withExclusiveTransactionAsync(async txn=>{
     const sourceList=[...new Set((replaceSources||[]).filter(Boolean))];
@@ -204,11 +215,13 @@ export async function commitLocalStageScan(
       generation,
     );
   });
+  });
 }
-
 export async function abandonLocalStageScan(generation:string){
-  const db=await database();
-  await db.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
+  return serializeWrite(async()=>{
+    const db=await database();
+    await db.runAsync('DELETE FROM local_scan_assets WHERE scan_generation = ?',generation);
+  });
 }
 
 export async function replaceLocalStageBooks(books:LocalBook[]){
@@ -226,6 +239,7 @@ export async function replaceLocalStageBooks(books:LocalBook[]){
 }
 
 export async function removeLocalStageBooks(books:LocalBook[]){
+  return serializeWrite(async()=>{
   const byUri=new Map<string,LocalBook>();
   for(const book of books)if(book.uri)byUri.set(book.uri,book);
   if(!byUri.size)return;
@@ -245,9 +259,10 @@ export async function removeLocalStageBooks(books:LocalBook[]){
       hidden.set(book.uri,signature);
     }
   });
+  });
 }
-
 export async function upsertLocalStageBooks(books:LocalBook[]){
+  return serializeWrite(async()=>{
   if(!books.length)return;
   const db=await database();
   const updatedAt=Date.now();
@@ -271,9 +286,10 @@ export async function upsertLocalStageBooks(books:LocalBook[]){
       await statement.finalizeAsync();
     }
   });
+  });
 }
-
 export async function upsertLocalEnrichmentEntries(entries:LocalEnrichmentCacheEntry[]){
+  return serializeWrite(async()=>{
   if(!entries.length)return;
   const db=await database();
   const updatedAt=Date.now();
@@ -297,9 +313,10 @@ export async function upsertLocalEnrichmentEntries(entries:LocalEnrichmentCacheE
       await statement.finalizeAsync();
     }
   });
+  });
 }
-
 export async function replaceLocalEnrichmentCache(cache:LocalEnrichmentCache){
+  return serializeWrite(async()=>{
   const db=await database();
   const entries=Object.values(cache);
   const updatedAt=Date.now();
@@ -321,8 +338,8 @@ export async function replaceLocalEnrichmentCache(cache:LocalEnrichmentCache){
       await statement.finalizeAsync();
     }
   });
+  });
 }
-
 export async function migrateLegacyLocalStage(books:LocalBook[],cache:LocalEnrichmentCache){
   const db=await database();
   const marker=await db.getFirstAsync<{value:string}>(
@@ -331,8 +348,11 @@ export async function migrateLegacyLocalStage(books:LocalBook[],cache:LocalEnric
   if(marker?.value==='1')return;
   if(books.length)await replaceLocalStageBooks(books);
   if(Object.keys(cache).length)await replaceLocalEnrichmentCache(cache);
-  await db.runAsync(
-    `INSERT INTO local_stage_meta(key,value) VALUES ('legacy_migrated','1')
-     ON CONFLICT(key) DO UPDATE SET value='1'`,
-  );
+  await serializeWrite(async()=>{
+    const writeDb=await database();
+    await writeDb.runAsync(
+      `INSERT INTO local_stage_meta(key,value) VALUES ('legacy_migrated','1')
+       ON CONFLICT(key) DO UPDATE SET value='1'`,
+    );
+  });
 }

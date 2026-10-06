@@ -132,6 +132,13 @@ const audioPath = inferLocalBookMetadata(
 );
 assert.equal(audioPath.author, 'Frank Herbert');
 assert.equal(audioPath.series, '');
+
+const musicRootPath = inferLocalBookMetadata(
+  'content://root/document/primary:Music%2FSlayer%2F01%20-%20Opening.mp3',
+  'Audio',
+);
+assert.notEqual(musicRootPath.author,'Music','A selected Music root must never be misclassified as the audiobook author');
+assert.equal(musicRootPath.needsReview,true,'A folder-only title with no trustworthy author should go to Review instead of being falsely auto-identified');
 (async () => {
   const root = 'content://root/tree/primary:Books/document/primary:Books';
   const file = root + '%2FMystery.epub';

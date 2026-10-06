@@ -31,6 +31,10 @@ assert.equal(gradle.includes('newArchEnabled=true'),true,'React Native 0.86 requ
 assert.equal(gradle.includes('hermesEnabled=true'),true,'Expo production builds should use Hermes.');
 assert.equal(gradle.includes('expo.useLegacyPackaging=false'),true,'Expo production builds should use modern native-library packaging.');
 assert.equal(gradle.includes('edgeToEdgeEnabled=true'),true,'Expo production builds should use the current edge-to-edge default.');
+const libraryNative=fs.readFileSync(path.join(__dirname,'android','app','src','main','java','app','archivist','reader','ArchivistLibraryModule.kt'),'utf8');
+for(const ext of ['"wma"','"aif"','"aiff"','"oga"','"mka"']){
+  assert.equal(libraryNative.includes(ext),true,'Native scanner must discover common audiobook extension '+ext);
+}
 console.log('PASS: Android startup configuration matches current Expo production defaults');
 
 const appPkg=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8'));

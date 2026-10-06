@@ -47,6 +47,15 @@ assert.equal(rootChapters.length,1);
 assert.equal(rootChapters[0].title,'Dune');
 assert.equal(rootChapters[0].files,3);
 
+const singleDigitRootChapters = groupLocalWorks([
+  book(23,'content://root/document/primary:Music%2FSlayer%20-%201.mp3',{title:'Part 1'}),
+  book(24,'content://root/document/primary:Music%2FSlayer%20-%202.mp3',{title:'Part 2'}),
+  book(25,'content://root/document/primary:Music%2FSlayer%20-%203.mp3',{title:'Part 3'}),
+]);
+assert.equal(singleDigitRootChapters.length,1,'single-digit root chapter suffixes must group into one audiobook');
+assert.equal(singleDigitRootChapters[0].title,'Slayer');
+assert.equal(singleDigitRootChapters[0].files,3);
+
 const conservativeRoot = groupLocalWorks([
   book(30,'content://root/document/primary:Audiobooks%2FBook%201.m4b',{title:'Book 1'}),
   book(31,'content://root/document/primary:Audiobooks%2FBook%202.m4b',{title:'Book 2'}),
