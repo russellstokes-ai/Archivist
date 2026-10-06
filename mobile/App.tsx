@@ -2808,14 +2808,16 @@ function Client() {
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false):Promise<LocalBook[]>{
     let currentBooks=baseBooks;
     try{
-      const embedded=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline);
-      if(!scanCommitGate.isCurrent(generation))return currentBooks;
-      if(embedded)currentBooks=embedded;
+      // Normal preparation is deliberately shallow. Discovery has already read
+      // file properties, folder/path evidence and safe sidecars. Do NOT reopen
+      // every EPUB/CBZ/M4B/audio file here: Android SAF/native reads are not
+      // reliably cancellable and were the historical 28% freeze.
+      //
+      // Deep local inspection is now explicit and work-scoped in Deep Search.
+      // Online enrichment and artwork can safely continue from the staged clues.
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
-      // Prefer network metadata/cover matches before opening every local archive.
-      // Fast providers can resolve most well-named items; embedded cover extraction
-      // then becomes a fallback only for the remaining gaps.
+      // Prefer bounded network metadata/cover matches after shallow discovery.
       if(metadataSettings.onlineEnabled&&(metadataSettings.automaticEnrichment||forceOnline)){
         if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
           const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline);
@@ -4736,8 +4738,37 @@ function Client() {
       try{
         const updated=await saveClues();
         if(!updated)return;
-        const representative=updated.find(book=>targets.includes(book.uri));
+        let searchBooks=updated;
+        let representative=searchBooks.find(book=>targets.includes(book.uri));
         if(!representative)throw Error('This staged work is no longer available.');
+
+        if(deep){
+          const workBooks=searchBooks.filter(book=>targets.includes(book.uri));
+          const sample=representative.format==='Audio'
+            ? [workBooks[0],workBooks[Math.floor(workBooks.length/2)],workBooks[workBooks.length-1]].filter((book,index,all)=>!!book&&all.findIndex(item=>item?.uri===book?.uri)===index)
+            : workBooks.slice(0,1);
+          const sampleUris=new Set(sample.map(book=>book!.uri));
+          setMetadataSearchNotice('Deep Search · inspecting this work…');
+          const inspected=await enrichLocalEmbeddedMetadata(searchBooks,{
+            refreshMetadata:true,
+            batchSize:1,
+            concurrency:1,
+            itemTimeoutMs:2500,
+            maxConsecutiveTimeouts:1,
+            shouldInspect:book=>sampleUris.has(book.uri),
+            onBatch:(_books,progress)=>{
+              const detail=progress.timedOut
+                ? 'Deep Search · local file inspection timed out; continuing online…'
+                : 'Deep Search · inspected '+Math.min(progress.processed,progress.total)+' of '+progress.total+' selected file'+(progress.total===1?'':'s')+'…';
+              setMetadataSearchNotice(detail);
+            },
+          });
+          searchBooks=(await synchronizeLocalMetadataCooperative(inspected.books)).books as LocalBook[];
+          await replaceLocalStageBooks(searchBooks);
+          setStagedLocalBooks(searchBooks.map(book=>({...book,source:'local' as const})));
+          representative=searchBooks.find(book=>targets.includes(book.uri))||representative;
+        }
+
         let proposals:MetadataProposal[]=[];
         if(representative.format==='Comic'){
           const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim()||undefined;
