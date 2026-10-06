@@ -170,6 +170,9 @@ type Book = {
   coverUri?: string;
   coverCandidates?: string[];
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'online' | 'legacy';
+  publishReady?: boolean;
+  publicationState?: 'discovered' | 'metadata' | 'cover' | 'published' | 'attention';
+  publicationReason?: string;
   localWorkKey?: string;
   serverWorkId?: number;
   source?: WorkSource;
