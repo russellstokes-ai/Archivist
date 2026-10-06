@@ -8,6 +8,7 @@ import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
 import {audioWorkGroupKeys, canonicalMetadataForBooks, synchronizeLocalMetadataCooperative} from './metadataSync';
+import {cachePortraitCover} from './coverCache';
 
 export type LocalBook = {
   id: number;
@@ -43,6 +44,9 @@ export type LocalBook = {
   metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual' | 'online';
   coverUri?: string;
   coverCandidates?: string[];
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: 'embedded' | 'open-library' | 'google-books' | 'manual' | 'jacket' | 'none';
+  livingBookCoverConfidence?: number;
   onlineMetadataMatch?: OnlineBookCandidate;
   onlineMetadataAlternatives?: OnlineBookCandidate[];
   comicIssueNumber?: string;
@@ -1110,6 +1114,25 @@ export async function enrichLocalBookMetadataOnline(
           for(const index of unit.indexes){
             const book=next[index];
             let patch=mergeOnlineBookCandidate(book,candidate,true);
+            const providerCoverApplied=!!candidate.coverUri&&!book.coverUri&&patch.coverUri===candidate.coverUri;
+            if(providerCoverApplied)patch={...patch,coverShape:'portrait'};
+            if(candidate.coverUri&&candidate.confidence==='high'){
+              try{
+                const portrait=await cachePortraitCover(
+                  'living-'+String(unit.target.workKey||unit.target.uri||unit.target.title)+'-'+candidate.provider,
+                  candidate.coverUri,
+                );
+                patch={
+                  ...patch,
+                  livingBookCoverUri:portrait.uri,
+                  livingBookCoverSource:candidate.provider==='googlebooks'?'google-books':'open-library',
+                  livingBookCoverConfidence:1,
+                };
+              }catch{
+                // Keep the edition artwork and metadata result. A rejected/non-portrait
+                // provider image must never break enrichment or be stretched as a book.
+              }
+            }
             patch={
               ...patch,
               workKey:logicalWorkKey({...patch,title:unit.target.title||patch.title}),
