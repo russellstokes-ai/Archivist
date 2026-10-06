@@ -22,7 +22,7 @@ Do not use the later stripped UI branch as the visual source of truth.
 
 1. **Splash** — preserve the test-13 launch identity, adding the established ambient halo and one restrained breathing/fade animation. Reduced Motion remains respected.
 2. **Fold Library source rail** — 184dp on Fold, stronger divider, larger Fold-only folder/source/group labels. Phone composition is unchanged.
-3. **Onboarding emphasis** — reuse the existing pulse language so focus moves in order from Add folders → Prepare library → Organise files. During preparation show **Discover → Identify & group → Metadata & covers → Ready**.
+3. **Onboarding emphasis** — reuse the existing pulse language so focus moves in order from Add folders → Prepare library → Review what needs attention → Enter my library. During preparation show **Discover → Identify & group → Metadata & covers → Ready**. Unresolved works stay out of normal Library/Shelf publication until reviewed.
 
 ## Locked test-13 surfaces
 
