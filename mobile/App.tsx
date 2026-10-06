@@ -62,7 +62,7 @@ import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks, up
 import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
-import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, LivingBookMotion, LivingBookMotionEvent, addBookmark, applyTrackOrder, initialLivingBookMotion, mergeChapter, moveTrackOrder, reduceLivingBookMotion, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, LivingBookMotion, LivingBookMotionEvent, PLAYER_MOTION_TIMING, addBookmark, applyTrackOrder, initialLivingBookMotion, livingBookHingeDuration, mergeChapter, moveTrackOrder, reduceLivingBookMotion, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {DurableNowSession, NowSessionMedia, refreshNowSession, sanitizeNowSession, sameNowMedia} from './nowSession';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
@@ -967,6 +967,7 @@ function Client() {
   const livingBookGeneration=useRef(0);
   const livingBookPageLoop=useRef<ReturnType<typeof setTimeout>|null>(null);
   const livingBookSettleTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const livingBookHasTurned=useRef(false);
   const livingBookCoverSessionRef=useRef<LivingBookCoverSession|undefined>(undefined);
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
@@ -998,7 +999,7 @@ function Client() {
     livingBookSettleTimer.current=setTimeout(()=>{
       livingBookSettleTimer.current=null;
       callback();
-    },180);
+    },PLAYER_MOTION_TIMING.pageRestMs);
   }
   function animateLivingBookCoverClose(){
     const generation=++livingBookGeneration.current;
@@ -1009,7 +1010,7 @@ function Client() {
         transitionLivingBook({type:'close-complete'});
         return;
       }
-      Animated.timing(bookOpenAnim,{toValue:0,duration:Math.max(180,Math.round(value*1500)),useNativeDriver:true})
+      Animated.timing(bookOpenAnim,{toValue:0,duration:livingBookHingeDuration(value,0,PLAYER_MOTION_TIMING.closeMs),useNativeDriver:true})
         .start(({finished})=>{if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'close-complete'});});
     });
   }
@@ -1026,7 +1027,7 @@ function Client() {
         transitionLivingBook({type:'open-complete'});
         return;
       }
-      Animated.timing(bookOpenAnim,{toValue:1,duration:Math.max(180,Math.round((1-value)*1500)),useNativeDriver:true})
+      Animated.timing(bookOpenAnim,{toValue:1,duration:livingBookHingeDuration(value,1,PLAYER_MOTION_TIMING.openMs),useNativeDriver:true})
         .start(({finished})=>{if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'open-complete'});});
     });
   }
@@ -1043,12 +1044,13 @@ function Client() {
     if(next.phase!=='turning')return;
     const generation=++livingBookGeneration.current;
     pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
-    Animated.timing(pageTurnAnim,{toValue:1,duration:1900,useNativeDriver:true}).start(({finished})=>{
+    Animated.timing(pageTurnAnim,{toValue:1,duration:PLAYER_MOTION_TIMING.pageTurnMs,useNativeDriver:true}).start(({finished})=>{
       if(!finished||generation!==livingBookGeneration.current)return;
       transitionLivingBook({type:'turn-complete'});
       scheduleLivingBookSettle(()=>{
         if(generation!==livingBookGeneration.current)return;
         const settled=transitionLivingBook({type:'settle-complete'});
+        livingBookHasTurned.current=true;
         pageTurnAnim.setValue(0);
         if(settled.phase==='closing')animateLivingBookCoverClose();
       });
@@ -1336,6 +1338,7 @@ function Client() {
       skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
       transitionLivingBook({type:'restore',playing:false});
       livingBookCoverSessionRef.current=undefined;
+      livingBookHasTurned.current=false;
       return;
     }
     transitionLivingBook({type:'visibility-change',visible:playbackVisible});
@@ -1347,10 +1350,11 @@ function Client() {
   useEffect(()=>{
     stopLivingBookPageLoop();
     if(!playbackVisible||!playerMotionPlaying||reduceMotion||livingBookMotion.phase!=='open')return;
+    const delay=livingBookHasTurned.current?7200:PLAYER_MOTION_TIMING.firstTurnDelayMs;
     livingBookPageLoop.current=setTimeout(()=>{
       livingBookPageLoop.current=null;
       animateLivingBookPageTurn();
-    },7200);
+    },delay);
     return()=>stopLivingBookPageLoop();
   },[livingBookMotion.phase,playerMotionPlaying,playbackVisible,reduceMotion]);
 
