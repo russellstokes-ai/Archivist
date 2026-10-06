@@ -1,0 +1,45 @@
+name: Verify mobile lockfile
+
+on:
+  push:
+    branches:
+      - review/0.9.5-test13-hardening
+    paths:
+      - '.github/workflows/verify-mobile-lockfile.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: review/0.9.5-test13-hardening
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Clean reproducible install
+        working-directory: mobile
+        run: |
+          npm ci --no-audit --no-fund
+          node harden-forge.cjs
+
+      - name: Expo Doctor
+        working-directory: mobile
+        run: npx expo-doctor
+
+      - name: TypeScript
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Mobile tests
+        working-directory: mobile
+        run: npm test
+
+      - name: Web export
+        working-directory: mobile
+        run: npx expo export --platform web --output-dir "$RUNNER_TEMP/archivist-web"
