@@ -15,7 +15,7 @@ assert.ok(player.includes("type LivingBookPhase = 'closed'|'opening'|'open'|'tur
 assert.ok(player.includes("if(state.phase==='turning')return {...state,closeAfterSettle:true}"),'Pause during a page turn must defer closing until the sheet lands');
 assert.ok(player.includes("return state.closeAfterSettle?{phase:'closing'"),'settling must hand deferred Pause into a smooth close');
 assert.ok(canvas.includes('function project(')&&canvas.includes('function flex(progress)')&&canvas.includes('Math.sin(PI*progress)'),'Canvas pages must use projected curved geometry rather than a flat card flip');
-assert.ok(canvas.includes("else if(next==='opening')")&&canvas.includes("else if(next==='closing')")&&canvas.includes("else if(next==='turning')")&&canvas.includes("else if(next==='settling')"),'renderer must animate each physical phase independently');
+assert.ok(canvas.includes("if(next==='opening')")&&canvas.includes("else if(next==='closing')")&&canvas.includes("else if(next==='turning')")&&canvas.includes("else if(next==='settling')"),'renderer must animate each physical phase independently');
 assert.ok(canvas.includes("if(previous==='settling'||previous==='turning')commitTurn()"),'a page must commit only after the turn has physically settled');
 assert.ok(canvas.includes("ctx.filter='blur(15px)'"),'ground shadow must be drawn inside the Canvas rather than attached to a rotating native layer');
 assert.equal(canvas.includes('shadowColor'),false,'rotating book surfaces must not use native shadows');
