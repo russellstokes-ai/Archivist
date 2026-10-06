@@ -380,6 +380,12 @@ type NativeLibraryScanItem = {
   modified:number;
   role:'media'|'sidecar'|'artwork'|'directory-context'|'directory-end';
   format:string;
+  quickTitle?:string;
+  quickAlbum?:string;
+  quickArtist?:string;
+  quickTrack?:string;
+  quickYear?:string;
+  quickDuration?:string;
 };
 type NativeLibraryScanBatch = {
   items:NativeLibraryScanItem[];
@@ -470,6 +476,21 @@ async function scanLocalFoldersNativeV2(
       }
       const siblingCount=item.format==='Audio'?Math.max(1,context.mediaCount):1;
       let identity=inferLocalBookMetadata(item.uri,item.format,{siblingMediaCount:siblingCount,rootUri:folder.uri});
+      const quickAlbum=String(item.quickAlbum||'').trim();
+      const quickTitle=String(item.quickTitle||'').trim();
+      const quickArtist=String(item.quickArtist||'').trim();
+      const quickYear=String(item.quickYear||'').trim();
+      const quickTrackRaw=String(item.quickTrack||'').trim();
+      if(item.format==='Audio'&&(quickAlbum||quickTitle||quickArtist||quickYear)){
+        const yearMatch=quickYear.match(/(?:^|\D)(\d{4})(?:\D|$)/);
+        const quickFields=sanitizeDiscoveredMetadata({
+          // Album is the work identity; TITLE is normally the chapter/track.
+          title:quickAlbum||quickTitle||undefined,
+          author:quickArtist||undefined,
+          publishedYear:yearMatch?Number(yearMatch[1]):undefined,
+        },item.format,identity.title,siblingCount);
+        if(Object.keys(quickFields).length)identity=applyLocalMetadata(identity,quickFields,'embedded');
+      }
       const stem=fileStem(item.name).toLowerCase();
       const genericAllowed=context.mediaCount===1||context.audioOnly;
       const sidecar=context.sidecars.get(stem)||(genericAllowed?(context.sidecars.get('metadata')||context.sidecars.get('book')||context.sidecars.get('comicinfo')):undefined);
@@ -491,6 +512,15 @@ async function scanLocalFoldersNativeV2(
         format:item.format,space:folder.name,available:true,identificationConfidence:identity.confidence,needsReview:identity.needsReview,
         reviewReason:identity.reviewReason,coverShape:identity.coverShape,metadataSource:identity.metadataSource,
         coverUri:override?.coverUri||artwork?.uri,coverCandidates:artwork?.uri?[artwork.uri]:[],
+        workTitleHint:quickAlbum||undefined,
+        trackTitle:quickTitle||undefined,
+        trackNumber:(()=>{
+          const parsed=Number.parseInt(quickTrackRaw,10);
+          if(!Number.isFinite(parsed)||parsed<=0)return undefined;
+          // MediaStore may encode disc in the thousands; retain only track.
+          const track=parsed>=1000?parsed%1000:parsed;
+          return track>0?track:undefined;
+        })(),
         publishReady:false,publicationState:'discovered',publicationReason:'Preparing metadata and cover artwork.',
       };
       books.push(book);if(book.needsReview)review++;
