@@ -517,7 +517,7 @@ function LaunchExperience({dark,onDone}:{dark:boolean;onDone:()=>void}) {
 
   useEffect(()=>{
     let cancelled=false;
-    let loop:ReturnType<typeof Animated.loop>|undefined;
+    let breatheSequence:ReturnType<typeof Animated.sequence>|undefined;
     let hold:ReturnType<typeof setTimeout>|undefined;
     AccessibilityInfo.isReduceMotionEnabled().then(reduced=>{
       if(cancelled)return;
@@ -531,11 +531,11 @@ function LaunchExperience({dark,onDone}:{dark:boolean;onDone:()=>void}) {
         return;
       }
       Animated.timing(entrance,{toValue:1,duration:620,useNativeDriver:true}).start();
-      loop=Animated.loop(Animated.sequence([
+      breatheSequence=Animated.sequence([
         Animated.timing(breathe,{toValue:1,duration:900,useNativeDriver:true}),
         Animated.timing(breathe,{toValue:0,duration:900,useNativeDriver:true}),
-      ]));
-      loop.start();
+      ]);
+      breatheSequence.start();
       hold=setTimeout(()=>{
         Animated.timing(fade,{toValue:0,duration:440,useNativeDriver:true}).start(({finished})=>{
           if(finished&&!cancelled)onDone();
@@ -545,7 +545,7 @@ function LaunchExperience({dark,onDone}:{dark:boolean;onDone:()=>void}) {
     return ()=>{
       cancelled=true;
       if(hold)clearTimeout(hold);
-      loop?.stop();
+      breatheSequence?.stop();
     };
   },[breathe,entrance,fade,onDone]);
 
