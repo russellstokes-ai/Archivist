@@ -76,6 +76,10 @@ export type LocalMetadataOverride = {
   series: string;
   genre: string;
   publishedYear?: number;
+  publisher?: string;
+  seriesIndex?: number;
+  isbn?: string;
+  identifiers?: string[];
 };
 
 export type LocalScanResult = {
@@ -207,6 +211,92 @@ const nativeLibraryScanner = (NativeModules.ArchivistLibrary || null) as NativeL
 export async function extractLocalAudioArtwork(uri:string){
   if(Platform.OS!=='android'||!nativeLibraryScanner?.extractAudioArtwork)return null;
   return nativeLibraryScanner.extractAudioArtwork(uri);
+}
+
+export async function deepScanLocalTracks(tracks:LocalBook[]):Promise<LocalBook[]>{
+  const next=tracks.map(track=>({...track}));
+  if(Platform.OS!=='android'||!nativeLibraryScanner||!next.length)return next;
+
+  const audio=next.filter(track=>track.format==='Audio');
+  const audioByUri=new Map<string,NativeAudioMetadata>();
+  if(audio.length&&nativeLibraryScanner.readAudioMetadataBatch){
+    for(let offset=0;offset<audio.length;offset+=24){
+      try{
+        const metadata=await nativeLibraryScanner.readAudioMetadataBatch(audio.slice(offset,offset+24).map(track=>track.uri));
+        for(const item of metadata||[])if(item?.uri)audioByUri.set(item.uri,item);
+      }catch{
+        // Deep scan is advisory. One unreadable file must not fail the work.
+      }
+      await yieldToUi();
+    }
+  }
+
+  const documents=next.filter(track=>track.format==='EPUB'||track.format==='Comic');
+  const documentByUri=new Map<string,NativeDocumentMetadata>();
+  if(documents.length&&nativeLibraryScanner.readDocumentMetadataBatch){
+    for(let offset=0;offset<documents.length;offset+=24){
+      try{
+        const chunk=documents.slice(offset,offset+24);
+        const metadata=await nativeLibraryScanner.readDocumentMetadataBatch(
+          chunk.map(track=>({uri:track.uri,format:track.format,name:fileNameFromUri(track.uri)})),
+        );
+        for(const item of metadata||[])if(item?.uri)documentByUri.set(item.uri,item);
+      }catch{
+        // Keep any other evidence and continue.
+      }
+      await yieldToUi();
+    }
+  }
+
+  return next.map(track=>{
+    if(track.format==='Audio'){
+      const embedded=audioByUri.get(track.uri);
+      if(!embedded)return track;
+      const embeddedAuthor=embedded.albumArtist||embedded.author||embedded.artist||'';
+      const oneFileWork=audio.length===1;
+      const embeddedWorkTitle=embedded.album||(oneFileWork?embedded.title:'')||'';
+      const strong=!!cleanMetadataValue(embeddedWorkTitle||track.title)&&!!cleanMetadataValue(embeddedAuthor||track.author);
+      const preserveManual=track.metadataSource==='manual';
+      return {
+        ...track,
+        ...(!preserveManual&&embeddedWorkTitle?{title:embeddedWorkTitle}:{}),
+        ...(!preserveManual&&embeddedAuthor?{author:embeddedAuthor}:{}),
+        ...(!preserveManual&&embedded.genre?{genre:embedded.genre}:{}),
+        ...(!preserveManual&&metadataYear(embedded.year)?{publishedYear:metadataYear(embedded.year)}:{}),
+        ...(!preserveManual&&(embeddedWorkTitle||embeddedAuthor||embedded.genre||embedded.year)?{metadataSource:'embedded' as const}:{}),
+        ...(!preserveManual&&strong?{identificationConfidence:'high' as const,needsReview:false,reviewReason:''}:{}),
+        workTitleHint:embedded.album||track.workTitleHint,
+        trackTitle:embedded.title||track.trackTitle,
+        trackNumber:metadataIndex(embedded.track)||track.trackNumber,
+        discNumber:metadataIndex(embedded.disc)||track.discNumber,
+      };
+    }
+
+    const embedded=documentByUri.get(track.uri);
+    if(!embedded)return track;
+    const preserveManual=track.metadataSource==='manual';
+    const resolvedTitle=cleanMetadataValue(embedded.title||track.title);
+    const resolvedAuthor=cleanMetadataValue(embedded.author||track.author);
+    const strong=!!resolvedTitle&&resolvedTitle.toLowerCase()!=='untitled'&&!!resolvedAuthor;
+    return {
+      ...track,
+      ...(!preserveManual&&embedded.title?{title:embedded.title}:{}),
+      ...(!preserveManual&&embedded.author?{author:embedded.author}:{}),
+      ...(!preserveManual&&embedded.series?{series:embedded.series}:{}),
+      ...(!preserveManual&&embedded.genre?{genre:embedded.genre}:{}),
+      ...(!preserveManual&&embedded.publisher?{publisher:embedded.publisher}:{}),
+      ...(!preserveManual&&embedded.seriesIndex!==undefined?{seriesIndex:embedded.seriesIndex}:{}),
+      ...(!preserveManual&&embedded.year?{publishedYear:embedded.year}:{}),
+      ...(!preserveManual&&embedded.isbn?{isbn:embedded.isbn}:{}),
+      ...(!preserveManual&&embedded.identifiers?.length?{identifiers:embedded.identifiers}:{}),
+      ...(!preserveManual&&(embedded.title||embedded.author||embedded.series||embedded.genre||embedded.publisher||embedded.year||embedded.isbn||embedded.identifiers?.length)?{metadataSource:'embedded' as const}:{}),
+      ...(!preserveManual&&strong?{identificationConfidence:'high' as const,needsReview:false,reviewReason:''}:{}),
+    };
+  });
+}
+
+function cleanMetadataValue(value:string|undefined){
+  return String(value||'').replace(/\s+/g,' ').trim();
 }
 
 const yieldToUi = () => new Promise<void>(resolve => setTimeout(resolve, 0));
