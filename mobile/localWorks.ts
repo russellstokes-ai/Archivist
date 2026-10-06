@@ -42,7 +42,15 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   }
 
   return order.map(key => {
-    const tracks = groups.get(key)!.slice().sort((a, b) => naturalCompare(a.uri, b.uri));
+    const tracks = groups.get(key)!.slice().sort((a, b) => {
+      const ad=Number(a.embeddedMetadata?.discNumber||0),bd=Number(b.embeddedMetadata?.discNumber||0);
+      const at=Number(a.embeddedMetadata?.trackNumber||0),bt=Number(b.embeddedMetadata?.trackNumber||0);
+      if(ad&&bd&&ad!==bd)return ad-bd;
+      if(at&&bt&&at!==bt)return at-bt;
+      if(at&&!bt)return -1;
+      if(!at&&bt)return 1;
+      return naturalCompare(a.uri,b.uri);
+    });
     const first = tracks[0];
     const audio = first.format === 'Audio';
     const folderTitle = audio ? audioFolderTitle(first.uri) : '';
