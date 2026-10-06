@@ -11,6 +11,7 @@ const nativeArchive=fs.readFileSync(__dirname+'/android/app/src/main/java/app/ar
 assert.ok(nativeArchive.includes('fun readArchiveMetadata('),'Android must expose bounded archive metadata inspection');
 assert.ok(nativeArchive.includes('BoundedArchiveInput')&&nativeArchive.includes('32L * 1024 * 1024'),'archive metadata reads must have a hard byte budget');
 assert.ok(nativeArchive.includes('2_000_000_000L'),'archive metadata reads must have a native deadline rather than relying only on JS Promise.race');
+assert.ok(nativeArchive.includes('fun readRarMetadata(')&&embedded.includes('native.readRarMetadata(uri)'),'Android CBR metadata must use a bounded single-pass native reader');
 assert.ok(embedded.includes("Platform.OS==='android'")&&embedded.includes('native.readArchiveMetadata(uri,ext)'),'Android EPUB/CBZ metadata must avoid whole-archive foreground copies');
 assert.ok(audio.includes('const maxMP4MetadataBytes=768*1024'),'M4B foreground parsing must stay bounded enough to avoid multi-megabyte JS decode bursts');
 assert.ok(app.includes('concurrency:2'),'foreground embedded metadata scanning must use bounded concurrency');
