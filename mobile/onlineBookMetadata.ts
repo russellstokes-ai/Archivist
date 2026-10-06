@@ -58,6 +58,7 @@ export type OnlineBookLookupOptions={
   now?:()=>number;
   timeoutMs?:number;
   ignoreCache?:boolean;
+  deep?:boolean;
 };
 
 const positiveTtl=30*24*60*60*1000;
@@ -160,16 +161,22 @@ export function buildBookLookupHints(input:BookLookupInput){
 }
 
 type QueryPlan={kind:'isbn'|'title-author'|'title';title?:string;author?:string;isbn?:string};
-function queryPlans(input:BookLookupInput){
+function queryPlans(input:BookLookupInput,deep=false){
   const hints=buildBookLookupHints(input);
   const plans:QueryPlan[]=[];
   if(hints.isbn)plans.push({kind:'isbn',isbn:hints.isbn});
-  for(const title of hints.titles.slice(0,3)){
-    for(const author of hints.authors.slice(0,2))plans.push({kind:'title-author',title,author});
+  for(const title of hints.titles.slice(0,deep?6:3)){
+    for(const author of hints.authors.slice(0,deep?4:2))plans.push({kind:'title-author',title,author});
     plans.push({kind:'title',title});
   }
+  if(deep){
+    for(const series of hints.series.slice(0,3)){
+      for(const author of hints.authors.slice(0,3))plans.push({kind:'title-author',title:series,author});
+      plans.push({kind:'title',title:series});
+    }
+  }
   const seen=new Set<string>();
-  return plans.filter(plan=>{const key=JSON.stringify(plan);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,6);
+  return plans.filter(plan=>{const key=JSON.stringify(plan);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,deep?16:6);
 }
 
 function selectGenre(values:unknown){
@@ -354,20 +361,26 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
   if(!options.ignoreCache&&cached&&cached.expiresAt>now())return cached.result;
   const fetcher=options.fetcher||(globalThis.fetch as unknown as FetchLike);
   if(typeof fetcher!=='function')return {key,status:'offline',candidates:[],autoApply:false,queried:[]};
-  const timeoutMs=Math.max(2500,Math.min(20000,options.timeoutMs||8000));
-  const plans=queryPlans(input);const queried:string[]=[];const raw:Array<Omit<OnlineBookCandidate,'score'|'confidence'|'reasons'>>=[];
+  const timeoutMs=Math.max(2500,Math.min(20000,options.timeoutMs||(options.deep?15000:8000)));
+  const plans=queryPlans(input,!!options.deep);const queried:string[]=[];const raw:Array<Omit<OnlineBookCandidate,'score'|'confidence'|'reasons'>>=[];
   try{
     const openLibraryEnabled=options.openLibraryEnabled!==false;
     if(openLibraryEnabled){
       for(const plan of plans){
         const found=await searchOpenLibrary(fetcher,plan,timeoutMs);queried.push('openlibrary:'+openLibraryQuery(plan));raw.push(...found);
-        const ranked=rankCandidates(input,raw);if(ranked[0]?.exactIdentifier||ranked[0]?.score>=88)break;if(raw.length>=18)break;
+        const ranked=rankCandidates(input,raw);
+        if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=88))break;
+        if(raw.length>=(options.deep?48:18))break;
       }
     }
     let ranked=rankCandidates(input,raw);
-    if(options.googleBooksApiKey&&(!ranked[0]||ranked[0].confidence!=='high')){
-      for(const plan of plans.slice(0,3)){
-        try{const found=await searchGoogleBooks(fetcher,plan,options.googleBooksApiKey,timeoutMs);queried.push('googlebooks:'+googleQuery(plan));raw.push(...found);ranked=rankCandidates(input,raw);if(ranked[0]?.exactIdentifier||ranked[0]?.score>=88)break;}catch{}
+    if(options.googleBooksApiKey&&(options.deep||!ranked[0]||ranked[0].confidence!=='high')){
+      for(const plan of plans.slice(0,options.deep?8:3)){
+        try{
+          const found=await searchGoogleBooks(fetcher,plan,options.googleBooksApiKey,timeoutMs);
+          queried.push('googlebooks:'+googleQuery(plan));raw.push(...found);ranked=rankCandidates(input,raw);
+          if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=88))break;
+        }catch{}
       }
     }
     ranked=rankCandidates(input,raw);
