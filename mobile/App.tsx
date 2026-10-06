@@ -1242,17 +1242,6 @@ function Client() {
     // the open state after Pause and make closing appear delayed or broken.
     if(playerMotionIntent!==null&&playbackIsPlaying===playerMotionIntent)setPlayerMotionIntent(null);
   },[playbackIsPlaying,playerMotionIntent]);
-  useLayoutEffect(()=>{
-    if(!playbackVisible||!playerMotionPlaying||reduceMotion){
-      ++skipGeneration.current;
-      ambientPageLoopStopRef.current?.();
-      ambientPageLoopStopRef.current=null;
-      pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
-      skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
-      return;
-    }
-    if(bookOpenProgressRef.current>=.95)setAmbientPageLoopEpoch(value=>value+1);
-  },[pageTurnAnim,playbackVisible,playerMotionPlaying,reduceMotion,skipTurnAnim]);
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,number>>(ritualDaysKey).then(value=>{if(live){setRitualDays(value&&typeof value==='object'?value:{});setRitualReady(true);}});return()=>{live=false;};},[]);
   useEffect(()=>{
     if(!ritualReady)return;
