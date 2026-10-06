@@ -57,7 +57,8 @@ import {AtlasChartRing} from './AtlasChartRing';
 import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasBreakdown as makeAtlasBreakdown, atlasSummary, atlasGenrePalette} from './atlasInteraction';
 import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
-import {getPersistedJSON, setPersistedJSON, setPersistedJSONArrayCooperative} from './stateStore';
+import {getPersistedJSON, setPersistedJSON} from './stateStore';
+import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks} from './localStageStore';
 import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
@@ -1798,12 +1799,28 @@ function Client() {
     getPersistedJSON<LocalFolder[]>(localFoldersKey).then(saved => {
       if (Array.isArray(saved)) setLocalFolders(saved);
     }).catch(() => undefined).finally(()=>setLocalFoldersReady(true));
-    getPersistedJSON<Book[]>(localCatalogKey).then(saved => {
-      if (!Array.isArray(saved)) return;
-      const normalized=saved.map(book=>({...book,genre:book.genre || ''}));
-      setLocalBooks(normalized.map(book=>({...book,source:'local' as const})));
-      setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
-    }).catch(() => undefined).finally(() => setLocalCatalogReady(true));
+    void (async()=>{
+      try{
+        let stored=await loadLocalStageBooks();
+        if(!stored.length){
+          const legacy=await getPersistedJSON<Book[]>(localCatalogKey).catch(()=>null);
+          const legacyBooks=Array.isArray(legacy)
+            ? legacy.filter((book):book is Book & {uri:string}=>!!book?.uri).map(book=>({...book,genre:book.genre||''}) as LocalBook)
+            : [];
+          if(legacyBooks.length){
+            await migrateLegacyLocalStage(legacyBooks);
+            stored=legacyBooks;
+          }
+        }
+        const normalized=stored.map(book=>({...book,genre:book.genre||''}));
+        setLocalBooks(normalized.map(book=>({...book,source:'local' as const})));
+        setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
+      }catch(error){
+        setError('Local catalogue database could not be opened: '+String((error as any)?.message||error));
+      }finally{
+        setLocalCatalogReady(true);
+      }
+    })();
     getPersistedJSON<{signature?:string}>(librarySetupPreparedKey).then(value=>{
       if(value&&typeof value.signature==='string')setLibraryPreparedSignature(value.signature);
     }).catch(()=>undefined);
@@ -2670,10 +2687,9 @@ function Client() {
     await Promise.all([
       setPersistedJSON(localFoldersKey,result.folders),
     ]);
-    const baselinePersisted=await setPersistedJSONArrayCooperative(localCatalogKey,result.books,{
-      batchSize:48,
-      shouldContinue:()=>scanCommitGate.isCurrent(generation),
-    });
+    const baselinePersisted=await replaceLocalStageBooks(result.books)
+      .then(()=>true)
+      .catch(error=>{recordLibraryRefreshWarning('Catalogue database',error);return false;});
     if(!baselinePersisted||!scanCommitGate.isCurrent(generation))return null;
 
     setScanResultSummary(summary);
@@ -2705,10 +2721,9 @@ function Client() {
 
   async function checkpointLocalEnrichment(books:LocalBook[],generation:number){
     if(!scanCommitGate.isCurrent(generation))return false;
-    return setPersistedJSONArrayCooperative(localCatalogKey,books,{
-      batchSize:64,
-      shouldContinue:()=>scanCommitGate.isCurrent(generation),
-    }).catch(error=>{recordLibraryRefreshWarning('Enrichment checkpoint',error);return false;});
+    return replaceLocalStageBooks(books)
+      .then(()=>scanCommitGate.isCurrent(generation))
+      .catch(error=>{recordLibraryRefreshWarning('Enrichment checkpoint',error);return false;});
   }
 
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false):Promise<LocalBook[]>{
@@ -2742,10 +2757,9 @@ function Client() {
       if(covered)currentBooks=covered;
 
       if(scanCommitGate.isCurrent(generation)){
-        const persisted=await setPersistedJSONArrayCooperative(localCatalogKey,currentBooks,{
-          batchSize:48,
-          shouldContinue:()=>scanCommitGate.isCurrent(generation),
-        }).catch(error=>{recordLibraryRefreshWarning('Final catalogue save',error);return false;});
+        const persisted=await replaceLocalStageBooks(currentBooks)
+          .then(()=>true)
+          .catch(error=>{recordLibraryRefreshWarning('Final catalogue save',error);return false;});
         if(persisted&&scanCommitGate.isCurrent(generation)){
           completedLibraryBooksRef.current=currentBooks;
           setLocalBooks(current=>applyOnlineMetadataEnrichment(
@@ -4610,7 +4624,7 @@ function Client() {
             setLocalBooks(old=>{
               const wanted=new Set(targets);
               const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const,metadataConflicts:[]}:b);
-              void setPersistedJSON(localCatalogKey,updated);
+              void replaceLocalStageBooks(updated as LocalBook[]);
               return updated;
             });
             setEditing(null);setEditingUris([]);setEditPickedCover(null);
@@ -4807,7 +4821,7 @@ function Client() {
             return {...next,workKey:logicalWorkKey(next),editionKey:editionKey(next,next.format)};
           });
           setLocalBooks(updated);
-          await setPersistedJSON(localCatalogKey,updated);
+          await replaceLocalStageBooks(updated as LocalBook[]);
         }
         if(serverTouched)await refreshSourcesAndShelf();
         setSelectedWorkKeys([]);
