@@ -66,13 +66,21 @@ export async function cacheRequiredWorkArtwork(
       providerLocal ||
       '';
     let livingBookCoverUri=isVerifiedLocalArtworkUri(currentLiving)?currentLiving:'';
+    const livingConfidence=Math.max(0,...tracks.map(track=>Number(track.livingBookCoverConfidence||0)));
+    const legacySquareFallback=work.format==='Audio'
+      && !!livingBookCoverUri
+      && !!libraryCoverUri
+      && livingBookCoverUri===libraryCoverUri
+      && work.coverShape==='square'
+      && livingConfidence<0.9;
 
-    if(!livingBookCoverUri){
+    if(!livingBookCoverUri||legacySquareFallback){
       if(work.format==='Audio'){
-        // Audiobook square edition art can remain the Library image; the
-        // provider's publication cover becomes the physical Living Book jacket.
+        // Audiobook square edition art can remain the Library image; when a
+        // provider publication cover exists it upgrades the one-time Test 13
+        // square fallback used solely to preserve an existing accepted library.
         if(providerLocal)livingBookCoverUri=providerLocal;
-        else if(work.coverShape==='portrait'&&libraryCoverUri)livingBookCoverUri=libraryCoverUri;
+        else if(!livingBookCoverUri&&work.coverShape==='portrait'&&libraryCoverUri)livingBookCoverUri=libraryCoverUri;
       }else{
         // EPUB/PDF/comic publication covers are already portrait artwork and
         // may satisfy both logical slots after local caching.
