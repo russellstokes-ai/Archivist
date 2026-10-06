@@ -78,6 +78,39 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   });
 }
 
+export function localWorkPublicationReady(work:Pick<LocalWork,'title'|'author'|'needsReview'|'coverUri'|'tracks'>) {
+  const title=cleanLabel(work.title);
+  const author=cleanLabel(work.author);
+  return !!title
+    && title.toLowerCase()!=='untitled'
+    && !!author
+    && !work.needsReview
+    && !!work.coverUri
+    && work.tracks.every(track=>track.publishReady===true);
+}
+
+export function applyLocalPublicationState(books:LocalBook[],finalise=true):LocalBook[] {
+  const stateByUri=new Map<string,{ready:boolean;state:LocalBook['publicationState'];reason:string}>();
+  for(const work of groupLocalWorks(books)){
+    const identityReady=!!cleanLabel(work.title)&&cleanLabel(work.title).toLowerCase()!=='untitled'&&!!cleanLabel(work.author)&&!work.needsReview;
+    const coverReady=!!work.coverUri;
+    const ready=identityReady&&coverReady;
+    const reason=ready?'':!identityReady?(work.reviewReason||'Metadata still needs attention.'):'Cover artwork is still missing.';
+    for(const track of work.tracks){
+      stateByUri.set(track.uri,{
+        ready,
+        state:ready?'published':finalise?'attention':coverReady?'metadata':'cover',
+        reason,
+      });
+    }
+  }
+  return books.map(book=>{
+    const state=stateByUri.get(book.uri);
+    if(!state)return {...book,publishReady:false,publicationState:finalise?'attention':'metadata',publicationReason:'Metadata still needs attention.'};
+    return {...book,publishReady:state.ready,publicationState:state.state,publicationReason:state.reason};
+  });
+}
+
 function localWorkKey(book: LocalBook,audioKeys:Map<string,string>) {
   if (book.format !== 'Audio') return 'asset:' + book.uri;
   return audioKeys.get(book.uri)||('audio-file:'+book.uri);
