@@ -23,6 +23,9 @@ export type LocalWork = {
   reviewReason: string;
   coverUri?: string;
   coverShape: 'portrait' | 'square';
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: LocalBook['livingBookCoverSource'];
+  livingBookCoverConfidence?: number;
 };
 
 export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
@@ -73,7 +76,10 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       needsReview: unresolved||!!importantConflict,
       reviewReason: importantConflict?.reviewReason || (unresolved?'Title or author still needs review.':''),
       coverUri: audio ? canonical.coverUri : tracks.find(item => item.coverUri)?.coverUri,
-      coverShape: audio ? 'square' : 'portrait',
+      coverShape: audio ? (tracks.find(item=>item.coverUri)?.coverShape||'square') : 'portrait',
+      livingBookCoverUri: tracks.find(item=>item.livingBookCoverUri)?.livingBookCoverUri,
+      livingBookCoverSource: tracks.find(item=>item.livingBookCoverSource)?.livingBookCoverSource,
+      livingBookCoverConfidence: tracks.find(item=>item.livingBookCoverConfidence!==undefined)?.livingBookCoverConfidence,
     };
   });
 }
