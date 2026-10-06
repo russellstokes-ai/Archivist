@@ -74,6 +74,8 @@ export type LocalSortPreview = {
   id: string;
   asset: number;
   title: string;
+  workKey: string;
+  workSize: number;
   sourceUri: string;
   sourceRootUri: string;
   rootUri: string;
@@ -1244,10 +1246,14 @@ export function previewLocalSortToRoot(books: LocalBook[], template: string, des
     destinations.set(destinationKey, count + 1);
     const same = normalizePathKey(sourceRootUri)===normalizePathKey(rootUri)
       && normalizePathKey(currentRelative) === normalizePathKey(target);
+    const workKey=audioKey || book.workKey || ('asset:'+book.uri);
+    const workSize=audioKey?(audioGroups.get(audioKey)?.length||1):1;
     return {
       id: `local-${book.id}`,
       asset: book.id,
       title: book.title,
+      workKey,
+      workSize,
       sourceUri: book.uri,
       sourceRootUri,
       rootUri,
@@ -1293,6 +1299,26 @@ export async function previewLocalSortSafely(
       ? {...preview,state:'conflict',reason:preflight.reason || 'Destination already exists.'}
       : preview);
   }
+  // A work is the transaction boundary. If one part is blocked, every other
+  // part of that work is blocked too so the UI can never select a partial book.
+  const byWork=new Map<string,LocalSortPreview[]>();
+  for(const item of checked){
+    const group=byWork.get(item.workKey)||[];
+    group.push(item);byWork.set(item.workKey,group);
+  }
+  for(const group of byWork.values()){
+    const blocker=group.find(item=>item.state==='conflict'||item.state==='review');
+    if(!blocker)continue;
+    for(let index=0;index<checked.length;index++){
+      const item=checked[index];
+      if(item.workKey!==blocker.workKey||item.state!=='ready')continue;
+      checked[index]={
+        ...item,
+        state:blocker.state,
+        reason:'This work is blocked because another chapter/part needs attention: '+(blocker.reason||'review the work first'),
+      };
+    }
+  }
   return checked;
 }
 
@@ -1313,49 +1339,126 @@ export async function applyLocalSort(
 ): Promise<LocalSortApplyResult> {
   const copied: LocalSortApplyResult['copied'] = [];
   const failed: LocalSortApplyResult['failed'] = [];
-  for (const preview of previews) {
-    if (preview.state !== 'ready') continue;
-    await new Promise(resolve=>setTimeout(resolve,0));
-    let target:string|undefined;
-    let applied:LocalSortAppliedItem|undefined;
-    try {
-      target = await createTargetFile(preview.rootUri, preview.relativePath);
-      await copyLocalUri(preview.sourceUri,target);
-      await verifyLocalCopy(preview.sourceUri,target);
-      applied={
-        id:preview.id,title:preview.title,uri:target,sourceUri:preview.sourceUri,
-        sourceRootUri:preview.sourceRootUri,rootUri:preview.rootUri,sourceRelativePath:preview.sourceRelativePath,sourceRemoved:false,
-      };
-      copied.push(applied);
-      // Persist a verified-copy checkpoint before a destructive source delete.
-      await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
-
-      if(mode==='move'){
-        let removed=false;
-        try{
-          await deleteLocalUri(preview.sourceUri);
-          const sourceAfter=await getInfoAsync(preview.sourceUri).catch(()=>null);
-          removed=sourceAfter?.exists===false;
-          if(!removed)throw Error('Source deletion could not be verified');
-        }catch(error){
-          const sourceAfter=await getInfoAsync(preview.sourceUri).catch(()=>null);
-          removed=sourceAfter?.exists===false;
-          if(!removed){
-            failed.push({id:preview.id,title:preview.title,error:'Verified copy was kept, but the original could not be removed safely: '+((error as Error).message||'unknown error')});
-            await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
-            continue;
-          }
-        }
-        applied.sourceRemoved=true;
-        await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
-      }
-    } catch (e) {
-      if(target&&!applied)await deleteLocalUri(target).catch(()=>undefined);
-      failed.push({id: preview.id, title: preview.title, error: (e as Error).message});
-      await onCheckpoint?.({copied: copied.map(item=>({...item})), failed: failed.slice()});
-    }
+  const ready=previews.filter(preview=>preview.state==='ready');
+  const groups=new Map<string,LocalSortPreview[]>();
+  for(const preview of ready){
+    const key=preview.workKey||preview.id;
+    const group=groups.get(key)||[];
+    group.push(preview);groups.set(key,group);
   }
-  return {copied, failed};
+
+  for(const [workKey,group] of groups){
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const expected=Math.max(...group.map(item=>Math.max(1,item.workSize||1)));
+    if(group.length!==expected){
+      const title=group[0]?.title||'Work';
+      failed.push({id:workKey,title,error:'Whole-work safety blocked this operation because not every chapter/part was selected and ready.'});
+      await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
+      continue;
+    }
+
+    const staged:LocalSortAppliedItem[]=[];
+    let copyError:Error|undefined;
+    for(const preview of group){
+      let target:string|undefined;
+      try{
+        target=await createTargetFile(preview.rootUri,preview.relativePath);
+        await copyLocalUri(preview.sourceUri,target);
+        await verifyLocalCopy(preview.sourceUri,target);
+        staged.push({
+          id:preview.id,title:preview.title,uri:target,sourceUri:preview.sourceUri,
+          sourceRootUri:preview.sourceRootUri,rootUri:preview.rootUri,
+          sourceRelativePath:preview.sourceRelativePath,sourceRemoved:false,
+        });
+      }catch(error){
+        if(target)await deleteLocalUri(target).catch(()=>undefined);
+        copyError=error as Error;
+        break;
+      }
+    }
+
+    if(copyError){
+      // No source has been removed yet. Roll back every newly-created
+      // destination for this work and leave the original work untouched.
+      for(const item of staged)await deleteLocalUri(item.uri).catch(()=>undefined);
+      failed.push({
+        id:workKey,title:group[0]?.title||'Work',
+        error:'Whole-work copy rolled back; originals were unchanged: '+(copyError.message||'copy failed'),
+      });
+      await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
+      continue;
+    }
+
+    copied.push(...staged);
+    // Durable checkpoint: every destination in the work exists and verifies,
+    // but every original still exists. Only now may Move become destructive.
+    await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
+    if(mode!=='move')continue;
+
+    const removed:LocalSortAppliedItem[]=[];
+    let deleteError:Error|undefined;
+    for(const item of staged){
+      try{
+        await deleteLocalUri(item.sourceUri);
+        const sourceAfter=await getInfoAsync(item.sourceUri).catch(()=>null);
+        if(sourceAfter?.exists!==false)throw Error('Source deletion could not be verified');
+        item.sourceRemoved=true;
+        removed.push(item);
+      }catch(error){
+        deleteError=error as Error;
+        break;
+      }
+    }
+
+    if(deleteError){
+      // Some originals may already have been removed. Restore those from their
+      // verified destination copies before considering rollback complete.
+      let restoreError:Error|undefined;
+      for(const item of removed){
+        try{
+          const sourceAfter=await getInfoAsync(item.sourceUri).catch(()=>null);
+          if(sourceAfter?.exists===true){item.sourceRemoved=false;continue;}
+          const restored=await createTargetFile(item.sourceRootUri,item.sourceRelativePath);
+          try{
+            await copyLocalUri(item.uri,restored);
+            await verifyLocalCopy(item.uri,restored);
+          }catch(error){
+            await deleteLocalUri(restored).catch(()=>undefined);
+            throw error;
+          }
+          item.sourceUri=restored;
+          item.sourceRemoved=false;
+        }catch(error){
+          restoreError=error as Error;
+          break;
+        }
+      }
+
+      if(!restoreError){
+        for(const item of staged)await deleteLocalUri(item.uri).catch(()=>undefined);
+        for(const item of staged){
+          const index=copied.indexOf(item);
+          if(index>=0)copied.splice(index,1);
+        }
+        failed.push({
+          id:workKey,title:group[0]?.title||'Work',
+          error:'Whole-work move rolled back; originals were restored because one source could not be removed safely: '+(deleteError.message||'delete failed'),
+        });
+      }else{
+        // Keep all verified destination copies as recovery material if restoration
+        // cannot be proven. The persisted checkpoint makes manual recovery safe.
+        failed.push({
+          id:workKey,title:group[0]?.title||'Work',
+          error:'Move stopped after a source deletion failure and automatic restoration could not be fully verified. Verified destination copies were retained for recovery: '+(restoreError.message||deleteError.message),
+        });
+      }
+      await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
+      continue;
+    }
+
+    await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});
+  }
+  return {copied,failed};
 }
 
 export async function applyLocalSortCopies(
