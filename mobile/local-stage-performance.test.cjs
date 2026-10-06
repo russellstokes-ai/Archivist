@@ -55,3 +55,6 @@ console.log('PASS: local catalogue persistence and enrichment remain keyed/delta
 
 const stageSourceRemoval=fs.readFileSync(__dirname+'/localStageStore.ts','utf8');
 assert.ok(stageSourceRemoval.includes('export async function removeLocalStageBooks'), 'Local stage store must support safe work removal without deleting source media');
+assert.ok(stageSourceRemoval.includes('CREATE TABLE IF NOT EXISTS local_hidden_assets'), 'Removed local works must be tombstoned so a normal rescan does not immediately re-add them');
+assert.ok(stageSourceRemoval.includes('if(hiddenSignature===currentSignature)return false'), 'An unchanged hidden source asset must stay out of staged scans');
+assert.ok(stageSourceRemoval.includes('hidden.delete(book.uri)'), 'A materially changed source file must become discoverable again instead of being hidden forever');
