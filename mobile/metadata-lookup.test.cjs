@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm');
 function load(path){const src=fs.readFileSync(path,'utf8');const out=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};const req=(id)=>require(id);vm.runInNewContext('(function(require,module,exports){'+out+'\n})(req,module,module.exports)',{req,require:req,module:mod,exports:mod.exports,AbortController,URLSearchParams,setTimeout,clearTimeout,fetch:async()=>{throw Error('network disabled in unit test')}});return mod.exports;}
 const x=load(__dirname+'/metadataLookup.ts');
+assert.equal(typeof x.searchBookMetadata,'function','manual metadata review must expose ranked candidate search');
 
 const input={title:'A Wizard of Earthsea',author:'Ursula K. Le Guin',series:'Earthsea',publishedYear:1968};
 const exact={provider:'open-library',providerId:'OL1W',title:'A Wizard of Earthsea',authors:['Ursula K. Le Guin'],series:['Earthsea'],publishedYear:1968,coverUri:'https://cover'};

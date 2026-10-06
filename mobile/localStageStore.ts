@@ -4,6 +4,7 @@ import type {LocalEnrichmentCache,LocalEnrichmentCacheEntry} from './localEnrich
 
 const databaseName='archivist-local.db';
 let databasePromise:Promise<SQLite.SQLiteDatabase>|null=null;
+let hiddenAssetsCache:Map<string,string>|null=null;
 
 async function database(){
   if(databasePromise)return databasePromise;
@@ -37,6 +38,11 @@ async function database(){
         payload TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS local_hidden_assets (
+        uri TEXT PRIMARY KEY NOT NULL,
+        asset_signature TEXT NOT NULL DEFAULT '',
+        hidden_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS local_stage_meta (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
@@ -61,6 +67,13 @@ async function database(){
 function parseJSON<T>(value:unknown):T|null{
   if(typeof value!=='string'||!value)return null;
   try{return JSON.parse(value) as T;}catch{return null;}
+}
+
+async function hiddenAssets(db:SQLite.SQLiteDatabase){
+  if(hiddenAssetsCache)return hiddenAssetsCache;
+  const rows=await db.getAllAsync<{uri:string;asset_signature:string}>('SELECT uri,asset_signature FROM local_hidden_assets');
+  hiddenAssetsCache=new Map(rows.map(row=>[row.uri,row.asset_signature||'']));
+  return hiddenAssetsCache;
 }
 
 export async function loadLocalStage(){
@@ -102,8 +115,24 @@ export async function stageLocalScanBooks(
 ){
   if(!books.length)return;
   const db=await database();
+  const hidden=await hiddenAssets(db);
+  const unhide:string[]=[];
+  const visibleBooks=books.filter(book=>{
+    if(!book.uri)return false;
+    const hiddenSignature=hidden.get(book.uri);
+    if(hiddenSignature===undefined)return true;
+    const currentSignature=book.assetSignature||'';
+    if(hiddenSignature===currentSignature)return false;
+    // A materially changed source file is a new asset and may be discovered again.
+    hidden.delete(book.uri);
+    unhide.push(book.uri);
+    return true;
+  });
+  if(!visibleBooks.length&&!unhide.length)return;
   const updatedAt=Date.now();
   await db.withExclusiveTransactionAsync(async txn=>{
+    for(const uri of unhide)await txn.runAsync('DELETE FROM local_hidden_assets WHERE uri = ?',uri);
+    if(!visibleBooks.length)return;
     const statement=await txn.prepareAsync(`
       INSERT INTO local_scan_assets(scan_generation,uri,source_uri,payload,ordinal,updated_at)
       VALUES ($generation,$uri,$sourceUri,$payload,$ordinal,$updatedAt)
@@ -114,8 +143,8 @@ export async function stageLocalScanBooks(
         updated_at=excluded.updated_at
     `);
     try{
-      for(let index=0;index<books.length;index++){
-        const book=books[index];
+      for(let index=0;index<visibleBooks.length;index++){
+        const book=visibleBooks[index];
         if(!book.uri)continue;
         await statement.executeAsync({
           $generation:generation,
@@ -194,6 +223,28 @@ export async function replaceLocalStageBooks(books:LocalBook[]){
     await abandonLocalStageScan(generation).catch(()=>undefined);
     throw error;
   }
+}
+
+export async function removeLocalStageBooks(books:LocalBook[]){
+  const byUri=new Map<string,LocalBook>();
+  for(const book of books)if(book.uri)byUri.set(book.uri,book);
+  if(!byUri.size)return;
+  const db=await database();
+  const hidden=await hiddenAssets(db);
+  const hiddenAt=Date.now();
+  await db.withExclusiveTransactionAsync(async txn=>{
+    for(const book of byUri.values()){
+      const signature=book.assetSignature||'';
+      await txn.runAsync(
+        `INSERT INTO local_hidden_assets(uri,asset_signature,hidden_at) VALUES (?,?,?)
+         ON CONFLICT(uri) DO UPDATE SET asset_signature=excluded.asset_signature,hidden_at=excluded.hidden_at`,
+        book.uri,signature,hiddenAt,
+      );
+      await txn.runAsync('DELETE FROM local_assets WHERE uri = ?',book.uri);
+      await txn.runAsync('DELETE FROM local_scan_assets WHERE uri = ?',book.uri);
+      hidden.set(book.uri,signature);
+    }
+  });
 }
 
 export async function upsertLocalStageBooks(books:LocalBook[]){
