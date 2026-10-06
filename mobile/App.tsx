@@ -2763,7 +2763,7 @@ function Client() {
     const readyCount=phoneWorks.length;
     const scanBusy=localScanning||!!localEnrichmentProgress;
     const serverLoading=!!session&&shelfLoading&&!serverSummary;
-    const serverReady=!!session&&!serverLoading;
+    const serverReady=!!session&&!serverLoading&&serverSummary!==null;
     const hasUsableLibrary=serverReady||allLocalSourcesScanned||readyCount>0;
 
     // Guided onboarding: only the next required stage pulses. Completed stages
