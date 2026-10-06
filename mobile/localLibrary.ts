@@ -476,10 +476,14 @@ async function scanLocalFoldersNativeV2(
       }
       const siblingCount=item.format==='Audio'?Math.max(1,context.mediaCount):1;
       let identity=inferLocalBookMetadata(item.uri,item.format,{siblingMediaCount:siblingCount,rootUri:folder.uri});
-      const quickAlbum=String(item.quickAlbum||'').trim();
-      const quickTitle=String(item.quickTitle||'').trim();
-      const quickArtist=String(item.quickArtist||'').trim();
-      const quickYear=String(item.quickYear||'').trim();
+      const cleanIndexedDetail=(value:unknown)=>{
+        const text=String(value||'').trim();
+        return /^(?:<unknown>|unknown(?: album| artist| title)?|n\/a|none|null)$/i.test(text)?'':text;
+      };
+      const quickAlbum=cleanIndexedDetail(item.quickAlbum);
+      const quickTitle=cleanIndexedDetail(item.quickTitle);
+      const quickArtist=cleanIndexedDetail(item.quickArtist);
+      const quickYear=cleanIndexedDetail(item.quickYear);
       const quickTrackRaw=String(item.quickTrack||'').trim();
       if(item.format==='Audio'&&(quickAlbum||quickTitle||quickArtist||quickYear)){
         const yearMatch=quickYear.match(/(?:^|\D)(\d{4})(?:\D|$)/);
