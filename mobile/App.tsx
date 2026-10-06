@@ -2833,9 +2833,9 @@ function Client() {
         }
       }
 
-      const covered=await enrichPublishedLocalCovers(currentBooks,generation);
-      if(!scanCommitGate.isCurrent(generation))return currentBooks;
-      if(covered)currentBooks=covered;
+      // Normal preparation also avoids archive/audio cover extraction. Provider
+      // artwork is already cached above; local forensic cover extraction belongs
+      // to explicit Deep Search/manual repair, not a catalogue-wide scan.
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
       // Publication artwork is work-level: keep an existing local Library image
