@@ -22,7 +22,7 @@ assert.equal(app.includes("item.complete===false?{...item,complete:true}:item"),
 // Metadata: the 28% stage is local embedded extraction, so every expensive local read needs a watchdog.
 assert.ok(feedback.includes("'reading-metadata':[28,46]"),'28% must remain identified as the embedded metadata stage');
 assert.ok(library.includes('withOperationTimeout'),'heavy local reads must have an operation watchdog');
-assert.ok(app.includes('itemTimeoutMs:refreshMetadata?5000:2500')&&app.includes('concurrency:refreshMetadata?3:4'),'production refresh must bound each local read while processing a small parallel batch');
+assert.ok(app.includes('itemTimeoutMs:refreshMetadata?4000:2200')&&app.includes('concurrency:2'),'production refresh must bound each local read while processing a small parallel batch');
 assert.ok(library.includes("'Embedded metadata read'")&&library.includes("'Embedded cover read'"),'both metadata and cover extraction must be watchdog-protected');
 assert.ok(library.includes('Promise.all(batch.map')&&library.includes('processed+=1'),'embedded stage must keep advancing across individually bounded files instead of abandoning the remaining library');
 assert.ok(library.includes("current:'Skipped remaining cover reads after repeated timeouts'"),'cover stage must fail forward rather than become the next freeze');
