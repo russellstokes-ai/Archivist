@@ -42,6 +42,10 @@ export type LocalBook = {
   coverShape?: 'portrait' | 'square';
   metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual' | 'online';
   coverUri?: string;
+  libraryCoverUri?: string;
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: 'embedded'|'open-library'|'google-books'|'manual'|'jacket'|'none';
+  livingBookCoverConfidence?: number;
   coverCandidates?: string[];
   onlineMetadataMatch?: OnlineBookCandidate;
   onlineMetadataAlternatives?: OnlineBookCandidate[];
