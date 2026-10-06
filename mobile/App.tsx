@@ -75,7 +75,7 @@ import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
-import {synchronizeLocalMetadataCooperative} from './metadataSync';
+import {audioWorkGroupKeys, synchronizeLocalMetadataCooperative} from './metadataSync';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -2789,14 +2789,11 @@ function Client() {
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false):Promise<LocalBook[]>{
     let currentBooks=baseBooks.map(book=>book.publishReady===true?book:{...book,publicationState:'metadata' as const,publicationReason:'Resolving metadata.'});
     try{
-      const embedded=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline);
-      if(!scanCommitGate.isCurrent(generation))return currentBooks;
-      if(embedded)currentBooks=embedded;
-      if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
-
-      // Prefer network metadata/cover matches before opening every local archive.
-      // Fast providers can resolve most well-named items; embedded cover extraction
-      // then becomes a fallback only for the remaining gaps.
+      // Test 14 shallow preparation: discovery has already collected filename /
+      // folder evidence, small sidecars and Android's indexed media details.
+      // Do NOT open media containers here. Expensive embedded parsing belongs to
+      // the explicit per-file Deep Scan action so a library refresh cannot stall
+      // on one pathological EPUB, comic or audiobook.
       if(metadataSettings.onlineEnabled&&(metadataSettings.automaticEnrichment||forceOnline)){
         if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
           const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline);
@@ -2812,10 +2809,9 @@ function Client() {
         }
       }
 
-      const covered=await enrichPublishedLocalCovers(currentBooks,generation);
-      if(!scanCommitGate.isCurrent(generation))return currentBooks;
-      if(covered)currentBooks=covered;
-
+      // Online providers cache the publication artwork during the stages above.
+      // Normal Prepare Library deliberately does not open local media merely to
+      // recover embedded artwork. That remains available through Deep Scan.
       // Publication is atomic at work level. Staged/raw assets never enter the
       // normal Library/Shelf; only a resolved identity + usable cover may publish.
       currentBooks=applyLocalPublicationState(currentBooks,true);
