@@ -34,7 +34,11 @@ assert.ok(app.includes("currentFolder:progress.current||''"),'the shared refresh
 assert.ok(app.includes("recordLibraryRefreshWarning('Embedded metadata'")&&app.includes("recordLibraryRefreshWarning('Local cover recovery'"),'timeouts/skips must be visible in the completed refresh warning');
 
 // Provider network work was already bounded; lock those deadlines too.
-assert.ok(books.includes('options.timeoutMs||8000')&&books.includes('AbortController'),'book provider requests must retain their network deadline');
+assert.ok(
+  (books.includes("options.timeoutMs||(options.deep?15000:8000)")||books.includes('options.timeoutMs||8000'))
+  && books.includes('AbortController'),
+  'book provider requests must retain bounded Smart/Deep network deadlines'
+);
 assert.ok(comics.includes('options.timeoutMs||8000')&&comics.includes('AbortController'),'comic provider requests must retain their network deadline');
 
 console.log('PASS: Test 10.1 release blockers lock verified Move sorting and fail-forward metadata scanning');
