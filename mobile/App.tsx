@@ -2739,13 +2739,25 @@ function Client() {
 
   function OnboardingGuide() {
     if (onboardingDone) return null;
-    const reviewCount = localEnrichmentProgress ? 0 : localBooks.filter(book => book.needsReview).length;
+    const reviewCount = localEnrichmentProgress ? 0 : localReviewBooks.length;
     const hasFolder = localFolders.length > 0;
     const scanHasRun = localFolders.some(folder=>!!folder.scannedAt);
     const localWorkCount=allPhoneWorks.length;
     const readyCount=phoneWorks.length;
     const hasUsableLibrary=!!session||scanHasRun||readyCount>0;
     const scanBusy=localScanning||!!localEnrichmentProgress;
+    const stageOneActive=!hasFolder&&!session;
+    const stageTwoActive=hasFolder&&!scanHasRun&&!scanBusy;
+    const stageThreeActive=scanHasRun&&!scanBusy&&reviewCount>0;
+    const enterActive=hasUsableLibrary&&!scanBusy&&reviewCount===0;
+    const pulseStyle=(active:boolean)=>active
+      ? reduceMotion
+        ? {opacity:1}
+        : {
+            opacity:onboardingPulse.interpolate({inputRange:[0,1],outputRange:[.82,1]}),
+            transform:[{scale:onboardingPulse.interpolate({inputRange:[0,1],outputRange:[1,1.012]})}],
+          }
+      : undefined;
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>SETUP</Text>
@@ -2765,10 +2777,12 @@ function Client() {
             {localFolders.map(folder=><Text key={folder.uri} numberOfLines={1} style={[styles.meta,{color:p.muted}]}>• {folder.name}</Text>)}
           </View>
         </View>
-        <View style={styles.toolRow}>
-          <Button label={hasFolder?'Add another folder':'Add folder'} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()} />
-          {!session?<Button label={serverPanelOpen?'Hide server setup':'Connect server'} tone="quiet" disabled={busy} onPress={()=>setServerPanelOpen(value=>!value)} />:null}
-        </View>
+        <Animated.View style={[styles.onboardingActionStage,pulseStyle(stageOneActive)]}>
+          <View style={styles.toolRow}>
+            <Button label={hasFolder?'Add another folder':'Add folder'} tone="gold" disabled={localScanning} onPress={()=>void addLocalFolder()} />
+            {!session?<Button label={serverPanelOpen?'Hide server setup':'Connect server'} tone="gold" disabled={busy} onPress={()=>setServerPanelOpen(value=>!value)} />:null}
+          </View>
+        </Animated.View>
         {!session&&serverPanelOpen?<ServerConnect/>:null}
 
         <View style={styles.onboardingStep}>
@@ -2781,16 +2795,16 @@ function Client() {
                 : localEnrichmentProgress
                   ? `Identifying ${localEnrichmentProgress.processed} of ${localEnrichmentProgress.total} works · ${localEnrichmentProgress.published} ready`
                   : scanHasRun
-                    ? `${localBooks.length} media files found · ${localWorkCount} works grouped · ${readyCount} ready`
+                    ? `${localBooks.length} media files found · ${localWorkCount} books grouped · ${readyCount} ready`
                     : hasFolder
-                      ? 'Your folders are ready. Start the scan when you have finished adding sources.'
+                      ? 'Your folders are ready. Add more sources if you want, then scan when you are ready.'
                       : session
                         ? 'Your server already uses its own indexed catalogue and metadata; no phone scan is required.'
                         : 'Add at least one device folder to run a local scan.'}
             </Text>
           </View>
         </View>
-        {hasFolder?<Button label={scanBusy?'Scanning & identifying…':scanHasRun?'Scan folders again':`Scan ${localFolders.length} folder${localFolders.length===1?'':'s'}`} disabled={scanBusy} onPress={()=>void rescanLocalFolders(false)} />:null}
+        {hasFolder?<Animated.View style={[styles.onboardingActionStage,pulseStyle(stageTwoActive)]}><Button label={scanBusy?'Scanning & identifying…':scanHasRun?'Scan folders again':`Scan ${localFolders.length} folder${localFolders.length===1?'':'s'}`} disabled={scanBusy} onPress={()=>void rescanLocalFolders(false)} /></Animated.View>:null}
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:(scanHasRun||session)&&!scanBusy?p.sage:p.muted}]}>03</Text>
@@ -2798,9 +2812,9 @@ function Client() {
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review only what needs attention</Text>
             <Text style={[styles.meta,{color:p.muted}]}>
               {scanBusy
-                ? 'Archivist is still identifying works and resolving artwork.'
+                ? 'Archivist is still identifying books and resolving artwork.'
                 : reviewCount
-                  ? `${reviewCount} item${reviewCount===1?'':'s'} need a quick check before they can enter the local Library.`
+                  ? `${reviewCount} book${reviewCount===1?'':'s'} need a quick check before they can enter the local Library.`
                   : scanHasRun
                     ? 'Everything found in the local scan is either ready or already resolved.'
                     : session
@@ -2809,8 +2823,8 @@ function Client() {
             </Text>
           </View>
         </View>
-        {!scanBusy&&reviewCount>0?<Button label={`Review ${reviewCount} item${reviewCount===1?'':'s'}`} onPress={()=>{setError('');setReviewOnly(true);setQuery('');setActiveTab('library')}} />:null}
-        {hasUsableLibrary&&!scanBusy?<Button label="Enter my library" tone={reviewCount>0?'quiet':'primary'} onPress={()=>void finishOnboarding()} />:null}
+        {!scanBusy&&reviewCount>0?<Animated.View style={[styles.onboardingActionStage,pulseStyle(stageThreeActive)]}><Button label={`Review ${reviewCount} book${reviewCount===1?'':'s'}`} onPress={()=>{setError('');setReviewOnly(true);setQuery('');setActiveTab('library')}} /></Animated.View>:null}
+        {hasUsableLibrary&&!scanBusy?<Animated.View style={[styles.onboardingActionStage,pulseStyle(enterActive)]}><Button label="Enter my library" tone={reviewCount>0?'quiet':'primary'} onPress={()=>void finishOnboarding()} /></Animated.View>:null}
         {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
       </View>
     );
@@ -5248,6 +5262,7 @@ const styles = StyleSheet.create({
   onboardingStep: {flexDirection:'row',gap:12,alignItems:'flex-start',paddingVertical:2},
   onboardingNumber: {width:24,fontSize:11,lineHeight:18,fontWeight:'700',letterSpacing:.7,textAlign:'left'},
   onboardingStepTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600',marginBottom:2},
+  onboardingActionStage: {alignSelf:'stretch'},
   sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:4},
   tabBody: {flex: 1},
   title: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',marginBottom:2,letterSpacing:-.4},
