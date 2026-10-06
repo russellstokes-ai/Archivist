@@ -1,10 +1,21 @@
 import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
+import {NativeModules,Platform} from 'react-native';
 import {isGenericMediaTitle, LocalMetadataFields, publicationYear} from './libraryIntelligence';
 
 const maxID3v2Bytes=256*1024;
 // Keep foreground M4B metadata reads bounded. 4 MB head + tail reads can
 // monopolise the JS thread when several audiobooks are scanned together.
 const maxMP4MetadataBytes=768*1024;
+const nativeMetadataReader=NativeModules?.ArchivistArchive as {
+  readMetadataRange?:(uri:string,position:number,length:number,timeoutMs:number)=>Promise<string>;
+}|undefined;
+
+async function readMetadataRange(uri:string,position:number,length:number){
+  if(Platform.OS==='android'&&nativeMetadataReader?.readMetadataRange){
+    return nativeMetadataReader.readMetadataRange(uri,position,length,2200);
+  }
+  return readAsStringAsync(uri,{encoding:EncodingType.Base64,position,length});
+}
 
 export async function extractAudioMetadata(
   uri:string,
@@ -16,22 +27,27 @@ export async function extractAudioMetadata(
     const size=typeof info?.size==='number'?info.size:undefined;
     if(ext==='mp3'){
       const firstLength=size===undefined?maxID3v2Bytes:Math.min(maxID3v2Bytes,size);
-      const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length:firstLength});
+      const head=await readMetadataRange(uri,0,firstLength);
       let fields=parseID3v2Base64(head);
       if((!fields.title||!fields.author||!fields.publishedYear)&&size!==undefined&&size>=128){
-        const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-128),length:128});
+        const tail=await readMetadataRange(uri,Math.max(0,size-128),128);
         fields={...parseID3v1Base64(tail),...fields};
       }
       return fields;
     }
     if(ext==='m4a'||ext==='m4b'){
       const readLength=size===undefined?maxMP4MetadataBytes:Math.min(size,maxMP4MetadataBytes);
-      const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length:readLength});
+      const head=await readMetadataRange(uri,0,readLength);
       let fields=parseMP4MetadataBase64(head);
       if(size!==undefined&&size>readLength){
         const tailLength=Math.min(size,maxMP4MetadataBytes);
-        const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-tailLength),length:tailLength});
-        fields=mergeFields(fields,parseMP4MetadataBase64(tail));
+        try{
+          const tail=await readMetadataRange(uri,Math.max(0,size-tailLength),tailLength);
+          fields=mergeFields(fields,parseMP4MetadataBase64(tail));
+        }catch{
+          // Some SAF providers expose non-seekable pipes. Head metadata is still
+          // useful; online enrichment can fill anything that only lived at EOF.
+        }
       }
       return fields;
     }
