@@ -76,11 +76,11 @@ export async function cacheRequiredWorkArtwork(
 
     if(!livingBookCoverUri||legacySquareFallback){
       if(work.format==='Audio'){
-        // Audiobook square edition art can remain the Library image; when a
-        // provider publication cover exists it upgrades the one-time Test 13
-        // square fallback used solely to preserve an existing accepted library.
+        // A valid square audiobook cover is sufficient to publish an identified
+        // work. Reuse it as a low-confidence Living Book jacket until a proper
+        // portrait provider jacket is available; later enrichment upgrades it.
         if(providerLocal)livingBookCoverUri=providerLocal;
-        else if(!livingBookCoverUri&&work.coverShape==='portrait'&&libraryCoverUri)livingBookCoverUri=libraryCoverUri;
+        else if(!livingBookCoverUri&&libraryCoverUri)livingBookCoverUri=libraryCoverUri;
       }else{
         // EPUB/PDF/comic publication covers are already portrait artwork and
         // may satisfy both logical slots after local caching.
@@ -102,7 +102,9 @@ export async function cacheRequiredWorkArtwork(
         libraryCoverUri:libraryCoverUri||undefined,
         livingBookCoverUri:livingBookCoverUri||undefined,
         livingBookCoverSource:livingBookCoverUri?(providerLocal?source:(next[index].livingBookCoverSource||'embedded')):'none',
-        livingBookCoverConfidence:livingBookCoverUri?1:0,
+        livingBookCoverConfidence:livingBookCoverUri
+          ? (work.format==='Audio'&&livingBookCoverUri===libraryCoverUri&&!providerLocal?0.45:1)
+          : 0,
       };
     }
   }
