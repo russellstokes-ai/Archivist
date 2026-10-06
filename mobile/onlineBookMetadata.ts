@@ -394,7 +394,11 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
       }
     }
     ranked=rankCandidates(input,raw);
-    let best=ranked[0];if(best?.provider==='openlibrary'&&best.confidence==='high')best=await hydrateOpenLibrary(fetcher,best,timeoutMs);
+    let best=ranked[0];
+    // Full Open Library work hydration fills optional descriptive fields and can
+    // cost another throttled request per book. Keep it for explicit Deep Search,
+    // never for initial publication-focused preparation.
+    if(options.deep&&best?.provider==='openlibrary'&&best.confidence==='high')best=await hydrateOpenLibrary(fetcher,best,timeoutMs);
     if(best){const idx=ranked.findIndex(item=>item.provider===best.provider&&item.providerId===best.providerId);if(idx>=0)ranked[idx]=best;}
     const second=ranked[1];const margin=best?best.score-(second?.score||0):0;
     const obviousIdentity=!!best
