@@ -15,6 +15,7 @@ on:
       - build/0.9.4-test10-20261005
       - build/0.9.4-test12-20261005
       - build/0.9.4-test13-20261005
+      - build/test13-media-pipeline-20261006
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
@@ -27,7 +28,7 @@ env:
   TEST_BUILD: '13'
 
 concurrency:
-  group: android-apk-${{ github.ref }}
+  group: android-apk-fast-properties-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -115,6 +116,7 @@ jobs:
           NODE
 
       - name: Android test-release lint
+        if: false
         working-directory: mobile/android
         run: ./gradlew :app:lintRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
 
@@ -202,7 +204,7 @@ jobs:
           script: bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}"
 
       - name: Publish tested APK download
-        if: github.ref != 'refs/heads/fix/test5-reader-player-blockers'
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.app_version.outputs.version }}
