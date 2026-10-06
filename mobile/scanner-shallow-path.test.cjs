@@ -8,10 +8,15 @@ const pipelineStart=app.indexOf('async function enrichPublishedLocalLibrary');
 const pipelineEnd=app.indexOf('async function enrichPublishedLocalEmbeddedMetadata',pipelineStart);
 assert.ok(pipelineStart>=0&&pipelineEnd>pipelineStart,'library enrichment pipeline must exist');
 const pipeline=app.slice(pipelineStart,pipelineEnd);
-assert.equal(
-  pipeline.includes('enrichPublishedLocalEmbeddedMetadata('),
-  false,
-  'normal Prepare/Refresh must never bulk deep-read local media'
+assert.match(
+  pipeline,
+  /enrichPublishedLocalEmbeddedMetadata\(currentBooks,generation,false,true\)/,
+  'normal Prepare must read only bounded unresolved audio properties before online matching'
+);
+assert.match(
+  app,
+  /if\(fastAudioProperties\)\{[\s\S]*?book\.format!=='Audio'/,
+  'fast properties mode must exclude EPUB/comic archive parsing'
 );
 assert.match(
   pipeline,
