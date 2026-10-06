@@ -3006,6 +3006,38 @@ function Client() {
     }
   }
 
+  async function approveLocalFile(uri:string,label='Selected book'){
+    if(!uri||deepScanBusyUri)return;
+    const current=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    const target=current.find(book=>book.uri===uri);
+    if(!target){setLocalFolderNotice('Approval could not find that local file.');return;}
+
+    let approvedUris=new Set<string>([uri]);
+    if(target.format==='Audio'){
+      const groupKeys=audioWorkGroupKeys(current);
+      const groupKey=groupKeys.get(uri);
+      if(groupKey){
+        approvedUris=new Set(current.filter(book=>book.format==='Audio'&&groupKeys.get(book.uri)===groupKey).map(book=>book.uri));
+      }
+    }
+
+    const approved=current.map(book=>approvedUris.has(book.uri)
+      ? {...book,needsReview:false,reviewReason:'',identificationConfidence:'high' as const,metadataSource:'manual' as const}
+      : book
+    );
+    const published=applyLocalPublicationState(approved,true);
+    await replaceLocalStageBooks(published);
+    completedLibraryBooksRef.current=published;
+    setLocalBooks(published.map(book=>({...book,source:'local' as const})));
+
+    const finished=published.find(book=>book.uri===uri);
+    if(finished?.publishReady===true){
+      setLocalFolderNotice('Approved “'+label+'” · it is now available in Library.');
+    }else{
+      setLocalFolderNotice('Approved identity for “'+label+'” · it still needs a usable cover and complete identity before it can enter Library.');
+    }
+  }
+
   async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number,forceRefresh=false):Promise<LocalBook[]|null>{
     if(!baseBooks.some(book=>book.format==='EPUB'||book.format==='PDF'||book.format==='Audio')||!scanCommitGate.isCurrent(generation))return baseBooks;
     const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
@@ -4354,6 +4386,9 @@ function Client() {
           <Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={!!deepScanBusyUri} onPress={()=>void deepScanLocalFile(item.uri!,item.title)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:deepScanBusyUri&&deepScanBusyUri!==item.uri?0.6:1}]}>
             <Text style={{color:p.sage,fontWeight:'700'}}>{deepScanBusyUri===item.uri?'Deep scanning…':'Deep scan'}</Text>
           </Pressable>
+          {item.needsReview?<Pressable accessibilityRole="button" accessibilityLabel={'Approve identity for '+item.title} disabled={!!deepScanBusyUri} onPress={()=>void approveLocalFile(item.uri!,item.title)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}>
+            <Text style={{color:p.sage,fontWeight:'700'}}>Approve identity</Text>
+          </Pressable>:null}
           <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} disabled={!!deepScanBusyUri} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable>
         </View>:owner?<Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable>:null}
       </View>
