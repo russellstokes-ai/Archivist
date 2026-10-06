@@ -60,6 +60,23 @@ for (const route of [
 }
 
 
+// 0.9.5 canonical UI lock. These are deliberately exact: functional work must not
+// silently restyle or roll back the approved APK baseline.
+assert.ok(source.includes("const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide'"), 'Canonical responsive breakpoints changed');
+assert.ok(source.includes("appHeader: {height:52,paddingHorizontal:18"), 'Canonical top app header geometry changed');
+assert.ok(source.includes("logoSmall: {fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30"), 'Canonical Archivist header wordmark changed');
+assert.ok(source.includes("tabBar: {height:60,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:'row'}"), 'Canonical bottom navigation geometry changed');
+assert.ok(source.includes("shelfGreeting: {fontFamily:'ArchivistEditorial',fontSize:34,lineHeight:40") && source.includes("shelfGreetingFold: {fontSize:36,lineHeight:42}"), 'Canonical Shelf editorial hierarchy changed');
+assert.ok(source.includes("libraryTitle: {fontFamily:'ArchivistEditorial',fontSize:36,lineHeight:44") && source.includes("libraryTitleFold: {fontSize:40,lineHeight:48}"), 'Canonical Library editorial hierarchy changed');
+assert.ok(source.includes("libraryRail: {width:208") && source.includes("libraryRailFold: {width:184,paddingHorizontal:14,paddingTop:20,borderRightWidth:1}"), 'Canonical Library rail widths changed');
+assert.ok(source.includes("libraryRailTitleFold: {fontSize:11,lineHeight:15") && source.includes("librarySpaceTextFold: {fontSize:14,lineHeight:19}") && source.includes("sourceTabTextFold: {fontSize:14,lineHeight:19}"), 'Approved Fold rail readability fix changed');
+assert.ok(source.includes("function LaunchExperience") && source.includes("launchHalo: {width:360,height:360") && source.includes("launchIcon: {width:98,height:98") && source.includes("launchWordmark: {fontFamily:'ArchivistEditorial',fontSize:38,lineHeight:46"), 'Approved 0.9.5 animated splash changed');
+assert.ok(source.includes("scannerStages=['Discover','Group & identify','Metadata & covers','Ready']"), 'Approved scanner onboarding stage labels changed');
+assert.ok(source.includes("const stageOneActive=!hasFolder&&!session") && source.includes("const stageTwoActive=hasFolder&&!scanHasRun&&!scanBusy") && source.includes("const stageThreeActive=scanHasRun&&!scanBusy&&reviewCount>0") && source.includes("const enterActive=hasUsableLibrary&&!scanBusy&&reviewCount===0"), 'Approved sequential onboarding emphasis changed');
+assert.ok(source.includes("<Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text>"), 'Archivist header branding disappeared');
+assert.ok(source.includes('accessibilityLabel="Open Reader Stats"'), 'Persistent profile/stats entry point disappeared');
+assert.equal(source.includes('All time'),false,'Reader Stats must not restore the removed All time label');
+
 // Locked main chrome: five-tab navigation with center Now and premium navy dark canvas.
 assert.ok(source.includes("{id:'player',label:'Now',icon:'bookOpen'}"), 'Bottom navigation must keep the centre Now tab');
 const tabsBlock=source.slice(source.indexOf("const tabs: Array"),source.indexOf("return (",source.indexOf("const tabs: Array")));
