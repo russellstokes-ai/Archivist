@@ -54,8 +54,9 @@ function book(id,uri,extra={}){
       onlineMetadataMatch:{provider:'openlibrary',coverUri:'https://covers.example/fail.jpg'},
     }),
   ],failedOps);
-  assert.equal(failed.books[0].livingBookCoverUri,undefined);
-  assert.equal(partitionLocalBooksByPublication(failed.books).published.length,0,'remote cover URL must never publish a work');
+  assert.equal(failed.books[0].livingBookCoverUri,'file:///covers/square.jpg','valid local audiobook art must provide a temporary Living Book jacket when provider art is unavailable');
+  assert.equal(failed.books[0].livingBookCoverConfidence,0.45);
+  assert.equal(partitionLocalBooksByPublication(failed.books).published.length,1,'identified audiobook with valid local artwork must not be hidden by portrait-jacket availability');
 
   const ebook=[book(4,'content://root/document/primary:Books%2FDune.epub',{format:'EPUB',coverShape:'portrait',coverUri:'file:///covers/dune.jpg'})];
   const ebookResult=await cacheRequiredWorkArtwork(ebook,ops);
