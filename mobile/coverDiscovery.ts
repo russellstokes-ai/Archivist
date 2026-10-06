@@ -1,6 +1,6 @@
 import {openNativeZip} from './nativeZip';
 import JSZip from 'jszip';
-import {NativeModules} from 'react-native';
+import {NativeModules,Platform} from 'react-native';
 import {openCbrPages,readCbtImages} from './archiveReader';
 import {
   documentDirectory,
@@ -18,6 +18,7 @@ export type DiscoveredCover = {
 };
 
 const maxArchiveBytes=64*1024*1024;
+const maxForegroundAndroidSafArchiveCoverBytes=24*1024*1024;
 const maxCoverBytes=12*1024*1024;
 const maxAudioTagBytes=4*1024*1024;
 
@@ -44,6 +45,11 @@ export async function discoverEmbeddedCover(
       const extension=mimeType.includes('png')?'png':mimeType.includes('webp')?'webp':mimeType.includes('gif')?'gif':'jpg';
       cover={base64,mimeType,extension};
     }else if(ext==='epub'||ext==='cbz'||ext==='zip'){
+      // Android SAF archives can sit on slow providers. Never copy a large or
+      // size-unknown archive into cache just to hunt for a cover in foreground.
+      // Online artwork has already run before this fallback stage.
+      if(Platform.OS==='android'&&uri.startsWith('content://')&&
+        (typeof info?.size!=='number'||info.size>maxForegroundAndroidSafArchiveCoverBytes))return undefined;
       const nativeZip=await openNativeZip(uri);
       if(nativeZip){try{cover=await extractArchiveCoverFromZip(nativeZip,ext);}finally{await nativeZip.dispose?.();}}
       else{
