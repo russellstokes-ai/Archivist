@@ -30,6 +30,22 @@ for (const route of [
   assert.ok(clientSource.includes(route), 'Expected wired mobile route missing from client: ' + route);
 }
 
+
+// Locked main chrome: five-tab navigation with center Now and premium navy dark canvas.
+assert.ok(source.includes("{id:'player',label:'Now',icon:'bookOpen'}"), 'Bottom navigation must keep the centre Now tab');
+const tabsBlock=source.slice(source.indexOf("const tabs: Array"),source.indexOf("return (",source.indexOf("const tabs: Array")));
+assert.deepEqual(
+  [...tabsBlock.matchAll(/label:'([^']+)'/g)].map(match=>match[1]),
+  ['Shelf','Library','Now','Atlas','Stats'],
+  'Locked bottom navigation order must remain Shelf, Library, Now, Atlas, Stats',
+);
+assert.ok(source.includes("paper: dark ? '#07111D'"), 'Dark mode must use the locked navy canvas, not pure black');
+assert.equal(source.includes("paper: dark ? '#000000'"),false,'Pure black must not replace the locked navy dark canvas');
+assert.ok(
+  source.includes("activeTab!=='reader'&&activeTab!=='profile'&&activeTab!=='settings'"),
+  'Main bottom navigation must remain visible on Player/Now and Stats',
+);
+
 console.log('PASS: no placeholder UI markers and every visible mobile button/tab is wired');
 
 assert.match(source,/\{id:\s*['"]insights['"],\s*label:\s*['"]Stats['"]/, 'Stats tab is not wired');
