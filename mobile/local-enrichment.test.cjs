@@ -182,35 +182,43 @@ assert(!x.publishableLocalWork({title:'Untitled',needsReview:false,coverUri:'cov
     assetSignature:'mystery-v1',
     metadataContextSignature:'ctx-a',
   };
-  let resolvingLookups=0;
-  const resolvedOnce=await x.enrichLocalCatalogue([firstUnresolved],{},undefined,{
-    lookup:async()=>{
-      resolvingLookups++;
-      return {
-        provider:'open-library',
-        providerId:'RESOLVED-1',
-        title:'The Left Hand of Darkness',
-        authors:['Ursula K. Le Guin'],
-        publishedYear:1969,
-        coverUri:'https://covers.example/left-hand.jpg',
-        confidence:.99,
-      };
-    },
+  let weakLookupCalls=0;
+  const unresolved=await x.enrichLocalCatalogue([firstUnresolved],{},undefined,{
+    lookup:async()=>{weakLookupCalls++;throw Error('weak discoveries must stay in review')},
     extractAudioArtwork:async()=>null,
-    cachePortrait:async()=>({uri:'file://left-hand.jpg',width:640,height:1000,aspectRatio:.64}),
+    cachePortrait:async()=>{throw Error('weak discoveries must not fetch covers')},
     lookupDelayMs:0,
     now:()=>new Date('2026-10-05T21:00:00Z'),
   });
-  assert.equal(resolvingLookups,1);
-  const resolvedAgain=await x.enrichLocalCatalogue(resolvedOnce.books,resolvedOnce.cache,undefined,{
-    lookup:async()=>{throw Error('resolved cache should be reusable without another lookup')},
+  assert.equal(weakLookupCalls,0,'title-only uncertain discoveries must not trigger automatic online lookup');
+  assert.equal(unresolved.books[0].needsReview,true);
+  assert.equal(Object.values(unresolved.cache)[0].publishReady,false);
+
+  const isbnUnresolved={...firstUnresolved,id:921,uri:'file://isbn-mystery.epub',isbn:'9780441172719',identifiers:['9780441172719'],assetSignature:'isbn-v1'};
+  let isbnLookupCalls=0;
+  const isbnResolved=await x.enrichLocalCatalogue([isbnUnresolved],{},undefined,{
+    lookup:async input=>{
+      isbnLookupCalls++;
+      assert.equal(input.isbn,'9780441172719');
+      return {
+        provider:'open-library',
+        providerId:'ISBN-DUNE',
+        title:'Dune',
+        authors:['Frank Herbert'],
+        publishedYear:1965,
+        coverUri:'https://covers.example/dune-isbn.jpg',
+        confidence:1,
+      };
+    },
     extractAudioArtwork:async()=>null,
-    cachePortrait:async()=>{throw Error('resolved cache should not rebuild portrait art')},
+    cachePortrait:async()=>({uri:'file://dune-isbn.jpg',width:640,height:1000,aspectRatio:.64}),
     lookupDelayMs:0,
     now:()=>new Date('2026-10-05T21:05:00Z'),
   });
-  assert.equal(resolvedAgain.books[0].title,'The Left Hand of Darkness','resolved cache signature must remain stable across restart');
-  assert.equal(Object.values(resolvedAgain.cache)[0].version,2,'active cache entries must use the current schema version');
+  assert.equal(isbnLookupCalls,1,'an exact ISBN may resolve an otherwise incomplete work automatically');
+  assert.equal(isbnResolved.books[0].title,'Dune');
+  assert.equal(isbnResolved.books[0].needsReview,false);
+  assert.equal(Object.values(isbnResolved.cache)[0].publishReady,true);
 
   const sameIdentityA={
     ...staleBook,
