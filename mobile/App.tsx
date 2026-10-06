@@ -802,12 +802,11 @@ function Client() {
   const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
-  const [deepScanKey,setDeepScanKey]=useState('');
   useEffect(()=>{
-    if(!localFolderNotice||localScanning||!!deepScanKey)return;
+    if(!localFolderNotice||localScanning)return;
     const timer=setTimeout(()=>setLocalFolderNotice(''),8000);
     return()=>clearTimeout(timer);
-  },[deepScanKey,localFolderNotice,localScanning]);
+  },[localFolderNotice,localScanning]);
   const [scanProgress, setScanProgress] = useState<LocalScanProgress | null>(null);
   const [enrichmentProgress,setEnrichmentProgress]=useState<LocalScanProgress|null>(null);
   const activeLibraryProgress=scanProgress||enrichmentProgress;
@@ -3054,108 +3053,8 @@ function Client() {
     return `${books.length} found · ${Math.max(0,books.length-review)} identified · ${review} need review${coverText}${warningText}.`;
   }
 
-  async function deepScanLocalAssets(seedUris:string[],label:string){
-    if(libraryRefreshRunningRef.current||deepScanKey)return;
-    const all=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-    const requested=new Set(seedUris.filter(Boolean));
-    if(!requested.size)return;
-    let targets=all.filter(book=>requested.has(book.uri));
-    if(targets.length===1){
-      const grouped=groupLocalWorks(all).find(work=>work.tracks.some(track=>track.uri===targets[0].uri));
-      if(grouped?.tracks.length)targets=grouped.tracks;
-    }
-    if(!targets.length)return;
-
-    const scanId=targets[0].uri;
-    setDeepScanKey(scanId);
-    setError('');
-    setLocalFolderNotice('Deep scanning “'+label+'”…');
-    try{
-      let enriched=targets;
-      const embedded=await enrichLocalEmbeddedMetadata(enriched,{
-        refreshMetadata:true,
-        batchSize:Math.max(1,Math.min(4,enriched.length)),
-        itemTimeoutMs:5000,
-        maxConsecutiveTimeouts:3,
-        concurrency:Math.max(1,Math.min(3,enriched.length)),
-      });
-      enriched=(await synchronizeLocalMetadataCooperative(embedded.books,{batchSize:12})).books as LocalBook[];
-
-      if(metadataSettings.onlineEnabled&&metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)
-        && enriched.some(book=>book.format==='EPUB'||book.format==='PDF'||book.format==='Audio')){
-        const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
-        const googleBooksApiKey=metadataSettings.books.googleBooks
-          ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
-          : undefined;
-        if(metadataSettings.books.openLibrary||googleBooksApiKey){
-          const online=await enrichLocalBookMetadataOnline(enriched,{
-            cache,
-            googleBooksApiKey,
-            openLibraryEnabled:metadataSettings.books.openLibrary,
-            applyHighConfidence:metadataSettings.applyHighConfidence,
-            ignoreCache:true,
-            batchSize:Math.max(1,Math.min(4,enriched.length)),
-            concurrency:Math.max(1,Math.min(2,enriched.length)),
-          });
-          enriched=online.books;
-          await setPersistedJSON(onlineBookMetadataCacheKey,online.cache).catch(()=>undefined);
-        }
-      }
-
-      if(metadataSettings.onlineEnabled&&metadataSettings.comics.enabled&&metadataSettings.comics.metron&&enriched.some(book=>book.format==='Comic')){
-        const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim();
-        if(token){
-          const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
-          const online=await enrichLocalComicMetadataOnline(enriched,{
-            token,
-            cache,
-            applyHighConfidence:metadataSettings.applyHighConfidence,
-            ignoreCache:true,
-            batchSize:Math.max(1,Math.min(3,enriched.length)),
-          });
-          enriched=online.books;
-          await setPersistedJSON(onlineComicMetadataCacheKey,online.cache).catch(()=>undefined);
-        }
-      }
-
-      const cached=await cacheOnlineCoverUris(enriched,{
-        documentDirectory,
-        makeDirectoryAsync,
-        downloadAsync:downloadCoverWithDeadline,
-        getInfoAsync,
-        deleteAsync,
-      },{concurrency:2}).catch(()=>null);
-      if(cached)enriched=cached.books;
-
-      const localCovers=await enrichLocalBookCovers(enriched,{
-        batchSize:Math.max(1,Math.min(4,enriched.length)),
-        itemTimeoutMs:8000,
-        maxConsecutiveTimeouts:2,
-      });
-      enriched=(await synchronizeLocalMetadataCooperative(localCovers.books,{batchSize:12})).books as LocalBook[];
-
-      const merged=applyOnlineMetadataEnrichment(all,enriched);
-      const changed=changedLocalStageBooks(all,merged);
-      if(changed.length)await upsertLocalStageBooks(changed);
-      setLocalBooks(merged.map(book=>({...book,source:'local' as const})));
-
-      const remaining=enriched.filter(book=>book.needsReview).length;
-      const coverMissing=enriched.filter(book=>!book.coverUri).length;
-      setLocalFolderNotice(
-        remaining
-          ? 'Deep scan finished · '+remaining+' file'+(remaining===1?' still needs':'s still need')+' review'+(coverMissing?' · '+coverMissing+' cover'+(coverMissing===1?' is':'s are')+' still missing':'')+'.'
-          : 'Deep scan finished · metadata confirmed'+(coverMissing?' · '+coverMissing+' cover'+(coverMissing===1?' is':'s are')+' still missing':' · cover ready')+'.'
-      );
-    }catch(error){
-      setError('Deep scan failed: '+String((error as any)?.message||error));
-      setLocalFolderNotice('Deep scan stopped. The existing catalogue was kept.');
-    }finally{
-      setDeepScanKey('');
-    }
-  }
-
   async function addLocalFolder() {
-    if(libraryRefreshRunningRef.current||deepScanKey)return;
+    if(libraryRefreshRunningRef.current)return;
     setError('');
     setLocalFolderNotice('');
     const picked=await pickLocalFolder().catch(e=>{setError((e as Error).message);return null;});
@@ -3184,7 +3083,7 @@ function Client() {
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
-    if(libraryRefreshRunningRef.current||deepScanKey)return;
+    if(libraryRefreshRunningRef.current)return;
     if(!localFolders.length)return;
     setError('');
     setLocalFolderNotice('');
