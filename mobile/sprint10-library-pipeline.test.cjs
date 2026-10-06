@@ -16,8 +16,8 @@ assert.ok(app.includes('accessibilityLabel="Cancel library refresh"'),'refresh m
 assert.ok(app.includes('scanCommitGate.invalidate()'),'cancel must invalidate stale work');
 assert.equal(app.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover progress batches must not republish the full catalogue');
 assert.equal(/onBatch:[\s\S]{0,600}setPersistedJSON\(localCatalogKey/.test(app),false,'metadata progress batches must not persist the full catalogue');
-assert.ok(app.includes('replaceLocalStageBooks(result.books)')&&app.includes('return replaceLocalStageBooks(books)')&&app.includes('replaceLocalStageBooks(currentBooks)'),'large catalogue persistence must use SQLite for discovery, stage checkpoints and the final enriched commit');
-assert.ok((app.match(/checkpointLocalEnrichment\(currentBooks,generation\)/g)||[]).length>=3,'completed enrichment stages must checkpoint so interrupted preparation resumes without throwing away finished work');
+assert.ok(app.includes('replaceLocalStageBooks(result.books)')&&app.includes('upsertLocalStageBooks(changed)')&&app.includes('upsertLocalStageBooks(currentBooks)'),'large catalogue persistence must use one authoritative SQLite discovery commit then incremental enrichment upserts');
+assert.ok((app.match(/checkpointLocalEnrichment\([^,]+,currentBooks,generation\)/g)||[]).length>=3,'completed enrichment stages must checkpoint only changed assets so interrupted preparation resumes without whole-catalogue rewrites');
 assert.ok(app.includes('loadLocalStageBooks()'),'catalogue hydration must come from SQLite while enrichment passes the catalogue in memory');
 
 assert.ok(library.includes('cooperativeYieldFactory'),'scanner must enforce a cooperative UI frame budget');
