@@ -21,6 +21,8 @@ assert.ok(audio.includes('const maxMP4MetadataBytes=768*1024'),'M4B foreground p
 assert.ok(app.includes('concurrency:2'),'foreground embedded metadata scanning must use bounded concurrency');
 assert.ok(covers.includes('maxForegroundAndroidSafArchiveCoverBytes=24*1024*1024')&&covers.includes("uri.startsWith('content://')"),'large Android SAF archives must not be recopied merely to find a fallback cover');
 assert.ok(nativeLibrary.includes('fun startTreeScan(')&&nativeLibrary.includes('fun readTreeScanBatch('),'Android discovery must run through the streamed native SAF scanner');
+assert.ok(nativeLibrary.includes('CancellationSignal')&&nativeLibrary.includes('session.cancellationSignal')&&nativeLibrary.includes('cancellationSignal?.cancel()'),'slow SAF directory queries must be cancellable at the DocumentsProvider boundary');
+assert.ok(nativeLibrary.includes('ext == "json" || ext == "xml"'),'native discovery must retain XML/JSON sidecar metadata support');
 assert.ok(localLibrary.includes("NativeModules?.ArchivistLibrary")&&localLibrary.includes('scanLocalFoldersNativeV2'),'Test 13 must use native Android discovery instead of the legacy JS folder walker');
 
 assert.ok(app.includes('const lastPlaybackVisibleRef=useRef(false)'),'Living Book must track player re-entry');
