@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.os.CancellationSignal
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -23,6 +24,7 @@ import kotlin.math.max
 import kotlin.math.min
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipFile
 import com.facebook.react.bridge.UiThreadUtil
 import android.os.Build
@@ -87,6 +89,74 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
     }
   }
 
+  private fun <T> withMetadataInput(uri: String, timeoutMs: Long = 2200L, block: (InputStream, () -> Boolean) -> T): T {
+    val parsed = Uri.parse(uri)
+    val cancelled = AtomicBoolean(false)
+    val signal = CancellationSignal()
+    var descriptor: ParcelFileDescriptor? = null
+    var input: InputStream? = null
+    val watchdog = thread(name = "archivist-metadata-watchdog", isDaemon = true) {
+      try {
+        Thread.sleep(timeoutMs)
+        if (cancelled.compareAndSet(false, true)) {
+          try { signal.cancel() } catch (_: Throwable) {}
+          try { input?.close() } catch (_: Throwable) {}
+          try { descriptor?.close() } catch (_: Throwable) {}
+        }
+      } catch (_: InterruptedException) {}
+    }
+    try {
+      input = when (parsed.scheme) {
+        "content" -> {
+          descriptor = context.contentResolver.openFileDescriptor(parsed, "r", signal)
+            ?: throw IllegalArgumentException("Unable to open metadata source")
+          FileInputStream(descriptor!!.fileDescriptor)
+        }
+        "file" -> FileInputStream(File(parsed.path ?: throw IllegalArgumentException("Invalid file URI")))
+        else -> FileInputStream(File(uri))
+      }
+      if (cancelled.get()) throw IllegalArgumentException("Metadata read timed out.")
+      return block(input!!){cancelled.get()}
+    } finally {
+      cancelled.set(true)
+      watchdog.interrupt()
+      try { input?.close() } catch (_: Throwable) {}
+      try { descriptor?.close() } catch (_: Throwable) {}
+      try { signal.cancel() } catch (_: Throwable) {}
+    }
+  }
+
+  @ReactMethod
+  fun readMetadataRange(uri: String, position: Double, requestedLength: Int, timeoutMs: Int, promise: Promise) {
+    thread(name = "archivist-metadata-range") {
+      try {
+        val length = requestedLength.coerceIn(1, 1024 * 1024)
+        val start = position.toLong().coerceAtLeast(0L)
+        val data = withMetadataInput(uri, timeoutMs.toLong().coerceIn(250L, 8000L)) { source, cancelled ->
+          val file = source as? FileInputStream ?: throw IllegalArgumentException("Metadata source is not seekable.")
+          if (start > 0L) {
+            try { file.channel.position(start) }
+            catch (_: Throwable) { throw IllegalArgumentException("Metadata source does not support bounded seeking.") }
+          }
+          val output = ByteArrayOutputStream(length)
+          val buffer = ByteArray(min(16 * 1024, length))
+          var remaining = length
+          while (remaining > 0) {
+            if (cancelled()) throw IllegalArgumentException("Metadata read timed out.")
+            val count = file.read(buffer, 0, min(buffer.size, remaining))
+            if (count < 0) break
+            output.write(buffer, 0, count)
+            remaining -= count
+          }
+          output.toByteArray()
+        }
+        promise.resolve(Base64.encodeToString(data, Base64.NO_WRAP))
+      } catch (error: Throwable) {
+        promise.reject("METADATA_RANGE_FAILED", error.message ?: "Unable to read bounded metadata range", error)
+      }
+    }
+  }
+
   private class BoundedArchiveInput(input: InputStream, private val maxBytes: Long) : FilterInputStream(input) {
     var bytesRead: Long = 0
       private set
@@ -144,10 +214,11 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
         var resolvedKind = ""
         var resolvedText = ""
         var entries = 0
-        BoundedArchiveInput(openInput(uri), 32L * 1024 * 1024).use { bounded ->
-          ZipInputStream(bounded.buffered()).use { zip ->
-            while (true) {
-              if (System.nanoTime() > deadline) throw IllegalArgumentException("Archive metadata scan timed out.")
+        withMetadataInput(uri, 2200L) { source, cancelled ->
+          BoundedArchiveInput(source, 32L * 1024 * 1024).use { bounded ->
+            ZipInputStream(bounded.buffered()).use { zip ->
+              while (true) {
+                if (cancelled() || System.nanoTime() > deadline) throw IllegalArgumentException("Archive metadata scan timed out.")
               val entry = zip.nextEntry ?: break
               if (entry.isDirectory) {
                 zip.closeEntry()
@@ -184,11 +255,12 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
             }
           }
 
-          val result = Arguments.createMap()
-          result.putString("kind", resolvedKind)
-          result.putString("text", resolvedText)
-          result.putDouble("bytesRead", bounded.bytesRead.toDouble())
-          promise.resolve(result)
+            val result = Arguments.createMap()
+            result.putString("kind", resolvedKind)
+            result.putString("text", resolvedText)
+            result.putDouble("bytesRead", bounded.bytesRead.toDouble())
+            promise.resolve(result)
+          }
         }
       } catch (error: Throwable) {
         promise.reject("ARCHIVE_METADATA_FAILED", error.message ?: "Unable to read archive metadata", error)
@@ -310,11 +382,11 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
       try {
         val deadline = System.nanoTime() + 2_000_000_000L
         var text = ""
-        openInput(uri).use { input ->
+        withMetadataInput(uri, 2200L) { input, cancelled ->
           Archive(input).use { archive ->
             var entries = 0
             while (true) {
-              if (System.nanoTime() > deadline) throw IllegalArgumentException("RAR metadata scan timed out.")
+              if (cancelled() || System.nanoTime() > deadline) throw IllegalArgumentException("RAR metadata scan timed out.")
               val header = archive.nextFileHeader() ?: break
               if (header.isDirectory) continue
               if (++entries > 4000) throw IllegalArgumentException("RAR contains too many entries for foreground metadata scanning.")
