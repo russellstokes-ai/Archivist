@@ -509,6 +509,79 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
   );
 }
 
+
+function LaunchExperience({dark,onDone}:{dark:boolean;onDone:()=>void}) {
+  const entrance=useRef(new Animated.Value(0)).current;
+  const breathe=useRef(new Animated.Value(0)).current;
+  const fade=useRef(new Animated.Value(1)).current;
+
+  useEffect(()=>{
+    let cancelled=false;
+    let loop:ReturnType<typeof Animated.loop>|undefined;
+    let hold:ReturnType<typeof setTimeout>|undefined;
+    AccessibilityInfo.isReduceMotionEnabled().then(reduced=>{
+      if(cancelled)return;
+      if(reduced){
+        entrance.setValue(1);
+        hold=setTimeout(()=>{
+          Animated.timing(fade,{toValue:0,duration:180,useNativeDriver:true}).start(({finished})=>{
+            if(finished&&!cancelled)onDone();
+          });
+        },700);
+        return;
+      }
+      Animated.timing(entrance,{toValue:1,duration:620,useNativeDriver:true}).start();
+      loop=Animated.loop(Animated.sequence([
+        Animated.timing(breathe,{toValue:1,duration:900,useNativeDriver:true}),
+        Animated.timing(breathe,{toValue:0,duration:900,useNativeDriver:true}),
+      ]));
+      loop.start();
+      hold=setTimeout(()=>{
+        Animated.timing(fade,{toValue:0,duration:440,useNativeDriver:true}).start(({finished})=>{
+          if(finished&&!cancelled)onDone();
+        });
+      },1750);
+    });
+    return ()=>{
+      cancelled=true;
+      if(hold)clearTimeout(hold);
+      loop?.stop();
+    };
+  },[breathe,entrance,fade,onDone]);
+
+  const ink=dark?'#F3F0E8':'#111111';
+  const muted=dark?'#A9B4C5':'#6B6B6B';
+  const halo=dark?'#5A9B94':'#B99A68';
+  return (
+    <Animated.View
+      pointerEvents="auto"
+      accessibilityLabel="Opening Archivist"
+      style={[styles.launchOverlay,{backgroundColor:dark?'#07151C':'#FBFAF7',opacity:fade}]}>
+      <AmbientGlow color={halo} size={560} strength={dark?1.35:.62}/>
+      <Animated.View style={[styles.launchHalo,{
+        opacity:entrance,
+        transform:[{scale:entrance.interpolate({inputRange:[0,1],outputRange:[.94,1]})}],
+      }]}>
+        <Animated.View pointerEvents="none" style={[styles.launchHaloRing,{
+          borderColor:halo,
+          opacity:breathe.interpolate({inputRange:[0,1],outputRange:[.16,.44]}),
+          transform:[{scale:breathe.interpolate({inputRange:[0,1],outputRange:[.94,1.08]})}],
+        }]}/>
+        <Animated.View pointerEvents="none" style={[styles.launchHaloRing,styles.launchHaloRingInner,{
+          borderColor:halo,
+          opacity:breathe.interpolate({inputRange:[0,1],outputRange:[.34,.14]}),
+          transform:[{scale:breathe.interpolate({inputRange:[0,1],outputRange:[1.04,.96]})}],
+        }]}/>
+        <View style={styles.launchMark}>
+          <Image source={require('./assets/icon.png')} resizeMode="contain" style={styles.launchIcon}/>
+          <Text style={[styles.launchWordmark,{color:ink}]}>Archivist</Text>
+          <Text style={[styles.launchTagline,{color:muted}]}>YOUR READING UNIVERSE</Text>
+        </View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 function Client() {
   const systemScheme = useColorScheme();
   const {width} = useWindowDimensions();
@@ -2726,13 +2799,15 @@ function Client() {
             style={({pressed})=>[
               styles.librarySpaceTab,
               vertical&&styles.librarySpaceTabVertical,
+              vertical&&layoutTier==='fold'&&styles.librarySpaceTabVerticalFold,
               pressed&&{opacity:.62},
             ]}>
-            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.librarySpaceText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>
+            <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.librarySpaceText,vertical&&layoutTier==='fold'&&styles.librarySpaceTextFold,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>
               {name || 'All spaces'}
             </Text>
             <View pointerEvents="none" style={[
               vertical?styles.librarySpaceMarkerVertical:styles.librarySpaceMarker,
+              vertical&&layoutTier==='fold'&&styles.librarySpaceMarkerVerticalFold,
               {backgroundColor:p.sage,opacity:selected?1:0},
             ]}/>
           </Pressable>;
@@ -2754,6 +2829,13 @@ function Client() {
     const stageTwoActive=hasFolder&&!scanHasRun&&!scanBusy;
     const stageThreeActive=scanHasRun&&!scanBusy&&reviewCount>0;
     const enterActive=hasUsableLibrary&&!scanBusy&&reviewCount===0;
+    const scannerActiveStage=localEnrichmentProgress
+      ? 2
+      : localScanning
+        ? scanProgress?.phase==='identifying'?1:0
+        : -1;
+    const scannerComplete=scanHasRun&&!scanBusy;
+    const scannerStages=['Discover','Group & identify','Metadata & covers','Ready'];
     const pulseStyle=(active:boolean)=>active
       ? reduceMotion
         ? {opacity:1}
@@ -2809,6 +2891,20 @@ function Client() {
           </View>
         </View>
         {hasFolder?<Animated.View style={[styles.onboardingActionStage,pulseStyle(stageTwoActive)]}><Button label={scanBusy?'Scanning & identifying…':scanHasRun?'Scan folders again':`Scan ${localFolders.length} folder${localFolders.length===1?'':'s'}`} disabled={scanBusy} onPress={()=>void rescanLocalFolders(false)} /></Animated.View>:null}
+        {hasFolder&&(scanBusy||scanHasRun)?<View accessibilityLabel="Library scan progress" style={styles.onboardingScanFlow}>
+          {scannerStages.map((label,index)=>{
+            const active=scannerActiveStage===index;
+            const done=scannerComplete||(scannerActiveStage>=0&&index<scannerActiveStage);
+            return <Animated.View key={label} style={[
+              styles.onboardingScanStage,
+              {borderColor:active||done?p.sage:p.line,backgroundColor:done?p.card:'transparent'},
+              pulseStyle(active),
+            ]}>
+              <View style={[styles.onboardingScanDot,{backgroundColor:active||done?p.sage:p.line}]}/>
+              <Text style={[styles.onboardingScanText,{color:active||done?p.ink:p.muted,fontWeight:active?'700':'600'}]}>{label}</Text>
+            </Animated.View>;
+          })}
+        </View>:null}
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:(scanHasRun||session)&&!scanBusy?p.sage:p.muted}]}>03</Text>
@@ -3220,13 +3316,14 @@ function Client() {
           pressed&&{opacity:.62},
         ]}>
         <View style={{flexDirection:'row',alignItems:'baseline',gap:7,minWidth:0}}>
-          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.sourceTabText,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>{item.label}</Text>
-          <Text maxFontSizeMultiplier={1.15} style={[styles.sourceTabCount,{color:selected?p.sage:p.muted}]}>{item.count}</Text>
+          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.sourceTabText,vertical&&layoutTier==='fold'&&styles.sourceTabTextFold,{color:selected?p.ink:p.muted,fontWeight:selected?'700':'500'}]}>{item.label}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.sourceTabCount,vertical&&layoutTier==='fold'&&styles.sourceTabCountFold,{color:selected?p.sage:p.muted}]}>{item.count}</Text>
         </View>
         <View
           pointerEvents="none"
           style={[
             vertical?styles.sourceTabMarkerVertical:styles.sourceTabMarker,
+            vertical&&layoutTier==='fold'&&styles.sourceTabMarkerVerticalFold,
             {backgroundColor:p.sage,opacity:selected?1:0},
           ]}
         />
@@ -3943,7 +4040,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);setOrganisationName('');setSmartShelfRules(emptySmartShelfRules());setSmartShelfAdvanced(false);setOrganisationModal('smart-shelf')}}/>
       </View></ScrollView></View></Modal>:null}
     </View>;
-    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:12.5,lineHeight:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
+    return wide?<View style={styles.libraryTwoPane}><View style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{backgroundColor:p.paper,borderRightColor:p.line}]}><Text style={[styles.libraryRailTitle,layoutTier==='fold'&&styles.libraryRailTitleFold,{color:p.muted}]}>SOURCES</Text><SourceSwitcher vertical/><Text style={[styles.libraryRailTitle,layoutTier==='fold'&&styles.libraryRailTitleFold,{color:p.muted,marginTop:20}]}>SPACES</Text><LibrarySwitcher vertical/><Pressable accessibilityRole="button" onPress={()=>void addLocalFolder()} style={styles.libraryRailAdd}><Text maxFontSizeMultiplier={1.15} style={{color:p.sage,fontSize:layoutTier==='fold'?13.5:12.5,lineHeight:layoutTier==='fold'?19:18,fontWeight:'600'}}>Add device folder</Text></Pressable></View>{main}</View>:main;
   }
 
   function Player() {
@@ -5261,12 +5358,24 @@ function Client() {
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ArchivistEditorial: require('./assets/fonts/LibreCaslonText.ttf')});
   const system = useColorScheme();
-  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:system==='dark'?'#07111D':'#FFFFFF'}}><ActivityIndicator color="#47736F" /></View>;
-  return <SafeAreaProvider><Client /></SafeAreaProvider>;
+  const [showLaunch,setShowLaunch]=useState(true);
+  const dark=system==='dark';
+  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={[styles.launchPrefont,{backgroundColor:dark?'#07151C':'#FBFAF7'}]}><AmbientGlow color={dark?'#5A9B94':'#B99A68'} size={520} strength={dark?1.1:.5}/><Image source={require('./assets/icon.png')} resizeMode="contain" style={styles.launchPrefontIcon}/><ActivityIndicator color="#47736F" /></View>;
+  return <SafeAreaProvider><View style={{flex:1,backgroundColor:dark?'#07151C':'#FBFAF7'}}><Client />{showLaunch?<LaunchExperience dark={dark} onDone={()=>setShowLaunch(false)}/>:null}</View></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
+  launchPrefont: {flex:1,alignItems:'center',justifyContent:'center',gap:18},
+  launchPrefontIcon: {width:82,height:82},
+  launchOverlay: {...StyleSheet.absoluteFillObject,zIndex:1000,alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  launchHalo: {width:360,height:360,alignItems:'center',justifyContent:'center'},
+  launchHaloRing: {position:'absolute',width:304,height:304,borderRadius:152,borderWidth:1},
+  launchHaloRingInner: {width:230,height:230,borderRadius:115},
+  launchMark: {alignItems:'center',justifyContent:'center',gap:8},
+  launchIcon: {width:98,height:98,marginBottom:8},
+  launchWordmark: {fontFamily:'ArchivistEditorial',fontSize:38,lineHeight:46,fontWeight:'500',letterSpacing:-.45},
+  launchTagline: {fontSize:9.5,lineHeight:14,fontWeight:'700',letterSpacing:3.1},
   restoreScreen: {flex:1,paddingHorizontal:18,paddingTop:8},
   restoreBody: {flex:1,paddingTop:28,gap:18,maxWidth:760,width:'100%',alignSelf:'center'},
   restoreKicker: {width:68,height:8,borderRadius:4,opacity:.6},
@@ -5293,8 +5402,9 @@ const styles = StyleSheet.create({
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
   libraryRail: {width:208,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:16,paddingTop:24,paddingBottom:20,gap:6},
-  libraryRailFold: {width:164,paddingHorizontal:12,paddingTop:20},
+  libraryRailFold: {width:184,paddingHorizontal:14,paddingTop:20,borderRightWidth:1},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
+  libraryRailTitleFold: {fontSize:11,lineHeight:15,letterSpacing:1.5,marginBottom:4},
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
   libraryChoice: {borderWidth: 0, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center'},
@@ -5304,9 +5414,12 @@ const styles = StyleSheet.create({
   libraryChipsRow: {flexDirection: 'row', gap: 20},
   librarySpaceTab: {minHeight:44,justifyContent:'center',position:'relative',paddingHorizontal:1},
   librarySpaceTabVertical: {minHeight:42,paddingHorizontal:10},
+  librarySpaceTabVerticalFold: {minHeight:45,paddingHorizontal:12},
   librarySpaceText: {fontSize:13},
+  librarySpaceTextFold: {fontSize:14,lineHeight:19},
   librarySpaceMarker: {position:'absolute',left:0,right:0,bottom:0,height:2,borderRadius:2},
   librarySpaceMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
+  librarySpaceMarkerVerticalFold: {width:4,top:9,bottom:9},
   librarySummary: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:14,flexDirection:'row',gap:12,alignItems:'center'},
   reviewBanner: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,minHeight:48,paddingVertical:8,paddingHorizontal:0,flexDirection:'row',gap:12,alignItems:'center'},
   reviewBannerCopy: {flex:1,minWidth:0,flexDirection:'row',alignItems:'baseline',gap:10},
@@ -5327,6 +5440,10 @@ const styles = StyleSheet.create({
   onboardingNumber: {width:24,fontSize:11,lineHeight:18,fontWeight:'700',letterSpacing:.7,textAlign:'left'},
   onboardingStepTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600',marginBottom:2},
   onboardingActionStage: {alignSelf:'stretch'},
+  onboardingScanFlow: {flexDirection:'row',flexWrap:'wrap',gap:6,paddingLeft:36,marginTop:-2,marginBottom:2},
+  onboardingScanStage: {minHeight:30,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:6},
+  onboardingScanDot: {width:6,height:6,borderRadius:3},
+  onboardingScanText: {fontSize:11.5,lineHeight:16},
   sourceRow: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:12,gap:4},
   tabBody: {flex: 1},
   title: {fontFamily:'ArchivistEditorial',fontSize:30,lineHeight:36,fontWeight:'500',marginBottom:2,letterSpacing:-.4},
@@ -5620,9 +5737,12 @@ const styles = StyleSheet.create({
   sourceTab: {minHeight:46,justifyContent:'center',position:'relative',paddingHorizontal:1},
   sourceTabVertical: {paddingHorizontal:10,minHeight:42},
   sourceTabText: {fontSize:13},
+  sourceTabTextFold: {fontSize:14,lineHeight:19},
   sourceTabCount: {fontSize:11,fontWeight:'600'},
+  sourceTabCountFold: {fontSize:11.5},
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
+  sourceTabMarkerVerticalFold: {width:4,top:9,bottom:9},
   shelfContent: {paddingHorizontal:18,paddingTop:20,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
   shelfContentFold: {paddingHorizontal:24,paddingTop:22,gap:34},
   shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:2,paddingBottom:0},
