@@ -13,6 +13,13 @@ for (const legacyControl of [">•••</Text>",">⋯</Text>","'Ⅱ'","'▶'","
 }
 assert.ok(source.includes("function UiIcon("), 'Drawn native icon component is missing');
 
+assert.ok(source.includes("Vibration.vibrate(12)"), 'Local cover long-press must provide haptic feedback');
+assert.ok(source.includes(">Edit</Text>") && source.includes(">Delete</Text>"), 'Long-press cover actions must expose direct Edit and Delete controls');
+assert.ok(source.includes("Find Better Match") && source.includes("Deep Scan"), 'Metadata editor must expose manual match search and per-book Deep Scan');
+assert.ok(source.includes("searchBookMetadata") && source.includes("deepScanLocalTracks"), 'Metadata review actions must be wired to the match engine and per-work deep scan');
+assert.ok(source.includes("Source files were left untouched"), 'Local Delete confirmation must preserve source files');
+assert.ok(source.includes("for(const uri of uris)nextOverrides[uri]=override"), 'Manual metadata edits must persist across every file in a grouped work');
+
 for (const match of source.matchAll(/<Button\b[\s\S]*?\/>/g)) {
   assert.match(match[0], /\bonPress\s*=/, 'Button without onPress handler: ' + match[0].slice(0,180));
 }
