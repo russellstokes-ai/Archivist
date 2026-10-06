@@ -1994,11 +1994,13 @@ function Client() {
       series: seriesFilter,
       genre: genreFilter,
       limit: String(limit),
-      offset: String(offset),
     });
     if(after?.id){
       params.set('afterId',String(after.id));
       params.set('afterTitle',after.title||'');
+    }else if(offset>0){
+      // Compatibility only for old server builds. Current pages use keyset cursors.
+      params.set('offset',String(offset));
     }
     if (unknownAuthorOnly) params.set('unknownAuthor','1');
     if (availabilityFilter !== 'all') params.set('availability',availabilityFilter);
@@ -2008,7 +2010,7 @@ function Client() {
     return '/api/works?' + params.toString();
   }
 
-  function serverAssetsPath(offset = 0, limit = 500, allLibrary = false) {
+  function serverAssetsPath(offset = 0, limit = 500, allLibrary = false, after?:{id:number;title:string;needsReview:boolean}) {
     const params = new URLSearchParams({
       q: allLibrary ? '' : query,
       space: allLibrary ? '' : space,
@@ -2017,8 +2019,14 @@ function Client() {
       series: allLibrary ? '' : seriesFilter,
       genre: allLibrary ? '' : genreFilter,
       limit: String(limit),
-      offset: String(offset),
     });
+    if(after?.id){
+      params.set('afterId',String(after.id));
+      params.set('afterTitle',after.title||'');
+      params.set('afterReview',after.needsReview?'1':'0');
+    }else if(offset>0){
+      params.set('offset',String(offset));
+    }
     if (!allLibrary && reviewOnly) params.set('review','1');
     if (!allLibrary && unknownAuthorOnly) params.set('unknownAuthor','1');
     if (!allLibrary && availabilityFilter !== 'all') params.set('availability',availabilityFilter);
@@ -2304,7 +2312,9 @@ function Client() {
     if (!session || !serverBooksHasMore || serverBooksLoadingMore || shelfLoading) return;
     setServerBooksLoadingMore(true);
     try {
-      const next = await request(session,serverAssetsPath(serverBooks.length,200)) as Book[];
+      const last=serverBooks[serverBooks.length-1];
+      const after=last?{id:last.id,title:last.title,needsReview:!!last.needsReview}:undefined;
+      const next = await request(session,serverAssetsPath(serverBooks.length,200,false,after)) as Book[];
       setServerBooks(current => {
         const seen=new Set(current.map(book=>book.id));
         return [...current,...next.filter(book=>!seen.has(book.id))];
@@ -2378,11 +2388,14 @@ function Client() {
   async function fetchAllAssetIDs(allLibrary: boolean) {
     if (!session) return [] as number[];
     const ids: number[] = [];
-    for (let offset=0; ; offset+=500) {
-      const page = await request(session,serverAssetsPath(offset,500,allLibrary)) as Book[];
+    let after:{id:number;title:string;needsReview:boolean}|undefined;
+    for (;;) {
+      const page = await request(session,serverAssetsPath(0,500,allLibrary,after)) as Book[];
       ids.push(...page.map(book=>book.id));
       setMoveStatus(`Reading library… ${ids.length} files found`);
       if (page.length < 500) break;
+      const last=page[page.length-1];
+      after={id:last.id,title:last.title,needsReview:!!last.needsReview};
     }
     return ids;
   }
