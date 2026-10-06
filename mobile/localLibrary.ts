@@ -62,6 +62,9 @@ export type LocalBook = {
   comicMetadataProvenance?: Partial<Record<string, MetadataSource>>;
   onlineComicMetadataMatch?: OnlineComicCandidate;
   onlineComicMetadataAlternatives?: OnlineComicCandidate[];
+  publishReady?: boolean;
+  publicationState?: 'discovered' | 'metadata' | 'cover' | 'published' | 'attention';
+  publicationReason?: string;
 };
 
 export type LocalSortMode = 'copy' | 'move';
