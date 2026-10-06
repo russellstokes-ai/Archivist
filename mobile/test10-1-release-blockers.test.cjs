@@ -13,8 +13,12 @@ assert.ok(app.includes('Copy · keep originals')&&app.includes('Move · remove o
 assert.ok(app.includes("applyLocalSort(ready,localSortMode,checkpoint)"),'selected sort mode must reach the engine');
 assert.ok(library.includes("export type LocalSortMode = 'copy' | 'move'"),'sort engine must model both modes');
 assert.ok(library.includes('await verifyLocalCopy(preview.sourceUri,target);'),'Move must verify the destination before deletion');
-assert.ok(library.indexOf('await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});') < library.indexOf("if(mode==='move')"),'verified copy must be durably checkpointed before entering destructive Move logic');
-assert.ok(library.includes('await deleteLocalUri(preview.sourceUri);')&&library.includes("if(!removed)throw Error('Source deletion could not be verified')"),'Move must delete and verify the source');
+const workCheckpoint=library.indexOf('copied.push(...staged);');
+const durableCheckpoint=library.indexOf('await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});',workCheckpoint);
+const firstSourceDelete=library.indexOf('await deleteLocalUri(item.sourceUri);',workCheckpoint);
+assert.ok(workCheckpoint>=0&&durableCheckpoint>workCheckpoint&&firstSourceDelete>durableCheckpoint,'every verified destination in a work must be durably checkpointed before any source deletion');
+assert.ok(library.includes("if(sourceAfter?.exists!==false)throw Error('Source deletion could not be verified')"),'Move must verify every source deletion');
+assert.ok(library.includes('for(const item of removed)')&&library.includes('await verifyLocalCopy(item.uri,restored);'),'whole-work Move must restore already-removed originals if a later part cannot be removed safely');
 assert.ok(library.includes('sourceRootUri')&&library.includes('sourceRelativePath'),'cross-storage recovery must retain the original root and path');
 assert.ok(library.includes('recoverLocalSortOperation'),'copy/move transactions must have a recovery path');
 assert.equal(app.includes("item.complete===false?{...item,complete:true}:item"),false,'a rescan must not silently mark interrupted sort transactions complete');
