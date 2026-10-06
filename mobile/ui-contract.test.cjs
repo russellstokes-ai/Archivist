@@ -17,6 +17,7 @@ assert.ok(source.includes("Vibration.vibrate(12)"), 'Local cover long-press must
 assert.ok(source.includes(">Edit</Text>") && source.includes(">Delete</Text>"), 'Long-press cover actions must expose direct Edit and Delete controls');
 assert.ok(source.includes("Find Better Match") && source.includes("Deep Scan"), 'Metadata editor must expose manual match search and per-book Deep Scan');
 assert.ok(source.includes("searchBookMetadata") && source.includes("deepScanLocalTracks"), 'Metadata review actions must be wired to the match engine and per-work deep scan');
+assert.ok(source.includes("setEditTitle(evidenceWork.title)") && source.includes("setEditPublisher(evidenceWork.publisher)"), 'Deep Scan evidence must populate the editable fields even when no online candidate is selected');
 assert.ok(source.includes("Source files were left untouched"), 'Local Delete confirmation must preserve source files');
 assert.ok(source.includes("for(const uri of uris)nextOverrides[uri]=override"), 'Manual metadata edits must persist across every file in a grouped work');
 
