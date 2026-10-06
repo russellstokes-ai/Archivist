@@ -3,7 +3,9 @@ const fs=require('node:fs');
 const ts=require('typescript');
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
 
-const {buildBookLookupHints,scoreOnlineBookCandidate,mergeOnlineBookCandidate,lookupOnlineBook,shouldLookupBookOnline}=require('./onlineBookMetadata.ts');
+const {buildBookLookupHints,scoreOnlineBookCandidate,mergeOnlineBookCandidate,lookupOnlineBook,shouldLookupBookOnline,onlineBookCacheKey}=require('./onlineBookMetadata.ts');
+
+assert.match(onlineBookCacheKey({title:'Dune',author:'Frank Herbert',format:'EPUB'}),/^v2\|/,'optimized matcher must ignore stale cache entries from earlier scanner builds');
 
 const sparse={title:'Dune',author:'',series:'',format:'EPUB',uri:'content://root/document/primary:Books%2FFrank%20Herbert%2FDune%2F01%20-%20Dune.epub'};
 const hints=buildBookLookupHints(sparse);
