@@ -4201,6 +4201,13 @@ function Client() {
     </View>;
   }
 
+  function localEditUris(item:Book){
+    if(item.source==='server'||!item.uri)return item.uri?[item.uri]:[];
+    const staged=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    const work=groupLocalWorks(staged).find(candidate=>candidate.tracks.some(track=>track.uri===item.uri));
+    return work?.tracks.map(track=>track.uri).filter(Boolean)||[item.uri];
+  }
+
   function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
     setEditing(item);
     setEditingUris(uris.filter(Boolean));
@@ -4242,7 +4249,7 @@ function Client() {
             {item.reviewReason?<Text numberOfLines={2} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
           </View>
         </Pressable>
-        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
+        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item,localEditUris(item))} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
       </View>
     );
   }
@@ -4825,7 +4832,26 @@ function Client() {
         });
         const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
         accepted=accepted.map(book=>artworkByUri.get(book.uri)||book);
-        await replaceLocalStageBooks(accepted);
+
+        // Accept & Save is an explicit user decision. Persist the accepted work
+        // as protected overrides for every physical part so a later scan cannot
+        // reconstruct stale chapter/path metadata over it.
+        const acceptedOverrides={...localMetadataOverrides};
+        for(const uri of targets){
+          const book=accepted.find(item=>item.uri===uri);
+          if(!book)continue;
+          acceptedOverrides[uri]={
+            title:book.title,author:book.author,series:book.series,seriesNumber:book.seriesNumber,
+            genre:book.genre,publishedYear:book.publishedYear,narrator:book.narrator,
+            publisher:book.publisher,isbn:book.isbn,asin:book.asin,language:book.language,
+            description:book.description,coverUri:book.coverUri,
+          };
+        }
+        setLocalMetadataOverrides(acceptedOverrides);
+        await Promise.all([
+          setPersistedJSON(localMetadataOverridesKey,acceptedOverrides),
+          replaceLocalStageBooks(accepted),
+        ]);
         setStagedLocalBooks(accepted.map(book=>({...book,source:'local' as const})));
         const publication=publishCompletedLocalStage(accepted);
         const acceptedPublished=artwork.books.length>0&&artwork.books.every(book=>publication.published.some(item=>item.uri===book.uri));
@@ -4892,6 +4918,18 @@ function Client() {
             setPersistedJSON(localMetadataOverridesKey,nextOverrides),
             replaceLocalStageBooks(updated),
           ]);
+          // Verify the durable stage immediately. A Save button must never close
+          // successfully if the work-level edit did not actually persist.
+          const persistedStage=await loadLocalStageBooks();
+          const persistedByUri=new Map(persistedStage.map(book=>[book.uri,book]));
+          const saveVerified=targets.every(uri=>{
+            const saved=persistedByUri.get(uri);
+            return !!saved
+              && saved.title===title
+              && String(saved.author||'')===author
+              && String(saved.series||'')===seriesName;
+          });
+          if(!saveVerified)throw Error('Metadata save could not be verified. Your changes were not discarded.');
           setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
           publishCompletedLocalStage(updated);
           setEditing(null);setEditingUris([]);setEditPickedCover(null);
