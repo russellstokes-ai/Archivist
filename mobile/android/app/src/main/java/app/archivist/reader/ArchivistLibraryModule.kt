@@ -3,6 +3,7 @@ package app.archivist.reader
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.CancellationSignal
 import android.provider.DocumentsContract
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -44,6 +45,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
   private class ScanSession {
     val queue = ArrayBlockingQueue<ScanEntry>(768)
     val cancelled = AtomicBoolean(false)
+    val cancellationSignal = CancellationSignal()
     val done = AtomicBoolean(false)
     val visited = AtomicInteger(0)
     val found = AtomicInteger(0)
@@ -71,7 +73,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
     val ext = extension(name)
     val format = mediaFormat(ext)
     if (format.isNotEmpty()) return "media" to format
-    if (ext == "opf" || ext == "nfo") return "sidecar" to ""
+    if (ext == "opf" || ext == "nfo" || ext == "json" || ext == "xml") return "sidecar" to ""
     if (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "webp") {
       return "artwork" to ""
     }
@@ -112,7 +114,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
           // Media is deliberately not queued here so JS never has to retain a
           // complete directory just to wait for cover/sidecar files that may
           // appear at the end of a provider cursor.
-          context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+          context.contentResolver.query(childrenUri, projection, null, null, null, session.cancellationSignal)?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
             val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
             val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
@@ -162,7 +164,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
             )
             // Pass two streams media only. Context for this parent is already
             // ahead of it in the bounded queue.
-            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            context.contentResolver.query(childrenUri, projection, null, null, null, session.cancellationSignal)?.use { cursor ->
               val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
               val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
               val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
@@ -649,6 +651,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
   fun cancelTreeScan(scanId: String, promise: Promise) {
     val session = sessions.remove(scanId)
     session?.cancelled?.set(true)
+    try { session?.cancellationSignal?.cancel() } catch (_: Throwable) {}
     promise.resolve(session != null)
   }
 }
