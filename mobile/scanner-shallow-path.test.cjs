@@ -18,6 +18,17 @@ assert.match(
   /checkpointLocalEnrichment\(currentBooks,generation\)/,
   'shallow staged discovery must checkpoint before online enrichment'
 );
+assert.equal(
+  pipeline.includes('enrichPublishedLocalCovers(currentBooks,generation)'),
+  false,
+  'normal Prepare/Refresh must never run catalogue-wide local cover extraction'
+);
+assert.match(
+  pipeline,
+  /cacheRequiredWorkArtwork\(currentBooks/,
+  'normal preparation must use cached/provider artwork at the work publication gate'
+);
+
 
 const searchStart=app.indexOf('const runMetadataSearch=async');
 const searchEnd=app.indexOf('const acceptProposal=async',searchStart);
