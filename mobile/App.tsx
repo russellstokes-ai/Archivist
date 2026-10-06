@@ -74,7 +74,7 @@ import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanProgressPercent} f
 import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
-import {cacheOnlineCoverUris} from './onlineCoverCache';
+import {cacheOnlineCoverUris, persistOnlineCover} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -4925,6 +4925,10 @@ function Client() {
       if(localEdit&&editPickedCover){
         try{coverUri=await persistPickedCover(editPickedCover.uri,editPickedCover.fileName,editPickedCover.fileSize);}
         catch(e){setError('Could not save the selected cover: '+(e as Error).message);return;}
+      }else if(localEdit&&/^https?:\/\//i.test(coverUri)){
+        coverUri=await persistOnlineCover(coverUri,{
+          documentDirectory,makeDirectoryAsync,downloadAsync:downloadCoverWithDeadline,getInfoAsync,deleteAsync,
+        }).catch(()=>coverUri);
       }
       setBusy(true);setError('');
       if(editing.source==='server'){
