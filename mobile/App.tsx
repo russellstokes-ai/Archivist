@@ -305,7 +305,7 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
   );
 }
 
-type UiIconName = 'play'|'pause'|'more'|'close'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
+type UiIconName = 'play'|'pause'|'more'|'close'|'edit'|'back'|'shelf'|'library'|'atlas'|'insights'|'settings'|'filter'|'grid'|'list'|'skipBack'|'skipForward'|'bookmark'|'moon'|'queue'|'search'|'minus'|'plus'|'fit'|'chevronUp'|'chevronDown'|'zoomIn'|'zoomOut'|'bookOpen'|'clock'|'calendar'|'flame'|'target'|'layers'|'gauge'|'pin';
 
 function RatingStarMark({color,opacity=1,size=20}:{color:string;opacity?:number;size?:number}) {
   const k=size/20;
@@ -341,6 +341,10 @@ function UiIcon({name,color,size=18}:{name:UiIconName;color:string;size?:number}
   if(name==='pause')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.18}}><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/><View style={{width:stroke*1.45,height:size*.68,borderRadius:stroke,backgroundColor:color}}/></View>;
   if(name==='more')return <View style={{width:size,height:size,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:size*.12}}>{[0,1,2].map(index=><View key={index} style={{width:stroke*1.35,height:stroke*1.35,borderRadius:stroke,backgroundColor:color}}/>)}</View>;
   if(name==='close')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'45deg'}]}}/><View style={{position:'absolute',width:size*.78,height:stroke,borderRadius:stroke,backgroundColor:color,transform:[{rotate:'-45deg'}]}}/></View>;
+  if(name==='edit')return <View style={{width:size,height:size,position:'relative'}}>
+    <View style={{position:'absolute',left:size*.15,top:size*.47,width:size*.70,height:Math.max(1,stroke*.78),borderRadius:stroke,backgroundColor:color,transform:[{rotate:'-42deg'}]}}/>
+    <View style={{position:'absolute',left:size*.10,bottom:size*.10,width:size*.20,height:size*.20,borderLeftWidth:Math.max(1,stroke*.7),borderBottomWidth:Math.max(1,stroke*.7),borderColor:color,transform:[{rotate:'3deg'}]}}/>
+  </View>;
   if(name==='back')return <View style={{width:size,height:size,position:'relative',alignItems:'center',justifyContent:'center'}}>
     <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,top:size*.31,transform:[{rotate:'-42deg'}]}}/>
     <View style={{position:'absolute',width:size*.55,height:stroke,borderRadius:stroke,backgroundColor:color,left:size*.16,bottom:size*.31,transform:[{rotate:'42deg'}]}}/>
