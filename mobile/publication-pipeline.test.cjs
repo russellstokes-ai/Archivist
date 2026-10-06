@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const ts=require('typescript');
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
-const {assessLocalWorkForPublication,partitionLocalBooksByPublication,reconcilePublishedLocalBooks,isVerifiedLocalArtworkUri}=require('./publicationPipeline.ts');
+const {assessLocalWorkForPublication,partitionLocalBooksByPublication,reconcilePublishedLocalBooks,migrateLegacyPublishedArtwork,isVerifiedLocalArtworkUri}=require('./publicationPipeline.ts');
 const {groupLocalWorks}=require('./localWorks.ts');
 
 function audio(id,uri,extra={}){
@@ -58,5 +58,24 @@ const replacement=[audio(20,'content://root/document/primary:Audiobooks%2FExisti
 const reconciled=reconcilePublishedLocalBooks(previous,replacement);
 assert.equal(reconciled.published.length,1,'last verified publication remains while replacement is incomplete');
 assert.equal(reconciled.published[0].title,'Existing');
+
+const legacy=migrateLegacyPublishedArtwork([
+  audio(30,'content://root/document/primary:Audiobooks%2FLegacy%2F01.mp3',{
+    title:'Legacy',coverUri:'file:///covers/legacy-square.jpg',
+    libraryCoverUri:undefined,livingBookCoverUri:undefined,
+  }),
+]);
+assert.equal(legacy[0].libraryCoverUri,'file:///covers/legacy-square.jpg');
+assert.equal(legacy[0].livingBookCoverUri,'file:///covers/legacy-square.jpg');
+assert.equal(legacy[0].livingBookCoverConfidence,0.45);
+assert.equal(partitionLocalBooksByPublication(legacy).published.length,1,'accepted Test 13 books must remain visible after schema upgrade');
+
+const unresolvedLegacy=migrateLegacyPublishedArtwork([
+  audio(31,'content://root/document/primary:Audiobooks%2FReview%2F01.mp3',{
+    title:'Review',needsReview:true,coverUri:'file:///covers/review.jpg',
+    libraryCoverUri:undefined,livingBookCoverUri:undefined,
+  }),
+]);
+assert.equal(unresolvedLegacy[0].livingBookCoverUri,undefined,'unresolved legacy items must not be grandfathered into publication');
 
 console.log('PASS: publication gate keeps incomplete works staged until identity and both cached covers are complete');
