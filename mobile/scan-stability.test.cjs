@@ -8,7 +8,9 @@ assert.match(source,/ListEmptyComponent=\{!shelfLoading&&!localScanning\?<Librar
 assert.ok(source.includes('const scanCommitGate=useRef(new ScanCommitGate()).current'),'scan generation gate must be retained');
 assert.ok(source.includes('if(!scanCommitGate.isCurrent(generation))return null'),'stale scan results must not commit');
 const finalise=source.slice(source.indexOf('async function finaliseLocalScan'),source.indexOf('function scanNotice'));
-assert.ok(finalise.indexOf('replaceLocalStageBooks(result.books)')<finalise.indexOf('setLocalBooks(nextBooks)'),'safe discovery baseline must commit to SQLite before it is published to the UI');
+assert.ok(finalise.indexOf('replaceLocalStageBooks(result.books)')<finalise.indexOf('setStagedLocalBooks(nextBooks)'),'safe discovery baseline must commit to SQLite before it enters the staged UI state');
+assert.equal(finalise.includes('setLocalBooks(nextBooks)'),false,'raw discovery results must never publish directly into the Library');
+assert.ok(finalise.indexOf('replaceLocalStageBooks(currentBooks)')<finalise.indexOf('publishCompletedLocalStage(currentBooks)'),'fully enriched stage must commit before atomic publication');
 assert.ok(source.includes("status:'Ready to prepare'")&&source.includes('setLocalFolders(folders)'),'new folder must appear immediately in setup without starting preparation');
 assert.ok(source.includes('setLocalFolderNotice(scanFailureCopy(localBooks.length>0))')&&source.includes("const stagedFolder:LocalFolder={...picked,status:'Ready to prepare'}"),'scan failures must preserve configured sources and explain that existing content remains safe');
 assert.ok(source.includes('{LocalScanStatus()}'),'Shelf/Library must expose a stable scan state rather than silently changing underneath the user');
