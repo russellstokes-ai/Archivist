@@ -1608,12 +1608,35 @@ function Client() {
     return value==='pdf';
   };
 
+  const localMaintenanceWorks = useMemo<Book[]>(() => allPhoneWorks.map(work => {
+    const first=work.tracks[0];
+    const ready=localWorkReadyForCatalogue(work);
+    return {
+      ...first,
+      title:work.title,
+      author:work.author,
+      series:work.series,
+      genre:work.genre,
+      publishedYear:work.publishedYear,
+      seriesNumber:work.seriesNumber,
+      coverUri:work.coverUri,
+      coverShape:work.coverShape,
+      livingBookCoverUri:work.livingBookCoverUri,
+      livingBookCoverSource:work.livingBookCoverSource,
+      livingBookCoverConfidence:work.livingBookCoverConfidence,
+      localWorkKey:work.key,
+      source:'local' as const,
+      needsReview:!ready,
+      reviewReason:work.reviewReason||(!work.coverUri?'Cover artwork needs review.':''),
+    };
+  }),[allPhoneWorks]);
+
   const reviewAssetPool = useMemo(() => {
     if(sourceFilter==='server')return serverBooks;
     if(sourceFilter==='downloaded')return [] as Book[];
-    if(sourceFilter==='local')return localBooks;
-    return [...localBooks,...serverBooks];
-  },[localBooks,serverBooks,sourceFilter]);
+    if(sourceFilter==='local')return localMaintenanceWorks;
+    return [...localMaintenanceWorks,...serverBooks];
+  },[localMaintenanceWorks,serverBooks,sourceFilter]);
 
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -4358,7 +4381,9 @@ function Client() {
     }
   }
   function RawAssetCard({item}: {item: Book}) {
-    const detail=[item.format,item.space,item.author,item.series,item.genre].filter(Boolean).join(' · ');
+    const grouped=item.source!=='server'?localWorkForEditing(item):undefined;
+    const editTargets=grouped?.tracks.map(track=>track.uri).filter(Boolean)||[];
+    const detail=[item.format,item.space,item.author,item.series,item.genre,grouped&&grouped.files>1?grouped.files+' files':''].filter(Boolean).join(' · ');
     return (
       <View style={[styles.maintenanceAssetCard,{borderBottomColor:p.line}]}>
         <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)} style={styles.maintenanceAssetMain}>
@@ -4372,8 +4397,8 @@ function Client() {
             {item.reviewReason?<Text numberOfLines={2} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
           </View>
         </Pressable>
-        {item.source!=='server'&&item.uri?<Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={metadataLookupBusy} onPress={()=>{beginEdit(item);void searchEditingMetadata(true,item)}} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:metadataLookupBusy ? .55 : 1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{metadataLookupBusy?'Deep scanning…':'Deep scan'}</Text></Pressable>:null}
-        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
+        {item.source!=='server'&&item.uri?<Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={metadataLookupBusy} onPress={()=>{beginEdit(item,editTargets);void searchEditingMetadata(true,item)}} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:metadataLookupBusy ? .55 : 1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{metadataLookupBusy?'Deep scanning…':'Deep scan'}</Text></Pressable>:null}
+        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item,editTargets)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
       </View>
     );
   }
@@ -5724,7 +5749,7 @@ function Client() {
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.reviewQueue}
       ListHeaderComponent={<View style={[styles.maintenanceHeader,phoneLayout&&styles.maintenanceHeaderPhone]}>
-        <View style={{flex:1,minWidth:0}}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text maxFontSizeMultiplier={1.2} style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} · review only what Archivist could not resolve confidently</Text></View>
+        <View style={{flex:1,minWidth:0}}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text maxFontSizeMultiplier={1.2} style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} item{visibleBooks.length===1?'':'s'} · local audiobooks are grouped as one work, not one row per chapter</Text></View>
         <Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/>
       </View>}
       ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>}
@@ -5734,7 +5759,7 @@ function Client() {
       <View style={styles.libraryCatalogueHeader}>
         <PageHeader title="Library" subtitle="Every book. In its place."/>
         <View style={styles.libraryHeaderSummary}>
-          <Text style={[styles.pageHeaderMeta,{color:p.muted}]}>{maintenanceMode?visibleBooks.length:sortedUnifiedWorks.length} {maintenanceMode?'file':'work'}{(maintenanceMode?visibleBooks.length:sortedUnifiedWorks.length)===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
+          <Text style={[styles.pageHeaderMeta,{color:p.muted}]}>{maintenanceMode?visibleBooks.length:sortedUnifiedWorks.length} {maintenanceMode?'item':'work'}{(maintenanceMode?visibleBooks.length:sortedUnifiedWorks.length)===1?'':'s'}{filtersActive?' · '+filtersActive+' filter'+(filtersActive===1?'':'s')+' active':''}</Text>
         </View>
       </View>
       {LocalScanStatus()}
