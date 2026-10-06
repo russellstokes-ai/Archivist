@@ -3,7 +3,9 @@ const fs = require('node:fs');
 
 const source = fs.readFileSync('App.tsx','utf8');
 const clientSource = ['App.tsx','connection.ts','queue.ts','playback.ts'].map(file => fs.readFileSync(file,'utf8')).join('\n');
-const livingBookSource = fs.readFileSync('LivingBookArtwork.tsx','utf8');
+const livingBookSource = fs.readFileSync('LivingBookCanvas.tsx','utf8');
+const playerExperienceSource = fs.readFileSync('playerExperience.ts','utf8');
+const localStageStoreSource = fs.readFileSync('localStageStore.ts','utf8');
 const coverManagementSource = fs.readFileSync('coverManagement.ts','utf8');
 const lockedFoldStyles = fs.readFileSync('locked-fold-ui.styles.snapshot.txt','utf8');
 
@@ -50,16 +52,16 @@ assert.ok(source.includes("!playing && (reading||lastReading)") && source.includ
 assert.ok(source.includes('tabCenterOrb') && source.includes('liveHubSegment'), 'Center live-tab visual treatment is missing');
 for(const label of ['Back 30 seconds','Back 15 seconds','Forward 15 seconds','Forward 30 seconds'])assert.ok(source.includes('accessibilityLabel="'+label+'"'),'Missing timed skip '+label);
 assert.ok(source.includes("skipAudio('large',-1)") && source.includes("skipAudio('large',1)") && source.includes("skipAudio('small',-1)") && source.includes("skipAudio('small',1)"),'Both skip sizes must work in both directions');
-assert.ok(livingBookSource.includes('Math.min(6,Math.round(skipPages))'),'Living Book must allow six leaves for large skips');
-assert.ok(source.includes('title={current.title}') && source.includes('cover={(current.coverUri||current.source===\'server\')?Cover({book:current,fill:true}):null}'), 'Living book must use the current title and metadata cover');
-assert.ok(livingBookSource.includes('skipPages=3') && livingBookSource.includes('leafCount') && livingBookSource.includes('leafEnvelope') && livingBookSource.includes('coverAngle'), 'Living book must support unclipped multi-page turns and one physical cover hinge');
-assert.ok(livingBookSource.includes('const coverAngle=open.interpolate') && livingBookSource.includes('{rotateY:coverAngle}') && livingBookSource.includes('internalOpacity=open.interpolate') && livingBookSource.includes('coverInsideFace'), 'Living book open/close transition must use a continuous two-sided physical cover hinge');
+assert.ok(source.includes('Math.min(6,Math.round(pages))'),'Living Book must allow up to six leaves for large skips');
+assert.ok(source.includes('<LivingBookCanvas') && source.includes('title={current.title}') && source.includes('coverUri={lockedLivingBookCover(current).uri}'), 'Living Book must use the current title and a session-locked metadata cover');
+assert.ok(livingBookSource.includes('function flex(progress)') && livingBookSource.includes('function rigid(angle') && livingBookSource.includes('rigid(PI*opening'), 'Living Book must render a physical hinge and curled page surface in the Canvas renderer');
+assert.ok(livingBookSource.includes("phase==='turning'") && livingBookSource.includes("phase==='settling'") && playerExperienceSource.includes("closeAfterSettle:true"), 'Living Book must separate turn/settle/close phases so Pause cannot snap a page or create a phantom sheet');
 assert.ok(source.includes('playerMotionIntent') && source.includes('setPlayerMotionIntent(targetPlaying)'), 'Living Book must respond immediately to the transport tap instead of a delayed pause grace');
-assert.ok(source.includes('PLAYER_MOTION_TIMING.firstTurnDelayMs') && source.includes('PLAYER_MOTION_TIMING.pageTurnMs') && source.includes('PLAYER_MOTION_TIMING.pageRestMs'), 'Living Book must use the deliberate slow page-turn cadence');
-assert.ok(livingBookSource.includes('scaleX:turn.interpolate') && livingBookSource.includes('translateX:turn.interpolate') && livingBookSource.includes("outputRange:['0deg','-78deg','-102deg','-180deg']"), 'Living Book ambient page turn must include a physical curl rather than a flat card flip');
+assert.ok(source.includes('duration:1900') && source.includes('},7200);'), 'Living Book must keep a deliberate slow page-turn cadence');
+assert.ok(livingBookSource.includes('Math.sin(PI*progress)') && livingBookSource.includes('surface(turn>.5?back:front,flex(turn)'), 'Living Book ambient page turn must include a curved physical sheet rather than a flat card flip');
 assert.ok(source.includes("const ambientHaloColor=darkMode?'#2F8B86':'#C99A43'") && source.includes("const ambientHaloStrength=darkMode?.95:.48") && source.includes("backgroundColor:darkMode?'#07151C':'#FBFAF7'") && source.includes("color={ambientHaloColor}") && source.includes("strength={ambientHaloStrength}"), 'Every app page must use the theme-aware ambient halo standard');
 assert.ok(source.includes("paper: dark ? '#000000' : '#FBFAF7'") && source.includes("highContrast?'#C6B9A5':'#E3DDD2'") && source.includes("gold: dark ? '#B99A68' : '#A67A2F'"), 'Light mode must use the warm ivory and champagne palette while preserving increased contrast');
-assert.ok(source.includes("glowColor={ambientHaloColor}") && source.includes("glowStrength={darkMode?.72:.46}") && livingBookSource.includes("glowColor='#2F8B86'"), 'Living Player artwork must inherit the theme-aware halo');
+assert.ok(livingBookSource.includes("backgroundColor:'transparent'") && source.includes('AmbientGlow'), 'Living Player Canvas must remain transparent so the approved theme-aware ambient halo remains visible');
 assert.ok(source.includes("<AmbientGlow color={ambientHaloColor} size={Math.max(680,ringSize*1.35)} strength={darkMode?.72:.52}/>"), 'Atlas atmosphere must switch from teal in dark mode to champagne in light mode');
 
 assert.ok(source.includes("(activeTab==='player'||(activeTab==='now'&&liveMode==='player'))"), 'Player motion visibility must include the live hub');
@@ -227,9 +229,10 @@ assert.ok(source.includes("function DuplicateReviewPanel()"), 'Duplicate review 
 assert.ok(source.includes("relation.genres || []"), 'Atlas relationship view must tolerate servers from before genre links were added');
 assert.ok(source.includes("relation.availability || []"), 'Atlas relationship view must tolerate servers from before availability links were added');
 
-assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'"), 'Local catalogue cache key is missing');
-assert.ok(source.includes("getPersistedJSON<Book[]>(localCatalogKey)"), 'Cold start must restore the cached local catalogue');
-assert.ok(source.includes("setPersistedJSONArrayCooperative(localCatalogKey,result.books") && source.includes("setPersistedJSONArrayCooperative(localCatalogKey,currentBooks"), 'Successful scans must persist a safe baseline and final enriched local catalogue cooperatively');
+assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'"), 'Legacy catalogue key must remain available for one-time migration');
+assert.ok(source.includes("loadLocalStageBooks()") && source.includes("getPersistedJSON<Book[]>(localCatalogKey)") && source.includes("migrateLegacyLocalStage(legacyBooks)"), 'Cold start must hydrate from SQLite and migrate the legacy cached catalogue once');
+assert.ok(source.includes("replaceLocalStageBooks(result.books)") && source.includes("replaceLocalStageBooks(currentBooks)"), 'Successful scans must commit a safe baseline and final enriched local catalogue to SQLite');
+assert.ok(localStageStoreSource.includes('PRAGMA journal_mode = WAL') && localStageStoreSource.includes('withExclusiveTransactionAsync'), 'Local catalogue database must use transactional WAL-backed SQLite');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
 assert.ok(source.includes('function LibraryManagementPanel()'), 'Library management workspace is missing');
