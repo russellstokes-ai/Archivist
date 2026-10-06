@@ -168,6 +168,10 @@ type Book = {
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
+  libraryCoverUri?: string;
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: 'embedded'|'open-library'|'google-books'|'manual'|'jacket'|'none';
+  livingBookCoverConfidence?: number;
   coverCandidates?: string[];
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'online' | 'legacy';
   localWorkKey?: string;
