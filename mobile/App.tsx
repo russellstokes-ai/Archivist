@@ -76,6 +76,7 @@ import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './librar
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
+import {partitionLocalBooksByPublication} from './publicationPipeline';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -1120,6 +1121,7 @@ function Client() {
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localFoldersReady,setLocalFoldersReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
+  const [stagedLocalBooks,setStagedLocalBooks]=useState<Book[]>([]);
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
   const [offlineWorksReady,setOfflineWorksReady]=useState(false);
   const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
@@ -1580,11 +1582,12 @@ function Client() {
   };
 
   const reviewAssetPool = useMemo(() => {
+    const localReviewPool=(reviewOnly||!!metadataGapFilter)?stagedLocalBooks:localBooks;
     if(sourceFilter==='server')return serverBooks;
     if(sourceFilter==='downloaded')return [] as Book[];
-    if(sourceFilter==='local')return localBooks;
-    return [...localBooks,...serverBooks];
-  },[localBooks,serverBooks,sourceFilter]);
+    if(sourceFilter==='local')return localReviewPool;
+    return [...localReviewPool,...serverBooks];
+  },[localBooks,metadataGapFilter,reviewOnly,serverBooks,sourceFilter,stagedLocalBooks]);
 
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1831,7 +1834,10 @@ function Client() {
           }
         }
         const normalized=stored.map(book=>({...book,genre:book.genre||''}));
-        setLocalBooks(normalized.map(book=>({...book,source:'local' as const})));
+        const staged=normalized.map(book=>({...book,source:'local' as const}));
+        const publication=partitionLocalBooksByPublication(normalized);
+        setStagedLocalBooks(staged);
+        setLocalBooks(publication.published.map(book=>({...book,source:'local' as const})));
         setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
       }catch(error){
         setError('Local catalogue database could not be opened: '+String((error as any)?.message||error));
@@ -2712,7 +2718,8 @@ function Client() {
 
     setScanResultSummary(summary);
     setLocalFolders(result.folders);
-    setLocalBooks(nextBooks);
+    setStagedLocalBooks(nextBooks);
+    // Keep the last fully published Library visible while this new stage is enriched.
     setLocalMovePreviews([]);
     setLocalMoveSelection([]);
     setSpaces([...new Set([...result.books.map(book=>book.space),...sources.map(source=>source.space)].filter(Boolean))]);
@@ -2737,10 +2744,23 @@ function Client() {
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
 
+  function publishCompletedLocalStage(books:LocalBook[]){
+    const publication=partitionLocalBooksByPublication(books);
+    const staged=books.map(book=>({...book,source:'local' as const}));
+    setStagedLocalBooks(staged);
+    setLocalBooks(publication.published.map(book=>({...book,source:'local' as const})));
+    completedLibraryBooksRef.current=books;
+    return publication;
+  }
+
   async function checkpointLocalEnrichment(books:LocalBook[],generation:number){
     if(!scanCommitGate.isCurrent(generation))return false;
     return replaceLocalStageBooks(books)
-      .then(()=>scanCommitGate.isCurrent(generation))
+      .then(()=>{
+        if(!scanCommitGate.isCurrent(generation))return false;
+        setStagedLocalBooks(books.map(book=>({...book,source:'local' as const})));
+        return true;
+      })
       .catch(error=>{recordLibraryRefreshWarning('Enrichment checkpoint',error);return false;});
   }
 
@@ -2779,11 +2799,7 @@ function Client() {
           .then(()=>true)
           .catch(error=>{recordLibraryRefreshWarning('Final catalogue save',error);return false;});
         if(persisted&&scanCommitGate.isCurrent(generation)){
-          completedLibraryBooksRef.current=currentBooks;
-          setLocalBooks(current=>applyOnlineMetadataEnrichment(
-            current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],
-            currentBooks,
-          ).map(book=>({...book,source:'local' as const})));
+          publishCompletedLocalStage(currentBooks);
         }
       }
       return currentBooks;
@@ -2836,10 +2852,7 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
     })).books as LocalBook[];
     if(!scanCommitGate.isCurrent(generation))return null;
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(
-      current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],
-      synchronized,
-    ).map(book=>({...book,source:'local' as const})));
+    setStagedLocalBooks(synchronized.map(book=>({...book,source:'local' as const})));
     return synchronized;
   }
 
@@ -2886,10 +2899,7 @@ function Client() {
     })).books as LocalBook[];
     if(!scanCommitGate.isCurrent(generation))return null;
 
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(
-      current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],
-      finalBooks,
-    ).map(book=>({...book,source:'local' as const})));
+    setStagedLocalBooks(finalBooks.map(book=>({...book,source:'local' as const})));
     await setPersistedJSON(onlineBookMetadataCacheKey,enriched.cache)
       .catch(error=>recordLibraryRefreshWarning('Book metadata cache',error));
 
@@ -2942,10 +2952,7 @@ function Client() {
     })).books as LocalBook[];
     if(!scanCommitGate.isCurrent(generation))return null;
 
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(
-      current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],
-      finalBooks,
-    ).map(book=>({...book,source:'local' as const})));
+    setStagedLocalBooks(finalBooks.map(book=>({...book,source:'local' as const})));
     await setPersistedJSON(onlineComicMetadataCacheKey,enriched.cache)
       .catch(error=>recordLibraryRefreshWarning('Comic metadata cache',error));
 
@@ -2990,10 +2997,7 @@ function Client() {
     })).books as LocalBook[];
     if(!scanCommitGate.isCurrent(generation))return null;
 
-    setLocalBooks(current=>applyOnlineMetadataEnrichment(
-      current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],
-      synchronized,
-    ).map(book=>({...book,source:'local' as const})));
+    setStagedLocalBooks(synchronized.map(book=>({...book,source:'local' as const})));
     return synchronized;
   }
 
@@ -3053,7 +3057,7 @@ function Client() {
     if(generation===null)return false;
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
-      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const previousLocal=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
       const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata,shouldContinue:()=>scanCommitGate.isCurrent(generation)});
       const summary=await finaliseLocalScan(result,previousLocal,generation,refreshMetadata);
       if(!summary)return false;
@@ -3093,7 +3097,7 @@ function Client() {
     try{
       await removeLocalFolderSource(folder);
       const remaining=localFolders.filter(item=>item.uri!==folder.uri);
-      const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const previousLocal=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
       const removedUris=new Set(previousLocal.filter(book=>book.rootUri===folder.uri||book.uri.startsWith(folder.uri.replace(/\/$/,'')+'/')).map(book=>book.uri));
       const nextOverrides=Object.fromEntries(Object.entries(localMetadataOverrides).filter(([uri])=>!removedUris.has(uri)));
       setLocalMetadataOverrides(nextOverrides);
