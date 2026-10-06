@@ -17,6 +17,7 @@ export type MetadataMatch = {
   title: string;
   authors: string[];
   publishedYear?: number;
+  publisher?: string;
   genres?: string[];
   description?: string;
   isbns?: string[];
@@ -172,7 +173,7 @@ export async function lookupOpenLibrary(input: MetadataLookupInput): Promise<Arr
     params.set('title', input.title);
     if (input.author) params.set('author', input.author);
   }
-  params.set('fields', 'key,title,author_name,cover_i,first_publish_year,isbn,edition_key,series');
+  params.set('fields', 'key,title,author_name,cover_i,first_publish_year,publisher,isbn,edition_key,series');
   params.set('limit', '8');
   const data = await fetchJson('https://openlibrary.org/search.json?' + params.toString());
   return (Array.isArray(data?.docs) ? data.docs : []).map((doc:any) => ({
@@ -183,6 +184,7 @@ export async function lookupOpenLibrary(input: MetadataLookupInput): Promise<Arr
     title: String(doc.title || ''),
     authors: Array.isArray(doc.author_name) ? doc.author_name.map(String) : [],
     publishedYear: Number(doc.first_publish_year) || undefined,
+    publisher: Array.isArray(doc.publisher) ? String(doc.publisher[0] || '') || undefined : undefined,
     isbns: Array.isArray(doc.isbn) ? doc.isbn.map(String) : [],
     identifiers: Array.isArray(doc.isbn) ? doc.isbn.map(String) : [],
     series: Array.isArray(doc.series) ? doc.series.map(String) : [],
@@ -208,6 +210,7 @@ export async function lookupGoogleBooks(input: MetadataLookupInput): Promise<Arr
       title: String(info.title || ''),
       authors: Array.isArray(info.authors) ? info.authors.map(String) : [],
       publishedYear: yearMatch ? Number(yearMatch[0]) : undefined,
+      publisher: typeof info.publisher === 'string' ? info.publisher : undefined,
       genres: Array.isArray(info.categories) ? info.categories.map(String) : [],
       description: typeof info.description === 'string' ? info.description : undefined,
       isbns: identifiers,
