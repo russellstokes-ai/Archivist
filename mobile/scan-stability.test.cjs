@@ -8,7 +8,7 @@ assert.match(source,/ListEmptyComponent=\{!shelfLoading&&!localScanning\?<Librar
 assert.ok(source.includes('const scanCommitGate=useRef(new ScanCommitGate()).current'),'scan generation gate must be retained');
 assert.ok(source.includes('if(!scanCommitGate.isCurrent(generation))return null'),'stale scan results must not commit');
 const finalise=source.slice(source.indexOf('async function finaliseLocalScan'),source.indexOf('function scanNotice'));
-assert.ok(finalise.indexOf('setPersistedJSONArrayCooperative(localCatalogKey,result.books')<finalise.indexOf('setLocalBooks(nextBooks)'),'safe discovery baseline must persist cooperatively before it is published to the UI');
+assert.ok(finalise.indexOf('replaceLocalStageBooks(result.books)')<finalise.indexOf('setLocalBooks(nextBooks)'),'safe discovery baseline must commit to SQLite before it is published to the UI');
 assert.ok(source.includes("status:'Ready to prepare'")&&source.includes('setLocalFolders(folders)'),'new folder must appear immediately in setup without starting preparation');
 assert.ok(source.includes('setLocalFolderNotice(scanFailureCopy(localBooks.length>0))')&&source.includes("const stagedFolder:LocalFolder={...picked,status:'Ready to prepare'}"),'scan failures must preserve configured sources and explain that existing content remains safe');
 assert.ok(source.includes('{LocalScanStatus()}'),'Shelf/Library must expose a stable scan state rather than silently changing underneath the user');
@@ -30,8 +30,8 @@ assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron cr
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'stale enrichment must stop when a newer scan begins');
 assert.equal(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover batch progress must not clone/publish the full catalogue on every batch');
 assert.ok(source.includes('reportEnrichmentProgress')&&source.includes('enrichmentProgressClock'),'enrichment progress must be throttled independently of catalogue publication');
-assert.ok(source.includes('setPersistedJSONArrayCooperative(localCatalogKey,currentBooks'),'final enriched catalogue must persist once, cooperatively, after all stages complete');
-assert.equal(source.includes('getPersistedJSON<LocalBook[]>(localCatalogKey)'),false,'enrichment stages must not repeatedly parse the large persisted catalogue');
+assert.ok(source.includes('replaceLocalStageBooks(currentBooks)'),'final enriched catalogue must commit to SQLite after all stages complete');
+assert.ok(source.includes('loadLocalStageBooks()')&&source.includes('migrateLegacyLocalStage(legacyBooks)'),'cold start must use SQLite with a one-time legacy catalogue migration');
 
 console.log('PASS: Sprint 5/7 scan/catalogue integration contracts');
 
