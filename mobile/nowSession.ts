@@ -16,6 +16,9 @@ export type NowSessionMedia={
   originServer?:string;
   coverShape?:'portrait'|'square';
   coverUri?:string;
+  livingBookCoverUri?:string;
+  livingBookCoverSource?:'embedded'|'open-library'|'google-books'|'manual'|'jacket'|'none';
+  livingBookCoverConfidence?:number;
 };
 
 export type DurableNowSession={
@@ -95,6 +98,9 @@ export function sanitizeNowSession(value:unknown):DurableNowSession|null{
     originServer:clean(media.originServer)||undefined,
     coverShape:media.coverShape==='square'||media.coverShape==='portrait'?media.coverShape:undefined,
     coverUri:clean(media.coverUri)||undefined,
+    livingBookCoverUri:clean(media.livingBookCoverUri)||undefined,
+    livingBookCoverSource:['embedded','open-library','google-books','manual','jacket','none'].includes(media.livingBookCoverSource)?media.livingBookCoverSource:undefined,
+    livingBookCoverConfidence:Number.isFinite(Number(media.livingBookCoverConfidence))?Math.max(0,Math.min(1,Number(media.livingBookCoverConfidence))):undefined,
   };
   if(!parsed.format||(!parsed.uri&&!parsed.localWorkKey&&!parsed.serverWorkId&&!parsed.id))return null;
   return createNowSession(parsed,raw.kind,raw.position,{
