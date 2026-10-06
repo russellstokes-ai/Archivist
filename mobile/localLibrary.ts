@@ -1,4 +1,4 @@
-import {Platform} from 'react-native';
+import {NativeModules,Platform} from 'react-native';
 import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, applyResolvedLocalMetadata, decodedPathParts, inferLocalBookMetadata, IdentificationConfidence, isGenericMediaTitle, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey, sanitizeDiscoveredMetadata} from './libraryIntelligence';
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
@@ -33,6 +33,16 @@ export type LocalBook = {
   fileSize?: number;
   modificationTime?: number;
   rootUri?: string;
+  sourceUri?: string;
+  documentId?: string;
+  metadataContextSignature?: string;
+  assetSignature?: string;
+  scanReused?: boolean;
+  workTitleHint?: string;
+  trackTitle?: string;
+  trackNumber?: number;
+  discNumber?: number;
+  identifiers?: string[];
   format: string;
   space: string;
   available: boolean;
@@ -359,6 +369,165 @@ export async function removeLocalFolderSource(folder:LocalFolder):Promise<void>{
   await deleteAsync(uri,{idempotent:true});
 }
 
+
+type NativeLibraryScanItem = {
+  uri:string;
+  documentId:string;
+  name:string;
+  parentId:string;
+  mimeType:string;
+  size:number;
+  modified:number;
+  role:'media'|'sidecar'|'artwork'|'directory-context'|'directory-end';
+  format:string;
+};
+type NativeLibraryScanBatch = {
+  items:NativeLibraryScanItem[];
+  done:boolean;
+  visited:number;
+  found:number;
+  errors:number;
+  lastError?:string;
+};
+type NativeLibraryScanner = {
+  startTreeScan:(uri:string)=>Promise<string>;
+  readTreeScanBatch:(scanId:string,limit:number)=>Promise<NativeLibraryScanBatch>;
+  cancelTreeScan:(scanId:string)=>Promise<boolean>;
+};
+const nativeLibraryScanner=(NativeModules?.ArchivistLibrary||null) as NativeLibraryScanner|null;
+type NativeDirectoryContext={
+  sidecars:Map<string,{uri:string;size:number;modified:number}>;
+  artwork:Map<string,{uri:string;size:number;modified:number}>;
+  mediaCount:number;
+  audioOnly:boolean;
+};
+function scannerSignature(value:string){
+  let h=2166136261;
+  for(let index=0;index<value.length;index++){h^=value.charCodeAt(index);h=Math.imul(h,16777619);}
+  return (h>>>0).toString(16).padStart(8,'0');
+}
+function nativeContextSignature(context:NativeDirectoryContext){
+  const parts:string[]=[];
+  for(const [stem,file] of context.sidecars)parts.push('s:'+stem+':'+file.uri+':'+file.size+':'+file.modified);
+  for(const [stem,file] of context.artwork)parts.push('a:'+stem+':'+file.uri+':'+file.size+':'+file.modified);
+  return parts.length?scannerSignature(parts.sort().join('|')):'none';
+}
+function nativeAssetSignature(item:NativeLibraryScanItem,context:NativeDirectoryContext){
+  if(!item.modified)return '';
+  return scannerSignature([item.documentId||'',item.size||0,item.modified,nativeContextSignature(context)].join('|'));
+}
+function reusableNativeBook(previous:LocalBook|undefined,signature:string,rootUri:string){
+  return !!previous&&!!signature&&previous.assetSignature===signature&&(previous.sourceUri||previous.rootUri)===rootUri;
+}
+async function scanLocalFoldersNativeV2(
+  folders:LocalFolder[],
+  onProgress:(progress:LocalScanProgress)=>void = ()=>undefined,
+  overrides:Record<string,LocalMetadataOverride>={},
+  previousBooks:LocalBook[]=[],
+  options:LocalScanOptions={},
+):Promise<LocalScanResult>{
+  if(!nativeLibraryScanner)throw Error('Native library scanner is unavailable.');
+  const shouldContinue=options.shouldContinue||(()=>true);
+  const previousByUri=new Map(previousBooks.filter(book=>!!book.uri).map(book=>[book.uri,book]));
+  const books:LocalBook[]=[];
+  let skipped=0,review=0,entriesVisited=0;
+  const nextFolders:LocalFolder[]=[];
+  const sidecarCache=new Map<string,LocalMetadataFields>();
+  const yieldToUi=cooperativeYieldFactory();
+
+  const cachedSidecarFields=async(uri:string)=>{
+    const cached=sidecarCache.get(uri);if(cached)return cached;
+    let fields:LocalMetadataFields={};
+    try{
+      const info=await getInfoAsync(uri);
+      if(info.exists&&(!('size' in info)||typeof info.size!=='number'||info.size<=2*1024*1024)){
+        fields=parseLocalSidecar(await readAsStringAsync(uri),extension(uri));
+      }
+    }catch{}
+    sidecarCache.set(uri,fields);return fields;
+  };
+
+  for(const folder of folders){
+    if(!shouldContinue())break;
+    const contexts=new Map<string,NativeDirectoryContext>();
+    let scanId='',lastVisited=0,nativeErrors=0;
+    const before=books.length;
+    const contextFor=(parentId:string)=>{
+      const existing=contexts.get(parentId);if(existing)return existing;
+      const created:NativeDirectoryContext={sidecars:new Map(),artwork:new Map(),mediaCount:0,audioOnly:false};
+      contexts.set(parentId,created);return created;
+    };
+    const processMedia=async(item:NativeLibraryScanItem)=>{
+      if(!shouldContinue())return;
+      const context=contextFor(item.parentId);
+      const signature=nativeAssetSignature(item,context);
+      const previous=previousByUri.get(item.uri);
+      if(reusableNativeBook(previous,signature,folder.uri)&&!options.refreshMetadata){
+        const reused={...previous!,id:books.length+1,available:true,rootUri:folder.uri,sourceUri:folder.uri,documentId:item.documentId,fileSize:item.size,modificationTime:item.modified,assetSignature:signature,metadataContextSignature:nativeContextSignature(context),scanReused:true};
+        books.push(reused);
+        if(reused.needsReview)review++;
+        return;
+      }
+      const siblingCount=item.format==='Audio'?Math.max(1,context.mediaCount):1;
+      let identity=inferLocalBookMetadata(item.uri,item.format,{siblingMediaCount:siblingCount,rootUri:folder.uri});
+      const stem=fileStem(item.name).toLowerCase();
+      const genericAllowed=context.mediaCount===1||context.audioOnly;
+      const sidecar=context.sidecars.get(stem)||(genericAllowed?(context.sidecars.get('metadata')||context.sidecars.get('book')||context.sidecars.get('comicinfo')):undefined);
+      if(sidecar){
+        const raw=await cachedSidecarFields(sidecar.uri);
+        const fields=sanitizeDiscoveredMetadata(raw,item.format,identity.title,siblingCount);
+        if(Object.keys(fields).length)identity=applyLocalMetadata(identity,fields,'sidecar');
+      }
+      const override=overrides[item.uri];
+      if(override)identity=applyLocalMetadata(identity,override,'manual');
+      const artwork=context.artwork.get(stem)||(genericAllowed?(context.artwork.get('cover')||context.artwork.get('front')||context.artwork.get('folder')||context.artwork.get('artwork')):undefined);
+      const book:LocalBook={
+        id:books.length+1,uri:item.uri,title:identity.title||titleFromUri(item.uri),author:identity.author,series:identity.series,
+        seriesNumber:identity.seriesNumber,genre:identity.genre,publishedYear:identity.publishedYear,narrator:identity.narrator,publisher:identity.publisher,
+        isbn:identity.isbn,asin:identity.asin,language:identity.language,description:identity.description,
+        workKey:logicalWorkKey(identity),editionKey:editionKey(identity,item.format),
+        fileSize:item.size,modificationTime:item.modified,rootUri:folder.uri,sourceUri:folder.uri,documentId:item.documentId,
+        metadataContextSignature:nativeContextSignature(context),assetSignature:signature||undefined,scanReused:false,
+        format:item.format,space:folder.name,available:true,identificationConfidence:identity.confidence,needsReview:identity.needsReview,
+        reviewReason:identity.reviewReason,coverShape:identity.coverShape,metadataSource:identity.metadataSource,
+        coverUri:override?.coverUri||artwork?.uri,coverCandidates:artwork?.uri?[artwork.uri]:[],
+        publishReady:false,publicationState:'discovered',publicationReason:'Preparing metadata and cover artwork.',
+      };
+      books.push(book);if(book.needsReview)review++;
+    };
+
+    try{
+      onProgress({phase:'discovering',currentFolder:folder.name,entriesVisited,found:books.length,review});
+      scanId=await nativeLibraryScanner.startTreeScan(folder.uri);
+      let done=false;
+      while(!done&&shouldContinue()){
+        const batch=await nativeLibraryScanner.readTreeScanBatch(scanId,240);
+        lastVisited=batch.visited;nativeErrors=batch.errors;entriesVisited+=Math.max(0,batch.visited-lastVisited+0);
+        for(const item of batch.items||[]){
+          const context=contextFor(item.parentId);
+          if(item.role==='sidecar'){context.sidecars.set(fileStem(item.name).toLowerCase(),{uri:item.uri,size:item.size,modified:item.modified});continue;}
+          if(item.role==='artwork'){const stem=fileStem(item.name).toLowerCase();if(stem&&!context.artwork.has(stem))context.artwork.set(stem,{uri:item.uri,size:item.size,modified:item.modified});continue;}
+          if(item.role==='directory-context'){context.mediaCount=Math.max(0,Math.round(item.size||0));context.audioOnly=item.format==='audio-only';continue;}
+          if(item.role==='media'){await processMedia(item);continue;}
+          if(item.role==='directory-end'){contexts.delete(item.parentId);}
+        }
+        entriesVisited=nextFolders.reduce((sum,item)=>sum+item.itemCount,0)+batch.visited;
+        onProgress({phase:'discovering',currentFolder:folder.name,entriesVisited,found:books.length,review});
+        done=!!batch.done;
+        await yieldToUi(true);
+      }
+      if(!shouldContinue()&&scanId)await nativeLibraryScanner.cancelTreeScan(scanId).catch(()=>false);
+    }catch{
+      skipped++;if(scanId)await nativeLibraryScanner.cancelTreeScan(scanId).catch(()=>false);
+    }
+    skipped+=nativeErrors;
+    const count=books.length-before;
+    nextFolders.push({...folder,status:'Scanned '+count+' items',itemCount:count,scannedAt:new Date().toISOString()});
+  }
+  onProgress({phase:'complete',currentFolder:'',entriesVisited,found:books.length,review});
+  return {folders:nextFolders.concat(folders.slice(nextFolders.length)),books,skipped,truncated:false,identified:books.length-review,review,entriesVisited};
+}
+
 export async function scanLocalFolders(
   folders: LocalFolder[],
   onProgress?: (progress: LocalScanProgress) => void,
@@ -366,6 +535,9 @@ export async function scanLocalFolders(
   previousBooks: LocalBook[] = [],
   options: LocalScanOptions = {},
 ): Promise<LocalScanResult> {
+  if(Platform.OS==='android'&&nativeLibraryScanner?.startTreeScan){
+    return scanLocalFoldersNativeV2(folders,onProgress||(()=>undefined),overrides,previousBooks,options);
+  }
   const books: LocalBook[] = [];
   const shouldContinue=options.shouldContinue||(()=>true);
   let skipped = 0;
