@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const ts=require('typescript');
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
 
-const {buildBookLookupHints,scoreOnlineBookCandidate,mergeOnlineBookCandidate,lookupOnlineBook}=require('./onlineBookMetadata.ts');
+const {buildBookLookupHints,scoreOnlineBookCandidate,mergeOnlineBookCandidate,lookupOnlineBook,shouldLookupBookOnline}=require('./onlineBookMetadata.ts');
 
 const sparse={title:'Dune',author:'',series:'',format:'EPUB',uri:'content://root/document/primary:Books%2FFrank%20Herbert%2FDune%2F01%20-%20Dune.epub'};
 const hints=buildBookLookupHints(sparse);
@@ -44,6 +44,22 @@ assert.equal(sparseMerge.author,'Frank Herbert');
 assert.equal(sparseMerge.publisher,'Ace');
 assert.equal(sparseMerge.coverUri,'https://covers/dune.jpg');
 assert.equal(sparseMerge.needsReview,false);
+
+assert.equal(
+  shouldLookupBookOnline({title:'Dune',author:'Frank Herbert',format:'EPUB',coverUri:'file:///covers/dune.jpg'}),
+  false,
+  'missing optional description/genre/publisher/year must not trigger normal catalogue lookup'
+);
+assert.equal(
+  shouldLookupBookOnline({title:'Dune',author:'Frank Herbert',format:'EPUB'}),
+  true,
+  'a missing publication cover should trigger one normal lookup'
+);
+assert.equal(
+  shouldLookupBookOnline({title:'Dune',author:'',format:'EPUB',coverUri:'file:///covers/dune.jpg',needsReview:true}),
+  true,
+  'unresolved identity must still be searched'
+);
 
 (async()=>{
   const openLibraryCalls=[];
