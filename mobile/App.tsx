@@ -1,4 +1,4 @@
-import {publicationYear} from './libraryIntelligence';
+import {decodedPathParts, publicationYear} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
@@ -712,6 +712,7 @@ function Client() {
   const [metadataMatchMode,setMetadataMatchMode]=useState<''|'search'|'deep'>('');
   const [metadataSearchNote,setMetadataSearchNote]=useState('');
   const [selectedMetadataMatch,setSelectedMetadataMatch]=useState<MetadataMatch|null>(null);
+  const [metadataTargetUris,setMetadataTargetUris]=useState<string[]>([]);
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [moveStatus,setMoveStatus]=useState('');
   const [localMovePreviews,setLocalMovePreviews]=useState<LocalWorkSortPreview[]>([]);
