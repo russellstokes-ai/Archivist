@@ -3981,26 +3981,26 @@ function Client() {
       style={({pressed})=>[styles.libraryTreeRow,active&&{backgroundColor:p.card},pressed&&{opacity:.68}]}>
       <View style={[styles.libraryTreeIcon,{backgroundColor:active?p.raised:'transparent'}]}><UiIcon name={icon} color={active?p.sage:p.muted} size={16}/></View>
       <View style={{flex:1,minWidth:0}}>
-        <Text numberOfLines={1} style={[styles.libraryTreeLabel,{color:active?p.ink:p.muted,fontWeight:active?'700':'500'}]}>{label}</Text>
-        {detail?<Text numberOfLines={1} style={[styles.libraryTreeDetail,{color:detailTone||p.muted}]}>{detail}</Text>:null}
+        <Text numberOfLines={1} style={[styles.libraryTreeLabel,layoutTier==='fold'&&styles.libraryTreeLabelFold,{color:active?p.ink:p.muted,fontWeight:active?'700':'500'}]}>{label}</Text>
+        {detail?<Text numberOfLines={1} style={[styles.libraryTreeDetail,layoutTier==='fold'&&styles.libraryTreeDetailFold,{color:detailTone||p.muted}]}>{detail}</Text>:null}
       </View>
-      {typeof count==='number'?<Text style={[styles.libraryTreeCount,{color:active?p.sage:p.muted}]}>{count}</Text>:null}
+      {typeof count==='number'?<Text style={[styles.libraryTreeCount,layoutTier==='fold'&&styles.libraryTreeCountFold,{color:active?p.sage:p.muted}]}>{count}</Text>:null}
     </Pressable>;
 
     return <View style={styles.librarySourceTree}>
       <Row label="All Library" count={sourceCounts.all} active={selected('all')} onPress={()=>choose('all')} icon="library"/>
 
-      <Text style={[styles.libraryTreeGroupLabel,{color:p.muted}]}>ON THIS DEVICE</Text>
+      <Text style={[styles.libraryTreeGroupLabel,layoutTier==='fold'&&styles.libraryTreeGroupLabelFold,{color:p.muted}]}>ON THIS DEVICE</Text>
       <Row label="On this device" count={sourceCounts.local} active={selected('local')} onPress={()=>choose('local')} icon="shelf"/>
       <View style={styles.libraryTreeChildren}>
         {localFolders.map(folder=><Row key={folder.id||folder.uri} label={folder.name} count={localFolderCount(folder)} detail={folder.status||undefined} detailTone={folder.status.startsWith('Scan failed')?p.danger:folder.status==='Scanning…'?p.sage:undefined} active={selected('local',folder.name,true)} onPress={()=>choose('local',folder.name,true)} icon="bookOpen"/>)}
         {sourceCounts.downloaded>0?<Row label="Offline downloads" count={sourceCounts.downloaded} detail="Saved from Archivist Server" active={selected('downloaded')} onPress={()=>choose('downloaded')} icon="bookmark"/>:null}
         {!localFolders.length&&sourceCounts.downloaded===0?<Text style={[styles.libraryTreeEmpty,{color:p.muted}]}>{Platform.OS==='ios'?'No imported folders yet.':'No device folders added.'}</Text>:null}
       </View>
-      <Pressable accessibilityRole="button" onPress={()=>{if(compact)setLibrarySourcesOpen(false);void addLocalFolder();}} style={styles.libraryTreeAdd}><UiIcon name="plus" color={p.sage} size={15}/><Text style={[styles.libraryTreeAddText,{color:p.sage}]}>{addLocalFolderLabel}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={()=>{if(compact)setLibrarySourcesOpen(false);void addLocalFolder();}} style={styles.libraryTreeAdd}><UiIcon name="plus" color={p.sage} size={15}/><Text style={[styles.libraryTreeAddText,layoutTier==='fold'&&styles.libraryTreeAddTextFold,{color:p.sage}]}>{addLocalFolderLabel}</Text></Pressable>
 
       {session||recoverableSession?<>
-        <Text style={[styles.libraryTreeGroupLabel,{color:p.muted}]}>ARCHIVIST SERVER</Text>
+        <Text style={[styles.libraryTreeGroupLabel,layoutTier==='fold'&&styles.libraryTreeGroupLabelFold,{color:p.muted}]}>ARCHIVIST SERVER</Text>
         {session?<Row label="On Archivist Server" count={sourceCounts.server} active={selected('server')} onPress={()=>choose('server')} icon="atlas"/>:
           <Row label="Archivist Server" detail="Server offline" active={false} onPress={()=>{if(compact)setLibrarySourcesOpen(false);setActiveTab('settings')}} icon="atlas"/>}
         {session?<View style={styles.libraryTreeChildren}>
@@ -4024,6 +4024,20 @@ function Client() {
     const serverReady=hasServerFolders&&sources.every(source=>source.status==='ok');
     const setupReady=hasSource&&(!hasFolder||libraryPreparationReady)&&(!hasServerFolders||serverReady);
     const preparing=hasSource&&!setupReady;
+    const stepOneActive=!hasSource;
+    const stepTwoActive=hasSource&&!setupReady;
+    const stepThreeActive=setupReady&&hasBooks;
+    const onboardingPulseStyle=(active:boolean)=>active&&!reduceMotion?{
+      opacity:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[.86,1,.86]}),
+      transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.035,1]})}],
+    }:undefined;
+    const scanStageIndex=progress
+      ? progress.phase==='discovering'?0
+        : ['reading-metadata','matching','checking-duplicates','preparing'].includes(progress.phase)?1
+          : ['covers','online-books','online-comics'].includes(progress.phase)?2
+            : progress.phase==='complete'?3:-1
+      : setupReady?3:-1;
+    const scanStageLabels=['Discover','Identify & group','Metadata & covers','Ready'];
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
@@ -4068,12 +4082,7 @@ function Client() {
         </View>
 
         <View style={styles.shelfSetupActions}>
-          <Animated.View style={[
-            styles.shelfSetupAction,
-            !hasSource&&!reduceMotion&&{
-              transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
-            },
-          ]}>
+          <Animated.View style={[styles.shelfSetupAction,onboardingPulseStyle(stepOneActive)]}>
             <Button
               label={libraryRefreshActive?'Preparing…':hasFolder?'Add another device folder':addLocalFolderShortLabel}
               disabled={libraryRefreshActive}
@@ -4085,9 +4094,19 @@ function Client() {
         </View>
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {preparing&&!libraryRefreshActive?<Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}
+        {hasSource&&(progress||setupReady)?<View accessibilityLabel="Library preparation stages" style={styles.onboardingScanFlow}>
+          {scanStageLabels.map((label,index)=>{
+            const active=index===scanStageIndex&&index<3;
+            const done=scanStageIndex>index||scanStageIndex===3;
+            return <Animated.View key={label} style={[styles.onboardingScanStage,{borderColor:active||done?p.sage:p.line,backgroundColor:done?p.card:'transparent'},onboardingPulseStyle(active)]}>
+              <View style={[styles.onboardingScanDot,{backgroundColor:active||done?p.sage:p.line}]}/>
+              <Text style={[styles.onboardingScanText,{color:active||done?p.ink:p.muted,fontWeight:active?'700':'600'}]}>{label}</Text>
+            </Animated.View>;
+          })}
+        </View>:null}
+        {preparing&&!libraryRefreshActive?<Animated.View style={onboardingPulseStyle(stepTwoActive)}><Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/></Animated.View>:null}
         {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></View>
+          <Animated.View style={[styles.shelfSetupAction,onboardingPulseStyle(stepThreeActive)]}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></Animated.View>
           <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
         </View>:null}
       </View>
@@ -5558,7 +5577,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);beginSmartShelf(true)}}/>
       </ScrollView></Pressable></Pressable></Modal>:null}
     </View>;
-    const libraryFolderRailWidth=layoutTier==='fold'?136:160;
+    const libraryFolderRailWidth=layoutTier==='fold'?184:160;
     return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{width:libraryFolderRailWidth,minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0,backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={[styles.libraryRailContent,{width:'100%'}]} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
@@ -8024,6 +8043,7 @@ export default function App() {
   const system = useColorScheme();
   const [brandLaunchVisible,setBrandLaunchVisible]=useState(nativeSplashEnabled);
   const brandLaunchOpacity=useRef(new Animated.Value(1)).current;
+  const brandLaunchHalo=useRef(new Animated.Value(0)).current;
   const launchSequenceStarted=useRef(false);
 
   useEffect(()=>{
@@ -8041,6 +8061,11 @@ export default function App() {
           AccessibilityInfo.isReduceMotionEnabled().catch(()=>false).then(reduce=>{
             if(cancelled)return;
             if(reduce){setBrandLaunchVisible(false);return;}
+            brandLaunchHalo.setValue(0);
+            Animated.sequence([
+              Animated.timing(brandLaunchHalo,{toValue:1,duration:720,useNativeDriver:true}),
+              Animated.timing(brandLaunchHalo,{toValue:0,duration:720,useNativeDriver:true}),
+            ]).start();
             Animated.timing(brandLaunchOpacity,{toValue:0,duration:brandedLaunchFadeMs,useNativeDriver:true}).start(({finished})=>{
               if(finished&&!cancelled)setBrandLaunchVisible(false);
             });
@@ -8054,8 +8079,9 @@ export default function App() {
       if(secondFrame)cancelAnimationFrame(secondFrame);
       if(holdTimer)clearTimeout(holdTimer);
       brandLaunchOpacity.stopAnimation();
+      brandLaunchHalo.stopAnimation();
     };
-  },[brandLaunchOpacity,fontError,fontsLoaded]);
+  },[brandLaunchHalo,brandLaunchOpacity,fontError,fontsLoaded]);
 
   if(!fontsLoaded&&!fontError){
     return nativeSplashEnabled?null:<View accessibilityLabel="Opening Archivist" style={[styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7'}]}><ArchivistLogo size={88}/><Text style={[styles.brandLaunchWordmark,{color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text></View>;
@@ -8063,16 +8089,26 @@ export default function App() {
 
   return <SafeAreaProvider>
     <Client />
-    {brandLaunchVisible?<Animated.View accessibilityLabel="Opening Archivist" pointerEvents="none" style={[StyleSheet.absoluteFillObject,styles.brandLaunch,{backgroundColor:system==='dark'?'#000000':'#FBFAF7',opacity:brandLaunchOpacity,zIndex:1000}]}>
-      <ArchivistLogo size={96}/>
-      <Text style={[styles.brandLaunchWordmark,{fontFamily:fontsLoaded?'ArchivistEditorial':'serif',color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text>
+    {brandLaunchVisible?<Animated.View accessibilityLabel="Opening Archivist" pointerEvents="none" style={[StyleSheet.absoluteFillObject,styles.brandLaunch,{backgroundColor:system==='dark'?'#07151C':'#FBFAF7',opacity:brandLaunchOpacity,zIndex:1000}]}>
+      <AmbientGlow color={system==='dark'?'#2F8B86':'#C99A43'} size={560} strength={system==='dark'?1.05:.58}/>
+      <Animated.View style={[styles.brandLaunchHaloRing,{
+        borderColor:system==='dark'?'#2F8B86':'#C99A43',
+        opacity:brandLaunchHalo.interpolate({inputRange:[0,1],outputRange:[.14,.48]}),
+        transform:[{scale:brandLaunchHalo.interpolate({inputRange:[0,1],outputRange:[.94,1.08]})}],
+      }]}/>
+      <View style={styles.brandLaunchMark}>
+        <ArchivistLogo size={96}/>
+        <Text style={[styles.brandLaunchWordmark,{fontFamily:fontsLoaded?'ArchivistEditorial':'serif',color:system==='dark'?'#F5F5F5':'#171410'}]}>Archivist</Text>
+      </View>
     </Animated.View>:null}
   </SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
-  brandLaunch: {flex:1,alignItems:'center',justifyContent:'center',gap:16},
+  brandLaunch: {flex:1,alignItems:'center',justifyContent:'center',gap:16,overflow:'hidden'},
+  brandLaunchMark: {alignItems:'center',justifyContent:'center',gap:16,zIndex:2},
+  brandLaunchHaloRing: {position:'absolute',width:300,height:300,borderRadius:150,borderWidth:1,zIndex:1},
   brandLaunchWordmark: {fontFamily:'serif',fontSize:30,lineHeight:38,fontWeight:'600',letterSpacing:.2},
   restoreScreen: {flex:1,paddingHorizontal:18,paddingTop:8},
   restoreBody: {flex:1,paddingTop:28,gap:18,maxWidth:760,width:'100%',alignSelf:'center'},
@@ -8100,22 +8136,27 @@ const styles = StyleSheet.create({
   setupPanel: {borderWidth:0,borderTopWidth:StyleSheet.hairlineWidth,paddingVertical:18,gap:12},
   shelfShell: {flex: 1, flexDirection: 'row'},
   libraryRail: {width:160,minWidth:160,maxWidth:160,flexBasis:160,flexGrow:0,flexShrink:0,borderRightWidth:StyleSheet.hairlineWidth,paddingHorizontal:5,paddingTop:8,paddingBottom:18,backgroundColor:'transparent'},
-  libraryRailFold: {width:136,minWidth:136,maxWidth:136,flexBasis:136,paddingHorizontal:3,paddingTop:8},
+  libraryRailFold: {width:184,minWidth:184,maxWidth:184,flexBasis:184,paddingHorizontal:8,paddingTop:8,borderRightWidth:1},
   libraryRailContent: {paddingBottom:28,width:'100%'},
   libraryRailTitle: {fontSize:9.5,lineHeight:13,fontWeight:'700',letterSpacing:1.4,marginBottom:2},
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
   librarySourceTree: {gap:3,width:'100%',minWidth:0},
   libraryTreeGroupLabel: {fontSize:8,lineHeight:10,fontWeight:'800',letterSpacing:1.15,marginTop:13,marginBottom:2,paddingHorizontal:5},
+  libraryTreeGroupLabelFold: {fontSize:10,lineHeight:13,letterSpacing:1.25,paddingHorizontal:7},
   libraryTreeChildren: {paddingLeft:4,gap:1},
   libraryTreeRow: {minHeight:38,borderRadius:9,paddingHorizontal:4,paddingVertical:4,flexDirection:'row',alignItems:'center',gap:5},
   libraryTreeIcon: {width:24,height:24,borderRadius:12,alignItems:'center',justifyContent:'center',flexShrink:0},
   libraryTreeLabel: {fontSize:10.5,lineHeight:13},
+  libraryTreeLabelFold: {fontSize:13,lineHeight:17},
   libraryTreeDetail: {fontSize:8,lineHeight:10.5,marginTop:1},
+  libraryTreeDetailFold: {fontSize:10,lineHeight:13,marginTop:2},
   libraryTreeCount: {fontSize:9.5,lineHeight:13,fontWeight:'700',fontVariant:['tabular-nums']},
+  libraryTreeCountFold: {fontSize:11,lineHeight:15},
   libraryTreeEmpty: {fontSize:9.5,lineHeight:14,paddingHorizontal:10,paddingVertical:7},
   libraryTreeAdd: {minHeight:38,flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:5,marginTop:2},
   libraryTreeAddText: {fontSize:10.5,lineHeight:13,fontWeight:'700'},
+  libraryTreeAddTextFold: {fontSize:12.5,lineHeight:17},
   libraryMobileSourceButton: {minHeight:58,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:10,paddingVertical:7},
   libraryMobileSourceKicker: {fontSize:8,lineHeight:10.5,fontWeight:'800',letterSpacing:1.15},
   libraryMobileSourceLabel: {fontSize:12.5,lineHeight:17,fontWeight:'600',marginTop:1},
@@ -8175,6 +8216,10 @@ const styles = StyleSheet.create({
   onboardingStep: {flexDirection:'row',gap:12,alignItems:'flex-start',paddingVertical:2},
   onboardingNumber: {width:24,fontSize:11,lineHeight:18,fontWeight:'700',letterSpacing:.7,textAlign:'left'},
   onboardingStepTitle: {fontSize:13.5,lineHeight:18,fontWeight:'600',marginBottom:2},
+  onboardingScanFlow: {flexDirection:'row',flexWrap:'wrap',gap:6,paddingLeft:36,marginTop:-2,marginBottom:2},
+  onboardingScanStage: {minHeight:30,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:6},
+  onboardingScanDot: {width:6,height:6,borderRadius:3},
+  onboardingScanText: {fontSize:11.5,lineHeight:16},
   shelfSetupActions: {flexDirection:'row',flexWrap:'wrap',gap:10,alignItems:'stretch'},
   shelfSetupAction: {minWidth:170,flexGrow:1},
   shelfLocalOnlyAction: {minHeight:40,alignSelf:'flex-start',justifyContent:'center',paddingRight:10},
