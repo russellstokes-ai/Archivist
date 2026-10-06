@@ -83,7 +83,9 @@ func autoAudioGroupKey(sourceID int64,x catalogueAsset) string {
 	if dir!="." && dir!="" && (genericAudioTrackLabel(base)||leadingNumberedAudioTrack(base)||audioMultipartWorkTitle(base)!="") {
 		return prefix+"audio-dir:"+dir
 	}
-	if id:=strings.TrimSpace(first(x.asin,x.isbn));id!="" {
+	id:=strings.TrimSpace(x.asin)
+	if id=="" { id=strings.TrimSpace(x.isbn) }
+	if id!="" {
 		return prefix+"audio-id:"+strings.ToLower(id)
 	}
 	if family:=audioMultipartWorkTitle(base);family!="" {
