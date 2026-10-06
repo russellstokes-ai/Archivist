@@ -948,6 +948,7 @@ function Client() {
   const livingBookPageLoop=useRef<ReturnType<typeof setTimeout>|null>(null);
   const livingBookSettleTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const livingBookCoverSessionRef=useRef<LivingBookCoverSession|undefined>(undefined);
+  const lastPlaybackVisibleRef=useRef(false);
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
   const [skipTurning,setSkipTurning]=useState(false);
@@ -1298,6 +1299,8 @@ function Client() {
   },[appActive,reduceMotion,shelfLoading,shelfSkeletonPulse]);
 
   useEffect(()=>{
+    const wasVisible=lastPlaybackVisibleRef.current;
+    lastPlaybackVisibleRef.current=playbackVisible;
     if(!playing){
       ++livingBookGeneration.current;
       ++skipGeneration.current;
@@ -1308,6 +1311,20 @@ function Client() {
       skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
       transitionLivingBook({type:'restore',playing:false});
       livingBookCoverSessionRef.current=undefined;
+      return;
+    }
+    // Re-entering Now must render a stable physical book immediately. Do not
+    // resurrect an off-screen turning/settling phase and wait for another
+    // transport tap before the Canvas becomes visible.
+    if(playbackVisible&&!wasVisible){
+      ++livingBookGeneration.current;
+      ++skipGeneration.current;
+      stopLivingBookPageLoop();
+      clearLivingBookSettle();
+      pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
+      skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
+      bookOpenAnim.stopAnimation();bookOpenAnim.setValue(playerMotionPlaying?1:0);
+      transitionLivingBook({type:'restore',playing:playerMotionPlaying});
       return;
     }
     transitionLivingBook({type:'visibility-change',visible:playbackVisible});
@@ -2811,9 +2828,11 @@ function Client() {
       batchSize:4,
       // First-run preparation must fail forward quickly on a slow/broken archive.
       // A single pathological EPUB/CBZ/M4B must never hold the UI at 28%.
-      itemTimeoutMs:refreshMetadata?5000:2500,
+      itemTimeoutMs:refreshMetadata?4000:2200,
       maxConsecutiveTimeouts:refreshMetadata?6:6,
-      concurrency:refreshMetadata?3:4,
+      // Two foreground readers keep SAF/archive and M4B work responsive on
+      // real devices; native archive inspection is independently byte-bounded.
+      concurrency:2,
       shouldInspect:needsEmbeddedRead,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
