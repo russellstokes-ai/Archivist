@@ -4327,11 +4327,12 @@ function Client() {
     setSelectedMetadataCandidate(candidate.key);
   }
 
-  async function searchEditingMetadata(deep=false){
-    if(!editing?.uri||editing.source==='server'||metadataLookupBusy)return;
-    const work=localWorkForEditing(editing);
+  async function searchEditingMetadata(deep=false,seed?:Book){
+    const target=seed||editing;
+    if(!target?.uri||target.source==='server'||metadataLookupBusy)return;
+    const work=localWorkForEditing(target);
     const currentLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-    const workTracks=(work?.tracks||currentLocal.filter(book=>book.uri===editing.uri)).filter(track=>!!track.uri);
+    const workTracks=(work?.tracks||currentLocal.filter(book=>book.uri===target.uri)).filter(track=>!!track.uri);
     if(!workTracks.length)return;
     setMetadataLookupBusy(true);
     setMetadataLookupMode(deep?'deep':'search');
@@ -4345,9 +4346,9 @@ function Client() {
           try{return decodeURIComponent(uri).split(/[\\/]/).slice(0,-1).join('/').toLowerCase();}
           catch{return uri.split(/[\\/]/).slice(0,-1).join('/').toLowerCase();}
         };
-        if(editing.format==='Audio'){
+        if(target.format==='Audio'){
           const known=new Set(workTracks.map(track=>track.uri));
-          const siblings=currentLocal.filter(track=>track.format==='Audio'&&parentKey(track.uri)===parentKey(editing.uri!));
+          const siblings=currentLocal.filter(track=>track.format==='Audio'&&parentKey(track.uri)===parentKey(target.uri!));
           evidenceTracks=[...workTracks,...siblings.filter(track=>!known.has(track.uri))].slice(0,256);
         }
         const embedded=await enrichLocalEmbeddedMetadata(evidenceTracks,{
@@ -4359,9 +4360,10 @@ function Client() {
       }
 
       const regrouped=groupLocalWorks(evidenceTracks);
-      const evidenceWork=regrouped.find(candidate=>candidate.tracks.some(track=>track.uri===editing.uri))||regrouped[0];
-      const representative=evidenceWork?.tracks.find(track=>track.uri===editing.uri)||evidenceWork?.tracks[0]||evidenceTracks[0];
+      const evidenceWork=regrouped.find(candidate=>candidate.tracks.some(track=>track.uri===target.uri))||regrouped[0];
+      const representative=evidenceWork?.tracks.find(track=>track.uri===target.uri)||evidenceWork?.tracks[0]||evidenceTracks[0];
       if(evidenceWork){
+        setEditingUris(evidenceWork.tracks.map(track=>track.uri).filter(Boolean));
         if(evidenceWork.title)setEditTitle(evidenceWork.title);
         if(evidenceWork.author)setEditAuthor(evidenceWork.author);
         if(evidenceWork.series)setEditSeries(evidenceWork.series);
@@ -4380,7 +4382,7 @@ function Client() {
       }
 
       const previews:MetadataCandidatePreview[]=[];
-      if(editing.format==='Comic'&&metadataSettings.onlineEnabled&&metadataSettings.comics.enabled&&metadataSettings.comics.metron){
+      if(target.format==='Comic'&&metadataSettings.onlineEnabled&&metadataSettings.comics.enabled&&metadataSettings.comics.metron){
         const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim();
         if(token){
           const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
@@ -4449,7 +4451,7 @@ function Client() {
             {item.reviewReason?<Text numberOfLines={2} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
           </View>
         </Pressable>
-        {item.source!=='server'&&item.uri?<Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={!!deepScanKey} onPress={()=>void deepScanLocalAssets([item.uri!],item.title)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:deepScanKey ? .55 : 1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{deepScanKey===item.uri?'Deep scanning…':'Deep scan'}</Text></Pressable>:null}
+        {item.source!=='server'&&item.uri?<Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={metadataLookupBusy} onPress={()=>{beginEdit(item);void searchEditingMetadata(true,item)}} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:metadataLookupBusy ? .55 : 1}]}><Text style={{color:p.sage,fontWeight:'700'}}>{metadataLookupBusy?'Deep scanning…':'Deep scan'}</Text></Pressable>:null}
         {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
       </View>
     );
@@ -4827,9 +4829,11 @@ function Client() {
       if(local)void saveLocalPreference(local,{...personal,favourite:!personal.favourite});
       else if(remote)void saveServerPreference(remote,{...personal,favourite:!personal.favourite});
     };
-    const editLocal=()=>{
+    const editLocal=(deep=false)=>{
       if(!localTrack)return;
-      beginEdit({...localTrack,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,coverUri:work.coverUri,source:work.source,originServer:local?.originServer,serverWorkId:local?.originWorkId},local?.tracks.map(track=>track.uri)||[]);
+      const editorBook={...localTrack,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,coverUri:work.coverUri,source:work.source,originServer:local?.originServer,serverWorkId:local?.originWorkId};
+      beginEdit(editorBook,local?.tracks.map(track=>track.uri)||[]);
+      if(deep)void searchEditingMetadata(true,editorBook);
       close();
     };
     const openServerManagement=()=>{
@@ -4841,11 +4845,7 @@ function Client() {
       close();
     };
     const refreshMetadata=()=>{
-      if(local){
-        void deepScanLocalAssets(local.tracks.map(track=>track.uri).filter(Boolean),work.title);
-        close();
-        return;
-      }
+      if(local){editLocal(true);return;}
       if(remote&&owner&&matchingServerSources.length===1){void sourceAction('/api/sources/'+matchingServerSources[0].id+'/scan');close();return;}
       openServerManagement();
     };
