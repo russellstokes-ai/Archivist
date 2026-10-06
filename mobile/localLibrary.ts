@@ -8,7 +8,6 @@ import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
 import {audioWorkGroupKeys, canonicalMetadataForBooks, synchronizeLocalMetadataCooperative} from './metadataSync';
-import {cachePortraitCover} from './coverCache';
 
 export type LocalBook = {
   id: number;
@@ -1082,6 +1081,7 @@ export async function enrichLocalBookMetadataOnline(
     shouldContinue?:()=>boolean;
     batchSize?:number;
     concurrency?:number;
+    cachePortrait?:(key:string,remoteUri:string)=>Promise<{uri:string;width:number;height:number;aspectRatio:number}>;
     onBatch?:(books:LocalBook[],progress:{attempted:number;matched:number;review:number;updated:number;cache:OnlineBookCache})=>void|Promise<void>;
   }={},
 ):Promise<LocalOnlineMetadataEnrichmentResult>{
@@ -1115,9 +1115,9 @@ export async function enrichLocalBookMetadataOnline(
         const candidate=result.best;
         if(result.autoApply&&options.applyHighConfidence!==false){
           let livingPortrait:{uri:string;source:'open-library'|'google-books';confidence:number}|undefined;
-          if(candidate.coverUri&&candidate.confidence==='high'){
+          if(unit.target.format==='Audio'&&candidate.coverUri&&candidate.confidence==='high'&&options.cachePortrait){
             try{
-              const portrait=await cachePortraitCover(
+              const portrait=await options.cachePortrait(
                 'living-'+String(unit.target.workKey||unit.target.uri||unit.target.title)+'-'+candidate.provider,
                 candidate.coverUri,
               );
