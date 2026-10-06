@@ -103,7 +103,7 @@ class ArchivistLibraryModule(private val context: ReactApplicationContext) : Rea
       // Translate only this user-granted SAF document to its MediaStore row.
       // This reads Android's media index, not the audiobook payload, and does
       // not require broad READ_MEDIA_AUDIO access to the rest of the device.
-      val mediaUri = DocumentsContract.getMediaUri(context, documentUri) ?: return null
+      val mediaUri = MediaStore.getMediaUri(context, documentUri) ?: return null
       val projection = arrayOf(
         MediaStore.MediaColumns.TITLE,
         MediaStore.Audio.AudioColumns.ALBUM,
