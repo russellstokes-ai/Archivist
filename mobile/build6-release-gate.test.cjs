@@ -10,11 +10,11 @@ const source=fs.readFileSync(__dirname+'/App.tsx','utf8');
 
 assert.equal(pkg.version,'0.9.4');
 assert.equal(app.expo.version,'0.9.4');
-assert.equal(app.expo.android.versionCode,102);
-assert.match(gradle,/versionCode\s+102/);
+assert.equal(app.expo.android.versionCode,103);
+assert.match(gradle,/versionCode\s+103/);
 assert.match(gradle,/versionName\s+"0\.9\.4"/);
-assert.match(apkWorkflow,/TEST_BUILD:\s*'13'/);
-assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'Test 13 branch must produce the verified APK');
+assert.match(apkWorkflow,/TEST_BUILD:\s*'14'/);
+assert.ok(apkWorkflow.includes('build/0.9.4-test14-20261006'),'Test 14 branch must produce the verified APK');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'release APK gate must lint the optimized release variant');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'release gate must verify package, signature and zip alignment');
 assert.ok(apkWorkflow.includes('Launch test APK in Android emulator'),'release gate must install and cold-launch the APK');
