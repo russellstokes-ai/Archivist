@@ -360,8 +360,7 @@ function validateServer(raw: string) {
 
 function localWorkReadyForCatalogue(work:LocalWork){
   const title=String(work.title||'').trim();
-  const author=String(work.author||'').trim();
-  return !work.needsReview&&!!work.coverUri&&!!title&&!/^(?:untitled|unknown|unclassified)$/i.test(title)&&!!author;
+  return !work.needsReview&&!!work.coverUri&&!!title&&!/^(?:untitled|unknown|unclassified)$/i.test(title);
 }
 
 function palette(mode: ThemeMode, system: string | null | undefined, highContrast=false): Palette {
@@ -1356,12 +1355,13 @@ function Client() {
   },[livingBookMotion.phase,playerMotionPlaying,playbackVisible,reduceMotion]);
 
 
-  const phoneWorks = useMemo(() => {
+  const allPhoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
-    // Needs-review assets remain in the maintenance/review pool but are not
-    // published to Shelf, the normal Library catalogue, recommendations or Auto.
-    return groupLocalWorks(local).filter(work=>!work.needsReview);
+    return groupLocalWorks(local);
   }, [localBooks]);
+  // Keep unresolved works available to maintenance/Deep Scan while withholding
+  // them from normal playback/catalogue surfaces.
+  const phoneWorks = useMemo(() => allPhoneWorks.filter(work=>!work.needsReview), [allPhoneWorks]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
 
@@ -4163,12 +4163,12 @@ function Client() {
 
   function OnboardingGuide() {
     if (onboardingDone) return null;
-    const reviewCount = phoneWorks.filter(work=>!localWorkReadyForCatalogue(work)).length;
+    const reviewCount = allPhoneWorks.filter(work=>!localWorkReadyForCatalogue(work)).length;
     const hasFolder = localFolders.length > 0;
     const hasServer = !!session;
     const hasServerFolders = sources.length > 0;
     const hasSource = hasFolder || hasServerFolders;
-    const approvedLocalCount=phoneWorks.filter(localWorkReadyForCatalogue).length;
+    const approvedLocalCount=allPhoneWorks.filter(localWorkReadyForCatalogue).length;
     const hasUsableLibrary = approvedLocalCount > 0 || serverWorks.length > 0;
     const progress=activeLibraryProgress;
     const progressPercent=progress?scanProgressPercent(progress):0;
@@ -4324,7 +4324,7 @@ function Client() {
 
   function localWorkForEditing(item:Book|null){
     if(!item?.uri)return undefined;
-    return phoneWorks.find(work=>work.tracks.some(track=>track.uri===item.uri));
+    return allPhoneWorks.find(work=>work.tracks.some(track=>track.uri===item.uri));
   }
 
   function metadataCandidateKey(candidate:{provider?:string;providerId?:string}){
@@ -5467,7 +5467,7 @@ function Client() {
       animateSeriesOpen(name);
     };
 
-    const localReview=phoneWorks.filter(work=>!localWorkReadyForCatalogue(work)).length;
+    const localReview=allPhoneWorks.filter(work=>!localWorkReadyForCatalogue(work)).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
