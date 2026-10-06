@@ -175,10 +175,15 @@ function currentWorkFor(
   return groupLocalWorks(tracks)[0]||{...originalWork,tracks};
 }
 
-function cacheReusable(entry:LocalEnrichmentCacheEntry|undefined,querySignature:string,now:Date){
+function cacheReusable(entry:LocalEnrichmentCacheEntry|undefined,querySignature:string,now:Date,work:LocalWork){
   if(!entry||entry.version!==2)return false;
   if(entry.querySignature!==querySignature)return false;
-  if(entry.publishReady)return true;
+  const missingLivingBookJacket=work.format==='Audio'&&(
+    !entry.livingBookCoverUri ||
+    entry.livingBookCoverSource==='jacket' ||
+    entry.coverShape==='square'&&entry.livingBookCoverUri===entry.coverUri
+  );
+  if(entry.publishReady&&!missingLivingBookJacket)return true;
   return !!entry.retryAfter&&Date.parse(entry.retryAfter)>now.getTime();
 }
 
@@ -221,7 +226,7 @@ export async function enrichLocalCatalogue(
     const querySignature=localWorkQuerySignature(work);
     const now=nowFn();
     const cached=seedCache[fingerprint];
-    if(cacheReusable(cached,querySignature,now)){
+    if(cacheReusable(cached,querySignature,now,work)){
       cache[fingerprint]=cached;
       const changedBooks=applyEntryIndexed(books,indexByUri,work,cached);
       await reportResult(cached,changedBooks,cached.title||work.title);
@@ -300,7 +305,7 @@ export async function enrichLocalCatalogue(
       }
     }
 
-    if(work.format==='Audio'&&!livingBookCoverUri&&coverUri){
+    if(work.format==='Audio'&&!livingBookCoverUri&&coverUri&&coverShape==='portrait'){
       livingBookCoverUri=coverUri;
       livingBookCoverSource='jacket';
       livingBookCoverConfidence=1;
@@ -320,7 +325,7 @@ export async function enrichLocalCatalogue(
       publishedYear:resolvedYear,coverUri,coverShape,livingBookCoverUri,livingBookCoverSource,livingBookCoverConfidence,
       metadataProvider:provider,metadataProviderId:providerId,identityReady:readyIdentity,publishReady,reviewReason,
       updatedAt:now.toISOString(),
-      ...(!publishReady?{retryAfter:new Date(now.getTime()+6*60*60*1000).toISOString()}:{}),
+      ...((!publishReady||(work.format==='Audio'&&!livingBookCoverUri))?{retryAfter:new Date(now.getTime()+6*60*60*1000).toISOString()}:{}),
     };
     cache[fingerprint]=entry;
     const changedBooks=applyEntryIndexed(books,indexByUri,work,entry);
