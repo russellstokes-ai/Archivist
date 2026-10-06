@@ -232,7 +232,7 @@ assert.ok(source.includes("relation.availability || []"), 'Atlas relationship vi
 
 assert.ok(source.includes("const localCatalogKey = 'archivist.localCatalog.v1'"), 'Legacy catalogue key must remain available for one-time migration');
 assert.ok(source.includes("loadLocalStageBooks()") && source.includes("getPersistedJSON<Book[]>(localCatalogKey)") && source.includes("migrateLegacyLocalStage(legacyBooks)"), 'Cold start must hydrate from SQLite and migrate the legacy cached catalogue once');
-assert.ok(source.includes("replaceLocalStageBooks(result.books)") && source.includes("replaceLocalStageBooks(currentBooks)"), 'Successful scans must commit a safe baseline and final enriched local catalogue to SQLite');
+assert.ok(source.includes("replaceLocalStageBooks(stagedBooks)") && source.includes("replaceLocalStageBooks(currentBooks)"), 'Successful scans must commit a hidden staged baseline and final enriched local catalogue to SQLite');
 assert.ok(localStageStoreNativeSource.includes('PRAGMA journal_mode = WAL') && localStageStoreNativeSource.includes('withExclusiveTransactionAsync'), 'Native local catalogue database must use transactional WAL-backed SQLite');
 assert.ok(source.includes("!localCatalogReady"), 'Automatic rescan must wait for catalogue restoration before deciding the cache is absent');
 
