@@ -66,7 +66,7 @@ export async function cacheRequiredWorkArtwork(
       providerLocal ||
       '';
     let livingBookCoverUri=isVerifiedLocalArtworkUri(currentLiving)?currentLiving:'';
-    const livingConfidence=Math.max(0,...tracks.map(track=>Number(track.livingBookCoverConfidence||0)));
+    const livingConfidence=Math.max(0,...tracks.map(track=>Number(track.livingBookCoverConfidence||0)).filter(Number.isFinite));
     const legacySquareFallback=work.format==='Audio'
       && !!livingBookCoverUri
       && !!libraryCoverUri
