@@ -409,9 +409,12 @@ func audioMultipartWorkTitle(value string) string {
 	for _, sep:=range []string{" - ","_"," : "} {
 		if index:=strings.LastIndex(value,sep); index>1 {
 			tail:=strings.TrimSpace(value[index+len(sep):])
-			if _,ok:=seriesPositionFromLabel(strings.Fields(tail)[0]);ok {
+			fields:=strings.Fields(tail)
+			if len(fields)>0 {
+				if _,ok:=seriesPositionFromLabel(fields[0]);ok {
 				title:=cleanMetadata(strings.Trim(value[:index]," ._:-"))
-				if title!="" && !strings.Contains(title," - ") { return title }
+					if title!="" && !strings.Contains(title," - ") { return title }
+				}
 			}
 		}
 	}
