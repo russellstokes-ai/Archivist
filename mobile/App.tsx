@@ -2097,6 +2097,7 @@ function Client() {
 
   async function rescanLocalFolders(forceMetadata=false) {
     if (!localFolders.length) return;
+    const hadPreviousScan=localFolders.some(folder=>!!folder.scannedAt);
     setError('');
     setLocalScanning(true);
     try {
@@ -2107,10 +2108,13 @@ function Client() {
       await setPersistedJSON(localFoldersKey,result.folders);
       void runLocalEnrichment(committedBooks,localEnrichmentCache);
       const reused=committedBooks.filter(book=>book.scanReused).length;
+      const grouped=groupLocalWorks(committedBooks).length;
       setLocalFolderNotice(
         forceMetadata
-          ? `Full rescan complete · ${committedBooks.length} files rechecked${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`
-          : `Library refreshed · ${reused} unchanged files reused · ${Math.max(0,committedBooks.length-reused)} changed or new${result.skipped ? ` · ${result.skipped} folders unreadable` : ''}.`,
+          ? `Full rescan complete · ${committedBooks.length} media files · ${grouped} works rechecked${result.skipped ? ` · ${result.skipped} folders or entries unreadable` : ''}.`
+          : hadPreviousScan
+            ? `Library refreshed · ${committedBooks.length} media files · ${grouped} works · ${reused} unchanged · ${Math.max(0,committedBooks.length-reused)} changed or new${result.skipped ? ` · ${result.skipped} folders or entries unreadable` : ''}.`
+            : `Scan complete · ${committedBooks.length} media files found · ${grouped} works grouped${result.skipped ? ` · ${result.skipped} folders or entries unreadable` : ''}.`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -2775,7 +2779,7 @@ function Client() {
             </Text>
           </View>
         </View>
-        {!scanBusy&&reviewCount>0?<Button label={`Review ${reviewCount} item${reviewCount===1?'':'s'}`} onPress={()=>{setReviewOnly(true);setQuery('');setActiveTab('library')}} />:null}
+        {!scanBusy&&reviewCount>0?<Button label={`Review ${reviewCount} item${reviewCount===1?'':'s'}`} onPress={()=>{setError('');setReviewOnly(true);setQuery('');setActiveTab('library')}} />:null}
         {hasUsableLibrary&&!scanBusy?<Button label="Enter my library" tone={reviewCount>0?'quiet':'primary'} onPress={()=>void finishOnboarding()} />:null}
         {localFolderNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.sage}]}>{localFolderNotice}</Text>:null}
       </View>
