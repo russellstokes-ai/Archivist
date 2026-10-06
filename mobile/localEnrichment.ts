@@ -254,17 +254,22 @@ export async function enrichLocalCatalogue(
       }
     }
 
-    const needsOnline=!readyIdentity||!coverUri||(work.format==='Audio'&&!livingBookCoverUri);
+    const identifiers=workIdentifiers(work);
+    const resolvedIsbn=workIsbn(work);
+    // Normal enrichment stays conservative: weak/title-only discoveries remain in
+    // Review instead of spending network/CPU trying to guess an identity. An ISBN
+    // may still resolve an otherwise incomplete work because it is deterministic.
+    const automaticLookupEligible=readyIdentity||!!resolvedIsbn;
+    const needsOnline=automaticLookupEligible&&(!readyIdentity||!coverUri||(work.format==='Audio'&&!livingBookCoverUri));
     let match:MetadataMatch|null=null;
     if(needsOnline&&resolvedTitle&&resolvedTitle.toLowerCase()!=='untitled'){
       try{
-        const identifiers=workIdentifiers(work);
         match=await lookup({
           title:resolvedTitle,
           author:resolvedAuthor||undefined,
           series:resolvedSeries||undefined,
           publishedYear:resolvedYear,
-          isbn:workIsbn(work),
+          isbn:resolvedIsbn,
           identifiers:identifiers.length?identifiers:undefined,
         },0.86);
       }catch{}
