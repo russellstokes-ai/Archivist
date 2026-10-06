@@ -1,7 +1,7 @@
-import {startPageTurnLoop} from './pageTurnLoop';
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
-import {AmbientGlow,LivingBookArtwork} from './LivingBookArtwork';
+import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
 import {
@@ -62,7 +62,7 @@ import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks} fr
 import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
-import {PLAYER_MOTION_TIMING, PlayerBookmark, TrackOrderMap, ChapterOverrideMap, addBookmark, applyTrackOrder, livingBookHingeDuration, mergeChapter, moveTrackOrder, playerMotionState, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, LivingBookMotion, LivingBookMotionEvent, addBookmark, applyTrackOrder, initialLivingBookMotion, mergeChapter, moveTrackOrder, reduceLivingBookMotion, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {DurableNowSession, NowSessionMedia, refreshNowSession, sanitizeNowSession, sameNowMedia} from './nowSession';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
@@ -940,29 +940,118 @@ function Client() {
     return()=>{loop.stop();interfacePulse.setValue(0);};
   },[appActive,interfacePulse,reduceMotion]);
   const bookOpenAnim=useRef(new Animated.Value(0)).current;
-  const bookOpenProgressRef=useRef(0);
   const pageTurnAnim=useRef(new Animated.Value(0)).current;
+  const [livingBookMotion,setLivingBookMotion]=useState<LivingBookMotion>(()=>initialLivingBookMotion(false));
+  const livingBookMotionRef=useRef<LivingBookMotion>(livingBookMotion);
+  livingBookMotionRef.current=livingBookMotion;
+  const livingBookGeneration=useRef(0);
+  const livingBookPageLoop=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const livingBookSettleTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const livingBookCoverSessionRef=useRef<LivingBookCoverSession|undefined>(undefined);
   const skipTurnAnim=useRef(new Animated.Value(0)).current;
   const [skipDirection,setSkipDirection]=useState<1|-1>(1);
   const [skipTurning,setSkipTurning]=useState(false);
   const [skipPageCount,setSkipPageCount]=useState(3);
   const skipGeneration=useRef(0);
-  const ambientPageLoopStopRef=useRef<(()=>void)|null>(null);
-  const [ambientPageLoopEpoch,setAmbientPageLoopEpoch]=useState(0);
+
+  function transitionLivingBook(event:LivingBookMotionEvent){
+    const next=reduceLivingBookMotion(livingBookMotionRef.current,event);
+    livingBookMotionRef.current=next;
+    setLivingBookMotion(next);
+    return next;
+  }
+  function stopLivingBookPageLoop(){
+    if(livingBookPageLoop.current!==null){
+      clearTimeout(livingBookPageLoop.current);
+      livingBookPageLoop.current=null;
+    }
+  }
+  function clearLivingBookSettle(){
+    if(livingBookSettleTimer.current!==null){
+      clearTimeout(livingBookSettleTimer.current);
+      livingBookSettleTimer.current=null;
+    }
+  }
+  function scheduleLivingBookSettle(callback:()=>void){
+    clearLivingBookSettle();
+    if(reduceMotion){callback();return;}
+    livingBookSettleTimer.current=setTimeout(()=>{
+      livingBookSettleTimer.current=null;
+      callback();
+    },180);
+  }
+  function animateLivingBookCoverClose(){
+    const generation=++livingBookGeneration.current;
+    bookOpenAnim.stopAnimation(value=>{
+      if(generation!==livingBookGeneration.current)return;
+      if(reduceMotion){
+        bookOpenAnim.setValue(0);
+        transitionLivingBook({type:'close-complete'});
+        return;
+      }
+      Animated.timing(bookOpenAnim,{toValue:0,duration:Math.max(180,Math.round(value*1500)),useNativeDriver:true})
+        .start(({finished})=>{if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'close-complete'});});
+    });
+  }
+  function animateLivingBookOpen(){
+    stopLivingBookPageLoop();
+    clearLivingBookSettle();
+    const next=transitionLivingBook({type:'play-request'});
+    if(next.phase!=='opening')return;
+    const generation=++livingBookGeneration.current;
+    bookOpenAnim.stopAnimation(value=>{
+      if(generation!==livingBookGeneration.current)return;
+      if(reduceMotion){
+        bookOpenAnim.setValue(1);
+        transitionLivingBook({type:'open-complete'});
+        return;
+      }
+      Animated.timing(bookOpenAnim,{toValue:1,duration:Math.max(180,Math.round((1-value)*1500)),useNativeDriver:true})
+        .start(({finished})=>{if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'open-complete'});});
+    });
+  }
+  function animateLivingBookClose(){
+    stopLivingBookPageLoop();
+    const next=transitionLivingBook({type:'pause-request'});
+    if(next.phase==='turning'||next.phase==='settling')return;
+    if(next.phase==='closing')animateLivingBookCoverClose();
+  }
+  function animateLivingBookPageTurn(){
+    stopLivingBookPageLoop();
+    if(reduceMotion||livingBookMotionRef.current.phase!=='open')return;
+    const next=transitionLivingBook({type:'turn-request'});
+    if(next.phase!=='turning')return;
+    const generation=++livingBookGeneration.current;
+    pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
+    Animated.timing(pageTurnAnim,{toValue:1,duration:1900,useNativeDriver:true}).start(({finished})=>{
+      if(!finished||generation!==livingBookGeneration.current)return;
+      transitionLivingBook({type:'turn-complete'});
+      scheduleLivingBookSettle(()=>{
+        if(generation!==livingBookGeneration.current)return;
+        const settled=transitionLivingBook({type:'settle-complete'});
+        pageTurnAnim.setValue(0);
+        if(settled.phase==='closing')animateLivingBookCoverClose();
+      });
+    });
+  }
   function turnPages(pages:number,direction:1|-1){
-    if(reduceMotion||!playbackVisible||bookOpenProgressRef.current<.95)return;
+    if(reduceMotion||!playbackVisible||livingBookMotionRef.current.phase!=='open')return;
+    stopLivingBookPageLoop();
+    const next=transitionLivingBook({type:'turn-request'});
+    if(next.phase!=='turning')return;
     const count=Math.max(1,Math.min(6,Math.round(pages)));
     const generation=++skipGeneration.current;
-    ambientPageLoopStopRef.current?.();
-    ambientPageLoopStopRef.current=null;
-    pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
-    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
+    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);
+    setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
     Animated.timing(skipTurnAnim,{toValue:count,duration:count>=6?1040:780,useNativeDriver:true}).start(({finished})=>{
-      if(finished&&generation===skipGeneration.current){
-        skipTurnAnim.setValue(0);
-        setSkipTurning(false);
-        setAmbientPageLoopEpoch(value=>value+1);
-      }
+      if(!finished||generation!==skipGeneration.current)return;
+      transitionLivingBook({type:'turn-complete'});
+      scheduleLivingBookSettle(()=>{
+        if(generation!==skipGeneration.current)return;
+        skipTurnAnim.setValue(0);setSkipTurning(false);
+        const settled=transitionLivingBook({type:'settle-complete'});
+        if(settled.phase==='closing')animateLivingBookCoverClose();
+      });
     });
   }
 
@@ -1098,6 +1187,21 @@ function Client() {
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
   const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
+  function lockedLivingBookCover(book:Book){
+    const editionCoverUri=book.source==='server'&&session
+      ? session.server+'/api/assets/'+book.id+'/cover'
+      : book.coverUri;
+    const next=resolveLivingBookCover({
+      format:book.format,
+      editionCoverUri,
+      editionCoverShape:book.coverShape,
+    });
+    const key=[book.source||'local',book.originServer||session?.server||'device',playbackWorkKey(book)||book.id].join('|');
+    const locked=lockLivingBookCoverSession(livingBookCoverSessionRef.current,key,next);
+    livingBookCoverSessionRef.current=locked;
+    return locked.decision;
+  }
+  useEffect(()=>{if(!playing)livingBookCoverSessionRef.current=undefined;},[playing]);
   useEffect(()=>{
     if(!playing||playing.source==='server'||!playing.uri)return;
     const seconds=Math.max(0,audio.currentTime||0);
@@ -1205,114 +1309,35 @@ function Client() {
   },[appActive,reduceMotion,shelfLoading,shelfSkeletonPulse]);
 
   useEffect(()=>{
-    const listener=bookOpenAnim.addListener(({value})=>{bookOpenProgressRef.current=value;});
-    return()=>bookOpenAnim.removeListener(listener);
-  },[bookOpenAnim]);
-
-  const livingBookMotionGeneration=useRef(0);
-  const livingBookVisualWorkRef=useRef('');
-  const livingBookWasVisibleRef=useRef(false);
-  const livingBookWorkKey=playbackWorkKey(playing);
-  useLayoutEffect(()=>{
-    const generation=++livingBookMotionGeneration.current;
-    const wasVisible=livingBookWasVisibleRef.current;
-    const enteringVisible=playbackVisible&&!wasVisible;
-    livingBookWasVisibleRef.current=playbackVisible;
-    const previousWorkKey=livingBookVisualWorkRef.current;
-    const workChanged=!!livingBookWorkKey&&!!previousWorkKey&&livingBookWorkKey!==previousWorkKey;
-    if(livingBookWorkKey)livingBookVisualWorkRef.current=livingBookWorkKey;
-
-    // When the player is not on screen there is no reason to preserve an
-    // in-flight visual frame. Normalising here prevents a half-closed hinge or
-    // half-turned page from being resurrected when Now is opened again.
-    if(!playbackVisible){
+    if(!playing){
+      ++livingBookGeneration.current;
       ++skipGeneration.current;
-      ambientPageLoopStopRef.current?.();
-      ambientPageLoopStopRef.current=null;
-      bookOpenAnim.stopAnimation();
-      pageTurnAnim.stopAnimation();
-      skipTurnAnim.stopAnimation();
-      bookOpenAnim.setValue(0);
-      bookOpenProgressRef.current=0;
-      pageTurnAnim.setValue(0);
-      skipTurnAnim.setValue(0);
-      setSkipTurning(false);
-      if(!livingBookWorkKey)livingBookVisualWorkRef.current='';
+      stopLivingBookPageLoop();
+      clearLivingBookSettle();
+      bookOpenAnim.stopAnimation();bookOpenAnim.setValue(0);
+      pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
+      skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);setSkipTurning(false);
+      transitionLivingBook({type:'restore',playing:false});
+      livingBookCoverSessionRef.current=undefined;
       return;
     }
+    transitionLivingBook({type:'visibility-change',visible:playbackVisible});
+    const phase=livingBookMotionRef.current.phase;
+    if(playerMotionPlaying&&(phase==='closed'||phase==='closing'))animateLivingBookOpen();
+    if(!playerMotionPlaying&&phase!=='closed'&&phase!=='closing')animateLivingBookClose();
+  },[playerMotionPlaying,playbackVisible,playing?.id,playing?.uri,reduceMotion]);
 
-    if(workChanged||enteringVisible){
-      ++skipGeneration.current;
-      ambientPageLoopStopRef.current?.();
-      ambientPageLoopStopRef.current=null;
-      bookOpenAnim.stopAnimation();
-      pageTurnAnim.stopAnimation();
-      skipTurnAnim.stopAnimation();
-      // A newly visible Living Book always begins from a physically valid
-      // closed frame. This prevents native Animated state from a previous
-      // screen visit resurrecting a half-open cover or detached paper layer.
-      bookOpenAnim.setValue(0);
-      bookOpenProgressRef.current=0;
-      pageTurnAnim.setValue(0);
-      skipTurnAnim.setValue(0);
-      setSkipTurning(false);
-    }
+  useEffect(()=>{
+    stopLivingBookPageLoop();
+    if(!playbackVisible||!playerMotionPlaying||reduceMotion||livingBookMotion.phase!=='open')return;
+    livingBookPageLoop.current=setTimeout(()=>{
+      livingBookPageLoop.current=null;
+      animateLivingBookPageTurn();
+    },7200);
+    return()=>stopLivingBookPageLoop();
+  },[livingBookMotion.phase,playerMotionPlaying,playbackVisible,reduceMotion]);
 
-    // Every visible player session starts with a clean page layer. Playback may
-    // already be active in the background, but the visual book always re-enters
-    // from a deterministic closed state rather than an abandoned native frame.
-    pageTurnAnim.stopAnimation();
-    skipTurnAnim.stopAnimation();
-    pageTurnAnim.setValue(0);
-    skipTurnAnim.setValue(0);
-    setSkipTurning(false);
 
-    const motion=playerMotionState({playing:playerMotionPlaying,visible:true,reduceMotion});
-    const target=motion==='closed'?0:1;
-    const current=Math.max(0,Math.min(1,bookOpenProgressRef.current));
-    const baseDuration=motion==='closed'?PLAYER_MOTION_TIMING.closeMs:PLAYER_MOTION_TIMING.openMs;
-    const hingeDuration=livingBookHingeDuration(current,target,baseDuration,reduceMotion);
-
-    bookOpenAnim.stopAnimation();
-    Animated.timing(bookOpenAnim,{
-      toValue:target,
-      isInteraction:false,
-      duration:hingeDuration,
-      easing:Easing.inOut(Easing.cubic),
-      useNativeDriver:true,
-    }).start(({finished})=>{
-      if(generation!==livingBookMotionGeneration.current)return;
-      if(finished&&target===0){
-        bookOpenProgressRef.current=0;
-        pageTurnAnim.setValue(0);
-        skipTurnAnim.setValue(0);
-      }
-    });
-
-    if(motion!=='turning'){
-      return()=>{if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();};
-    }
-
-    ambientPageLoopStopRef.current?.();
-    const stop=startPageTurnLoop({
-      firstDelay:hingeDuration+PLAYER_MOTION_TIMING.firstTurnDelayMs,
-      restDelay:PLAYER_MOTION_TIMING.pageRestMs,
-      reset:()=>{if(generation===livingBookMotionGeneration.current)pageTurnAnim.setValue(0);},
-      animate:done=>{
-        if(generation!==livingBookMotionGeneration.current){done(false);return;}
-        Animated.timing(pageTurnAnim,{toValue:1,duration:PLAYER_MOTION_TIMING.pageTurnMs,easing:Easing.bezier(.22,.72,.2,1),useNativeDriver:true,isInteraction:false})
-          .start(({finished})=>done(finished&&generation===livingBookMotionGeneration.current));
-      },
-      stop:()=>pageTurnAnim.stopAnimation(),
-      preserveCurrentOnStop:false,
-    });
-    ambientPageLoopStopRef.current=stop;
-    return()=>{
-      stop();
-      if(ambientPageLoopStopRef.current===stop)ambientPageLoopStopRef.current=null;
-      if(generation===livingBookMotionGeneration.current)bookOpenAnim.stopAnimation();
-    };
-  },[ambientPageLoopEpoch,bookOpenAnim,livingBookWorkKey,pageTurnAnim,playerMotionPlaying,playbackVisible,reduceMotion,skipTurnAnim]);
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return groupLocalWorks(local);
@@ -5651,7 +5676,19 @@ function Client() {
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
             <View style={styles.playerHeroColumn}>
-            <LivingBookArtwork key={workKey||'living-book'} title={current.title} author={current.author} chapter={currentChapter?.title} number={Math.max(1,currentChapterIndex+1)} open={bookOpenAnim} turn={pageTurnAnim} skip={skipTurnAnim} skipPages={skipPageCount} direction={skipDirection} skipping={skipTurning} glowColor={ambientHaloColor} glowStrength={darkMode?.72:.46} cover={(current.coverUri||current.source==='server')?Cover({book:current,fill:true}):null}/>
+            <LivingBookCanvas
+              title={current.title}
+              author={current.author}
+              chapter={currentChapter?.title}
+              number={Math.max(1,currentChapterIndex+1)}
+              phase={livingBookMotion.phase}
+              direction={skipDirection}
+              skipping={skipTurning}
+              reduceMotion={reduceMotion}
+              coverUri={lockedLivingBookCover(current).uri}
+              coverMode={lockedLivingBookCover(current).kind==='jacket'?'jacket':lockedLivingBookCover(current).kind==='portrait'?'portrait':'fallback'}
+              coverHeaders={current.source==='server'&&session?{Authorization:'Bearer '+session.token}:undefined}
+            />
             <View style={styles.playerIdentity}>
               <Text maxFontSizeMultiplier={1.12} numberOfLines={2} style={[styles.nowTitle,{color:p.ink},layoutTier==='compact'&&styles.nowTitleCompact,layoutTier==='fold'&&styles.nowTitleFold]}>{current.title}</Text>
               {(current.narrator||current.author)?<Text numberOfLines={1} style={[styles.playerByline,{color:p.muted}]}>{current.narrator?'Narrated by '+current.narrator:'By '+current.author}</Text>:null}
