@@ -24,7 +24,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '13'
+  TEST_BUILD: '14'
 
 concurrency:
   group: android-apk-${{ github.ref }}
