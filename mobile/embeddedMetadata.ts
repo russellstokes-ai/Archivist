@@ -1,4 +1,5 @@
 import {openNativeZip} from './nativeZip';
+import {NativeModules,Platform} from 'react-native';
 import JSZip from 'jszip';
 import {EncodingType, getInfoAsync, readAsStringAsync} from 'expo-file-system/legacy';
 import {LocalMetadataFields, parseLocalSidecar} from './libraryIntelligence';
@@ -15,6 +16,15 @@ export async function extractEmbeddedMetadata(uri:string, extension:string, know
   try{
     const info=knownInfo || await getInfoAsync(uri);
     if(info.exists===false)return {};
+    if(Platform.OS==='android'&&(ext==='epub'||ext==='cbz'||ext==='zip')){
+      const native=NativeModules?.ArchivistArchive as {readArchiveMetadata?:(uri:string,extension:string)=>Promise<{kind?:string;text?:string}>}|undefined;
+      if(native?.readArchiveMetadata){
+        const result=await native.readArchiveMetadata(uri,ext);
+        const text=String(result?.text||'');
+        if(!text)return {};
+        return parseLocalSidecar(text,result?.kind==='opf'?'opf':'xml');
+      }
+    }
     const nativeZip=await openNativeZip(uri);
     if(nativeZip){try{return await extractEmbeddedMetadataFromZip(nativeZip,ext);}finally{await nativeZip.dispose?.();}}
     if(typeof info.size==='number'&&info.size>maxEmbeddedArchiveBytes)return {};
