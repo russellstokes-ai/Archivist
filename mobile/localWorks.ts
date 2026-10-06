@@ -206,7 +206,7 @@ function filenameClusterTitle(uri:string){
   const patterns=[
     /^(.+?)\s+-\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
     /^(.+?)\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
-    /^(.+?)\s+-\s+0*\d{2,4}(?:\s*[-._].*)?$/i,
+    /^(.+?)\s+-\s+0*\d{1,4}(?:\s*[-._].*)?$/i,
     /^(.+?)[._-](?:ch|pt|track)0*\d{1,4}$/i,
     /^(.+?)\s+0*\d{2,4}\s+-\s+.+$/i,
   ];
