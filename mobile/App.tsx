@@ -1985,7 +1985,7 @@ function Client() {
     return out;
   }
 
-  function serverWorksPath(offset = 0, limit = 100) {
+  function serverWorksPath(offset = 0, limit = 100, after?:{id:number;title:string}) {
     const params = new URLSearchParams({
       q: query,
       space,
@@ -1996,6 +1996,10 @@ function Client() {
       limit: String(limit),
       offset: String(offset),
     });
+    if(after?.id){
+      params.set('afterId',String(after.id));
+      params.set('afterTitle',after.title||'');
+    }
     if (unknownAuthorOnly) params.set('unknownAuthor','1');
     if (availabilityFilter !== 'all') params.set('availability',availabilityFilter);
     if (readingFilter) params.set('reading',readingFilter);
@@ -2281,7 +2285,8 @@ function Client() {
     if (!session || !serverHasMore || serverLoadingMore || shelfLoading) return;
     setServerLoadingMore(true);
     try {
-      const next = (await request(session,serverWorksPath(serverWorks.length,100)) as ServerWork[]).map(normalizeServerWork) as ServerWork[];
+      const after=serverWorks.length?{id:serverWorks[serverWorks.length-1].id,title:serverWorks[serverWorks.length-1].title}:undefined;
+      const next = (await request(session,serverWorksPath(serverWorks.length,100,after)) as ServerWork[]).map(normalizeServerWork) as ServerWork[];
       setServerWorks(current => {
         const seen=new Set(current.map(work=>work.id));
         return [...current,...next.filter(work=>!seen.has(work.id))];
