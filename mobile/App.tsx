@@ -8280,21 +8280,23 @@ export default function App() {
       secondFrame=requestAnimationFrame(()=>{
         if(cancelled)return;
         void SplashScreen.hideAsync().catch(()=>undefined);
-        holdTimer=setTimeout(()=>{
+        AccessibilityInfo.isReduceMotionEnabled().catch(()=>false).then(reduce=>{
           if(cancelled)return;
-          AccessibilityInfo.isReduceMotionEnabled().catch(()=>false).then(reduce=>{
-            if(cancelled)return;
-            if(reduce){setBrandLaunchVisible(false);return;}
+          if(!reduce){
             brandLaunchHalo.setValue(0);
             Animated.sequence([
               Animated.timing(brandLaunchHalo,{toValue:1,duration:720,useNativeDriver:true}),
               Animated.timing(brandLaunchHalo,{toValue:0,duration:720,useNativeDriver:true}),
             ]).start();
+          }
+          holdTimer=setTimeout(()=>{
+            if(cancelled)return;
+            if(reduce){setBrandLaunchVisible(false);return;}
             Animated.timing(brandLaunchOpacity,{toValue:0,duration:brandedLaunchFadeMs,useNativeDriver:true}).start(({finished})=>{
               if(finished&&!cancelled)setBrandLaunchVisible(false);
             });
-          });
-        },brandedLaunchHoldMs);
+          },brandedLaunchHoldMs);
+        });
       });
     });
     return()=>{
