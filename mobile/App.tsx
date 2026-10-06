@@ -76,7 +76,7 @@ import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './librar
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
-import {partitionLocalBooksByPublication} from './publicationPipeline';
+import {partitionLocalBooksByPublication,reconcilePublishedLocalBooks} from './publicationPipeline';
 import {cacheRequiredWorkArtwork} from './dualCoverPipeline';
 import LocalPdfReader from './LocalPdfReader';
 import {
@@ -2749,7 +2749,8 @@ function Client() {
   }
 
   function publishCompletedLocalStage(books:LocalBook[]){
-    const publication=partitionLocalBooksByPublication(books);
+    const previous=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    const publication=reconcilePublishedLocalBooks(previous,books);
     const staged=books.map(book=>({...book,source:'local' as const}));
     setStagedLocalBooks(staged);
     setLocalBooks(publication.published.map(book=>({...book,source:'local' as const})));
