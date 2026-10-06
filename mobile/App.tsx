@@ -4109,7 +4109,7 @@ function Client() {
     const enterActive=setupReady&&reviewCount===0&&hasUsableLibrary;
     const onboardingPulseStyle=(active:boolean)=>active&&!reduceMotion?{
       opacity:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[.86,1,.86]}),
-      transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.035,1]})}],
+      transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
     }:undefined;
     const scanStageIndex=progress
       ? progress.phase==='discovering'?0
