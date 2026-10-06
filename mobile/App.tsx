@@ -1854,7 +1854,7 @@ function Client() {
           );
           if(changed)await replaceLocalStageBooks(migrated);
           normalized=migrated;
-          await setPersistedJSON(publicationArtworkMigrationKey,{done:true,completedAt:new Date().toISOString()});
+          await setPersistedJSON(publicationArtworkMigrationKey,{done:true,completedAt:new Date().toISOString()}).catch(()=>undefined);
         }
         const staged=normalized.map(book=>({...book,source:'local' as const}));
         const publication=partitionLocalBooksByPublication(normalized);
