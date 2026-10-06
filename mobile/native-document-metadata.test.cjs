@@ -21,6 +21,15 @@ const native={
     };
   },
   async cancelTreeScan(){return true;},
+  async readAudioMetadataBatch(uris){
+    return uris.map((uri,index)=>({
+      uri,
+      title:'Slayer - Chapter '+(index+1),
+      author:'William King',
+      track:String(index+1),
+      year:'1999',
+    }));
+  },
   async readDocumentMetadataBatch(items){
     this.documentMetadataReads++;
     assert.equal(items.length,this.documentMetadataReads===1?2:1,'initial scan reads the discovery batch; Deep Scan reads only the selected work');
@@ -62,7 +71,8 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,file);
 
-const {deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
+const {deepScanEvidenceSummary,deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
+const {groupLocalWorks}=require('./localWorks.ts');
 
 (async()=>{
   const root='content://provider/tree/primary%3ABooks';
@@ -113,6 +123,30 @@ const {deepScanLocalTracks,scanLocalFolders}=require('./localLibrary.ts');
   assert.equal(deep[0].author,'Frank Herbert');
   assert.equal(deep[0].isbn,'9780441172719');
   assert.equal(deep[0].needsReview,false);
+
+  const audioDeep=await deepScanLocalTracks([
+    {
+      id:201,
+      uri:'content://provider/tree/primary%3AMusic/document/primary%3AMusic%2Fx01.mp3',
+      title:'Part 1',author:'',series:'',genre:'',format:'Audio',space:'Music',available:true,
+      coverShape:'square',metadataSource:'path',identificationConfidence:'low',needsReview:true,reviewReason:'Unknown',
+    },
+    {
+      id:202,
+      uri:'content://provider/tree/primary%3AMusic/document/primary%3AMusic%2Fx02.mp3',
+      title:'Part 2',author:'',series:'',genre:'',format:'Audio',space:'Music',available:true,
+      coverShape:'square',metadataSource:'path',identificationConfidence:'low',needsReview:true,reviewReason:'Unknown',
+    },
+  ]);
+  const groupedAudio=groupLocalWorks(audioDeep);
+  assert.equal(groupedAudio.length,1,'Deep Scan must combine compatible root files into one work');
+  assert.equal(groupedAudio[0].title,'Slayer');
+  assert.equal(groupedAudio[0].author,'William King');
+  assert.equal(groupedAudio[0].files,2);
+  const audioEvidence=deepScanEvidenceSummary(audioDeep);
+  assert.equal(audioEvidence.files,2);
+  assert.equal(audioEvidence.embeddedFiles,2);
+  assert.equal(audioEvidence.trackNumbers,2);
 
   const source=fs.readFileSync(__dirname+'/android/app/src/main/java/app/archivist/reader/ArchivistLibraryModule.kt','utf8');
   assert(source.includes('fun readDocumentMetadataBatch'),'Android scanner must expose bounded document metadata extraction');
