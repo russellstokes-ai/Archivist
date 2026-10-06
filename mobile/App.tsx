@@ -77,6 +77,7 @@ import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCover
 import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
 import {partitionLocalBooksByPublication} from './publicationPipeline';
+import {cacheRequiredWorkArtwork} from './dualCoverPipeline';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -1199,8 +1200,11 @@ function Client() {
       : book.coverUri;
     const next=resolveLivingBookCover({
       format:book.format,
-      editionCoverUri,
+      editionCoverUri:book.libraryCoverUri||editionCoverUri,
       editionCoverShape:book.coverShape,
+      livingBookCoverUri:book.livingBookCoverUri,
+      livingBookCoverSource:book.livingBookCoverSource,
+      livingBookCoverConfidence:book.livingBookCoverConfidence,
     });
     const key=[book.source||'local',book.originServer||session?.server||'device',playbackWorkKey(book)||book.id].join('|');
     const locked=lockLivingBookCoverSession(livingBookCoverSessionRef.current,key,next);
@@ -2793,6 +2797,22 @@ function Client() {
       const covered=await enrichPublishedLocalCovers(currentBooks,generation);
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(covered)currentBooks=covered;
+      if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
+
+      // Publication artwork is work-level: keep an existing local Library image
+      // where appropriate, but always resolve and cache the Living Book jacket.
+      reportEnrichmentProgress({phase:'covers',currentFolder:'Publication artwork',entriesVisited:0,found:currentBooks.length,review:currentBooks.filter(book=>book.needsReview).length,processed:0,total:currentBooks.length},true);
+      const dualArtwork=await cacheRequiredWorkArtwork(currentBooks,{
+        documentDirectory,
+        makeDirectoryAsync,
+        downloadAsync:downloadCoverWithDeadline,
+        getInfoAsync,
+        deleteAsync,
+      },{shouldContinue:()=>scanCommitGate.isCurrent(generation)})
+        .catch(error=>{recordLibraryRefreshWarning('Publication artwork',error);return null;});
+      if(!scanCommitGate.isCurrent(generation))return currentBooks;
+      if(dualArtwork)currentBooks=dualArtwork.books;
+      if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
       if(scanCommitGate.isCurrent(generation)){
         const persisted=await replaceLocalStageBooks(currentBooks)
