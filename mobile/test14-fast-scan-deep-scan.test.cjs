@@ -20,6 +20,15 @@ if(!normalPipeline.includes('enrichPublishedLocalBookMetadata('))throw new Error
 if(!normalPipeline.includes('applyLocalPublicationState('))throw new Error('Normal preparation must retain the publication gate');
 
 for(const marker of [
+  'async function approveLocalFile',
+  'Approve identity',
+  "identificationConfidence:'high' as const",
+  "metadataSource:'manual' as const",
+]){
+  if(!app.includes(marker))throw new Error('Missing explicit per-book approval contract: '+marker);
+}
+
+for(const marker of [
   'async function deepScanLocalFile',
   'enrichLocalEmbeddedMetadata([target]',
   'itemTimeoutMs:7000',
