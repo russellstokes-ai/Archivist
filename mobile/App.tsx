@@ -4048,7 +4048,10 @@ function Client() {
 
   function OnboardingGuide() {
     if (onboardingDone) return null;
-    const reviewCount = localBooks.filter(book => book.needsReview).length;
+    const stagedBooks=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    const stagedPartition=partitionLocalBooksByPublication(stagedBooks);
+    const pendingLocalWorks=groupLocalWorks(stagedPartition.staged);
+    const reviewCount=pendingLocalWorks.length;
     const hasFolder = localFolders.length > 0;
     const hasServer = !!session;
     const hasServerFolders = sources.length > 0;
@@ -4059,6 +4062,19 @@ function Client() {
     const serverReady=hasServerFolders&&sources.every(source=>source.status==='ok');
     const setupReady=hasSource&&(!hasFolder||libraryPreparationReady)&&(!hasServerFolders||serverReady);
     const preparing=hasSource&&!setupReady;
+    const activeStep: 'source'|'prepare'|'review'|'organise' =
+      !hasSource?'source':
+      libraryRefreshActive||!setupReady?'prepare':
+      reviewCount>0?'review':'organise';
+    const pulseStyle=(active:boolean)=>active&&!reduceMotion?{
+      transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
+    }:undefined;
+    const openOnboardingReview=()=>{
+      clearLibraryFilters();
+      setReviewOnly(true);
+      setSourceFilter('local');
+      setActiveTab('library');
+    };
     return (
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
@@ -4083,32 +4099,27 @@ function Client() {
           <View style={{flex:1,gap:4}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Prepare library</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
-              ? (localBooks.length+serverWorks.length)+' items ready'+(reviewCount?' · '+reviewCount+' local items need review':'')
+              ? (localBooks.length+serverWorks.length)+' items ready'+(reviewCount?' · '+reviewCount+' work'+(reviewCount===1?'':'s')+' need attention':'')
               : progress
                 ? scanPhaseLabel(progress.phase)+' · '+progressPercent+'%'
                 : hasSource?'Ready to prepare metadata and covers.':'Starts after library folders are added.'}</Text>
             {progress?<View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:(progressPercent+'%') as `${number}%`}]} /></View>:null}
           </View>
-          {setupReady?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
+          {setupReady&&reviewCount===0?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:p.muted}]}>03</Text>
+          <Text style={[styles.onboardingNumber,{color:setupReady&&reviewCount===0?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
             <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Organise files</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{setupReady
+            <Text style={[styles.meta,{color:p.muted}]}>{setupReady&&reviewCount===0
               ? 'Preview your preferred layout, then copy or move eligible files.'
-              : 'Available when preparation finishes.'}</Text>
+              : reviewCount>0?'Available after items needing attention are resolved.':'Available when preparation finishes.'}</Text>
           </View>
         </View>
 
         <View style={styles.shelfSetupActions}>
-          <Animated.View style={[
-            styles.shelfSetupAction,
-            !hasSource&&!reduceMotion&&{
-              transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
-            },
-          ]}>
+          <Animated.View style={[styles.shelfSetupAction,pulseStyle(activeStep==='source')]}>
             <Button
               label={libraryRefreshActive?'Preparing…':hasFolder?'Add another device folder':addLocalFolderShortLabel}
               disabled={libraryRefreshActive}
@@ -4120,9 +4131,10 @@ function Client() {
         </View>
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {preparing&&!libraryRefreshActive?<Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}
-        {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></View>
+        {preparing&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='prepare')}><Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/></Animated.View>:null}
+        {setupReady&&reviewCount>0?<Animated.View style={pulseStyle(activeStep==='review')}><Button label={'Review '+reviewCount+' item'+(reviewCount===1?'':'s')} onPress={openOnboardingReview}/></Animated.View>:null}
+        {setupReady&&reviewCount===0&&hasBooks?<View style={styles.shelfSetupActions}>
+          <Animated.View style={[styles.shelfSetupAction,pulseStyle(activeStep==='organise')]}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></Animated.View>
           <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
         </View>:null}
       </View>
