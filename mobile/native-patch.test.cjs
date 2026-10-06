@@ -34,7 +34,7 @@ assert.equal(gradle.includes('edgeToEdgeEnabled=true'),true,'Expo production bui
 console.log('PASS: Android startup configuration matches current Expo production defaults');
 
 const appPkg=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8'));
-assert.equal(appPkg.dependencies?.['expo-asset'],'~57.0.18','expo-audio needs expo-asset installed directly in standalone builds.');
+assert.equal(appPkg.dependencies?.['expo-asset'],'~57.0.19','expo-audio needs expo-asset installed directly in standalone builds.');
 assert.equal(appPkg.dependencies?.['expo-file-system'],'~57.0.7','Use the Expo SDK 57 file-system native module.');
 const manifest=fs.readFileSync(path.join(__dirname,'android','app','src','main','AndroidManifest.xml'),'utf8');
 assert.equal(manifest.includes('android.permission.RECORD_AUDIO'),false,'Archivist playback does not request microphone access.');
