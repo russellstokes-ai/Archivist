@@ -836,12 +836,15 @@ function Client() {
     onboardingPulse.stopAnimation();
     onboardingPulse.setValue(0);
     if(onboardingDone||reduceMotion)return;
-    const loop=Animated.loop(Animated.sequence([
-      Animated.timing(onboardingPulse,{toValue:1,duration:850,useNativeDriver:true}),
-      Animated.timing(onboardingPulse,{toValue:0,duration:850,useNativeDriver:true}),
-    ]));
-    loop.start();
-    return()=>loop.stop();
+    let cancelled=false;
+    const cycle=()=>{
+      Animated.sequence([
+        Animated.timing(onboardingPulse,{toValue:1,duration:850,useNativeDriver:true}),
+        Animated.timing(onboardingPulse,{toValue:0,duration:850,useNativeDriver:true}),
+      ]).start(({finished})=>{if(finished&&!cancelled)cycle();});
+    };
+    cycle();
+    return()=>{cancelled=true;onboardingPulse.stopAnimation();};
   },[onboardingDone,onboardingPulse,reduceMotion]);
 
   useEffect(()=>{
