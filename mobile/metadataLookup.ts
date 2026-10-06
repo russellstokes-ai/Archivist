@@ -217,9 +217,29 @@ export async function lookupGoogleBooks(input: MetadataLookupInput): Promise<Arr
   }).filter((item:any) => item.providerId && item.title);
 }
 
-export async function lookupBookMetadata(input: MetadataLookupInput, minimum = 0.86): Promise<MetadataMatch | null> {
+export async function searchBookMetadata(input: MetadataLookupInput, minimum = 0): Promise<MetadataMatch[]> {
   const results = await Promise.allSettled([lookupOpenLibrary(input), lookupGoogleBooks(input)]);
   const candidates: Array<Omit<MetadataMatch,'confidence'>> = [];
   for (const result of results) if (result.status === 'fulfilled') candidates.push(...result.value);
-  return bestMetadataMatch(input, candidates, minimum);
+
+  const seen = new Set<string>();
+  return candidates
+    .map(candidate => ({...candidate, confidence: scoreMetadataMatch(input, candidate)}))
+    .filter(candidate => candidate.confidence >= minimum)
+    .filter(candidate => {
+      const key = candidate.provider + ':' + candidate.providerId;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a,b) =>
+      b.confidence - a.confidence ||
+      Number(!!b.coverUri) - Number(!!a.coverUri) ||
+      a.title.localeCompare(b.title)
+    )
+    .slice(0, 12);
+}
+
+export async function lookupBookMetadata(input: MetadataLookupInput, minimum = 0.86): Promise<MetadataMatch | null> {
+  return (await searchBookMetadata(input, minimum))[0] || null;
 }
