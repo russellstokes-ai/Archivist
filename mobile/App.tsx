@@ -4350,7 +4350,12 @@ function Client() {
             {item.reviewReason?<Text numberOfLines={2} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
           </View>
         </Pressable>
-        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
+        {item.source!=='server'&&item.uri?<View style={{alignItems:'flex-end',gap:6}}>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Deep scan '+item.title} disabled={!!deepScanBusyUri} onPress={()=>void deepScanLocalFile(item.uri!,item.title)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone,{opacity:deepScanBusyUri&&deepScanBusyUri!==item.uri?.6:1}]}>
+            <Text style={{color:p.sage,fontWeight:'700'}}>{deepScanBusyUri===item.uri?'Deep scanning…':'Deep scan'}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} disabled={!!deepScanBusyUri} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable>
+        </View>:owner?<Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable>:null}
       </View>
     );
   }
@@ -4687,6 +4692,7 @@ function Client() {
             {downloaded?<SheetAction label={'Remove download · '+formatBytes(downloaded.bytes)} disabled={offlineBusyId!==null} onPress={()=>{close();confirmRemoveServerDownload(downloaded);}}/>:null}
             <SheetAction label="Add to collection" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}}/>
             {local?.tracks[0]?<SheetAction label="Edit details & cover" onPress={()=>{beginEdit({...local.tracks[0],title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,coverUri:work.coverUri,source:work.source,originServer:local.originServer,serverWorkId:local.originWorkId},local.tracks.map(track=>track.uri));close();}}/>:null}
+            {local?.tracks[0]?<SheetAction label={deepScanBusyUri===local.tracks[0].uri?'Deep scanning…':'Deep scan file'} disabled={!!deepScanBusyUri} onPress={()=>{void deepScanLocalFile(local.tracks[0].uri,work.title);close();}}/>:null}
           </View>
         </Pressable>
       </Pressable>
@@ -4786,6 +4792,7 @@ function Client() {
               <Pressable accessibilityRole="button" onPress={()=>{setCollectionTarget(work);setOrganisationModal('add-to-collection');close();}} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="library" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Collection</Text></Pressable>
               {localTrack?<Pressable accessibilityRole="button" onPress={editLocal} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="edit" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Edit metadata & cover</Text></Pressable>
                 :remote&&owner?<Pressable accessibilityRole="button" onPress={openServerManagement} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="edit" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Manage metadata</Text></Pressable>:null}
+              {localTrack?<Pressable accessibilityRole="button" disabled={!!deepScanBusyUri} onPress={()=>{void deepScanLocalFile(localTrack.uri,work.title);close();}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:deepScanBusyUri?.55:1}]}><UiIcon name="search" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>{deepScanBusyUri===localTrack.uri?'Deep scanning…':'Deep scan file'}</Text></Pressable>:null}
               <Pressable accessibilityRole="button" onPress={refreshMetadata} style={[styles.workDetailsAction,{borderColor:p.line}]}><UiIcon name="refresh" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Refresh metadata & cover</Text></Pressable>
               {remote&&!downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{void downloadServerWork(remote);close();}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null ? .45 : 1}]}><UiIcon name="download" color={p.sage} size={18}/><Text style={[styles.workDetailsActionText,{color:p.ink}]}>Download</Text></Pressable>:null}
               {downloaded?<Pressable accessibilityRole="button" disabled={offlineBusyId!==null} onPress={()=>{close();confirmRemoveServerDownload(downloaded);}} style={[styles.workDetailsAction,{borderColor:p.line,opacity:offlineBusyId!==null ? .45 : 1}]}><UiIcon name="close" color={p.danger} size={18}/><Text style={[styles.workDetailsActionText,{color:p.danger}]}>Remove download</Text></Pressable>:null}
