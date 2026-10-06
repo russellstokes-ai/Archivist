@@ -65,6 +65,24 @@ export function partitionLocalBooksByPublication(books:LocalBook[]){
   return {published,staged,assessments};
 }
 
+export function migrateLegacyPublishedArtwork(books:LocalBook[]){
+  return books.map(book=>{
+    if(book.libraryCoverUri||book.livingBookCoverUri||book.needsReview)return book;
+    const cover=String(book.coverUri||'').trim();
+    if(!isVerifiedLocalArtworkUri(cover))return book;
+    // Test 13 stored one accepted cover slot. Preserve those already accepted
+    // books on upgrade; later enrichment may replace the low-confidence
+    // audiobook Living Book fallback with a portrait publication jacket.
+    return {
+      ...book,
+      libraryCoverUri:cover,
+      livingBookCoverUri:cover,
+      livingBookCoverSource:'embedded' as const,
+      livingBookCoverConfidence:book.format==='Audio'?0.45:1,
+    };
+  });
+}
+
 export function reconcilePublishedLocalBooks(previousPublished:LocalBook[],stagedBooks:LocalBook[]){
   const partition=partitionLocalBooksByPublication(stagedBooks);
   const stagedUris=new Set(stagedBooks.map(book=>book.uri).filter(Boolean));
