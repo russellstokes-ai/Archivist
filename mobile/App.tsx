@@ -58,7 +58,7 @@ import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasB
 import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
-import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks} from './localStageStore';
+import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks, upsertLocalStageBooks} from './localStageStore';
 import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
@@ -2733,9 +2733,16 @@ function Client() {
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
 
-  async function checkpointLocalEnrichment(books:LocalBook[],generation:number){
+  function changedLocalStageBooks(previous:LocalBook[],next:LocalBook[]){
+    const before=new Map(previous.filter(book=>!!book.uri).map(book=>[book.uri,JSON.stringify(book)]));
+    return next.filter(book=>!!book.uri&&before.get(book.uri)!==JSON.stringify(book));
+  }
+
+  async function checkpointLocalEnrichment(previous:LocalBook[],books:LocalBook[],generation:number){
     if(!scanCommitGate.isCurrent(generation))return false;
-    return replaceLocalStageBooks(books)
+    const changed=changedLocalStageBooks(previous,books);
+    if(!changed.length)return scanCommitGate.isCurrent(generation);
+    return upsertLocalStageBooks(changed)
       .then(()=>scanCommitGate.isCurrent(generation))
       .catch(error=>{recordLibraryRefreshWarning('Enrichment checkpoint',error);return false;});
   }
@@ -2743,26 +2750,29 @@ function Client() {
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false):Promise<LocalBook[]>{
     let currentBooks=baseBooks;
     try{
+      const beforeEmbedded=currentBooks;
       const embedded=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline);
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(embedded)currentBooks=embedded;
-      if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
+      if(!await checkpointLocalEnrichment(beforeEmbedded,currentBooks,generation))return currentBooks;
 
       // Prefer network metadata/cover matches before opening every local archive.
       // Fast providers can resolve most well-named items; embedded cover extraction
       // then becomes a fallback only for the remaining gaps.
       if(metadataSettings.onlineEnabled&&(metadataSettings.automaticEnrichment||forceOnline)){
         if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
+          const beforeBooks=currentBooks;
           const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline);
           if(!scanCommitGate.isCurrent(generation))return currentBooks;
           if(enrichedBooks)currentBooks=enrichedBooks;
-          if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
+          if(!await checkpointLocalEnrichment(beforeBooks,currentBooks,generation))return currentBooks;
         }
         if(metadataSettings.comics.enabled&&metadataSettings.comics.metron){
+          const beforeComics=currentBooks;
           const enrichedComics=await enrichPublishedLocalComicMetadata(currentBooks,generation,forceOnline);
           if(!scanCommitGate.isCurrent(generation))return currentBooks;
           if(enrichedComics)currentBooks=enrichedComics;
-          if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
+          if(!await checkpointLocalEnrichment(beforeComics,currentBooks,generation))return currentBooks;
         }
       }
 
@@ -2771,7 +2781,7 @@ function Client() {
       if(covered)currentBooks=covered;
 
       if(scanCommitGate.isCurrent(generation)){
-        const persisted=await replaceLocalStageBooks(currentBooks)
+        const persisted=await upsertLocalStageBooks(currentBooks)
           .then(()=>true)
           .catch(error=>{recordLibraryRefreshWarning('Final catalogue save',error);return false;});
         if(persisted&&scanCommitGate.isCurrent(generation)){
