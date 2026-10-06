@@ -2918,14 +2918,36 @@ function Client() {
         setMetadataSearchNote((deepEvidenceText?deepEvidenceText+' ':'')+'No usable book title was found. Enter a title and author, then search again.');
         return;
       }
-      const matches=await searchBookMetadata({
-        title,
-        author:author||undefined,
-        series:seriesName||undefined,
-        publishedYear:year,
-        isbn,
-        identifiers:identifiers.length?identifiers:undefined,
-      },0.35);
+      const queryTitles=[title];
+      if(deep){
+        const evidence=deepScanEvidenceSummary(evidenceWork.tracks);
+        for(const hint of evidence.titleHints){
+          const cleaned=hint.trim();
+          if(cleaned&&!queryTitles.some(value=>value.toLowerCase()===cleaned.toLowerCase()))queryTitles.push(cleaned);
+          if(queryTitles.length>=4)break;
+        }
+      }
+      const searches=[];
+      for(const queryTitle of queryTitles.slice(0,deep?4:1)){
+        searches.push(await searchBookMetadata({
+          title:queryTitle,
+          author:author||undefined,
+          series:seriesName||undefined,
+          publishedYear:year,
+          isbn,
+          identifiers:identifiers.length?identifiers:undefined,
+        },0.35));
+      }
+      const seenMatches=new Set<string>();
+      const matches=searches.flat()
+        .filter(match=>{
+          const key=match.provider+':'+match.providerId;
+          if(seenMatches.has(key))return false;
+          seenMatches.add(key);
+          return true;
+        })
+        .sort((a,b)=>b.confidence-a.confidence)
+        .slice(0,12);
       setMetadataMatches(matches);
       setMetadataSearchNote(
         (deepEvidenceText?deepEvidenceText+' ':'')+
