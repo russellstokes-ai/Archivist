@@ -280,7 +280,8 @@ function cleanLabel(value: string) {
 }
 
 function isLibraryRoot(value: string) {
-  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
+  const key=cleanLabel(value).toLowerCase().replace(/[^a-z0-9]+/g,'');
+  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|music|library|libraries|spokenword)$/.test(key);
 }
 
 function decode(value: string) {
