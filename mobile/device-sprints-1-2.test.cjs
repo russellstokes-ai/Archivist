@@ -5,7 +5,7 @@ const sheetSource=fs.readFileSync('sheetInteraction.ts','utf8');
 
 assert.ok(source.includes("useSafeAreaInsets"),'Profile placement must use the actual device safe area');
 assert.ok(source.includes("top:safeArea.top+(phoneLayout?8:10)"),'Profile avatar must sit below status icons on phones');
-assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?136:160"),'Fold/wide Library rail must have readable width');
+assert.ok(source.includes("const libraryFolderRailWidth=layoutTier==='fold'?184:160"),'Fold Library rail must retain the approved 184dp readable width');
 assert.ok(source.includes("maintenanceAssetCard")&&source.includes("maintenanceAssetCover")&&source.includes("maintenanceAssetReason"),'Needs-attention mode must use the compact mobile cleanup row');
 assert.ok(source.includes("else if(atlasNodeId||atlasBreakdown)dismissAtlasNode()"),'Tapping empty Atlas space must clear selection');
 assert.ok(source.includes("function DismissSheetHandle(")&&source.includes("shouldCaptureSheetDismiss")&&source.includes("shouldDismissSheet")&&sheetSource.includes("gesture.dy>56 || gesture.vy>0.7"),'Phone sheets must support deliberate downward dismissal');
