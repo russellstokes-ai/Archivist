@@ -1968,10 +1968,8 @@ function Client() {
       const entries=[...pendingEntries.values()];
       pendingBooks.clear();
       pendingEntries.clear();
-      await Promise.all([
-        upsertLocalStageBooks(books),
-        upsertLocalEnrichmentEntries(entries),
-      ]);
+      await upsertLocalStageBooks(books);
+      await upsertLocalEnrichmentEntries(entries);
     };
     try{
       const result=await enrichLocalCatalogue(catalogue,cacheSeed,async(progress,delta)=>{
