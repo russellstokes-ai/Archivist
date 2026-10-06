@@ -34,6 +34,19 @@ function book(id,uri,extra={}){
   assert.match(result.books[0].livingBookCoverUri,/file:\/\/\/app\/covers\/online\//);
   assert.equal(partitionLocalBooksByPublication(result.books).published.length,2);
 
+  const legacyUpgrade=await cacheRequiredWorkArtwork([
+    book(9,'content://root/document/primary:Audio%2FLegacy%2F01.mp3',{
+      title:'Legacy',coverUri:'file:///covers/legacy-square.jpg',
+      libraryCoverUri:'file:///covers/legacy-square.jpg',
+      livingBookCoverUri:'file:///covers/legacy-square.jpg',
+      livingBookCoverConfidence:0.45,
+      onlineMetadataMatch:{provider:'openlibrary',coverUri:'https://covers.example/legacy-portrait.jpg'},
+    }),
+  ],ops);
+  assert.equal(legacyUpgrade.books[0].libraryCoverUri,'file:///covers/legacy-square.jpg');
+  assert.notEqual(legacyUpgrade.books[0].livingBookCoverUri,'file:///covers/legacy-square.jpg','provider portrait must upgrade the migration-only square Living Book fallback');
+  assert.match(legacyUpgrade.books[0].livingBookCoverUri,/covers\/online/);
+
   const failedOps={...ops,downloadAsync:async()=>{throw new Error('offline')}};
   const failed=await cacheRequiredWorkArtwork([
     book(3,'content://root/document/primary:Audio%2FFail%2F01.mp3',{
