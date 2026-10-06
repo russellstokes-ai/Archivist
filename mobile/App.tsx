@@ -3613,9 +3613,9 @@ function Client() {
                 accessibilityRole="button"
                 accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
                 disabled={serverPlayer ? playback?.loading : false}
-                style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
+                style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#07111D'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={27}/>}
+                {serverPlayer && playback?.loading ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#07111D'?'#182C29':'#FFFFFF'} size={27}/>}
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" onPress={()=>{seekTo(position+30);turnThreePages(1);}} style={styles.skipButton}>
                 <UiIcon name="skipForward" color={p.ink} size={32}/>
@@ -4093,7 +4093,7 @@ function Client() {
   function Insights(){
     const summary=insightSummary;
     const stats=profileStats;
-    const darkStats=p.paper==='#000000';
+    const darkStats=p.paper==='#07111D';
     const statsPalette={
       canvas:darkStats?'#07111D':'#F7F7F5',
       panel:darkStats?'#0B1725':'#FFFFFF',
