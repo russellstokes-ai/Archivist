@@ -5,7 +5,7 @@ const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
 const library=fs.readFileSync(__dirname+'/localLibrary.ts','utf8');
 const sync=fs.readFileSync(__dirname+'/metadataSync.ts','utf8');
 const stateStore=fs.readFileSync(__dirname+'/stateStore.ts','utf8');
-const localStageStore=fs.readFileSync(__dirname+'/localStageStore.ts','utf8');
+const localStageStoreNative=fs.readFileSync(__dirname+'/localStageStore.native.ts','utf8');
 
 assert.ok(app.includes('const activeLibraryProgress=scanProgress||enrichmentProgress'),'refresh progress must have one shared source');
 assert.ok(app.includes('const libraryRefreshRunningRef=useRef(false)'),'refresh must have a synchronous re-entry guard');
@@ -27,7 +27,7 @@ assert.equal(library.includes('review=next.reduce'),false,'embedded metadata mus
 assert.equal(library.includes('JSON.stringify(patch)'),false,'metadata enrichment must not deep-stringify full records in hot loops');
 assert.equal(sync.includes('JSON.stringify(after)'),false,'canonical metadata sync must avoid deep stringify comparisons');
 assert.ok(sync.includes('synchronizeLocalMetadataCooperative'),'large canonical metadata synchronization must yield cooperatively');
-assert.ok(localStageStore.includes('PRAGMA journal_mode = WAL')&&localStageStore.includes('withExclusiveTransactionAsync')&&localStageStore.includes('local_assets'),'large catalogue persistence must use transactional WAL-backed SQLite rather than one giant JSON payload');
+assert.ok(localStageStoreNative.includes('PRAGMA journal_mode = WAL')&&localStageStoreNative.includes('withExclusiveTransactionAsync')&&localStageStoreNative.includes('local_assets'),'Android/iOS large catalogue persistence must use transactional WAL-backed SQLite rather than one giant JSON payload');
 
 assert.ok(app.includes('ignoreCache:forceRefresh'),'manual refresh must re-query providers without destructively clearing working caches first');
 assert.ok(app.includes('concurrency:2'),'online cover caching must remain bounded during an interactive refresh');
