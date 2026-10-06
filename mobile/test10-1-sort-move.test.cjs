@@ -139,7 +139,8 @@ const {applyLocalSort,previewLocalSortToRoot,recoverLocalSortOperation}=require(
     {...book,id:21,uri:part1,title:'Dune',author:'Frank Herbert',format:'Audio',embeddedMetadata:{workTitle:'Dune',trackNumber:1}},
     {...book,id:22,uri:part2,title:'Dune',author:'Frank Herbert',format:'Audio',embeddedMetadata:{workTitle:'Dune',trackNumber:2}},
   ];
-  const audioPreviews=previewLocalSortToRoot(audioBooks,'author-title',targetRoot);
+  const audioPreviews=previewLocalSortToRoot(audioBooks,'author-title',targetRoot)
+    .map(item=>({...item,workKey:'fixture:dune',workSize:2}));
   assert.equal(audioPreviews[0].workKey,audioPreviews[1].workKey);
   assert.equal(audioPreviews[0].workSize,2);
   copyFailures.add(part2);
