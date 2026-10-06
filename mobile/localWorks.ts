@@ -1,5 +1,4 @@
-import {decodedPathParts, isLibraryRootLabel, logicalWorkKey} from './libraryIntelligence';
-import {audioWorkGroupKeys, canonicalMetadataForBooks} from './metadataSync';
+import {decodedPathParts} from './libraryIntelligence';
 import {LocalBook} from './localLibrary';
 
 export type LocalWork = {
@@ -12,8 +11,6 @@ export type LocalWork = {
   series: string;
   genre: string;
   publishedYear?: number;
-  seriesNumber?: number;
-  logicalWorkKey?: string;
   format: string;
   space: string;
   available: boolean;
@@ -23,15 +20,29 @@ export type LocalWork = {
   reviewReason: string;
   coverUri?: string;
   coverShape: 'portrait' | 'square';
+  livingBookCoverUri?: string;
+  livingBookCoverSource?: LocalBook['livingBookCoverSource'];
+  livingBookCoverConfidence?: number;
 };
 
 export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   const groups = new Map<string, LocalBook[]>();
   const order: string[] = [];
-  const audioKeys=audioWorkGroupKeys(books);
+  const rootAudioCandidates = new Map<string, string>();
+  const rootAudioCounts = new Map<string, number>();
+  for (const book of books) {
+    if (book.format !== 'Audio') continue;
+    const metadataCandidate = book.workTitleHint ? 'meta:' + normalKey(book.author) + '|' + normalKey(book.workTitleHint) : '';
+    const filenameCandidate = rootAudioClusterCandidate(book.uri);
+    const candidate = metadataCandidate || filenameCandidate;
+    if (!candidate) continue;
+    rootAudioCandidates.set(book.uri, candidate);
+    rootAudioCounts.set(candidate, (rootAudioCounts.get(candidate) || 0) + 1);
+  }
 
   for (const book of books) {
-    const key = localWorkKey(book,audioKeys);
+    const candidate = rootAudioCandidates.get(book.uri) || '';
+    const key = localWorkKey(book, candidate && (rootAudioCounts.get(candidate) || 0) > 1 ? candidate : '');
     if (!groups.has(key)) {
       groups.set(key, []);
       order.push(key);
@@ -40,21 +51,17 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
   }
 
   return order.map(key => {
-    const tracks = groups.get(key)!.slice().sort((a, b) => naturalCompare(a.uri, b.uri));
+    const tracks = groups.get(key)!.slice().sort((a, b) => ((a.discNumber || 0) - (b.discNumber || 0)) || ((a.trackNumber || 0) - (b.trackNumber || 0)) || naturalCompare(a.uri, b.uri));
     const first = tracks[0];
     const audio = first.format === 'Audio';
+    const embeddedTitle = audio ? commonValue(tracks.map(item => item.workTitleHint || '')) : '';
     const folderTitle = audio ? audioFolderTitle(first.uri) : '';
-    const canonical = canonicalMetadataForBooks(tracks);
-    const chapterTitles=audio?new Set(tracks.map(item=>cleanLabel(item.title).toLowerCase()).filter(Boolean)):new Set<string>();
-    const canonicalLooksLikeOneChapter=audio&&canonical.provenance.title==='embedded'&&tracks.length>1&&chapterTitles.size>1&&chapterTitles.has(cleanLabel(canonical.title).toLowerCase());
-    const title = audio ? (canonicalLooksLikeOneChapter&&folderTitle?folderTitle:(canonical.title || folderTitle || first.title)) : first.title;
-    const author = audio ? canonical.author : commonValue(tracks.map(item => item.author));
-    const series = audio ? canonical.series : commonValue(tracks.map(item => item.series));
-    const genre = audio ? canonical.genre : commonValue(tracks.map(item => item.genre));
-    const seriesNumber = audio ? canonical.seriesNumber : tracks.find(item=>item.seriesNumber !== undefined)?.seriesNumber;
-    const publishedYear = audio ? canonical.publishedYear : tracks.find(item=>item.publishedYear)?.publishedYear;
-    const importantConflict=tracks.find(item=>(item.metadataConflicts||[]).some(conflict=>['title','author','series','seriesNumber','isbn','asin'].includes(String(conflict.field))));
-    const unresolved=!title||!author;
+    const rootTitle = audio && !folderTitle && tracks.length > 1 ? rootAudioClusterTitle(first.uri) : '';
+    const title = audio && (embeddedTitle || folderTitle || rootTitle) ? (embeddedTitle || folderTitle || rootTitle) : first.title;
+    const author = commonValue(tracks.map(item => item.author));
+    const series = commonValue(tracks.map(item => item.series));
+    const genre = commonValue(tracks.map(item => item.genre));
+    const reviewItem = tracks.find(item => item.needsReview);
     return {
       key,
       source: 'local' as const,
@@ -62,33 +69,67 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       author,
       series,
       genre,
-      publishedYear,
-      seriesNumber,
-      logicalWorkKey: logicalWorkKey({title,author,series,seriesNumber}),
+      publishedYear: tracks.find(item=>item.publishedYear)?.publishedYear,
       format: first.format,
       space: first.space,
       available: tracks.some(item => item.available),
       files: tracks.length,
       tracks,
-      needsReview: unresolved||!!importantConflict,
-      reviewReason: importantConflict?.reviewReason || (unresolved?'Title or author still needs review.':''),
-      coverUri: audio ? canonical.coverUri : tracks.find(item => item.coverUri)?.coverUri,
-      coverShape: audio ? 'square' : 'portrait',
+      needsReview: !!reviewItem,
+      reviewReason: reviewItem?.reviewReason || '',
+      coverUri: tracks.find(item => item.coverUri)?.coverUri,
+      coverShape: tracks.find(item=>item.coverUri)?.coverShape || (audio ? 'square' : 'portrait'),
+      livingBookCoverUri: tracks.find(item=>item.livingBookCoverUri)?.livingBookCoverUri,
+      livingBookCoverSource: tracks.find(item=>item.livingBookCoverSource)?.livingBookCoverSource,
+      livingBookCoverConfidence: tracks.find(item=>item.livingBookCoverConfidence)?.livingBookCoverConfidence,
     };
   });
 }
 
-function localWorkKey(book: LocalBook,audioKeys:Map<string,string>) {
+function localWorkKey(book: LocalBook, rootCandidate = '') {
   if (book.format !== 'Audio') return 'asset:' + book.uri;
-  return audioKeys.get(book.uri)||('audio-file:'+book.uri);
+  const parts = decodedPathParts(book.uri);
+  const dirs = parts.slice(0, -1).filter(Boolean);
+  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
+  if (!dirs.length) return rootCandidate ? 'audio-root:' + book.space + ':' + rootCandidate : 'audio-file:' + book.uri;
+  const parent = dirs[dirs.length - 1];
+  if (isLibraryRoot(parent)) return rootCandidate ? 'audio-root:' + book.space + ':' + rootCandidate : 'audio-file:' + book.uri;
+  return 'audio-dir:' + book.space + ':' + dirs.join('/');
+}
+
+function rootAudioClusterCandidate(uri: string) {
+  const title = rootAudioClusterTitle(uri);
+  return title ? normalKey(title) : '';
+}
+
+function rootAudioClusterTitle(uri: string) {
+  const parts = decodedPathParts(uri);
+  const filename = cleanLabel(parts[parts.length - 1] || '').replace(/\.[^.]+$/, '');
+  const patterns = [
+    /^(.+?)\s+-\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
+    /^(.+?)\s+(?:chapter|chap|ch|part|pt|track)\s*0*\d{1,4}(?:\b.*)?$/i,
+    /^(.+?)\s+-\s+0*\d{2,4}(?:\s*[-._].*)?$/i,
+    /^(.+?)[._-](?:ch|pt|track)?0*\d{2,4}$/i,
+    /^(.+?)\s+0*\d{2,4}\s+-\s+.+$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = filename.match(pattern);
+    const base = cleanLabel(match?.[1] || '');
+    if (base.length >= 4 && !/^chapter|part|track$/i.test(base)) return base;
+  }
+  return '';
+}
+
+function normalKey(value: string) {
+  return cleanLabel(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function audioFolderTitle(uri: string) {
   const parts = decodedPathParts(uri);
   const dirs = parts.slice(0, -1).filter(Boolean);
-  while (dirs.length && isLibraryRootLabel(dirs[0])) dirs.shift();
+  while (dirs.length && isLibraryRoot(dirs[0])) dirs.shift();
   const parent = dirs[dirs.length - 1] || '';
-  return isLibraryRootLabel(parent) ? '' : cleanLabel(parent);
+  return isLibraryRoot(parent) ? '' : cleanLabel(parent);
 }
 
 function commonValue(values: string[]) {
@@ -106,78 +147,10 @@ function cleanLabel(value: string) {
   return String(value || '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function isLibraryRoot(value: string) {
+  return /^(books?|ebooks?|audiobooks?|comics?|pdfs?|downloads?|documents?|media|library|libraries)$/i.test(cleanLabel(value));
+}
+
 function decode(value: string) {
   try { return decodeURIComponent(value); } catch { return value; }
-}
-
-
-export type LocalEditionGroup = {
-  key: string;
-  format: string;
-  items: LocalBook[];
-};
-
-export type LogicalLocalWork = {
-  key: string;
-  title: string;
-  author: string;
-  series: string;
-  seriesNumber?: number;
-  formats: string[];
-  editions: LocalEditionGroup[];
-  items: LocalBook[];
-};
-
-export function groupLogicalLocalWorks(books: LocalBook[]): LogicalLocalWork[] {
-  const grouped = new Map<string, LocalBook[]>();
-  for (const book of books) {
-    const key = book.workKey || ('asset:' + book.uri);
-    const items = grouped.get(key) || [];
-    items.push(book);
-    grouped.set(key, items);
-  }
-  return [...grouped.entries()].map(([key, items]) => {
-    const editions = new Map<string, LocalBook[]>();
-    for (const item of items) {
-      const editionKey = item.editionKey || (key + '|format:' + cleanLabel(item.format).toLowerCase());
-      const editionItems = editions.get(editionKey) || [];
-      editionItems.push(item);
-      editions.set(editionKey, editionItems);
-    }
-    const first = items[0];
-    return {
-      key,
-      title: first.title,
-      author: commonValue(items.map(item => item.author)) || first.author,
-      series: commonValue(items.map(item => item.series)) || first.series,
-      seriesNumber: items.find(item => item.seriesNumber !== undefined)?.seriesNumber,
-      formats: [...new Set(items.map(item => item.format).filter(Boolean))].sort(),
-      editions: [...editions.entries()].map(([editionKey, editionItems]) => ({
-        key: editionKey,
-        format: editionItems[0]?.format || '',
-        items: editionItems.slice().sort((a,b) => naturalCompare(a.uri,b.uri)),
-      })),
-      items: items.slice().sort((a,b) => naturalCompare(a.uri,b.uri)),
-    };
-  });
-}
-
-export function logicalSeriesGroups(books: LocalBook[]) {
-  const grouped = new Map<string, LogicalLocalWork[]>();
-  for (const work of groupLogicalLocalWorks(books)) {
-    if (!work.series) continue;
-    const key = cleanLabel(work.author).toLowerCase() + '|' + cleanLabel(work.series).toLowerCase();
-    const works = grouped.get(key) || [];
-    works.push(work);
-    grouped.set(key, works);
-  }
-  return [...grouped.entries()].map(([key, works]) => ({
-    key,
-    author: works[0]?.author || '',
-    series: works[0]?.series || '',
-    works: works.slice().sort((a,b) =>
-      (a.seriesNumber ?? Number.MAX_SAFE_INTEGER) - (b.seriesNumber ?? Number.MAX_SAFE_INTEGER)
-      || a.title.localeCompare(b.title,undefined,{numeric:true,sensitivity:'base'})
-    ),
-  }));
 }
