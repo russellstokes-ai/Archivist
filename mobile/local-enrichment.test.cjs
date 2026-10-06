@@ -46,6 +46,73 @@ assert(!x.publishableLocalWork({title:'Untitled',needsReview:false,coverUri:'cov
   assert.equal(entry.publishReady,true);
   assert.equal(entry.coverUri,'file://square-audio.jpg');
   assert.equal(entry.livingBookCoverUri,'file://portrait-book.jpg');
+
+
+  const legacySquareBooks=[1,2].map(id=>({
+    id:20+id,
+    uri:'file://legacy-track'+id+'.mp3',
+    title:'Chapter '+id,
+    workTitleHint:'Legacy Dune',
+    author:'Frank Herbert',
+    series:'',
+    genre:'',
+    format:'Audio',
+    space:'Audiobooks',
+    available:true,
+    coverShape:'square',
+    coverUri:'file://legacy-square.jpg',
+    livingBookCoverUri:'file://legacy-square.jpg',
+    livingBookCoverSource:'jacket',
+    livingBookCoverConfidence:1,
+    metadataSource:'embedded',
+    identificationConfidence:'high',
+    needsReview:false,
+    reviewReason:'',
+    trackNumber:id,
+  }));
+  const legacySquareWork=groupLocalWorks(legacySquareBooks)[0];
+  const legacyFingerprint=x.localWorkFingerprint(legacySquareWork);
+  const legacyQuery=x.localWorkQuerySignature(legacySquareWork);
+  let legacyLookupCalls=0;
+  const upgradedLegacy=await x.enrichLocalCatalogue(legacySquareBooks,{
+    [legacyFingerprint]:{
+      version:2,
+      fingerprint:legacyFingerprint,
+      querySignature:legacyQuery,
+      title:'Legacy Dune',
+      author:'Frank Herbert',
+      series:'',
+      genre:'',
+      coverUri:'file://legacy-square.jpg',
+      coverShape:'square',
+      livingBookCoverUri:'file://legacy-square.jpg',
+      livingBookCoverSource:'jacket',
+      livingBookCoverConfidence:1,
+      identityReady:true,
+      publishReady:true,
+      reviewReason:'',
+      updatedAt:'2026-10-01T00:00:00.000Z',
+    },
+  },undefined,{
+    lookup:async()=>{
+      legacyLookupCalls++;
+      return {
+        provider:'google-books',
+        providerId:'legacy-dune',
+        title:'Legacy Dune',
+        authors:['Frank Herbert'],
+        coverUri:'https://covers.example/legacy-dune-portrait.jpg',
+        confidence:.98,
+      };
+    },
+    extractAudioArtwork:async()=>({uri:'file://legacy-square.jpg',mimeType:'image/jpeg',width:1000,height:1000}),
+    cachePortrait:async()=>({uri:'file://legacy-portrait.jpg',width:640,height:1000,aspectRatio:.64}),
+    lookupDelayMs:0,
+    now:()=>new Date('2026-10-06T12:00:00Z'),
+  });
+  assert.equal(legacyLookupCalls,1,'publish-ready audio with only a square Living Book texture must retry portrait artwork');
+  assert.equal(upgradedLegacy.books[0].coverUri,'file://legacy-square.jpg','square audiobook tile art must remain untouched');
+  assert.equal(upgradedLegacy.books[0].livingBookCoverUri,'file://legacy-portrait.jpg','portrait Living Book jacket must be upgraded independently');
   let capturedLookup;
   const identifiedBook={
     id:90,
