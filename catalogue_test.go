@@ -198,6 +198,20 @@ func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 	if e:=json.Unmarshal(res.Body.Bytes(),&works);e!=nil{t.Fatal(e)}
 	if len(works)!=1 || works[0]["title"]!="Unknown"{t.Fatalf("filtered works=%v",works)}
 
+	// Raw asset review/organisation pages use a stable
+	// needs-review/title/id keyset cursor as well.
+	assetRes:=call("/api/books?limit=1")
+	if assetRes.Code!=200{t.Fatalf("first asset cursor page=%d %s",assetRes.Code,assetRes.Body.String())}
+	var firstAssets []book
+	if e:=json.Unmarshal(assetRes.Body.Bytes(),&firstAssets);e!=nil{t.Fatal(e)}
+	if len(firstAssets)!=1{t.Fatalf("first asset cursor page=%v",firstAssets)}
+	firstAsset:=firstAssets[0]
+	assetRes=call("/api/books?limit=1&afterReview="+map[bool]string{true:"1",false:"0"}[firstAsset.NeedsReview]+"&afterTitle="+firstAsset.Title+"&afterId="+strconv.FormatInt(firstAsset.ID,10))
+	if assetRes.Code!=200{t.Fatalf("second asset cursor page=%d %s",assetRes.Code,assetRes.Body.String())}
+	var secondAssets []book
+	if e:=json.Unmarshal(assetRes.Body.Bytes(),&secondAssets);e!=nil{t.Fatal(e)}
+	if len(secondAssets)!=1 || secondAssets[0].ID==firstAsset.ID {t.Fatalf("asset cursor did not advance: first=%v second=%v",firstAssets,secondAssets)}
+
 	// Current clients can page large catalogues by the stable title/id cursor.
 	res=call("/api/works?limit=1")
 	if res.Code!=200{t.Fatalf("first cursor page=%d %s",res.Code,res.Body.String())}
