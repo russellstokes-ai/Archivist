@@ -76,7 +76,7 @@ import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './librar
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
-import {partitionLocalBooksByPublication,reconcilePublishedLocalBooks} from './publicationPipeline';
+import {migrateLegacyPublishedArtwork,partitionLocalBooksByPublication,reconcilePublishedLocalBooks} from './publicationPipeline';
 import {cacheRequiredWorkArtwork} from './dualCoverPipeline';
 import {applyManualCluesToWork,acceptBookCandidateForWork,acceptComicCandidateForWork,type MetadataProposal,proposalTitle,proposalCreator,proposalScore} from './metadataSearchWorkflow';
 import LocalPdfReader from './LocalPdfReader';
@@ -306,6 +306,7 @@ const localQueueKey = 'archivist.localQueue';
 const localSortHistoryKey = 'archivist.localSortHistory';
 const localMetadataOverridesKey = 'archivist.localMetadataOverrides.v1';
 const localCatalogKey = 'archivist.localCatalog.v1';
+const publicationArtworkMigrationKey = 'archivist.publicationArtworkMigration.v1';
 const onlineBookMetadataCacheKey = 'archivist.onlineBookMetadataCache.v1';
 const onlineComicMetadataCacheKey = 'archivist.onlineComicMetadataCache.v1';
 const metadataSettingsKey = 'archivist.metadata.settings.v1';
@@ -1843,7 +1844,18 @@ function Client() {
             stored=legacyBooks;
           }
         }
-        const normalized=stored.map(book=>({...book,genre:book.genre||''}));
+        let normalized=stored.map(book=>({...book,genre:book.genre||''}));
+        const publicationMigration=await getPersistedJSON<{done?:boolean}>(publicationArtworkMigrationKey).catch(()=>null);
+        if(!publicationMigration?.done){
+          const migrated=migrateLegacyPublishedArtwork(normalized);
+          const changed=migrated.some((book,index)=>
+            book.libraryCoverUri!==normalized[index]?.libraryCoverUri ||
+            book.livingBookCoverUri!==normalized[index]?.livingBookCoverUri
+          );
+          if(changed)await replaceLocalStageBooks(migrated);
+          normalized=migrated;
+          await setPersistedJSON(publicationArtworkMigrationKey,{done:true,completedAt:new Date().toISOString()});
+        }
         const staged=normalized.map(book=>({...book,source:'local' as const}));
         const publication=partitionLocalBooksByPublication(normalized);
         setStagedLocalBooks(staged);
