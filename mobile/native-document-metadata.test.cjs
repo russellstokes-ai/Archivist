@@ -5,6 +5,7 @@ const Module=require('node:module');
 
 const native={
   scanReads:0,
+  documentMetadataReads:0,
   async startTreeScan(){return 'scan-1';},
   async readTreeScanBatch(){
     this.scanReads++;
@@ -21,7 +22,8 @@ const native={
   },
   async cancelTreeScan(){return true;},
   async readDocumentMetadataBatch(items){
-    assert.equal(items.length,2);
+    this.documentMetadataReads++;
+    assert.equal(items.length,this.documentMetadataReads===1?2:1,'initial scan reads the discovery batch; Deep Scan reads only the selected work');
     return items.map(item=>item.format==='EPUB'?{
       uri:item.uri,
       title:'Dune',
