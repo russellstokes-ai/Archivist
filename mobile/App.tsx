@@ -3595,7 +3595,7 @@ function Client() {
         return order(a)-order(b)||a.localeCompare(b);
       })
       .map(name=>({name,total:base.filter(work=>work.format===name).length,works:base.filter(work=>work.format===name).slice(0,4)}));
-    const localReview=localEnrichmentProgress?0:localBooks.filter(book=>book.needsReview).length;
+    const localReview=localEnrichmentProgress?0:localReviewBooks.length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=sourceFilter==='local'?localReview:sourceFilter==='server'?serverReview:sourceFilter==='downloaded'?0:localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
@@ -3747,10 +3747,10 @@ function Client() {
 
       <OnboardingGuide/>
 
-      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setError('');setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata book'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setError('');setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.reviewBannerCopy}>
           <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerTitle,{color:p.ink}]}>Metadata review</Text>
-          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} item{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
+          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} book{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
         </View>
         <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
       </Pressable>:null}
