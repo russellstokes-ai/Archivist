@@ -242,15 +242,10 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		a.db.Exec("UPDATE sources SET status='Unavailable' WHERE id=?", id)
 		return errors.New("source unavailable; previous catalogue retained")
 	}
-	total := 0
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() || d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
-			return nil
-		}
-		if kind(path) != "" { total++ }
-		return nil
-	})
-	if progress != nil { progress(0, total) }
+	// Large-library scans are single-pass. Counting with a complete first walk
+	// doubled NAS/USB I/O and delayed useful work. Total remains unknown until
+	// discovery completes, while progress reports the rolling discovered count.
+	if progress != nil { progress(0, 0) }
 	stage, e := os.CreateTemp("", "archivist-scan-*.jsonl")
 	if e != nil {
 		return e
@@ -276,27 +271,12 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
-	cached := map[string]cachedEntry{}
-	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
-	if cacheErr != nil {
-		return cacheErr
-	}
-	for rows.Next() {
-		var rel string
-		var item cachedEntry
-		var review int
-		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.Genre,&item.SeriesNumber,&item.PublishedYear,&item.Narrator,&item.Publisher,&item.ISBN,&item.ASIN,&item.Language,&item.Description,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
-			rows.Close()
-			return cacheErr
-		}
-		item.NeedsReview = review != 0
-		cached[rel] = item
-	}
-	if cacheErr = rows.Err(); cacheErr != nil {
-		rows.Close()
-		return cacheErr
-	}
-	rows.Close()
+	// Query unchanged-file fingerprints through one prepared SQLite statement
+	// instead of loading the whole previous catalogue into RAM. This keeps
+	// memory bounded when a source contains hundreds of thousands of files.
+	cacheStmt, cacheErr := a.db.Prepare(`SELECT title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=? AND relative_path=?`)
+	if cacheErr != nil { return cacheErr }
+	defer cacheStmt.Close()
 
 	count := 0
 	reused := 0
@@ -335,7 +315,17 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			SizeBytes: info.Size(),
 			ModifiedUnix: info.ModTime().Unix(),
 		}
-		if existing, ok := cached[rel]; ok && existing.ScanSignature == signature {
+		var existing cachedEntry
+		var existingReview int
+		cacheLookupErr:=cacheStmt.QueryRow(id,rel).Scan(
+			&existing.Title,&existing.Author,&existing.Series,&existing.Genre,&existing.SeriesNumber,&existing.PublishedYear,
+			&existing.Narrator,&existing.Publisher,&existing.ISBN,&existing.ASIN,&existing.Language,&existing.Description,
+			&existing.MetadataSource,&existing.MetadataConfidence,&existingReview,&existing.ReviewReason,
+			&existing.ScanSignature,&existing.SizeBytes,&existing.ModifiedUnix,
+		)
+		existing.NeedsReview=existingReview!=0
+		if cacheLookupErr!=nil && cacheLookupErr!=sql.ErrNoRows { return cacheLookupErr }
+		if cacheLookupErr==nil && existing.ScanSignature == signature {
 			item.Title = existing.Title
 			item.Author = existing.Author
 			item.Series = existing.Series
@@ -376,7 +366,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			reviewCount++
 		}
 		count++
-		if progress != nil && (count == total || count%10 == 0) { progress(count, total) }
+		if progress != nil && count%10 == 0 { progress(count, 0) }
 		return encoder.Encode(item)
 	})
 	if e != nil {
@@ -441,7 +431,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		a.db.Exec("UPDATE sources SET status=? WHERE id=?", "Scanned; library grouping needs attention", id)
 		return e
 	}
-	if progress != nil { progress(total, total) }
+	if progress != nil { progress(count, count) }
 	return nil
 }
 func (a *app) scan(id int64) error { return a.scanWithProgress(id, nil) }
