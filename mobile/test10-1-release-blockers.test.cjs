@@ -23,10 +23,13 @@ assert.ok(library.includes('sourceRootUri')&&library.includes('sourceRelativePat
 assert.ok(library.includes('recoverLocalSortOperation'),'copy/move transactions must have a recovery path');
 assert.equal(app.includes("item.complete===false?{...item,complete:true}:item"),false,'a rescan must not silently mark interrupted sort transactions complete');
 
-// Metadata: normal Prepare/Refresh must not bulk deep-read local media.
+// Metadata: normal Prepare may read cheap unresolved audio properties, but must
+// never restore the historical catalogue-wide archive/deep-read stage.
 const normalEnrichment=app.slice(app.indexOf('async function enrichPublishedLocalLibrary'),app.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
-assert.equal(normalEnrichment.includes('enrichPublishedLocalEmbeddedMetadata('),false,'normal refresh must not contain the historical bulk embedded-read stage');
-assert.ok(feedback.includes("'reading-metadata':[40,44]"),'reading-metadata is reserved as a narrow explicit deep-search phase, not the old 28% mandatory stage');
+assert.ok(normalEnrichment.includes('enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true)'),'normal refresh must restore bounded audio property evidence before online matching');
+assert.ok(app.includes("if(fastAudioProperties){")&&app.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'normal property pass must exclude EPUB/comic archive reads and already-cached audio');
+assert.ok(app.includes('itemTimeoutMs:fastAudioProperties?1200')&&app.includes('maxConsecutiveTimeouts:fastAudioProperties?3:6'),'normal property pass must retain a strict fail-forward watchdog');
+assert.ok(feedback.includes("'reading-metadata':[40,44]"),'reading-metadata must remain a narrow bounded identification phase rather than the historical 28% bulk stage');
 assert.ok(library.includes('withOperationTimeout'),'explicit local forensic reads must still have an operation watchdog');
 const deepSearch=app.slice(app.indexOf('const runMetadataSearch=async'),app.indexOf('const acceptProposal=async'));
 assert.ok(deepSearch.includes('concurrency:1')&&deepSearch.includes('maxConsecutiveTimeouts:1'),'Deep Search local inspection must be serial and stop launching reads after the first timeout');
