@@ -65,6 +65,18 @@ export function partitionLocalBooksByPublication(books:LocalBook[]){
   return {published,staged,assessments};
 }
 
+export function reconcilePublishedLocalBooks(previousPublished:LocalBook[],stagedBooks:LocalBook[]){
+  const partition=partitionLocalBooksByPublication(stagedBooks);
+  const stagedUris=new Set(stagedBooks.map(book=>book.uri).filter(Boolean));
+  const readyUris=new Set(partition.published.map(book=>book.uri).filter(Boolean));
+  // A staged but incomplete replacement must not degrade the user's current
+  // Library. Keep the previous verified version for matching physical assets.
+  const retained=previousPublished.filter(book=>!!book.uri&&stagedUris.has(book.uri)&&!readyUris.has(book.uri));
+  const byUri=new Map<string,LocalBook>();
+  for(const book of [...partition.published,...retained])if(book.uri&&!byUri.has(book.uri))byUri.set(book.uri,book);
+  return {published:[...byUri.values()],staged:partition.staged,assessments:partition.assessments};
+}
+
 export function publicationBlockerCopy(blocker:PublicationBlocker){
   switch(blocker){
     case 'needs-review': return 'Metadata needs review';
