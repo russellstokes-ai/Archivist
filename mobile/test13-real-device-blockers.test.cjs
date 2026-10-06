@@ -7,6 +7,8 @@ const embedded=fs.readFileSync(__dirname+'/embeddedMetadata.ts','utf8');
 const audio=fs.readFileSync(__dirname+'/audioMetadata.ts','utf8');
 const covers=fs.readFileSync(__dirname+'/coverDiscovery.ts','utf8');
 const nativeArchive=fs.readFileSync(__dirname+'/android/app/src/main/java/app/archivist/reader/ArchivistArchiveModule.kt','utf8');
+const nativeLibrary=fs.readFileSync(__dirname+'/android/app/src/main/java/app/archivist/reader/ArchivistLibraryModule.kt','utf8');
+const localLibrary=fs.readFileSync(__dirname+'/localLibrary.ts','utf8');
 
 assert.ok(nativeArchive.includes('fun readArchiveMetadata('),'Android must expose bounded archive metadata inspection');
 assert.ok(nativeArchive.includes('BoundedArchiveInput')&&nativeArchive.includes('32L * 1024 * 1024'),'archive metadata reads must have a hard byte budget');
@@ -18,6 +20,8 @@ assert.ok(embedded.includes("Platform.OS==='android'")&&embedded.includes('nativ
 assert.ok(audio.includes('const maxMP4MetadataBytes=768*1024'),'M4B foreground parsing must stay bounded enough to avoid multi-megabyte JS decode bursts');
 assert.ok(app.includes('concurrency:2'),'foreground embedded metadata scanning must use bounded concurrency');
 assert.ok(covers.includes('maxForegroundAndroidSafArchiveCoverBytes=24*1024*1024')&&covers.includes("uri.startsWith('content://')"),'large Android SAF archives must not be recopied merely to find a fallback cover');
+assert.ok(nativeLibrary.includes('fun startTreeScan(')&&nativeLibrary.includes('fun readTreeScanBatch('),'Android discovery must run through the streamed native SAF scanner');
+assert.ok(localLibrary.includes("NativeModules?.ArchivistLibrary")&&localLibrary.includes('scanLocalFoldersNativeV2'),'Test 13 must use native Android discovery instead of the legacy JS folder walker');
 
 assert.ok(app.includes('const lastPlaybackVisibleRef=useRef(false)'),'Living Book must track player re-entry');
 assert.ok(app.includes("if(playbackVisible&&!wasVisible)")&&app.includes("transitionLivingBook({type:'restore',playing:playerMotionPlaying})"),'re-entering an active player must immediately restore a stable visible book');
