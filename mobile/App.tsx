@@ -33,7 +33,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {deepScanLocalTracks, LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, pickLocalFolder, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
+import {deepScanEvidenceSummary, deepScanLocalTracks, LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalSortHistory, pickLocalFolder, removeLocalSortCopies, scanLocalFolders} from './localLibrary';
 import {LocalWorkSortPreview, applyLocalWorkSortCopies, previewLocalWorkSort} from './localWorkSort';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
@@ -638,6 +638,7 @@ function Client() {
   const [chapterEditIndex,setChapterEditIndex]=useState<number|null>(null);
   const [chapterEditTitle,setChapterEditTitle]=useState('');
   const [reduceMotion,setReduceMotion]=useState(false);
+  const onboardingPulse=useRef(new Animated.Value(0)).current;
   const [appActive,setAppActive]=useState(AppState.currentState==='active');
   const bookOpenAnim=useRef(new Animated.Value(0)).current;
   const pageTurnAnim=useRef(new Animated.Value(0)).current;
