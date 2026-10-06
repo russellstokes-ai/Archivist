@@ -5132,7 +5132,7 @@ function Client() {
             return {...next,workKey:logicalWorkKey(next),editionKey:editionKey(next,next.format)};
           });
           setLocalBooks(updated);
-          await replaceLocalStageBooks(updated as LocalBook[]);
+          await upsertLocalStageBooks((updated as LocalBook[]).filter(book=>localUpdates.has(book.uri)));
         }
         if(serverTouched)await refreshSourcesAndShelf();
         setSelectedWorkKeys([]);
