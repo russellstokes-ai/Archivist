@@ -30,6 +30,7 @@ assert.ok(app.includes("if(playbackVisible&&!wasVisible)")&&app.includes("transi
 assert.ok(canvas.includes("else if(next==='closing'){if(activeTurn){if(turn>=.5)commitTurn();else{activeTurn=false;turn=0;rebuildStable();}}"),'Pause must settle/remove an in-flight sheet before closing the cover');
 assert.ok(canvas.includes("setPhase(data.phase||phase,data);paint();"),'Living Book state injection must repaint immediately');
 assert.ok(app.includes("groupLocalWorks(local).filter(localWorkPublicationReady)"),'normal device Library/Shelf must only receive explicitly published local works');
+assert.ok(app.includes('localFolders.filter(folder=>localFolderCount(folder)>0).map'),'Library source rail must not show a blank folder before it has a published work');
 assert.ok(app.includes("publicationState!=='attention'")&&app.includes('resumeStagedLocalPreparation()'),'interrupted staged metadata must resume after restart while attention items remain backstage');
 
 console.log('PASS: Test 13 real-device metadata and Living Book blockers are locked');
