@@ -44,8 +44,8 @@ import {request, validateServer as checkServer, readerNavigationAllowed, setupSt
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortMode, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSort, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, recoverLocalSortOperation, removeLocalFolderSource, scanLocalFolders} from './localLibrary';
-import type {OnlineBookCache} from './onlineBookMetadata';
-import type {OnlineComicCache} from './onlineComicMetadata';
+import {lookupOnlineBook, type OnlineBookCache, type OnlineBookCandidate} from './onlineBookMetadata';
+import {lookupOnlineComic, type OnlineComicCache, type OnlineComicCandidate} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
@@ -78,6 +78,7 @@ import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
 import {partitionLocalBooksByPublication,reconcilePublishedLocalBooks} from './publicationPipeline';
 import {cacheRequiredWorkArtwork} from './dualCoverPipeline';
+import {applyManualCluesToWork,acceptBookCandidateForWork,acceptComicCandidateForWork,type MetadataProposal,proposalTitle,proposalCreator,proposalScore} from './metadataSearchWorkflow';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -1107,6 +1108,11 @@ function Client() {
   const [editCoverUri,setEditCoverUri]=useState('');
   const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null;fileSize?:number}|null>(null);
   const [coverPicking,setCoverPicking]=useState(false);
+  const [metadataSearchBusy,setMetadataSearchBusy]=useState(false);
+  const [metadataSearchMode,setMetadataSearchMode]=useState<''|'smart'|'deep'>('');
+  const [metadataSearchResults,setMetadataSearchResults]=useState<MetadataProposal[]>([]);
+  const [metadataSearchSelection,setMetadataSearchSelection]=useState(-1);
+  const [metadataSearchNotice,setMetadataSearchNotice]=useState('');
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [localSortMode,setLocalSortMode]=useState<LocalSortMode>('copy');
   const [moveStatus,setMoveStatus]=useState('');
@@ -4170,6 +4176,11 @@ function Client() {
     setEditCoverUri(item.coverUri || '');
     setEditPickedCover(null);
     setCoverPicking(false);
+    setMetadataSearchBusy(false);
+    setMetadataSearchMode('');
+    setMetadataSearchResults([]);
+    setMetadataSearchSelection(-1);
+    setMetadataSearchNotice('');
   }
 
   function RawAssetCard({item}: {item: Book}) {
@@ -4638,6 +4649,125 @@ function Client() {
     if(!editing)return null;
     const localEdit=editing.source!=='server'&&!!editing.uri;
     const targets=editingUris.length?editingUris:(editing.uri?[editing.uri]:[]);
+
+    const editorOverride=(coverUri?:string):LocalMetadataOverride=>{
+      const title=editTitle.trim(),author=editAuthor.trim(),series=editSeries.trim(),genre=editGenre.trim();
+      const seriesNumberText=editSeriesNumber.trim();
+      const seriesNumber=seriesNumberText!==''&&Number.isFinite(Number(seriesNumberText))?Number(seriesNumberText):undefined;
+      const yearText=editYear.trim();
+      const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
+      return {
+        title,author,series,seriesNumber,genre,publishedYear,
+        narrator:editNarrator.trim(),publisher:editPublisher.trim(),isbn:editISBN.trim(),
+        asin:editASIN.trim(),language:editLanguage.trim(),description:editDescription.trim(),
+        coverUri:coverUri?.trim()||undefined,
+      };
+    };
+
+    const saveClues=async():Promise<LocalBook[]|null>=>{
+      if(!localEdit||!targets.length||metadataSearchBusy)return null;
+      const override=editorOverride(editCoverUri);
+      if(!override.title.trim()){setMetadataSearchNotice('Add a title before searching.');return null;}
+      const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+      const updated=applyManualCluesToWork(current,targets,override);
+      const nextOverrides={...localMetadataOverrides};
+      for(const uri of targets)nextOverrides[uri]=override;
+      setLocalMetadataOverrides(nextOverrides);
+      setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
+      await Promise.all([
+        setPersistedJSON(localMetadataOverridesKey,nextOverrides),
+        replaceLocalStageBooks(updated),
+      ]);
+      const representative=updated.find(book=>targets.includes(book.uri));
+      if(representative)setEditing({...representative,source:'local'});
+      setMetadataSearchNotice('Search clues saved.');
+      return updated;
+    };
+
+    const runMetadataSearch=async(deep:boolean)=>{
+      if(!localEdit||metadataSearchBusy)return;
+      setMetadataSearchBusy(true);
+      setMetadataSearchMode(deep?'deep':'smart');
+      setMetadataSearchNotice(deep?'Running Deep Search…':'Running Smart Search…');
+      setMetadataSearchResults([]);
+      setMetadataSearchSelection(-1);
+      try{
+        const updated=await saveClues();
+        if(!updated)return;
+        const representative=updated.find(book=>targets.includes(book.uri));
+        if(!representative)throw Error('This staged work is no longer available.');
+        let proposals:MetadataProposal[]=[];
+        if(representative.format==='Comic'){
+          const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim()||undefined;
+          const result=await lookupOnlineComic(representative,{
+            token,
+            ignoreCache:deep,
+            timeoutMs:deep?15000:8000,
+          });
+          proposals=result.candidates.slice(0,deep?8:5).map((candidate:OnlineComicCandidate)=>({kind:'comic' as const,candidate}));
+        }else{
+          const googleBooksApiKey=metadataSettings.books.googleBooks
+            ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
+            : undefined;
+          const result=await lookupOnlineBook(representative,{
+            openLibraryEnabled:metadataSettings.books.openLibrary,
+            googleBooksApiKey,
+            ignoreCache:deep,
+            deep,
+            timeoutMs:deep?15000:8000,
+          });
+          proposals=result.candidates.slice(0,deep?8:5).map((candidate:OnlineBookCandidate)=>({kind:'book' as const,candidate}));
+        }
+        setMetadataSearchResults(proposals);
+        setMetadataSearchSelection(proposals.length?0:-1);
+        setMetadataSearchNotice(proposals.length
+          ? (deep?'Deep Search':'Smart Search')+' found '+proposals.length+' possible match'+(proposals.length===1?'':'es')+'.'
+          : 'No confident matches found. Add another clue or try Deep Search.');
+      }catch(error){
+        setMetadataSearchNotice('Search could not complete: '+String((error as Error)?.message||error));
+      }finally{
+        setMetadataSearchBusy(false);
+        setMetadataSearchMode('');
+      }
+    };
+
+    const acceptProposal=async()=>{
+      if(!localEdit||metadataSearchBusy||metadataSearchSelection<0)return;
+      const proposal=metadataSearchResults[metadataSearchSelection];
+      if(!proposal)return;
+      setMetadataSearchBusy(true);setMetadataSearchNotice('Accepting metadata and preparing artwork…');
+      try{
+        const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+        let accepted=proposal.kind==='book'
+          ? acceptBookCandidateForWork(current,targets,proposal.candidate)
+          : acceptComicCandidateForWork(current,targets,proposal.candidate);
+        const targetSet=new Set(targets);
+        const targetBooks=accepted.filter(book=>targetSet.has(book.uri));
+        const artwork=await cacheRequiredWorkArtwork(targetBooks,{
+          documentDirectory,
+          makeDirectoryAsync,
+          downloadAsync:downloadCoverWithDeadline,
+          getInfoAsync,
+          deleteAsync,
+        });
+        const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
+        accepted=accepted.map(book=>artworkByUri.get(book.uri)||book);
+        await replaceLocalStageBooks(accepted);
+        setStagedLocalBooks(accepted.map(book=>({...book,source:'local' as const})));
+        const publication=publishCompletedLocalStage(accepted);
+        const acceptedPublished=artwork.books.length>0&&artwork.books.every(book=>publication.published.some(item=>item.uri===book.uri));
+        setLocalFolderNotice(acceptedPublished
+          ? 'Metadata accepted · both covers cached · book published.'
+          : 'Metadata accepted. Artwork or identification still needs attention before publication.');
+        setEditing(null);setEditingUris([]);setEditPickedCover(null);
+        setMetadataSearchResults([]);setMetadataSearchSelection(-1);setMetadataSearchNotice('');
+      }catch(error){
+        setMetadataSearchNotice('Could not accept this match: '+String((error as Error)?.message||error));
+      }finally{
+        setMetadataSearchBusy(false);
+      }
+    };
+
     const save=async()=>{
       const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
       const seriesNumberText=editSeriesNumber.trim();
@@ -4659,20 +4789,41 @@ function Client() {
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
         const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
-        const next={...localMetadataOverrides};
-        for(const uri of targets)next[uri]=override;
-        setLocalMetadataOverrides(next);
-        setPersistedJSON(localMetadataOverridesKey,next)
-          .then(()=>{
-            setLocalBooks(old=>{
-              const wanted=new Set(targets);
-              const updated=old.map(b=>(b.uri?wanted.has(b.uri):false)?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||b.coverUri,needsReview:false,reviewReason:'',metadataSource:'manual' as const,identificationConfidence:'high' as const,metadataConflicts:[]}:b);
-              void replaceLocalStageBooks(updated as LocalBook[]);
-              return updated;
-            });
-            setEditing(null);setEditingUris([]);setEditPickedCover(null);
-          })
-          .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+        const nextOverrides={...localMetadataOverrides};
+        for(const uri of targets)nextOverrides[uri]=override;
+        try{
+          const wanted=new Set(targets);
+          const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+          let updated=current.map(book=>{
+            if(!wanted.has(book.uri))return book;
+            const nextBook:LocalBook={
+              ...book,...override,
+              coverUri:coverUri||book.coverUri,
+              libraryCoverUri:coverUri||book.libraryCoverUri||book.coverUri,
+              needsReview:false,reviewReason:'',metadataSource:'manual',
+              identificationConfidence:'high',metadataConflicts:[],
+              metadataProvenance:{...(book.metadataProvenance||{}),title:'manual',author:'manual'},
+              metadataFieldConfidence:{...(book.metadataFieldConfidence||{}),title:'high',author:'high'},
+            };
+            nextBook.workKey=logicalWorkKey(nextBook);nextBook.editionKey=editionKey(nextBook,nextBook.format);
+            return nextBook;
+          });
+          const targetBooks=updated.filter(book=>wanted.has(book.uri));
+          const artwork=await cacheRequiredWorkArtwork(targetBooks,{
+            documentDirectory,makeDirectoryAsync,downloadAsync:downloadCoverWithDeadline,getInfoAsync,deleteAsync,
+          });
+          const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
+          updated=updated.map(book=>artworkByUri.get(book.uri)||book);
+          setLocalMetadataOverrides(nextOverrides);
+          await Promise.all([
+            setPersistedJSON(localMetadataOverridesKey,nextOverrides),
+            replaceLocalStageBooks(updated),
+          ]);
+          setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
+          publishCompletedLocalStage(updated);
+          setEditing(null);setEditingUris([]);setEditPickedCover(null);
+        }catch(e){setError((e as Error).message);}
+        finally{setBusy(false);}
       }else setBusy(false);
     };
     const chooseCoverFromDevice=async()=>{
@@ -4702,7 +4853,7 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    const closeEditor=()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null)};
+    const closeEditor=()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null);setMetadataSearchResults([]);setMetadataSearchSelection(-1);setMetadataSearchNotice('');};
     const editorDirty=
       editTitle!==editing.title||
       editAuthor!==(editing.author||'')||
@@ -4783,7 +4934,39 @@ function Client() {
               </View>:null}
             </View>:null}
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
-            <Button label="Save details" disabled={busy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
+            {localEdit?<View style={styles.settingsSubgroup}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FIND METADATA</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Save corrected clues first, then search for this work. Chapter and part data stays separate.</Text>
+              <View style={styles.toolRow}>
+                <Button label="Save clues" tone="quiet" disabled={metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void saveClues()}/>
+                <Button label={metadataSearchMode==='smart'?'Searching…':'Smart Search'} disabled={metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void runMetadataSearch(false)}/>
+                <Button label={metadataSearchMode==='deep'?'Searching…':'Deep Search'} tone="quiet" disabled={metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void runMetadataSearch(true)}/>
+              </View>
+              {metadataSearchNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:metadataSearchResults.length?p.sage:p.muted}]}>{metadataSearchNotice}</Text>:null}
+              {metadataSearchResults.length?<View style={{gap:7}}>
+                {metadataSearchResults.map((proposal,index)=>{
+                  const candidate=proposal.candidate;
+                  const selected=index===metadataSearchSelection;
+                  const details=[
+                    proposalCreator(proposal),
+                    candidate.fields.series,
+                    candidate.fields.publishedYear?String(candidate.fields.publishedYear):'',
+                    candidate.provider,
+                    proposalScore(proposal)+'% match',
+                  ].filter(Boolean).join(' · ');
+                  return <Pressable key={proposal.kind+':'+candidate.provider+':'+candidate.providerId+':'+index}
+                    accessibilityRole="button"
+                    accessibilityState={{selected}}
+                    onPress={()=>setMetadataSearchSelection(index)}
+                    style={({pressed})=>[{paddingVertical:10,borderBottomWidth:1,borderBottomColor:p.line,opacity:pressed?.72:1}]}>
+                    <Text numberOfLines={2} style={[styles.bookTitle,{color:selected?p.sage:p.ink}]}>{proposalTitle(proposal)}</Text>
+                    <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{details}</Text>
+                  </Pressable>;
+                })}
+                <Button label="Accept & Save" disabled={metadataSearchBusy||metadataSearchSelection<0} onPress={()=>void acceptProposal()}/>
+              </View>:null}
+            </View>:null}
+            <Button label="Save details" disabled={busy||metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
             <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={requestEditorClose}/>
           </Pressable>
