@@ -7561,19 +7561,29 @@ function Client() {
     const readyIds=localMovePreviews.filter(item=>item.state==='ready').map(item=>item.id);
     const selectedReady=readyIds.filter(id=>localMoveSelection.includes(id));
     const togglePreview=(id:string)=>{
-      setLocalMoveSelection(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);
+      const item=localMovePreviews.find(preview=>preview.id===id);
+      if(!item)return;
+      const workIds=localMovePreviews
+        .filter(preview=>preview.workKey===item.workKey&&preview.state==='ready')
+        .map(preview=>preview.id);
+      setLocalMoveSelection(current=>{
+        const selected=workIds.every(value=>current.includes(value));
+        return selected
+          ? current.filter(value=>!workIds.includes(value))
+          : [...new Set([...current,...workIds])];
+      });
     };
     return (
       <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
         <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Organise local files</Text>
-        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Choose whether Archivist keeps the originals or moves them after a verified copy. Move never deletes a source until the destination has been verified.</Text>
+        <Text style={[styles.meta,{color:p.muted}]}>Preview first. Archivist organises a complete work together. Every destination for a multi-part book is verified before Move removes any original.</Text>
         <View style={styles.segment}>
           {[
             ['copy','Copy · keep originals'],
             ['move','Move · remove originals'],
           ].map(([id,label])=><Pressable key={id} accessibilityRole="button" accessibilityState={{selected:localSortMode===id}} onPress={()=>setLocalSortMode(id as LocalSortMode)} style={[styles.segmentItem,{backgroundColor:localSortMode===id?p.card:'transparent'}]}><Text style={{color:localSortMode===id?p.sage:p.muted,textAlign:'center',fontWeight:localSortMode===id?'700':'500'}}>{label}</Text></Pressable>)}
         </View>
-        <Text style={[styles.meta,{color:localSortMode==='move'?p.gold:p.muted}]}>{localSortMode==='move'?'Move mode: each destination is copied and verified first; only then is its original removed.':'Copy mode: organised copies are created and your originals stay where they are.'}</Text>
+        <Text style={[styles.meta,{color:localSortMode==='move'?p.gold:p.muted}]}>{localSortMode==='move'?'Move mode: every file in a work is copied and verified first; only then are any originals removed.':'Copy mode: organised copies are created and your originals stay where they are.'}</Text>
         <View style={styles.segment}>
           {[
             ['author-title','Author / Title'],
