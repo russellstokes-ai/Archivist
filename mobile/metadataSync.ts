@@ -32,6 +32,9 @@ export type SynchronizableBook={
   identificationConfidence?:SyncConfidence;
   onlineMetadataMatch?:{fields?:Partial<Record<string,unknown>>;confidence?:SyncConfidence};
   embeddedMetadata?:{workTitle?:string};
+  workTitleHint?:string;
+  trackTitle?:string;
+  trackNumber?:number;
 };
 
 export type CanonicalMetadata={
@@ -129,7 +132,7 @@ function rootAudioIdentityKey(book:SynchronizableBook){
   const scope=normal(book.space||'library');
   const id=normal(book.asin||book.isbn||'');
   if(id)return 'audio-root:'+scope+':id:'+id;
-  const workTitle=clean(book.embeddedMetadata?.workTitle||'');
+  const workTitle=clean(book.workTitleHint||book.embeddedMetadata?.workTitle||'');
   if(workTitle){
     const author=normal(book.author||'');
     return 'audio-root:'+scope+':work:'+normal(workTitle)+(author?'|'+author:'');
@@ -233,7 +236,7 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
     }
     if(audio&&['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'].includes(field)){
       if(field==='title'){
-        const workTitle=book.embeddedMetadata?.workTitle;
+        const workTitle=book.workTitleHint||book.embeddedMetadata?.workTitle;
         if(present(workTitle)&&normal(workTitle)!==normal(value)){
           values.push({book,value:workTitle,source:'embedded',confidence:'high',key:normal(workTitle),workHint:true});
         }
