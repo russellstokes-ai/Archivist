@@ -10,7 +10,16 @@ const maxEmbeddedArchiveBytes = 64 * 1024 * 1024;
 export async function extractEmbeddedMetadata(uri:string, extension:string, knownInfo?:{exists?:boolean;size?:number}):Promise<LocalMetadataFields> {
   const ext=extension.toLowerCase();
   if(ext==='cbr'){
-    try{return parseLocalSidecar(await readCbrMetadataText(uri),'xml');}catch{return {};}
+    try{
+      if(Platform.OS==='android'){
+        const native=NativeModules?.ArchivistArchive as {readRarMetadata?:(uri:string)=>Promise<string>}|undefined;
+        if(native?.readRarMetadata){
+          const text=String(await native.readRarMetadata(uri)||'');
+          return text?parseLocalSidecar(text,'xml'):{};
+        }
+      }
+      return parseLocalSidecar(await readCbrMetadataText(uri),'xml');
+    }catch{return {};}
   }
   if(ext!=='epub'&&ext!=='cbz'&&ext!=='zip')return {};
   try{
