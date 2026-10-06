@@ -1129,17 +1129,25 @@ export async function enrichLocalBookMetadataOnline(
           }
           matched+=1;
         }else if(result.status==='review'||result.status==='matched'){
+          let unitNeedsReview=false;
           for(const index of unit.indexes){
             const book=next[index];
+            const alreadyNeedsReview=!!book.needsReview;
             next[index]={
               ...book,
-              needsReview:true,
-              reviewReason:'A possible online metadata match needs review.',
+              // A weak online proposal may assist a genuinely unresolved work,
+              // but it must never downgrade a book that path/file evidence has
+              // already identified well enough.
+              needsReview:alreadyNeedsReview,
+              reviewReason:alreadyNeedsReview
+                ? (book.reviewReason||'A possible online metadata match needs review.')
+                : '',
               onlineMetadataMatch:candidate,
               onlineMetadataAlternatives:result.candidates.slice(1,5),
             };
+            unitNeedsReview=unitNeedsReview||alreadyNeedsReview;
           }
-          review+=1;
+          if(unitNeedsReview)review+=1;
         }
       }
     }
