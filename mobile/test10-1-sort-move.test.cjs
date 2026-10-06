@@ -6,6 +6,7 @@ const Module=require('node:module');
 const dirs=new Map();
 const info=new Map();
 const deleteFailures=new Set();
+const copyFailures=new Set();
 const copies=[];
 const deleted=[];
 
@@ -30,6 +31,7 @@ const saf={
   },
   async copyAsync({from,to}){
     copies.push({from,to});
+    if(copyFailures.has(from))throw new Error('simulated copy failure');
     const source=info.get(from);
     if(!source?.exists)throw new Error('source missing');
     info.set(to,{exists:true,size:source.size});
@@ -115,18 +117,43 @@ const {applyLocalSort,previewLocalSortToRoot,recoverLocalSortOperation}=require(
   assert.equal(info.get(restoredSource)?.size,4096);
   assert.equal(info.get(organised).exists,false,'recovery must remove the organised copy only after the original verifies');
 
-  // A delete failure must never turn Move into data loss. Keep both verified
-  // files and surface the item for review.
+  // A delete failure rolls the whole work back when restoration is verifiable.
   const source2=createdUri(sourceRoot,'Second.epub');
   addChild(sourceRoot,source2);info.set(source2,{exists:true,size:2048});
   const preview2=previewLocalSortToRoot([{...book,id:2,uri:source2,title:'Second'}],'author-title',targetRoot)[0];
   deleteFailures.add(source2);
   const failedMove=await applyLocalSort([preview2],'move');
   assert.equal(failedMove.failed.length,1);
-  assert.match(failedMove.failed[0].error,/original could not be removed safely/i);
+  assert.match(failedMove.failed[0].error,/whole-work move rolled back/i);
   assert.equal(info.get(source2).exists,true,'failed source deletion must leave the original untouched');
-  assert.equal(info.get(failedMove.copied[0].uri).exists,true,'verified destination is retained as the safety copy');
-  assert.equal(failedMove.copied[0].sourceRemoved,false);
+  assert.equal(failedMove.copied.length,0,'rolled-back work must not remain in completed copies');
+  deleteFailures.delete(source2);
+
+  // A multi-part audiobook is atomic. Failure copying part 2 removes part 1's
+  // new destination and leaves both originals untouched.
+  const part1=createdUri(sourceRoot,'01.mp3');
+  const part2=createdUri(sourceRoot,'02.mp3');
+  addChild(sourceRoot,part1);addChild(sourceRoot,part2);
+  info.set(part1,{exists:true,size:1000});info.set(part2,{exists:true,size:2000});
+  const audioBooks=[
+    {...book,id:21,uri:part1,title:'Dune',author:'Frank Herbert',format:'Audio',embeddedMetadata:{workTitle:'Dune',trackNumber:1}},
+    {...book,id:22,uri:part2,title:'Dune',author:'Frank Herbert',format:'Audio',embeddedMetadata:{workTitle:'Dune',trackNumber:2}},
+  ];
+  const audioPreviews=previewLocalSortToRoot(audioBooks,'author-title',targetRoot);
+  assert.equal(audioPreviews[0].workKey,audioPreviews[1].workKey);
+  assert.equal(audioPreviews[0].workSize,2);
+  copyFailures.add(part2);
+  const atomicFailure=await applyLocalSort(audioPreviews,'move');
+  assert.equal(atomicFailure.failed.length,1);
+  assert.match(atomicFailure.failed[0].error,/whole-work copy rolled back/i);
+  assert.equal(atomicFailure.copied.length,0);
+  assert.equal(info.get(part1).exists,true);
+  assert.equal(info.get(part2).exists,true);
+  copyFailures.delete(part2);
+
+  const partial=await applyLocalSort([audioPreviews[0]],'copy');
+  assert.equal(partial.copied.length,0);
+  assert.match(partial.failed[0].error,/not every chapter\/part was selected/i);
 
   console.log('PASS: Test 10.1 Move is verified, cross-storage safe, interruption recoverable and loss-resistant');
 })().catch(error=>{console.error(error);process.exitCode=1;});
