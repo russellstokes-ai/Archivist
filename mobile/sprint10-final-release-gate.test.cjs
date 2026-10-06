@@ -39,7 +39,7 @@ assert.ok(androidWorkflow.includes('mobile/sprint10-final-release-gate.test.cjs'
 assert.ok(manifest.includes('android:name=".ArchivistAutoService"')&&manifest.includes('androidx.media3.session.MediaButtonReceiver'),'final APK must retain Android Auto browse and resumption services');
 
 assert.ok(read('sprint10-library-pipeline.test.cjs').includes('single-job'),'Sprint 1 scanner closure gate must remain present');
-assert.ok(read('sprint10-living-book-engine.test.cjs').includes('single-hinge'),'Sprint 2 Living Book closure gate must remain present');
+assert.ok(read('sprint10-living-book-engine.test.cjs').includes('stateful')&&read('sprint10-living-book-engine.test.cjs').includes('curl-based'),'Sprint 2 Living Book Canvas closure gate must remain present');
 assert.ok(read('sprint10-comic-reader.test.cjs').includes('gesture arbitration'),'Sprint 3 comic closure gate must remain present');
 assert.ok(read('sprint10-now-persistence.test.cjs').includes('durable Now'),'Sprint 4 persistence closure gate must remain present');
 assert.ok(read('sprint10-reward-idempotency.test.cjs').includes('idempotency'),'Sprint 5 reward closure gate must remain present');
