@@ -66,6 +66,33 @@ func naturalLess(a, b string) bool {
 type catalogueAsset struct {
 	id int64
 	path, title, author, series, genre, format, space string
+	isbn, asin string
+	needsReview bool
+}
+
+func catalogueIdentityPart(value string) string {
+	value=strings.ToLower(strings.TrimSpace(value))
+	value=strings.Join(strings.Fields(value)," ")
+	return value
+}
+
+func autoAudioGroupKey(sourceID int64,x catalogueAsset) string {
+	prefix:="source:"+strconv.FormatInt(sourceID,10)+":"
+	dir:=filepath.ToSlash(filepath.Dir(x.path))
+	base:=strings.TrimSuffix(filepath.Base(x.path),filepath.Ext(x.path))
+	if dir!="." && dir!="" && (genericAudioTrackLabel(base)||leadingNumberedAudioTrack(base)||audioMultipartWorkTitle(base)!="") {
+		return prefix+"audio-dir:"+dir
+	}
+	if id:=strings.TrimSpace(first(x.asin,x.isbn));id!="" {
+		return prefix+"audio-id:"+strings.ToLower(id)
+	}
+	if family:=audioMultipartWorkTitle(base);family!="" {
+		return prefix+"audio-family:"+catalogueIdentityPart(family)+"|"+catalogueIdentityPart(x.author)
+	}
+	if !x.needsReview && strings.TrimSpace(x.title)!="" && strings.TrimSpace(x.author)!="" {
+		return prefix+"audio-work:"+catalogueIdentityPart(x.title)+"|"+catalogueIdentityPart(x.author)+"|"+catalogueIdentityPart(x.series)
+	}
+	return prefix+"audio-file:"+filepath.ToSlash(x.path)
 }
 
 func commonValue(items []catalogueAsset, field func(catalogueAsset) string) string {
@@ -86,7 +113,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	if e != nil { return e }
 	defer tx.Rollback()
 
-	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.genre,a.format,s.space,
+	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.genre,a.format,s.space,a.isbn,a.asin,a.needs_review,
 		COALESCE(w.auto,1)
 		FROM assets a JOIN sources s ON s.id=a.source_id
 		LEFT JOIN edition_assets ea ON ea.asset_id=a.id
@@ -101,13 +128,9 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	for rows.Next() {
 		var x catalogueAsset
 		var auto int
-		if e = rows.Scan(&x.id,&x.path,&x.title,&x.author,&x.series,&x.genre,&x.format,&x.space,&auto); e != nil { rows.Close(); return e }
-		key := strings.ToLower(x.format)+":"+filepath.ToSlash(x.path)
-		if x.format == "Audio" {
-			dir := filepath.ToSlash(filepath.Dir(x.path))
-			if dir != "." && dir != "" { key = "audio-dir:"+dir }
-		}
-		key = "source:" + strconv.FormatInt(sourceID,10) + ":" + key
+		if e = rows.Scan(&x.id,&x.path,&x.title,&x.author,&x.series,&x.genre,&x.format,&x.space,&x.isbn,&x.asin,&x.needsReview,&auto); e != nil { rows.Close(); return e }
+		key := "source:" + strconv.FormatInt(sourceID,10) + ":" + strings.ToLower(x.format)+":"+filepath.ToSlash(x.path)
+		if x.format == "Audio" { key=autoAudioGroupKey(sourceID,x) }
 		if _, ok := groups[key]; !ok { order = append(order,key) }
 		groups[key] = append(groups[key],x)
 	}
