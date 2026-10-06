@@ -2789,6 +2789,15 @@ function Client() {
       if(deep){
         const rescanned=await deepScanLocalTracks(work.tracks);
         evidenceWork=groupLocalWorks(rescanned)[0]||work;
+        if(evidenceWork.title&&evidenceWork.title.toLowerCase()!=='untitled')setEditTitle(evidenceWork.title);
+        if(evidenceWork.author)setEditAuthor(evidenceWork.author);
+        if(evidenceWork.series)setEditSeries(evidenceWork.series);
+        if(evidenceWork.genre)setEditGenre(evidenceWork.genre);
+        if(evidenceWork.publishedYear)setEditPublishedYear(String(evidenceWork.publishedYear));
+        if(evidenceWork.publisher)setEditPublisher(evidenceWork.publisher);
+        if(evidenceWork.seriesIndex!==undefined)setEditSeriesIndex(String(evidenceWork.seriesIndex));
+        const embeddedIsbn=evidenceWork.tracks.map(track=>track.isbn||'').find(Boolean);
+        if(embeddedIsbn)setEditIsbn(embeddedIsbn);
       }
       const strongDeep=deep&&!evidenceWork.needsReview&&!!evidenceWork.title&&evidenceWork.title.toLowerCase()!=='untitled';
       const title=(strongDeep?evidenceWork.title:editTitle.trim()||evidenceWork.title).trim();
@@ -2854,7 +2863,7 @@ function Client() {
     if(!uris.length)return;
     setBusy(true);setError('');
     try{
-      await removeLocalStageBooks(uris);
+      await removeLocalStageBooks(work.tracks);
       const removeSet=new Set(uris);
       const nextBooks=localBooks.filter(book=>!book.uri||!removeSet.has(book.uri));
       setLocalBooks(nextBooks);
@@ -2867,7 +2876,7 @@ function Client() {
       setLocalPreferences(nextPreferences);
       await setPersistedJSON(localPreferencesKey,nextPreferences);
       setQuickActionsWorkKey('');
-      setLocalFolderNotice(`Removed “${work.title}” from Archivist. Source files were left untouched.`);
+      setLocalFolderNotice(`Removed “${work.title}” from Archivist. Source files were left untouched and it will stay hidden unless the source file changes.`);
       void runLocalEnrichment(nextBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],localEnrichmentCache);
     }catch(e){
       setError((e as Error).message);
