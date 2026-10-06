@@ -47,7 +47,7 @@ import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalS
 import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
-import {groupLocalWorks, LocalWork} from './localWorks';
+import {applyLocalPublicationState, groupLocalWorks, localWorkPublicationReady, LocalWork} from './localWorks';
 import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
@@ -330,6 +330,22 @@ const nowSessionKey = 'archivist.nowSession.v1';
 const achievementLedgerKey = 'archivist.achievementLedger.v1';
 function localFolderSetSignature(folders:LocalFolder[]){
   return folders.map(folder=>String(folder.uri||'')).filter(Boolean).sort().join('|');
+}
+
+function stageDiscoveredLocalBooks(books:LocalBook[],previous:LocalBook[],force=false){
+  const previousByUri=new Map(previous.filter(book=>!!book.uri).map(book=>[book.uri,book]));
+  return books.map(book=>{
+    const old=previousByUri.get(book.uri);
+    const unchanged=!!old
+      && book.fileSize!==undefined
+      && old.fileSize===book.fileSize
+      && book.modificationTime!==undefined
+      && old.modificationTime===book.modificationTime;
+    if(!force&&unchanged&&old?.publishReady===true){
+      return {...book,publishReady:true,publicationState:'published' as const,publicationReason:''};
+    }
+    return {...book,publishReady:false,publicationState:'discovered' as const,publicationReason:'Preparing metadata and cover artwork.'};
+  });
 }
 
 const defaultShelfSections:ShelfSectionPref[] = [
@@ -1346,7 +1362,7 @@ function Client() {
 
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
-    return groupLocalWorks(local);
+    return groupLocalWorks(local).filter(localWorkPublicationReady);
   }, [localBooks]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
@@ -2706,7 +2722,8 @@ function Client() {
     if(!scanCommitGate.isCurrent(generation))return null;
 
     const summary=reconcileScan(previousLocal,result.books);
-    const nextBooks=result.books.map(book=>({...book,source:'local' as const}));
+    const stagedBooks=stageDiscoveredLocalBooks(result.books,previousLocal,forceOnline);
+    const nextBooks=stagedBooks.map(book=>({...book,source:'local' as const}));
     // Interrupted organisation transactions remain incomplete until the user
     // explicitly recovers them. A rescan must never silently bless a half-finished
     // copy/move transaction.
@@ -2718,7 +2735,7 @@ function Client() {
     await Promise.all([
       setPersistedJSON(localFoldersKey,result.folders),
     ]);
-    const baselinePersisted=await replaceLocalStageBooks(result.books)
+    const baselinePersisted=await replaceLocalStageBooks(stagedBooks)
       .then(()=>true)
       .catch(error=>{recordLibraryRefreshWarning('Catalogue database',error);return false;});
     if(!baselinePersisted||!scanCommitGate.isCurrent(generation))return null;
@@ -2728,7 +2745,7 @@ function Client() {
     setLocalBooks(nextBooks);
     setLocalMovePreviews([]);
     setLocalMoveSelection([]);
-    setSpaces([...new Set([...result.books.map(book=>book.space),...sources.map(source=>source.space)].filter(Boolean))]);
+    setSpaces([...new Set([...stagedBooks.map(book=>book.space),...sources.map(source=>source.space)].filter(Boolean))]);
     if(historyChanged)setLocalSortHistory(reconciledHistory);
     setRescanPromptOpen(false);
     setScanProgress({phase:'preparing',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review,processed:result.books.length,total:result.books.length});
@@ -2737,7 +2754,7 @@ function Client() {
     setScanProgress(null);
     let enrichmentCompleted=false;
     try{
-      await enrichPublishedLocalLibrary(result.books,generation,forceOnline);
+      await enrichPublishedLocalLibrary(stagedBooks,generation,forceOnline);
       enrichmentCompleted=scanCommitGate.isCurrent(generation);
     }catch(error){
       if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
@@ -2758,7 +2775,7 @@ function Client() {
   }
 
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false):Promise<LocalBook[]>{
-    let currentBooks=baseBooks;
+    let currentBooks=baseBooks.map(book=>book.publishReady===true?book:{...book,publicationState:'metadata' as const,publicationReason:'Resolving metadata.'});
     try{
       const embedded=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline);
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
@@ -2787,16 +2804,17 @@ function Client() {
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(covered)currentBooks=covered;
 
+      // Publication is atomic at work level. Staged/raw assets never enter the
+      // normal Library/Shelf; only a resolved identity + usable cover may publish.
+      currentBooks=applyLocalPublicationState(currentBooks,true);
+
       if(scanCommitGate.isCurrent(generation)){
         const persisted=await replaceLocalStageBooks(currentBooks)
           .then(()=>true)
           .catch(error=>{recordLibraryRefreshWarning('Final catalogue save',error);return false;});
         if(persisted&&scanCommitGate.isCurrent(generation)){
           completedLibraryBooksRef.current=currentBooks;
-          setLocalBooks(current=>applyOnlineMetadataEnrichment(
-            current.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[],
-            currentBooks,
-          ).map(book=>({...book,source:'local' as const})));
+          setLocalBooks(currentBooks.map(book=>({...book,source:'local' as const})));
         }
       }
       return currentBooks;
@@ -3022,12 +3040,14 @@ function Client() {
   }
   async function completedLibraryRefreshNotice(result:LocalScanResult){
     const books=completedLibraryBooksRef.current||result.books;
-    const review=books.filter(book=>book.needsReview).length;
-    const missingCovers=books.filter(book=>!book.coverUri).length;
+    const works=groupLocalWorks(books);
+    const published=works.filter(localWorkPublicationReady).length;
+    const review=Math.max(0,works.length-published);
+    const missingCovers=works.filter(work=>!work.coverUri).length;
     const warnings=libraryRefreshWarningsRef.current;
     const warningText=warnings.length?` · ${warnings.length} stage warning${warnings.length===1?'':'s'}`:'';
     const coverText=missingCovers?` · ${missingCovers} cover${missingCovers===1?'':'s'} still need attention`:' · covers complete';
-    return `${books.length} found · ${Math.max(0,books.length-review)} identified · ${review} need review${coverText}${warningText}.`;
+    return `${books.length} files found · ${published} published · ${review} staged / need attention${coverText}${warningText}.`;
   }
 
   async function addLocalFolder() {
@@ -5142,7 +5162,8 @@ function Client() {
       animateSeriesOpen(name);
     };
 
-    const localReview=localBooks.filter(book=>book.needsReview).length;
+    const localReview=groupLocalWorks(localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[])
+      .filter(work=>!localWorkPublicationReady(work)).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
