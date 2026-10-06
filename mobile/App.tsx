@@ -832,6 +832,18 @@ function Client() {
   },[]);
 
   useEffect(()=>{
+    onboardingPulse.stopAnimation();
+    onboardingPulse.setValue(0);
+    if(onboardingDone||reduceMotion)return;
+    const loop=Animated.loop(Animated.sequence([
+      Animated.timing(onboardingPulse,{toValue:1,duration:850,useNativeDriver:true}),
+      Animated.timing(onboardingPulse,{toValue:0,duration:850,useNativeDriver:true}),
+    ]));
+    loop.start();
+    return()=>loop.stop();
+  },[onboardingDone,onboardingPulse,reduceMotion]);
+
+  useEffect(()=>{
     tabTransition.stopAnimation();
     if(reduceMotion){tabTransition.setValue(1);return;}
     tabTransition.setValue(0);
