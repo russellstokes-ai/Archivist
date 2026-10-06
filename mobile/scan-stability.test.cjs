@@ -30,7 +30,9 @@ assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron cr
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'stale enrichment must stop when a newer scan begins');
 assert.equal(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover batch progress must not clone/publish the full catalogue on every batch');
 assert.ok(source.includes('reportEnrichmentProgress')&&source.includes('enrichmentProgressClock'),'enrichment progress must be throttled independently of catalogue publication');
-assert.ok(source.includes('replaceLocalStageBooks(currentBooks)'),'final enriched catalogue must commit to SQLite after all stages complete');
+assert.ok(source.includes('upsertLocalStageBooks(currentBooks)'),'final enriched catalogue must update SQLite without deleting and rewriting the whole catalogue');
+assert.ok(source.includes('changedLocalStageBooks(previous,books)')&&source.includes('upsertLocalStageBooks(changed)'),'enrichment checkpoints must persist only changed assets instead of rewriting every catalogue row');
+assert.equal(source.includes('checkpointLocalEnrichment(books:LocalBook[]'),false,'legacy whole-catalogue enrichment checkpoint must not return');
 assert.ok(source.includes('loadLocalStageBooks()')&&source.includes('migrateLegacyLocalStage(legacyBooks)'),'cold start must use SQLite with a one-time legacy catalogue migration');
 
 console.log('PASS: Sprint 5/7 scan/catalogue integration contracts');
