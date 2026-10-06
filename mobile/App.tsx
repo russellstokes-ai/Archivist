@@ -2787,15 +2787,19 @@ function Client() {
   }
 
   function beginEdit(item: Book) {
+    const work=item.source==='server'?undefined:localWorkForBook(item);
+    const workIsbn=work?.tracks.map(track=>track.isbn||'').find(Boolean);
     setEditing(item);
-    setEditTitle(item.title);
-    setEditAuthor(item.author || '');
-    setEditSeries(item.series || '');
-    setEditGenre(item.genre || '');
-    setEditPublishedYear(item.publishedYear ? String(item.publishedYear) : '');
-    setEditPublisher(item.publisher || '');
-    setEditSeriesIndex(item.seriesIndex !== undefined ? String(item.seriesIndex) : '');
-    setEditIsbn(item.isbn || '');
+    setEditTitle(work?.title || item.title);
+    setEditAuthor(work?.author || item.author || '');
+    setEditSeries(work?.series || item.series || '');
+    setEditGenre(work?.genre || item.genre || '');
+    const year=work?.publishedYear || item.publishedYear;
+    setEditPublishedYear(year ? String(year) : '');
+    setEditPublisher(work?.publisher || item.publisher || '');
+    const seriesIndex=work?.seriesIndex ?? item.seriesIndex;
+    setEditSeriesIndex(seriesIndex !== undefined ? String(seriesIndex) : '');
+    setEditIsbn(workIsbn || item.isbn || '');
     setMetadataMatches([]);
     setMetadataMatchMode('');
     setMetadataSearchNote('');
@@ -2929,20 +2933,22 @@ function Client() {
 
   function RawAssetCard({item}: {item: Book}) {
     const canEdit=item.source!=='server'||owner;
+    const work=item.source==='server'?undefined:localWorkForBook(item);
+    const displayTitle=work?.title||item.title||'Unidentified item';
+    const displayAuthor=work?.author||item.author||'Unknown author';
+    const reviewReason=work?.reviewReason||item.reviewReason||'Archivist needs you to confirm this work.';
     return (
       <View style={[styles.reviewAssetCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <MiniArtwork book={item}/>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={'Review '+item.title}
+          accessibilityLabel={'Review '+displayTitle}
           onPress={()=>canEdit?beginEdit(item):openBook(item)}
           style={({pressed})=>[styles.reviewAssetCopy,pressed&&{opacity:.72}]}>
-          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title||'Unidentified item'}</Text>
-          <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
-            {item.reviewReason || [item.format,item.space,item.author,item.series].filter(Boolean).join(' · ')}
-          </Text>
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{displayTitle}</Text>
+          <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{reviewReason}</Text>
           <Text numberOfLines={1} style={[styles.metadataConfidence,{color:p.sage}]}>
-            {[item.format,item.author||'Unknown author',item.space].filter(Boolean).join(' · ')}
+            {[item.format,displayAuthor,work?.files&&work.files>1?work.files+' files':'',item.space].filter(Boolean).join(' · ')}
           </Text>
         </Pressable>
         <Button label={canEdit?'Review':'Open'} onPress={()=>canEdit?beginEdit(item):openBook(item)} />

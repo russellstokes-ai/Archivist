@@ -17,6 +17,9 @@ assert.ok(source.includes("Nothing is scanned until you choose Scan folders."), 
 assert.ok(source.includes("Add another folder") && source.includes("Connect server"), 'Onboarding must allow multiple folders and optional server connection before scanning');
 assert.ok(source.includes("Your server already uses its own indexed catalogue and metadata"), 'Onboarding must explain that server metadata stays on the server catalogue');
 assert.ok(source.includes("function RawAssetCard") && source.includes("label={canEdit?'Review':'Open'}"), 'Metadata review must use a clear compact Review action');
+assert.ok(source.includes("const work=item.source==='server'?undefined:localWorkForBook(item)"), 'Metadata review must resolve grouped local-work identity instead of showing a raw chapter asset');
+assert.ok(source.includes("setEditTitle(work?.title || item.title)"), 'Metadata editing must start from the grouped work title when one is available');
+assert.ok(source.includes("const displayTitle=work?.title||item.title||'Unidentified item'") && source.includes("work.files+' files'"), 'Review rows must show grouped work title and multi-file count');
 assert.ok(source.includes("setError('');setReviewOnly(true)"), 'Opening metadata review must clear stale transient errors before rendering the review queue');
 
 assert.ok(source.includes("Vibration.vibrate(12)"), 'Local cover long-press must provide haptic feedback');
