@@ -38,5 +38,5 @@ assert.ok((library.match(/result\.autoApply&&options\.applyHighConfidence!==fals
 
 console.log('PASS: holistic metadata settings control books/comics, secure credentials, caches and explicit refresh');
 
-assert.ok(source.includes("import {cacheOnlineCoverUris} from './onlineCoverCache'"),'provider covers must have a durable app-private cache');
+assert.ok(source.includes('cacheOnlineCoverUris')&&source.includes('persistOnlineCover'),'provider covers and accepted manual matches must have a durable app-private cache');
 assert.ok((source.match(/cacheOnlineCoverUris\(enriched\.books/g)||[]).length>=2,'book and comic enrichment must both persist provider covers for offline use');
