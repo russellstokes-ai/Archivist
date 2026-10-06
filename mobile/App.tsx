@@ -2842,7 +2842,7 @@ function Client() {
     if(match.genres?.[0])setEditGenre(match.genres[0]);
     if(match.publishedYear)setEditPublishedYear(String(match.publishedYear));
     if(match.publisher)setEditPublisher(match.publisher);
-    const matchedIsbn=(match.isbns||match.identifiers||[]).find(value=>{
+    const matchedIsbn=[...(match.isbns||[]),...(match.identifiers||[])].find(value=>{
       const normalized=String(value).toUpperCase().replace(/[^0-9X]/g,'');
       return normalized.length===10||normalized.length===13;
     });
@@ -3378,7 +3378,7 @@ function Client() {
             <Button label="Save details" disabled={busy||metadataMatchLoading||!editTitle.trim()} onPress={()=>void save()}/>
             <Button label="Cancel" tone="quiet" disabled={busy||metadataMatchLoading} onPress={()=>setEditing(null)}/>
           </View>
-        </View></ScrollView>
+        </ScrollView></View>
       </KeyboardAvoidingView>
     </Modal>;
   }
