@@ -2924,15 +2924,24 @@ function Client() {
   }
 
   function RawAssetCard({item}: {item: Book}) {
+    const canEdit=item.source!=='server'||owner;
     return (
-      <View style={styles.book}>
-        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)}>
-          <Cover book={item} />
-          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
-          {item.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
-          <Text style={[styles.meta,{color:p.muted}]}>{item.format} · {item.space}{item.author ? ' · '+item.author : ''}{item.series ? ' · '+item.series : ''}{item.genre ? ' · '+item.genre : ''}</Text>
+      <View style={[styles.reviewAssetCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+        <MiniArtwork book={item}/>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={'Review '+item.title}
+          onPress={()=>canEdit?beginEdit(item):openBook(item)}
+          style={({pressed})=>[styles.reviewAssetCopy,pressed&&{opacity:.72}]}>
+          <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title||'Unidentified item'}</Text>
+          <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
+            {item.reviewReason || [item.format,item.space,item.author,item.series].filter(Boolean).join(' · ')}
+          </Text>
+          <Text numberOfLines={1} style={[styles.metadataConfidence,{color:p.sage}]}>
+            {[item.format,item.author||'Unknown author',item.space].filter(Boolean).join(' · ')}
+          </Text>
         </Pressable>
-        {(item.source!=='server' || owner) ? <Button label="Edit details" tone="quiet" onPress={()=>beginEdit(item)} /> : null}
+        <Button label={canEdit?'Review':'Open'} onPress={()=>canEdit?beginEdit(item):openBook(item)} />
       </View>
     );
   }
@@ -3684,7 +3693,7 @@ function Client() {
 
       <OnboardingGuide/>
 
-      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{setError('');setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.reviewBannerCopy}>
           <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerTitle,{color:p.ink}]}>Metadata review</Text>
           <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} item{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
@@ -5622,6 +5631,8 @@ const styles = StyleSheet.create({
   selectionToolbar: {borderWidth:1,borderRadius:14,padding:10,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},
   selectionCount: {fontSize:13,fontWeight:'900'},
   reviewQueue: {gap:10,paddingBottom:10},
+  reviewAssetCard: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,paddingVertical:12,paddingHorizontal:2,flexDirection:'row',alignItems:'center',gap:12},
+  reviewAssetCopy: {flex:1,minWidth:0,gap:2},
   filterLabel: {fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:6},
   filterWrap: {flexDirection:'row',flexWrap:'wrap',gap:7},
   filterChip: {borderWidth:0,borderRadius:9,minHeight:38,paddingHorizontal:11,alignItems:'center',justifyContent:'center'},
