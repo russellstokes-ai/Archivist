@@ -196,6 +196,25 @@ export async function replaceLocalStageBooks(books:LocalBook[]){
   }
 }
 
+export async function removeLocalStageBooks(uris:string[]){
+  const unique=[...new Set(uris.filter(Boolean))];
+  if(!unique.length)return;
+  const db=await database();
+  await db.withExclusiveTransactionAsync(async txn=>{
+    const active=await txn.prepareAsync('DELETE FROM local_assets WHERE uri = ?');
+    const staged=await txn.prepareAsync('DELETE FROM local_scan_assets WHERE uri = ?');
+    try{
+      for(const uri of unique){
+        await active.executeAsync([uri]);
+        await staged.executeAsync([uri]);
+      }
+    }finally{
+      await active.finalizeAsync();
+      await staged.finalizeAsync();
+    }
+  });
+}
+
 export async function upsertLocalStageBooks(books:LocalBook[]){
   if(!books.length)return;
   const db=await database();
