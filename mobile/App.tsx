@@ -239,15 +239,15 @@ function validateServer(raw: string) {
 function palette(mode: ThemeMode, system: string | null | undefined): Palette {
   const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
   return {
-    ink: dark ? '#F5F5F5' : '#111111',
-    paper: dark ? '#000000' : '#FFFFFF',
-    muted: dark ? '#A0A0A0' : '#6B6B6B',
-    line: dark ? '#252525' : '#E8E8E8',
-    card: dark ? '#111111' : '#F7F7F7',
-    raised: dark ? '#181818' : '#FFFFFF',
+    ink: dark ? '#F3F0E8' : '#111111',
+    paper: dark ? '#07111D' : '#FFFFFF',
+    muted: dark ? '#A9B4C5' : '#6B6B6B',
+    line: dark ? '#26364A' : '#E8E8E8',
+    card: dark ? '#0B1725' : '#F7F7F7',
+    raised: dark ? '#0E1C2C' : '#FFFFFF',
     sage: '#47736F',
-    gold: '#B99A68',
-    ivory: '#FFFFFF',
+    gold: dark ? '#E3BC67' : '#B99A68',
+    ivory: dark ? '#F3F0E8' : '#FFFFFF',
     danger: dark ? '#DE8585' : '#A94F4F',
     dangerSoft: dark ? '#351F20' : '#F4E1DF',
   };
@@ -4736,12 +4736,13 @@ function Client() {
   const tabs: Array<{id: Tab; label: string; icon: UiIconName}> = [
     {id:'shelf',label:'Shelf',icon:'shelf'},
     {id:'library',label:'Library',icon:'library'},
+    {id:'player',label:'Now',icon:'bookOpen'},
     {id:'atlas',label:'Atlas',icon:'atlas'},
     {id:'insights',label:'Stats',icon:'insights'},
   ];
 
   return (
-    <SafeAreaView style={[styles.screen, {backgroundColor:(activeTab==='insights'||activeTab==='profile')?(p.paper==='#000000'?'#07111D':'#F7F7F5'):p.paper}]}><AmbientGlow size={Math.max(480,width)} strength={p.paper==='#000000'?.6:.22}/>
+    <SafeAreaView style={[styles.screen, {backgroundColor:activeTab==='profile'?(theme==='dark'||(theme==='system'&&systemScheme==='dark')?'#07111D':'#F7F7F5'):p.paper}]}><AmbientGlow size={Math.max(480,width)} strength={(theme==='dark'||(theme==='system'&&systemScheme==='dark'))?.6:.22}/>
       {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={styles.appHeader}>
         <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Pressable accessibilityRole="button" accessibilityLabel="Open Reader Stats" onPress={()=>setActiveTab('insights')} style={{width:44,height:44,borderRadius:22,backgroundColor:p.card,borderWidth:1,borderColor:p.line,alignItems:'center',justifyContent:'center'}}><Text style={{color:p.ink,fontSize:17}}>{(profileStats?.name||'A').trim().charAt(0).toUpperCase()}</Text></Pressable><Text style={[styles.logoSmall,{color:p.ink}]}>Archivist</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel={activeTab==='settings'?'Close Settings':'Settings'} onPress={()=>setActiveTab(activeTab==='settings'?'shelf':'settings')} style={styles.settingsButton}>
@@ -4781,7 +4782,7 @@ function Client() {
           </Pressable>
         </View>
       ):null}
-      {activeTab!=='reader'&&activeTab!=='player'&&activeTab!=='insights'&&activeTab!=='profile'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
+      {activeTab!=='reader'&&activeTab!=='profile'&&activeTab!=='settings'?<View style={[styles.tabBar,{backgroundColor:p.paper,borderTopColor:p.line}]}>
         {tabs.map(tab=>{
           const selected=activeTab===tab.id;
           return <Pressable key={tab.id} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{selected}} onPress={()=>setActiveTab(tab.id)} style={styles.tab}>
@@ -4798,7 +4799,7 @@ function Client() {
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ArchivistEditorial: require('./assets/fonts/LibreCaslonText.ttf')});
   const system = useColorScheme();
-  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:system==='dark'?'#000000':'#FFFFFF'}}><ActivityIndicator color="#47736F" /></View>;
+  if (!fontsLoaded && !fontError) return <View accessibilityLabel="Opening Archivist" style={{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:system==='dark'?'#07111D':'#FFFFFF'}}><ActivityIndicator color="#47736F" /></View>;
   return <SafeAreaProvider><Client /></SafeAreaProvider>;
 }
 
