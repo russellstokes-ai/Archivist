@@ -1157,6 +1157,7 @@ function Client() {
   const [metronTokenDraft,setMetronTokenDraft]=useState('');
   const [metadataCredentialEditor,setMetadataCredentialEditor]=useState<'google'|'metron'|''>('');
   const [metadataSettingsNotice,setMetadataSettingsNotice]=useState('');
+  const [deepScanBusyUri,setDeepScanBusyUri]=useState('');
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,string>>(shelfFormatChoiceKey).then(value=>{if(live&&value&&typeof value==='object')setShelfFormatChoice(value)}).catch(()=>undefined);return()=>{live=false;};},[]);
   const loadCancel = useRef<(() => void) | null>(null);
   const controller = useMemo(() => new Playback(
@@ -2882,6 +2883,127 @@ function Client() {
       synchronized,
     ).map(book=>({...book,source:'local' as const})));
     return synchronized;
+  }
+
+  async function deepScanLocalFile(uri:string,label='Selected file'){
+    if(!uri||deepScanBusyUri)return;
+    const current=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    const target=current.find(book=>book.uri===uri);
+    if(!target){setLocalFolderNotice('Deep scan could not find that local file.');return;}
+
+    setDeepScanBusyUri(uri);
+    setError('');
+    setLocalFolderNotice('Deep scanning “'+label+'”…');
+    try{
+      // Deliberately one file at a time. Android archive/audio readers underneath
+      // this call are byte/deadline bounded; the JS operation also fails forward.
+      const embedded=await enrichLocalEmbeddedMetadata([target],{
+        refreshMetadata:true,
+        batchSize:1,
+        itemTimeoutMs:7000,
+        maxConsecutiveTimeouts:1,
+        concurrency:1,
+        shouldInspect:()=>true,
+        shouldContinue:()=>true,
+      });
+      if(embedded.timedOut){
+        setLocalFolderNotice('Deep scan stopped safely because “'+label+'” did not respond in time. Existing metadata was kept.');
+        return;
+      }
+
+      // Merge the deep result into the complete staged catalogue first so a
+      // recovered audiobook album/work identity can regroup related tracks.
+      let merged=applyOnlineMetadataEnrichment(current,embedded.books);
+      merged=(await synchronizeLocalMetadataCooperative(merged)).books as LocalBook[];
+
+      const refreshedTarget=merged.find(book=>book.uri===uri);
+      if(!refreshedTarget)throw new Error('The scanned file disappeared from the local catalogue.');
+      let workBooks:LocalBook[]=[refreshedTarget];
+      if(refreshedTarget.format==='Audio'){
+        const groupKeys=audioWorkGroupKeys(merged);
+        const groupKey=groupKeys.get(uri);
+        if(groupKey)workBooks=merged.filter(book=>book.format==='Audio'&&groupKeys.get(book.uri)===groupKey);
+      }
+
+      const settings=metadataSettingsRef.current;
+      let prepared=workBooks;
+      let onlineMatched=0;
+
+      if(settings.onlineEnabled&&settings.books.enabled&&prepared.some(book=>book.format==='EPUB'||book.format==='PDF'||book.format==='Audio')){
+        const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
+        const googleBooksApiKey=settings.books.googleBooks
+          ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
+          : undefined;
+        if(settings.books.openLibrary||googleBooksApiKey){
+          const online=await enrichLocalBookMetadataOnline(prepared,{
+            cache,
+            googleBooksApiKey,
+            openLibraryEnabled:settings.books.openLibrary,
+            applyHighConfidence:settings.applyHighConfidence,
+            ignoreCache:true,
+            batchSize:1,
+            concurrency:1,
+          });
+          prepared=online.books;
+          onlineMatched+=online.matched;
+          await setPersistedJSON(onlineBookMetadataCacheKey,online.cache).catch(()=>undefined);
+          const cached=await cacheOnlineCoverUris(prepared,{
+            documentDirectory,
+            makeDirectoryAsync,
+            downloadAsync:downloadCoverWithDeadline,
+            getInfoAsync,
+            deleteAsync,
+          },{concurrency:1}).catch(()=>null);
+          if(cached)prepared=cached.books;
+        }
+      }
+
+      if(settings.onlineEnabled&&settings.comics.enabled&&settings.comics.metron&&prepared.some(book=>book.format==='Comic')){
+        const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim();
+        if(token){
+          const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
+          const online=await enrichLocalComicMetadataOnline(prepared,{
+            token,
+            cache,
+            applyHighConfidence:settings.applyHighConfidence,
+            ignoreCache:true,
+            batchSize:1,
+          });
+          prepared=online.books;
+          onlineMatched+=online.matched;
+          await setPersistedJSON(onlineComicMetadataCacheKey,online.cache).catch(()=>undefined);
+          const cached=await cacheOnlineCoverUris(prepared,{
+            documentDirectory,
+            makeDirectoryAsync,
+            downloadAsync:downloadCoverWithDeadline,
+            getInfoAsync,
+            deleteAsync,
+          },{concurrency:1}).catch(()=>null);
+          if(cached)prepared=cached.books;
+        }
+      }
+
+      merged=applyOnlineMetadataEnrichment(merged,prepared);
+      merged=(await synchronizeLocalMetadataCooperative(merged)).books as LocalBook[];
+      merged=applyLocalPublicationState(merged,true);
+      await replaceLocalStageBooks(merged);
+      completedLibraryBooksRef.current=merged;
+      setLocalBooks(merged.map(book=>({...book,source:'local' as const})));
+
+      const finished=merged.find(book=>book.uri===uri);
+      const embeddedFields=embedded.books[0]?.embeddedMetadata?Object.keys(embedded.books[0].embeddedMetadata||{}).length:0;
+      const published=finished?.publishReady===true;
+      setLocalFolderNotice(
+        'Deep scan complete for “'+label+'”'+
+        (embeddedFields?' · embedded details recovered':' · no additional embedded details found')+
+        (onlineMatched?' · online match refreshed':'')+
+        (published?' · ready in Library':' · remains in Needs Attention')
+      );
+    }catch(error){
+      setLocalFolderNotice('Deep scan stopped safely for “'+label+'”: '+String((error as any)?.message||error));
+    }finally{
+      setDeepScanBusyUri('');
+    }
   }
 
   async function enrichPublishedLocalBookMetadata(baseBooks:LocalBook[],generation:number,forceRefresh=false):Promise<LocalBook[]|null>{
