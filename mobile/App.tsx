@@ -816,6 +816,7 @@ function Client() {
   const enrichmentProgressClock=useRef(0);
   const scanCommitGate=useRef(new ScanCommitGate()).current;
   const autoLocalScanAttempted=useRef(false);
+  const autoMetadataResumeAttempted=useRef(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
@@ -2176,6 +2177,14 @@ function Client() {
   },[localCatalogReady,localFolders,localFoldersReady,localOverridesReady,localScanning,metadataSettingsReady,restoring]);
 
   useEffect(()=>{
+    if(restoring||!localFoldersReady||!localCatalogReady||!metadataSettingsReady||!localFolders.length||localScanning||autoMetadataResumeAttempted.current)return;
+    const resumable=localBooks.some(book=>book.publishReady!==true&&book.publicationState!=='attention');
+    if(!resumable)return;
+    autoMetadataResumeAttempted.current=true;
+    void resumeStagedLocalPreparation();
+  },[localBooks,localCatalogReady,localFolders.length,localFoldersReady,localScanning,metadataSettingsReady,restoring]);
+
+  useEffect(()=>{
     if(activeTab!=='settings')return;
     void refreshOfflineStorage();
   },[activeTab,offlineWorks]);
@@ -3077,6 +3086,29 @@ function Client() {
       setPersistedJSON(librarySetupPreparedKey,{signature:'',completedAt:''}),
     ]).catch(()=>undefined);
     setLocalFolderNotice(picked.name+' added. Add another folder, or continue to Prepare library.');
+  }
+
+  async function resumeStagedLocalPreparation(){
+    if(libraryRefreshRunningRef.current||!localFolders.length)return false;
+    const staged=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    if(!staged.some(book=>book.publishReady!==true&&book.publicationState!=='attention'))return true;
+    const generation=beginLocalScan();
+    if(generation===null)return false;
+    try{
+      setScanProgress({phase:'preparing',currentFolder:'Resuming library preparation',entriesVisited:0,found:staged.length,review:staged.filter(book=>book.needsReview).length,processed:0,total:staged.length});
+      await enrichPublishedLocalLibrary(staged,generation,false);
+      if(!scanCommitGate.isCurrent(generation))return false;
+      const signature=localFolderSetSignature(localFolders);
+      setLibraryPreparedSignature(signature);
+      await setPersistedJSON(librarySetupPreparedKey,{signature,completedAt:new Date().toISOString()}).catch(()=>undefined);
+      setLocalFolderNotice('Library preparation resumed from the last completed metadata stage.');
+      return true;
+    }catch(error){
+      if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Library preparation will resume again after restart: '+String((error as any)?.message||error));
+      return false;
+    }finally{
+      endLocalScan(generation);
+    }
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
