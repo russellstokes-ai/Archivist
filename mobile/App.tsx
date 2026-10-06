@@ -175,6 +175,17 @@ type Book = {
   source?: WorkSource;
   originServer?: string;
 };
+type MetadataCandidatePreview={
+  key:string;
+  provider:string;
+  providerLabel:string;
+  fields:{
+    title?:string;author?:string;series?:string;seriesNumber?:number;genre?:string;publishedYear?:number;
+    narrator?:string;publisher?:string;isbn?:string;language?:string;description?:string;
+  };
+  coverUri?:string;
+  score:number;
+};
 type RatingPrompt = {title:string;localWorkKey?:string;serverWorkId?:number};
 type MoveBatchResult = {ok: number; failed: number; items: Array<{asset?: number; status?: 'ready'|'review'|'conflict'|'same'; from?: string; to?: string; title?: string; author?: string; series?: string; seriesNumber?: number; format?: string; error?: string; move?: {id: string; asset: number; from: string; to: string; state: string}}>};
 type ServerWork = {
@@ -1099,6 +1110,11 @@ function Client() {
   const [editLanguage,setEditLanguage]=useState('');
   const [editDescription,setEditDescription]=useState('');
   const [editAdvancedOpen,setEditAdvancedOpen]=useState(false);
+  const [metadataCandidates,setMetadataCandidates]=useState<MetadataCandidatePreview[]>([]);
+  const [metadataLookupBusy,setMetadataLookupBusy]=useState(false);
+  const [metadataLookupMode,setMetadataLookupMode]=useState<'search'|'deep'|''>('');
+  const [metadataLookupNote,setMetadataLookupNote]=useState('');
+  const [selectedMetadataCandidate,setSelectedMetadataCandidate]=useState('');
   const [editCoverUri,setEditCoverUri]=useState('');
   const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null;fileSize?:number}|null>(null);
   const [coverPicking,setCoverPicking]=useState(false);
@@ -4276,11 +4292,148 @@ function Client() {
     setEditLanguage(item.language || '');
     setEditDescription(item.description || '');
     setEditAdvancedOpen(false);
+    setMetadataCandidates([]);
+    setMetadataLookupMode('');
+    setMetadataLookupNote('');
+    setSelectedMetadataCandidate('');
     setEditCoverUri(item.coverUri || '');
     setEditPickedCover(null);
     setCoverPicking(false);
   }
 
+  function localWorkForEditing(item:Book|null){
+    if(!item?.uri)return undefined;
+    return phoneWorks.find(work=>work.tracks.some(track=>track.uri===item.uri));
+  }
+
+  function metadataCandidateKey(candidate:{provider?:string;providerId?:string}){
+    return String(candidate.provider||'provider')+':'+String(candidate.providerId||'match');
+  }
+
+  function useMetadataCandidate(candidate:MetadataCandidatePreview){
+    const fields=candidate.fields;
+    if(fields.title)setEditTitle(fields.title);
+    if(fields.author)setEditAuthor(fields.author);
+    if(fields.series)setEditSeries(fields.series);
+    if(fields.seriesNumber!==undefined)setEditSeriesNumber(String(fields.seriesNumber));
+    if(fields.genre)setEditGenre(fields.genre);
+    if(fields.publishedYear)setEditYear(String(fields.publishedYear));
+    if(fields.narrator)setEditNarrator(fields.narrator);
+    if(fields.publisher)setEditPublisher(fields.publisher);
+    if(fields.isbn)setEditISBN(fields.isbn);
+    if(fields.language)setEditLanguage(fields.language);
+    if(fields.description)setEditDescription(fields.description);
+    if(candidate.coverUri)setEditCoverUri(candidate.coverUri);
+    setSelectedMetadataCandidate(candidate.key);
+  }
+
+  async function searchEditingMetadata(deep=false){
+    if(!editing?.uri||editing.source==='server'||metadataLookupBusy)return;
+    const work=localWorkForEditing(editing);
+    const currentLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+    const workTracks=(work?.tracks||currentLocal.filter(book=>book.uri===editing.uri)).filter(track=>!!track.uri);
+    if(!workTracks.length)return;
+    setMetadataLookupBusy(true);
+    setMetadataLookupMode(deep?'deep':'search');
+    setMetadataLookupNote(deep?'Deep scanning this work and its likely companion files…':'Searching metadata providers…');
+    setMetadataCandidates([]);
+    setSelectedMetadataCandidate('');
+    try{
+      let evidenceTracks=workTracks;
+      if(deep){
+        const parentKey=(uri:string)=>{
+          try{return decodeURIComponent(uri).split(/[\\/]/).slice(0,-1).join('/').toLowerCase();}
+          catch{return uri.split(/[\\/]/).slice(0,-1).join('/').toLowerCase();}
+        };
+        if(editing.format==='Audio'){
+          const known=new Set(workTracks.map(track=>track.uri));
+          const siblings=currentLocal.filter(track=>track.format==='Audio'&&parentKey(track.uri)===parentKey(editing.uri!));
+          evidenceTracks=[...workTracks,...siblings.filter(track=>!known.has(track.uri))].slice(0,256);
+        }
+        const embedded=await enrichLocalEmbeddedMetadata(evidenceTracks,{
+          refreshMetadata:true,batchSize:4,itemTimeoutMs:3500,maxConsecutiveTimeouts:4,concurrency:3,
+        });
+        evidenceTracks=(await synchronizeLocalMetadataCooperative(embedded.books,{batchSize:24})).books;
+        const covers=await enrichLocalBookCovers(evidenceTracks,{batchSize:4,itemTimeoutMs:3500,maxConsecutiveTimeouts:3});
+        evidenceTracks=covers.books;
+      }
+
+      const regrouped=groupLocalWorks(evidenceTracks);
+      const evidenceWork=regrouped.find(candidate=>candidate.tracks.some(track=>track.uri===editing.uri))||regrouped[0];
+      const representative=evidenceWork?.tracks.find(track=>track.uri===editing.uri)||evidenceWork?.tracks[0]||evidenceTracks[0];
+      if(evidenceWork){
+        if(evidenceWork.title)setEditTitle(evidenceWork.title);
+        if(evidenceWork.author)setEditAuthor(evidenceWork.author);
+        if(evidenceWork.series)setEditSeries(evidenceWork.series);
+        if(evidenceWork.seriesNumber!==undefined)setEditSeriesNumber(String(evidenceWork.seriesNumber));
+        if(evidenceWork.genre)setEditGenre(evidenceWork.genre);
+        if(evidenceWork.publishedYear)setEditYear(String(evidenceWork.publishedYear));
+        if(evidenceWork.coverUri&&!editCoverUri)setEditCoverUri(evidenceWork.coverUri);
+      }
+      if(representative){
+        if(representative.narrator)setEditNarrator(representative.narrator);
+        if(representative.publisher)setEditPublisher(representative.publisher);
+        if(representative.isbn)setEditISBN(representative.isbn);
+        if(representative.asin)setEditASIN(representative.asin);
+        if(representative.language)setEditLanguage(representative.language);
+        if(representative.description)setEditDescription(representative.description);
+      }
+
+      const previews:MetadataCandidatePreview[]=[];
+      if(editing.format==='Comic'&&metadataSettings.onlineEnabled&&metadataSettings.comics.enabled&&metadataSettings.comics.metron){
+        const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim();
+        if(token){
+          const cache=(await getPersistedJSON<OnlineComicCache>(onlineComicMetadataCacheKey).catch(()=>null))||{};
+          const online=await enrichLocalComicMetadataOnline(evidenceTracks,{token,cache,applyHighConfidence:false,ignoreCache:deep,batchSize:3});
+          await setPersistedJSON(onlineComicMetadataCacheKey,online.cache).catch(()=>undefined);
+          for(const book of online.books){
+            const candidates=[book.onlineComicMetadataMatch,...(book.onlineComicMetadataAlternatives||[])].filter(Boolean);
+            for(const candidate of candidates){
+              if(!candidate)continue;
+              const key=metadataCandidateKey(candidate);
+              if(previews.some(item=>item.key===key))continue;
+              previews.push({key,provider:'metron',providerLabel:'Metron',fields:candidate.fields,coverUri:candidate.coverUri,score:candidate.score});
+            }
+          }
+        }
+      }else if(metadataSettings.onlineEnabled&&metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
+        const googleBooksApiKey=metadataSettings.books.googleBooks
+          ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
+          : undefined;
+        const cache=(await getPersistedJSON<OnlineBookCache>(onlineBookMetadataCacheKey).catch(()=>null))||{};
+        const online=await enrichLocalBookMetadataOnline(evidenceTracks,{
+          cache,googleBooksApiKey,openLibraryEnabled:metadataSettings.books.openLibrary,
+          applyHighConfidence:false,ignoreCache:deep,batchSize:4,concurrency:2,
+        });
+        await setPersistedJSON(onlineBookMetadataCacheKey,online.cache).catch(()=>undefined);
+        for(const book of online.books){
+          const candidates=[book.onlineMetadataMatch,...(book.onlineMetadataAlternatives||[])].filter(Boolean);
+          for(const candidate of candidates){
+            if(!candidate)continue;
+            const key=metadataCandidateKey(candidate);
+            if(previews.some(item=>item.key===key))continue;
+            previews.push({
+              key,provider:candidate.provider,providerLabel:candidate.provider==='googlebooks'?'Google Books':'Open Library',
+              fields:candidate.fields,coverUri:candidate.coverUri,score:candidate.score,
+            });
+          }
+        }
+      }
+      previews.sort((a,b)=>b.score-a.score);
+      setMetadataCandidates(previews.slice(0,12));
+      const evidenceCount=evidenceWork?.tracks.length||evidenceTracks.length;
+      setMetadataLookupNote(previews.length
+        ? (deep?'Deep Scan grouped '+evidenceCount+' file'+(evidenceCount===1?'':'s')+' and found '+previews.length+' possible match'+(previews.length===1?'':'es')+'. Choose one, then save.':'Found '+previews.length+' possible match'+(previews.length===1?'':'es')+'. Choose one, then save.')
+        : (deep?'Deep Scan re-read '+evidenceCount+' file'+(evidenceCount===1?'':'s')+' but found no confident online alternative. Embedded details above are ready for review.':'No useful online alternative was found. Try Deep Scan or edit the details manually.')
+      );
+    }catch(error){
+      setMetadataLookupNote((error as Error)?.message||'Metadata lookup failed.');
+      setMetadataCandidates([]);
+    }finally{
+      setMetadataLookupBusy(false);
+      setMetadataLookupMode('');
+    }
+  }
   function RawAssetCard({item}: {item: Book}) {
     const detail=[item.format,item.space,item.author,item.series,item.genre].filter(Boolean).join(' · ');
     return (
@@ -4816,7 +4969,7 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    const closeEditor=()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null)};
+    const closeEditor=()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null);setMetadataCandidates([]);setMetadataLookupNote('');setSelectedMetadataCandidate('')};
     const editorDirty=
       editTitle!==editing.title||
       editAuthor!==(editing.author||'')||
@@ -4834,7 +4987,7 @@ function Client() {
       editCoverUri!==(editing.coverUri||'');
     const localCoverCandidates=rankLocalCoverCandidates(editing.coverUri,editing.coverCandidates);
     const requestEditorClose=()=>{
-      if(busy||coverPicking)return;
+      if(busy||coverPicking||metadataLookupBusy)return;
       if(editorDirty){
         Alert.alert('Discard changes?','Your metadata or cover changes have not been saved.',[
           {text:'Keep editing',style:'cancel'},
@@ -4869,6 +5022,29 @@ function Client() {
               <TextInput accessibilityLabel="Language" autoCapitalize="none" value={editLanguage} onChangeText={setEditLanguage} placeholder="Language" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
               <TextInput accessibilityLabel="Description" multiline value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised,minHeight:96,textAlignVertical:'top'}]}/>
             </View>:null}
+            {localEdit?<View style={styles.settingsSubgroup}>
+              <Text style={[styles.meta,{color:p.muted}]}>Find a different edition, or Deep Scan just this work. Deep Scan re-reads embedded metadata and likely companion audio files before checking configured providers. Nothing is applied until you choose a result and save.</Text>
+              <View style={styles.toolRow}>
+                <Button label={metadataLookupBusy&&metadataLookupMode==='search'?'Searching…':'Find Better Match'} tone="quiet" disabled={busy||metadataLookupBusy} onPress={()=>void searchEditingMetadata(false)}/>
+                <Button label={metadataLookupBusy&&metadataLookupMode==='deep'?'Deep scanning…':'Deep Scan'} tone="quiet" disabled={busy||metadataLookupBusy} onPress={()=>void searchEditingMetadata(true)}/>
+              </View>
+              {metadataLookupNote?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{metadataLookupNote}</Text>:null}
+              {metadataCandidates.map(candidate=>{
+                const chosen=selectedMetadataCandidate===candidate.key;
+                const details=[candidate.fields.author,candidate.fields.publisher,candidate.fields.publishedYear?String(candidate.fields.publishedYear):''].filter(Boolean).join(' · ');
+                return <Pressable key={candidate.key} accessibilityRole="button" accessibilityState={{selected:chosen}} accessibilityLabel={'Use metadata match '+(candidate.fields.title||editing.title)} onPress={()=>useMetadataCandidate(candidate)} style={({pressed})=>[styles.sourceRow,{borderTopColor:p.line,opacity:pressed?.72:1}]}>
+                  <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+                    {candidate.coverUri?<View style={{width:46}}><Artwork session={session} p={p} title={candidate.fields.title||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={candidate.coverUri}/></View>:null}
+                    <View style={{flex:1,minWidth:0,gap:2}}>
+                      <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{candidate.fields.title||editing.title}</Text>
+                      {details?<Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{details}</Text>:null}
+                      <Text style={[styles.meta,{color:chosen?p.sage:p.muted}]}>{Math.round(candidate.score*100)}% match · {candidate.providerLabel}</Text>
+                    </View>
+                    <Text style={{color:p.sage,fontWeight:'700'}}>{chosen?'Selected':'Use'}</Text>
+                  </View>
+                </Pressable>;
+              })}
+            </View>:null}
             {localEdit?<View style={{gap:10}}>
               <View style={styles.metadataCoverEditor}>
                 <View style={styles.metadataCoverPreview}><Artwork session={session} p={p} title={editTitle||editing.title} format={editing.format} coverShape={editing.coverShape} coverUri={editCoverUri||editing.coverUri}/></View>
@@ -4897,9 +5073,9 @@ function Client() {
               </View>:null}
             </View>:null}
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
-            <Button label="Save details" disabled={busy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
+            <Button label="Save details" disabled={busy||coverPicking||metadataLookupBusy||!editTitle.trim()} onPress={()=>void save()}/>
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
-            <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={requestEditorClose}/>
+            <Button label="Cancel" tone="quiet" disabled={busy||coverPicking||metadataLookupBusy} onPress={requestEditorClose}/>
           </Pressable>
         </ScrollView></Pressable>
       </KeyboardAvoidingView>
