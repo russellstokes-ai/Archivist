@@ -3,11 +3,13 @@ import {isGenericMediaTitle, LocalMetadataFields, publicationYear} from './libra
 
 const maxID3v2Bytes=256*1024;
 const maxMP4MetadataBytes=4*1024*1024;
+const maxFastMP4MetadataBytes=512*1024;
 
 export async function extractAudioMetadata(
   uri:string,
   extension:string,
   info?:{size?:number},
+  options:{fast?:boolean}={},
 ):Promise<LocalMetadataFields>{
   const ext=extension.toLowerCase();
   try{
@@ -23,11 +25,14 @@ export async function extractAudioMetadata(
       return fields;
     }
     if(ext==='m4a'||ext==='m4b'){
-      const readLength=size===undefined?maxMP4MetadataBytes:Math.min(size,maxMP4MetadataBytes);
+      const limit=options.fast?maxFastMP4MetadataBytes:maxMP4MetadataBytes;
+      const readLength=size===undefined?limit:Math.min(size,limit);
       const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length:readLength});
       let fields=parseMP4MetadataBase64(head);
       if(size!==undefined&&size>readLength){
-        const tailLength=Math.min(size,maxMP4MetadataBytes);
+        // Normal preparation reads only a small head/tail window. Full 4 MB
+        // windows remain available to explicit Deep Search.
+        const tailLength=Math.min(size,limit);
         const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-tailLength),length:tailLength});
         fields=mergeFields(fields,parseMP4MetadataBase64(tail));
       }
