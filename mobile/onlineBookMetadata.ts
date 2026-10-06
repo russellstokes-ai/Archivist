@@ -20,6 +20,7 @@ export type BookLookupInput=OnlineBookFields&{
   metadataProvenance?:Partial<Record<string,string>>;
   metadataFieldConfidence?:Partial<Record<string,OnlineBookConfidence>>;
   coverUri?:string;
+  needsReview?:boolean;
 };
 
 export type OnlineBookCandidate={
@@ -165,18 +166,26 @@ function queryPlans(input:BookLookupInput,deep=false){
   const hints=buildBookLookupHints(input);
   const plans:QueryPlan[]=[];
   if(hints.isbn)plans.push({kind:'isbn',isbn:hints.isbn});
-  for(const title of hints.titles.slice(0,deep?6:3)){
-    for(const author of hints.authors.slice(0,deep?4:2))plans.push({kind:'title-author',title,author});
-    plans.push({kind:'title',title});
-  }
-  if(deep){
+  if(!deep){
+    // Initial library preparation is identity/cover focused. One precise
+    // title+author query is normally enough; a title-only fallback is the most
+    // we allow before the work moves to Needs Attention.
+    const title=hints.titles[0];
+    const author=hints.authors[0];
+    if(title&&author)plans.push({kind:'title-author',title,author});
+    if(title)plans.push({kind:'title',title});
+  }else{
+    for(const title of hints.titles.slice(0,6)){
+      for(const author of hints.authors.slice(0,4))plans.push({kind:'title-author',title,author});
+      plans.push({kind:'title',title});
+    }
     for(const series of hints.series.slice(0,3)){
       for(const author of hints.authors.slice(0,3))plans.push({kind:'title-author',title:series,author});
       plans.push({kind:'title',title:series});
     }
   }
   const seen=new Set<string>();
-  return plans.filter(plan=>{const key=JSON.stringify(plan);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,deep?16:6);
+  return plans.filter(plan=>{const key=JSON.stringify(plan);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,deep?16:3);
 }
 
 function selectGenre(values:unknown){
@@ -348,10 +357,11 @@ export function onlineBookCacheKey(input:BookLookupInput){
 export function shouldLookupBookOnline(input:BookLookupInput){
   const format=String(input.format||'').toLowerCase();
   if(format&&format!=='epub'&&format!=='pdf'&&format!=='audio')return false;
-  const provenance=input.metadataProvenance||{};
-  if(provenance.title==='manual'&&provenance.author==='manual'&&input.coverUri&&input.description&&input.genre)return false;
   if(!useful(input.title)&&!normalizeIsbn(input.isbn)&&!input.uri)return false;
-  return !input.coverUri||!useful(input.author)||!input.genre||!input.description||!input.publisher||!input.publishedYear||!!normalizeIsbn(input.isbn);
+  // Initial preparation only needs enough online work to identify the title
+  // and obtain publishable artwork. Optional descriptive fields must never
+  // turn a fast scan into a catalogue-wide enrichment job.
+  return !!input.needsReview||!input.coverUri||!useful(input.author)||!useful(input.title);
 }
 
 export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookLookupOptions={}):Promise<OnlineBookLookupResult>{
@@ -369,7 +379,7 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
       for(const plan of plans){
         const found=await searchOpenLibrary(fetcher,plan,timeoutMs);queried.push('openlibrary:'+openLibraryQuery(plan));raw.push(...found);
         const ranked=rankCandidates(input,raw);
-        if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=88))break;
+        if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=80))break;
         if(raw.length>=(options.deep?48:18))break;
       }
     }
@@ -379,7 +389,7 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
         try{
           const found=await searchGoogleBooks(fetcher,plan,options.googleBooksApiKey,timeoutMs);
           queried.push('googlebooks:'+googleQuery(plan));raw.push(...found);ranked=rankCandidates(input,raw);
-          if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=88))break;
+          if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=80))break;
         }catch{}
       }
     }
@@ -387,7 +397,11 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
     let best=ranked[0];if(best?.provider==='openlibrary'&&best.confidence==='high')best=await hydrateOpenLibrary(fetcher,best,timeoutMs);
     if(best){const idx=ranked.findIndex(item=>item.provider===best.provider&&item.providerId===best.providerId);if(idx>=0)ranked[idx]=best;}
     const second=ranked[1];const margin=best?best.score-(second?.score||0):0;
-    const autoApply=!!best&&best.confidence==='high'&&(best.exactIdentifier||margin>=7);
+    const obviousIdentity=!!best
+      && best.score>=80
+      && best.reasons.includes('strong title match')
+      && best.reasons.includes('author match');
+    const autoApply=!!best&&best.confidence==='high'&&(best.exactIdentifier||obviousIdentity||margin>=7);
     const status:OnlineBookLookupResult['status']=!best||best.confidence==='low'?'none':autoApply?'matched':'review';
     const result={key,status,best,candidates:ranked,autoApply,queried};
     if(options.cache)options.cache[key]={expiresAt:now()+(status==='none'?negativeTtl:positiveTtl),result};
