@@ -2849,6 +2849,7 @@ function Client() {
     setMetadataMatchMode('');
     setMetadataSearchNote('');
     setSelectedMetadataMatch(null);
+    setMetadataTargetUris(work?.tracks.map(track=>track.uri).filter(Boolean)||[item.uri||''].filter(Boolean));
   }
 
   function localWorkForBook(item:Book|null){
@@ -2862,13 +2863,33 @@ function Client() {
     if(!work)return;
     setMetadataMatchLoading(true);
     setMetadataMatchMode(deep?'deep':'search');
-    setMetadataSearchNote(deep?'Deep scanning this book…':'Searching metadata sources…');
+    setMetadataSearchNote(deep?'Deep scanning this book and its likely companion files…':'Searching metadata sources…');
     setSelectedMetadataMatch(null);
     try{
       let evidenceWork=work;
+      let deepEvidenceText='';
       if(deep){
-        const rescanned=await deepScanLocalTracks(work.tracks);
-        evidenceWork=groupLocalWorks(rescanned)[0]||work;
+        const parentKey=(uri:string)=>decodedPathParts(uri).slice(0,-1).join('/').toLowerCase();
+        const workUris=new Set(work.tracks.map(track=>track.uri));
+        const localTracks=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
+        const siblingPool=editing.format==='Audio'
+          ? localTracks.filter(track=>track.format==='Audio'&&parentKey(track.uri)===parentKey(editing.uri!))
+          : work.tracks;
+        const orderedCandidates=[
+          ...work.tracks,
+          ...siblingPool.filter(track=>!workUris.has(track.uri)),
+        ].slice(0,256);
+        const rescanned=await deepScanLocalTracks(orderedCandidates.length?orderedCandidates:work.tracks);
+        const regrouped=groupLocalWorks(rescanned);
+        evidenceWork=regrouped.find(candidate=>candidate.tracks.some(track=>track.uri===editing.uri))||groupLocalWorks(await deepScanLocalTracks(work.tracks))[0]||work;
+        setMetadataTargetUris(evidenceWork.tracks.map(track=>track.uri).filter(Boolean));
+        const evidence=deepScanEvidenceSummary(evidenceWork.tracks);
+        const evidenceBits=[
+          `${evidence.files} file${evidence.files===1?'':'s'} grouped`,
+          `${evidence.embeddedFiles} with embedded evidence`,
+          evidence.trackNumbers?`${evidence.trackNumbers} numbered track${evidence.trackNumbers===1?'':'s'}`:'',
+        ].filter(Boolean);
+        deepEvidenceText=`Deep Scan: ${evidenceBits.join(' · ')}.`;
         if(evidenceWork.title&&evidenceWork.title.toLowerCase()!=='untitled')setEditTitle(evidenceWork.title);
         if(evidenceWork.author)setEditAuthor(evidenceWork.author);
         if(evidenceWork.series)setEditSeries(evidenceWork.series);
@@ -2894,7 +2915,7 @@ function Client() {
       });
       if(!title||title.toLowerCase()==='untitled'){
         setMetadataMatches([]);
-        setMetadataSearchNote('Add a title, or use Deep Scan to look for embedded identity first.');
+        setMetadataSearchNote((deepEvidenceText?deepEvidenceText+' ':'')+'No usable book title was found. Enter a title and author, then search again.');
         return;
       }
       const matches=await searchBookMetadata({
@@ -2907,13 +2928,12 @@ function Client() {
       },0.35);
       setMetadataMatches(matches);
       setMetadataSearchNote(
-        matches.length
-          ? (deep
-              ? `Deep scan found ${matches.length} possible metadata match${matches.length===1?'':'es'}. Nothing changes until you choose one and save.`
-              : `Found ${matches.length} possible metadata match${matches.length===1?'':'es'}. Nothing changes until you choose one and save.`)
-          : (deep
-              ? 'Deep scan completed, but no useful online match was found. You can still edit the details manually.'
-              : 'No useful online match was found. Try Deep Scan or edit the details manually.')
+        (deepEvidenceText?deepEvidenceText+' ':'')+
+        (matches.length
+          ? `Found ${matches.length} possible metadata match${matches.length===1?'':'es'}. Nothing changes until you choose one and save.`
+          : deep
+            ? 'No useful online match was found from that evidence. You can refine the title or author and search again.'
+            : 'No useful online match was found. Try Deep Scan or edit the details manually.')
       );
     }catch(e){
       setMetadataMatches([]);
@@ -3348,7 +3368,10 @@ function Client() {
         }
         if(!editing.uri)return;
         const work=localWorkForBook(editing);
-        const targets=work?.tracks.length?work.tracks:[editing as LocalBook];
+        const targetUriSet=new Set(metadataTargetUris.filter(Boolean));
+        const targets=targetUriSet.size
+          ? (localBooks.filter((book):book is Book & {uri:string}=>!!book.uri&&targetUriSet.has(book.uri)) as LocalBook[])
+          : work?.tracks.length?work.tracks:[editing as LocalBook];
         const uris=new Set(targets.map(track=>track.uri).filter(Boolean));
         let portraitUri:string|undefined;
         if(selectedMetadataMatch?.coverUri){
