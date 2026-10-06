@@ -52,3 +52,6 @@ assert(enrichment.includes('workConcurrency=Math.max(1,Math.min(3'),'Enrichment 
 assert(enrichment.includes('let progressChain=Promise.resolve()'),'Concurrent work must serialize progress/persistence callbacks.');
 
 console.log('PASS: local catalogue persistence and enrichment remain keyed/delta-based');
+
+const stageSourceRemoval=fs.readFileSync(__dirname+'/localStageStore.ts','utf8');
+assert.ok(stageSourceRemoval.includes('export async function removeLocalStageBooks'), 'Local stage store must support safe work removal without deleting source media');
