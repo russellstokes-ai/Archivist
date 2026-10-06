@@ -16,6 +16,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
+import java.io.FilterInputStream
+import java.util.zip.ZipInputStream
 import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.math.min
@@ -82,6 +84,115 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
         check(verified == written) { "Destination verification failed. Original retained." }
         promise.resolve(written.toDouble())
       } catch (error: Throwable) { promise.reject("COPY_FAILED", error.message, error) }
+    }
+  }
+
+  private class BoundedArchiveInput(input: InputStream, private val maxBytes: Long) : FilterInputStream(input) {
+    var bytesRead: Long = 0
+      private set
+
+    private fun record(count: Int) {
+      if (count <= 0) return
+      bytesRead += count.toLong()
+      if (bytesRead > maxBytes) throw IllegalArgumentException("Archive metadata scan exceeded the 32 MB read limit.")
+    }
+
+    override fun read(): Int {
+      val value = super.read()
+      if (value >= 0) record(1)
+      return value
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+      val count = super.read(buffer, offset, length)
+      record(count)
+      return count
+    }
+  }
+
+  private fun readZipMetadataEntry(zip: ZipInputStream, maxBytes: Int, deadlineNanos: Long): String {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(16 * 1024)
+    while (true) {
+      if (System.nanoTime() > deadlineNanos) throw IllegalArgumentException("Archive metadata scan timed out.")
+      val count = zip.read(buffer)
+      if (count < 0) break
+      if (output.size() + count > maxBytes) throw IllegalArgumentException("Archive metadata entry is too large.")
+      output.write(buffer, 0, count)
+    }
+    return output.toString("UTF-8")
+  }
+
+  private fun normalizeZipName(value: String) = value.replace('\\', '/').trimStart('/')
+
+  @ReactMethod
+  fun readArchiveMetadata(uri: String, extension: String, promise: Promise) {
+    thread(name = "archivist-archive-metadata") {
+      try {
+        val ext = extension.lowercase()
+        if (ext != "epub" && ext != "cbz" && ext != "zip") {
+          val empty = Arguments.createMap()
+          empty.putString("kind", "")
+          empty.putString("text", "")
+          promise.resolve(empty)
+          return@thread
+        }
+
+        val deadline = System.nanoTime() + 2_000_000_000L
+        var targetOpf: String? = null
+        var fallbackOpf: String? = null
+        var resolvedKind = ""
+        var resolvedText = ""
+        var entries = 0
+        BoundedArchiveInput(openInput(uri), 32L * 1024 * 1024).use { bounded ->
+          ZipInputStream(bounded.buffered()).use { zip ->
+            while (true) {
+              if (System.nanoTime() > deadline) throw IllegalArgumentException("Archive metadata scan timed out.")
+              val entry = zip.nextEntry ?: break
+              if (entry.isDirectory) {
+                zip.closeEntry()
+                continue
+              }
+              if (++entries > 4000) throw IllegalArgumentException("Archive contains too many entries for foreground metadata scanning.")
+              val name = normalizeZipName(entry.name)
+
+              if (ext == "epub") {
+                if (name.equals("META-INF/container.xml", ignoreCase = true)) {
+                  val container = readZipMetadataEntry(zip, 512 * 1024, deadline)
+                  targetOpf = Regex("""full-path\s*=\s*["']([^"']+\.opf)["']""", RegexOption.IGNORE_CASE)
+                    .find(container)?.groupValues?.getOrNull(1)?.let(::normalizeZipName)
+                } else if (name.endsWith(".opf", ignoreCase = true)) {
+                  val opf = readZipMetadataEntry(zip, 2 * 1024 * 1024, deadline)
+                  if (fallbackOpf == null) fallbackOpf = opf
+                  if (targetOpf != null && name.equals(targetOpf, ignoreCase = true)) {
+                    resolvedKind = "opf"
+                    resolvedText = opf
+                    break
+                  }
+                }
+              } else if (name.endsWith("ComicInfo.xml", ignoreCase = true)) {
+                resolvedKind = "xml"
+                resolvedText = readZipMetadataEntry(zip, 2 * 1024 * 1024, deadline)
+                break
+              }
+              zip.closeEntry()
+            }
+
+            if (ext == "epub" && resolvedText.isEmpty() && fallbackOpf != null) {
+              resolvedKind = "opf"
+              resolvedText = fallbackOpf!!
+            }
+          }
+
+          val result = Arguments.createMap()
+          result.putString("kind", resolvedKind)
+          result.putString("text", resolvedText)
+          result.putDouble("bytesRead", bounded.bytesRead.toDouble())
+          promise.resolve(result)
+        }
+      } catch (error: Throwable) {
+        promise.reject("ARCHIVE_METADATA_FAILED", error.message ?: "Unable to read archive metadata", error)
+      }
     }
   }
 
