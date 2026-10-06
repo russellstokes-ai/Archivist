@@ -17,7 +17,10 @@ assert.ok(app.includes('scanCommitGate.invalidate()'),'cancel must invalidate st
 assert.equal(app.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover progress batches must not republish the full catalogue');
 assert.equal(/onBatch:[\s\S]{0,600}setPersistedJSON\(localCatalogKey/.test(app),false,'metadata progress batches must not persist the full catalogue');
 assert.ok(app.includes('replaceLocalStageBooks(stagedBooks)')&&app.includes('return replaceLocalStageBooks(books)')&&app.includes('replaceLocalStageBooks(currentBooks)'),'large catalogue persistence must use SQLite for backstage discovery, stage checkpoints and the final enriched commit');
-assert.ok((app.match(/checkpointLocalEnrichment\(currentBooks,generation\)/g)||[]).length>=3,'completed enrichment stages must checkpoint so interrupted preparation resumes without throwing away finished work');
+assert.ok((app.match(/checkpointLocalEnrichment\(currentBooks,generation\)/g)||[]).length>=2,'completed online enrichment stages must checkpoint so interrupted preparation resumes without throwing away finished work');
+const normalPipeline=app.slice(app.indexOf('async function enrichPublishedLocalLibrary'),app.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
+assert.equal(normalPipeline.includes('enrichPublishedLocalEmbeddedMetadata('),false,'normal library refresh must remain shallow');
+assert.equal(normalPipeline.includes('enrichPublishedLocalCovers('),false,'normal library refresh must not extract embedded covers');
 assert.ok(app.includes('loadLocalStageBooks()'),'catalogue hydration must come from SQLite while enrichment passes the catalogue in memory');
 
 assert.ok(library.includes('cooperativeYieldFactory'),'scanner must enforce a cooperative UI frame budget');
