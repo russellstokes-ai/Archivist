@@ -32,7 +32,7 @@ for(const marker of [
 }
 
 for(const marker of [
-  'DocumentsContract.getMediaUri(context, documentUri)',
+  'MediaStore.getMediaUri(context, documentUri)',
   'MediaStore.MediaColumns.TITLE',
   'MediaStore.Audio.AudioColumns.ALBUM',
   'MediaStore.Audio.AudioColumns.ARTIST',
