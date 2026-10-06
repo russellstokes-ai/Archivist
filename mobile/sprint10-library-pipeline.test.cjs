@@ -9,14 +9,14 @@ const localStageStoreNative=fs.readFileSync(__dirname+'/localStageStore.native.t
 
 assert.ok(app.includes('const activeLibraryProgress=scanProgress||enrichmentProgress'),'refresh progress must have one shared source');
 assert.ok(app.includes('const libraryRefreshRunningRef=useRef(false)'),'refresh must have a synchronous re-entry guard');
-assert.ok(app.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),'enrichment must remain inside the same refresh lifetime');
+assert.ok(app.includes('await enrichPublishedLocalLibrary(stagedBooks,generation,forceOnline)'),'staged enrichment must remain inside the same refresh lifetime');
 assert.ok(app.includes('{LocalScanStatus()}'),'shared progress surface must be reusable');
 assert.ok((app.match(/\{LocalScanStatus\(\)\}/g)||[]).length>=3,'Settings, Shelf and Library must all render the shared refresh status');
 assert.ok(app.includes('accessibilityLabel="Cancel library refresh"'),'refresh must expose cancellation');
 assert.ok(app.includes('scanCommitGate.invalidate()'),'cancel must invalidate stale work');
 assert.equal(app.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover progress batches must not republish the full catalogue');
 assert.equal(/onBatch:[\s\S]{0,600}setPersistedJSON\(localCatalogKey/.test(app),false,'metadata progress batches must not persist the full catalogue');
-assert.ok(app.includes('replaceLocalStageBooks(result.books)')&&app.includes('return replaceLocalStageBooks(books)')&&app.includes('replaceLocalStageBooks(currentBooks)'),'large catalogue persistence must use SQLite for discovery, stage checkpoints and the final enriched commit');
+assert.ok(app.includes('replaceLocalStageBooks(stagedBooks)')&&app.includes('return replaceLocalStageBooks(books)')&&app.includes('replaceLocalStageBooks(currentBooks)'),'large catalogue persistence must use SQLite for backstage discovery, stage checkpoints and the final enriched commit');
 assert.ok((app.match(/checkpointLocalEnrichment\(currentBooks,generation\)/g)||[]).length>=3,'completed enrichment stages must checkpoint so interrupted preparation resumes without throwing away finished work');
 assert.ok(app.includes('loadLocalStageBooks()'),'catalogue hydration must come from SQLite while enrichment passes the catalogue in memory');
 
