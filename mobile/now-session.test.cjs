@@ -27,9 +27,13 @@ const {stripTypeScriptTypes}=require('node:module');
   const serverB={...serverA,id:99,title:'Renamed server title',originServer:'https://HOME.example'};
   assert.equal(x.sameNowMedia(serverA,serverB),true,'server work identity must survive asset and metadata changes');
 
-  const sanitized=x.sanitizeNowSession(JSON.parse(JSON.stringify(first)));
+  const withLivingCover={...first,media:{...first.media,livingBookCoverUri:'file:///portrait.jpg',livingBookCoverSource:'open-library',livingBookCoverConfidence:.98}};
+  const sanitized=x.sanitizeNowSession(JSON.parse(JSON.stringify(withLivingCover)));
   assert.equal(sanitized.kind,'audio');
   assert.equal(sanitized.position,125.5);
+  assert.equal(sanitized.media.livingBookCoverUri,'file:///portrait.jpg');
+  assert.equal(sanitized.media.livingBookCoverSource,'open-library');
+  assert.equal(sanitized.media.livingBookCoverConfidence,.98);
   assert.equal(x.sanitizeNowSession({version:1,kind:'reader',media:{}}),null);
 
   console.log('PASS: durable Now session preserves stable identity, exact position and replacement semantics');
