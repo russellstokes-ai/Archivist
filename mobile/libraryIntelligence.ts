@@ -36,6 +36,8 @@ export type LocalMetadataFields = {
   asin?: string;
   language?: string;
   description?: string;
+  trackNumber?: number;
+  discNumber?: number;
   comicIssueNumber?: string;
   comicVolume?: number;
   comicSeriesAliases?: string[];
