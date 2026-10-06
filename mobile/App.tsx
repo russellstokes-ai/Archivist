@@ -355,6 +355,12 @@ function validateServer(raw: string) {
   return checkServer(raw, __DEV__);
 }
 
+function localWorkReadyForCatalogue(work:LocalWork){
+  const title=String(work.title||'').trim();
+  const author=String(work.author||'').trim();
+  return !work.needsReview&&!!work.coverUri&&!!title&&!/^(?:untitled|unknown|unclassified)$/i.test(title)&&!!author;
+}
+
 function palette(mode: ThemeMode, system: string | null | undefined, highContrast=false): Palette {
   const dark = mode === 'dark' || (mode === 'system' && system === 'dark');
   return {
@@ -1369,17 +1375,19 @@ function Client() {
   });
   const phonePersonalWorks = useMemo(() => personaliseLocalWorks(phoneWorks), [localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress,phoneWorks]);
   const downloadedPersonalWorks = useMemo(() => personaliseLocalWorks(downloadedWorks), [downloadedWorks,localAudioCompleted,localPreferences,localReadingComplete,localReadingProgress,localWorkProgress]);
+  const publishedPhonePersonalWorks = useMemo(() => phonePersonalWorks.filter(localWorkReadyForCatalogue), [phonePersonalWorks]);
   const localPersonalWorks = useMemo(() => [...phonePersonalWorks,...downloadedPersonalWorks], [downloadedPersonalWorks,phonePersonalWorks]);
+  const publishedLocalPersonalWorks = useMemo(() => [...publishedPhonePersonalWorks,...downloadedPersonalWorks], [downloadedPersonalWorks,publishedPhonePersonalWorks]);
   useEffect(()=>{
     const current=nowSessionRef.current;
     const resume=current?.kind==='audio'&&current.media.localWorkKey
       ? {workKey:current.media.localWorkKey,updatedAt:current.updatedAt}
       : {};
-    const timer=setTimeout(()=>void persistAndroidAutoLibrary(localPersonalWorks,localWorkProgress,resume).catch(()=>undefined),900);
+    const timer=setTimeout(()=>void persistAndroidAutoLibrary(publishedLocalPersonalWorks,localWorkProgress,resume).catch(()=>undefined),900);
     return()=>clearTimeout(timer);
-  },[localPersonalWorks,localWorkProgress,nowSession?.updatedAt]);
+  },[publishedLocalPersonalWorks,localWorkProgress,nowSession?.updatedAt]);
   useEffect(()=>{
-    if(!appActive||!localCatalogReady||!localPersonalWorks.length)return;
+    if(!appActive||!localCatalogReady||!publishedLocalPersonalWorks.length)return;
     let cancelled=false,busy=false;
     const syncAndroidAutoProgress=async()=>{
       if(cancelled||busy)return;
@@ -1394,7 +1402,7 @@ function Client() {
           setPersistedJSON(localWorkProgressKey,next).catch(()=>undefined);
           return next;
         });
-        const work=localPersonalWorks.find(item=>item.key===progress.workKey);
+        const work=publishedLocalPersonalWorks.find(item=>item.key===progress.workKey);
         const track=work?.tracks.find(item=>item.uri===progress.trackUri);
         if(work&&track){
           const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
@@ -1413,10 +1421,10 @@ function Client() {
     void syncAndroidAutoProgress();
     const timer=setInterval(()=>void syncAndroidAutoProgress(),4000);
     return()=>{cancelled=true;clearInterval(timer);};
-  },[appActive,localCatalogReady,localPersonalWorks]);
+  },[appActive,localCatalogReady,publishedLocalPersonalWorks]);
 
   const sourceWorks = useMemo<UnifiedWork[]>(() => {
-    const phone:UnifiedWork[] = phonePersonalWorks.map(work => {
+    const phone:UnifiedWork[] = publishedPhonePersonalWorks.map(work => {
       const identity=sourceIdentity({source:'local',localKey:work.key,space:work.space,title:work.title});
       return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work};
     });
@@ -1431,7 +1439,7 @@ function Client() {
       return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre||'',publishedYear:publicationYear(work.publishedYear),seriesNumber:work.seriesNumber,format:work.format,space:work.space,available:work.available,files:work.files,editions:work.editions,readingState:pref.state||'not-started',rating:pref.rating||0,favourite:!!pref.favourite,serverWork:work,server:session.server,serverWorkId:work.id};
     }) : [];
     return [...phone,...downloaded,...remote];
-  },[downloadedPersonalWorks,phonePersonalWorks,serverPreferences,serverWorks,session]);
+  },[downloadedPersonalWorks,publishedPhonePersonalWorks,serverPreferences,serverWorks,session]);
 
   const sourceCounts = useMemo(() => ({
     all: dedupeForAll(sourceWorks).length,
@@ -1605,7 +1613,7 @@ function Client() {
     const q = query.trim().toLowerCase();
     return reviewAssetPool.filter(book => {
       if (space && book.space !== space) return false;
-      if (reviewOnly && !book.needsReview) return false;
+      if (reviewOnly && !(book.needsReview || (book.source!=='server'&&!book.coverUri))) return false;
       if (metadataGapFilter && !matchesMetadataGap(book,metadataGapFilter)) return false;
       if (!libraryFormatFamilyMatches(book.format)) return false;
       if (formatFilter && book.format !== formatFilter) return false;
@@ -1691,7 +1699,7 @@ function Client() {
 
   const visibleLocalWorks = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return localPersonalWorks.filter(work => {
+    return publishedLocalPersonalWorks.filter(work => {
       if (space && work.space !== space) return false;
       if (formatFilter && work.format !== formatFilter) return false;
       if (authorFilter && work.author !== authorFilter) return false;
@@ -1705,7 +1713,7 @@ function Client() {
       if (q && ![work.title,work.author,work.series,work.genre,work.format,work.space].some(value => value.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [authorFilter, availabilityFilter, favouriteOnly, formatFilter, genreFilter, localPersonalWorks, query, ratingFilter, readingFilter, seriesFilter, space, unknownAuthorOnly]);
+  }, [authorFilter, availabilityFilter, favouriteOnly, formatFilter, genreFilter, publishedLocalPersonalWorks, query, ratingFilter, readingFilter, seriesFilter, space, unknownAuthorOnly]);
 
   const visibleServerWorks = useMemo(() => serverWorks.filter(work => {
     const pref=serverPreferences[work.id] || {rating:0,favourite:false,state:'not-started' as ReadingState};
@@ -1720,7 +1728,7 @@ function Client() {
       (!unknownAuthorOnly || !work.author);
   }), [authorFilter, availabilityFilter, favouriteOnly, formatFilter, genreFilter, ratingFilter, readingFilter, seriesFilter, serverPreferences, serverWorks, unknownAuthorOnly]);
 
-  const localContinueWorks = useMemo(() => localWorks.filter(work => {
+  const localContinueWorks = useMemo(() => localWorks.filter(work => (work.originServer||localWorkReadyForCatalogue(work))&&(()=>{
     if (space && work.space !== space) return false;
     if (work.format === 'Audio') {
       const point = localWorkProgress[work.key];
@@ -1732,7 +1740,7 @@ function Client() {
       const currentComplete=localReadingCurrentComplete[track.uri] ?? !!localReadingComplete[track.uri];
       return page>0 && !currentComplete;
     });
-  }).slice(0, 12), [localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks, space]);
+  })()).slice(0, 12), [localReadingComplete, localReadingCurrentComplete, localReadingProgress, localWorkProgress, localWorks, space]);
 
   const atlas = useMemo(() => {
     const count=(values:string[])=>{const totals=new Map<string,number>();for(const value of values.map(v=>v.trim()).filter(Boolean))totals.set(value,(totals.get(value)||0)+1);return [...totals.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,16);};
@@ -4142,12 +4150,12 @@ function Client() {
 
   function OnboardingGuide() {
     if (onboardingDone) return null;
-    const reviewCount = localBooks.filter(book => book.needsReview).length;
+    const reviewCount = phoneWorks.filter(work=>!localWorkReadyForCatalogue(work)).length;
     const hasFolder = localFolders.length > 0;
     const hasServer = !!session;
     const hasServerFolders = sources.length > 0;
     const hasSource = hasFolder || hasServerFolders;
-    const approvedLocalCount=localBooks.filter(book=>!book.needsReview).length;
+    const approvedLocalCount=phoneWorks.filter(localWorkReadyForCatalogue).length;
     const hasUsableLibrary = approvedLocalCount > 0 || serverWorks.length > 0;
     const progress=activeLibraryProgress;
     const progressPercent=progress?scanProgressPercent(progress):0;
@@ -5442,7 +5450,7 @@ function Client() {
       animateSeriesOpen(name);
     };
 
-    const localReview=localBooks.filter(book=>book.needsReview).length;
+    const localReview=phoneWorks.filter(work=>!localWorkReadyForCatalogue(work)).length;
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
@@ -7731,7 +7739,7 @@ function Client() {
   function LibraryManagementPanel(){
     if(!libraryManageOpen)return null;
     const gaps=metadataGapCounts(reviewAssetPool);
-    const reviewCount=reviewAssetPool.filter(item=>item.needsReview).length;
+    const reviewCount=reviewAssetPool.filter(item=>item.needsReview || (item.source!=='server'&&!item.coverUri)).length;
     const localDuplicateCount=localDuplicateGroups.reduce((sum,group)=>sum+group.items.length,0);
     const localDuplicateGroupCount=localDuplicateGroups.length;
     const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
