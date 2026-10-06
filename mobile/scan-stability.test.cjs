@@ -22,8 +22,11 @@ assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan
 assert.ok(source.includes('deferEmbeddedCovers:true')&&source.includes('deferEmbeddedMetadata:true'),'app scans must publish identity before expensive embedded metadata and cover recovery');
 assert.ok(source.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),'catalogue publication and enrichment must share one cancellable refresh job');
 assert.ok(source.includes('setScanProgress(null)')&&source.includes('libraryRefreshRunningRef.current=true'),'foreground discovery must hand off to enrichment without allowing a second refresh to overlap');
-assert.ok(source.includes('await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline)'),'enrichment must move embedded archive/audio parsing out of foreground discovery and thread the in-memory catalogue forward');
-assert.ok(source.includes('shouldInspect:needsEmbeddedRead')&&source.includes('return true;'),'normal preparation must collect complete embedded details for each new or changed supported file');
+const enrichmentBody=source.slice(source.indexOf('async function enrichPublishedLocalLibrary'),source.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
+assert.equal(enrichmentBody.includes('enrichPublishedLocalEmbeddedMetadata('),false,'normal preparation must never bulk-open every EPUB/comic/audio file');
+const deepSearchBody=source.slice(source.indexOf('const runMetadataSearch=async'),source.indexOf('const acceptProposal=async'));
+assert.ok(deepSearchBody.includes('if(deep)')&&deepSearchBody.includes('concurrency:1')&&deepSearchBody.includes('maxConsecutiveTimeouts:1'),'deep local inspection must be explicit, serial and circuit-broken per work');
+assert.ok(deepSearchBody.includes('workBooks[Math.floor(workBooks.length/2)]')&&deepSearchBody.includes('workBooks.slice(0,1)'),'Deep Search must sample multipart audio and inspect only one single-file book/comic instead of scanning the library');
 assert.ok(source.indexOf('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)')<source.indexOf('await enrichPublishedLocalCovers(currentBooks,generation)'),'online matching should run before local cover fallback so fast provider matches avoid unnecessary archive reads');
 assert.ok(source.includes('await enrichPublishedLocalCovers(currentBooks,generation)'),'library enrichment must recover covers from the latest in-memory metadata state');
 assert.ok(source.includes('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)'),'library enrichment must continue into online book metadata using the latest in-memory state and explicit refresh intent');
