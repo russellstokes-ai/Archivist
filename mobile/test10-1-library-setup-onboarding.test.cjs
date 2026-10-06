@@ -25,8 +25,8 @@ assert.ok(app.includes("if (onboardingDone) return null;"),'completed onboarding
 assert.ok(app.includes("await SecureStore.setItemAsync(onboardingDoneKey, '1')"),'onboarding completion must survive relaunch');
 assert.ok(app.includes('label="Keep current layout"'),'users must be able to complete setup without reorganising files');
 assert.ok(app.includes("if(!onboardingDone&&refreshed&&result.failed.length===0)"),'successful organisation and refresh must complete onboarding automatically');
-assert.ok(app.includes("itemTimeoutMs:refreshMetadata?5000:2500"),'first-run embedded metadata must fail forward quickly instead of appearing frozen at 28%');
-assert.ok(app.includes("concurrency:refreshMetadata?3:4"),'first-run metadata must use bounded concurrency instead of serial reads or skip-all timeouts');
+assert.ok(app.includes("itemTimeoutMs:refreshMetadata?4000:2200"),'first-run embedded metadata must fail forward quickly instead of appearing frozen at 28%');
+assert.ok(app.includes("concurrency:2"),'first-run metadata must use bounded concurrency instead of saturating Android storage');
 
 assert.ok(app.includes('>Library management<'),'ongoing library maintenance must live in Settings');
 assert.ok(app.includes('Folders, metadata, scanning and file organisation.'),'Settings must clearly own post-onboarding library maintenance');
