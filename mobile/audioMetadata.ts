@@ -2,7 +2,9 @@ import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
 import {isGenericMediaTitle, LocalMetadataFields, publicationYear} from './libraryIntelligence';
 
 const maxID3v2Bytes=256*1024;
-const maxMP4MetadataBytes=4*1024*1024;
+// Keep foreground M4B metadata reads bounded. 4 MB head + tail reads can
+// monopolise the JS thread when several audiobooks are scanned together.
+const maxMP4MetadataBytes=768*1024;
 
 export async function extractAudioMetadata(
   uri:string,
