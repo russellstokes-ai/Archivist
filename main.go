@@ -628,6 +628,24 @@ func (a *app) routes() http.Handler {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
+		cursorEnabled:=0
+		afterReview:=0
+		afterTitle:=r.URL.Query().Get("afterTitle")
+		var afterID int64
+		if raw:=strings.TrimSpace(r.URL.Query().Get("afterId"));raw!="" {
+			n,err:=strconv.ParseInt(raw,10,64)
+			if err!=nil||n<0 { fail(w,400,errors.New("invalid asset cursor")); return }
+			afterID=n
+			if afterID>0 {
+				cursorEnabled=1
+				offset=0
+				if rawReview:=r.URL.Query().Get("afterReview");rawReview!="" {
+					n,err:=strconv.Atoi(rawReview)
+					if err!=nil||(n!=0&&n!=1) { fail(w,400,errors.New("invalid asset review cursor")); return }
+					afterReview=n
+				}
+			}
+		}
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.series_number,a.genre,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
 			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ?)
@@ -640,9 +658,12 @@ func (a *app) routes() http.Handler {
 			AND (?=0 OR a.needs_review=1)
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
+			AND (?=0 OR a.needs_review<? OR (a.needs_review=? AND (a.title>? OR (a.title=? AND a.id>?))))
 			ORDER BY a.needs_review DESC,a.title,a.id LIMIT ? OFFSET ?`,
 			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
-			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
+			availability, availability, availability, who(r).Owner, who(r).ID,
+			cursorEnabled,afterReview,afterReview,afterTitle,afterTitle,afterID,
+			limit, offset)
 		if e != nil {
 			fail(w, 500, e)
 			return
