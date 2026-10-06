@@ -83,6 +83,12 @@ assert.equal(sparseMerge.needsReview,false);
   assert.ok(bypassCalls>0,'explicit refresh must bypass stale positive/negative metadata cache');
   assert.ok(refreshed.queried.length>0,'cache bypass must execute a fresh provider query even when the new result remains low-confidence');
 
+  let deepCalls=0;
+  const deepFetcher=async()=>{deepCalls++;return {ok:true,status:200,json:async()=>({docs:[]})}};
+  const deepResult=await lookupOnlineBook({title:'Dune',author:'Frank Herbert',series:'Dune Chronicles',format:'EPUB'},{fetcher:deepFetcher,openLibraryEnabled:true,deep:true,ignoreCache:true});
+  assert.ok(deepCalls>=3,'Deep Search must execute broader per-work query plans instead of stopping after the first weak result');
+  assert.ok(deepResult.queried.length>=3);
+
   const googleOnlyCalls=[];
   const googleOnlyFetcher=async(url)=>{
     googleOnlyCalls.push(url);
