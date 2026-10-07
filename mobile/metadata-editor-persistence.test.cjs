@@ -63,6 +63,22 @@ const track=(uri,n)=>({uri,title:'Old',author:'Old author',series:'',genre:'',fo
  await persistWorkEdit([updated[0]],['one'],overrides,storage);
  assert.equal((await stage.loadLocalStageBooks()).length,3);
  assert.equal((await stage.loadLocalStageBooks())[0].manualOverride.title,'New');
+ // The editor must compare against the revision it opened, not a fresh load after
+ // artwork/provider awaits. Otherwise a late Save can overwrite a newer scan/edit.
+ const editorBase=await stage.loadLocalStageBooks();
+ const editorExpected=editorBase.filter(book=>book.uri==='one');
+ await stage.replaceLocalStageBooks(editorBase.map(book=>book.uri==='one'?{...book,genre:'Scanner update',modificationTime:777}:book));
+ const staleOverride={...override,title:'Late editor save',genre:'Editor genre'};
+ const staleProposed=editorBase.map(book=>book.uri==='one'?{...book,...staleOverride}:book);
+ await assert.rejects(
+   persistWorkEdit(staleProposed,['one'],{one:staleOverride},storage,editorExpected),
+   /changed/,
+   'a Save started from an older editor revision must not overwrite a newer durable row',
+ );
+ const afterStale=await stage.loadLocalStageBooks();
+ assert.equal(afterStale.find(book=>book.uri==='one').genre,'Scanner update');
+ assert.notEqual(afterStale.find(book=>book.uri==='one').title,'Late editor save');
+ await stage.replaceLocalStageBooks(editorBase);
  await assert.rejects(persistWorkEdit(updated,['missing'],overrides,storage),/changed/);
  console.log('PASS: real SQLite whole-work save, queued writes, restart, rescan, chapter preservation and failed-save detection');
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>{db?.close();fs.rmSync(dir,{recursive:true,force:true})});
