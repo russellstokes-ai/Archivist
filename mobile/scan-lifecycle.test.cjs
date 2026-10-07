@@ -37,11 +37,11 @@ assert.equal(cancelled.signature,'folders-a','cancelling enrichment must preserv
 assert.equal(cancelled.activeJob,undefined,'explicit cancellation must not auto-resume on restart');
 assert.equal(shouldResumeLibraryPreparation(cancelled,'folders-a'),false);
 
-const initial=beginLibraryPreparation({signature:''},{kind:'prepare',signature:'folders-b',startedAt:'2026-10-07T21:05:00Z'});
-assert.equal(initial.signature,'','initial preparation is not complete merely because a job started');
-assert.equal(shouldResumeLibraryPreparation(initial,'folders-b'),true);
-assert.equal(shouldResumeLibraryPreparation(initial,'different-folders'),false,'changed folder configuration must never resume a stale job');
-const complete=completeLibraryPreparation(markLibraryDiscoveryCommitted(initial),'folders-b','2026-10-07T21:06:00Z');
+const initialCheckpoint=beginLibraryPreparation({signature:''},{kind:'prepare',signature:'folders-b',startedAt:'2026-10-07T21:05:00Z'});
+assert.equal(initialCheckpoint.signature,'','initial preparation is not complete merely because a job started');
+assert.equal(shouldResumeLibraryPreparation(initialCheckpoint,'folders-b'),true);
+assert.equal(shouldResumeLibraryPreparation(initialCheckpoint,'different-folders'),false,'changed folder configuration must never resume a stale job');
+const complete=completeLibraryPreparation(markLibraryDiscoveryCommitted(initialCheckpoint),'folders-b','2026-10-07T21:06:00Z');
 assert.equal(complete.signature,'folders-b');
 assert.equal(complete.activeJob,undefined);
 assert.equal(complete.completedAt,'2026-10-07T21:06:00Z');
