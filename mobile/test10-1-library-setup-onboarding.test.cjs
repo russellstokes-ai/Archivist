@@ -5,8 +5,8 @@ const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
 
 assert.ok(app.includes("const librarySetupPreparedKey = 'archivist.librarySetupPrepared.v1'"),'initial library preparation state must persist');
 assert.ok(app.includes('localFolderSetSignature(localFolders)'),'preparation readiness must be tied to the current folder set');
-assert.ok(app.includes("setLibraryPreparedSignature('')")&&app.includes("completedAt:''"),'starting any scan must invalidate organisation readiness');
-assert.ok(app.includes("setPersistedJSON(librarySetupPreparedKey,{signature,completedAt:new Date().toISOString()})"),'only a completed metadata pipeline may unlock organisation');
+assert.ok(app.includes("libraryPreparationReady=!!currentLibraryFolderSignature&&libraryPreparationCheckpoint.signature===currentLibraryFolderSignature&&!libraryRefreshActive"),'active preparation must lock organisation without erasing the last completed checkpoint');
+assert.ok(app.includes('beginLibraryPreparation(')&&app.includes('completeLibraryPreparation('),'preparation must persist explicit in-progress intent and unlock only after the completed metadata pipeline');
 
 assert.ok(app.includes('LIBRARY SETUP'),'Shelf onboarding must be a dedicated Library Setup journey');
 assert.ok(app.includes('>Add library folders<'),'step 1 must support device and server library folders');
