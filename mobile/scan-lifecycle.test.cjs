@@ -24,12 +24,12 @@ const restoredLegacy=sanitizeLibraryPreparationCheckpoint({signature:'folders-a'
 assert.equal(restoredLegacy.signature,'folders-a');
 assert.equal(restoredLegacy.activeJob,undefined,'legacy prepared state must restore without inventing a scan job');
 
-const refreshing=beginLibraryPreparation(restoredLegacy,{kind:'refresh',signature:'folders-a',startedAt:'2026-10-07T21:00:00Z'});
-assert.equal(refreshing.signature,'folders-a','starting a refresh must not clear the last completed preparation');
-assert.equal(refreshing.activeJob.phase,'discovery');
-assert.equal(shouldResumeLibraryPreparation(refreshing,'folders-a'),true,'only explicit durable job intent may resume after restart');
+const refreshCheckpoint=beginLibraryPreparation(restoredLegacy,{kind:'refresh',signature:'folders-a',startedAt:'2026-10-07T21:00:00Z'});
+assert.equal(refreshCheckpoint.signature,'folders-a','starting a refresh must not clear the last completed preparation');
+assert.equal(refreshCheckpoint.activeJob.phase,'discovery');
+assert.equal(shouldResumeLibraryPreparation(refreshCheckpoint,'folders-a'),true,'only explicit durable job intent may resume after restart');
 
-const discovered=markLibraryDiscoveryCommitted(refreshing);
+const discovered=markLibraryDiscoveryCommitted(refreshCheckpoint);
 assert.equal(discovered.activeJob.phase,'enrichment','a durably committed discovery stage must be distinguishable from transient UI progress');
 
 const cancelled=cancelLibraryPreparation(discovered);
