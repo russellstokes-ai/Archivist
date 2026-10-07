@@ -1,5 +1,6 @@
 import type {LocalBook} from './localLibrary';
 import {groupLocalWorks, type LocalWork} from './localWorks';
+import {isGenericMediaTitle} from './libraryIntelligence';
 
 export type PublicationBlocker =
   | 'needs-review'
@@ -34,16 +35,38 @@ export function workLivingBookCoverUri(work:LocalWork){
   ).trim()||undefined;
 }
 
+function hasImportantIdentityConflict(work:LocalWork){
+  return work.tracks.some(track=>(track.metadataConflicts||[]).some(conflict=>
+    ['title','author','series','seriesNumber','isbn','asin'].includes(String(conflict.field||''))
+  ));
+}
+
+function trustedTitleWithoutAuthor(work:LocalWork,title:string,author:string){
+  if(author||!title||isGenericMediaTitle(title,work.format,work.files)||hasImportantIdentityConflict(work))return false;
+  const rank={low:0,medium:1,high:2} as const;
+  let best=0;
+  let trustedSource=false;
+  for(const track of work.tracks){
+    const confidence=track.metadataFieldConfidence?.title;
+    if(confidence)best=Math.max(best,rank[confidence]);
+    const source=String(track.metadataProvenance?.title||track.metadataSource||'');
+    if(['manual','embedded','sidecar','online'].includes(source))trustedSource=true;
+  }
+  return trustedSource||best>=rank.medium;
+}
+
 export function assessLocalWorkForPublication(work:LocalWork):PublicationAssessment{
   const blockers:PublicationBlocker[]=[];
   const title=String(work.title||'').trim();
   const author=String(work.author||'').trim();
   const libraryCoverUri=workLibraryCoverUri(work);
   const livingBookCoverUri=workLivingBookCoverUri(work);
+  const authorMayRemainIncomplete=trustedTitleWithoutAuthor(work,title,author);
+  const blockingReview=work.needsReview&&!authorMayRemainIncomplete;
 
-  if(work.needsReview)blockers.push('needs-review');
+  if(blockingReview)blockers.push('needs-review');
   if(!title)blockers.push('missing-title');
-  if(!author)blockers.push('missing-author');
+  if(!author&&!authorMayRemainIncomplete)blockers.push('missing-author');
   if(!libraryCoverUri)blockers.push('missing-library-cover');
   else if(!isVerifiedLocalArtworkUri(libraryCoverUri))blockers.push('remote-library-cover');
   if(!livingBookCoverUri)blockers.push('missing-living-book-cover');
