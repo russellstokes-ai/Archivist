@@ -138,7 +138,7 @@ internal object BoundedArchiveReader {
   }
 
   private fun imageMime(name:String?):String{
-    val lower=String(name?:"").lowercase()
+    val lower=(name?:"").lowercase()
     return when{
       lower.endsWith(".png")->"image/png"
       lower.endsWith(".webp")->"image/webp"
