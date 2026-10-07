@@ -122,4 +122,67 @@ class BoundedZipProbeTest {
     val entry = probe.index().single()
     expectFailure("expanded metadata budget") { probe.readEntry(entry, 512 * 1024) }
   }
+  @Test
+  fun extractsOnlySelectedEpubEvidenceWithinBudgets() {
+    val container = """<?xml version="1.0"?><container><rootfiles><rootfile full-path="OPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""".toByteArray()
+    val opf = """<package><metadata><dc:title xmlns:dc="dc">Dune</dc:title><dc:creator xmlns:dc="dc">Frank Herbert</dc:creator></metadata><manifest><item id="cover" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest></package>""".toByteArray()
+    val cover = ByteArray(96 * 1024) { (it % 251).toByte() }
+    val chapter = ByteArray(2 * 1024 * 1024).also { Random(9).nextBytes(it) }
+    val archive = zip(listOf(
+      "META-INF/container.xml" to container,
+      "OPS/package.opf" to opf,
+      "OPS/images/cover.jpg" to cover,
+      "OPS/chapter.xhtml" to chapter,
+    ))
+    val reader = RecordingReader(archive)
+
+    val evidence = BoundedArchiveEvidence.probeZip("epub", reader)
+
+    assertEquals("opf", evidence.metadataKind)
+    assertEquals(String(opf), evidence.metadataText)
+    assertEquals("OPS/images/cover.jpg", evidence.coverName)
+    assertArrayEquals(cover, evidence.coverBytes)
+    assertTrue("fast EPUB evidence must not read the whole archive", reader.totalBytesRead < archive.size / 2)
+  }
+
+  @Test
+  fun extractsComicInfoAndFirstPageWithoutInflatingOtherComicPages() {
+    val comicInfo = """<ComicInfo><Title>Dune</Title><Series>Dune</Series><Number>1</Number></ComicInfo>""".toByteArray()
+    val first = ByteArray(80 * 1024) { 7 }
+    val hugeSecond = ByteArray(2 * 1024 * 1024).also { Random(11).nextBytes(it) }
+    val archive = zip(listOf(
+      "ComicInfo.xml" to comicInfo,
+      "001.jpg" to first,
+      "002.jpg" to hugeSecond,
+    ))
+    val reader = RecordingReader(archive)
+
+    val evidence = BoundedArchiveEvidence.probeZip("cbz", reader)
+
+    assertEquals("xml", evidence.metadataKind)
+    assertEquals(String(comicInfo), evidence.metadataText)
+    assertEquals("001.jpg", evidence.coverName)
+    assertArrayEquals(first, evidence.coverBytes)
+    assertTrue("fast CBZ evidence must not read unrelated pages", reader.totalBytesRead < archive.size / 2)
+  }
+
+  @Test
+  fun archiveEvidenceUsesTypedFailuresForMissingOrOversizedMetadata() {
+    val missing = zip(listOf("chapter.xhtml" to "<html/>".toByteArray()))
+    try {
+      BoundedArchiveEvidence.probeZip("epub", RecordingReader(missing))
+      fail("Expected missing EPUB package metadata to fail")
+    } catch (error: BoundedArchiveEvidence.ProbeFailure) {
+      assertEquals("metadata-missing", error.code)
+    }
+
+    val oversized = zip(listOf("ComicInfo.xml" to ByteArray(600 * 1024), "001.jpg" to byteArrayOf(1,2,3)))
+    try {
+      BoundedArchiveEvidence.probeZip("cbz", RecordingReader(oversized))
+      fail("Expected oversized ComicInfo metadata to fail")
+    } catch (error: BoundedArchiveEvidence.ProbeFailure) {
+      assertEquals("metadata-too-large", error.code)
+    }
+  }
+
 }
