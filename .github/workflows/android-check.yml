@@ -70,6 +70,10 @@ jobs:
         working-directory: mobile
         run: node native-patch.test.cjs
 
+      - name: Bounded archive probe unit tests
+        working-directory: mobile/android
+        run: ./gradlew :app:testDebugUnitTest --tests app.archivist.reader.BoundedZipProbeTest --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
+
       - name: Compile Android Kotlin
         working-directory: mobile/android
         run: ./gradlew :app:compileDebugKotlin --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
