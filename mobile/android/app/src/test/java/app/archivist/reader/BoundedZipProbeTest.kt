@@ -227,4 +227,65 @@ class BoundedZipProbeTest {
     }
   }
 
+  @Test
+  fun extractsComicInfoAndFirstPageFromCbtWithoutReadingPayloadsInBetween() {
+    fun tarEntry(name: String, data: ByteArray): ByteArray {
+      val header = ByteArray(512) { 0 }
+      name.toByteArray().copyInto(header, 0, endIndex = minOf(name.toByteArray().size, 100))
+      val octal = data.size.toString(8).padStart(11, '0') + "\u0000"
+      octal.toByteArray().copyInto(header, 124)
+      header[156] = '0'.code.toByte()
+      val padded = ((data.size + 511) / 512) * 512
+      return header + data + ByteArray(padded - data.size)
+    }
+    val first = ByteArray(64 * 1024) { 3 }
+    val ignored = ByteArray(2 * 1024 * 1024) { 9 }
+    val info = "<ComicInfo><Title>Watchmen</Title><Number>1</Number></ComicInfo>".toByteArray()
+    val archive = tarEntry("001.jpg", first) + tarEntry("pages/002.jpg", ignored) + tarEntry("ComicInfo.xml", info) + ByteArray(1024)
+    val reader = RecordingReader(archive)
+
+    val evidence = BoundedTarEvidence.probe(reader)
+
+    assertEquals("xml", evidence.metadataKind)
+    assertEquals(String(info), evidence.metadataText)
+    assertEquals("001.jpg", evidence.coverName)
+    assertArrayEquals(first, evidence.coverBytes)
+    assertTrue("CBT probe must skip unrelated payload bytes", reader.totalBytesRead < 200 * 1024)
+  }
+
+  @Test
+  fun guardedArchiveInputStopsAtByteBudgetAndCancellation() {
+    var cancelled = false
+    val stream = GuardedArchiveInputStream(
+      input = java.io.ByteArrayInputStream(ByteArray(4096)),
+      maxBytes = 1024,
+      shouldContinue = { !cancelled },
+      now = { 1000L },
+      deadlineAt = 3000L,
+    )
+    val buffer = ByteArray(800)
+    assertEquals(800, stream.read(buffer))
+    try {
+      stream.read(buffer)
+      fail("Expected compressed-byte budget failure")
+    } catch (error: BoundedArchiveEvidence.ProbeFailure) {
+      assertEquals("archive-read-budget", error.code)
+    }
+
+    cancelled = true
+    val cancelledStream = GuardedArchiveInputStream(
+      input = java.io.ByteArrayInputStream(ByteArray(16)),
+      maxBytes = 1024,
+      shouldContinue = { !cancelled },
+      now = { 1000L },
+      deadlineAt = 3000L,
+    )
+    try {
+      cancelledStream.read()
+      fail("Expected cancellation failure")
+    } catch (error: BoundedArchiveEvidence.ProbeFailure) {
+      assertEquals("operation-cancelled", error.code)
+    }
+  }
+
 }
