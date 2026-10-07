@@ -1,3 +1,4 @@
+import {hydrateBookCandidate} from './onlineBookMetadata';
 import {persistWorkEdit} from './metadataEditPersistence';
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
@@ -14,6 +15,7 @@ import {
   AppState,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   NativeModules,
@@ -730,7 +732,7 @@ function reviewBooksForDisplay(books:Book[]):Book[]{
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
-  const {width} = useWindowDimensions();
+  const {width,height:windowHeight} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const phoneLayout = width < 600;
@@ -1121,6 +1123,8 @@ function Client() {
   const [editCoverUri,setEditCoverUri]=useState('');
   const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null;fileSize?:number}|null>(null);
   const [coverPicking,setCoverPicking]=useState(false);
+  const metadataEditorScroll=useRef<ScrollView>(null);
+  const editorScrollReset=useRef(false);
   const [metadataSearchBusy,setMetadataSearchBusy]=useState(false);
   const [metadataSearchMode,setMetadataSearchMode]=useState<''|'smart'|'deep'>('');
   const [metadataSearchResults,setMetadataSearchResults]=useState<MetadataProposal[]>([]);
@@ -1605,13 +1609,12 @@ function Client() {
   };
 
   const pendingReviewBooks=useMemo(()=>reviewBooksForDisplay([...stagedLocalBooks,...serverBooks]).filter(book=>book.needsReview),[stagedLocalBooks,serverBooks]);
-  const stagedPublication=useMemo(()=>partitionLocalBooksByPublication(stagedLocalBooks.filter(book=>!!book.uri) as LocalBook[]),[stagedLocalBooks]);
   const reviewAssetPool = useMemo(() => {
     const localReviewPool=(reviewOnly||!!metadataGapFilter)?stagedLocalBooks:localBooks;
-    if(sourceFilter==='server')return serverBooks;
+    if(sourceFilter==='server')return reviewOnly?reviewBooksForDisplay(serverBooks):serverBooks;
     if(sourceFilter==='downloaded')return [] as Book[];
-    if(sourceFilter==='local')return localReviewPool;
-    return [...localReviewPool,...serverBooks];
+    if(sourceFilter==='local')return reviewOnly?reviewBooksForDisplay(localReviewPool):localReviewPool;
+    return reviewOnly?reviewBooksForDisplay([...localReviewPool,...serverBooks]):[...localReviewPool,...serverBooks];
   },[localBooks,metadataGapFilter,reviewOnly,serverBooks,sourceFilter,stagedLocalBooks]);
 
   const visibleBooks = useMemo(() => {
@@ -4127,9 +4130,7 @@ function Client() {
 
   function OnboardingGuide() {
     if (onboardingDone) return null;
-    const stagedPartition=stagedPublication;
-    const pendingLocalWorks=groupLocalWorks(stagedPartition.staged);
-    const reviewCount=pendingLocalWorks.length;
+    const reviewCount=pendingReviewBooks.filter(book=>book.source!=='server').length;
     const hasFolder = localFolders.length > 0;
     const hasServer = !!session;
     const hasServerFolders = sources.length > 0;
@@ -4771,6 +4772,7 @@ function Client() {
 
     const runMetadataSearch=async(deep:boolean)=>{
       if(!localEdit||metadataSearchBusy)return;
+      Keyboard.dismiss();editorScrollReset.current=true;metadataEditorScroll.current?.scrollTo({y:0,animated:false});
       setMetadataSearchBusy(true);
       setMetadataSearchMode(deep?'deep':'smart');
       setMetadataSearchNotice(deep?'Running Deep Search…':'Running Smart Search…');
@@ -4837,6 +4839,7 @@ function Client() {
           });
           proposals=result.candidates.slice(0,8).map((candidate:OnlineBookCandidate)=>({kind:'book' as const,candidate}));
         }
+        editorScrollReset.current=true;
         setMetadataSearchResults(proposals);
         setMetadataSearchSelection(-1);
         setMetadataSearchNotice(proposals.length
@@ -4850,18 +4853,28 @@ function Client() {
       }
     };
 
-    const useProposal=(index:number)=>{
-      const proposal=metadataSearchResults[index];if(!proposal)return;
+    const useProposal=async(index:number)=>{
+      if(metadataSearchBusy)return;
+      let proposal=metadataSearchResults[index];if(!proposal)return;
+      Keyboard.dismiss();setMetadataSearchBusy(true);setMetadataSearchNotice('Loading book details…');
+      try{
+      if(proposal.kind==='book')proposal={...proposal,candidate:await hydrateBookCandidate(proposal.candidate)};
+      const selectedProposal=proposal;
+      setMetadataSearchResults(current=>current.map((item,i)=>i===index?selectedProposal:item));
       const fields=proposal.candidate.fields;
       setMetadataSearchSelection(index);
-      setEditTitle(String(fields.title||editTitle));setEditAuthor(String(fields.author||''));
-      setEditSeries(String(fields.series||''));setEditSeriesNumber(fields.seriesNumber===undefined?'':String(fields.seriesNumber));
-      setEditGenre(String(fields.genre||''));setEditYear(fields.publishedYear?String(fields.publishedYear):'');
-      setEditNarrator(String((fields as any).narrator||''));setEditPublisher(String(fields.publisher||''));
-      setEditISBN(String((fields as any).isbn||''));setEditASIN(String((fields as any).asin||''));
-      setEditLanguage(String(fields.language||''));setEditDescription(String(fields.description||''));
+      setEditTitle(String(fields.title||editTitle));setEditAuthor(String(fields.author||editAuthor));
+      setEditSeries(String(fields.series||editSeries));setEditSeriesNumber(fields.seriesNumber===undefined?editSeriesNumber:String(fields.seriesNumber));
+      setEditGenre(String(fields.genre||editGenre));setEditYear(fields.publishedYear?String(fields.publishedYear):editYear);
+      setEditNarrator(String((fields as any).narrator||editNarrator));setEditPublisher(String(fields.publisher||editPublisher));
+      setEditISBN(String((fields as any).isbn||editISBN));setEditASIN(String((fields as any).asin||editASIN));
+      setEditLanguage(String(fields.language||editLanguage));setEditDescription(String(fields.description||editDescription));
       if(proposal.candidate.coverUri){setEditCoverUri(proposal.candidate.coverUri);setEditPickedCover(null);}
-      setMetadataSearchNotice('Match selected. Review the details, then Save.');
+      const missing=[!fields.genre?'genre':'',!fields.series?'series':'',!fields.description?'description':''].filter(Boolean);
+      setMetadataSearchNotice('Details filled. Review and Save.'+(missing.length?' Not available: '+missing.join(', ')+'.':''));
+      editorScrollReset.current=true;metadataEditorScroll.current?.scrollTo({y:0,animated:false});
+      }catch(error){setMetadataSearchNotice('Could not load book details. Please try again.');}
+      finally{setMetadataSearchBusy(false);}
     };
 
     const save=async()=>{
@@ -4993,17 +5006,13 @@ function Client() {
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
         <View style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={StyleSheet.absoluteFill} onPress={requestEditorClose}/>
-          <View accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,maxHeight:'100%',flex:1,padding:0,overflow:'hidden'}]}>
-          <ScrollView style={{flex:1}} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{padding:18,gap:9}}>
-
-            <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA & COVER</Text>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
-            {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
-            {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
-            <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
-            {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
+          <View accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,height:Math.max(240,windowHeight-safeArea.top-safeArea.bottom-40),maxHeight:'100%',padding:0,overflow:'hidden'}]}>
+          <View style={{padding:16,gap:8,borderBottomWidth:1,borderBottomColor:p.line}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit book details</Text>
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+          </View>
+          <ScrollView ref={metadataEditorScroll} style={{flex:1,minHeight:0}} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" onContentSizeChange={()=>{if(editorScrollReset.current){editorScrollReset.current=false;metadataEditorScroll.current?.scrollTo({y:0,animated:false});}}} contentContainerStyle={{padding:16,gap:9}}>
             {localEdit?<View style={styles.settingsSubgroup}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FIND METADATA</Text>
               <Text style={[styles.meta,{color:p.muted}]}>Enter a title, author, or both. Tap Smart Search, then choose a match.</Text>
@@ -5022,9 +5031,10 @@ function Client() {
                   return <Pressable key={proposal.kind+':'+candidate.provider+':'+candidate.providerId+':'+index}
                     accessibilityRole="button"
                     accessibilityState={{selected}}
-                    onPress={()=>useProposal(index)}
+                    disabled={metadataSearchBusy} onPress={()=>void useProposal(index)}
                     style={({pressed})=>[{paddingVertical:10,borderBottomWidth:1,borderBottomColor:p.line,opacity:pressed?.72:1}]}>
                     <Text numberOfLines={2} style={[styles.bookTitle,{color:selected?p.sage:p.ink}]}>{proposalTitle(proposal)}</Text>
+                    <Text style={{color:p.sage,fontWeight:'700'}}>{selected?'✓ Selected':'Use this book →'}</Text>
                     <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{details}</Text>
                   </Pressable>;
                 })}
@@ -5038,6 +5048,7 @@ function Client() {
             <TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <Button label={editAdvancedOpen?'Hide additional details':'Additional details'} tone="quiet" onPress={()=>setEditAdvancedOpen(value=>!value)}/>
             {editAdvancedOpen?<View style={styles.settingsSubgroup}>
+              <Text style={{color:p.muted}}>Manual edits are protected from future rescans.</Text>
               {editing.format==='Audio'?<TextInput accessibilityLabel="Narrator" value={editNarrator} onChangeText={setEditNarrator} placeholder="Narrator" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
               <TextInput accessibilityLabel="Publisher" value={editPublisher} onChangeText={setEditPublisher} placeholder="Publisher" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
               <TextInput accessibilityLabel="ISBN" autoCapitalize="characters" autoCorrect={false} value={editISBN} onChangeText={setEditISBN} placeholder="ISBN" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>

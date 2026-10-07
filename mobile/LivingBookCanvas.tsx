@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
-import {StyleSheet,View} from 'react-native';
+import {StyleSheet,View,Text} from 'react-native';
 
 export function AmbientGlow({color='#47736F',size=520,strength=1}:{color?:string;size?:number;strength?:number}){
   return <View pointerEvents="none" accessibilityElementsHidden style={{position:'absolute',width:size,height:size,left:'50%',top:0,marginLeft:-size/2}}>{Array.from({length:24},(_,i)=>{const inset=i*size/64;return <View key={i} style={{position:'absolute',left:inset,top:inset,right:inset,bottom:inset,borderRadius:size,backgroundColor:color,opacity:.009*strength}}/>})}</View>;
@@ -97,18 +97,21 @@ function setPhase(next,data){if(data){direction=data.direction===-1?-1:1;skippin
 function paint(){ctx.setTransform(2,0,0,2,0,0);ctx.clearRect(0,0,500,420);ctx.save();ctx.fillStyle='rgba(0,0,0,.19)';ctx.filter='blur(15px)';ctx.beginPath();ctx.ellipse(250,342,110+80*opening,18+4*opening,0,0,2*PI);ctx.fill();ctx.restore();surface(cover,rigid(0,-9,W+5,H+8),false,false);for(let j=0;j<6;j++)surface(liner,rigid(0,-7+j*1.7),false,false);surface(right,rigid(0,4));if(opening>0){surface(cover,rigid(PI*opening,-5,W+5,H+8),opening>.5,false);surface(left,rigid(PI*opening,5),opening>.5);}if(activeTurn)surface(turn>.5?back:front,flex(turn),direction===1?turn>.5:turn<.5,true);if(opening<1)surface(opening<.5?cover:liner,rigid(PI*opening,11,W+5,H+8),opening>.5,false);}
 function tick(now){if(phase==='opening'||phase==='closing'){const progress=reduced?1:Math.min(1,(now-transitionStart)/1500);opening=transitionFrom+(transitionTo-transitionFrom)*ease(progress);}else if(phase==='turning'&&activeTurn){const duration=skipping?780:1900,progress=reduced?1:Math.min(1,(now-turnStart)/duration);turn=ease(progress);}else if(phase==='settling'&&activeTurn)turn=1;paint();requestAnimationFrame(tick);}
 window.ArchivistLivingBook={setState:data=>{if(!data)return;if(typeof data.title==='string'&&data.title!==title)title=data.title;if(typeof data.author==='string')author=data.author;if(typeof data.chapter==='string')chapter=data.chapter;if(Number.isFinite(data.number)){const nextPage=Math.max(2,Number(data.number)*2);if(!activeTurn&&nextPage!==page){page=nextPage;rebuildStable();}}setPhase(data.phase||phase,data);},setCover:(source,mode)=>{coverMode=mode||'fallback';if(!source){coverImage=null;coverReady=false;cover=texture(true,0);return;}const img=new Image();img.onload=()=>{coverImage=img;coverReady=true;cover=texture(true,0);};img.onerror=()=>{coverImage=null;coverReady=false;cover=texture(true,0);};img.src=source;}};
-paint();requestAnimationFrame(tick);
+paint();if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage('living-book-ready');requestAnimationFrame(tick);
 })();</script></body></html>`;
 }
 
 export function LivingBookCanvas(props:LivingBookCanvasProps){
   const ref=useRef<WebView>(null);
   const [ready,setReady]=useState(false);
+  const [rendererEpoch,setRendererEpoch]=useState(0);
   const initialHtml=useMemo(()=>rendererHtml({
     title:props.title,author:props.author,chapter:props.chapter||'',number:props.number||1,
     phase:props.phase,direction:props.direction,skipping:props.skipping,reduceMotion:props.reduceMotion,
     coverMode:props.coverMode||'fallback',
   }),[]);
+  const webSource=useMemo(()=>({html:initialHtml}),[initialHtml]);
+  const recoverRenderer=()=>{setReady(false);setRendererEpoch(value=>value+1);};
   const inject=(code:string)=>{if(ready)ref.current?.injectJavaScript('try{'+code+'}catch(e){};true;');};
 
   useEffect(()=>{
@@ -127,9 +130,10 @@ export function LivingBookCanvas(props:LivingBookCanvasProps){
   },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);
 
   return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none">
-    <WebView ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
+    {!ready?<View style={{position:'absolute',alignSelf:'center',top:24,width:150,height:225,borderRadius:6,backgroundColor:'#102b35',borderWidth:1,borderColor:'#c6a374',alignItems:'center',justifyContent:'center',padding:12}}><Text style={{color:'#f1ead5',textAlign:'center'}}>{props.title}</Text></View>:null}
+    <WebView key={rendererEpoch} ref={ref} source={webSource} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
       bounces={false} overScrollMode="never" androidLayerType="hardware" style={styles.web} containerStyle={styles.container}
-      onLoadEnd={()=>setReady(true)} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+      onLoadStart={()=>setReady(false)} onMessage={event=>{if(event.nativeEvent.data==='living-book-ready')setReady(true);}} onContentProcessDidTerminate={recoverRenderer} onRenderProcessGone={recoverRenderer} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
       setSupportMultipleWindows={false} accessible={false} importantForAccessibility="no-hide-descendants"/>
   </View>;
 }

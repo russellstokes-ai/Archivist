@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typ
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:1,target:9}}).outputText,file);
 const {groupLocalWorks}=require('./localWorks.ts');
 const {logicalWorkKey}=require('./libraryIntelligence.ts');
-const {lookupOnlineBook}=require('./onlineBookMetadata.ts');
+const {lookupOnlineBook,hydrateBookCandidate}=require('./onlineBookMetadata.ts');
 const app=fs.readFileSync('App.tsx','utf8');
 const helper=app.slice(app.indexOf('function reviewBooksForDisplay'),app.indexOf('function Client()'));
 const reviewBooksForDisplay=new Function('groupLocalWorks','logicalWorkKey',ts.transpileModule(helper,{compilerOptions:{target:9}}).outputText+';return reviewBooksForDisplay')(groupLocalWorks,logicalWorkKey);
@@ -13,7 +13,18 @@ assert.equal(/persistEditorWork|replaceLocalStageBooks/.test(app.slice(start,end
 const modal=app.slice(app.indexOf('    return <Modal transparent',app.indexOf('function MetadataEditorPanel')),app.indexOf('function BulkMetadataPanel'));
 assert.ok(modal.lastIndexOf('</ScrollView>')<modal.indexOf("label={busy?'Saving…':'Save'}"),'Save must stay outside scrolling fields');
 assert.ok(modal.includes("maxHeight:'100%'")&&modal.includes("keyboardShouldPersistTaps=\"handled\""));
+assert.ok(app.includes("const reviewCount=pendingReviewBooks.filter(book=>book.source!=='server').length"),'onboarding must use the same grouped review collection');
+assert.ok(modal.indexOf('accessibilityLabel="Corrected title"')<modal.indexOf('<ScrollView'),'title input must stay visible when results change');
+assert.ok(modal.includes('Use this book →'),'search results must expose an explicit selection action');
 (async()=>{
+ const candidate={provider:'openlibrary',providerId:'/works/test',fields:{title:'Dune',author:'Frank Herbert'}};
+ const enriched=await hydrateBookCandidate(candidate,{fetcher:async()=>({ok:true,status:200,json:async()=>({description:{value:'A desert planet.'},subjects:['Science fiction']})})});
+ assert.equal(enriched.fields.genre,'Science Fiction');
+ assert.equal(enriched.fields.description,'A desert planet.');
+ assert.equal(enriched.fields.title,'Dune');
+ assert.equal(candidate.fields.genre,undefined,'hydration must not mutate the original result');
+ const offline=await hydrateBookCandidate(candidate,{fetcher:async()=>{throw Error('offline')}});
+ assert.equal(offline,candidate,'detail fetch failure must retain the selectable search result');
  let queries=[];
  const fetcher=async url=>{queries.push(new URL(url).searchParams.get('q'));return {ok:true,status:200,json:async()=>({docs:[{key:'/works/dune',title:'Dune',author_name:['Frank Herbert'],cover_i:1}]})}};
  const author=await lookupOnlineBook({title:'',author:'Frank Herbert',uri:'',format:'Audio'},{fetcher,cache:{}});

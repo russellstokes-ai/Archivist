@@ -339,6 +339,10 @@ async function hydrateOpenLibrary(fetcher:FetchLike,candidate:OnlineBookCandidat
     return {...candidate,fields:compact({...candidate.fields,description:candidate.fields.description||descriptionValue(json?.description),genre:candidate.fields.genre||selectGenre(json?.subjects)})};
   }catch{return candidate;}
 }
+export async function hydrateBookCandidate(candidate:OnlineBookCandidate,options:{fetcher?:FetchLike;timeoutMs?:number}={}){
+  return hydrateOpenLibrary(options.fetcher||fetch as FetchLike,candidate,options.timeoutMs||6000);
+}
+
 function googleQuery(plan:QueryPlan){
   if(plan.kind==='isbn')return 'isbn:'+plan.isbn;
   return [plan.title?'intitle:'+plan.title:'',plan.author?'inauthor:'+plan.author:''].filter(Boolean).join(' ');
