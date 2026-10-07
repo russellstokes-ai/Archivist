@@ -32,3 +32,8 @@ assert.equal(accepted[0].embeddedMetadata.trackNumber,1,'Accept metadata must no
 assert.equal(accepted[1].embeddedMetadata.trackNumber,2,'Each physical part keeps its own ordering data');
 assert.equal(accepted[0].uri,source[0].uri);
 console.log('PASS: metadata search workflow preserves chapter/part structure while saving clues and accepting work metadata');
+
+const corrected=acceptBookCandidateForWork(applyManualCluesToWork(source,source.map(b=>b.uri),{title:'Dun',author:'Frank',series:'',genre:''}),source.map(b=>b.uri),candidate);
+assert.equal(corrected[0].title,'Dune','explicit candidate acceptance must replace incomplete manual search clues');
+assert.equal(corrected[0].author,'Frank Herbert');
+assert.equal(corrected[0].metadataProvenance.title,'manual');

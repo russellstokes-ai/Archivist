@@ -25,7 +25,7 @@ assert.ok(source.includes('setScanProgress(null)')&&source.includes('libraryRefr
 const enrichmentBody=source.slice(source.indexOf('async function enrichPublishedLocalLibrary'),source.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
 assert.ok(enrichmentBody.includes('enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true)'),'normal preparation must read bounded unresolved audio properties before online lookup');
 assert.ok(source.includes("if(fastAudioProperties){")&&source.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'fast normal property pass must be audio-only and must not reopen already-read files');
-assert.ok(source.includes('itemTimeoutMs:fastAudioProperties?1200')&&source.includes('fastAudioProperties?3:6'),'fast property reads must be aggressively timeout/circuit-broken');
+assert.ok(source.includes('itemTimeoutMs:fastAudioProperties?1200')&&source.includes('maxConsecutiveTimeouts:1'),'fast property reads must be aggressively timeout/circuit-broken');
 const deepSearchBody=source.slice(source.indexOf('const runMetadataSearch=async'),source.indexOf('const acceptProposal=async'));
 assert.ok(deepSearchBody.includes('if(deep)')&&deepSearchBody.includes('concurrency:1')&&deepSearchBody.includes('maxConsecutiveTimeouts:1'),'deep local inspection must be explicit, serial and circuit-broken per work');
 assert.ok(deepSearchBody.includes('workBooks[Math.floor(workBooks.length/2)]')&&deepSearchBody.includes('workBooks.slice(0,1)'),'Deep Search must sample multipart audio and inspect only one single-file book/comic instead of scanning the library');

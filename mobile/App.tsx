@@ -1,3 +1,4 @@
+import {persistWorkEdit} from './metadataEditPersistence';
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
@@ -2721,6 +2722,7 @@ function Client() {
   const cancelLibraryRefresh=()=>{
     if(!libraryRefreshRunningRef.current&&!activeLibraryProgress)return;
     scanCommitGate.invalidate();
+    NativeModules.ArchivistArchive?.cancelAudioMetadataRead?.();
     libraryRefreshRunningRef.current=false;
     setLocalScanning(false);
     setScanProgress(null);
@@ -2913,8 +2915,8 @@ function Client() {
       // Fast properties are bounded header reads and fail forward aggressively.
       // Full archive/audio inspection remains explicit or refresh-only.
       itemTimeoutMs:fastAudioProperties?1200:(refreshMetadata?5000:2500),
-      maxConsecutiveTimeouts:fastAudioProperties?3:6,
-      concurrency:fastAudioProperties?4:(refreshMetadata?3:4),
+      maxConsecutiveTimeouts:1,
+      concurrency:1,
       shouldInspect:needsEmbeddedRead,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
@@ -4241,6 +4243,7 @@ function Client() {
   }
 
   function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
+    if(item.source!=='server')cancelLibraryRefresh();
     setEditing(item);
     setEditingUris(uris.filter(Boolean));
     setEditTitle(item.title);
@@ -4728,6 +4731,12 @@ function Client() {
     </Modal>;
   }
 
+  const persistEditorWork=(books:LocalBook[],targets:string[],overrides:Record<string,LocalMetadataOverride>)=>persistWorkEdit(books,targets,overrides,{
+    load:loadLocalStageBooks,replace:replaceLocalStageBooks,
+    saveOverrides:value=>setPersistedJSON(localMetadataOverridesKey,value),
+    loadOverrides:()=>getPersistedJSON<Record<string,LocalMetadataOverride>>(localMetadataOverridesKey),
+  });
+
   function MetadataEditorPanel(){
     if(!editing)return null;
     const localEdit=editing.source!=='server'&&!!editing.uri;
@@ -4752,15 +4761,12 @@ function Client() {
       const override=editorOverride(editCoverUri);
       if(!override.title.trim()){setMetadataSearchNotice('Add a title before searching.');return null;}
       const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const updated=applyManualCluesToWork(current,targets,override);
+      let updated=applyManualCluesToWork(current,targets,override);
       const nextOverrides={...localMetadataOverrides};
       for(const uri of targets)nextOverrides[uri]=override;
+      updated=await persistEditorWork(updated,targets,nextOverrides);
       setLocalMetadataOverrides(nextOverrides);
       setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
-      await Promise.all([
-        setPersistedJSON(localMetadataOverridesKey,nextOverrides),
-        replaceLocalStageBooks(updated),
-      ]);
       const representative=updated.find(book=>targets.includes(book.uri));
       if(representative)setEditing({...representative,source:'local'});
       setMetadataSearchNotice('Search clues saved.');
@@ -4879,11 +4885,8 @@ function Client() {
             description:book.description,coverUri:book.coverUri,
           };
         }
+        accepted=await persistEditorWork(accepted,targets,acceptedOverrides);
         setLocalMetadataOverrides(acceptedOverrides);
-        await Promise.all([
-          setPersistedJSON(localMetadataOverridesKey,acceptedOverrides),
-          replaceLocalStageBooks(accepted),
-        ]);
         setStagedLocalBooks(accepted.map(book=>({...book,source:'local' as const})));
         const publication=publishCompletedLocalStage(accepted);
         const acceptedPublished=artwork.books.length>0&&artwork.books.every(book=>publication.published.some(item=>item.uri===book.uri));
@@ -4919,7 +4922,7 @@ function Client() {
           .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);setEditPickedCover(null);})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
-        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
+        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined,clearedFields:[...(seriesNumber===undefined?['seriesNumber']:[]),...(publishedYear===undefined?['publishedYear']:[])]};
         const nextOverrides={...localMetadataOverrides};
         for(const uri of targets)nextOverrides[uri]=override;
         try{
@@ -4931,9 +4934,10 @@ function Client() {
               ...book,...override,
               coverUri:coverUri||book.coverUri,
               libraryCoverUri:coverUri||book.libraryCoverUri||book.coverUri,
+              livingBookCoverUri:coverUri&&coverUri!==book.coverUri?undefined:book.livingBookCoverUri,
               needsReview:false,reviewReason:'',metadataSource:'manual',
               identificationConfidence:'high',metadataConflicts:[],
-              metadataProvenance:{...(book.metadataProvenance||{}),title:'manual',author:'manual'},
+              metadataProvenance:{...(book.metadataProvenance||{}),...Object.fromEntries(Object.keys(override).filter(key=>key!=='coverUri').map(key=>[key,'manual' as const]))},
               metadataFieldConfidence:{...(book.metadataFieldConfidence||{}),title:'high',author:'high'},
             };
             nextBook.workKey=logicalWorkKey(nextBook);nextBook.editionKey=editionKey(nextBook,nextBook.format);
@@ -4945,11 +4949,8 @@ function Client() {
           });
           const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
           updated=updated.map(book=>artworkByUri.get(book.uri)||book);
+          updated=await persistEditorWork(updated,targets,nextOverrides);
           setLocalMetadataOverrides(nextOverrides);
-          await Promise.all([
-            setPersistedJSON(localMetadataOverridesKey,nextOverrides),
-            replaceLocalStageBooks(updated),
-          ]);
           // Verify the durable stage immediately. A Save button must never close
           // successfully if the work-level edit did not actually persist.
           const persistedStage=await loadLocalStageBooks();

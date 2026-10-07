@@ -133,6 +133,7 @@ export type LocalScanProgress = {
 };
 
 export type LocalMetadataOverride = {
+  clearedFields?: string[];
   title: string;
   author: string;
   series: string;
@@ -530,6 +531,19 @@ export async function scanLocalFolders(
         const resolvedMetadata = resolveMetadataCandidates(evidence);
         identity = applyResolvedLocalMetadata(identity, resolvedMetadata);
         if (override) identity = applyLocalMetadata(identity, override, 'manual');
+        if(override){
+          for(const field of Object.keys(override)){
+            if(['coverUri','clearedFields'].includes(field))continue;
+            resolvedMetadata.provenance[field as keyof typeof resolvedMetadata.provenance]='manual';
+          }
+          for(const field of override.clearedFields||[]){
+            if(['seriesNumber','publishedYear'].includes(field)){
+              (identity as any)[field]=undefined;
+              (resolvedMetadata.provenance as any)[field]='manual';
+            }
+          }
+          resolvedMetadata.conflicts=resolvedMetadata.conflicts.filter(conflict=>resolvedMetadata.provenance[conflict.field]!=='manual');
+        }
 
         const comicFields:LocalMetadataFields=format==='Comic'?{...sidecarFields,...embeddedFields}:{};
         const comicMetadataProvenance:Partial<Record<string,MetadataSource>>={};

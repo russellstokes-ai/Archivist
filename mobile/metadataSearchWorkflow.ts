@@ -50,15 +50,25 @@ export function acceptBookCandidateForWork(
   return books.map(book=>{
     if(!wanted.has(book.uri))return book;
     const embeddedMetadata=book.embeddedMetadata;
+    // Accept is an explicit choice, unlike automatic enrichment: search clues
+    // must not prevent the chosen candidate from correcting the identity.
+    const selectedFields=Object.fromEntries(Object.entries(candidate.fields).filter(([,value])=>value!==undefined&&value!==null&&String(value).trim()!==''));
     const merged=mergeOnlineBookCandidate(book,candidate,true) as LocalBook;
     const next:LocalBook={
       ...merged,
+      ...selectedFields,
+      metadataSource:'manual',
+      metadataConflicts:[],
+      metadataProvenance:{...(merged.metadataProvenance||{}),...Object.fromEntries(Object.keys(selectedFields).map(field=>[field,'manual' as const]))},
+      needsReview:false,reviewReason:'',
+      coverUri:candidate.coverUri||merged.coverUri,
+      libraryCoverUri:candidate.coverUri||merged.libraryCoverUri,
+      livingBookCoverUri:candidate.coverUri&&candidate.coverUri!==book.coverUri?undefined:merged.livingBookCoverUri,
       uri:book.uri,
       rootUri:book.rootUri,
       embeddedMetadata,
       onlineMetadataMatch:candidate,
       identificationConfidence:merged.needsReview?'medium':'high',
-      metadataSource:(merged.metadataProvenance?.title==='online'||merged.metadataProvenance?.author==='online')?'online':merged.metadataSource,
     };
     next.workKey=logicalWorkKey(next);
     next.editionKey=editionKey(next,next.format);
@@ -75,9 +85,20 @@ export function acceptComicCandidateForWork(
   return books.map(book=>{
     if(!wanted.has(book.uri))return book;
     const embeddedMetadata=book.embeddedMetadata;
+    // Accept is an explicit choice, unlike automatic enrichment: search clues
+    // must not prevent the chosen candidate from correcting the identity.
+    const selectedFields=Object.fromEntries(Object.entries(candidate.fields).filter(([,value])=>value!==undefined&&value!==null&&String(value).trim()!==''));
     const merged=mergeOnlineComicCandidate(book,candidate,true) as LocalBook;
     const next:LocalBook={
       ...merged,
+      ...selectedFields,
+      metadataSource:'manual',
+      metadataConflicts:[],
+      metadataProvenance:{...(merged.metadataProvenance||{}),...Object.fromEntries(Object.keys(selectedFields).map(field=>[field,'manual' as const]))},
+      needsReview:false,reviewReason:'',
+      coverUri:candidate.coverUri||merged.coverUri,
+      libraryCoverUri:candidate.coverUri||merged.libraryCoverUri,
+      livingBookCoverUri:candidate.coverUri&&candidate.coverUri!==book.coverUri?undefined:merged.livingBookCoverUri,
       uri:book.uri,
       rootUri:book.rootUri,
       embeddedMetadata,

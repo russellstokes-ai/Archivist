@@ -416,6 +416,7 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
 }
 
 function canReplaceField(book:BookLookupInput,field:keyof OnlineBookFields,candidate:OnlineBookCandidate){
+  if(book.metadataProvenance?.[field as string]==='manual')return false;
   const current=(book as any)[field];
   if(current===undefined||current===null||String(current).trim()==='')return true;
   const source=book.metadataProvenance?.[field as string];
