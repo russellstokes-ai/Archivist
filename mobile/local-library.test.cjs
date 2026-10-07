@@ -262,6 +262,14 @@ assert.equal(previews[0].state, 'review');
   assert.equal(scanned.books[0].coverUri, 'content://manual/MyCover.jpg');
   assert.deepEqual(scanned.books[0].coverCandidates, [cover, genericCover, frontCover]);
 
+  const acceptedPrevious=scanned.books.map(book=>({...book,identificationState:'accepted',libraryCoverUri:'content://manual/MyCover.jpg',livingBookCoverUri:'content://manual/MyCover.jpg'}));
+  const acceptedRescan=await scanLocalFolders(
+    [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],undefined,
+    {[file]:{title:'My correction',author:'Manual Author',series:'Manual Series',genre:'Fantasy',coverUri:'content://manual/MyCover.jpg'}},acceptedPrevious,
+  );
+  assert.equal(acceptedRescan.books[0].identificationState,'accepted','rescan must preserve explicit acceptance');
+  assert.equal(acceptedRescan.books[0].livingBookCoverUri,'content://manual/MyCover.jpg');
+
   const restoredScan=await scanLocalFolders(
     [{id:root,uri:root,name:'Books',status:'Ready',itemCount:0}],
     undefined,

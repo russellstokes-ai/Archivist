@@ -61,11 +61,11 @@ import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasB
 import {localRelationClassification} from './duplicates';
 import {normalizeLibrarySummary, normalizeServerWork} from './serverCompatibility';
 import {getPersistedJSON, setPersistedJSON} from './stateStore';
-import {loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks} from './localStageStore';
+import {commitLocalWorkEdit,loadLocalStageBooks, migrateLegacyLocalStage, replaceLocalStageBooks} from './localStageStore';
 import {defaultMetadataSettings, MetadataSettings, sanitizeMetadataSettings} from './metadataSettings';
 import {LibrarySource, WorkSource, dedupeForAll, matchesSource, normalizeSpaceSelection, sourceIdentity, sourceLabel, spacesForSource} from './librarySources';
 import {SmartShelfDefinition, SmartShelfField, SmartShelfOperator, SmartShelfRule, SmartShelfRuleGroup, LibraryCollection, addGroupAtPath, addRuleAtPath, applySmartShelf, collectionWorks, emptySmartShelfRules, legacyRules, newOrganisationId, smartShelfPresets, removeRuleNode, replaceRuleNode, sanitizeCollections, sanitizeSmartShelves, toggleCollectionWork} from './libraryOrganisation';
-import {PlayerBookmark, TrackOrderMap, ChapterOverrideMap, LivingBookMotion, LivingBookMotionEvent, addBookmark, applyTrackOrder, initialLivingBookMotion, mergeChapter, moveTrackOrder, reduceLivingBookMotion, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
+import {PLAYER_MOTION_TIMING,PlayerBookmark, TrackOrderMap, ChapterOverrideMap, LivingBookMotion, LivingBookMotionEvent, addBookmark, applyTrackOrder, initialLivingBookMotion, mergeChapter, moveTrackOrder, reduceLivingBookMotion, removeBookmark, renameChapter, sanitizeBookmarks, sanitizeChapterOverrides, sanitizeTrackOrders, setChapterBoundary, splitChapter} from './playerExperience';
 import {DurableNowSession, NowSessionMedia, refreshNowSession, sanitizeNowSession, sameNowMedia} from './nowSession';
 import {ReaderAnnotation, ReaderAppearance, ReaderBookmark, addReaderAnnotation, defaultReaderAppearance, sanitizeReaderAnnotations, sanitizeReaderAppearance, sanitizeReaderBookmarks, toggleReaderBookmark, workReaderAnnotations, workReaderBookmarks} from './readerExperience';
 import {shouldCaptureSheetDismiss, shouldDismissSheet} from './sheetInteraction';
@@ -79,7 +79,7 @@ import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './librar
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
-import {migrateLegacyPublishedArtwork,partitionLocalBooksByPublication,reconcilePublishedLocalBooks} from './publicationPipeline';
+import {restorePublishedCatalogue,localWorksForReview,migrateLegacyPublishedArtwork,partitionLocalBooksByPublication,reconcilePublishedLocalBooks} from './publicationPipeline';
 import {cacheRequiredWorkArtwork} from './dualCoverPipeline';
 import {applyManualCluesToWork,acceptBookCandidateForWork,acceptComicCandidateForWork,type MetadataProposal,proposalTitle,proposalCreator,proposalScore} from './metadataSearchWorkflow';
 import LocalPdfReader from './LocalPdfReader';
@@ -720,7 +720,7 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
 
 function reviewBooksForDisplay(books:Book[]):Book[]{
   const local=books.filter(book=>book.source!=='server'&&!!book.uri) as LocalBook[];
-  const grouped:Book[]=groupLocalWorks(local).map(work=>({...work.tracks[0],source:'local' as const,title:work.title,author:work.author,series:work.series,needsReview:work.tracks.some(book=>book.needsReview),coverUri:work.coverUri}));
+  const grouped:Book[]=localWorksForReview(local).map(book=>({...book,source:'local' as const}));
   const servers=new Map<string,Book>();
   for(const book of books.filter(book=>book.source==='server')){
     const key=String(book.serverWorkId||logicalWorkKey(book)||book.id);
@@ -1000,7 +1000,7 @@ function Client() {
     livingBookSettleTimer.current=setTimeout(()=>{
       livingBookSettleTimer.current=null;
       callback();
-    },180);
+    },PLAYER_MOTION_TIMING.settleMs);
   }
   function animateLivingBookCoverClose(){
     const generation=++livingBookGeneration.current;
@@ -1011,7 +1011,7 @@ function Client() {
         transitionLivingBook({type:'close-complete'});
         return;
       }
-      Animated.timing(bookOpenAnim,{toValue:0,duration:Math.max(180,Math.round(value*1500)),useNativeDriver:true})
+      Animated.timing(bookOpenAnim,{toValue:0,duration:Math.max(180,Math.round(value*PLAYER_MOTION_TIMING.closeMs)),useNativeDriver:true})
         .start(({finished})=>{if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'close-complete'});});
     });
   }
@@ -1028,7 +1028,7 @@ function Client() {
         transitionLivingBook({type:'open-complete'});
         return;
       }
-      Animated.timing(bookOpenAnim,{toValue:1,duration:Math.max(180,Math.round((1-value)*1500)),useNativeDriver:true})
+      Animated.timing(bookOpenAnim,{toValue:1,duration:Math.max(180,Math.round((1-value)*PLAYER_MOTION_TIMING.openMs)),useNativeDriver:true})
         .start(({finished})=>{if(finished&&generation===livingBookGeneration.current)transitionLivingBook({type:'open-complete'});});
     });
   }
@@ -1045,7 +1045,7 @@ function Client() {
     if(next.phase!=='turning')return;
     const generation=++livingBookGeneration.current;
     pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
-    Animated.timing(pageTurnAnim,{toValue:1,duration:1900,useNativeDriver:true}).start(({finished})=>{
+    Animated.timing(pageTurnAnim,{toValue:1,duration:PLAYER_MOTION_TIMING.pageTurnMs,useNativeDriver:true}).start(({finished})=>{
       if(!finished||generation!==livingBookGeneration.current)return;
       transitionLivingBook({type:'turn-complete'});
       scheduleLivingBookSettle(()=>{
@@ -1065,7 +1065,7 @@ function Client() {
     const generation=++skipGeneration.current;
     skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);
     setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
-    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=6?1040:780,useNativeDriver:true}).start(({finished})=>{
+    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=6?PLAYER_MOTION_TIMING.multiSkipTurnMs:PLAYER_MOTION_TIMING.skipTurnMs,useNativeDriver:true}).start(({finished})=>{
       if(!finished||generation!==skipGeneration.current)return;
       transitionLivingBook({type:'turn-complete'});
       scheduleLivingBookSettle(()=>{
@@ -1355,7 +1355,7 @@ function Client() {
     livingBookPageLoop.current=setTimeout(()=>{
       livingBookPageLoop.current=null;
       animateLivingBookPageTurn();
-    },7200);
+    },PLAYER_MOTION_TIMING.ambientRestMs);
     return()=>stopLivingBookPageLoop();
   },[livingBookMotion.phase,playerMotionPlaying,playbackVisible,reduceMotion]);
 
@@ -1874,7 +1874,7 @@ function Client() {
           await setPersistedJSON(publicationArtworkMigrationKey,{done:true,completedAt:new Date().toISOString()}).catch(()=>undefined);
         }
         const staged=normalized.map(book=>({...book,source:'local' as const}));
-        const publication=partitionLocalBooksByPublication(normalized);
+        const publication={published:restorePublishedCatalogue(normalized)};
         setStagedLocalBooks(staged);
         setLocalBooks(publication.published.map(book=>({...book,source:'local' as const})));
         setSpaces([...new Set(normalized.map(book=>book.space).filter(Boolean))]);
@@ -1923,7 +1923,9 @@ function Client() {
         if(value.some(item=>item.complete===false))setRescanPromptOpen(true);
       }
     }).catch(() => undefined);
-    getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(value => {
+    getPersistedJSON<Record<string, LocalMetadataOverride>>(localMetadataOverridesKey).then(async legacy => {
+      const stored=await loadLocalStageBooks();
+      const value={...legacy,...Object.fromEntries(stored.filter(book=>book.manualOverride).map(book=>[book.uri,book.manualOverride!]))};
       if (value && typeof value === 'object') setLocalMetadataOverrides(value);
     }).catch(() => undefined).finally(() => setLocalOverridesReady(true));
     getPersistedJSON<SmartShelfDefinition[]>(smartShelvesKey).then(value => setSmartShelves(sanitizeSmartShelves(value))).catch(() => undefined);
@@ -4746,9 +4748,7 @@ function Client() {
   }
 
   const persistEditorWork=(books:LocalBook[],targets:string[],overrides:Record<string,LocalMetadataOverride>)=>persistWorkEdit(books,targets,overrides,{
-    load:loadLocalStageBooks,replace:replaceLocalStageBooks,
-    saveOverrides:value=>setPersistedJSON(localMetadataOverridesKey,value),
-    loadOverrides:()=>getPersistedJSON<Record<string,LocalMetadataOverride>>(localMetadataOverridesKey),
+    load:loadLocalStageBooks,commit:commitLocalWorkEdit,
   });
 
   function MetadataEditorPanel(){
@@ -4853,7 +4853,7 @@ function Client() {
       const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
       const narrator=editNarrator.trim(),publisher=editPublisher.trim(),isbn=editISBN.trim(),asin=editASIN.trim(),language=editLanguage.trim(),description=editDescription.trim();
       let coverUri=editCoverUri.trim();
-      if(!title)return;
+      if(!(title||author||isbn))return;
       if(localEdit&&editPickedCover){
         try{coverUri=await persistPickedCover(editPickedCover.uri,editPickedCover.fileName,editPickedCover.fileSize);}
         catch(e){setError('Could not save the selected cover: '+(e as Error).message);return;}
@@ -4870,28 +4870,21 @@ function Client() {
         for(const uri of targets)nextOverrides[uri]=override;
         try{
           const wanted=new Set(targets);
-          const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-          let updated=current.map(book=>{
-            if(!wanted.has(book.uri))return book;
-            const nextBook:LocalBook={
-              ...book,...override,
-              coverUri:coverUri||book.coverUri,
-              libraryCoverUri:coverUri||book.libraryCoverUri||book.coverUri,
-              livingBookCoverUri:coverUri&&coverUri!==book.coverUri?undefined:book.livingBookCoverUri,
-              needsReview:false,reviewReason:'',metadataSource:'manual',
-              identificationConfidence:'high',metadataConflicts:[],
-              metadataProvenance:{...(book.metadataProvenance||{}),...Object.fromEntries(Object.keys(override).filter(key=>key!=='coverUri').map(key=>[key,'manual' as const]))},
-              metadataFieldConfidence:{...(book.metadataFieldConfidence||{}),title:'high',author:'high'},
-            };
-            nextBook.workKey=logicalWorkKey(nextBook);nextBook.editionKey=editionKey(nextBook,nextBook.format);
-            return nextBook;
-          });
+          const current=await loadLocalStageBooks();
           const selected=metadataSearchResults[metadataSearchSelection];
-          if(selected)updated=updated.map(book=>!wanted.has(book.uri)?book:{...book,...(selected.kind==='book'?{onlineMetadataMatch:selected.candidate}:{onlineComicMetadataMatch:selected.candidate})});
+          let updated=selected
+            ? selected.kind==='book'
+              ? acceptBookCandidateForWork(current,targets,selected.candidate)
+              : acceptComicCandidateForWork(current,targets,selected.candidate)
+            : current;
+          updated=applyManualCluesToWork(updated,targets,override);
+          if(coverUri)updated=updated.map(book=>!wanted.has(book.uri)?book:{...book,
+            coverUri,libraryCoverUri:coverUri,
+            livingBookCoverUri:coverUri!==book.libraryCoverUri?undefined:book.livingBookCoverUri});
           const targetBooks=updated.filter(book=>wanted.has(book.uri));
-          const artwork=await cacheRequiredWorkArtwork(targetBooks,{
+          const artwork=selected||targetBooks.some(book=>book.identificationState==='accepted')?await cacheRequiredWorkArtwork(targetBooks,{
             documentDirectory,makeDirectoryAsync,downloadAsync:downloadCoverWithDeadline,getInfoAsync,deleteAsync,
-          });
+          }):{books:targetBooks};
           const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
           updated=updated.map(book=>artworkByUri.get(book.uri)||book);
           updated=await persistEditorWork(updated,targets,nextOverrides);
@@ -4910,7 +4903,9 @@ function Client() {
           if(!saveVerified)throw Error('Metadata save could not be verified. Your changes were not discarded.');
           setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
           publishCompletedLocalStage(updated);
-          setEditing({...editing,...override,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);setMetadataSearchNotice('Saved. You can search again or close.');
+          setEditing({...editing,...override,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);setMetadataSearchNotice(selected
+            ? (partitionLocalBooksByPublication(updated.filter(book=>wanted.has(book.uri))).staged.length?'Metadata accepted. Artwork is not ready; this book remains in Needs Attention.':'Accepted and saved to your Library.')
+            : 'Search clues saved. Run Smart Search and choose a match.');
         }catch(e){setError((e as Error).message);}
         finally{setBusy(false);}
       }else setBusy(false);
@@ -4937,6 +4932,10 @@ function Client() {
         for(const uri of targets)delete next[uri];
         setLocalMetadataOverrides(next);
         await setPersistedJSON(localMetadataOverridesKey,next);
+        const current=await loadLocalStageBooks();
+        const original=current.filter(book=>targets.includes(book.uri));
+        await commitLocalWorkEdit(original.map(book=>({...book,manualOverride:undefined,identificationState:undefined})),original);
+
         setEditing(null);setEditingUris([]);
         await rescanLocalFolders(next);
       }catch(e){setError((e as Error).message);}
@@ -5062,7 +5061,7 @@ function Client() {
             {error?<Text accessibilityLiveRegion="polite" style={{color:p.danger}}>{error}</Text>:null}
             <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
               {localEdit?<Button label={metadataSearchBusy?'Searching…':'Smart Search'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void runMetadataSearch()}/>:null}
-              <Button label={busy?'Saving…':'Save'} disabled={busy||metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
+              <Button label={busy?'Saving…':metadataSearchSelection>=0?'Accept & Save':'Save'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void save()}/>
               <Button label="Close" tone="quiet" disabled={busy||metadataSearchBusy||coverPicking} onPress={requestEditorClose}/>
             </View>
           </View>
@@ -5134,17 +5133,13 @@ function Client() {
           }
         }
         if(localUpdates.size){
+          cancelLibraryRefresh();
+          let updated=await loadLocalStageBooks();
+          for(const [uri,override] of localUpdates)updated=applyManualCluesToWork(updated,[uri],override);
+          updated=await persistEditorWork(updated,[...localUpdates.keys()],nextOverrides);
           setLocalMetadataOverrides(nextOverrides);
-          await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
-          const updated=localBooks.map(book=>{
-            if(!book.uri)return book;
-            const override=localUpdates.get(book.uri);
-            if(!override)return book;
-            const next={...book,...override,metadataSource:'manual' as const,identificationConfidence:'high' as const,needsReview:false,reviewReason:'',metadataConflicts:[]};
-            return {...next,workKey:logicalWorkKey(next),editionKey:editionKey(next,next.format)};
-          });
-          setLocalBooks(updated);
-          await replaceLocalStageBooks(updated as LocalBook[]);
+          publishCompletedLocalStage(updated);
+
         }
         if(serverTouched)await refreshSourcesAndShelf();
         setSelectedWorkKeys([]);

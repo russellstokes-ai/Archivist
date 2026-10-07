@@ -42,7 +42,8 @@ export function assessLocalWorkForPublication(work:LocalWork):PublicationAssessm
   const libraryCoverUri=workLibraryCoverUri(work);
   const livingBookCoverUri=workLivingBookCoverUri(work);
   const authorMayRemainIncomplete=!work.needsReview&&!isGenericMediaTitle(title,work.format,work.files);
-  const blockingReview=work.needsReview||isGenericMediaTitle(title,work.format,work.files);
+  const pendingClues=work.tracks.some(track=>track.identificationState==='clues-saved'||track.identificationState==='unresolved');
+  const blockingReview=pendingClues||work.needsReview||isGenericMediaTitle(title,work.format,work.files);
 
   if(blockingReview)blockers.push('needs-review');
   if(!title)blockers.push('missing-title');
@@ -108,4 +109,32 @@ export function publicationBlockerCopy(blocker:PublicationBlocker){
     case 'remote-library-cover': return 'Library cover has not been cached';
     case 'remote-living-book-cover': return 'Living Book cover has not been cached';
   }
+}
+
+/** Review visibility follows publication, including accepted works with failed artwork. */
+export function localWorksForReview(books:LocalBook[]){
+  return groupLocalWorks(books).map(work=>{
+    const assessment=assessLocalWorkForPublication(work);
+    return {...work.tracks[0],title:work.title,author:work.author,series:work.series,
+      coverUri:work.coverUri,needsReview:!assessment.ready,
+      reviewReason:assessment.blockers.map(publicationBlockerCopy).join('. ')};
+  });
+}
+
+export function restorePublishedCatalogue(books:LocalBook[]):LocalBook[]{
+  const previous=books.flatMap(book=>book.publishedSnapshot?[book.publishedSnapshot]:[]);
+  return reconcilePublishedLocalBooks(previous,books).published;
+}
+
+export function retainPublishedSnapshots(books:LocalBook[],previous:LocalBook[]):LocalBook[]{
+  const good=new Map(restorePublishedCatalogue(previous).map(book=>[book.uri,book]));
+  const ready=new Set(partitionLocalBooksByPublication(books).published.map(book=>book.uri));
+  return books.map(book=>{
+    const {publishedSnapshot:ignored,...current}=book;
+    const old=good.get(book.uri);
+    if(ready.has(book.uri))return {...current,identificationState:book.identificationState||'accepted'};
+    if(!old)return current;
+    const {publishedSnapshot:nested,...snapshot}=old;
+    return {...current,publishedSnapshot:snapshot};
+  });
 }

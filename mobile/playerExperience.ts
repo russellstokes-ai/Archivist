@@ -65,6 +65,10 @@ export const PLAYER_MOTION_TIMING = {
   closeMs: 1000,
   firstTurnDelayMs: 650,
   pageTurnMs: 3000,
+  skipTurnMs: 780,
+  multiSkipTurnMs: 1040,
+  ambientRestMs: 7200,
+  settleMs: 180,
   pageRestMs: 300,
 } as const;
 

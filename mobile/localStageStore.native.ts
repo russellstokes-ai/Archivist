@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import {retainPublishedSnapshots} from './publicationPipeline';
 import type {LocalBook} from './localLibrary';
 
 const databaseName='archivist-local.db';
@@ -31,6 +32,10 @@ async function database(){
         value TEXT NOT NULL
       );
     `);
+    // Preserve the complete pre-migration catalogue once, before any new writer.
+    await db.withExclusiveTransactionAsync(async txn=>{
+      await txn.runAsync('CREATE TABLE IF NOT EXISTS local_assets_test18_backup AS SELECT * FROM local_assets');
+    });
     return db;
   })();
   return databasePromise;
@@ -71,6 +76,8 @@ async function replaceLocalStageBooksNow(books:LocalBook[]){
   const db=await database();
   const now=Date.now();
   await db.withExclusiveTransactionAsync(async txn=>{
+    const rows=await txn.getAllAsync<{payload:string}>('SELECT payload FROM local_assets ORDER BY ordinal');
+    books=retainPublishedSnapshots(books,rows.map(row=>parseBook(row.payload)).filter((book):book is LocalBook=>!!book));
     await txn.runAsync('DELETE FROM local_assets');
     const statement=await txn.prepareAsync(`
       INSERT INTO local_assets(uri,root_uri,payload,ordinal,updated_at)
@@ -137,4 +144,21 @@ export async function migrateLegacyLocalStage(books:LocalBook[]){
     INSERT INTO local_stage_meta(key,value) VALUES ('legacy_migrated','1')
     ON CONFLICT(key) DO UPDATE SET value='1'
   `);
+}
+
+/** Compare-and-patch inside the same transaction as the durable manual override. */
+export function commitLocalWorkEdit(patches:LocalBook[],expected:LocalBook[]){
+  return serialMutation(async()=>{
+    const db=await database();
+    const before=new Map(expected.map(book=>[book.uri,JSON.stringify(book)]));
+    await db.withExclusiveTransactionAsync(async txn=>{
+      const rows=await txn.getAllAsync<{payload:string}>('SELECT payload FROM local_assets ORDER BY ordinal');
+      const current=rows.map(row=>parseBook(row.payload)).filter((book):book is LocalBook=>!!book);
+      for(const book of retainPublishedSnapshots(patches,current)){
+        const row=await txn.getFirstAsync<{payload:string}>('SELECT payload FROM local_assets WHERE uri=?',book.uri);
+        if(!row||row.payload!==before.get(book.uri))throw Error('The selected work has changed. Reopen it before saving.');
+        await txn.runAsync('UPDATE local_assets SET payload=?, updated_at=? WHERE uri=?',JSON.stringify(book),Date.now(),book.uri);
+      }
+    });
+  });
 }

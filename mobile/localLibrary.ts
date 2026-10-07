@@ -37,6 +37,9 @@ export type LocalBook = {
   space: string;
   available: boolean;
   identificationConfidence?: IdentificationConfidence;
+  publishedSnapshot?: LocalBook;
+  manualOverride?: LocalMetadataOverride;
+  identificationState?: 'unresolved' | 'clues-saved' | 'accepted';
   needsReview?: boolean;
   reviewReason?: string;
   coverShape?: 'portrait' | 'square';
@@ -612,6 +615,12 @@ export async function scanLocalFolders(
           format,
           space,
           available: true,
+          manualOverride:override,
+          identificationState:override?previous?.identificationState:undefined,
+          libraryCoverUri:override||unchanged?previous?.libraryCoverUri:undefined,
+          livingBookCoverUri:override||unchanged?previous?.livingBookCoverUri:undefined,
+          livingBookCoverSource:override||unchanged?previous?.livingBookCoverSource:undefined,
+          livingBookCoverConfidence:override||unchanged?previous?.livingBookCoverConfidence:undefined,
           identificationConfidence: identity.confidence,
           needsReview: identity.needsReview,
           reviewReason: identity.reviewReason,

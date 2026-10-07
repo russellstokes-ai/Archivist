@@ -32,8 +32,9 @@ export function applyManualCluesToWork(
       metadataProvenance:provenance,
       metadataFieldConfidence:confidence,
       // Saving a clue is not accepting a finished identification.
-      needsReview:true,
-      reviewReason:'Manual search clues saved. Review a Smart Search or Deep Search match.',
+      identificationState:book.identificationState==='accepted'?'accepted':'clues-saved',
+      needsReview:book.identificationState!=='accepted',
+      reviewReason:book.identificationState==='accepted'?'':'Search clues saved. Choose a Smart Search match to accept this work.',
     };
     next.workKey=logicalWorkKey(next);
     next.editionKey=editionKey(next,next.format);
@@ -60,6 +61,7 @@ export function acceptBookCandidateForWork(
       metadataSource:'manual',
       metadataConflicts:[],
       metadataProvenance:{...(merged.metadataProvenance||{}),...Object.fromEntries(Object.keys(selectedFields).map(field=>[field,'manual' as const]))},
+      identificationState:'accepted',
       needsReview:false,reviewReason:'',
       coverUri:candidate.coverUri||merged.coverUri,
       libraryCoverUri:candidate.coverUri||merged.libraryCoverUri,
@@ -95,6 +97,7 @@ export function acceptComicCandidateForWork(
       metadataSource:'manual',
       metadataConflicts:[],
       metadataProvenance:{...(merged.metadataProvenance||{}),...Object.fromEntries(Object.keys(selectedFields).map(field=>[field,'manual' as const]))},
+      identificationState:'accepted',
       needsReview:false,reviewReason:'',
       coverUri:candidate.coverUri||merged.coverUri,
       libraryCoverUri:candidate.coverUri||merged.libraryCoverUri,
