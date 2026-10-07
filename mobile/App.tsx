@@ -46,7 +46,7 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortMode, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSort, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, recoverLocalSortOperation, removeLocalFolderSource, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortMode, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSort, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, enrichLocalBoundedArchiveEvidence, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, recoverLocalSortOperation, removeLocalFolderSource, scanLocalFolders} from './localLibrary';
 import {lookupOnlineBook, type OnlineBookCache, type OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, type OnlineComicCache, type OnlineComicCandidate} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
@@ -2868,12 +2868,17 @@ function Client() {
       // Online enrichment and artwork can safely continue from the staged clues.
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
-      // Cheap file properties are part of normal identification. Only unresolved
-      // audio is sampled here, using bounded ID3/MP4 header windows; EPUB/comic
-      // archive parsing remains explicit Deep Search work.
+      // Cheap file properties are part of normal identification. Unresolved
+      // audio uses bounded ID3/MP4 windows, then EPUB/comic archives use the
+      // bounded native evidence bridge. Neither path may copy/read a whole archive.
       const propertyBooks=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true);
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(propertyBooks)currentBooks=propertyBooks;
+      if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
+
+      const archiveBooks=await enrichPublishedLocalBoundedArchiveEvidence(currentBooks,generation);
+      if(!scanCommitGate.isCurrent(generation))return currentBooks;
+      if(archiveBooks)currentBooks=archiveBooks;
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
       // Prefer bounded network metadata/cover matches after file/path evidence.
@@ -2940,6 +2945,29 @@ function Client() {
         setTimeout(()=>{if(scanCommitGate.isCurrent(generation))setEnrichmentProgress(null);},1600);
       }
     }
+  }
+
+  async function enrichPublishedLocalBoundedArchiveEvidence(baseBooks:LocalBook[],generation:number):Promise<LocalBook[]|null>{
+    if(!scanCommitGate.isCurrent(generation))return null;
+    const eligible=baseBooks.filter(book=>{
+      const ext=String(book.uri||'').split('?')[0].split('.').pop()?.toLowerCase()||'';
+      return (book.format==='EPUB'&&ext==='epub')||(book.format==='Comic'&&['cbz','zip','cbr','cbt'].includes(ext));
+    });
+    if(!eligible.length)return baseBooks;
+    reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'Archive evidence',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length},true);
+    const enriched=await enrichLocalBoundedArchiveEvidence(baseBooks,{
+      batchSize:4,
+      shouldContinue:()=>scanCommitGate.isCurrent(generation),
+      onBatch:(batch,progress)=>{
+        if(!scanCommitGate.isCurrent(generation))return;
+        reportEnrichmentProgress({phase:'reading-metadata',currentFolder:progress.current||'Archive evidence',entriesVisited:progress.processed,found:batch.length,review:batch.filter(book=>book.needsReview).length,processed:progress.processed,total:progress.total});
+      },
+    }).catch(error=>{recordLibraryRefreshWarning('Archive evidence',error);return null;});
+    if(!scanCommitGate.isCurrent(generation))return null;
+    if(!enriched)return baseBooks;
+    if(enriched.blocked)recordLibraryRefreshWarning('Archive evidence',new Error(enriched.blocked+' archive'+(enriched.blocked===1?'':'s')+' could not be inspected within the safe probe limits'));
+    setStagedLocalBooks(enriched.books.map(book=>({...book,source:'local' as const})));
+    return enriched.books;
   }
 
   async function enrichPublishedLocalEmbeddedMetadata(baseBooks:LocalBook[],generation:number,refreshMetadata=false,fastAudioProperties=false):Promise<LocalBook[]|null>{
