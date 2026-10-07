@@ -7,7 +7,7 @@ function load(){
   const out=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
   const mod={exports:{}};vm.runInNewContext('(function(module,exports){'+out+'\n})(module,module.exports)',{module:mod,exports:mod.exports});return mod.exports;
 }
-const {ScanCommitGate,scanStatusCopy,scanFailureCopy,sanitizeLibraryPreparationCheckpoint,beginLibraryPreparation,markLibraryDiscoveryCommitted,cancelLibraryPreparation,completeLibraryPreparation,shouldResumeLibraryPreparation}=load();
+const {ScanCommitGate,scanStatusCopy,scanFailureCopy,sanitizeLibraryPreparationCheckpoint,beginLibraryPreparation,markLibraryDiscoveryCommitted,cancelLibraryPreparation,failLibraryPreparation,completeLibraryPreparation,shouldResumeLibraryPreparation}=load();
 const gate=new ScanCommitGate();
 const first=gate.begin();assert.equal(gate.isCurrent(first),true);
 const second=gate.begin();assert.equal(gate.isCurrent(first),false,'older scan must become stale');assert.equal(gate.isCurrent(second),true);
@@ -36,6 +36,10 @@ const cancelled=cancelLibraryPreparation(discovered);
 assert.equal(cancelled.signature,'folders-a','cancelling enrichment must preserve the last completed preparation');
 assert.equal(cancelled.activeJob,undefined,'explicit cancellation must not auto-resume on restart');
 assert.equal(shouldResumeLibraryPreparation(cancelled,'folders-a'),false);
+const failed=failLibraryPreparation(discovered);
+assert.equal(failed.signature,'folders-a','a handled refresh failure must preserve the last completed library');
+assert.equal(failed.activeJob,undefined,'a handled failure must not silently schedule another scan after restart');
+assert.equal(shouldResumeLibraryPreparation(failed,'folders-a'),false);
 
 const initialCheckpoint=beginLibraryPreparation({signature:''},{kind:'prepare',signature:'folders-b',startedAt:'2026-10-07T21:05:00Z'});
 assert.equal(initialCheckpoint.signature,'','initial preparation is not complete merely because a job started');
