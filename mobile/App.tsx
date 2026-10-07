@@ -76,6 +76,7 @@ import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from '.
 import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanProgressPercent} from './scanFeedback';
 import {ScanCommitGate, beginLibraryPreparation, cancelLibraryPreparation, failLibraryPreparation, completeLibraryPreparation, markLibraryDiscoveryCommitted, sanitizeLibraryPreparationCheckpoint, scanFailureCopy, scanStatusCopy, shouldResumeLibraryPreparation, type LibraryPreparationCheckpoint} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
+import {filterPublishedWorks, libraryFormatFamilyMatches as sharedLibraryFormatFamilyMatches} from './libraryFilters';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
@@ -1603,15 +1604,6 @@ function Client() {
 
   const availabilityMatches = (available: boolean) =>
     availabilityFilter === 'all' || (availabilityFilter === 'available' ? available : !available);
-  const libraryFormatFamilyMatches=(format:string)=>{
-    if(!libraryFormatFamily)return true;
-    const value=String(format||'').trim().toLowerCase();
-    if(libraryFormatFamily==='books')return value==='epub'||value==='ebook'||value==='book';
-    if(libraryFormatFamily==='comics')return value==='comic'||value==='cbz'||value==='cbr'||value==='cbt';
-    if(libraryFormatFamily==='audio')return value==='audio'||value==='audiobook';
-    return value==='pdf';
-  };
-
   const pendingReviewBooks=useMemo(()=>reviewBooksForDisplay([...stagedLocalBooks,...serverBooks]).filter(book=>book.needsReview),[stagedLocalBooks,serverBooks]);
   const reviewAssetPool = useMemo(() => {
     const localReviewPool=(reviewOnly||!!metadataGapFilter)?stagedLocalBooks:localBooks;
@@ -1627,7 +1619,7 @@ function Client() {
       if (space && book.space !== space) return false;
       if (reviewOnly && !book.needsReview) return false;
       if (metadataGapFilter && !matchesMetadataGap(book,metadataGapFilter)) return false;
-      if (!libraryFormatFamilyMatches(book.format)) return false;
+      if (!sharedLibraryFormatFamilyMatches(book.format,libraryFormatFamily)) return false;
       if (formatFilter && book.format !== formatFilter) return false;
       if (authorFilter && book.author !== authorFilter) return false;
       if (seriesFilter && book.series !== seriesFilter) return false;
@@ -1644,22 +1636,22 @@ function Client() {
     const base=sourceFilter==='all' ? dedupeForAll(sourceWorks) : sourceWorks.filter(item=>libraryFolderExact?item.source===sourceFilter:matchesSource(item.source,sourceFilter));
     const activeCollection=collectionFilter?collections.find(item=>item.id===collectionFilter):undefined;
     const collectionKeys=activeCollection?new Set(activeCollection.canonicalKeys):null;
-    return base.filter(work=>{
-      if(collectionKeys && !collectionKeys.has(work.canonicalKey))return false;
-      if(space && work.space!==space)return false;
-      if(metadataGapFilter && !matchesMetadataGap(work,metadataGapFilter))return false;
-      if(!libraryFormatFamilyMatches(work.format))return false;
-      if(formatFilter && work.format!==formatFilter)return false;
-      if(authorFilter && work.author!==authorFilter)return false;
-      if(seriesFilter && work.series!==seriesFilter)return false;
-      if(genreFilter && work.genre!==genreFilter)return false;
-      if(unknownAuthorOnly && !!work.author)return false;
-      if(readingFilter && work.readingState!==readingFilter)return false;
-      if(ratingFilter>0 && work.rating!==ratingFilter)return false;
-      if(favouriteOnly && !work.favourite)return false;
-      if(!availabilityMatches(work.available))return false;
-      if(q && ![work.title,work.author,work.series,work.genre,work.format,work.space].some(value=>value.toLowerCase().includes(q)))return false;
-      return true;
+    return filterPublishedWorks(base,{
+      query:q,
+      space,
+      format:formatFilter,
+      formatFamily:libraryFormatFamily,
+      author:authorFilter,
+      series:seriesFilter,
+      genre:genreFilter,
+      readingState:readingFilter,
+      rating:ratingFilter,
+      favouriteOnly,
+      unknownAuthorOnly,
+      availability:availabilityFilter,
+      collectionKeys,
+      metadataGap:metadataGapFilter,
+      matchesMetadataGap:(work,gap)=>matchesMetadataGap(work,gap as MetadataGapFilter),
     });
   },[authorFilter,availabilityFilter,collectionFilter,collections,favouriteOnly,formatFilter,genreFilter,libraryFolderExact,libraryFormatFamily,metadataGapFilter,query,ratingFilter,readingFilter,seriesFilter,sourceFilter,sourceWorks,space,unknownAuthorOnly]);
 
