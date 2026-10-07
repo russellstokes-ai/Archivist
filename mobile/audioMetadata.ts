@@ -16,12 +16,15 @@ export async function extractAudioMetadata(
     if(options.fast){
       // Resolve lazily: parser-only tests/web do not require a native bridge.
       const {NativeModules,Platform}=require('react-native');
-      if(Platform.OS!=='android'||!NativeModules.ArchivistArchive?.readAudioMetadataWindows)return {};
-      if(!['mp3','m4a','m4b'].includes(ext))return {};
-      const windows=await NativeModules.ArchivistArchive.readAudioMetadataWindows(uri,ext);
-      return ext==='mp3'
-        ? {...parseID3v1Base64(windows.tail||''),...parseID3v2Base64(windows.head||'')}
-        : mergeFields(parseMP4MetadataBase64(windows.head||''),parseMP4MetadataBase64(windows.tail||''));
+      if(Platform.OS==='android'){
+        if(!NativeModules.ArchivistArchive?.readAudioMetadataWindows)return {};
+        if(!['mp3','m4a','m4b'].includes(ext))return {};
+        const windows=await NativeModules.ArchivistArchive.readAudioMetadataWindows(uri,ext);
+        return ext==='mp3'
+          ? {...parseID3v1Base64(windows.tail||''),...parseID3v2Base64(windows.head||'')}
+          : mergeFields(parseMP4MetadataBase64(windows.head||''),parseMP4MetadataBase64(windows.tail||''));
+      }
+      // Keep the existing bounded-window implementation on iOS/web.
     }
     const size=typeof info?.size==='number'?info.size:undefined;
     if(ext==='mp3'){
