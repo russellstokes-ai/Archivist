@@ -36,7 +36,7 @@ assert.match(
 
 
 const searchStart=app.indexOf('const runMetadataSearch=async');
-const searchEnd=app.indexOf('const acceptProposal=async',searchStart);
+const searchEnd=app.indexOf('const useProposal=',searchStart);
 const search=app.slice(searchStart,searchEnd);
 assert.match(search,/if\(deep\)/,'Deep Search must own local forensic inspection');
 assert.match(search,/concurrency:1/,'Deep Search local inspection must be serial');

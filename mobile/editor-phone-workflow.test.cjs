@@ -1,0 +1,26 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:1,target:9}}).outputText,file);
+const {groupLocalWorks}=require('./localWorks.ts');
+const {logicalWorkKey}=require('./libraryIntelligence.ts');
+const {lookupOnlineBook}=require('./onlineBookMetadata.ts');
+const app=fs.readFileSync('App.tsx','utf8');
+const helper=app.slice(app.indexOf('function reviewBooksForDisplay'),app.indexOf('function Client()'));
+const reviewBooksForDisplay=new Function('groupLocalWorks','logicalWorkKey',ts.transpileModule(helper,{compilerOptions:{target:9}}).outputText+';return reviewBooksForDisplay')(groupLocalWorks,logicalWorkKey);
+const files=Array.from({length:227},(_,i)=>({id:i,uri:'file:///Books/Author/Book '+(i%12)+'/Chapter '+i+'.mp3',title:'Book '+(i%12),author:'An Author',series:'',format:'Audio',space:'Books',source:'local',needsReview:true}));
+assert.equal(reviewBooksForDisplay(files).length,12,'227 chapters must display/count as 12 books');
+const start=app.indexOf('const runMetadataSearch=async'),end=app.indexOf('const useProposal=',start);
+assert.equal(/persistEditorWork|replaceLocalStageBooks/.test(app.slice(start,end)),false,'search must never save unaccepted drafts');
+const modal=app.slice(app.indexOf('    return <Modal transparent',app.indexOf('function MetadataEditorPanel')),app.indexOf('function BulkMetadataPanel'));
+assert.ok(modal.lastIndexOf('</ScrollView>')<modal.indexOf("label={busy?'Saving…':'Save'}"),'Save must stay outside scrolling fields');
+assert.ok(modal.includes("maxHeight:'100%'")&&modal.includes("keyboardShouldPersistTaps=\"handled\""));
+(async()=>{
+ let queries=[];
+ const fetcher=async url=>{queries.push(new URL(url).searchParams.get('q'));return {ok:true,status:200,json:async()=>({docs:[{key:'/works/dune',title:'Dune',author_name:['Frank Herbert'],cover_i:1}]})}};
+ const author=await lookupOnlineBook({title:'',author:'Frank Herbert',uri:'',format:'Audio'},{fetcher,cache:{}});
+ assert.equal(queries.length,1);assert.match(queries[0],/author:"Frank Herbert"/);assert.doesNotMatch(queries[0],/title:/);
+ assert.equal(author.candidates[0].fields.title,'Dune');assert.equal(author.autoApply,false,'author-only results require a choice');
+ queries=[];
+ const precise=await lookupOnlineBook({title:'Dune',author:'Frank Herbert',uri:'',format:'Audio'},{fetcher,cache:{}});
+ assert.equal(queries.length,1);assert.equal(precise.candidates[0].fields.author,'Frank Herbert');
+ console.log('PASS: grouped review counts, persistent mobile Save, draft-only Smart Search and author/title queries');
+})().catch(error=>{console.error(error);process.exitCode=1});

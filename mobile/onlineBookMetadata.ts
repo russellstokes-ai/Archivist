@@ -161,7 +161,7 @@ export function buildBookLookupHints(input:BookLookupInput){
   };
 }
 
-type QueryPlan={kind:'isbn'|'title-author'|'title';title?:string;author?:string;isbn?:string};
+type QueryPlan={kind:'isbn'|'title-author'|'title'|'author';title?:string;author?:string;isbn?:string};
 function queryPlans(input:BookLookupInput,deep=false){
   const hints=buildBookLookupHints(input);
   const plans:QueryPlan[]=[];
@@ -174,7 +174,9 @@ function queryPlans(input:BookLookupInput,deep=false){
     const author=hints.authors[0];
     if(title&&author)plans.push({kind:'title-author',title,author});
     if(title)plans.push({kind:'title',title});
+    if(!title&&author)plans.push({kind:'author',author});
   }else{
+    if(!hints.titles.length&&hints.authors[0])plans.push({kind:'author',author:hints.authors[0]});
     for(const title of hints.titles.slice(0,6)){
       for(const author of hints.authors.slice(0,4))plans.push({kind:'title-author',title,author});
       plans.push({kind:'title',title});
@@ -284,7 +286,7 @@ export function scoreOnlineBookCandidate(input:BookLookupInput,candidate:Omit<On
   if(hints.publishedYear&&candidate.fields.publishedYear){
     const delta=Math.abs(hints.publishedYear-candidate.fields.publishedYear);if(delta===0)score+=5;else if(delta<=2)score+=3;else if(delta>=10)score-=4;
   }
-  if(!hints.isbn){if(titleScore<.38)score-=32;if(hints.authors.length&&authorScore<.25)score-=22;}
+  if(!hints.isbn){if(hints.titles.length&&titleScore<.38)score-=32;if(hints.authors.length&&authorScore<.25)score-=22;}
   if(candidate.coverUri)score+=2;
   score=Math.max(0,Math.min(100,Math.round(score)));
   const confidence:OnlineBookConfidence=exactIdentifier||score>=80?'high':score>=62?'medium':'low';
