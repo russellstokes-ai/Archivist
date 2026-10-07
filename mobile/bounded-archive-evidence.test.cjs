@@ -59,7 +59,7 @@ const {readBoundedArchiveEvidence}=require('./boundedArchiveEvidence.ts');
   assert.equal(epub.fields.title,'Dune');
   assert.equal(epub.fields.author,'Frank Herbert');
   assert.equal(epub.coverUri,'data:image/jpeg;base64,AQID');
-  assert.equal(calls,2);
+  assert.equal(calls,4);
 
   mode='blocked';
   const blocked=await readBoundedArchiveEvidence('content://oversized.cbz','cbz');
