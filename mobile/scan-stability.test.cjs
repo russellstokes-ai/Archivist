@@ -16,8 +16,10 @@ assert.ok(source.includes('setLocalFolderNotice(scanFailureCopy(localBooks.lengt
 assert.ok(source.includes('{LocalScanStatus()}'),'Shelf/Library must expose a stable scan state rather than silently changing underneath the user');
 assert.ok(source.includes("setSpaces([...new Set([...result.books.map(book=>book.space),...sources.map(source=>source.space)].filter(Boolean))])"),'local scan must not erase server-space choices');
 assert.ok(source.includes('const autoLocalScanAttempted=useRef(false)'),'startup scan recovery must be one-shot');
-assert.ok(source.includes("folder.status==='Scanning…'||folder.status==='Ready to scan'"),'interrupted pending folders must be recoverable after restart');
-assert.ok(source.includes("autoLocalScanAttempted.current||!pendingFolder")&&source.includes('Only recover an explicitly interrupted legacy scan'),'onboarding folders must never auto-scan; only interrupted legacy scans may resume');
+assert.ok(source.includes('sanitizeLibraryPreparationCheckpoint')&&source.includes('shouldResumeLibraryPreparation('),'startup recovery must use the durable preparation checkpoint rather than folder display text');
+assert.equal(source.includes("folder.status==='Scanning…'||folder.status==='Ready to scan'"),false,'folder status text must never be scan-resume intent');
+assert.ok(source.includes('beginLibraryPreparation(')&&source.includes('markLibraryDiscoveryCommitted(')&&source.includes('cancelLibraryPreparation(')&&source.includes('completeLibraryPreparation('),'prepare/refresh lifecycle must persist explicit job intent and preserve the last completed checkpoint');
+assert.ok(source.includes('libraryPreparationCheckpointReady'),'startup must wait for durable preparation intent before deciding whether to resume');
 assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan completion notice should be visible but not become stale chrome');
 assert.ok(source.includes('deferEmbeddedCovers:true')&&source.includes('deferEmbeddedMetadata:true'),'app scans must publish identity before expensive embedded metadata and cover recovery');
 assert.ok(source.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),'catalogue publication and enrichment must share one cancellable refresh job');
