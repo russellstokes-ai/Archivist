@@ -27,11 +27,21 @@ assert.ok(modal.includes('Use this book →'),'search results must expose an exp
  assert.equal(offline,candidate,'detail fetch failure must retain the selectable search result');
  let queries=[];
  const fetcher=async url=>{queries.push(new URL(url).searchParams.get('q'));return {ok:true,status:200,json:async()=>({docs:[{key:'/works/dune',title:'Dune',author_name:['Frank Herbert'],cover_i:1}]})}};
- const author=await lookupOnlineBook({title:'',author:'Frank Herbert',uri:'',format:'Audio'},{fetcher,cache:{}});
+ const author=await lookupOnlineBook({title:'',author:'Frank Herbert',uri:'',format:'Audio'},{fetcher,cache:{},interactive:true});
  assert.equal(queries.length,1);assert.match(queries[0],/author:"Frank Herbert"/);assert.doesNotMatch(queries[0],/title:/);
  assert.equal(author.candidates[0].fields.title,'Dune');assert.equal(author.autoApply,false,'author-only results require a choice');
  queries=[];
- const precise=await lookupOnlineBook({title:'Dune',author:'Frank Herbert',uri:'',format:'Audio'},{fetcher,cache:{}});
+ const precise=await lookupOnlineBook({title:'Dune',author:'Frank Herbert',uri:'',format:'Audio'},{fetcher,cache:{},interactive:true});
  assert.equal(queries.length,1);assert.equal(precise.candidates[0].fields.author,'Frank Herbert');
+ const fallback=await lookupOnlineBook({title:'Assassinorum Kingmaker Warhammer audiobook',author:'Robert Rath',format:'Audio'},{interactive:true,fetcher:async url=>{
+   const q=new URL(url).searchParams.get('q');
+   if(q.includes('Warhammer'))throw Error('provider error');
+   return {ok:true,status:200,json:async()=>({docs:[{key:'/works/OL28185289W',title:'Assassinorum',author_name:['Robert Rath']}]})};
+ }});
+ assert.equal(fallback.candidates[0].fields.author,'Robert Rath','relaxed search must survive a failed precise query');
+ const savedBody=app.slice(app.indexOf('const save=async()=>',app.indexOf('function MetadataEditorPanel')),app.indexOf('const chooseCoverFromDevice=',app.indexOf('function MetadataEditorPanel')));
+ assert.equal(savedBody.includes('setEditing(null)'),false,'Save must keep editor open');
+ assert.equal(app.split('{MetadataEditorPanel()}').length-1,1,'editor must mount only once outside tab content');
+ assert.ok(app.indexOf('{MetadataEditorPanel()}')>app.indexOf('{CurrentTab()}'),'editor must be outside animated tab content');
  console.log('PASS: grouped review counts, persistent mobile Save, draft-only Smart Search and author/title queries');
 })().catch(error=>{console.error(error);process.exitCode=1});

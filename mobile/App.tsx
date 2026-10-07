@@ -4770,48 +4770,15 @@ function Client() {
       };
     };
 
-    const runMetadataSearch=async(deep:boolean)=>{
+    const runMetadataSearch=async()=>{
       if(!localEdit||metadataSearchBusy)return;
       Keyboard.dismiss();editorScrollReset.current=true;metadataEditorScroll.current?.scrollTo({y:0,animated:false});
-      setMetadataSearchBusy(true);
-      setMetadataSearchMode(deep?'deep':'smart');
-      setMetadataSearchNotice(deep?'Running Deep Search…':'Running Smart Search…');
-      setMetadataSearchResults([]);
-      setMetadataSearchSelection(-1);
+      setMetadataSearchBusy(true);setMetadataSearchMode('smart');
+      setMetadataSearchNotice('Searching by your title and author…');
+      setMetadataSearchResults([]);setMetadataSearchSelection(-1);
       try{
         if(!metadataSettings.onlineEnabled)throw Error('Enable Online metadata in Settings to search.');
-        const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-        const updated=applyManualCluesToWork(current,targets,editorOverride(editCoverUri));
-        let searchBooks=updated;
-        let representative=searchBooks.find(book=>targets.includes(book.uri));
-        if(!representative)throw Error('This staged work is no longer available.');
-
-        if(deep){
-          const workBooks=searchBooks.filter(book=>targets.includes(book.uri));
-          const sample=representative.format==='Audio'
-            ? [workBooks[0],workBooks[Math.floor(workBooks.length/2)],workBooks[workBooks.length-1]].filter((book,index,all)=>!!book&&all.findIndex(item=>item?.uri===book?.uri)===index)
-            : workBooks.slice(0,1);
-          const sampleUris=new Set(sample.map(book=>book!.uri));
-          setMetadataSearchNotice('Deep Search · inspecting this work…');
-          const inspected=await enrichLocalEmbeddedMetadata(searchBooks,{
-            refreshMetadata:true,
-            batchSize:1,
-            concurrency:1,
-            itemTimeoutMs:2500,
-            maxConsecutiveTimeouts:1,
-            shouldInspect:book=>sampleUris.has(book.uri),
-            onBatch:(_books,progress)=>{
-              const detail=progress.timedOut
-                ? 'Deep Search · local file inspection timed out; continuing online…'
-                : 'Deep Search · inspected '+Math.min(progress.processed,progress.total)+' of '+progress.total+' selected file'+(progress.total===1?'':'s')+'…';
-              setMetadataSearchNotice(detail);
-            },
-          });
-          searchBooks=(await synchronizeLocalMetadataCooperative(inspected.books)).books as LocalBook[];
-
-          representative=searchBooks.find(book=>targets.includes(book.uri))||representative;
-        }
-
+        let representative=editing;
         representative={...representative,title:editTitle.trim(),author:editAuthor.trim(),series:editSeries.trim(),isbn:editISBN.trim(),uri:''};
         if(!representative.title&&!representative.author&&!representative.isbn)throw Error('Enter a title or author to search.');
         let proposals:MetadataProposal[]=[];
@@ -4821,8 +4788,8 @@ function Client() {
           if(!token)throw Error('Configure a Metron token in Settings to search comics.');
           const result=await lookupOnlineComic(representative,{
             token,
-            ignoreCache:deep,
-            timeoutMs:deep?15000:8000,
+            ignoreCache:true,
+            timeoutMs:5000,
           });
           proposals=result.candidates.slice(0,8).map((candidate:OnlineComicCandidate)=>({kind:'comic' as const,candidate}));
         }else{
@@ -4833,18 +4800,19 @@ function Client() {
           const result=await lookupOnlineBook(representative,{
             openLibraryEnabled:metadataSettings.books.openLibrary,
             googleBooksApiKey,
-            ignoreCache:deep,
-            deep,
-            timeoutMs:deep?15000:8000,
+            ignoreCache:true,
+            interactive:true,
+            timeoutMs:5000,
           });
+          if(result.status==='offline')throw Error('Metadata providers could not be reached. Check your connection and try again.');
           proposals=result.candidates.slice(0,8).map((candidate:OnlineBookCandidate)=>({kind:'book' as const,candidate}));
         }
         editorScrollReset.current=true;
         setMetadataSearchResults(proposals);
         setMetadataSearchSelection(-1);
         setMetadataSearchNotice(proposals.length
-          ? (deep?'Deep Search':'Smart Search')+' found '+proposals.length+' possible match'+(proposals.length===1?'':'es')+'.'
-          : 'No confident matches found. Add another clue or try Deep Search.');
+          ? 'Smart Search'+' found '+proposals.length+' possible match'+(proposals.length===1?'':'es')+'.'
+          : 'No matches found. Try a shorter title, or clear the title to search by author.');
       }catch(error){
         setMetadataSearchNotice('Search could not complete: '+String((error as Error)?.message||error));
       }finally{
@@ -4894,7 +4862,7 @@ function Client() {
       if(editing.source==='server'){
         if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
         request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber:seriesNumber??0,genre,publishedYear:publishedYear??0,narrator,publisher,isbn,asin,language,description})
-          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);setEditPickedCover(null);})
+          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(previous=>previous?{...previous,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description}:previous);setMetadataSearchNotice('Saved. You can search again or close.');})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
         const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined,clearedFields:[...(seriesNumber===undefined?['seriesNumber']:[]),...(publishedYear===undefined?['publishedYear']:[])]};
@@ -4942,7 +4910,7 @@ function Client() {
           if(!saveVerified)throw Error('Metadata save could not be verified. Your changes were not discarded.');
           setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
           publishCompletedLocalStage(updated);
-          setEditing(null);setEditingUris([]);setEditPickedCover(null);
+          setEditing({...editing,...override,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);setMetadataSearchNotice('Saved. You can search again or close.');
         }catch(e){setError((e as Error).message);}
         finally{setBusy(false);}
       }else setBusy(false);
@@ -5002,7 +4970,7 @@ function Client() {
       }
       closeEditor();
     };
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestEditorClose}>
+    return <Modal transparent animationType="none" visible onRequestClose={requestEditorClose}>
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
         <View style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={StyleSheet.absoluteFill} onPress={requestEditorClose}/>
@@ -5091,11 +5059,10 @@ function Client() {
           <View style={{padding:12,gap:8,borderTopWidth:1,borderTopColor:p.line}}>
             {error?<Text accessibilityLiveRegion="polite" style={{color:p.danger}}>{error}</Text>:null}
             <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
-              {localEdit?<Button label={metadataSearchBusy?'Searching…':'Smart Search'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void runMetadataSearch(false)}/>:null}
+              {localEdit?<Button label={metadataSearchBusy?'Searching…':'Smart Search'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void runMetadataSearch()}/>:null}
               <Button label={busy?'Saving…':'Save'} disabled={busy||metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
-              <Button label="Cancel" tone="quiet" disabled={busy||metadataSearchBusy||coverPicking} onPress={requestEditorClose}/>
+              <Button label="Close" tone="quiet" disabled={busy||metadataSearchBusy||coverPicking} onPress={requestEditorClose}/>
             </View>
-            {localEdit?<Button label={metadataSearchMode==='deep'?'Searching…':'Deep Search'} tone="quiet" disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim())} onPress={()=>void runMetadataSearch(true)}/>:null}
           </View>
           </View>
         </View>
@@ -5184,9 +5151,9 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestClose}>
-      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close bulk metadata editor" style={styles.modalBackdrop} onPress={requestClose}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+    return <Modal transparent animationType="none" visible onRequestClose={requestClose}>
+      <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':undefined}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close bulk metadata editor" style={styles.modalBackdrop} onPress={requestClose}><ScrollView keyboardShouldPersistTaps="handled" style={{width:'100%',maxWidth:520,flexGrow:0,maxHeight:'100%'}} contentContainerStyle={{flexGrow:1}}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Bulk edit '+selectedWorks.length+' selected works'} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.playerEyebrow,{color:p.sage}]}>BULK METADATA</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit {selectedWorks.length} selected work{selectedWorks.length===1?'':'s'}</Text>
@@ -5646,7 +5613,7 @@ function Client() {
         </Pressable>
       </PageToolbar>
 
-      <OnboardingGuide/>
+      {OnboardingGuide()}
 
       {shelfSections.find(item=>item.id==='continue')?section(shelfSections.find(item=>item.id==='continue') as ShelfSectionPref):null}
 
@@ -5714,7 +5681,7 @@ function Client() {
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('manage')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Manage collections</Text></Pressable>
       </View>
 
-      {WorkActionSheet()}{OrganisationPanel()}{ShelfManagePanel()}{MetadataEditorPanel()}
+      {WorkActionSheet()}{OrganisationPanel()}{ShelfManagePanel()}
     </ScrollView>;
   }
 
@@ -5813,9 +5780,9 @@ function Client() {
         <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={p.muted} size={16}/></View>
       </Pressable>:null}
       {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
+        <Text style={[styles.bookTitle,{color:p.ink,width:'100%',flexShrink:0}]}>{selectedWorkKeys.length} selected</Text>
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={()=>{setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');setBulkEditOpen(true)}} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Edit metadata</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>{const work=selectedWorks.length===1?selectedWorks[0]:undefined;const local=work?.localWork;if(work&&local?.tracks[0]){beginEdit({...local.tracks[0],title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,source:'local'},local.tracks.map(track=>track.uri));return;}setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');setBulkEditOpen(true)}} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Edit metadata</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={favouriteSelected} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Favourite</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={()=>setSelectedWorkKeys([])} style={styles.librarySelectionAction}><Text style={{color:p.sage,fontWeight:'700'}}>Done</Text></Pressable>
       </View>:<>
@@ -5843,7 +5810,7 @@ function Client() {
           </Pressable>)}
         </ScrollView>:null}
       </>}
-      <MaintenanceList/>
+      {MaintenanceList()}
       {!maintenanceMode?<FlatList
         ref={libraryListRef}
         key={'unified-'+libraryView+'-'+columns}
@@ -5861,7 +5828,7 @@ function Client() {
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
-      {WorkActionSheet()}{OrganisationPanel()}{MetadataEditorPanel()}{BulkMetadataPanel()}{LibraryManagementPanel()}
+      {WorkActionSheet()}{OrganisationPanel()}{LibraryManagementPanel()}
       {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={modalSheetBackdrop} onPress={()=>setLibrarySourcesOpen(false)}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
@@ -8316,6 +8283,7 @@ function Client() {
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
+      {MetadataEditorPanel()}{BulkMetadataPanel()}
       {ProfileMenu()}
       {WorkDetailsPanel()}
       {FormatPickerPanel()}
@@ -9255,7 +9223,7 @@ const styles = StyleSheet.create({
   quickFilters: {gap:4,paddingRight:8},
   quickFilter: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
   toolbarButton: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
-  librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
+  librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:8,paddingVertical:6},
   librarySelectionAction: {minHeight:44,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
   unifiedGrid: {paddingBottom:120,gap:16,paddingTop:2},
   unifiedGridRow: {gap:10},

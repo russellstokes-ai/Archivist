@@ -27,8 +27,6 @@ assert.ok(enrichmentBody.includes('enrichPublishedLocalEmbeddedMetadata(currentB
 assert.ok(source.includes("if(fastAudioProperties){")&&source.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'fast normal property pass must be audio-only and must not reopen already-read files');
 assert.ok(source.includes('itemTimeoutMs:fastAudioProperties?1200')&&source.includes('maxConsecutiveTimeouts:1'),'fast property reads must be aggressively timeout/circuit-broken');
 const deepSearchBody=source.slice(source.indexOf('const runMetadataSearch=async'),source.indexOf('const acceptProposal=async'));
-assert.ok(deepSearchBody.includes('if(deep)')&&deepSearchBody.includes('concurrency:1')&&deepSearchBody.includes('maxConsecutiveTimeouts:1'),'deep local inspection must be explicit, serial and circuit-broken per work');
-assert.ok(deepSearchBody.includes('workBooks[Math.floor(workBooks.length/2)]')&&deepSearchBody.includes('workBooks.slice(0,1)'),'Deep Search must sample multipart audio and inspect only one single-file book/comic instead of scanning the library');
 assert.equal(enrichmentBody.includes('enrichPublishedLocalCovers(currentBooks,generation)'),false,'normal preparation must not run catalogue-wide local cover extraction');
 assert.ok(enrichmentBody.includes('cacheRequiredWorkArtwork(currentBooks'),'publication artwork must use already-cached/provider artwork rather than reopen every local file');
 assert.ok(source.includes('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)'),'library enrichment must continue into online book metadata using the latest in-memory state and explicit refresh intent');
@@ -50,3 +48,6 @@ assert.ok(source.includes('accessibilityLabel="Cancel library refresh"')&&source
 assert.ok(source.includes('disabled={libraryRefreshActive||!localFolders.length}')&&source.includes('{LocalScanStatus()}'),'Settings must show and respect the same active refresh state');
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'foreground discovery and all enrichment stages must stop for a cancelled/stale generation');
 assert.equal(source.includes('online enrichment continues in the background.'),false,'manual refresh must not claim completion while unmanaged enrichment is still running');
+
+const editorSearch=source.split('const runMetadataSearch=async')[1].split('const useProposal=')[0];
+assert.equal(/enrichLocalEmbeddedMetadata|synchronizeLocalMetadataCooperative|if\(deep\)/.test(editorSearch),false,'interactive search must never inspect local files');

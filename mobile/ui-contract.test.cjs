@@ -259,7 +259,7 @@ assert.ok(source.includes('consolidates selected author-name variants'), 'Bulk a
 assert.ok(source.includes('>POSSIBLE DUPLICATES</Text>') && source.includes('>ALTERNATE FORMATS</Text>') && source.includes('>DIFFERENT EDITIONS</Text>'), 'Duplicate review must distinguish copies, formats and editions');
 assert.ok(source.includes('not a deletion candidate') && source.includes('Kept as separate editions under the same logical work.'), 'Format and edition review must not imply destructive duplicate handling');
 assert.ok(source.includes('(reviewOnly||!!metadataGapFilter) ? request(session, serverAssetsPath(0,200))'), 'Server raw assets must load only for explicit maintenance views');
-assert.ok(source.includes('<MaintenanceList/>') && source.includes('maintenanceMode=reviewOnly||!!metadataGapFilter'), 'Library maintenance results must use editable raw-file rows');
+assert.ok(source.includes('{MaintenanceList()}') && source.includes('maintenanceMode=reviewOnly||!!metadataGapFilter'), 'Library maintenance results must use editable raw-file rows');
 assert.ok(source.includes('Rescan device folders') && source.includes('Add device folder'), 'Library scan controls are missing');
 assert.ok(source.includes('scanPhaseLabel(activeProgress.phase)') && source.includes('scanProgressPercent(activeProgress)') && source.includes('>Library updated</Text>'), 'Scan UI must expose phased determinate progress and a compact rescan result summary');
 assert.ok(source.includes('Library may be out of date') && source.includes('Some files changed while Archivist was organising your library.') && source.includes('label="Rescan"') && source.includes('label="Not now"'), 'Interrupted local organisation must use the approved simple rescan prompt');
@@ -306,7 +306,7 @@ assert.ok(source.includes("reading.format"), 'Reader header must expose the acti
 assert.ok(source.includes("Modal transparent animationType={reduceMotion?'none':'fade'} visible onRequestClose={()=>setRatingPrompt(null)}"), 'Completion rating prompt must be dismissible and respect Reduced Motion');
 assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose format or edition for '"), 'Format / edition picker must expose modal accessibility semantics');
 assert.ok(source.includes("accessibilityViewIsModal={true} accessibilityLabel={'Choose format for '+work.title}"), 'Grouped Shelf format picker must expose modal accessibility semantics');
-assert.ok(source.includes("KeyboardAvoidingView style={styles.modalKeyboard}"), 'Metadata editor must remain usable with the on-screen keyboard');
+assert.ok(source.includes("KeyboardAvoidingView style={[styles.modalKeyboard,"), 'Metadata editor must remain usable with the on-screen keyboard');
 assert.ok(source.includes("accessibilityLabel={'Open player for '+playing.title}"), 'Mini player must expose a separate open-player action');
 assert.match(source,/accessibilityLabel=\{[\s\S]{0,240}['"]Pause ['"]\+playing\.title[\s\S]{0,120}['"]Play ['"]\+playing\.title/, 'Mini player play/pause must be source-aware and separately labelled');
 assert.equal(source.includes('<Pressable accessibilityRole="button" onPress={() => setActiveTab(\'player\')} style={[styles.miniPlayer'),false,'Mini player must not nest a button inside another button');

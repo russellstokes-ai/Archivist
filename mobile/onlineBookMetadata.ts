@@ -60,6 +60,7 @@ export type OnlineBookLookupOptions={
   timeoutMs?:number;
   ignoreCache?:boolean;
   deep?:boolean;
+  interactive?:boolean;
 };
 
 const positiveTtl=30*24*60*60*1000;
@@ -162,7 +163,7 @@ export function buildBookLookupHints(input:BookLookupInput){
 }
 
 type QueryPlan={kind:'isbn'|'title-author'|'title'|'author';title?:string;author?:string;isbn?:string};
-function queryPlans(input:BookLookupInput,deep=false){
+function queryPlans(input:BookLookupInput,deep=false,interactive=false){
   const hints=buildBookLookupHints(input);
   const plans:QueryPlan[]=[];
   if(hints.isbn)plans.push({kind:'isbn',isbn:hints.isbn});
@@ -186,8 +187,14 @@ function queryPlans(input:BookLookupInput,deep=false){
       plans.push({kind:'title',title:series});
     }
   }
+  if(interactive){
+    // Search user clues broadly when filename suffixes defeat an exact phrase.
+    const title=hints.titles[0],author=hints.authors[0];
+    if(title&&title.split(/\s+/).length>2)plans.splice(1,0,{kind:'title-author',title:title.split(/\s+/).slice(0,2).join(' '),author});
+    if(title&&author)plans.push({kind:'author',author});
+  }
   const seen=new Set<string>();
-  return plans.filter(plan=>{const key=JSON.stringify(plan);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,deep?16:3);
+  return plans.filter(plan=>{const key=JSON.stringify(plan);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,deep?16:interactive?4:3);
 }
 
 function selectGenre(values:unknown){
@@ -316,7 +323,9 @@ async function fetchJson(fetcher:FetchLike,url:string,timeoutMs:number,init:any=
   }finally{if(timer)clearTimeout(timer);}
 }
 async function throttleOpenLibrary(){
-  const wait=Math.max(0,1050-(Date.now()-lastOpenLibraryRequestAt));if(wait)await sleep(wait);lastOpenLibraryRequestAt=Date.now();
+  const slot=Math.max(Date.now(),lastOpenLibraryRequestAt+1050);
+  lastOpenLibraryRequestAt=slot;
+  const wait=slot-Date.now();if(wait>0)await sleep(wait);
 }
 function openLibraryQuery(plan:QueryPlan){
   if(plan.kind==='isbn')return 'isbn:'+plan.isbn;
@@ -336,7 +345,7 @@ async function hydrateOpenLibrary(fetcher:FetchLike,candidate:OnlineBookCandidat
   try{
     await throttleOpenLibrary();
     const json=await fetchJson(fetcher,'https://openlibrary.org'+candidate.providerId+'.json',timeoutMs,{headers:{Accept:'application/json','User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'}});
-    return {...candidate,fields:compact({...candidate.fields,description:candidate.fields.description||descriptionValue(json?.description),genre:candidate.fields.genre||selectGenre(json?.subjects)})};
+    return {...candidate,fields:compact({...candidate.fields,description:candidate.fields.description||descriptionValue(json?.description),genre:candidate.fields.genre||selectGenre(json?.subjects),series:candidate.fields.series||parseSeriesValue(json?.series).series,seriesNumber:candidate.fields.seriesNumber??parseSeriesValue(json?.series).seriesNumber})};
   }catch{return candidate;}
 }
 export async function hydrateBookCandidate(candidate:OnlineBookCandidate,options:{fetcher?:FetchLike;timeoutMs?:number}={}){
@@ -357,19 +366,17 @@ async function searchGoogleBooks(fetcher:FetchLike,plan:QueryPlan,apiKey:string,
 
 export function onlineBookCacheKey(input:BookLookupInput){
   const hints=buildBookLookupHints(input);
-  // v2 invalidates negative/ambiguous results produced by the earlier bulk
+  // v3 invalidates negative/ambiguous results produced by the earlier bulk
   // scanner so the publication-focused matcher gets one clean retry.
-  return ['v2',hints.isbn,normalize(hints.titles[0]),normalize(hints.authors[0]),normalize(hints.series[0]),input.format||''].join('|');
+  return ['v3',hints.isbn,normalize(hints.titles[0]),normalize(hints.authors[0]),normalize(hints.series[0]),input.format||''].join('|');
 }
 
 export function shouldLookupBookOnline(input:BookLookupInput){
   const format=String(input.format||'').toLowerCase();
   if(format&&format!=='epub'&&format!=='pdf'&&format!=='audio')return false;
   if(!useful(input.title)&&!normalizeIsbn(input.isbn)&&!input.uri)return false;
-  // Initial preparation only needs enough online work to identify the title
-  // and obtain publishable artwork. Optional descriptive fields must never
-  // turn a fast scan into a catalogue-wide enrichment job.
-  return !!input.needsReview||!input.coverUri||!useful(input.author)||!useful(input.title);
+  // Missing genre needs work-level enrichment for Atlas, even with a cover.
+  return !!input.needsReview||!input.coverUri||!useful(input.author)||!useful(input.title)||!useful(input.genre);
 }
 
 export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookLookupOptions={}):Promise<OnlineBookLookupResult>{
@@ -380,12 +387,14 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
   const fetcher=options.fetcher||(globalThis.fetch as unknown as FetchLike);
   if(typeof fetcher!=='function')return {key,status:'offline',candidates:[],autoApply:false,queried:[]};
   const timeoutMs=Math.max(2500,Math.min(20000,options.timeoutMs||(options.deep?15000:8000)));
-  const plans=queryPlans(input,!!options.deep);const queried:string[]=[];const raw:Array<Omit<OnlineBookCandidate,'score'|'confidence'|'reasons'>>=[];
+  const started=Date.now();
+  const plans=queryPlans(input,!!options.deep,!!options.interactive);const queried:string[]=[];const raw:Array<Omit<OnlineBookCandidate,'score'|'confidence'|'reasons'>>=[];
   try{
     const openLibraryEnabled=options.openLibraryEnabled!==false;
     if(openLibraryEnabled){
       for(const plan of plans){
-        const found=await searchOpenLibrary(fetcher,plan,timeoutMs);queried.push('openlibrary:'+openLibraryQuery(plan));raw.push(...found);
+        if(options.interactive&&Date.now()-started>=12000)break;
+        try{const found=await searchOpenLibrary(fetcher,plan,options.interactive?Math.min(timeoutMs,Math.max(500,12000-(Date.now()-started))):timeoutMs);queried.push('openlibrary:'+openLibraryQuery(plan));raw.push(...found);}catch{continue;}
         const ranked=rankCandidates(input,raw);
         if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=80))break;
         if(raw.length>=(options.deep?48:18))break;
@@ -394,8 +403,9 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
     let ranked=rankCandidates(input,raw);
     if(options.googleBooksApiKey&&(options.deep||!ranked[0]||ranked[0].confidence!=='high')){
       for(const plan of plans.slice(0,options.deep?8:3)){
+        if(options.interactive&&Date.now()-started>=12000)break;
         try{
-          const found=await searchGoogleBooks(fetcher,plan,options.googleBooksApiKey,timeoutMs);
+          const found=await searchGoogleBooks(fetcher,plan,options.googleBooksApiKey,options.interactive?Math.min(timeoutMs,Math.max(500,12000-(Date.now()-started))):timeoutMs);
           queried.push('googlebooks:'+googleQuery(plan));raw.push(...found);ranked=rankCandidates(input,raw);
           if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=80))break;
         }catch{}
@@ -403,10 +413,9 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
     }
     ranked=rankCandidates(input,raw);
     let best=ranked[0];
-    // Full Open Library work hydration fills optional descriptive fields and can
-    // cost another throttled request per book. Keep it for explicit Deep Search,
-    // never for initial publication-focused preparation.
-    if(options.deep&&best?.provider==='openlibrary'&&best.confidence==='high')best=await hydrateOpenLibrary(fetcher,best,timeoutMs);
+    // Fill missing Atlas genre on confident automatic matches; interactive
+    // search hydrates only the user's selected result.
+    if(!options.interactive&&(options.deep||!best?.fields.genre)&&best?.provider==='openlibrary'&&best.confidence==='high')best=await hydrateOpenLibrary(fetcher,best,timeoutMs);
     if(best){const idx=ranked.findIndex(item=>item.provider===best.provider&&item.providerId===best.providerId);if(idx>=0)ranked[idx]=best;}
     const second=ranked[1];const margin=best?best.score-(second?.score||0):0;
     const obviousIdentity=!!best
@@ -414,9 +423,9 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
       && best.reasons.includes('strong title match')
       && best.reasons.includes('author match');
     const autoApply=!!best&&best.confidence==='high'&&(best.exactIdentifier||obviousIdentity||margin>=7);
-    const status:OnlineBookLookupResult['status']=!best||best.confidence==='low'?'none':autoApply?'matched':'review';
+    const status:OnlineBookLookupResult['status']=!queried.length?'offline':!best||best.confidence==='low'?'none':autoApply?'matched':'review';
     const result={key,status,best,candidates:ranked,autoApply,queried};
-    if(options.cache)options.cache[key]={expiresAt:now()+(status==='none'?negativeTtl:positiveTtl),result};
+    if(options.cache&&status!=='offline')options.cache[key]={expiresAt:now()+(status==='none'?negativeTtl:positiveTtl),result};
     return result;
   }catch{return {key,status:'offline',candidates:[],autoApply:false,queried};}
 }

@@ -38,14 +38,11 @@ assert.match(
 const searchStart=app.indexOf('const runMetadataSearch=async');
 const searchEnd=app.indexOf('const useProposal=',searchStart);
 const search=app.slice(searchStart,searchEnd);
-assert.match(search,/if\(deep\)/,'Deep Search must own local forensic inspection');
-assert.match(search,/concurrency:1/,'Deep Search local inspection must be serial');
-assert.match(search,/maxConsecutiveTimeouts:1/,'one pathological local read must open the circuit');
-assert.match(search,/workBooks\[Math\.floor\(workBooks\.length\/2\)\]/,'multi-part audio Deep Search must sample the work rather than scan every part');
-assert.match(search,/workBooks\.slice\(0,1\)/,'single-file book/comic Deep Search must inspect only that work');
-assert.match(search,/synchronizeLocalMetadataCooperative\(inspected\.books\)/,'local clues must be propagated at work level before online search');
 
 assert.match(feedback,/preparing:\[34,40\]/);
 assert.match(feedback,/'online-books':\[40,72\]/);
 
 console.log('PASS: normal scanner is shallow; deep local parsing is explicit, serial and work-scoped');
+
+const editorSearch=app.split('const runMetadataSearch=async')[1].split('const useProposal=')[0];
+assert.equal(/enrichLocalEmbeddedMetadata|synchronizeLocalMetadataCooperative|if\(deep\)/.test(editorSearch),false,'interactive search must never inspect local files');
