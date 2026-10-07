@@ -12,27 +12,27 @@ const {lookupOnlineComic}=require('./onlineComicMetadata.ts');
   const calls=[];
   const bookFetcher=async(url)=>{
     calls.push(url);
-    const decoded=decodeURIComponent(url);
-    if(decoded.includes('isbn:9780441172719'))return {ok:true,status:200,json:async()=>({docs:[{key:'/works/DUNE',title:'Dune',author_name:['Frank Herbert'],isbn:['9780441172719'],cover_i:1}]})};
-    if(decoded.includes('author:"Frank Herbert"'))return {ok:true,status:200,json:async()=>({docs:[{key:'/works/DUNE',title:'Dune',author_name:['Frank Herbert'],cover_i:1}]})};
-    if(decoded.includes('title:"Dune"'))return {ok:true,status:200,json:async()=>({docs:[{key:'/works/DUNE',title:'Dune',author_name:['Frank Herbert'],cover_i:1}]})};
+    const q=new URL(url).searchParams.get('q')||'';
+    if(q.includes('isbn:9780441172719'))return {ok:true,status:200,json:async()=>({docs:[{key:'/works/DUNE',title:'Dune',author_name:['Frank Herbert'],isbn:['9780441172719'],cover_i:1}]})};
+    if(q.includes('author:"Frank Herbert"'))return {ok:true,status:200,json:async()=>({docs:[{key:'/works/DUNE',title:'Dune',author_name:['Frank Herbert'],cover_i:1}]})};
+    if(q.includes('title:"Dune"'))return {ok:true,status:200,json:async()=>({docs:[{key:'/works/DUNE',title:'Dune',author_name:['Frank Herbert'],cover_i:1}]})};
     return {ok:true,status:200,json:async()=>({docs:[]})};
   };
 
   const titleOnly=await lookupOnlineBook({title:'Dune',author:'',format:'EPUB'},{fetcher:bookFetcher,openLibraryEnabled:true,ignoreCache:true,interactive:true});
   assert.ok(titleOnly.candidates.some(candidate=>candidate.fields.title==='Dune'),'title-only Smart Search must return candidates');
-  assert.ok(calls.some(url=>decodeURIComponent(url).includes('title:"Dune"')));
+  assert.ok(calls.some(url=>(new URL(url).searchParams.get('q')||'').includes('title:"Dune"')));
 
   calls.length=0;
   const authorOnly=await lookupOnlineBook({title:'',author:'Frank Herbert',format:'EPUB'},{fetcher:bookFetcher,openLibraryEnabled:true,ignoreCache:true,interactive:true});
   assert.ok(authorOnly.candidates.some(candidate=>candidate.fields.author==='Frank Herbert'),'author-only Smart Search must return candidates');
-  assert.ok(calls.some(url=>decodeURIComponent(url).includes('author:"Frank Herbert"')));
+  assert.ok(calls.some(url=>(new URL(url).searchParams.get('q')||'').includes('author:"Frank Herbert"')));
 
   calls.length=0;
   const isbn=await lookupOnlineBook({title:'',author:'',isbn:'9780441172719',format:'EPUB'},{fetcher:bookFetcher,openLibraryEnabled:true,ignoreCache:true,interactive:true});
   assert.equal(isbn.best?.exactIdentifier,true);
   assert.equal(isbn.status,'matched');
-  assert.ok(calls.some(url=>decodeURIComponent(url).includes('isbn:9780441172719')));
+  assert.ok(calls.some(url=>(new URL(url).searchParams.get('q')||'').includes('isbn:9780441172719')));
 
   const disabled=await lookupOnlineBook({title:'Dune',author:'Frank Herbert',format:'EPUB'},{fetcher:bookFetcher,openLibraryEnabled:false,ignoreCache:true});
   assert.equal(disabled.status,'unconfigured','disabled book providers must not masquerade as an offline network failure');
