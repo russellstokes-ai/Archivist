@@ -185,4 +185,46 @@ class BoundedZipProbeTest {
     }
   }
 
+  @Test
+  fun guardedReaderStopsAtDeadlineAndCancellationBeforeFurtherRanges() {
+    val archive = zip(listOf("ComicInfo.xml" to "<ComicInfo><Title>Dune</Title></ComicInfo>".toByteArray()))
+    var now = 1000L
+    var cancelled = false
+    val base = RecordingReader(archive)
+    val guarded = GuardedArchiveReader(
+      reader = base,
+      now = { now },
+      shouldContinue = { !cancelled },
+      deadlineMs = 2000,
+    )
+
+    val first = BoundedArchiveEvidence.probeZip("cbz", guarded)
+    assertEquals("Dune", first.metadataText?.substringAfter("<Title>")?.substringBefore("</Title>"))
+    val readsAfterSuccess = base.windows.size
+
+    now = 4001L
+    try {
+      BoundedArchiveEvidence.probeZip("cbz", guarded)
+      fail("Expected deadline failure")
+    } catch (error: BoundedArchiveEvidence.ProbeFailure) {
+      assertEquals("operation-timeout", error.code)
+    }
+    assertEquals(readsAfterSuccess, base.windows.size, "expired probe must not start another range read")
+
+    now = 1000L
+    cancelled = true
+    val cancelledReader = GuardedArchiveReader(
+      reader = RecordingReader(archive),
+      now = { now },
+      shouldContinue = { !cancelled },
+      deadlineMs = 2000,
+    )
+    try {
+      BoundedArchiveEvidence.probeZip("cbz", cancelledReader)
+      fail("Expected cancellation failure")
+    } catch (error: BoundedArchiveEvidence.ProbeFailure) {
+      assertEquals("operation-cancelled", error.code)
+    }
+  }
+
 }
