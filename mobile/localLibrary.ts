@@ -8,6 +8,7 @@ import {discoverEmbeddedCover} from './coverDiscovery';
 import {lookupOnlineBook, mergeOnlineBookCandidate, shouldLookupBookOnline, OnlineBookCache, OnlineBookCandidate} from './onlineBookMetadata';
 import {lookupOnlineComic, mergeOnlineComicCandidate, shouldLookupComicOnline, OnlineComicCache, OnlineComicCandidate} from './onlineComicMetadata';
 import {audioWorkGroupKeys, canonicalMetadataForBooks, synchronizeLocalMetadataCooperative} from './metadataSync';
+import {readBoundedArchiveEvidence} from './boundedArchiveEvidence';
 
 export type LocalBook = {
   id: number;
@@ -783,6 +784,66 @@ function mergeEmbeddedMetadata(book:LocalBook,fields:LocalMetadataFields):LocalB
     patch.comicMetadataProvenance=provenance;
   }
   return patch;
+}
+
+export async function enrichLocalBoundedArchiveEvidence(
+  books:LocalBook[],
+  options:{
+    shouldContinue?:()=>boolean;
+    batchSize?:number;
+    onBatch?:(books:LocalBook[],progress:{attempted:number;processed:number;total:number;updated:number;blocked:number;current?:string})=>void|Promise<void>;
+  }={},
+):Promise<{books:LocalBook[];attempted:number;processed:number;updated:number;blocked:number}> {
+  const shouldContinue=options.shouldContinue||(()=>true);
+  const batchSize=Math.max(1,Math.min(12,Math.trunc(options.batchSize||4)));
+  const supportedArchive=(book:LocalBook)=>{
+    const ext=extension(book.uri);
+    return (book.format==='EPUB'&&ext==='epub')||(book.format==='Comic'&&['cbz','zip','cbr','cbt'].includes(ext));
+  };
+  const eligible=books.map((book,index)=>({book,index})).filter(({book})=>supportedArchive(book)&&(!book.embeddedMetadata||!book.coverUri||!!book.needsReview));
+  if(!eligible.length)return {books,attempted:0,processed:0,updated:0,blocked:0};
+  const next=books.slice();
+  let attempted=0,processed=0,updated=0,blocked=0,pending=0;
+  for(const {book,index} of eligible){
+    if(!shouldContinue())break;
+    attempted+=1;
+    const ext=extension(book.uri);
+    const evidence=await readBoundedArchiveEvidence(book.uri,ext);
+    if(!shouldContinue())break;
+    if(evidence.status==='ok'){
+      let patch=Object.keys(evidence.fields||{}).length?mergeEmbeddedMetadata(book,evidence.fields):book;
+      const localCover=String(evidence.coverUri||'').trim();
+      const manualCover=String(book.manualOverride?.coverUri||'').trim();
+      if(localCover&&!manualCover){
+        const candidates=[...(patch.coverCandidates||[])];
+        if(!candidates.includes(localCover))candidates.push(localCover);
+        patch={
+          ...patch,
+          coverUri:localCover,
+          coverCandidates:candidates,
+          libraryCoverUri:patch.libraryCoverUri||localCover,
+          livingBookCoverUri:patch.livingBookCoverUri||localCover,
+          livingBookCoverSource:patch.livingBookCoverSource||'embedded',
+          livingBookCoverConfidence:patch.livingBookCoverConfidence??1,
+        };
+      }
+      next[index]=patch;
+      if(patch!==book)updated+=1;
+    }else if(evidence.status==='blocked'){
+      blocked+=1;
+      if(book.needsReview||!String(book.title||'').trim()){
+        next[index]={...book,needsReview:true,reviewReason:evidence.reason||book.reviewReason||'Archive evidence could not be read safely.'};
+      }
+    }
+    processed+=1;pending+=1;
+    if(pending>=batchSize){
+      pending=0;
+      await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,blocked,current:book.title});
+      await new Promise<void>(resolve=>setTimeout(resolve,0));
+    }
+  }
+  if(shouldContinue())await options.onBatch?.(next,{attempted,processed,total:eligible.length,updated,blocked});
+  return {books:next,attempted,processed,updated,blocked};
 }
 
 export async function enrichLocalEmbeddedMetadata(
