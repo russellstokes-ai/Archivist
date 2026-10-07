@@ -46,6 +46,13 @@ const {readBoundedArchiveEvidence}=require('./boundedArchiveEvidence.ts');
   assert.equal(comic.coverUri,'data:image/jpeg;base64,BAUG');
   assert.equal(calls,1);
 
+  const cbt=await readBoundedArchiveEvidence('content://comic.cbt','cbt');
+  assert.equal(cbt.status,'ok');
+  assert.equal(cbt.fields.title,'Dune');
+  const cbr=await readBoundedArchiveEvidence('content://comic.cbr','cbr');
+  assert.equal(cbr.status,'ok');
+  assert.equal(cbr.fields.series,'Dune');
+
   mode='epub';
   const epub=await readBoundedArchiveEvidence('content://book.epub','epub');
   assert.equal(epub.status,'ok');
