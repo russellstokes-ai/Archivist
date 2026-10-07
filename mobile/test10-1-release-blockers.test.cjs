@@ -28,12 +28,10 @@ assert.equal(app.includes("item.complete===false?{...item,complete:true}:item"),
 const normalEnrichment=app.slice(app.indexOf('async function enrichPublishedLocalLibrary'),app.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
 assert.ok(normalEnrichment.includes('enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true)'),'normal refresh must restore bounded audio property evidence before online matching');
 assert.ok(app.includes("if(fastAudioProperties){")&&app.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'normal property pass must exclude EPUB/comic archive reads and already-cached audio');
-assert.ok(app.includes('itemTimeoutMs:fastAudioProperties?1200')&&app.includes('maxConsecutiveTimeouts:fastAudioProperties?3:6'),'normal property pass must retain a strict fail-forward watchdog');
+assert.ok(app.includes('itemTimeoutMs:fastAudioProperties?1200')&&app.includes('maxConsecutiveTimeouts:1'),'normal property pass must retain a strict fail-forward watchdog');
 assert.ok(feedback.includes("'reading-metadata':[40,44]"),'reading-metadata must remain a narrow bounded identification phase rather than the historical 28% bulk stage');
 assert.ok(library.includes('withOperationTimeout'),'explicit local forensic reads must still have an operation watchdog');
 const deepSearch=app.slice(app.indexOf('const runMetadataSearch=async'),app.indexOf('const acceptProposal=async'));
-assert.ok(deepSearch.includes('concurrency:1')&&deepSearch.includes('maxConsecutiveTimeouts:1'),'Deep Search local inspection must be serial and stop launching reads after the first timeout');
-assert.ok(deepSearch.includes('workBooks[Math.floor(workBooks.length/2)]')&&deepSearch.includes('workBooks.slice(0,1)'),'Deep Search must inspect only a tiny selected-work sample');
 assert.ok(library.includes("'Embedded metadata read'")&&library.includes("'Embedded cover read'"),'explicit metadata and cover extraction must remain watchdog-protected');
 assert.ok(library.includes("current:'Skipped remaining cover reads after repeated timeouts'"),'cover recovery must fail forward rather than become a new freeze');
 assert.ok(app.includes("recordLibraryRefreshWarning('Local cover recovery'"),'cover timeouts/skips must remain visible in completed refresh warnings');
@@ -47,3 +45,6 @@ assert.ok(
 assert.ok(comics.includes('options.timeoutMs||8000')&&comics.includes('AbortController'),'comic provider requests must retain their network deadline');
 
 console.log('PASS: Test 10.1 release blockers lock verified Move sorting and fail-forward metadata scanning');
+
+const editorSearch=app.split('const runMetadataSearch=async')[1].split('const useProposal=')[0];
+assert.equal(/enrichLocalEmbeddedMetadata|synchronizeLocalMetadataCooperative|if\(deep\)/.test(editorSearch),false,'interactive search must never inspect local files');

@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - fix/test13-scanner-commercial-20261007
       - dev/archivist-work
       - build/final-apk-0.9.4-20261004
       - build/0.9.4-test6-20261004
@@ -24,7 +25,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '13'
+  TEST_BUILD: '18-editor-render'
 
 concurrency:
   group: android-apk-${{ github.ref }}

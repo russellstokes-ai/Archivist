@@ -33,6 +33,15 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
   private val zipFiles = ConcurrentHashMap<String, File>()
 
   @ReactMethod
+  fun readAudioMetadataWindows(uri: String, extension: String, promise: Promise) {
+    BoundedAudioReader.read(context, uri, extension, promise)
+  }
+
+  @ReactMethod
+  fun cancelAudioMetadataRead() { BoundedAudioReader.cancel() }
+
+
+  @ReactMethod
   fun setReaderFullscreen(enabled: Boolean) {
     UiThreadUtil.runOnUiThread {
       val window = context.currentActivity?.window ?: return@runOnUiThread

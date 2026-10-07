@@ -1,3 +1,5 @@
+import {hydrateBookCandidate} from './onlineBookMetadata';
+import {persistWorkEdit} from './metadataEditPersistence';
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
@@ -13,6 +15,7 @@ import {
   AppState,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   NativeModules,
@@ -715,6 +718,17 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
   }
 
 
+function reviewBooksForDisplay(books:Book[]):Book[]{
+  const local=books.filter(book=>book.source!=='server'&&!!book.uri) as LocalBook[];
+  const grouped:Book[]=groupLocalWorks(local).map(work=>({...work.tracks[0],source:'local' as const,title:work.title,author:work.author,series:work.series,needsReview:work.tracks.some(book=>book.needsReview),coverUri:work.coverUri}));
+  const servers=new Map<string,Book>();
+  for(const book of books.filter(book=>book.source==='server')){
+    const key=String(book.serverWorkId||logicalWorkKey(book)||book.id);
+    const prior=servers.get(key);servers.set(key,prior?{...prior,needsReview:!!prior.needsReview||!!book.needsReview}:book);
+  }
+  return [...grouped,...servers.values()];
+}
+
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
@@ -1109,6 +1123,8 @@ function Client() {
   const [editCoverUri,setEditCoverUri]=useState('');
   const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null;fileSize?:number}|null>(null);
   const [coverPicking,setCoverPicking]=useState(false);
+  const metadataEditorScroll=useRef<ScrollView>(null);
+  const editorScrollReset=useRef(false);
   const [metadataSearchBusy,setMetadataSearchBusy]=useState(false);
   const [metadataSearchMode,setMetadataSearchMode]=useState<''|'smart'|'deep'>('');
   const [metadataSearchResults,setMetadataSearchResults]=useState<MetadataProposal[]>([]);
@@ -1592,12 +1608,13 @@ function Client() {
     return value==='pdf';
   };
 
+  const pendingReviewBooks=useMemo(()=>reviewBooksForDisplay([...stagedLocalBooks,...serverBooks]).filter(book=>book.needsReview),[stagedLocalBooks,serverBooks]);
   const reviewAssetPool = useMemo(() => {
     const localReviewPool=(reviewOnly||!!metadataGapFilter)?stagedLocalBooks:localBooks;
-    if(sourceFilter==='server')return serverBooks;
+    if(sourceFilter==='server')return reviewOnly?reviewBooksForDisplay(serverBooks):serverBooks;
     if(sourceFilter==='downloaded')return [] as Book[];
-    if(sourceFilter==='local')return localReviewPool;
-    return [...localReviewPool,...serverBooks];
+    if(sourceFilter==='local')return reviewOnly?reviewBooksForDisplay(localReviewPool):localReviewPool;
+    return reviewOnly?reviewBooksForDisplay([...localReviewPool,...serverBooks]):[...localReviewPool,...serverBooks];
   },[localBooks,metadataGapFilter,reviewOnly,serverBooks,sourceFilter,stagedLocalBooks]);
 
   const visibleBooks = useMemo(() => {
@@ -2682,7 +2699,7 @@ function Client() {
   const scanFrame=()=>new Promise<void>(resolve=>setTimeout(resolve,16));
   const reportEnrichmentProgress=(progress:LocalScanProgress,force=false)=>{
     const now=Date.now();
-    if(!force&&now-enrichmentProgressClock.current<220)return;
+    if(!force&&now-enrichmentProgressClock.current<450)return;
     enrichmentProgressClock.current=now;
     setEnrichmentProgress(progress);
   };
@@ -2705,7 +2722,7 @@ function Client() {
   };
   const reportLocalScan=(generation:number)=>{
     let last=0;
-    return (progress:LocalScanProgress)=>{const now=Date.now();if(scanCommitGate.isCurrent(generation)&&now-last>=150){last=now;setScanProgress(progress);}};
+    return (progress:LocalScanProgress)=>{const now=Date.now();if(scanCommitGate.isCurrent(generation)&&now-last>=450){last=now;setScanProgress(progress);}};
   };
   const endLocalScan=(generation:number)=>{
     if(!scanCommitGate.isCurrent(generation))return;
@@ -2721,6 +2738,7 @@ function Client() {
   const cancelLibraryRefresh=()=>{
     if(!libraryRefreshRunningRef.current&&!activeLibraryProgress)return;
     scanCommitGate.invalidate();
+    NativeModules.ArchivistArchive?.cancelAudioMetadataRead?.();
     libraryRefreshRunningRef.current=false;
     setLocalScanning(false);
     setScanProgress(null);
@@ -2913,8 +2931,8 @@ function Client() {
       // Fast properties are bounded header reads and fail forward aggressively.
       // Full archive/audio inspection remains explicit or refresh-only.
       itemTimeoutMs:fastAudioProperties?1200:(refreshMetadata?5000:2500),
-      maxConsecutiveTimeouts:fastAudioProperties?3:6,
-      concurrency:fastAudioProperties?4:(refreshMetadata?3:4),
+      maxConsecutiveTimeouts:1,
+      concurrency:1,
       shouldInspect:needsEmbeddedRead,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
       onBatch:(batch,progress)=>{
@@ -4112,10 +4130,7 @@ function Client() {
 
   function OnboardingGuide() {
     if (onboardingDone) return null;
-    const stagedBooks=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-    const stagedPartition=partitionLocalBooksByPublication(stagedBooks);
-    const pendingLocalWorks=groupLocalWorks(stagedPartition.staged);
-    const reviewCount=pendingLocalWorks.length;
+    const reviewCount=pendingReviewBooks.filter(book=>book.source!=='server').length;
     const hasFolder = localFolders.length > 0;
     const hasServer = !!session;
     const hasServerFolders = sources.length > 0;
@@ -4196,7 +4211,7 @@ function Client() {
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
         {preparing&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='prepare')}><Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/></Animated.View>:null}
-        {setupReady&&reviewCount>0?<Animated.View style={pulseStyle(activeStep==='review')}><Button label={'Review '+reviewCount+' item'+(reviewCount===1?'':'s')} onPress={openOnboardingReview}/></Animated.View>:null}
+        {setupReady&&reviewCount>0?<Animated.View style={pulseStyle(activeStep==='review')}><Button label={'Review '+reviewCount+' book'+(reviewCount===1?'':'s')} onPress={openOnboardingReview}/></Animated.View>:null}
         {setupReady&&reviewCount===0&&hasBooks?<View style={styles.shelfSetupActions}>
           <Animated.View style={[styles.shelfSetupAction,pulseStyle(activeStep==='organise')]}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></Animated.View>
           <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
@@ -4241,6 +4256,8 @@ function Client() {
   }
 
   function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
+    if(item.source!=='server')cancelLibraryRefresh();
+    setError('');
     setEditing(item);
     setEditingUris(uris.filter(Boolean));
     setEditTitle(item.title);
@@ -4728,6 +4745,12 @@ function Client() {
     </Modal>;
   }
 
+  const persistEditorWork=(books:LocalBook[],targets:string[],overrides:Record<string,LocalMetadataOverride>)=>persistWorkEdit(books,targets,overrides,{
+    load:loadLocalStageBooks,replace:replaceLocalStageBooks,
+    saveOverrides:value=>setPersistedJSON(localMetadataOverridesKey,value),
+    loadOverrides:()=>getPersistedJSON<Record<string,LocalMetadataOverride>>(localMetadataOverridesKey),
+  });
+
   function MetadataEditorPanel(){
     if(!editing)return null;
     const localEdit=editing.source!=='server'&&!!editing.uri;
@@ -4747,94 +4770,49 @@ function Client() {
       };
     };
 
-    const saveClues=async():Promise<LocalBook[]|null>=>{
-      if(!localEdit||!targets.length||metadataSearchBusy)return null;
-      const override=editorOverride(editCoverUri);
-      if(!override.title.trim()){setMetadataSearchNotice('Add a title before searching.');return null;}
-      const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const updated=applyManualCluesToWork(current,targets,override);
-      const nextOverrides={...localMetadataOverrides};
-      for(const uri of targets)nextOverrides[uri]=override;
-      setLocalMetadataOverrides(nextOverrides);
-      setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
-      await Promise.all([
-        setPersistedJSON(localMetadataOverridesKey,nextOverrides),
-        replaceLocalStageBooks(updated),
-      ]);
-      const representative=updated.find(book=>targets.includes(book.uri));
-      if(representative)setEditing({...representative,source:'local'});
-      setMetadataSearchNotice('Search clues saved.');
-      return updated;
-    };
-
-    const runMetadataSearch=async(deep:boolean)=>{
+    const runMetadataSearch=async()=>{
       if(!localEdit||metadataSearchBusy)return;
-      setMetadataSearchBusy(true);
-      setMetadataSearchMode(deep?'deep':'smart');
-      setMetadataSearchNotice(deep?'Running Deep Search…':'Running Smart Search…');
-      setMetadataSearchResults([]);
-      setMetadataSearchSelection(-1);
+      Keyboard.dismiss();editorScrollReset.current=true;metadataEditorScroll.current?.scrollTo({y:0,animated:false});
+      setMetadataSearchBusy(true);setMetadataSearchMode('smart');
+      setMetadataSearchNotice('Searching by your title and author…');
+      setMetadataSearchResults([]);setMetadataSearchSelection(-1);
       try{
-        const updated=await saveClues();
-        if(!updated)return;
-        let searchBooks=updated;
-        let representative=searchBooks.find(book=>targets.includes(book.uri));
-        if(!representative)throw Error('This staged work is no longer available.');
-
-        if(deep){
-          const workBooks=searchBooks.filter(book=>targets.includes(book.uri));
-          const sample=representative.format==='Audio'
-            ? [workBooks[0],workBooks[Math.floor(workBooks.length/2)],workBooks[workBooks.length-1]].filter((book,index,all)=>!!book&&all.findIndex(item=>item?.uri===book?.uri)===index)
-            : workBooks.slice(0,1);
-          const sampleUris=new Set(sample.map(book=>book!.uri));
-          setMetadataSearchNotice('Deep Search · inspecting this work…');
-          const inspected=await enrichLocalEmbeddedMetadata(searchBooks,{
-            refreshMetadata:true,
-            batchSize:1,
-            concurrency:1,
-            itemTimeoutMs:2500,
-            maxConsecutiveTimeouts:1,
-            shouldInspect:book=>sampleUris.has(book.uri),
-            onBatch:(_books,progress)=>{
-              const detail=progress.timedOut
-                ? 'Deep Search · local file inspection timed out; continuing online…'
-                : 'Deep Search · inspected '+Math.min(progress.processed,progress.total)+' of '+progress.total+' selected file'+(progress.total===1?'':'s')+'…';
-              setMetadataSearchNotice(detail);
-            },
-          });
-          searchBooks=(await synchronizeLocalMetadataCooperative(inspected.books)).books as LocalBook[];
-          await replaceLocalStageBooks(searchBooks);
-          setStagedLocalBooks(searchBooks.map(book=>({...book,source:'local' as const})));
-          representative=searchBooks.find(book=>targets.includes(book.uri))||representative;
-        }
-
+        if(!metadataSettings.onlineEnabled)throw Error('Enable Online metadata in Settings to search.');
+        let representative=editing;
+        representative={...representative,title:editTitle.trim(),author:editAuthor.trim(),series:editSeries.trim(),isbn:editISBN.trim(),uri:''};
+        if(!representative.title&&!representative.author&&!representative.isbn)throw Error('Enter a title or author to search.');
         let proposals:MetadataProposal[]=[];
         if(representative.format==='Comic'){
+          if(!metadataSettings.comics.enabled||!metadataSettings.comics.metron)throw Error('Enable comic metadata and Metron in Settings to search comics.');
           const token=(await SecureStore.getItemAsync(metronTokenKey).catch(()=>null))?.trim()||undefined;
+          if(!token)throw Error('Configure a Metron token in Settings to search comics.');
           const result=await lookupOnlineComic(representative,{
             token,
-            ignoreCache:deep,
-            timeoutMs:deep?15000:8000,
+            ignoreCache:true,
+            timeoutMs:5000,
           });
-          proposals=result.candidates.slice(0,deep?8:5).map((candidate:OnlineComicCandidate)=>({kind:'comic' as const,candidate}));
+          proposals=result.candidates.slice(0,8).map((candidate:OnlineComicCandidate)=>({kind:'comic' as const,candidate}));
         }else{
           const googleBooksApiKey=metadataSettings.books.googleBooks
             ? (await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined
             : undefined;
+          if(!metadataSettings.books.enabled||(!metadataSettings.books.openLibrary&&!googleBooksApiKey))throw Error('Enable a book metadata provider in Settings to search.');
           const result=await lookupOnlineBook(representative,{
             openLibraryEnabled:metadataSettings.books.openLibrary,
             googleBooksApiKey,
-            ignoreCache:deep,
-            deep,
-            timeoutMs:deep?15000:8000,
+            ignoreCache:true,
+            interactive:true,
+            timeoutMs:5000,
           });
-          proposals=result.candidates.slice(0,deep?8:5).map((candidate:OnlineBookCandidate)=>({kind:'book' as const,candidate}));
+          if(result.status==='offline')throw Error('Metadata providers could not be reached. Check your connection and try again.');
+          proposals=result.candidates.slice(0,8).map((candidate:OnlineBookCandidate)=>({kind:'book' as const,candidate}));
         }
+        editorScrollReset.current=true;
         setMetadataSearchResults(proposals);
-        setMetadataSearchSelection(proposals.length?0:-1);
+        setMetadataSearchSelection(-1);
         setMetadataSearchNotice(proposals.length
-          ? (deep?'Deep Search':'Smart Search')+' found '+proposals.length+' possible match'+(proposals.length===1?'':'es')+'.'
-          : 'No confident matches found. Add another clue or try Deep Search.');
+          ? 'Smart Search'+' found '+proposals.length+' possible match'+(proposals.length===1?'':'es')+'.'
+          : 'No matches found. Try a shorter title, or clear the title to search by author.');
       }catch(error){
         setMetadataSearchNotice('Search could not complete: '+String((error as Error)?.message||error));
       }finally{
@@ -4843,60 +4821,28 @@ function Client() {
       }
     };
 
-    const acceptProposal=async()=>{
-      if(!localEdit||metadataSearchBusy||metadataSearchSelection<0)return;
-      const proposal=metadataSearchResults[metadataSearchSelection];
-      if(!proposal)return;
-      setMetadataSearchBusy(true);setMetadataSearchNotice('Accepting metadata and preparing artwork…');
+    const useProposal=async(index:number)=>{
+      if(metadataSearchBusy)return;
+      let proposal=metadataSearchResults[index];if(!proposal)return;
+      Keyboard.dismiss();setMetadataSearchBusy(true);setMetadataSearchNotice('Loading book details…');
       try{
-        const current=stagedLocalBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-        let accepted=proposal.kind==='book'
-          ? acceptBookCandidateForWork(current,targets,proposal.candidate)
-          : acceptComicCandidateForWork(current,targets,proposal.candidate);
-        const targetSet=new Set(targets);
-        const targetBooks=accepted.filter(book=>targetSet.has(book.uri));
-        const artwork=await cacheRequiredWorkArtwork(targetBooks,{
-          documentDirectory,
-          makeDirectoryAsync,
-          downloadAsync:downloadCoverWithDeadline,
-          getInfoAsync,
-          deleteAsync,
-        });
-        const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
-        accepted=accepted.map(book=>artworkByUri.get(book.uri)||book);
-
-        // Accept & Save is an explicit user decision. Persist the accepted work
-        // as protected overrides for every physical part so a later scan cannot
-        // reconstruct stale chapter/path metadata over it.
-        const acceptedOverrides={...localMetadataOverrides};
-        for(const uri of targets){
-          const book=accepted.find(item=>item.uri===uri);
-          if(!book)continue;
-          acceptedOverrides[uri]={
-            title:book.title,author:book.author,series:book.series,seriesNumber:book.seriesNumber,
-            genre:book.genre,publishedYear:book.publishedYear,narrator:book.narrator,
-            publisher:book.publisher,isbn:book.isbn,asin:book.asin,language:book.language,
-            description:book.description,coverUri:book.coverUri,
-          };
-        }
-        setLocalMetadataOverrides(acceptedOverrides);
-        await Promise.all([
-          setPersistedJSON(localMetadataOverridesKey,acceptedOverrides),
-          replaceLocalStageBooks(accepted),
-        ]);
-        setStagedLocalBooks(accepted.map(book=>({...book,source:'local' as const})));
-        const publication=publishCompletedLocalStage(accepted);
-        const acceptedPublished=artwork.books.length>0&&artwork.books.every(book=>publication.published.some(item=>item.uri===book.uri));
-        setLocalFolderNotice(acceptedPublished
-          ? 'Metadata accepted · both covers cached · book published.'
-          : 'Metadata accepted. Artwork or identification still needs attention before publication.');
-        setEditing(null);setEditingUris([]);setEditPickedCover(null);
-        setMetadataSearchResults([]);setMetadataSearchSelection(-1);setMetadataSearchNotice('');
-      }catch(error){
-        setMetadataSearchNotice('Could not accept this match: '+String((error as Error)?.message||error));
-      }finally{
-        setMetadataSearchBusy(false);
-      }
+      if(proposal.kind==='book')proposal={...proposal,candidate:await hydrateBookCandidate(proposal.candidate)};
+      const selectedProposal=proposal;
+      setMetadataSearchResults(current=>current.map((item,i)=>i===index?selectedProposal:item));
+      const fields=proposal.candidate.fields;
+      setMetadataSearchSelection(index);
+      setEditTitle(String(fields.title||editTitle));setEditAuthor(String(fields.author||editAuthor));
+      setEditSeries(String(fields.series||editSeries));setEditSeriesNumber(fields.seriesNumber===undefined?editSeriesNumber:String(fields.seriesNumber));
+      setEditGenre(String(fields.genre||editGenre));setEditYear(fields.publishedYear?String(fields.publishedYear):editYear);
+      setEditNarrator(String((fields as any).narrator||editNarrator));setEditPublisher(String(fields.publisher||editPublisher));
+      setEditISBN(String((fields as any).isbn||editISBN));setEditASIN(String((fields as any).asin||editASIN));
+      setEditLanguage(String(fields.language||editLanguage));setEditDescription(String(fields.description||editDescription));
+      if(proposal.candidate.coverUri){setEditCoverUri(proposal.candidate.coverUri);setEditPickedCover(null);}
+      const missing=[!fields.genre?'genre':'',!fields.series?'series':'',!fields.description?'description':''].filter(Boolean);
+      setMetadataSearchNotice('Details filled. Review and Save.'+(missing.length?' Not available: '+missing.join(', ')+'.':''));
+      editorScrollReset.current=true;metadataEditorScroll.current?.scrollTo({y:0,animated:false});
+      }catch(error){setMetadataSearchNotice('Could not load book details. Please try again.');}
+      finally{setMetadataSearchBusy(false);}
     };
 
     const save=async()=>{
@@ -4916,10 +4862,10 @@ function Client() {
       if(editing.source==='server'){
         if(!session || (editing.originServer&&editing.originServer!==session.server) || !owner){setBusy(false);setError('Reconnect to the correct server as an admin to edit this file.');return;}
         request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber:seriesNumber??0,genre,publishedYear:publishedYear??0,narrator,publisher,isbn,asin,language,description})
-          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);setEditPickedCover(null);})
+          .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(previous=>previous?{...previous,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description}:previous);setMetadataSearchNotice('Saved. You can search again or close.');})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
-        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
+        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined,clearedFields:[...(seriesNumber===undefined?['seriesNumber']:[]),...(publishedYear===undefined?['publishedYear']:[])]};
         const nextOverrides={...localMetadataOverrides};
         for(const uri of targets)nextOverrides[uri]=override;
         try{
@@ -4931,25 +4877,25 @@ function Client() {
               ...book,...override,
               coverUri:coverUri||book.coverUri,
               libraryCoverUri:coverUri||book.libraryCoverUri||book.coverUri,
+              livingBookCoverUri:coverUri&&coverUri!==book.coverUri?undefined:book.livingBookCoverUri,
               needsReview:false,reviewReason:'',metadataSource:'manual',
               identificationConfidence:'high',metadataConflicts:[],
-              metadataProvenance:{...(book.metadataProvenance||{}),title:'manual',author:'manual'},
+              metadataProvenance:{...(book.metadataProvenance||{}),...Object.fromEntries(Object.keys(override).filter(key=>key!=='coverUri').map(key=>[key,'manual' as const]))},
               metadataFieldConfidence:{...(book.metadataFieldConfidence||{}),title:'high',author:'high'},
             };
             nextBook.workKey=logicalWorkKey(nextBook);nextBook.editionKey=editionKey(nextBook,nextBook.format);
             return nextBook;
           });
+          const selected=metadataSearchResults[metadataSearchSelection];
+          if(selected)updated=updated.map(book=>!wanted.has(book.uri)?book:{...book,...(selected.kind==='book'?{onlineMetadataMatch:selected.candidate}:{onlineComicMetadataMatch:selected.candidate})});
           const targetBooks=updated.filter(book=>wanted.has(book.uri));
           const artwork=await cacheRequiredWorkArtwork(targetBooks,{
             documentDirectory,makeDirectoryAsync,downloadAsync:downloadCoverWithDeadline,getInfoAsync,deleteAsync,
           });
           const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
           updated=updated.map(book=>artworkByUri.get(book.uri)||book);
+          updated=await persistEditorWork(updated,targets,nextOverrides);
           setLocalMetadataOverrides(nextOverrides);
-          await Promise.all([
-            setPersistedJSON(localMetadataOverridesKey,nextOverrides),
-            replaceLocalStageBooks(updated),
-          ]);
           // Verify the durable stage immediately. A Save button must never close
           // successfully if the work-level edit did not actually persist.
           const persistedStage=await loadLocalStageBooks();
@@ -4964,7 +4910,7 @@ function Client() {
           if(!saveVerified)throw Error('Metadata save could not be verified. Your changes were not discarded.');
           setStagedLocalBooks(updated.map(book=>({...book,source:'local' as const})));
           publishCompletedLocalStage(updated);
-          setEditing(null);setEditingUris([]);setEditPickedCover(null);
+          setEditing({...editing,...override,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);setMetadataSearchNotice('Saved. You can search again or close.');
         }catch(e){setError((e as Error).message);}
         finally{setBusy(false);}
       }else setBusy(false);
@@ -5014,7 +4960,7 @@ function Client() {
       editCoverUri!==(editing.coverUri||'');
     const localCoverCandidates=rankLocalCoverCandidates(editing.coverUri,editing.coverCandidates);
     const requestEditorClose=()=>{
-      if(busy||coverPicking)return;
+      if(busy||metadataSearchBusy||coverPicking)return;
       if(editorDirty){
         Alert.alert('Discard changes?','Your metadata or cover changes have not been saved.',[
           {text:'Keep editing',style:'cancel'},
@@ -5024,24 +4970,54 @@ function Client() {
       }
       closeEditor();
     };
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestEditorClose}>
-      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={styles.modalBackdrop} onPress={requestEditorClose}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
-          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
-            <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA & COVER</Text>
-            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
-            {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
-            {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
-            <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
-            {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
+    return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestEditorClose}>
+      <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
+        <View style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={StyleSheet.absoluteFill} onPress={requestEditorClose}/>
+          <View collapsable={false} accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden'}]}>
+          <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:16,gap:8,borderBottomWidth:1,borderBottomColor:p.line}}>
+            <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit book details</Text>
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+          </View>
+          <View collapsable={false} style={{flex:1,minHeight:0,overflow:'hidden',backgroundColor:p.card}}>
+          <ScrollView ref={metadataEditorScroll} removeClippedSubviews={false} style={{flex:1,minHeight:0,backgroundColor:p.card}} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" onContentSizeChange={()=>{if(editorScrollReset.current){editorScrollReset.current=false;metadataEditorScroll.current?.scrollTo({y:0,animated:false});}}} contentContainerStyle={{padding:16,gap:9,backgroundColor:p.card}}>
+            {localEdit?<View style={styles.settingsSubgroup}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FIND METADATA</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Enter a title, author, or both. Tap Smart Search, then choose a match.</Text>
+              {metadataSearchNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:metadataSearchResults.length?p.sage:p.muted}]}>{metadataSearchNotice}</Text>:null}
+              {metadataSearchResults.length?<View style={{gap:7}}>
+                {metadataSearchResults.map((proposal,index)=>{
+                  const candidate=proposal.candidate;
+                  const selected=index===metadataSearchSelection;
+                  const details=[
+                    proposalCreator(proposal),
+                    candidate.fields.series,
+                    candidate.fields.publishedYear?String(candidate.fields.publishedYear):'',
+                    candidate.provider,
+                    selected?'Selected':'',
+                  ].filter(Boolean).join(' · ');
+                  return <Pressable key={proposal.kind+':'+candidate.provider+':'+candidate.providerId+':'+index}
+                    accessibilityRole="button"
+                    accessibilityState={{selected}}
+                    disabled={metadataSearchBusy} onPress={()=>void useProposal(index)}
+                    style={({pressed})=>[{paddingVertical:10,borderBottomWidth:1,borderBottomColor:p.line,opacity:pressed?.72:1}]}>
+                    <Text numberOfLines={2} style={[styles.bookTitle,{color:selected?p.sage:p.ink}]}>{proposalTitle(proposal)}</Text>
+                    <Text style={{color:p.sage,fontWeight:'700'}}>{selected?'✓ Selected':'Use this book →'}</Text>
+                    <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{details}</Text>
+                  </Pressable>;
+                })}
+
+              </View>:null}
+            </View>:null}
+
             <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Series number" keyboardType="decimal-pad" value={editSeriesNumber} onChangeText={setEditSeriesNumber} placeholder="Series number (for example 2 or 2.5)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <Button label={editAdvancedOpen?'Hide additional details':'Additional details'} tone="quiet" onPress={()=>setEditAdvancedOpen(value=>!value)}/>
             {editAdvancedOpen?<View style={styles.settingsSubgroup}>
+              <Text style={{color:p.muted}}>Manual edits are protected from future rescans.</Text>
               {editing.format==='Audio'?<TextInput accessibilityLabel="Narrator" value={editNarrator} onChangeText={setEditNarrator} placeholder="Narrator" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>:null}
               <TextInput accessibilityLabel="Publisher" value={editPublisher} onChangeText={setEditPublisher} placeholder="Publisher" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
               <TextInput accessibilityLabel="ISBN" autoCapitalize="characters" autoCorrect={false} value={editISBN} onChangeText={setEditISBN} placeholder="ISBN" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
@@ -5077,43 +5053,21 @@ function Client() {
               </View>:null}
             </View>:null}
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
-            {localEdit?<View style={styles.settingsSubgroup}>
-              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FIND METADATA</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Save corrected clues first, then search for this work. Chapter and part data stays separate.</Text>
-              <View style={styles.toolRow}>
-                <Button label="Save clues" tone="quiet" disabled={metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void saveClues()}/>
-                <Button label={metadataSearchMode==='smart'?'Searching…':'Smart Search'} disabled={metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void runMetadataSearch(false)}/>
-                <Button label={metadataSearchMode==='deep'?'Searching…':'Deep Search'} tone="quiet" disabled={metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void runMetadataSearch(true)}/>
-              </View>
-              {metadataSearchNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:metadataSearchResults.length?p.sage:p.muted}]}>{metadataSearchNotice}</Text>:null}
-              {metadataSearchResults.length?<View style={{gap:7}}>
-                {metadataSearchResults.map((proposal,index)=>{
-                  const candidate=proposal.candidate;
-                  const selected=index===metadataSearchSelection;
-                  const details=[
-                    proposalCreator(proposal),
-                    candidate.fields.series,
-                    candidate.fields.publishedYear?String(candidate.fields.publishedYear):'',
-                    candidate.provider,
-                    proposalScore(proposal)+'% match',
-                  ].filter(Boolean).join(' · ');
-                  return <Pressable key={proposal.kind+':'+candidate.provider+':'+candidate.providerId+':'+index}
-                    accessibilityRole="button"
-                    accessibilityState={{selected}}
-                    onPress={()=>setMetadataSearchSelection(index)}
-                    style={({pressed})=>[{paddingVertical:10,borderBottomWidth:1,borderBottomColor:p.line,opacity:pressed?.72:1}]}>
-                    <Text numberOfLines={2} style={[styles.bookTitle,{color:selected?p.sage:p.ink}]}>{proposalTitle(proposal)}</Text>
-                    <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>{details}</Text>
-                  </Pressable>;
-                })}
-                <Button label="Accept & Save" disabled={metadataSearchBusy||metadataSearchSelection<0} onPress={()=>void acceptProposal()}/>
-              </View>:null}
-            </View>:null}
-            <Button label="Save details" disabled={busy||metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
+
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
-            <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={requestEditorClose}/>
-          </Pressable>
-        </ScrollView></Pressable>
+
+          </ScrollView>
+          </View>
+          <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:12,gap:8,borderTopWidth:1,borderTopColor:p.line}}>
+            {error?<Text accessibilityLiveRegion="polite" style={{color:p.danger}}>{error}</Text>:null}
+            <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
+              {localEdit?<Button label={metadataSearchBusy?'Searching…':'Smart Search'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void runMetadataSearch()}/>:null}
+              <Button label={busy?'Saving…':'Save'} disabled={busy||metadataSearchBusy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
+              <Button label="Close" tone="quiet" disabled={busy||metadataSearchBusy||coverPicking} onPress={requestEditorClose}/>
+            </View>
+          </View>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>;
   }
@@ -5199,9 +5153,9 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestClose}>
-      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close bulk metadata editor" style={styles.modalBackdrop} onPress={requestClose}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+    return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestClose}>
+      <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':undefined}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close bulk metadata editor" style={styles.modalBackdrop} onPress={requestClose}><ScrollView keyboardShouldPersistTaps="handled" style={{width:'100%',maxWidth:520,flexGrow:0,maxHeight:'100%'}} contentContainerStyle={{flexGrow:1}}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Bulk edit '+selectedWorks.length+' selected works'} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
             <Text style={[styles.playerEyebrow,{color:p.sage}]}>BULK METADATA</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit {selectedWorks.length} selected work{selectedWorks.length===1?'':'s'}</Text>
@@ -5478,8 +5432,8 @@ function Client() {
       animateSeriesOpen(name);
     };
 
-    const localReview=localBooks.filter(book=>book.needsReview).length;
-    const serverReview=session?(serverSummary?.needsReview||0):0;
+    const localReview=pendingReviewBooks.filter(book=>book.source!=='server').length;
+    const serverReview=session?pendingReviewBooks.filter(book=>book.source==='server').length:0;
     const reviewCount=localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
     const workArtwork=(work:UnifiedWork)=><Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPathFor(work)}/>;
@@ -5661,7 +5615,7 @@ function Client() {
         </Pressable>
       </PageToolbar>
 
-      <OnboardingGuide/>
+      {OnboardingGuide()}
 
       {shelfSections.find(item=>item.id==='continue')?section(shelfSections.find(item=>item.id==='continue') as ShelfSectionPref):null}
 
@@ -5676,10 +5630,10 @@ function Client() {
         {renderWorks(row.result.works)}
       </View>:null)}
 
-      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' metadata item'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{clearLibraryFilters();setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      {reviewCount>0?<Pressable accessibilityRole="button" accessibilityLabel={reviewCount+' book'+(reviewCount===1?'':'s')+' need review'} onPress={()=>{clearLibraryFilters();setReviewOnly(true);setActiveTab('library')}} style={[styles.reviewBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <View style={styles.reviewBannerCopy}>
           <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerTitle,{color:p.ink}]}>Metadata review</Text>
-          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} item{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
+          <Text maxFontSizeMultiplier={1.15} numberOfLines={1} style={[styles.reviewBannerMeta,{color:p.muted}]}>{reviewCount} book{reviewCount===1?'':'s'} need{reviewCount===1?'s':''} a quick check</Text>
         </View>
         <Text maxFontSizeMultiplier={1.15} style={[styles.reviewBannerAction,{color:p.sage}]}>Review</Text>
       </Pressable>:null}
@@ -5729,7 +5683,7 @@ function Client() {
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('manage')} style={styles.shelfUtilityAction}><Text style={{color:p.ink,fontWeight:'600'}}>Manage collections</Text></Pressable>
       </View>
 
-      {WorkActionSheet()}{OrganisationPanel()}{ShelfManagePanel()}{MetadataEditorPanel()}
+      {WorkActionSheet()}{OrganisationPanel()}{ShelfManagePanel()}
     </ScrollView>;
   }
 
@@ -5748,6 +5702,7 @@ function Client() {
     const genreOptions:string[]=Array.from(new Set<string>(allUnifiedWorks.map((work:UnifiedWork)=>work.genre).filter((value:string)=>!!value))).sort().slice(0,20);
     const favouriteSelected=()=>{for(const work of selectedWorks){if(work.localWork)void saveLocalPreference(work.localWork,{...(localPreferences[work.localWork.key]||{rating:work.rating,favourite:work.favourite}),favourite:true});else if(work.serverWork)void saveServerPreference(work.serverWork,{...(serverPreferences[work.serverWork.id]||{rating:work.rating,favourite:work.favourite,state:work.readingState}),favourite:true});}setSelectedWorkKeys([])};
     const maintenanceMode=reviewOnly||!!metadataGapFilter;
+    const maintenanceBooks=reviewBooksForDisplay(visibleBooks);
     const maintenanceTitle=reviewOnly?'Metadata review'
       :metadataGapFilter==='incomplete'?'Missing metadata'
       :metadataGapFilter==='conflicts'?'Metadata conflicts'
@@ -5798,7 +5753,7 @@ function Client() {
     };
 
     const MaintenanceList=()=>maintenanceMode?<FlatList
-      data={visibleBooks}
+      data={maintenanceBooks}
       keyExtractor={item=>(item.source||'local')+'-'+item.id+'-'+(item.uri||'')}
       renderItem={({item})=>RawAssetCard({item})}
       initialNumToRender={12}
@@ -5807,7 +5762,7 @@ function Client() {
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.reviewQueue}
       ListHeaderComponent={<View style={[styles.maintenanceHeader,phoneLayout&&styles.maintenanceHeaderPhone]}>
-        <View style={{flex:1,minWidth:0}}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text maxFontSizeMultiplier={1.2} style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} · review only what Archivist could not resolve confidently</Text></View>
+        <View style={{flex:1,minWidth:0}}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text maxFontSizeMultiplier={1.2} style={[styles.meta,{color:p.muted}]}>{maintenanceBooks.length} book{maintenanceBooks.length===1?'':'s'} · review only what Archivist could not resolve confidently</Text></View>
         <Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/>
       </View>}
       ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>}
@@ -5827,9 +5782,9 @@ function Client() {
         <View style={{transform:[{rotate:'-90deg'}]}}><UiIcon name="chevronDown" color={p.muted} size={16}/></View>
       </Pressable>:null}
       {selectedWorkKeys.length?<View style={[styles.librarySelectionBar,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <Text style={[styles.bookTitle,{color:p.ink,flex:1}]}>{selectedWorkKeys.length} selected</Text>
+        <Text style={[styles.bookTitle,{color:p.ink,width:'100%',flexShrink:0}]}>{selectedWorkKeys.length} selected</Text>
         <Pressable accessibilityRole="button" onPress={()=>setOrganisationModal('add-to-collection')} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Collection</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={()=>{setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');setBulkEditOpen(true)}} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Edit metadata</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={()=>{const work=selectedWorks.length===1?selectedWorks[0]:undefined;const local=work?.localWork;if(work&&local?.tracks[0]){beginEdit({...local.tracks[0],title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,source:'local'},local.tracks.map(track=>track.uri));return;}setBulkAuthor('');setBulkSeries('');setBulkGenre('');setBulkNarrator('');setBulkSequential(false);setBulkSeriesStart('1');setBulkEditOpen(true)}} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Edit metadata</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={favouriteSelected} style={styles.librarySelectionAction}><Text style={{color:p.ink,fontWeight:'600'}}>Favourite</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={()=>setSelectedWorkKeys([])} style={styles.librarySelectionAction}><Text style={{color:p.sage,fontWeight:'700'}}>Done</Text></Pressable>
       </View>:<>
@@ -5857,7 +5812,7 @@ function Client() {
           </Pressable>)}
         </ScrollView>:null}
       </>}
-      <MaintenanceList/>
+      {MaintenanceList()}
       {!maintenanceMode?<FlatList
         ref={libraryListRef}
         key={'unified-'+libraryView+'-'+columns}
@@ -5875,7 +5830,7 @@ function Client() {
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
-      {WorkActionSheet()}{OrganisationPanel()}{MetadataEditorPanel()}{BulkMetadataPanel()}{LibraryManagementPanel()}
+      {WorkActionSheet()}{OrganisationPanel()}{LibraryManagementPanel()}
       {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={modalSheetBackdrop} onPress={()=>setLibrarySourcesOpen(false)}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
@@ -7777,7 +7732,7 @@ function Client() {
   function LibraryManagementPanel(){
     if(!libraryManageOpen)return null;
     const gaps=metadataGapCounts(reviewAssetPool);
-    const reviewCount=reviewAssetPool.filter(item=>item.needsReview).length;
+    const reviewCount=pendingReviewBooks.length;
     const localDuplicateCount=localDuplicateGroups.reduce((sum,group)=>sum+group.items.length,0);
     const localDuplicateGroupCount=localDuplicateGroups.length;
     const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
@@ -7821,7 +7776,7 @@ function Client() {
                 <View style={{flex:1}}><Text style={{color:p.ink,fontWeight:'700'}}>Library updated</Text><Text style={{color:p.muted}}>{scanResultSummary.unchanged} unchanged · {scanResultSummary.added} new · {scanResultSummary.updated} updated · {scanResultSummary.removed} removed</Text></View>
               </View>:null}
               <View style={styles.libraryRepairList}>
-                <Pressable accessibilityRole="button" onPress={openReview} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Review uncertain metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Open the exact files Archivist could not identify confidently.</Text></View><Text style={[styles.libraryRepairCount,{color:reviewCount?p.gold:p.muted}]}>{reviewCount}</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={openReview} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Review uncertain metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Review grouped books and use Smart Search to complete their details.</Text></View><Text style={[styles.libraryRepairCount,{color:reviewCount?p.gold:p.muted}]}>{reviewCount}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('conflicts')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Resolve metadata conflicts</Text><Text style={[styles.meta,{color:p.muted}]}>Compare fields where embedded, sidecar or folder evidence disagrees.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.conflicts?p.gold:p.muted}]}>{gaps.conflicts}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('seriesNumber')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Check series order</Text><Text style={[styles.meta,{color:p.muted}]}>Find series with no position or conflicting series evidence.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.seriesNumber?p.gold:p.muted}]}>{gaps.seriesNumber}</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={()=>openGap('author')} style={[styles.libraryRepairRow,{borderBottomColor:p.line}]}><View style={{flex:1}}><Text style={[styles.bookTitle,{color:p.ink}]}>Fill missing authors</Text><Text style={[styles.meta,{color:p.muted}]}>Filter to unresolved author fields for quick editing.</Text></View><Text style={[styles.libraryRepairCount,{color:gaps.author?p.gold:p.muted}]}>{gaps.author}</Text></Pressable>
@@ -8154,7 +8109,10 @@ function Client() {
                 {DuplicateReviewPanel()}
               </View>
 
-              {LocalSortingPanel()}
+              <View style={styles.settingsRow}>
+                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Organise files</Text><Text style={[styles.meta,{color:p.muted}]}>Review books, then preview and apply safe file organisation.</Text></View>
+                <Button label="Open" tone="quiet" disabled={libraryRefreshActive} onPress={()=>setLibraryManageOpen(true)}/>
+              </View>
 
               {owner?<View style={styles.settingsSubgroup}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Server source folders</Text>
@@ -8327,6 +8285,7 @@ function Client() {
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
+      {MetadataEditorPanel()}{BulkMetadataPanel()}
       {ProfileMenu()}
       {WorkDetailsPanel()}
       {FormatPickerPanel()}
@@ -9266,7 +9225,7 @@ const styles = StyleSheet.create({
   quickFilters: {gap:4,paddingRight:8},
   quickFilter: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},
   toolbarButton: {borderWidth:0,borderRadius:10,minHeight:44,paddingHorizontal:12,alignItems:'center',justifyContent:'center'},
-  librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',alignItems:'center',gap:8,paddingVertical:6},
+  librarySelectionBar: {borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,minHeight:52,flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:8,paddingVertical:6},
   librarySelectionAction: {minHeight:44,paddingHorizontal:6,alignItems:'center',justifyContent:'center'},
   unifiedGrid: {paddingBottom:120,gap:16,paddingTop:2},
   unifiedGridRow: {gap:10},

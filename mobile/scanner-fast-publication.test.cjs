@@ -20,8 +20,8 @@ function base(extra={}){
 
 assert.equal(
   shouldLookupBookOnline(base({coverUri:'file:///covers/dune.jpg'})),
-  false,
-  'publish-ready identity+cover must skip optional online enrichment'
+  true,
+  'missing genre requires work-level Atlas enrichment'
 );
 assert.equal(
   shouldLookupBookOnline(base({coverUri:undefined})),
@@ -33,6 +33,7 @@ assert.equal(
   let calls=0;
   const fetcher=async url=>{
     calls++;
+    if(url.includes('/works/'))return {ok:true,status:200,json:async()=>({subjects:['Science fiction']})};
     return {ok:true,status:200,json:async()=>({docs:[
       {key:'/works/a',title:'Dune',author_name:['Frank Herbert'],cover_i:1,isbn:['9780441172719']},
       {key:'/works/b',title:'Dune',author_name:['Frank Herbert'],cover_i:2,isbn:['9780000000002']},
@@ -43,12 +44,13 @@ assert.equal(
   });
   assert.equal(result.autoApply,true,'obvious title+author must auto-accept despite similar editions');
   assert.equal(result.status,'matched');
+  assert.equal(result.best.fields.genre,'Science Fiction','automatic preparation must hydrate genre for Atlas');
   assert.ok(result.best?.coverUri,'obvious match should provide artwork');
-  assert.ok(calls<=1,'normal lookup should stop after one precise query for an obvious work');
+  assert.ok(calls<=2,'normal lookup permits one precise query and one genre hydration');
 
   const localLibrary=fs.readFileSync('localLibrary.ts','utf8');
   assert.match(localLibrary,/const alreadyNeedsReview=!!book\.needsReview/,'ambiguous online suggestions must inspect prior review state');
   assert.match(localLibrary,/needsReview:alreadyNeedsReview/,'ambiguous online suggestions must never downgrade an already-resolved work');
 
-  console.log('PASS: fast scanner skips optional enrichment, preserves resolved identity and uses one precise lookup for obvious books');
+  console.log('PASS: fast scanner enriches missing Atlas genre, preserves resolved identity and uses one precise lookup for obvious books');
 })().catch(error=>{console.error(error);process.exit(1)});

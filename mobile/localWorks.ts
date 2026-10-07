@@ -1,6 +1,7 @@
 import {decodedPathParts, isLibraryRootLabel, logicalWorkKey} from './libraryIntelligence';
 import {audioWorkGroupKeys, canonicalMetadataForBooks} from './metadataSync';
 import {LocalBook} from './localLibrary';
+import {workIdentityStatus} from './workIdentity';
 
 export type LocalWork = {
   key: string;
@@ -63,8 +64,7 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
     const genre = audio ? canonical.genre : commonValue(tracks.map(item => item.genre));
     const seriesNumber = audio ? canonical.seriesNumber : tracks.find(item=>item.seriesNumber !== undefined)?.seriesNumber;
     const publishedYear = audio ? canonical.publishedYear : tracks.find(item=>item.publishedYear)?.publishedYear;
-    const importantConflict=tracks.find(item=>(item.metadataConflicts||[]).some(conflict=>['title','author','series','seriesNumber','isbn','asin'].includes(String(conflict.field))));
-    const unresolved=!title||!author;
+    const identity=workIdentityStatus(tracks,title,first.format,audio?canonical.confidence.title:undefined);
     return {
       key,
       source: 'local' as const,
@@ -80,8 +80,8 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       available: tracks.some(item => item.available),
       files: tracks.length,
       tracks,
-      needsReview: unresolved||!!importantConflict,
-      reviewReason: importantConflict?.reviewReason || (unresolved?'Title or author still needs review.':''),
+      needsReview: identity.ambiguous,
+      reviewReason: identity.conflict?(tracks.find(track=>track.metadataConflicts?.length)?.reviewReason||'Conflicting metadata needs review.'):identity.ambiguous?'Title or author still needs review.':'',
       coverUri: audio ? canonical.coverUri : tracks.find(item => item.coverUri)?.coverUri,
       libraryCoverUri: tracks.find(item=>item.libraryCoverUri)?.libraryCoverUri || (audio ? canonical.coverUri : tracks.find(item => item.coverUri)?.coverUri),
       livingBookCoverUri: tracks.find(item=>item.livingBookCoverUri)?.livingBookCoverUri,

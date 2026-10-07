@@ -82,8 +82,8 @@ const ebooks = groupLocalWorks([
 assert.equal(ebooks.length,2);
 
 const review = groupLocalWorks([
-  book(5,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F01.mp3',{needsReview:true,reviewReason:'Check author'}),
-  book(6,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F02.mp3'),
+  book(5,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F01.mp3',{title:'Dune',needsReview:true,reviewReason:'Check author'}),
+  book(6,'content://root/document/primary:Audiobooks%2FAuthor%2FBook%2F02.mp3',{title:'Dune'}),
 ]);
 assert.equal(review[0].needsReview,false,'resolved work identity should not inherit a stale per-track review flag');
 

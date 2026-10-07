@@ -64,7 +64,7 @@ const review=groupLocalWorks([
 ])[0];
 const reviewAssessment=assessLocalWorkForPublication(review);
 assert.equal(reviewAssessment.ready,false);
-assert.ok(reviewAssessment.blockers.includes('needs-review'));
+assert.ok(reviewAssessment.blockers.includes('missing-library-cover'),'folder identity alone cannot bypass required artwork');
 assert.ok(reviewAssessment.blockers.includes('missing-library-cover'));
 
 const partition=partitionLocalBooksByPublication([
@@ -102,3 +102,14 @@ const unresolvedLegacy=migrateLegacyPublishedArtwork([
 assert.equal(unresolvedLegacy[0].livingBookCoverUri,undefined,'unresolved legacy items must not be grandfathered into publication');
 
 console.log('PASS: publication gate publishes trusted title-only identity gaps while keeping ambiguous works staged');
+
+const incomplete=audio(50,'file:///Books/Dune/01.mp3',{author:'',needsReview:true,metadataProvenance:{title:'path'},metadataFieldConfidence:{title:'medium'}});
+const weak=audio(51,'file:///Books/Dune/02.mp3',{title:'Chapter 02',author:'',needsReview:true});
+const coherent=groupLocalWorks([incomplete,weak])[0];
+assert.equal(assessLocalWorkForPublication(coherent).ready,true,'weak chapter does not poison a known work');
+const optionalConflict={...incomplete,metadataConflicts:[{field:'series',chosen:'Dune',alternatives:[{value:'Dune saga',source:'path',score:80}]}]};
+assert.equal(assessLocalWorkForPublication(groupLocalWorks([optionalConflict])[0]).ready,true,'optional series conflict does not hide identified work');
+const identityConflict={...incomplete,metadataConflicts:[{field:'author',chosen:'Frank Herbert',alternatives:[{value:'Other author',source:'embedded',score:110}]}]};
+assert.equal(assessLocalWorkForPublication(groupLocalWorks([identityConflict])[0]).ready,false,'actual author conflict remains staged');
+const genericWithAuthor=audio(55,'file:///Books/Unknown/01.mp3',{title:'Chapter 01',author:'An Author',needsReview:true});
+assert.equal(assessLocalWorkForPublication({...groupLocalWorks([genericWithAuthor])[0],title:'Chapter 01'}).ready,false,'author alone cannot publish a chapter identity');

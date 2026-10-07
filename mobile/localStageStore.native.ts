@@ -3,6 +3,12 @@ import type {LocalBook} from './localLibrary';
 
 const databaseName='archivist-local.db';
 let databasePromise:Promise<SQLite.SQLiteDatabase>|null=null;
+let pendingMutation:Promise<void>=Promise.resolve();
+function serialMutation(action:()=>Promise<void>){
+  const result=pendingMutation.catch(()=>undefined).then(action);
+  pendingMutation=result;
+  return result;
+}
 
 async function database(){
   if(databasePromise)return databasePromise;
@@ -39,6 +45,7 @@ function parseBook(value:unknown):LocalBook|null{
 }
 
 export async function loadLocalStageBooks():Promise<LocalBook[]>{
+  await pendingMutation.catch(()=>undefined);
   const db=await database();
   const rows=await db.getAllAsync<{payload:string}>('SELECT payload FROM local_assets ORDER BY ordinal ASC');
   const books:LocalBook[]=[];
@@ -55,7 +62,12 @@ export async function localStageHasAssets(){
   return Number(row?.count||0)>0;
 }
 
-export async function replaceLocalStageBooks(books:LocalBook[]){
+export function replaceLocalStageBooks(books:LocalBook[]){
+  const snapshot=books.slice();
+  return serialMutation(()=>replaceLocalStageBooksNow(snapshot));
+}
+
+async function replaceLocalStageBooksNow(books:LocalBook[]){
   const db=await database();
   const now=Date.now();
   await db.withExclusiveTransactionAsync(async txn=>{
@@ -82,7 +94,12 @@ export async function replaceLocalStageBooks(books:LocalBook[]){
   });
 }
 
-export async function upsertLocalStageBooks(books:LocalBook[]){
+export function upsertLocalStageBooks(books:LocalBook[]){
+  const snapshot=books.slice();
+  return serialMutation(()=>upsertLocalStageBooksNow(snapshot));
+}
+
+async function upsertLocalStageBooksNow(books:LocalBook[]){
   if(!books.length)return;
   const db=await database();
   const now=Date.now();

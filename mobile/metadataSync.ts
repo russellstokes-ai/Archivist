@@ -226,11 +226,14 @@ function bestCover(books:SynchronizableBook[]){
     .sort((a,b)=>coverScore(b)-coverScore(a))[0];
 }
 
-function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean){
+function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean,inferredByUri:Map<string,ReturnType<typeof inferLocalBookMetadata>>){
   const entries=books.flatMap(book=>{
     const values:Array<{book:SynchronizableBook;value:any;source:SyncSource;confidence:SyncConfidence;key:string;workHint?:boolean}>=[];
     const value=(book as any)[field];
     const genericRootValue=field==='author'&&present(value)&&isLibraryRootLabel(String(value));
+    if(sourceFor(book,field)==='manual'){
+      return [{book,value,source:'manual' as const,confidence:'high' as const,key:normal(value)}];
+    }
     if(present(value)&&!genericRootValue){
       const source=sourceFor(book,field);
       const confidence=confidenceFor(book,field);
@@ -254,7 +257,8 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
           workHint:true,
         });
       }
-      const inferred=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length,rootUri:book.rootUri});
+      let inferred=inferredByUri.get(book.uri);
+      if(!inferred){inferred=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length,rootUri:book.rootUri});inferredByUri.set(book.uri,inferred);}
       const pathValue=(inferred as any)[field];
       if(present(pathValue)&&normal(pathValue)!==normal(value)){
         values.push({book,value:pathValue,source:'path',confidence:inferred.confidence,key:normal(pathValue)});
@@ -306,7 +310,8 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
 export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalMetadata{
   const audio=books.some(book=>book.format==='Audio');
   const selected:Partial<Record<SyncField,ReturnType<typeof canonicalField>>>={};
-  for(const field of fields)selected[field]=canonicalField(books,field,audio);
+  const inferredByUri=new Map<string,ReturnType<typeof inferLocalBookMetadata>>();
+  for(const field of fields)selected[field]=canonicalField(books,field,audio,inferredByUri);
 
   // Multipart filenames can carry a reliable work title even when each
   // per-track title is only "Chapter 01". Require every grouped track to agree.
@@ -375,6 +380,7 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
 
 function canPropagate(book:SynchronizableBook,field:SyncField,canonical:CanonicalMetadata){
   const target=(book as any)[field];
+  if(sourceFor(book,field)==='manual')return false;
   if(!present(target))return true;
   if(field==='author'&&isLibraryRootLabel(String(target)))return true;
   const targetSource=sourceFor(book,field);
