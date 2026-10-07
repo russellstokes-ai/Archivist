@@ -14,7 +14,7 @@ type NativeArchiveEvidence={
   coverBase64?:string;
 };
 
-const supported=new Set(['epub','cbz','zip']);
+const supported=new Set(['epub','cbz','zip','cbr','cbt']);
 
 function cleanExtension(value:string){
   return String(value||'').trim().toLowerCase().replace(/^\./,'');
