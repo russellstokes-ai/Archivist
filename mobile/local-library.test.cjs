@@ -41,8 +41,11 @@ const localDeletes = [];
 const localMade = [];
 const embeddedCoverResults = new Map();
 const embeddedCoverCalls = [];
+const boundedEvidenceResults = new Map();
+const boundedEvidenceCalls = [];
 Module._load = function(request, parent, isMain) {
   if (request === './coverDiscovery') return {discoverEmbeddedCover: async uri => {embeddedCoverCalls.push(uri);return embeddedCoverResults.get(uri)}};
+  if (request === './boundedArchiveEvidence') return {readBoundedArchiveEvidence: async (uri,ext) => {boundedEvidenceCalls.push([uri,ext]);return boundedEvidenceResults.get(uri)||{status:'blocked',fields:{},code:'missing-fixture',reason:'Missing fixture'}}};
   if (request === 'react-native') return {Platform: {OS: 'android'}};
   if (request === 'expo-file-system/legacy') return {
     EncodingType: {Base64:'base64'},
@@ -78,7 +81,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText, file);
 
-const {applyCoverEnrichment, applyLocalSortCopies, countLocalBookOnlineLookupUnits, enrichLocalBookCovers, previewLocalSort, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
+const {applyCoverEnrichment, applyLocalSortCopies, countLocalBookOnlineLookupUnits, enrichLocalBookCovers, enrichLocalBoundedArchiveEvidence, previewLocalSort, previewLocalSortSafely, removeLocalFolderSource, removeLocalSortCopies, localFolderName, scanLocalFolders} = require('./localLibrary.ts');
 const {applyLocalMetadata, inferLocalBookMetadata, parseLocalSidecar} = require('./libraryIntelligence.ts');
 
 const lookupTracks=Array.from({length:30},(_,index)=>({
@@ -205,6 +208,22 @@ previews = previewLocalSort([{...books[0], needsReview: true}], 'author-title');
 assert.equal(previews[0].state, 'review');
 
 (async () => {
+  boundedEvidenceResults.set(books[0].uri,{status:'ok',fields:{title:'Dune',author:'Frank Herbert',series:'Dune'},coverUri:'data:image/jpeg;base64,AQID',coverName:'OPS/cover.jpg'});
+  boundedEvidenceResults.set(books[1].uri,{status:'ok',fields:{title:'Dune',series:'Dune',comicIssueNumber:'1'},coverUri:'data:image/jpeg;base64,BAUG',coverName:'001.jpg'});
+  const boundedPrepared=await enrichLocalBoundedArchiveEvidence([
+    {...books[0],title:'unknown',author:'',series:'',needsReview:true,reviewReason:'Missing author'},
+    {...books[1],title:'Dune 001',author:'',series:'',needsReview:true,reviewReason:'Needs metadata'},
+  ],{shouldContinue:()=>true});
+  assert.equal(boundedPrepared.books[0].title,'Dune');
+  assert.equal(boundedPrepared.books[0].author,'Frank Herbert');
+  assert.equal(boundedPrepared.books[0].coverUri,'data:image/jpeg;base64,AQID');
+  assert.equal(boundedPrepared.books[0].embeddedMetadata.title,'Dune');
+  assert.equal(boundedPrepared.books[1].series,'Dune');
+  assert.equal(String(boundedPrepared.books[1].comicIssueNumber),'1');
+  assert.equal(boundedPrepared.books[1].coverUri,'data:image/jpeg;base64,BAUG');
+  assert.deepEqual(boundedEvidenceCalls.map(call=>call[1]),['epub','cbz']);
+  assert.equal(embeddedCoverCalls.length,0,'bounded preparation must not fall back to reader-oriented/full archive cover extraction');
+
   const organisationRoot='content://root/tree/primary:Books/document/primary:Books';
   const organisedAuthor=organisationRoot+'%2FFrank%20Herbert';
   const organisedTitle=organisedAuthor+'%2FDune';
