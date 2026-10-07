@@ -50,6 +50,11 @@ export function cancelLibraryPreparation(current:LibraryPreparationCheckpoint|un
   return {...checkpoint,activeJob:undefined};
 }
 
+export function failLibraryPreparation(current:LibraryPreparationCheckpoint|unknown):LibraryPreparationCheckpoint{
+  const checkpoint=sanitizeLibraryPreparationCheckpoint(current);
+  return {...checkpoint,activeJob:undefined};
+}
+
 export function completeLibraryPreparation(
   current:LibraryPreparationCheckpoint|unknown,
   signature:string,
