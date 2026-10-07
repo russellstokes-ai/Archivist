@@ -27,6 +27,29 @@ const assessment=assessLocalWorkForPublication(ready);
 assert.equal(assessment.ready,true);
 assert.deepEqual(assessment.blockers,[]);
 
+const trustedTitleMissingAuthor=groupLocalWorks([
+  audio(40,'content://root/document/primary:Audiobooks%2FDune%2F01.mp3',{
+    author:'',needsReview:true,reviewReason:'Title or author still needs review.',
+    identificationConfidence:'low',
+    metadataProvenance:{title:'path'},
+    metadataFieldConfidence:{title:'medium'},
+  }),
+])[0];
+const trustedAssessment=assessLocalWorkForPublication(trustedTitleMissingAuthor);
+assert.equal(trustedAssessment.ready,true,'medium-confidence title plus verified artwork should publish while author enrichment remains incomplete');
+assert.equal(trustedAssessment.blockers.includes('missing-author'),false);
+
+const ambiguousMissingAuthor=groupLocalWorks([
+  audio(41,'content://root/document/primary:Audiobooks%2FChapter%2001.mp3',{
+    title:'Chapter 01',author:'',needsReview:true,
+    metadataProvenance:{title:'path'},metadataFieldConfidence:{title:'low'},
+  }),
+])[0];
+const ambiguousAssessment=assessLocalWorkForPublication(ambiguousMissingAuthor);
+assert.equal(ambiguousAssessment.ready,false,'generic/low-confidence identity must stay staged');
+assert.ok(ambiguousAssessment.blockers.includes('needs-review'));
+assert.ok(ambiguousAssessment.blockers.includes('missing-author'));
+
 const remote=groupLocalWorks([
   audio(3,'content://root/document/primary:Audiobooks%2FRemote%2F01.mp3',{
     title:'Remote',libraryCoverUri:'https://covers.example/library.jpg',livingBookCoverUri:'https://covers.example/jacket.jpg',
@@ -78,4 +101,4 @@ const unresolvedLegacy=migrateLegacyPublishedArtwork([
 ]);
 assert.equal(unresolvedLegacy[0].livingBookCoverUri,undefined,'unresolved legacy items must not be grandfathered into publication');
 
-console.log('PASS: publication gate keeps incomplete works staged until identity and both cached covers are complete');
+console.log('PASS: publication gate publishes trusted title-only identity gaps while keeping ambiguous works staged');
