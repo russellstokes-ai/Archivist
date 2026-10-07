@@ -27,6 +27,7 @@ assert.ok(source.includes('await enrichPublishedLocalLibrary(result.books,genera
 assert.ok(source.includes('setScanProgress(null)')&&source.includes('libraryRefreshRunningRef.current=true'),'foreground discovery must hand off to enrichment without allowing a second refresh to overlap');
 const enrichmentBody=source.slice(source.indexOf('async function enrichPublishedLocalLibrary'),source.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
 assert.ok(enrichmentBody.includes('enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true)'),'normal preparation must read bounded unresolved audio properties before online lookup');
+assert.ok(enrichmentBody.includes('enrichPublishedLocalBoundedArchiveEvidence(currentBooks,generation)'),'normal preparation must run bounded EPUB/comic evidence before online lookup');
 assert.ok(source.includes("if(fastAudioProperties){")&&source.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'fast normal property pass must be audio-only and must not reopen already-read files');
 assert.ok(source.includes('itemTimeoutMs:fastAudioProperties?1200')&&source.includes('maxConsecutiveTimeouts:1'),'fast property reads must be aggressively timeout/circuit-broken');
 const deepSearchBody=source.slice(source.indexOf('const runMetadataSearch=async'),source.indexOf('const acceptProposal=async'));
