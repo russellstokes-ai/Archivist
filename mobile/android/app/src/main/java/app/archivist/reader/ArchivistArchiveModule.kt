@@ -40,6 +40,14 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
   @ReactMethod
   fun cancelAudioMetadataRead() { BoundedAudioReader.cancel() }
 
+  @ReactMethod
+  fun readBoundedArchiveEvidence(uri: String, extension: String, promise: Promise) {
+    BoundedArchiveReader.read(context, uri, extension, promise)
+  }
+
+  @ReactMethod
+  fun cancelBoundedArchiveEvidence() { BoundedArchiveReader.cancel() }
+
 
   @ReactMethod
   fun setReaderFullscreen(enabled: Boolean) {
