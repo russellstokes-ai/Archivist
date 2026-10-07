@@ -74,7 +74,7 @@ import {shelfRecommendations} from './shelfRecommendations';
 import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
 import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from './bulkMetadata';
 import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanProgressPercent} from './scanFeedback';
-import {ScanCommitGate, scanFailureCopy, scanStatusCopy} from './scanLifecycle';
+import {ScanCommitGate, beginLibraryPreparation, cancelLibraryPreparation, completeLibraryPreparation, markLibraryDiscoveryCommitted, sanitizeLibraryPreparationCheckpoint, scanFailureCopy, scanStatusCopy, shouldResumeLibraryPreparation, type LibraryPreparationCheckpoint} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
@@ -802,7 +802,10 @@ function Client() {
   const [serverBooksHasMore, setServerBooksHasMore] = useState(false);
   const [serverBooksLoadingMore, setServerBooksLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
-  const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');
+  const [libraryPreparationCheckpoint,setLibraryPreparationCheckpoint]=useState<LibraryPreparationCheckpoint>({signature:''});
+  const libraryPreparationCheckpointRef=useRef(libraryPreparationCheckpoint);
+  libraryPreparationCheckpointRef.current=libraryPreparationCheckpoint;
+  const [libraryPreparationCheckpointReady,setLibraryPreparationCheckpointReady]=useState(false);
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
   useEffect(()=>{
@@ -815,7 +818,7 @@ function Client() {
   const activeLibraryProgress=scanProgress||enrichmentProgress;
   const libraryRefreshActive=localScanning||!!activeLibraryProgress;
   const currentLibraryFolderSignature=useMemo(()=>localFolderSetSignature(localFolders),[localFolders]);
-  const libraryPreparationReady=!!currentLibraryFolderSignature&&libraryPreparedSignature===currentLibraryFolderSignature&&!libraryRefreshActive;
+  const libraryPreparationReady=!!currentLibraryFolderSignature&&libraryPreparationCheckpoint.signature===currentLibraryFolderSignature&&!libraryRefreshActive;
   const libraryRefreshRunningRef=useRef(false);
   const libraryRefreshWarningsRef=useRef<string[]>([]);
   const completedLibraryBooksRef=useRef<LocalBook[]|null>(null);
@@ -1884,9 +1887,15 @@ function Client() {
         setLocalCatalogReady(true);
       }
     })();
-    getPersistedJSON<{signature?:string}>(librarySetupPreparedKey).then(value=>{
-      if(value&&typeof value.signature==='string')setLibraryPreparedSignature(value.signature);
-    }).catch(()=>undefined);
+    getPersistedJSON<LibraryPreparationCheckpoint>(librarySetupPreparedKey).then(value=>{
+      const checkpoint=sanitizeLibraryPreparationCheckpoint(value);
+      libraryPreparationCheckpointRef.current=checkpoint;
+      setLibraryPreparationCheckpoint(checkpoint);
+    }).catch(()=>{
+      const checkpoint=sanitizeLibraryPreparationCheckpoint(undefined);
+      libraryPreparationCheckpointRef.current=checkpoint;
+      setLibraryPreparationCheckpoint(checkpoint);
+    }).finally(()=>setLibraryPreparationCheckpointReady(true));
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
       if (value && typeof value === 'object') setOfflineWorks(value);
     }).catch(() => undefined).finally(()=>setOfflineWorksReady(true));
@@ -2197,13 +2206,11 @@ function Client() {
   },[localAudioCompleted,localWorkProgress]);
 
   useEffect(() => {
-    const pendingFolder=localFolders.some(folder=>folder.status==='Scanning…'||folder.status==='Ready to scan');
-    // New onboarding folders use "Ready to prepare" and must never auto-start.
-    // Only recover an explicitly interrupted legacy scan after process restart.
-    if(restoring||!localFoldersReady||!localOverridesReady||!localCatalogReady||!metadataSettingsReady||!localFolders.length||localScanning||autoLocalScanAttempted.current||!pendingFolder)return;
+    if(restoring||!localFoldersReady||!localOverridesReady||!localCatalogReady||!metadataSettingsReady||!libraryPreparationCheckpointReady||!localFolders.length||localScanning||autoLocalScanAttempted.current)return;
+    if(!shouldResumeLibraryPreparation(libraryPreparationCheckpoint,currentLibraryFolderSignature))return;
     autoLocalScanAttempted.current=true;
-    void rescanLocalFolders();
-  },[localCatalogReady,localFolders,localFoldersReady,localOverridesReady,localScanning,metadataSettingsReady,restoring]);
+    void rescanLocalFolders(localMetadataOverrides,libraryPreparationCheckpoint.activeJob?.kind==='refresh');
+  },[currentLibraryFolderSignature,libraryPreparationCheckpoint,libraryPreparationCheckpointReady,localCatalogReady,localFolders.length,localFoldersReady,localMetadataOverrides,localOverridesReady,localScanning,metadataSettingsReady,restoring]);
 
   useEffect(()=>{
     if(activeTab!=='settings')return;
@@ -2706,12 +2713,21 @@ function Client() {
     setEnrichmentProgress(progress);
   };
 
-  const beginLocalScan=()=>{
+  async function persistLibraryPreparationCheckpoint(next:LibraryPreparationCheckpoint){
+    await setPersistedJSON(librarySetupPreparedKey,next);
+    libraryPreparationCheckpointRef.current=next;
+    setLibraryPreparationCheckpoint(next);
+  }
+
+  const beginLocalScan=async(kind:'prepare'|'refresh'|null='prepare')=>{
     if(libraryRefreshRunningRef.current)return null;
     libraryRefreshRunningRef.current=true;
+    if(kind){
+      const next=beginLibraryPreparation(libraryPreparationCheckpointRef.current,{kind,signature:currentLibraryFolderSignature,startedAt:new Date().toISOString()});
+      try{await persistLibraryPreparationCheckpoint(next);}
+      catch(error){libraryRefreshRunningRef.current=false;setError('Could not save library refresh state: '+String((error as any)?.message||error));return null;}
+    }
     libraryRefreshWarningsRef.current=[];
-    setLibraryPreparedSignature('');
-    void setPersistedJSON(librarySetupPreparedKey,{signature:'',completedAt:''}).catch(()=>undefined);
     completedLibraryBooksRef.current=null;
     autoLocalScanAttempted.current=true;
     enrichmentProgressClock.current=0;
@@ -2745,6 +2761,8 @@ function Client() {
     setLocalScanning(false);
     setScanProgress(null);
     setEnrichmentProgress(null);
+    const cancelled=cancelLibraryPreparation(libraryPreparationCheckpointRef.current);
+    void persistLibraryPreparationCheckpoint(cancelled).catch(error=>recordLibraryRefreshWarning('Preparation checkpoint',error));
     setLocalFolderNotice('Refresh cancelled · the last completed library stage was kept.');
     setMetadataSettingsNotice('Metadata refresh cancelled.');
   };
@@ -2775,6 +2793,12 @@ function Client() {
       .then(()=>true)
       .catch(error=>{recordLibraryRefreshWarning('Catalogue database',error);return false;});
     if(!baselinePersisted||!scanCommitGate.isCurrent(generation))return null;
+    if(libraryPreparationCheckpointRef.current.activeJob){
+      const discoveryCheckpoint=markLibraryDiscoveryCommitted(libraryPreparationCheckpointRef.current);
+      await persistLibraryPreparationCheckpoint(discoveryCheckpoint)
+        .catch(error=>recordLibraryRefreshWarning('Preparation checkpoint',error));
+      if(!scanCommitGate.isCurrent(generation))return null;
+    }
 
     setScanResultSummary(summary);
     setLocalFolders(result.folders);
@@ -2798,8 +2822,9 @@ function Client() {
     }
     if(enrichmentCompleted){
       const signature=localFolderSetSignature(result.folders);
-      setLibraryPreparedSignature(signature);
-      await setPersistedJSON(librarySetupPreparedKey,{signature,completedAt:new Date().toISOString()}).catch(()=>undefined);
+      const completed=completeLibraryPreparation(libraryPreparationCheckpointRef.current,signature,new Date().toISOString());
+      await persistLibraryPreparationCheckpoint(completed)
+        .catch(error=>recordLibraryRefreshWarning('Preparation checkpoint',error));
     }
     return scanCommitGate.isCurrent(generation)?summary:null;
   }
@@ -3151,10 +3176,10 @@ function Client() {
     // Step 1 only collects sources. Preparation is deliberately started by
     // Step 2 so users can add every library folder before any heavy scan begins.
     setLocalFolders(folders);
-    setLibraryPreparedSignature('');
+    const resetCheckpoint=sanitizeLibraryPreparationCheckpoint({signature:''});
     await Promise.all([
       setPersistedJSON(localFoldersKey,folders),
-      setPersistedJSON(librarySetupPreparedKey,{signature:'',completedAt:''}),
+      persistLibraryPreparationCheckpoint(resetCheckpoint),
     ]).catch(()=>undefined);
     setLocalFolderNotice(picked.name+' added. Add another folder, or continue to Prepare library.');
   }
@@ -3164,7 +3189,7 @@ function Client() {
     if(!localFolders.length)return;
     setError('');
     setLocalFolderNotice('');
-    const generation=beginLocalScan();
+    const generation=await beginLocalScan(refreshMetadata?'refresh':'prepare');
     if(generation===null)return false;
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
@@ -3203,7 +3228,7 @@ function Client() {
     if(libraryRefreshRunningRef.current)return;
     setError('');
     setLocalFolderNotice('');
-    const generation=beginLocalScan();
+    const generation=await beginLocalScan(null);
     if(generation===null)return;
     try{
       await removeLocalFolderSource(folder);
