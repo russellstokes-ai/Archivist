@@ -74,7 +74,7 @@ import {shelfRecommendations} from './shelfRecommendations';
 import {groupShelfFormats, obviousShelfFormatChoice, sortSeriesWorks} from './shelfPresentation';
 import {BulkMetadataPatch, bulkOverrideForBook, sequentialSeriesNumbers} from './bulkMetadata';
 import {ScanResultSummary, reconcileScan, scanPhaseLabel, scanProgressPercent} from './scanFeedback';
-import {ScanCommitGate, beginLibraryPreparation, cancelLibraryPreparation, completeLibraryPreparation, markLibraryDiscoveryCommitted, sanitizeLibraryPreparationCheckpoint, scanFailureCopy, scanStatusCopy, shouldResumeLibraryPreparation, type LibraryPreparationCheckpoint} from './scanLifecycle';
+import {ScanCommitGate, beginLibraryPreparation, cancelLibraryPreparation, failLibraryPreparation, completeLibraryPreparation, markLibraryDiscoveryCommitted, sanitizeLibraryPreparationCheckpoint, scanFailureCopy, scanStatusCopy, shouldResumeLibraryPreparation, type LibraryPreparationCheckpoint} from './scanLifecycle';
 import {MetadataGapFilter, matchesMetadataGap, metadataGapCounts} from './libraryMaintenance';
 import {inspectPickedCover, persistManualCover, pickedCoverAsset, rankLocalCoverCandidates} from './coverManagement';
 import {cacheOnlineCoverUris} from './onlineCoverCache';
@@ -2819,7 +2819,12 @@ function Client() {
       await enrichPublishedLocalLibrary(result.books,generation,forceOnline);
       enrichmentCompleted=scanCommitGate.isCurrent(generation);
     }catch(error){
-      if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
+      if(scanCommitGate.isCurrent(generation)){
+        setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
+        await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current))
+          .catch(checkpointError=>recordLibraryRefreshWarning('Preparation checkpoint',checkpointError));
+      }
+      return null;
     }
     if(enrichmentCompleted){
       const signature=localFolderSetSignature(result.folders);
@@ -3202,6 +3207,8 @@ function Client() {
       return true;
     }catch(e){
       if(scanCommitGate.isCurrent(generation)){
+        await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current))
+          .catch(checkpointError=>recordLibraryRefreshWarning('Preparation checkpoint',checkpointError));
         setLocalFolderNotice(scanFailureCopy(localBooks.length>0));
         setError((e as Error).message);
       }
