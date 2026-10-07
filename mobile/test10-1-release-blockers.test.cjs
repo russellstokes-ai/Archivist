@@ -13,24 +13,37 @@ assert.ok(app.includes('Copy · keep originals')&&app.includes('Move · remove o
 assert.ok(app.includes("applyLocalSort(ready,localSortMode,checkpoint)"),'selected sort mode must reach the engine');
 assert.ok(library.includes("export type LocalSortMode = 'copy' | 'move'"),'sort engine must model both modes');
 assert.ok(library.includes('await verifyLocalCopy(preview.sourceUri,target);'),'Move must verify the destination before deletion');
-assert.ok(library.indexOf('await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});') < library.indexOf("if(mode==='move')"),'verified copy must be durably checkpointed before entering destructive Move logic');
-assert.ok(library.includes('await deleteLocalUri(preview.sourceUri);')&&library.includes("if(!removed)throw Error('Source deletion could not be verified')"),'Move must delete and verify the source');
+const workCheckpoint=library.indexOf('copied.push(...staged);');
+const durableCheckpoint=library.indexOf('await onCheckpoint?.({copied:copied.map(item=>({...item})),failed:failed.slice()});',workCheckpoint);
+const firstSourceDelete=library.indexOf('await deleteLocalUri(item.sourceUri);',workCheckpoint);
+assert.ok(workCheckpoint>=0&&durableCheckpoint>workCheckpoint&&firstSourceDelete>durableCheckpoint,'every verified destination in a work must be durably checkpointed before any source deletion');
+assert.ok(library.includes("if(sourceAfter?.exists!==false)throw Error('Source deletion could not be verified')"),'Move must verify every source deletion');
+assert.ok(library.includes('for(const item of removed)')&&library.includes('await verifyLocalCopy(item.uri,restored);'),'whole-work Move must restore already-removed originals if a later part cannot be removed safely');
 assert.ok(library.includes('sourceRootUri')&&library.includes('sourceRelativePath'),'cross-storage recovery must retain the original root and path');
 assert.ok(library.includes('recoverLocalSortOperation'),'copy/move transactions must have a recovery path');
 assert.equal(app.includes("item.complete===false?{...item,complete:true}:item"),false,'a rescan must not silently mark interrupted sort transactions complete');
 
-// Metadata: the 28% stage is local embedded extraction, so every expensive local read needs a watchdog.
-assert.ok(feedback.includes("'reading-metadata':[28,46]"),'28% must remain identified as the embedded metadata stage');
-assert.ok(library.includes('withOperationTimeout'),'heavy local reads must have an operation watchdog');
-assert.ok(app.includes('itemTimeoutMs:refreshMetadata?5000:2500')&&app.includes('concurrency:refreshMetadata?3:4'),'production refresh must bound each local read while processing a small parallel batch');
-assert.ok(library.includes("'Embedded metadata read'")&&library.includes("'Embedded cover read'"),'both metadata and cover extraction must be watchdog-protected');
-assert.ok(library.includes('Promise.all(batch.map')&&library.includes('processed+=1'),'embedded stage must keep advancing across individually bounded files instead of abandoning the remaining library');
-assert.ok(library.includes("current:'Skipped remaining cover reads after repeated timeouts'"),'cover stage must fail forward rather than become the next freeze');
-assert.ok(app.includes("currentFolder:progress.current||''"),'the shared refresh UI must show the current item during heavy local work');
-assert.ok(app.includes("recordLibraryRefreshWarning('Embedded metadata'")&&app.includes("recordLibraryRefreshWarning('Local cover recovery'"),'timeouts/skips must be visible in the completed refresh warning');
+// Metadata: normal Prepare may read cheap unresolved audio properties, but must
+// never restore the historical catalogue-wide archive/deep-read stage.
+const normalEnrichment=app.slice(app.indexOf('async function enrichPublishedLocalLibrary'),app.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
+assert.ok(normalEnrichment.includes('enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true)'),'normal refresh must restore bounded audio property evidence before online matching');
+assert.ok(app.includes("if(fastAudioProperties){")&&app.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'normal property pass must exclude EPUB/comic archive reads and already-cached audio');
+assert.ok(app.includes('itemTimeoutMs:fastAudioProperties?1200')&&app.includes('maxConsecutiveTimeouts:fastAudioProperties?3:6'),'normal property pass must retain a strict fail-forward watchdog');
+assert.ok(feedback.includes("'reading-metadata':[40,44]"),'reading-metadata must remain a narrow bounded identification phase rather than the historical 28% bulk stage');
+assert.ok(library.includes('withOperationTimeout'),'explicit local forensic reads must still have an operation watchdog');
+const deepSearch=app.slice(app.indexOf('const runMetadataSearch=async'),app.indexOf('const acceptProposal=async'));
+assert.ok(deepSearch.includes('concurrency:1')&&deepSearch.includes('maxConsecutiveTimeouts:1'),'Deep Search local inspection must be serial and stop launching reads after the first timeout');
+assert.ok(deepSearch.includes('workBooks[Math.floor(workBooks.length/2)]')&&deepSearch.includes('workBooks.slice(0,1)'),'Deep Search must inspect only a tiny selected-work sample');
+assert.ok(library.includes("'Embedded metadata read'")&&library.includes("'Embedded cover read'"),'explicit metadata and cover extraction must remain watchdog-protected');
+assert.ok(library.includes("current:'Skipped remaining cover reads after repeated timeouts'"),'cover recovery must fail forward rather than become a new freeze');
+assert.ok(app.includes("recordLibraryRefreshWarning('Local cover recovery'"),'cover timeouts/skips must remain visible in completed refresh warnings');
 
 // Provider network work was already bounded; lock those deadlines too.
-assert.ok(books.includes('options.timeoutMs||8000')&&books.includes('AbortController'),'book provider requests must retain their network deadline');
+assert.ok(
+  (books.includes("options.timeoutMs||(options.deep?15000:8000)")||books.includes('options.timeoutMs||8000'))
+  && books.includes('AbortController'),
+  'book provider requests must retain bounded Smart/Deep network deadlines'
+);
 assert.ok(comics.includes('options.timeoutMs||8000')&&comics.includes('AbortController'),'comic provider requests must retain their network deadline');
 
 console.log('PASS: Test 10.1 release blockers lock verified Move sorting and fail-forward metadata scanning');

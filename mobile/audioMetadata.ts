@@ -3,11 +3,13 @@ import {isGenericMediaTitle, LocalMetadataFields, publicationYear} from './libra
 
 const maxID3v2Bytes=256*1024;
 const maxMP4MetadataBytes=4*1024*1024;
+const maxFastMP4MetadataBytes=512*1024;
 
 export async function extractAudioMetadata(
   uri:string,
   extension:string,
   info?:{size?:number},
+  options:{fast?:boolean}={},
 ):Promise<LocalMetadataFields>{
   const ext=extension.toLowerCase();
   try{
@@ -23,11 +25,14 @@ export async function extractAudioMetadata(
       return fields;
     }
     if(ext==='m4a'||ext==='m4b'){
-      const readLength=size===undefined?maxMP4MetadataBytes:Math.min(size,maxMP4MetadataBytes);
+      const limit=options.fast?maxFastMP4MetadataBytes:maxMP4MetadataBytes;
+      const readLength=size===undefined?limit:Math.min(size,limit);
       const head=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:0,length:readLength});
       let fields=parseMP4MetadataBase64(head);
       if(size!==undefined&&size>readLength){
-        const tailLength=Math.min(size,maxMP4MetadataBytes);
+        // Normal preparation reads only a small head/tail window. Full 4 MB
+        // windows remain available to explicit Deep Search.
+        const tailLength=Math.min(size,limit);
         const tail=await readAsStringAsync(uri,{encoding:EncodingType.Base64,position:Math.max(0,size-tailLength),length:tailLength});
         fields=mergeFields(fields,parseMP4MetadataBase64(tail));
       }
@@ -81,6 +86,13 @@ export function parseID3v2Base64(base64:string):LocalMetadataFields{
           else if(id==='TCON')fields.genre=value.replace(/^\((\d+)\)$/,'$1');
           else if(id==='TPUB')fields.publisher=value;
           else if(id==='TLAN')fields.language=value;
+          else if(id==='TRCK'){
+            const number=Number(value.match(/\d+/)?.[0]);
+            if(Number.isFinite(number)&&number>0)fields.trackNumber=number;
+          }else if(id==='TPOS'){
+            const number=Number(value.match(/\d+/)?.[0]);
+            if(Number.isFinite(number)&&number>0)fields.discNumber=number;
+          }
         }
       }
     }
@@ -110,9 +122,27 @@ export function parseMP4MetadataBase64(base64:string):LocalMetadataFields{
   if(artist||albumArtist)fields.author=artist||albumArtist;
   if(genre)fields.genre=genre;
   if(grouping)fields.series=grouping;
+  const trackNumber=mp4Index(bytes,'trkn');
+  const discNumber=mp4Index(bytes,'disk');
+  if(trackNumber)fields.trackNumber=trackNumber;
+  if(discNumber)fields.discNumber=discNumber;
   const year=publicationYear(date);
   if(year)fields.publishedYear=year;
   return compact(fields);
+}
+
+function mp4Index(bytes:Uint8Array,name:string){
+  const payload=mp4Data(bytes,name);
+  if(!payload||payload.length<4)return undefined;
+  // Apple trkn/disk atoms normally store the current index in bytes 2-3
+  // of the data payload. Fall back to the first sensible 16-bit value.
+  const preferred=(payload[2]<<8)|payload[3];
+  if(preferred>0&&preferred<100000)return preferred;
+  for(let i=0;i+1<payload.length;i+=2){
+    const value=(payload[i]<<8)|payload[i+1];
+    if(value>0&&value<100000)return value;
+  }
+  return undefined;
 }
 
 function mp4Text(bytes:Uint8Array,name:string){

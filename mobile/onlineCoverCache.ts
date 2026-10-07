@@ -63,10 +63,10 @@ export async function cacheOnlineCoverUris<T extends OnlineCoverBook>(
   const concurrency=Math.max(1,Math.min(4,Math.trunc(options.concurrency||3)));
   const next=books.slice();
   const indexes=next.map((book,index)=>({book,index})).filter(({book})=>{
-    const current=String(book.coverUri||'');
-    if(!isRemote(current))return false;
-    const provider=String(book.onlineMetadataMatch?.coverUri||book.onlineComicMetadataMatch?.coverUri||'');
-    return !!provider&&provider===current;
+    // A remote cover already attached to a work is trusted enough to cache
+    // locally even if it came from an older catalogue version that did not
+    // persist the provider-match object alongside it.
+    return isRemote(String(book.coverUri||''));
   });
   let cursor=0,cached=0;
   const worker=async()=>{

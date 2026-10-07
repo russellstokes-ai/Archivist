@@ -389,6 +389,38 @@ func sidecarMetadata(filename string) embeddedMetadata {
 	return sidecarMetadataWithCache(filename, nil)
 }
 
+func audioMultipartWorkTitle(value string) string {
+	value=cleanMetadata(strings.TrimSuffix(value,filepath.Ext(value)))
+	if value=="" { return "" }
+	lower:=strings.ToLower(value)
+	for _, marker:=range []string{" part "," pt "," chapter "," ch "," track "," disc "," disk "," cd "} {
+		if index:=strings.LastIndex(lower,marker); index>1 {
+			tail:=strings.TrimSpace(strings.TrimLeft(lower[index+len(marker):],"._:#- "))
+			if tail!="" {
+				first:=strings.Fields(strings.NewReplacer("/"," ","-"," ","_"," ").Replace(tail))
+				if len(first)>0 {
+					if _,ok:=seriesPositionFromLabel(first[0]);ok {
+						return cleanMetadata(strings.Trim(value[:index]," ._:-"))
+					}
+				}
+			}
+		}
+	}
+	for _, sep:=range []string{" - ","_"," : "} {
+		if index:=strings.LastIndex(value,sep); index>1 {
+			tail:=strings.TrimSpace(value[index+len(sep):])
+			fields:=strings.Fields(tail)
+			if len(fields)>0 {
+				if _,ok:=seriesPositionFromLabel(fields[0]);ok {
+				title:=cleanMetadata(strings.Trim(value[:index]," ._:-"))
+					if title!="" && !strings.Contains(title," - ") { return title }
+				}
+			}
+		}
+	}
+	return ""
+}
+
 func pathMetadata(relative, format string) metadataCandidate {
 	parts := strings.Split(filepath.ToSlash(relative), "/")
 	base := cleanMetadata(strings.TrimSuffix(filepath.Base(relative), filepath.Ext(relative)))
@@ -396,6 +428,12 @@ func pathMetadata(relative, format string) metadataCandidate {
 	confidence := 35
 
 	if format == "Audio" {
+		if len(parts)==1 {
+			if workTitle:=audioMultipartWorkTitle(base);workTitle!="" {
+				m.Title=workTitle
+				confidence=58
+			}
+		}
 		// Common layouts:
 		// Author / Book / 01 - Chapter.mp3
 		// Author / Series / Book / 01 - Chapter.mp3

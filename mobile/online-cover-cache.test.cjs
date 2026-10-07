@@ -14,15 +14,18 @@ const {cacheOnlineCoverUris,persistOnlineCover,MAX_ONLINE_COVER_BYTES}=require('
     deleteAsync:async uri=>{files.delete(uri)},
   };
   const remote='https://covers.example/book?id=1';
+  const legacyRemote='https://covers.example/legacy-without-provider.jpg';
   const books=[
     {coverUri:remote,coverCandidates:[remote],onlineMetadataMatch:{coverUri:remote}},
+    {coverUri:legacyRemote,coverCandidates:[legacyRemote]},
     {coverUri:'file:///manual.jpg',coverCandidates:['file:///manual.jpg'],onlineMetadataMatch:{coverUri:'https://covers.example/other.jpg'}},
   ];
   const result=await cacheOnlineCoverUris(books,ops,{concurrency:2});
-  assert.equal(result.attempted,1);
-  assert.equal(result.cached,1);
+  assert.equal(result.attempted,2);
+  assert.equal(result.cached,2);
   assert.match(result.books[0].coverUri,/file:\/\/\/app\/covers\/online\/cover-/);
-  assert.equal(result.books[1].coverUri,'file:///manual.jpg','manual/local cover must not be replaced');
+  assert.match(result.books[1].coverUri,/file:\/\/\/app\/covers\/online\/cover-/,'legacy remote cover must be cached even without provider-match state');
+  assert.equal(result.books[2].coverUri,'file:///manual.jpg','manual/local cover must not be replaced');
 
   const hugeOps={...ops,downloadAsync:async(uri,target)=>{files.set(target,{exists:true,size:MAX_ONLINE_COVER_BYTES+1});return {uri:target,status:200}}};
   const fallback=await persistOnlineCover('https://covers.example/huge.png',hugeOps);
