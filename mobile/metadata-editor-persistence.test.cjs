@@ -28,6 +28,7 @@ const {persistWorkEdit}=require('./metadataEditPersistence.ts');
 const {applyLocalMetadata}=require('./libraryIntelligence.ts');
 const storage={load:()=>stage.loadLocalStageBooks(),commit:(patches,expected)=>stage.commitLocalWorkEdit(patches,expected)};
 const track=(uri,n)=>({uri,title:'Old',author:'Old author',series:'',genre:'',format:'Audio',embeddedMetadata:{trackNumber:n,discNumber:1,title:'Chapter '+n}});
+const expectedFor=(books,targets)=>{const wanted=new Set(targets);return books.filter(book=>wanted.has(book.uri));};
 (async()=>{
  const books=[track('one',1),track('two',2),track('unrelated',1)];
  await stage.replaceLocalStageBooks(books);
@@ -37,7 +38,7 @@ const track=(uri,n)=>({uri,title:'Old',author:'Old author',series:'',genre:'',fo
  const updated=books.map(book=>targets.includes(book.uri)?{...book,...override,metadataSource:'manual'}:book);
  // A scanner transaction already in flight must finish before the editor reads.
  const oldWrite=stage.replaceLocalStageBooks(books);
- await persistWorkEdit(updated,targets,overrides,storage);
+ await persistWorkEdit(updated,targets,overrides,storage,expectedFor(books,targets));
  await oldWrite;
  let saved=await stage.loadLocalStageBooks();
  assert.equal(saved[0].title,'New');assert.equal(saved[1].description,'Edited');
@@ -53,14 +54,15 @@ const track=(uri,n)=>({uri,title:'Old',author:'Old author',series:'',genre:'',fo
  assert.equal(rescanned.title,'New');assert.equal(rescanned.author,'New author');
  const cleared=applyLocalMetadata({...saved[0],description:'Old',isbn:'123'}, {...override,description:'',isbn:''},'manual');
  assert.equal(cleared.description,undefined);assert.equal(cleared.isbn,undefined);
- await assert.rejects(persistWorkEdit(updated,targets,overrides,{...storage,commit:async()=>{throw Error('disk full')}}),/disk full/);
+ const beforeDiskFailure=await stage.loadLocalStageBooks();
+ await assert.rejects(persistWorkEdit(updated,targets,overrides,{...storage,commit:async()=>{throw Error('disk full')}},expectedFor(beforeDiskFailure,targets)),/disk full/);
  // A stale second row aborts the entire transaction, including the first patch.
  const before=await stage.loadLocalStageBooks();
  const changed=before.map(book=>({...book,title:'Must roll back',manualOverride:{title:'Must roll back'}}));
  await assert.rejects(stage.commitLocalWorkEdit(changed,[before[0],{...before[1],title:'stale'},before[2]]),/changed/);
  assert.deepEqual(await stage.loadLocalStageBooks(),before);
  // Editing only a published subset cannot delete an unrelated staged row.
- await persistWorkEdit([updated[0]],['one'],overrides,storage);
+ await persistWorkEdit([updated[0]],['one'],overrides,storage,expectedFor(before,['one']));
  assert.equal((await stage.loadLocalStageBooks()).length,3);
  assert.equal((await stage.loadLocalStageBooks())[0].manualOverride.title,'New');
  // The editor must compare against the revision it opened, not a fresh load after
@@ -79,6 +81,6 @@ const track=(uri,n)=>({uri,title:'Old',author:'Old author',series:'',genre:'',fo
  assert.equal(afterStale.find(book=>book.uri==='one').genre,'Scanner update');
  assert.notEqual(afterStale.find(book=>book.uri==='one').title,'Late editor save');
  await stage.replaceLocalStageBooks(editorBase);
- await assert.rejects(persistWorkEdit(updated,['missing'],overrides,storage),/changed/);
+ await assert.rejects(persistWorkEdit(updated,['missing'],overrides,storage,[]),/changed/);
  console.log('PASS: real SQLite whole-work save, queued writes, restart, rescan, chapter preservation and failed-save detection');
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>{db?.close();fs.rmSync(dir,{recursive:true,force:true})});

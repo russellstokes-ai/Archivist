@@ -1109,6 +1109,7 @@ function Client() {
   const [folderSpace,setFolderSpace]=useState('My library');
   const [editing,setEditing]=useState<Book|null>(null);
   const [editingUris,setEditingUris]=useState<string[]>([]);
+  const editingExpectedBooksRef=useRef<LocalBook[]>([]);
   const [workPicker,setWorkPicker]=useState<WorkPicker|null>(null);
   const [editTitle,setEditTitle]=useState('');
   const [editAuthor,setEditAuthor]=useState('');
@@ -4283,10 +4284,17 @@ function Client() {
   }
 
   function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
-    if(item.source!=='server')cancelLibraryRefresh();
+    const nextUris=uris.filter(Boolean);
+    if(item.source!=='server'){
+      cancelLibraryRefresh();
+      const wanted=new Set(nextUris);
+      editingExpectedBooksRef.current=stagedLocalBooks
+        .filter((book):book is Book & {uri:string}=>!!book.uri&&wanted.has(book.uri))
+        .map(book=>{const {source:_source,...durable}=book;return JSON.parse(JSON.stringify(durable)) as LocalBook;});
+    }else editingExpectedBooksRef.current=[];
     setError('');
     setEditing(item);
-    setEditingUris(uris.filter(Boolean));
+    setEditingUris(nextUris);
     setEditTitle(item.title);
     setEditAuthor(item.author || '');
     setEditSeries(item.series || '');
@@ -4772,9 +4780,9 @@ function Client() {
     </Modal>;
   }
 
-  const persistEditorWork=(books:LocalBook[],targets:string[],overrides:Record<string,LocalMetadataOverride>)=>persistWorkEdit(books,targets,overrides,{
+  const persistEditorWork=(books:LocalBook[],targets:string[],overrides:Record<string,LocalMetadataOverride>,expectedRevision:LocalBook[])=>persistWorkEdit(books,targets,overrides,{
     load:loadLocalStageBooks,commit:commitLocalWorkEdit,
-  });
+  },expectedRevision);
 
   function MetadataEditorPanel(){
     if(!editing)return null;
@@ -4912,7 +4920,8 @@ function Client() {
           }):{books:targetBooks};
           const artworkByUri=new Map(artwork.books.map(book=>[book.uri,book]));
           updated=updated.map(book=>artworkByUri.get(book.uri)||book);
-          updated=await persistEditorWork(updated,targets,nextOverrides);
+          updated=await persistEditorWork(updated,targets,nextOverrides,editingExpectedBooksRef.current);
+          editingExpectedBooksRef.current=updated.filter(book=>wanted.has(book.uri)).map(book=>JSON.parse(JSON.stringify(book)) as LocalBook);
           setLocalMetadataOverrides(nextOverrides);
           // Verify the durable stage immediately. A Save button must never close
           // successfully if the work-level edit did not actually persist.
@@ -4966,7 +4975,7 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    const closeEditor=()=>{setEditing(null);setEditingUris([]);setEditPickedCover(null);setMetadataSearchResults([]);setMetadataSearchSelection(-1);setMetadataSearchNotice('');};
+    const closeEditor=()=>{setEditing(null);setEditingUris([]);editingExpectedBooksRef.current=[];setEditPickedCover(null);setMetadataSearchResults([]);setMetadataSearchSelection(-1);setMetadataSearchNotice('');};
     const editorDirty=
       editTitle!==editing.title||
       editAuthor!==(editing.author||'')||
@@ -5159,9 +5168,12 @@ function Client() {
         }
         if(localUpdates.size){
           cancelLibraryRefresh();
-          let updated=await loadLocalStageBooks();
+          const base=await loadLocalStageBooks();
+          let updated=base;
           for(const [uri,override] of localUpdates)updated=applyManualCluesToWork(updated,[uri],override);
-          updated=await persistEditorWork(updated,[...localUpdates.keys()],nextOverrides);
+          const targetUris=[...localUpdates.keys()];
+          const targetSet=new Set(targetUris);
+          updated=await persistEditorWork(updated,targetUris,nextOverrides,base.filter(book=>targetSet.has(book.uri)));
           setLocalMetadataOverrides(nextOverrides);
           publishCompletedLocalStage(updated);
 
