@@ -18,7 +18,8 @@ assert.ok(source.includes("setSpaces([...new Set([...result.books.map(book=>book
 assert.ok(source.includes('const autoLocalScanAttempted=useRef(false)'),'startup scan recovery must be one-shot');
 assert.ok(source.includes('sanitizeLibraryPreparationCheckpoint')&&source.includes('shouldResumeLibraryPreparation('),'startup recovery must use the durable preparation checkpoint rather than folder display text');
 assert.equal(source.includes("folder.status==='Scanning…'||folder.status==='Ready to scan'"),false,'folder status text must never be scan-resume intent');
-assert.ok(source.includes('beginLibraryPreparation(')&&source.includes('markLibraryDiscoveryCommitted(')&&source.includes('cancelLibraryPreparation(')&&source.includes('completeLibraryPreparation('),'prepare/refresh lifecycle must persist explicit job intent and preserve the last completed checkpoint');
+assert.ok(source.includes('beginLibraryPreparation(')&&source.includes('markLibraryDiscoveryCommitted(')&&source.includes('cancelLibraryPreparation(')&&source.includes('failLibraryPreparation(')&&source.includes('completeLibraryPreparation('),'prepare/refresh lifecycle must persist explicit job intent and preserve the last completed checkpoint');
+assert.ok(source.includes("persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current))"),'handled scan/enrichment failures must clear durable resume intent rather than loop on next launch');
 assert.ok(source.includes('libraryPreparationCheckpointReady'),'startup must wait for durable preparation intent before deciding whether to resume');
 assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan completion notice should be visible but not become stale chrome');
 assert.ok(source.includes('deferEmbeddedCovers:true')&&source.includes('deferEmbeddedMetadata:true'),'app scans must publish identity before expensive embedded metadata and cover recovery');
