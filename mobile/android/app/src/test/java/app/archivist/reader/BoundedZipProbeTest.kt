@@ -209,7 +209,7 @@ class BoundedZipProbeTest {
     } catch (error: BoundedArchiveEvidence.ProbeFailure) {
       assertEquals("operation-timeout", error.code)
     }
-    assertEquals(readsAfterSuccess, base.windows.size, "expired probe must not start another range read")
+    assertEquals("expired probe must not start another range read", readsAfterSuccess, base.windows.size)
 
     now = 1000L
     cancelled = true
