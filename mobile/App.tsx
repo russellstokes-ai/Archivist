@@ -732,7 +732,7 @@ function reviewBooksForDisplay(books:Book[]):Book[]{
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
-  const {width,height:windowHeight} = useWindowDimensions();
+  const {width} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const phoneLayout = width < 600;
@@ -4970,17 +4970,18 @@ function Client() {
       }
       closeEditor();
     };
-    return <Modal transparent animationType="none" visible onRequestClose={requestEditorClose}>
+    return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestEditorClose}>
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
         <View style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={StyleSheet.absoluteFill} onPress={requestEditorClose}/>
-          <View accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,height:Math.max(240,windowHeight-safeArea.top-safeArea.bottom-40),maxHeight:'100%',padding:0,overflow:'hidden'}]}>
-          <View style={{padding:16,gap:8,borderBottomWidth:1,borderBottomColor:p.line}}>
+          <View collapsable={false} accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden'}]}>
+          <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:16,gap:8,borderBottomWidth:1,borderBottomColor:p.line}}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit book details</Text>
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
           </View>
-          <ScrollView ref={metadataEditorScroll} style={{flex:1,minHeight:0}} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" onContentSizeChange={()=>{if(editorScrollReset.current){editorScrollReset.current=false;metadataEditorScroll.current?.scrollTo({y:0,animated:false});}}} contentContainerStyle={{padding:16,gap:9}}>
+          <View collapsable={false} style={{flex:1,minHeight:0,overflow:'hidden',backgroundColor:p.card}}>
+          <ScrollView ref={metadataEditorScroll} removeClippedSubviews={false} style={{flex:1,minHeight:0,backgroundColor:p.card}} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" onContentSizeChange={()=>{if(editorScrollReset.current){editorScrollReset.current=false;metadataEditorScroll.current?.scrollTo({y:0,animated:false});}}} contentContainerStyle={{padding:16,gap:9,backgroundColor:p.card}}>
             {localEdit?<View style={styles.settingsSubgroup}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>FIND METADATA</Text>
               <Text style={[styles.meta,{color:p.muted}]}>Enter a title, author, or both. Tap Smart Search, then choose a match.</Text>
@@ -5056,7 +5057,8 @@ function Client() {
             {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
 
           </ScrollView>
-          <View style={{padding:12,gap:8,borderTopWidth:1,borderTopColor:p.line}}>
+          </View>
+          <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:12,gap:8,borderTopWidth:1,borderTopColor:p.line}}>
             {error?<Text accessibilityLiveRegion="polite" style={{color:p.danger}}>{error}</Text>:null}
             <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
               {localEdit?<Button label={metadataSearchBusy?'Searching…':'Smart Search'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void runMetadataSearch()}/>:null}
@@ -5151,7 +5153,7 @@ function Client() {
       }catch(e){setError((e as Error).message);}
       finally{setBusy(false);}
     };
-    return <Modal transparent animationType="none" visible onRequestClose={requestClose}>
+    return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestClose}>
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':undefined}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close bulk metadata editor" style={styles.modalBackdrop} onPress={requestClose}><ScrollView keyboardShouldPersistTaps="handled" style={{width:'100%',maxWidth:520,flexGrow:0,maxHeight:'100%'}} contentContainerStyle={{flexGrow:1}}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Bulk edit '+selectedWorks.length+' selected works'} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
