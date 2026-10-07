@@ -24,7 +24,7 @@ internal object BoundedRarEvidence {
           val header=archive.nextFileHeader()?:break
           if(header.isDirectory)continue
           if(++entries>MAX_ENTRIES)throw BoundedArchiveEvidence.ProbeFailure("entry-limit","CBR archive contains too many entries for the fast probe.")
-          val name=String(header.fileName ?: "").replace('\\','/')
+          val name=(header.fileName ?: "").replace('\\','/')
           if(name.isBlank()||name.startsWith("/")||name.split('/').any{it==".."})throw BoundedArchiveEvidence.ProbeFailure("archive-invalid","Unsafe CBR entry path.")
           val base=name.substringAfterLast('/')
           val size=header.fullUnpackSize
