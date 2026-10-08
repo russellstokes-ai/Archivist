@@ -10,7 +10,7 @@ type GenreRule={genre:string;score:number;match:(text:string)=>boolean};
 const contains=(text:string,term:string)=>(' '+text+' ').includes(' '+term+' ');
 const genreRules:GenreRule[]=[
   {genre:'Science Fiction',score:100,match:t=>/\b(science fiction|sci fi|scifi|space opera|cyberpunk|dystopi\w*|hard science fiction|speculative science fiction)\b/.test(t)},
-  {genre:'Historical Fiction',score:98,match:t=>/\bhistorical fiction\b/.test(t)||(/\bhistorical\b/.test(t)&&/\bfiction\b/.test(t))},
+  {genre:'Historical Fiction',score:98,match:t=>/\bhistorical fiction\b/.test(t)||(/\bfiction historical\b/.test(t)&&!/\bmystery\b/.test(t))},
   {genre:'Fantasy',score:95,match:t=>/\b(fantasy|high fantasy|epic fantasy|urban fantasy|sword and sorcery)\b/.test(t)},
   {genre:'Graphic Novels',score:94,match:t=>/\b(graphic novels?|comics?|manga|superhero comics?)\b/.test(t)},
   {genre:'Memoir',score:93,match:t=>/\b(memoirs?|personal memoirs?|autobiograph\w*)\b/.test(t)},
