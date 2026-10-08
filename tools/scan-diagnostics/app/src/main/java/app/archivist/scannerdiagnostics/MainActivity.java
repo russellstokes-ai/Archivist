@@ -75,6 +75,7 @@ public final class MainActivity extends Activity {
       }
       observedStallMs=Math.max(observedStallMs,activeMs);
       summary.setText("Scanning… "+(now-scanStart)/1000+"s  •  files "+files+"  •  folders "+dirs+"\n"
+        +"Audio: "+audio+"  •  Comics: "+comics+"  •  PDFs: "+comicPdfs+"\n"
         +"Provider query: "+(activeMs/1000)+"s  •  idle: "+(idle/1000)+"s\n"
         +(providerStalled?"STALLED — provider query exceeded 4 seconds. Cancel is available.":"Slow queries: "+slowQueries));
     }
@@ -101,14 +102,14 @@ public final class MainActivity extends Activity {
   long lastUpdate=0L;
   Button select,start,cancel,export;
   TextView heading,summary,log;
-  int files=0, dirs=0, audio=0, ebooks=0, comics=0, rootAudio=0, queries=0, retries=0, failures=0, slowQueries=0;
+  int files=0, dirs=0, audio=0, ebooks=0, comics=0, comicPdfs=0, comicArchives=0, rootAudio=0, queries=0, retries=0, failures=0, slowQueries=0;
   long scanStart=0L, queryTime=0L, longestQuery=0L, headerTime=0L, longestHeader=0L;
   int providerTimeouts=0,headerTimeouts=0,headerErrors=0,slowHeaders=0,headersAttempted=0;
   long inventoryElapsedMs=0,headerElapsedMs=0;
   JSONArray fileRecords,folderRecords,errors,headerRecords;
   ArrayList<JSONObject> samples;
   HashMap<String,Integer> sampledPerFolder;
-  HashMap<String,Integer> audioByParent;
+  HashMap<String,Integer> audioByParent,comicsByParent;
   HashSet<String> seenDirIds;
 
   @Override public void onCreate(Bundle state){
@@ -211,7 +212,7 @@ public final class MainActivity extends Activity {
     scanning=true;
     cancelled.set(false);
     finishedReport=null;
-    files=dirs=audio=ebooks=comics=rootAudio=queries=retries=failures=slowQueries=0;
+    files=dirs=audio=ebooks=comics=comicPdfs=comicArchives=rootAudio=queries=retries=failures=slowQueries=0;
     queryTime=longestQuery=headerTime=longestHeader=0;
     providerTimeouts=headerTimeouts=headerErrors=slowHeaders=headersAttempted=0;
     inventoryElapsedMs=headerElapsedMs=maxUiDelayMs=lastHeartbeat=0;
@@ -220,7 +221,7 @@ public final class MainActivity extends Activity {
     lastProgress=scanStart;activeQueryStarted=0;activeFolder="";providerStalled=false;observedStallMs=0;stallEvents=0;
     fileRecords=new JSONArray();folderRecords=new JSONArray();errors=new JSONArray();headerRecords=new JSONArray();
     samples=new ArrayList<>();sampledPerFolder=new HashMap<>();
-    audioByParent=new HashMap<>();seenDirIds=new HashSet<>();
+    audioByParent=new HashMap<>();comicsByParent=new HashMap<>();seenDirIds=new HashSet<>();
     log.setText("Scanning selected folder…\n");
     updateButtons();
     ui.post(heartbeat);
@@ -348,6 +349,9 @@ public final class MainActivity extends Activity {
       counts.put("audioFiles",audio);
       counts.put("ebooks",ebooks);
       counts.put("comics",comics);
+      counts.put("comicArchives",comicArchives);
+      counts.put("ambiguousPdfFiles",comicPdfs);
+      counts.put("distinctComicOrPdfContainingFolders",comicsByParent.size());
       counts.put("audioFilesAtSelectedRoot",rootAudio);
       counts.put("distinctAudioContainingFolders",audioByParent.size());
       counts.put("providerQueries",queries);
@@ -401,7 +405,7 @@ public final class MainActivity extends Activity {
     long now=SystemClock.elapsedRealtime();
     if(!force && now-lastUpdate<300)return;
     lastUpdate=now;
-    String text="Files: "+files+"   Audio: "+audio+"   Folders: "+dirs+"\n"
+    String text="Files: "+files+"   Audio: "+audio+"   Comics: "+comics+"   PDFs: "+comicPdfs+"   Folders: "+dirs+"\n"
       +"Folder queries: "+queries+"   Fallbacks: "+retries+"\n"
       +"Slow queries (1s+): "+slowQueries+"   Elapsed: "+((now-scanStart)/1000)+"s\n"
       +"Stage: "+stage+"   Header probes: "+headersAttempted+"   Timeouts: "+(providerTimeouts+headerTimeouts);
