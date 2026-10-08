@@ -132,6 +132,10 @@ test('Needs Attention save, restore, Smart Search and acceptance use the product
     };
   });
   console.log('METADATA_EDITOR_SAVE_HIT_TEST',JSON.stringify(hitLayers));
+  const viewport=page.viewportSize();
+  expect(viewport,'A real device viewport must be available').toBeTruthy();
+  expect(hitLayers.target.y,'Metadata Save must stay inside the visible modal viewport').toBeLessThan(viewport!.height);
+  expect(hitLayers.target.x,'Metadata Save must stay inside the visible modal viewport').toBeLessThan(viewport!.width);
   await saveButton.click();
   await expect(page.getByText(/Search clues saved/)).toBeVisible();
   await page.getByRole('button',{name:'Close',exact:true}).click();
