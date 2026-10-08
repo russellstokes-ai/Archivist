@@ -3,7 +3,7 @@ name: Standalone Scanner Diagnostics APK
 on:
   push:
     branches:
-      - diagnostics/standalone-readonly-scanner-20261008
+      - diagnostics/android-smb-20261008
     paths:
       - 'tools/scan-diagnostics/**'
       - '.github/workflows/scanner-diagnostics-apk.yml'
@@ -50,15 +50,15 @@ jobs:
             echo "Unexpected broad storage or network permissions"; exit 1
           fi
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
-          cp "$APK" Archivist-Scanner-Diagnostics-1.0.apk
-          sha256sum Archivist-Scanner-Diagnostics-1.0.apk > Archivist-Scanner-Diagnostics-1.0.apk.sha256
+          cp "$APK" Archivist-Scanner-Diagnostics-1.1.apk
+          sha256sum Archivist-Scanner-Diagnostics-1.1.apk > Archivist-Scanner-Diagnostics-1.1.apk.sha256
       - name: Upload separately installable APK
         uses: actions/upload-artifact@v4
         with:
           name: Archivist-Scanner-Diagnostics-APK
           path: |
-            Archivist-Scanner-Diagnostics-1.0.apk
-            Archivist-Scanner-Diagnostics-1.0.apk.sha256
+            Archivist-Scanner-Diagnostics-1.1.apk
+            Archivist-Scanner-Diagnostics-1.1.apk.sha256
           retention-days: 30
       - name: Install and launch in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -69,7 +69,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            adb install -r Archivist-Scanner-Diagnostics-1.0.apk
+            adb install -r Archivist-Scanner-Diagnostics-1.1.apk
             adb shell am start -W -n app.archivist.scannerdiagnostics/.MainActivity
             sleep 8
             adb shell pidof app.archivist.scannerdiagnostics
@@ -78,6 +78,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="scanner-diagnostics-v1"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "Archivist Scanner Diagnostics v1" --notes "Separate read-only Android diagnostics app. No access to Archivist app storage, no network permission; user-picked SAF folders and manual export only."
-          gh release upload "$TAG" Archivist-Scanner-Diagnostics-1.0.apk Archivist-Scanner-Diagnostics-1.0.apk.sha256 --clobber
+          TAG="scanner-diagnostics-v1.1"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "Archivist Scanner Diagnostics v1.1" --notes "Separate read-only Android diagnostics app. No access to Archivist app storage, no network permission; user-picked SAF folders and manual export only."
+          gh release upload "$TAG" Archivist-Scanner-Diagnostics-1.1.apk Archivist-Scanner-Diagnostics-1.1.apk.sha256 --clobber
