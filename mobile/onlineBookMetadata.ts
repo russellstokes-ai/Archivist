@@ -368,7 +368,8 @@ export function shouldLookupBookOnline(input:BookLookupInput){
   if(format&&format!=='epub'&&format!=='pdf'&&format!=='audio')return false;
   if(!useful(input.title)&&!normalizeIsbn(input.isbn)&&!input.uri)return false;
   // Missing genre needs work-level enrichment for Atlas, even with a cover.
-  return !!input.needsReview||!input.coverUri||!useful(input.author)||!useful(input.title)||!useful(input.genre);
+  const genreNeedsEnrichment=!useful(input.genre)||(!genreIsSpecific(input.genre)&&input.metadataProvenance?.genre!=='manual');
+  return !!input.needsReview||!input.coverUri||!useful(input.author)||!useful(input.title)||genreNeedsEnrichment;
 }
 
 export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookLookupOptions={}):Promise<OnlineBookLookupResult>{
@@ -430,6 +431,13 @@ function canReplaceField(book:BookLookupInput,field:keyof OnlineBookFields,candi
   const current=(book as any)[field];
   if(current===undefined||current===null||String(current).trim()==='')return true;
   const source=book.metadataProvenance?.[field as string];
+  if(field==='genre'){
+    // Never replace a specific local classification with a conflicting broad online
+    // category. A confident matched work can refine generic local Fiction, however.
+    if(genreIsSpecific(current))return false;
+    if(source==='embedded'||source==='sidecar')
+      return candidate.confidence==='high'&&genreIsSpecific(candidate.fields.genre);
+  }
   if(source==='manual'||source==='embedded'||source==='sidecar')return false;
   if(candidate.exactIdentifier&&source==='path')return true;
   const confidence=book.metadataFieldConfidence?.[field as string];
