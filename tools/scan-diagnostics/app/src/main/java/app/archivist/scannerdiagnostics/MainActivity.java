@@ -82,6 +82,7 @@ public final class MainActivity extends Activity {
   };
   volatile JSONObject finishedReport;
   volatile String pickedUri="";
+  volatile boolean networkSource=false;
   volatile boolean scanning=false;
   long lastUpdate=0L;
   Button select,start,cancel,export;
@@ -105,7 +106,7 @@ public final class MainActivity extends Activity {
     heading=text("Archivist Scanner Diagnostics",23,true,Color.rgb(18,31,40));
     root.addView(heading);
     root.addView(text("SEPARATE READ-ONLY APP  •  Archivist data remains untouched",12,true,Color.rgb(35,107,101)));
-    root.addView(text("1. Choose the same Android library folder.  2. Start Scan.  3. Export JSON and share it in ChatGPT. Only read-only file headers are opened; no media is moved or changed.",14,false,Color.rgb(65,67,69)));
+    root.addView(text("Choose Android storage or an SMB/NAS share exposed through a Documents Provider, then scan and export JSON. Nothing is moved or changed.",14,false,Color.rgb(65,67,69)));
     select=button(root,"1 — Choose library folder",()->choose());
     start=button(root,"2 — Start diagnostic scan",()->launchScan());
     cancel=button(root,"Cancel scan",()->stopScan());
@@ -157,9 +158,15 @@ public final class MainActivity extends Activity {
       try{getContentResolver().takePersistableUriPermission(selected,Intent.FLAG_GRANT_READ_URI_PERMISSION);}
       catch(Exception ignored){}
       pickedUri=selected.toString();
+      String provider=String.valueOf(selected.getAuthority()).toLowerCase(Locale.ROOT);
+      networkSource=provider.contains("cifs")||provider.contains("smb")||provider.contains("sftp")
+        ||provider.contains("ftp")||provider.contains("webdav")||provider.contains("network");
       finishedReport=null;
-      summary.setText("Folder selected. Ready to scan.");
-      log.setText("Selected SAF authority: "+selected.getAuthority()+"\nRead-only directory inventory and bounded 64KB header timing samples.\n");
+      summary.setText((networkSource?"Network":"Device")+" folder selected. Ready to scan.");
+      log.setText("Selected SAF authority: "+selected.getAuthority()+"\n"
+        +(networkSource?"Network provider detected: 25-second folder / 10-second header limits.\n"
+          :"Local provider detected: 7-second folder / 2.5-second header limits.\n")
+        +"Read-only directory inventory and bounded 64KB header timing samples.\n");
       updateButtons();
     }else if(request==SAVE_JSON && finishedReport!=null){
       final JSONObject report=finishedReport;
@@ -213,7 +220,7 @@ public final class MainActivity extends Activity {
   }
   void scan(){
     JSONObject finalResult=new JSONObject();
-    TimedSafProbe probe=new TimedSafProbe(this);
+    TimedSafProbe probe=new TimedSafProbe(this,networkSource);
     activeProbe=probe;
     try{
       Uri tree=Uri.parse(pickedUri);
@@ -325,6 +332,7 @@ public final class MainActivity extends Activity {
       finalResult.put("treeUri",pickedUri);
       finalResult.put("treeDocumentId",rootId);
       finalResult.put("authority",authority);
+      finalResult.put("networkMode",networkSource);
       finalResult.put("cancelled",cancelled.get());
       finalResult.put("truncated",files+dirs>=MAX_ENTRIES);
       JSONObject counts=new JSONObject();
