@@ -15,7 +15,7 @@ assert.match(
 );
 assert.match(
   app,
-  /if\(fastAudioProperties\)\{[\s\S]*?book\.format!=='Audio'/,
+  /if\(fastAudioProperties\)\{[\s\S]*?book\.format==='Audio'\&\&!book\.embeddedMetadata/,
   'fast properties mode must exclude EPUB/comic archive parsing'
 );
 assert.match(
