@@ -9,6 +9,7 @@ on:
       - integration/test18-reliability
       - feature/test21-scanner-and-book-loader-20261008
       - feature/scanner-quality-gates-20261008
+      - feature/test23-scanner-device-truth-20261008
       - dev/archivist-work
       - build/final-apk-0.9.4-20261004
       - build/0.9.4-test6-20261004
@@ -28,7 +29,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '22-scanner-quality-gates'
+  TEST_BUILD: '23-scanner-device-truth'
 
 concurrency:
   group: android-apk-${{ github.ref }}
@@ -76,6 +77,29 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           node harden-forge.cjs
+
+      - name: Stamp and verify Test 23 source identity
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs');
+          const sha=process.env.GITHUB_SHA||'';
+          const runId=process.env.GITHUB_RUN_ID||'';
+          if(!/^[a-f0-9]{40}$/.test(sha))throw new Error('Missing exact source commit SHA');
+          if(!/^\d+$/.test(runId))throw new Error('Missing workflow run ID');
+          const gradle=fs.readFileSync('android/app/build.gradle','utf8');
+          const app=JSON.parse(fs.readFileSync('app.json','utf8'));
+          if(app.expo.android.versionCode!==108||!/versionCode\s+108\b/.test(gradle))throw new Error('Test23 requires Android code 108');
+          if(app.expo.android.package!=='app.archivist.reader')throw new Error('Unexpected Android package identity');
+          const stamp={candidate:'Test 23 device-truth candidate',sourceCommit:sha,runId};
+          const json=JSON.stringify(stamp,null,2)+'\n';
+          fs.writeFileSync('buildStamp.json',json);
+          fs.mkdirSync('android/app/src/main/assets',{recursive:true});
+          fs.writeFileSync('android/app/src/main/assets/archivist-provenance.json',json);
+          console.log('Test23 source identity:',JSON.stringify(stamp),'Android versionCode:',app.expo.android.versionCode);
+          NODE
 
       - name: Expo doctor
         working-directory: mobile
@@ -170,6 +194,22 @@ jobs:
             echo "Unexpected legacy ABI in release APK"
             exit 1
           fi
+
+      - name: Verify exact SHA provenance inside the signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="${{ steps.release_apk.outputs.path }}"
+          unzip -p "$APK" assets/archivist-provenance.json > "$RUNNER_TEMP/archivist-provenance.json"
+          node - "$RUNNER_TEMP/archivist-provenance.json" <<'NODE'
+          const fs=require('fs');
+          const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(p.sourceCommit!==process.env.GITHUB_SHA||p.runId!==process.env.GITHUB_RUN_ID){
+            throw new Error('Signed APK provenance differs from checked-out GitHub Actions commit');
+          }
+          if(p.candidate!=='Test 23 device-truth candidate')throw new Error('Wrong candidate embedded in APK');
+          console.log('Verified packaged source SHA:',p.sourceCommit,'GitHub run:',p.runId);
+          NODE
 
       - name: Name and checksum versioned test APK
         shell: bash

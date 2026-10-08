@@ -30,7 +30,7 @@ assert.equal(app.expo.version,'0.9.4');
 assert.equal(app.expo.android.versionCode,108,'Test 23 must install with a distinct Android version code; historical Test13 remains untouched');
 assert.match(gradle,/versionCode\s+108/);
 assert.match(gradle,/versionName\s+"0\.9\.4"/);
-assert.match(apkWorkflow,/TEST_BUILD:\s*'(?:18-editor-render|19-reliability|20-work-grouping|21-scanner-book-loader|22-scanner-quality-gates)'/);
+assert.match(apkWorkflow,/TEST_BUILD:\s*'(?:18-editor-render|19-reliability|20-work-grouping|21-scanner-book-loader|22-scanner-quality-gates|23-scanner-device-truth)'/);
 assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'final Test 13 branch must trigger the APK workflow');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'final APK must pass release lint');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'final APK must verify package/version/signature/alignment');
