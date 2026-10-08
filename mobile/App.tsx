@@ -324,6 +324,7 @@ const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const librarySetupPreparedKey = 'archivist.librarySetupPrepared.v1';
+const onboardingDiscoveryKey = 'archivist.onboardingDiscovery.v1';
 const shelfServerPromptKey = 'archivist.shelfServerPrompt.v1';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 const smartShelvesKey = 'archivist.smartShelves.v1';
@@ -810,6 +811,7 @@ function Client() {
   const libraryPreparationCheckpointRef=useRef(libraryPreparationCheckpoint);
   libraryPreparationCheckpointRef.current=libraryPreparationCheckpoint;
   const [libraryPreparationCheckpointReady,setLibraryPreparationCheckpointReady]=useState(false);
+  const [onboardingDiscoverySignature,setOnboardingDiscoverySignature]=useState('');
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
   useEffect(()=>{
@@ -1892,6 +1894,9 @@ function Client() {
       libraryPreparationCheckpointRef.current=checkpoint;
       setLibraryPreparationCheckpoint(checkpoint);
     }).finally(()=>setLibraryPreparationCheckpointReady(true));
+    getPersistedJSON<{signature:string}>(onboardingDiscoveryKey)
+      .then(value=>setOnboardingDiscoverySignature(typeof value?.signature==='string'?value.signature:''))
+      .catch(()=>setOnboardingDiscoverySignature(''));
     getPersistedJSON<Record<string, OfflineServerWork>>(offlineWorksKey).then(value => {
       if (value && typeof value === 'object') setOfflineWorks(value);
     }).catch(() => undefined).finally(()=>setOfflineWorksReady(true));
@@ -2369,11 +2374,34 @@ function Client() {
     } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
   }
 
-  async function prepareOnboardingLibrary(){
+  async function discoverOnboardingLibrary(){
     if(libraryRefreshRunningRef.current||busy)return;
     if(localFolders.length){
-      const localPrepared=await rescanLocalFolders();
-      if(localPrepared===false)return;
+      // Source discovery is deliberately read-only and must not launch online
+      // metadata, archive parsing or artwork recovery until step 2 is pressed.
+      const generation=await beginLocalScan(null);
+      if(generation===null)return;
+      try{
+        const previousLocal=await loadLocalStageBooks();
+        if(!scanCommitGate.isCurrent(generation))return;
+        const result=await scanLocalFolders(localFolders,reportLocalScan(generation),
+          localMetadataOverrides,previousLocal,{
+            deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata:false,
+            shouldContinue:()=>scanCommitGate.isCurrent(generation),
+          });
+        const summary=await finaliseLocalScan(result,previousLocal,generation,false,true);
+        if(!summary||!scanCommitGate.isCurrent(generation))return;
+        const signature=localFolderSetSignature(result.folders);
+        await setPersistedJSON(onboardingDiscoveryKey,{signature,completedAt:new Date().toISOString()});
+        if(!scanCommitGate.isCurrent(generation))return;
+        setOnboardingDiscoverySignature(signature);
+        setLocalFolderNotice('Books discovered. Identify books and covers when ready.');
+      }catch(e){
+        if(scanCommitGate.isCurrent(generation))setError('Book discovery could not complete: '+(e as Error).message);
+        return;
+      }finally{
+        endLocalScan(generation);
+      }
     }
     if(!session||!sources.length)return;
     setBusy(true);setError('');
@@ -2386,6 +2414,43 @@ function Client() {
       setError((e as Error).message);
     }finally{
       setBusy(false);
+    }
+  }
+
+  async function identifyOnboardingBooksAndCovers(){
+    if(libraryRefreshRunningRef.current||busy||!localFolders.length)return;
+    if(onboardingDiscoverySignature!==currentLibraryFolderSignature&&!libraryPreparationReady)return;
+    const generation=await beginLocalScan('prepare');
+    if(generation===null)return;
+    try{
+      const staged=await loadLocalStageBooks();
+      if(!scanCommitGate.isCurrent(generation))return;
+      if(!staged.length){
+        setLocalFolderNotice('No media files were found. Choose a folder containing books, comics or audiobooks.');
+        await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current));
+        return;
+      }
+      await enrichPublishedLocalLibrary(staged,generation,false);
+      if(!scanCommitGate.isCurrent(generation))return;
+      // The completion marker is written only when the whole work-level stage
+      // was durably committed, not when metadata enrichment merely returned.
+      if(!completedLibraryBooksRef.current){
+        await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current));
+        setLocalFolderNotice('Identification could not be saved. Your discovered files are preserved for retry.');
+        return;
+      }
+      const completed=completeLibraryPreparation(libraryPreparationCheckpointRef.current,
+        currentLibraryFolderSignature,new Date().toISOString());
+      await persistLibraryPreparationCheckpoint(completed);
+      setLocalFolderNotice('Identification complete. Review only the works that still need attention.');
+    }catch(e){
+      if(scanCommitGate.isCurrent(generation)){
+        await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current))
+          .catch(error=>recordLibraryRefreshWarning('Preparation checkpoint',error));
+        setError('Identification interrupted: '+(e as Error).message);
+      }
+    }finally{
+      endLocalScan(generation);
     }
   }
 
@@ -2764,7 +2829,7 @@ function Client() {
     setMetadataSettingsNotice('Metadata refresh cancelled.');
   };
 
-  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[], generation:number, forceOnline=false) {
+  async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[], generation:number, forceOnline=false,discoveryOnly=false) {
     if(!scanCommitGate.isCurrent(generation))return null;
     if(__DEV__&&result.diagnostics)console.info('[Archivist scanner diagnostic]',JSON.stringify(result.diagnostics));
     setScanProgress({phase:'checking-duplicates',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
@@ -2811,6 +2876,7 @@ function Client() {
     await scanFrame();
     if(!scanCommitGate.isCurrent(generation))return null;
     setScanProgress(null);
+    if(discoveryOnly)return summary;
     let enrichmentCompleted=false;
     try{
       await enrichPublishedLocalLibrary(result.books,generation,forceOnline);
@@ -3205,15 +3271,15 @@ function Client() {
 
     const stagedFolder:LocalFolder={...picked,status:'Ready to prepare'};
     const folders=[...localFolders,stagedFolder];
-    // Step 1 only collects sources. Preparation is deliberately started by
-    // Step 2 so users can add every library folder before any heavy scan begins.
+    // Adding a folder does not launch discovery or metadata enrichment. Both
+    // actions are explicitly controlled by the following onboarding buttons.
     setLocalFolders(folders);
     const resetCheckpoint=sanitizeLibraryPreparationCheckpoint({signature:''});
     await Promise.all([
       setPersistedJSON(localFoldersKey,folders),
       persistLibraryPreparationCheckpoint(resetCheckpoint),
     ]).catch(()=>undefined);
-    setLocalFolderNotice(picked.name+' added. Add another folder, or continue to Prepare library.');
+    setLocalFolderNotice(picked.name+' added. Add another folder, or choose Find Books.');
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
@@ -4196,16 +4262,16 @@ function Client() {
     const hasServer = !!session;
     const hasServerFolders = sources.length > 0;
     const hasSource = hasFolder || hasServerFolders;
-    const hasBooks = localBooks.length > 0 || serverWorks.length > 0;
     const progress=activeLibraryProgress;
     const progressPercent=progress?scanProgressPercent(progress):0;
     const serverReady=hasServerFolders&&sources.every(source=>source.status==='ok');
-    const setupReady=hasSource&&(!hasFolder||libraryPreparationReady)&&(!hasServerFolders||serverReady);
-    const preparing=hasSource&&!setupReady;
-    const activeStep: 'source'|'prepare'|'review'|'organise' =
-      !hasSource?'source':
-      libraryRefreshActive||!setupReady?'prepare':
-      reviewCount>0?'review':'organise';
+    const localDiscovered=!!currentLibraryFolderSignature
+      &&(libraryPreparationReady
+        ||(onboardingDiscoverySignature===currentLibraryFolderSignature&&stagedLocalBooks.length>0));
+    const discovered=hasSource&&(!hasFolder||localDiscovered)&&(!hasServerFolders||serverReady);
+    const setupReady=discovered&&(!hasFolder||libraryPreparationReady);
+    const activeStep: 'source'|'identify'|'review' =
+      !discovered?'source':!setupReady?'identify':'review';
     const pulseStyle=(active:boolean)=>active&&!reduceMotion?{
       transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
     }:undefined;
@@ -4219,42 +4285,42 @@ function Client() {
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
         <Text style={[styles.onboardingTitle,{color:p.ink}]}>Set up your library</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Three simple steps prepare your library for reading, listening and safe file organisation.</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Find your books, identify them and review any remaining exceptions. File organisation stays in Settings.</Text>
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasSource?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Add library folders</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Find Books</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{hasSource
-              ? [hasFolder?localFolders.length+' device folder'+(localFolders.length===1?'':'s'):'',hasServerFolders?sources.length+' server folder'+(sources.length===1?'':'s'):''].filter(Boolean).join(' · ')
+              ? discovered?'Folders scanned. Ready for identification.':'Folders selected. Add more, or run Find Books.'
               : hasServer
                 ? 'Server connected. Add server folders, device folders, or both.'
                 : Platform.OS==='ios'?'Add folders from Files, or connect Archivist Server.':'Add device folders, or connect Archivist Server.'}</Text>
           </View>
-          {hasSource?<Text accessibilityLabel="Step 1 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
+          {discovered?<Text accessibilityLabel="Step 1 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:hasSource?p.gold:p.muted}]}>02</Text>
+          <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:discovered?p.gold:p.muted}]}>02</Text>
           <View style={{flex:1,gap:4}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Prepare library</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Identify Books & Covers</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
-              ? (localBooks.length+serverWorks.length)+' items ready'+(reviewCount?' · '+reviewCount+' work'+(reviewCount===1?'':'s')+' need attention':'')
+              ? 'Identified works are ready for your Shelf.'
               : progress
                 ? scanPhaseLabel(progress.phase)+' · '+progressPercent+'%'
-                : hasSource?'Ready to prepare metadata and covers.':'Starts after library folders are added.'}</Text>
+                : discovered?'Ready to identify books, comics and covers.':'Available after Find Books.'}</Text>
             {progress?<View style={[styles.scanProgressTrack,{backgroundColor:p.line}]}><View style={[styles.scanProgressFill,{backgroundColor:p.sage,width:(progressPercent+'%') as `${number}%`}]} /></View>:null}
           </View>
-          {setupReady&&reviewCount===0?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
+          {setupReady?<Text accessibilityLabel="Step 2 complete" style={{color:p.sage,fontWeight:'800'}}>✓</Text>:null}
         </View>
 
         <View style={styles.onboardingStep}>
-          <Text style={[styles.onboardingNumber,{color:setupReady&&reviewCount===0?p.sage:p.muted}]}>03</Text>
+          <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Organise files</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{setupReady&&reviewCount===0
-              ? 'Preview your preferred layout, then copy or move eligible files.'
-              : reviewCount>0?'Available after items needing attention are resolved.':'Available when preparation finishes.'}</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Needs Attention</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{!setupReady?'Available after identification.':reviewCount>0
+              ? reviewCount+' work'+(reviewCount===1?'':'s')+' need review. All other identified works remain on Shelf.'
+              : 'Nothing requires your attention. You can finish setup.'}</Text>
           </View>
         </View>
 
@@ -4271,12 +4337,10 @@ function Client() {
         </View>
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {preparing&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='prepare')}><Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/></Animated.View>:null}
+        {hasSource&&!discovered&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='source')}><Button label="Find Books" disabled={busy} onPress={()=>void discoverOnboardingLibrary()}/></Animated.View>:null}
+        {discovered&&!setupReady&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='identify')}><Button label="Identify Books & Covers" disabled={busy} onPress={()=>void identifyOnboardingBooksAndCovers()}/></Animated.View>:null}
         {setupReady&&reviewCount>0?<Animated.View style={pulseStyle(activeStep==='review')}><Button label={'Review '+reviewCount+' book'+(reviewCount===1?'':'s')} onPress={openOnboardingReview}/></Animated.View>:null}
-        {setupReady&&reviewCount===0&&hasBooks?<View style={styles.shelfSetupActions}>
-          <Animated.View style={[styles.shelfSetupAction,pulseStyle(activeStep==='organise')]}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></Animated.View>
-          <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
-        </View>:null}
+        {setupReady?<View style={styles.shelfSetupAction}><Button label="Finish setup" tone="quiet" onPress={()=>void finishOnboarding()}/></View>:null}
       </View>
     );
   }
