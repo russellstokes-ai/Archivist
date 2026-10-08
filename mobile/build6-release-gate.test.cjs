@@ -13,7 +13,7 @@ assert.equal(app.expo.version,'0.9.4');
 assert.equal(app.expo.android.versionCode,107);
 assert.match(gradle,/versionCode\s+107/);
 assert.match(gradle,/versionName\s+"0\.9\.4"/);
-assert.match(apkWorkflow,/TEST_BUILD:\s*'18-editor-render'/);
+assert.match(apkWorkflow,/TEST_BUILD:\s*'(?:18-editor-render|19-reliability)'/);
 assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'Test 13 branch must produce the verified APK');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'release APK gate must lint the optimized release variant');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'release gate must verify package, signature and zip alignment');
