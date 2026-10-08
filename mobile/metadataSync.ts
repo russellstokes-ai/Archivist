@@ -168,7 +168,11 @@ function audiobookFolderLooksLikeOneWork(books:SynchronizableBook[]){
   const relative=belongsToRoot?dirs.slice(root.length):
     dirs.filter((part,index)=>!(index===0&&isLibraryRootLabel(clean(part).replace(/^primary:/i,''))));
   const folder=clean(relative[relative.length-1]||'');
-  if(relative.length<2||!folder||looksLikeLibraryContainer(folder))return false;
+  // The selected SAF root commonly contains book folders directly. There
+  // need only be one path component *beneath* the selected library root.
+  // Distinct album identities, multi-part family evidence and container names
+  // are independently guarded below; file-count alone must not define a work.
+  if(relative.length<1||!folder||looksLikeLibraryContainer(folder))return false;
   const distinctAlbums=new Set(books.map(book=>normal(book.embeddedMetadata?.workTitle||'')).filter(Boolean));
   if(distinctAlbums.size>1)return false;
   const stems=books.map(book=>fileStem(book.uri));
@@ -376,6 +380,23 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
         workHint:true,
         score:Number.MAX_SAFE_INTEGER-1,
         authority:0,
+      } as any;
+    }
+  }
+
+  // Descriptive chapter titles (e.g. "An unexpected visitor") are not
+  // competing book identities. If a positively identified book folder holds
+  // multiple distinct chapter titles, use the enclosing folder as the *work*
+  // title. The individual track titles stay untouched. Repeated authoritative
+  // work titles, explicit manual identity and embedded album/work titles win.
+  if(audio&&books.length>1&&selected.title?.source!=='manual'&&audiobookFolderLooksLikeOneWork(books)){
+    const folderTitle=audioBookFolderTitle(books[0].uri);
+    const titleVotes=books.filter(book=>normal(book.title)===normal(selected.title?.value)).length;
+    const distinctTitles=new Set(books.map(book=>normal(book.title)).filter(Boolean));
+    if(folderTitle&&distinctTitles.size>1&&titleVotes<=books.length/2){
+      selected.title={
+        book:books[0],value:folderTitle,source:'path',confidence:'high',
+        key:normal(folderTitle),workHint:true,score:Number.MAX_SAFE_INTEGER-2,authority:0,
       } as any;
     }
   }
