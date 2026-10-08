@@ -28,8 +28,8 @@ assert.ok(source.includes('setScanProgress(null)')&&source.includes('libraryRefr
 const enrichmentBody=source.slice(source.indexOf('async function enrichPublishedLocalLibrary'),source.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
 assert.ok(enrichmentBody.includes('enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true)'),'normal preparation must read bounded unresolved audio properties before online lookup');
 assert.ok(enrichmentBody.includes('enrichPublishedLocalBoundedArchiveEvidence(currentBooks,generation)'),'normal preparation must run bounded EPUB/comic evidence before online lookup');
-assert.ok(source.includes("if(fastAudioProperties){")&&source.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'fast normal property pass must be audio-only and must not reopen already-read files');
-assert.ok(source.includes('itemTimeoutMs:fastAudioProperties?1200')&&source.includes('maxConsecutiveTimeouts:1'),'fast property reads must be aggressively timeout/circuit-broken');
+assert.ok(source.includes("const sampledAudioUris=fastAudioProperties?fastAudioProbeUris(groupLocalWorks(baseBooks)):null")&&source.includes("return book.format==='Audio'&&!book.embeddedMetadata&&!!sampledAudioUris?.has(book.uri);"),'fast normal property pass must be audio-only, work-sampled and must not reopen already-read files');
+assert.ok(source.includes('itemTimeoutMs:fastAudioProperties?1200')&&source.includes('maxConsecutiveTimeouts:3'),'fast property reads must be aggressively timeout/circuit-broken');
 const deepSearchBody=source.slice(source.indexOf('const runMetadataSearch=async'),source.indexOf('const acceptProposal=async'));
 assert.equal(enrichmentBody.includes('enrichPublishedLocalCovers(currentBooks,generation)'),false,'normal preparation must not run catalogue-wide local cover extraction');
 assert.ok(enrichmentBody.includes('cacheRequiredWorkArtwork(currentBooks'),'publication artwork must use already-cached/provider artwork rather than reopen every local file');
