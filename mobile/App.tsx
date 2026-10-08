@@ -4268,7 +4268,9 @@ function Client() {
     const localDiscovered=!!currentLibraryFolderSignature
       &&(libraryPreparationReady
         ||(onboardingDiscoverySignature===currentLibraryFolderSignature&&stagedLocalBooks.length>0));
-    const discovered=hasSource&&(!hasFolder||localDiscovered)&&(!hasServerFolders||serverReady);
+    // A disconnected optional server must never hold back an already discovered
+    // device library. Server-only setups still require the server source.
+    const discovered=hasSource&&(hasFolder?localDiscovered:serverReady);
     const setupReady=discovered&&(!hasFolder||libraryPreparationReady);
     const activeStep: 'source'|'discover'|'identify'|'review' =
       !hasSource?'source':!discovered?'discover':!setupReady?'identify':'review';
