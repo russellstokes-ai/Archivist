@@ -181,7 +181,16 @@ def trace_screen(profile,out,step,timeout=MAX_STAGE_S,settled_words=()):
             lastCapture=time.monotonic()
             log(step+" +"+str(int(time.monotonic()-started))+"s: "+repr(texts[-32:])[:1600])
         lower=signature.lower()
-        if any(word.lower() in lower for word in settled_words):
+        # A heading saying "Identify Books & Covers" is always present, even
+        # BEFORE stage 1 has finished. Require an ENABLED native button.
+        targets=[n for n in nodes(root) if n.get("clickable")=="true"
+                 and n.get("enabled")!="false"]
+        available="|".join(n.get("text","")+" "+n.get("content-desc","") for n in targets).lower()
+        stage1_done=step=="discovery" and "identify books & covers" in available
+        stage2_done=step=="identification" and (
+            "finish setup" in available
+            or bool(re.search(r"review\s+\d+\s+books?",available)))
+        if stage1_done or stage2_done:
             log(step+" settled after "+str(int(time.monotonic()-started))+"s")
             return {"seconds":round(time.monotonic()-started,1),"settled":True,"visible":texts}
         if time.monotonic()-lastChange>NO_PROGRESS_S:
@@ -204,6 +213,24 @@ def collect_native_catalogue(out):
         result["reason"]="native database not present/readable"
         return result
     result["rooted"]=True
+    state="/data/user/0/"+PKG+"/files/archivist-state/archivist.scannerTrace.v1.json"
+    traceTarget=out/"scanner-trace.json"
+    pulled=adb("pull",state,str(traceTarget),timeout=30,check=False)
+    if pulled.returncode==0 and traceTarget.exists():
+        try:
+            trace=json.loads(traceTarget.read_text())
+            result["scanner_stages"]=[{
+                "phase":entry.get("phase"),
+                "elapsed_ms":entry.get("elapsedMs"),
+                "physical_files":entry.get("counts",{}).get("physicalFiles"),
+                "logical_works":entry.get("counts",{}).get("logicalWorks"),
+                "audio_works":entry.get("counts",{}).get("audioWorks"),
+                "review_works":entry.get("counts",{}).get("reviewFlaggedWorks"),
+                "audio_group_identity":entry.get("counts",{}).get("audioGroupsByIdentity"),
+                "counters":entry.get("counters")
+            } for entry in trace if isinstance(entry,dict)]
+        except Exception as e:result["scanner_trace_error"]=str(e)
+    else:result["scanner_trace_missing"]=True
     dst=out/"catalogue"
     dst.mkdir(exist_ok=True)
     for name in ["archivist-local.db","archivist-local.db-wal","archivist-local.db-shm"]:
@@ -306,7 +333,17 @@ def process_profile(profile,apk):
         # Collect logcat whether pass, fail, freeze, or Android chooser trouble.
         p=adb("logcat","-d","-v","time","-t","1700",timeout=35,check=False)
         (out/"logcat.txt").write_text(p.stdout[-200000:])
-        try:result["catalogue"]=collect_native_catalogue(out)
+        try:
+            result["catalogue"]=collect_native_catalogue(out)
+            stages=result["catalogue"].get("scanner_stages") or []
+            # The privacy-safe stage trace reflects the actual shipped native
+            # scanner's work-grouping algorithm, not our fixture filename guesses.
+            if stages:
+                last=stages[-1]
+                result["final_native_work_count"]=last.get("logical_works")
+                if last.get("logical_works")!=12:
+                    result["status"]="failed"
+                    result["reason"]="Shipped scanner trace grouped real fixture into "+str(last.get("logical_works"))+" works rather than 12"
         except Exception as e:result["catalogue_error"]=str(e)
         (out/"result.json").write_text(json.dumps(result,indent=2,default=str)+"\n")
         log("RESULT "+profile+" "+json.dumps({k:v for k,v in result.items() if k not in ("traceback","discovery","identification")})[:2500])
