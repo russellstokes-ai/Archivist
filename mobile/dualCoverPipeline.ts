@@ -38,16 +38,18 @@ export async function cacheRequiredWorkArtwork(
   for(const work of works){
     if(!shouldContinue())break;
     const tracks=work.tracks;
-    const currentLibrary=String(
-      work.libraryCoverUri ||
-      tracks.find(track=>isVerifiedLocalArtworkUri(track.coverUri))?.coverUri ||
-      ''
-    ).trim();
-    const currentLiving=String(
-      work.livingBookCoverUri ||
-      tracks.find(track=>isVerifiedLocalArtworkUri(track.livingBookCoverUri))?.livingBookCoverUri ||
-      ''
-    ).trim();
+    // Work-level cache recovery must prefer a local image found on ANY track
+    // over a remote placeholder on the first track.
+    const localCandidate=(uris:Array<string|undefined>)=>
+      String(uris.find(isVerifiedLocalArtworkUri)||'').trim();
+    const currentLibrary=localCandidate([
+      ...tracks.map(track=>track.libraryCoverUri),
+      ...tracks.map(track=>track.coverUri),
+      work.libraryCoverUri,work.coverUri,
+    ]);
+    const currentLiving=localCandidate([
+      ...tracks.map(track=>track.livingBookCoverUri),work.livingBookCoverUri,
+    ]);
 
     const providerTrack=tracks.find(track=>remote(providerCover(track)));
     const providerRemote=providerTrack?providerCover(providerTrack):'';
@@ -89,6 +91,9 @@ export async function cacheRequiredWorkArtwork(
     }
 
     const source=providerTrack?providerSource(providerTrack):(libraryCoverUri?'embedded' as const:'none' as const);
+    const squareJacket=work.format==='Audio'&&work.coverShape==='square'
+      && !!libraryCoverUri&&livingBookCoverUri===libraryCoverUri&&!providerLocal
+      && livingConfidence<0.9;
     if(libraryCoverUri)libraryReady+=1;
     if(livingBookCoverUri)livingReady+=1;
     if(libraryCoverUri&&livingBookCoverUri)complete+=1;
@@ -101,9 +106,13 @@ export async function cacheRequiredWorkArtwork(
         coverUri:libraryCoverUri||next[index].coverUri,
         libraryCoverUri:libraryCoverUri||undefined,
         livingBookCoverUri:livingBookCoverUri||undefined,
-        livingBookCoverSource:livingBookCoverUri?(providerLocal?source:(next[index].livingBookCoverSource||'embedded')):'none',
+        // A square source is a texture INSIDE the generated jacket, not a
+        // portrait book cover. Encoding this role avoids distorted artwork.
+        livingBookCoverSource:livingBookCoverUri
+          ? (squareJacket?'jacket':providerLocal?source:(next[index].livingBookCoverSource||'embedded'))
+          : 'none',
         livingBookCoverConfidence:livingBookCoverUri
-          ? (work.format==='Audio'&&livingBookCoverUri===libraryCoverUri&&!providerLocal?0.45:1)
+          ? (squareJacket?0.45:1)
           : 0,
       };
     }
