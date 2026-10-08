@@ -216,6 +216,14 @@ const numberedBookFolder=[
 assert.equal(groupLocalWorks(numberedBookFolder).length,1,
  'book folders prefixed Book 01 must group descriptive chapters instead of being mistaken for the Books collection');
 
+const multipartM4a=['Part 01 - Arrival','Part 02 - Journey','Part 03 - Finale'].map((chapter,i)=>track(63000+i,chapter,{
+  uri:'content://media/document/primary:Audiobooks%2FWriter%2FBook%20Four%2F'+encodeURIComponent(chapter)+'.m4a',
+  rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks',
+  title:chapter,embeddedMetadata:{},
+}));
+assert.equal(groupLocalWorks(multipartM4a).length,1,
+ 'a multi-part M4A audiobook with numbered chapters must group as one book');
+
 const mixedAlbumDirectory=[
   track(60001,'01 - Opening',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F01.mp3',embeddedMetadata:{workTitle:'Album One'}}),
   track(60002,'02 - More',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F02.mp3',embeddedMetadata:{workTitle:'Album One'}}),
