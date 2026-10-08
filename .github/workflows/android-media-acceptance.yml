@@ -48,6 +48,10 @@ jobs:
       - name: Generate 454 actual audio tracks across two independent 227-file test cases
         run: |
           set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
           command -v ffmpeg
           python -m pip install --disable-pip-version-check 'mutagen==1.47.0'
           python .github/scripts/android-fixture-media.py android-media-fixtures
