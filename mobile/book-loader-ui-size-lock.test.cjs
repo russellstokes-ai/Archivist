@@ -13,7 +13,7 @@ assert.match(source,/progress=\{reduceMotion \? 0\.26 : undefined\}/);
 assert.match(source,/resizeMode="contain"/);
 assert.ok(source.includes("require('./assets/animations/book-loader-dark.json')"));
 assert.ok(source.includes("require('./assets/animations/book-loader-light.json')"));
-const loaders=[...app.matchAll(/<BookLoader\s[^>]+\/>/g)].map(m=>m[0]);
+const loaders=[...app.matchAll(/<BookLoader[\s\S]*?accessibilityLabel="[^"]+"\/>/g)].map(m=>m[0]);
 assert.ok(loaders.length>=7,'maintain loading indicators across all existing user flows');
 for(const element of loaders){
   assert.match(element,/reduceMotion=\{reduceMotion\}/,'loader must respect reduced motion in every screen');
