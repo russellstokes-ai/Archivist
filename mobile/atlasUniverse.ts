@@ -1,3 +1,4 @@
+import {canonicalPrimaryGenre} from './genreTaxonomy';
 export type AtlasUniverseWork = {
   key:string;
   canonicalKey?:string;
@@ -58,6 +59,8 @@ export type AtlasUniverse = {
   hiddenWorks:number;
 };
 
+const atlasGenre=(value:string)=>canonicalPrimaryGenre(value)||value.trim()||'Unclassified';
+
 const WIDTH=1400;
 const HEIGHT=980;
 const CX=WIDTH/2;
@@ -110,7 +113,7 @@ export function buildAtlasUniverse(
 ):AtlasUniverse {
   const works=[...inputWorks].sort((a,b)=>(a.canonicalKey||a.key).localeCompare(b.canonicalKey||b.key)||a.title.localeCompare(b.title));
   if(!works.length)return {width:WIDTH,height:HEIGHT,nodes:[],edges:[],hiddenWorks:0};
-  const genreCounts=counts(works.map(work=>work.genre.trim()||'Unclassified'));
+  const genreCounts=counts(works.map(work=>atlasGenre(work.genre)));
   const genreTop=genreCounts.slice(0,24);
   const overflowGenres=genreCounts.slice(24);
   const priority=new Set(priorityKeys);
@@ -142,7 +145,7 @@ export function buildAtlasUniverse(
   });
 
   const genreNodeFor=(work:AtlasUniverseWork)=>{
-    const raw=work.genre.trim()||'Unclassified';
+    const raw=atlasGenre(work.genre);
     const name=allowedGenres.has(raw)?raw:'Other genres';
     return byId.get('genre:'+name)!;
   };
@@ -155,7 +158,7 @@ export function buildAtlasUniverse(
     const id='work:'+(work.canonicalKey||work.key);
     const node=add({
       id,kind:'work',label:work.title,x:hub.x+Math.cos(angle)*radius,y:hub.y+Math.sin(angle)*radius,
-      count:1,workKey:work.key,coverUri:work.coverUri,source:work.source,genre:work.genre.trim()||'Unclassified',
+      count:1,workKey:work.key,coverUri:work.coverUri,source:work.source,genre:atlasGenre(work.genre),
       subtitle:[work.author,work.series,work.format].filter(Boolean).slice(0,2).join(' · '),
     });
     edge(hub.id,node.id,'genre');
