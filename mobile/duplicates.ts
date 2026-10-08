@@ -28,13 +28,30 @@ function identifierKey(book:LocalBook) {
   return '';
 }
 
+function comicIssueKey(value:unknown){
+  const text=String(value??'').trim().toLowerCase().replace(/^#\s*/,'');
+  // 001 and 1 denote the same issue; retain fractional and suffix details.
+  return text.replace(/^0+(?=\d)/,'');
+}
+
+function comicDuplicateQualifier(book:LocalBook){
+  const format=normalized(book.format);
+  if(format!=='cbz'&&format!=='cbr'&&format!=='cbt')return '';
+  // A similarly named comic can be issue #1 in several distinct runs.
+  // Unknown metadata must not be silently assigned a known volume/issue.
+  const issue=comicIssueKey(book.comicIssueNumber);
+  const volume=book.comicVolume===undefined?'?':String(book.comicVolume);
+  const publisher=normalized(book.publisher);
+  return '|comic-volume:'+volume+'|comic-issue:'+(issue||'?')+'|publisher:'+(publisher||'?');
+}
+
 function fallbackWorkKey(book:LocalBook) {
   return [
     normalized(book.title),
     normalized(book.author),
     normalized(book.series),
     book.seriesNumber === undefined ? '' : String(book.seriesNumber),
-  ].join('|');
+  ].join('|')+comicDuplicateQualifier(book);
 }
 
 export function possibleLocalDuplicateGroups(books:LocalBook[]):LocalDuplicateGroup[] {
