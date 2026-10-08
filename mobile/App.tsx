@@ -84,7 +84,7 @@ import {cacheOnlineCoverUris} from './onlineCoverCache';
 import {synchronizeLocalMetadataCooperative} from './metadataSync';
 import {restorePublishedCatalogue,localWorksForReview,migrateLegacyPublishedArtwork,partitionLocalBooksByPublication,reconcilePublishedLocalBooks} from './publicationPipeline';
 import {cacheRequiredWorkArtwork} from './dualCoverPipeline';
-import {applyManualCluesToWork,acceptBookCandidateForWork,acceptComicCandidateForWork,type MetadataProposal,proposalTitle,proposalCreator,proposalScore} from './metadataSearchWorkflow';
+import {applyManualCluesToWork,acceptBookCandidateForWork,acceptComicCandidateForWork,editorCoverOverride,type MetadataProposal,proposalTitle,proposalCreator,proposalScore} from './metadataSearchWorkflow';
 import LocalPdfReader from './LocalPdfReader';
 import {
   cleanupOfflineStorage,
@@ -4927,22 +4927,23 @@ function Client() {
           .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(previous=>previous?{...previous,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description}:previous);setMetadataSearchNotice('Saved. You can search again or close.');})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else if(editing.uri){
-        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined,clearedFields:[...(seriesNumber===undefined?['seriesNumber']:[]),...(publishedYear===undefined?['publishedYear']:[])]};
+        const selected=metadataSearchResults[metadataSearchSelection];
+        const explicitCoverUri=editorCoverOverride(coverUri,selected?.candidate.coverUri,!!editPickedCover);
+        const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:explicitCoverUri,clearedFields:[...(seriesNumber===undefined?['seriesNumber']:[]),...(publishedYear===undefined?['publishedYear']:[])]};
         const nextOverrides={...localMetadataOverrides};
         for(const uri of targets)nextOverrides[uri]=override;
         try{
           const wanted=new Set(targets);
           const current=await loadLocalStageBooks();
-          const selected=metadataSearchResults[metadataSearchSelection];
           let updated=selected
             ? selected.kind==='book'
               ? acceptBookCandidateForWork(current,targets,selected.candidate)
               : acceptComicCandidateForWork(current,targets,selected.candidate)
             : current;
           updated=applyManualCluesToWork(updated,targets,override);
-          if(coverUri)updated=updated.map(book=>!wanted.has(book.uri)?book:{...book,
-            coverUri,libraryCoverUri:coverUri,
-            livingBookCoverUri:coverUri!==book.libraryCoverUri?undefined:book.livingBookCoverUri});
+          if(explicitCoverUri)updated=updated.map(book=>!wanted.has(book.uri)?book:{...book,
+            coverUri:explicitCoverUri,libraryCoverUri:explicitCoverUri,
+            livingBookCoverUri:explicitCoverUri!==book.libraryCoverUri?undefined:book.livingBookCoverUri});
           const targetBooks=updated.filter(book=>wanted.has(book.uri));
           const artwork=selected||targetBooks.some(book=>book.identificationState==='accepted')?await cacheRequiredWorkArtwork(targetBooks,{
             documentDirectory,makeDirectoryAsync,downloadAsync:downloadCoverWithDeadline,getInfoAsync,deleteAsync,
