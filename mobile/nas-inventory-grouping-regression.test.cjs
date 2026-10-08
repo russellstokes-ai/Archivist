@@ -95,6 +95,57 @@ const malediction=groupLocalWorks([
 assert.equal(malediction.length,1,'generic tracks in a named book folder must become ONE audiobook');
 assert.equal(malediction[0].files,3);
 
+// Large-NAS scale fixtures use anonymised/generated titles rather than
+// publishing the user's full private library inventory. Counts, formats,
+// rough size bands and folder arrangements reproduce observed NAS patterns.
+// They are structural truth cases, not online metadata accuracy claims.
+const discworldFull=[
+  ...Array.from({length:39},(_,i)=>audio(10000+i,
+    'Terry Pratchett/Discworld/'+String(i+1).padStart(2,'0')+'. Novel '+(i+1)+'.mp3',
+    'Discworld',{author:'Terry Pratchett',fileSize:(100+(i%7)*55)*1024*1024})),
+  audio(10039,'Terry Pratchett/Discworld/The Science of Discworld Revised Edition.mp3',
+    'Discworld',{author:'Terry Pratchett',fileSize:188*1024*1024}),
+];
+const discworldFullWorks=groupLocalWorks(discworldFull);
+assert.equal(discworldFullWorks.length,40,
+  'NAS scale: 39 numbered standalone audiobooks plus one extra novel are 40 works');
+assert.ok(discworldFullWorks.every(work=>work.files===1),
+  'each independent audiobook-sized series file is one physical edition');
+assert.equal(new Set(discworldFullWorks.map(work=>work.title)).size,40,
+  'distinct titles recovered from filename, not the shared Discworld series folder');
+
+// Contrasting NAS patterns: many smaller tracks and a teaching-course folder
+// represent complete *single* works, never 66 books or 36 books.
+const consoleWars=Array.from({length:66},(_,i)=>audio(11000+i,
+  'Console Wars Sega Nintendo Battle/'+String(i+1).padStart(2,'0')
+    +' - Console Wars Sega Nintendo Battle.mp3',
+  String(i+1)+' - Console Wars',{fileSize:(4+(i%4)*3)*1024*1024}));
+const courseLessons=Array.from({length:36},(_,i)=>audio(12000+i,
+  'TGC - The Decisive Battles Of World History/'+String(i+1).padStart(2,'0')
+    +'_Lecture '+(i+1)+' World History.mp3',
+  'Lecture '+(i+1),{fileSize:(22+(i%4)*3)*1024*1024}));
+assert.equal(groupLocalWorks(consoleWars).length,1,
+  'NAS scale: 66 multipart audiobook tracks must remain one work');
+assert.equal(groupLocalWorks(courseLessons).length,1,
+  'NAS scale: 36 numbered lectures within one course must remain one work');
+
+// The same series folder may contain several book folders, each with dozens
+// of chapters. Books cannot become one giant series or 113 loose tracks.
+const largeExpanse=[
+  ...Array.from({length:57},(_,i)=>audio(13000+i,
+    'James S. A. Corey/The Expanse/narrated by Jefferson Mays/1.0 - Leviathan Wakes/'
+      +'Corey - The Expanse 1.0 - Leviathan Wakes - '+String(i).padStart(2,'0')
+      +' Chapter.mp3',
+    'Chapter '+i,{fileSize:10*1024*1024})),
+  ...Array.from({length:56},(_,i)=>audio(14000+i,
+    'James S. A. Corey/The Expanse/narrated by Jefferson Mays/2.0 - Calibans War/'
+      +'Corey - The Expanse 2.0 - Calibans War - '+String(i).padStart(2,'0')
+      +' Chapter.mp3',
+    'Chapter '+i,{fileSize:12*1024*1024})),
+];
+assert.deepEqual(groupLocalWorks(largeExpanse).map(w=>w.files).sort((a,b)=>a-b),[56,57],
+  'NAS scale: 113 chapters from two distinct Expanse books must become exactly two works');
+
 // Comic semantics differ: each CBZ/CBR is a distinct issue/volume,
 // even when many are nested under the same parent series/collection.
 const comics=groupLocalWorks([
