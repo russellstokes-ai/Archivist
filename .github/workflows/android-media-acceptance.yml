@@ -1,0 +1,136 @@
+name: Android Media Acceptance — real APK and MP3 files
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/android-emulator-media-acceptance-20261008
+    paths:
+      - '.github/workflows/android-media-acceptance.yml'
+      - '.github/scripts/android-fixture-media.py'
+      - '.github/scripts/android-media-acceptance.py'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-media-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  media-acceptance:
+    name: Test 23 native scanner — 227 real MP3s
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout isolated acceptance branch
+        uses: actions/checkout@v5
+
+      - name: Python for test fixture and native UI driver
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download the exact unchanged Test 23 release APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p android-acceptance-input android-acceptance-results
+          gh release download 'v0.9.4-testing.23-scanner-device-truth' \
+            --repo 'russellstokes-ai/Archivist' \
+            --pattern 'Archivist-0.9.4-test-23-scanner-device-truth.apk' \
+            --dir 'android-acceptance-input'
+          cd android-acceptance-input
+          echo '97c6a1148fa2cf2b8317ca6ee2a6873af7a19abea8134bd4b9ee7b63edf9fd6d  Archivist-0.9.4-test-23-scanner-device-truth.apk' | sha256sum -c -
+          echo 'Exact shipped Test 23 artifact verified by SHA256 (not rebuilt, not altered).'
+
+      - name: Generate 454 actual audio tracks across two independent 227-file test cases
+        run: |
+          set -euo pipefail
+          command -v ffmpeg
+          python -m pip install --disable-pip-version-check 'mutagen==1.47.0'
+          python .github/scripts/android-fixture-media.py android-media-fixtures
+          test "$(find android-media-fixtures/grouped -type f -name '*.mp3' | wc -l)" -eq 227
+          test "$(find android-media-fixtures/split-discs -type f -name '*.mp3' | wc -l)" -eq 227
+
+      - name: Drive installed Test 23 app through Android picker and two real scans
+        id: emulator_acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          emulator-build: 14214601
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            python3 .github/scripts/android-media-acceptance.py \
+              "$GITHUB_WORKSPACE/android-acceptance-input/Archivist-0.9.4-test-23-scanner-device-truth.apk"
+
+      - name: Produce acceptance summary regardless of pass or failure
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os
+          report=Path("android-acceptance-results/summary.json")
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              print("### Android native media acceptance",file=f)
+              if report.exists():
+                  summary=json.loads(report.read_text())
+                  for case in summary.get("results",[]):
+                      print(f"- **{case.get('profile')}** — {case.get('status')}; native review count: {case.get('review_count')}; failure: {case.get('reason','none')}",file=f)
+                  print(json.dumps(summary)[:12000])
+              else:
+                  print("Acceptance driver did not finish. Inspect workflow emulator log and artifacts.",file=f)
+          PY
+
+      - name: Upload Android screenshots, stage timings, DB aggregates and logcat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Archivist-Test23-Android-Native-Media-Acceptance
+          path: |
+            android-acceptance-results/
+            android-media-fixtures/manifest.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Commit synthetic-fixture evidence to isolated branch
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          root=Path("android-acceptance-results")
+          dest=Path("docs/qa-evidence/test23-android-emulator")
+          dest.mkdir(parents=True,exist_ok=True)
+          if (root/"summary.json").exists():shutil.copyfile(root/"summary.json",dest/"summary.json")
+          for profile in ("grouped","split-discs"):
+              src=root/profile
+              if not src.exists():continue
+              out=dest/profile;out.mkdir(parents=True,exist_ok=True)
+              for name in ("result.json","scanner-trace.json"):
+                  if (src/name).exists():shutil.copyfile(src/name,out/name)
+              pngs=sorted(src.glob("*.png"))
+              critical=[p for p in pngs if any(k in p.name for k in (
+                  "app-open","picker-open","picker-roots","picker-documents",
+                  "picker-fixture","folder-selected","-started","-complete",
+                  "metadata-editor","needs-attention","failure","WATCHDOG","TIMEOUT"))]
+              sampled=[p for p in pngs if p.name.startswith(("discovery-","identification-"))]
+              selected=[]
+              for p in [*critical,*sampled[:1],*sampled[-1:]]:
+                  if p not in selected:selected.append(p)
+              for p in selected[:16]:shutil.copyfile(p,out/p.name)
+          PY
+          git config user.name "archivist-android-qa[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/qa-evidence/test23-android-emulator
+          if ! git diff --cached --quiet; then
+            git commit -m "test-evidence: native Test23 emulator results (synthetic fixtures only)"
+            git push origin HEAD:refs/heads/test/android-emulator-media-acceptance-20261008
+          fi
