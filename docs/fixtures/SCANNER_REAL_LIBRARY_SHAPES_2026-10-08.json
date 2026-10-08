@@ -1,0 +1,216 @@
+{
+  "schema": "archivist-real-library-regression-shapes-v1",
+  "createdAt": "2026-10-08",
+  "privacy": "Synthetic/anonymised paths and titles reproducing structural patterns found in private scanner data; source reports are NOT in this public repository.",
+  "sourceManifest": {
+    "audiobooks": {
+      "sha256": "e8f29fc4c92ac2a0d5049e4cad3aa5a2075a284a9feec0b1a2e77883da179ca1",
+      "entries": 2216,
+      "audioFiles": 1821,
+      "directoriesScanned": 153,
+      "sampleMs": 22212,
+      "elapsedMs": 26672
+    },
+    "comics": {
+      "sha256": "bd9d3e22901b51b4885524a59c6ca4bc3e9944ab41464f10d4951658c0581c1d",
+      "entries": 5817,
+      "comicArchives": 4664,
+      "directoriesScanned": 272,
+      "sampleMs": 29581,
+      "elapsedMs": 36797
+    }
+  },
+  "cases": [
+    {
+      "id": "audio-narrated-chapters-in-one-book-folder",
+      "category": "audio",
+      "reason": "Deep nested author/series/narrator/book structure with distinct chapter titles; these must be tracks, not works.",
+      "root": "Audiobooks",
+      "paths": [
+        "Author A/Series A/Narrator A/1.0 - Novel Alpha/00 Prologue Person.mp3",
+        "Author A/Series A/Narrator A/1.0 - Novel Alpha/01 Character.mp3",
+        "Author A/Series A/Narrator A/1.0 - Novel Alpha/02 Another Character.mp3"
+      ],
+      "expected": {
+        "physicalMedia": 3,
+        "logicalWorks": 1,
+        "tracksInSingleWork": 3
+      }
+    },
+    {
+      "id": "audio-separate-novels-same-series-folder",
+      "category": "audio",
+      "reason": "Numbered names can be distinct novels. Never merge solely because they are under one folder or start with a number.",
+      "root": "Audiobooks",
+      "paths": [
+        "Author B/Series B/01. Novel One.mp3",
+        "Author B/Series B/02. Novel Two.mp3",
+        "Author B/Series B/03. Novel Three.mp3"
+      ],
+      "expected": {
+        "physicalMedia": 3,
+        "logicalWorks": 3,
+        "requireDistinctBookEvidence": true
+      }
+    },
+    {
+      "id": "audio-single-novel-50-m4b-parts",
+      "category": "audio",
+      "reason": "M4B can represent chapters, not just self-contained books.",
+      "root": "Audiobooks",
+      "paths": [
+        "Author C - Novel Gamma/01 - Novel Gamma - Chapter 01.m4b",
+        "Author C - Novel Gamma/02 - Novel Gamma - Chapter 02.m4b",
+        "Author C - Novel Gamma/03 - Novel Gamma - Chapter 03.m4b"
+      ],
+      "expected": {
+        "physicalMedia": 3,
+        "logicalWorks": 1,
+        "tracksInSingleWork": 3
+      }
+    },
+    {
+      "id": "audio-descriptive-named-tracks",
+      "category": "audio",
+      "reason": "Multitrack book may have descriptive chapter filenames without Chapter NN in stem.",
+      "root": "Audiobooks",
+      "paths": [
+        "Author D/Series D/Book Delta/Introduction.mp3",
+        "Author D/Series D/Book Delta/A Strange Meeting.mp3",
+        "Author D/Series D/Book Delta/The Revelation.mp3"
+      ],
+      "expected": {
+        "physicalMedia": 3,
+        "logicalWorks": 1,
+        "mayNeedEmbeddedTagOrFolderEvidence": true
+      }
+    },
+    {
+      "id": "audio-numbered-parts-with-part-reset",
+      "category": "audio",
+      "reason": "Chapter sequence may reset at each Part; Part is not a separate book.",
+      "root": "Audiobooks",
+      "paths": [
+        "Novel Epsilon/01 - Novel Epsilon - Part One - Chapter One.mp3",
+        "Novel Epsilon/02 - Novel Epsilon - Part One - Chapter Two.mp3",
+        "Novel Epsilon/03 - Novel Epsilon - Part Two - Chapter One.mp3"
+      ],
+      "expected": {
+        "physicalMedia": 3,
+        "logicalWorks": 1
+      }
+    },
+    {
+      "id": "audio-independent-root-files",
+      "category": "audio",
+      "reason": "Selected audiobook root may contain unrelated standalone media beside book directories.",
+      "root": "Audiobooks",
+      "paths": [
+        "Author F - Novel Zeta.m4b",
+        "Author G - Novel Eta.m4b"
+      ],
+      "expected": {
+        "physicalMedia": 2,
+        "logicalWorks": 2
+      }
+    },
+    {
+      "id": "comic-issues-are-works-series-is-not-work",
+      "category": "comic",
+      "reason": "A publisher/series folder contains separate issue works, even when issue numbers are sequential.",
+      "root": "Comics",
+      "paths": [
+        "Series A/Series A 001.cbr",
+        "Series A/Series A 002.cbr",
+        "Series A/Series A 003.cbz"
+      ],
+      "expected": {
+        "physicalMedia": 3,
+        "logicalWorks": 3,
+        "seriesCount": 1
+      }
+    },
+    {
+      "id": "comic-duplicate-candidates-only",
+      "category": "comic",
+      "reason": "Same file name and size in two paths means only possible duplicates, not permission to delete or merge automatically.",
+      "root": "Comics",
+      "paths": [
+        "Series B/Collected Set/Issue 050.cbr",
+        "Series B/Loose Issues/Issue 050.cbr"
+      ],
+      "fileSizes": [
+        10485760,
+        10485760
+      ],
+      "expected": {
+        "physicalMedia": 2,
+        "potentialDuplicatePairs": 1,
+        "automaticFileChanges": 0,
+        "needsContentVerification": true
+      }
+    },
+    {
+      "id": "comic-valid-zip-without-comicinfo",
+      "category": "comic",
+      "reason": "ComicInfo absent cannot suppress a CBZ issue from the collection; cover and identity need bounded fallback.",
+      "root": "Comics",
+      "paths": [
+        "Series C/Series C 004.cbz"
+      ],
+      "metadata": {
+        "ComicInfo": null
+      },
+      "expected": {
+        "physicalMedia": 1,
+        "logicalWorks": 1,
+        "fallbackIdentification": true
+      }
+    },
+    {
+      "id": "comic-invalid-zip-extension",
+      "category": "comic",
+      "reason": "A .cbz might fail ZIP signature validation; fail forward with a bounded error, no catalogue-wide hang.",
+      "root": "Comics",
+      "paths": [
+        "Series D/Series D 001.cbz"
+      ],
+      "archiveState": "invalid-zip",
+      "expected": {
+        "physicalMedia": 1,
+        "archiveReadResult": "bounded-failure",
+        "automaticFileChanges": 0
+      }
+    },
+    {
+      "id": "comic-pdf-ambiguous",
+      "category": "comic",
+      "reason": "PDFs in a comic tree include documents and magazines; never classify all PDFs as comics purely by root folder.",
+      "root": "Comics",
+      "paths": [
+        "Publisher/Series E 001.pdf",
+        "Publisher/Guide to Repairs.pdf"
+      ],
+      "expected": {
+        "physicalMedia": 2,
+        "classification": "needs-evidence",
+        "automaticComicPublication": false
+      }
+    },
+    {
+      "id": "comic-cbr-cover-fallback",
+      "category": "comic",
+      "reason": "Most observed comic archives are RAR-based CBR. Need bounded RAR-aware metadata and cover fallback.",
+      "root": "Comics",
+      "paths": [
+        "Series F/Series F 010.cbr"
+      ],
+      "expected": {
+        "physicalMedia": 1,
+        "boundedCoverProbe": true,
+        "mustNotRequireComicInfo": true
+      }
+    }
+  ],
+  "testingRule": "Only mark a case passing when the REAL production grouping and publication implementation executes on it. This file by itself is a requirement set, not a passing test."
+}
