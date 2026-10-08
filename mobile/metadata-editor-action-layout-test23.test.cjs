@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
+const editor=app.slice(app.indexOf('function MetadataEditorPanel'),app.indexOf('function BulkMetadataPanel'));
+assert.match(editor,/<View style=\{styles\.metadataEditorActions\}>/);
+assert.match(editor,/<Button stableAction label=\{metadataSearchBusy\?'Searching…':'Smart Search'\}/);
+assert.match(editor,/<Button stableAction label=\{busy\?'Saving…':metadataSearchSelection>=0\?'Accept & Save':'Save'\}/);
+assert.match(editor,/<Button stableAction label="Close" tone="quiet"/);
+assert.ok(app.includes("metadataEditorActions: {flexDirection:'row',alignItems:'stretch',gap:8}"));
+assert.ok(app.includes('stableAction&&styles.metadataEditorStableButtonText'));
+assert.ok(app.includes('stableAction?{}:{transform:'),'modal actions must suppress Android press transform');
+assert.match(app,/numberOfLines=\{stableAction\?1:undefined\}/);
+console.log('PASS: Smart Search, Save and Close keep equal single-row bounds across label transitions');

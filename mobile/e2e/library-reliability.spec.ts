@@ -36,6 +36,25 @@ async function seed(page:Page){
   },{stage:seededStage});
 }
 
+async function assertEditorActionGeometry(page:Page,labels:string[]){
+  const boxes=await Promise.all(labels.map(async label=>{
+    const rect=await page.getByRole('button',{name:label,exact:true}).boundingBox();
+    expect(rect,'missing editor button '+label).not.toBeNull();
+    return rect!;
+  }));
+  const viewport=page.viewportSize()!;
+  const top=boxes[0].y;
+  for(const box of boxes){
+    expect(Math.abs(box.y-top),'metadata actions must not wrap onto another row').toBeLessThan(3);
+    expect(box.x,'button must remain inside viewport').toBeGreaterThanOrEqual(0);
+    expect(box.x+box.width,'button must not be clipped by viewport').toBeLessThanOrEqual(viewport.width+1);
+    expect(box.y+box.height,'button must not be clipped by viewport').toBeLessThanOrEqual(viewport.height+1);
+    expect(box.width,'button must remain comfortably tappable').toBeGreaterThan(60);
+  }
+  for(let i=1;i<boxes.length;i++)
+    expect(boxes[i].x,'action buttons must not overlap').toBeGreaterThanOrEqual(boxes[i-1].x+boxes[i-1].width-1);
+}
+
 async function openLibrary(page:Page){
   await page.goto('/');
   await expect(page.getByRole('tab',{name:'Library'})).toBeVisible({timeout:20_000});
@@ -116,6 +135,8 @@ test('Needs Attention save, restore, Smart Search and acceptance use the product
   await expect(page.getByLabel('Corrected title')).toBeVisible();
   await page.getByLabel('Corrected title').fill('Dune Messiah');
   await page.getByLabel('Author').fill('Frank Herbert');
+  await assertEditorActionGeometry(page,['Smart Search','Save','Close']);
+  await page.screenshot({path:testInfo.outputPath('metadata-actions-before-save.png'),fullPage:true});
   const saveButton=page.getByRole('button',{name:'Save',exact:true});
   const hitLayers=await saveButton.evaluate(element=>{
     const rect=element.getBoundingClientRect();
@@ -154,6 +175,7 @@ test('Needs Attention save, restore, Smart Search and acceptance use the product
   await page.getByText('Use this book →',{exact:true}).click();
   await expect(page.getByText(/Details filled\. Review and Save/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Accept & Save',exact:true})).toBeVisible();
+  await assertEditorActionGeometry(page,['Smart Search','Accept & Save','Close']);
   await page.screenshot({path:testInfo.outputPath('metadata-editor-candidate.png'),fullPage:true});
 
   await page.getByRole('button',{name:'Accept & Save',exact:true}).click();

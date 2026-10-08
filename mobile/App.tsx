@@ -404,7 +404,7 @@ function formatTime(seconds: number) {
   return `${mins}:${secs}`;
 }
 
-function Button({label, onPress, disabled, tone = 'primary'}: {label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'quiet' | 'gold' | 'danger'}) {
+function Button({label, onPress, disabled, tone = 'primary', stableAction=false}: {label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'quiet' | 'gold' | 'danger'; stableAction?:boolean}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -416,10 +416,11 @@ function Button({label, onPress, disabled, tone = 'primary'}: {label: string; on
         tone === 'quiet' && styles.buttonQuiet,
         tone === 'gold' && styles.buttonGold,
         tone === 'danger' && styles.buttonDanger,
-        (disabled || pressed) && {opacity: disabled ? 0.38 : 0.88, transform:[{scale:pressed&&!disabled?0.98:1}]},
+        (disabled || pressed) && {opacity: disabled ? 0.38 : 0.88, ...(stableAction?{}:{transform:[{scale:pressed&&!disabled?0.98:1}]})},
+        stableAction&&styles.metadataEditorStableButton,
       ]}
       onPress={onPress}>
-      <Text style={[styles.buttonText, tone === 'quiet' && styles.buttonQuietText, tone === 'danger' && styles.buttonDangerText]}>{label}</Text>
+      <Text numberOfLines={stableAction?1:undefined} adjustsFontSizeToFit={stableAction} minimumFontScale={0.7} style={[styles.buttonText,tone==='quiet'&&styles.buttonQuietText,tone==='danger'&&styles.buttonDangerText,stableAction&&styles.metadataEditorStableButtonText]}>{label}</Text>
     </Pressable>
   );
 }
@@ -4388,7 +4389,7 @@ function Client() {
       const percent=scanProgressPercent(activeProgress);
       const count=activeProgress.total&&activeProgress.total>0?`${Math.min(activeProgress.processed||0,activeProgress.total)} / ${activeProgress.total}`:'';
       return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?38:34} accessibilityLabel="Scanning local library"/>
+        <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?58:50} accessibilityLabel="Scanning local library"/>
         <View style={{flex:1,minWidth:0,gap:3}}>
           <View style={styles.scanProgressHeading}>
             <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{scanPhaseLabel(activeProgress.phase)}</Text>
@@ -5226,10 +5227,10 @@ function Client() {
           </View>
           <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:12,gap:8,borderTopWidth:1,borderTopColor:p.line}}>
             {error?<Text accessibilityLiveRegion="polite" style={{color:p.danger}}>{error}</Text>:null}
-            <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
-              {localEdit?<Button label={metadataSearchBusy?'Searching…':'Smart Search'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void runMetadataSearch()}/>:null}
-              <Button label={busy?'Saving…':metadataSearchSelection>=0?'Accept & Save':'Save'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void save()}/>
-              <Button label="Close" tone="quiet" disabled={busy||metadataSearchBusy||coverPicking} onPress={requestEditorClose}/>
+            <View style={styles.metadataEditorActions}>
+              {localEdit?<Button stableAction label={metadataSearchBusy?'Searching…':'Smart Search'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void runMetadataSearch()}/>:null}
+              <Button stableAction label={busy?'Saving…':metadataSearchSelection>=0?'Accept & Save':'Save'} disabled={busy||metadataSearchBusy||coverPicking||!(editTitle.trim()||editAuthor.trim()||editISBN.trim())} onPress={()=>void save()}/>
+              <Button stableAction label="Close" tone="quiet" disabled={busy||metadataSearchBusy||coverPicking} onPress={requestEditorClose}/>
             </View>
           </View>
           </View>
@@ -6383,10 +6384,10 @@ function Client() {
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
-      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?42:36} accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
+      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?54:46} accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
     }
     if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>{ReaderTools()}</View>;
-    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView style={styles.readerWebView} ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?42:36} accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}{ReaderTools()}</View>;
+    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView style={styles.readerWebView} ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?54:46} accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}{ReaderTools()}</View>;
   }
 
   function LiveHub(){
@@ -7930,7 +7931,7 @@ function Client() {
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-                <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?38:34} accessibilityLabel="Scanning local library"/>
+                <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?58:50} accessibilityLabel="Scanning local library"/>
                 <View style={{flex:1,gap:6}}>
                   <View style={styles.scanProgressHeading}><Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(progress.phase)}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{percent}%</Text></View>
                   <Text style={{color:p.muted}}>{progress.total?Math.min(progress.processed||0,progress.total)+' / '+progress.total:progress.entriesVisited+' checked'} · {progress.found} found · {progress.review} review{progress.currentFolder?' · '+progress.currentFolder:''}</Text>
@@ -8427,7 +8428,7 @@ function Client() {
               </View>
             </View>
             <View style={styles.restoreFooter}>
-              <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?38:34} accessibilityLabel="Opening Archivist library"/>
+              <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?58:50} accessibilityLabel="Opening Archivist library"/>
               <Text style={[styles.meta,{color:p.muted}]}>Opening your library and restoring your catalogue…</Text>
             </View>
           </View>
@@ -8690,6 +8691,10 @@ const styles = StyleSheet.create({
   sectionTitle: {fontFamily:'ArchivistEditorial',fontSize:18,lineHeight:23,fontWeight:'500',marginTop:8,letterSpacing:-0.1},
   input: {paddingHorizontal:14,paddingVertical:12,borderWidth:0,borderRadius:12,fontSize:16},
   button: {backgroundColor: '#47736F', borderRadius: 12, paddingHorizontal: 18, minHeight: 48, justifyContent: 'center', alignItems: 'center'},
+  // Editor-only stable action row. Changing labels must not reflow or scale modal buttons.
+  metadataEditorActions: {flexDirection:'row',alignItems:'stretch',gap:8},
+  metadataEditorStableButton: {flexGrow:1,flexBasis:0,minWidth:0,paddingHorizontal:4},
+  metadataEditorStableButtonText: {fontSize:13,lineHeight:18,textAlign:'center'},
   buttonGold: {backgroundColor:'#B99A68'},
   buttonQuiet: {backgroundColor:'transparent',borderWidth:0},
   buttonDanger: {backgroundColor:'transparent',borderWidth:0},

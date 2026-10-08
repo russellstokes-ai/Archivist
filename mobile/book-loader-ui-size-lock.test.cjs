@@ -5,7 +5,7 @@ const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
 
 // UI LOCK: only responsive size adjustment for the existing user-selected
 // Book Loader animation, not new colours, animation frames or screen layout.
-assert.match(source,/size=30, accessibilityLabel='Loading'/,
+assert.match(source,/size=36, accessibilityLabel='Loading'/,
  'default loader should be modestly larger than the old 24-point version');
 assert.match(source,/autoPlay=\{!reduceMotion\}/);
 assert.match(source,/loop=\{!reduceMotion\}/);
@@ -21,8 +21,8 @@ for(const element of loaders){
   const nums=[...element.matchAll(/\b\d{2}\b/g)].map(x=>Number(x[0]));
   assert.ok(nums.some(n=>n>=28),'small loaders must remain legible');
 }
-assert.ok(app.includes('size={width>=760?38:34}'),
+assert.ok(app.includes('size={width>=760?58:50}'),
  'the scan banner should use a proportional Fold-sized book loader');
-assert.ok(app.includes('size={width>=760?42:36}'),
+assert.ok(app.includes('size={width>=760?54:46}'),
  'reader load affordance must scale on wider Fold layouts');
 console.log('PASS: canonical Lottie loader enlarged proportionately; reduced motion/colours preserved');

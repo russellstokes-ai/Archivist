@@ -33,8 +33,8 @@ assert.ok(source.includes('itemTimeoutMs:fastAudioProperties?1200')&&source.incl
 const deepSearchBody=source.slice(source.indexOf('const runMetadataSearch=async'),source.indexOf('const acceptProposal=async'));
 assert.equal(enrichmentBody.includes('enrichPublishedLocalCovers(currentBooks,generation)'),false,'normal preparation must not run catalogue-wide local cover extraction');
 assert.ok(enrichmentBody.includes('cacheRequiredWorkArtwork(currentBooks'),'publication artwork must use already-cached/provider artwork rather than reopen every local file');
-assert.ok(source.includes('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline)'),'library enrichment must continue into online book metadata using the latest in-memory state and explicit refresh intent');
-assert.ok(source.includes('await enrichPublishedLocalComicMetadata(currentBooks,generation,forceOnline)'),'comic enrichment must run after books against the latest in-memory catalogue and carry explicit refresh intent');
+assert.ok(source.includes('await enrichPublishedLocalBookMetadata(currentBooks,generation,forceRefresh)'),'library enrichment must continue into online book metadata using the latest in-memory state and explicit refresh intent');
+assert.ok(source.includes('await enrichPublishedLocalComicMetadata(currentBooks,generation,forceRefresh)'),'comic enrichment must run after books against the latest in-memory catalogue and carry explicit refresh intent');
 assert.ok(source.includes('SecureStore.getItemAsync(metronTokenKey)'),'Metron credentials must come from secure storage rather than app source or persisted catalogue files');
 assert.ok(source.includes('shouldContinue:()=>scanCommitGate.isCurrent(generation)'),'stale enrichment must stop when a newer scan begins');
 assert.equal(source.includes('setLocalBooks(current=>applyCoverEnrichment(current,batch))'),false,'cover batch progress must not clone/publish the full catalogue on every batch');

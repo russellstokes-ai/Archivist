@@ -16,7 +16,7 @@ export type BookLoaderProps = {
 };
 
 export default function BookLoader({
-  dark, reduceMotion=false, size=30, accessibilityLabel='Loading',
+  dark, reduceMotion=false, size=36, accessibilityLabel='Loading',
 }: BookLoaderProps) {
   return (
     <View
