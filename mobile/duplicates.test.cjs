@@ -59,4 +59,30 @@ const classified=localRelationClassification([
 assert.equal(classified.duplicates.length,1);
 assert.equal(classified.alternateFormats.length,1);
 assert.equal(classified.differentEditions.length,0);
+
+// Gate 2 NAS safety: comic volumes/issues from different publication runs may
+// share the same displayed title and format. Do not call them duplicates from
+// filename equivalence alone. Same exact issue/volume can be a candidate,
+// but candidates must never imply byte equality or automatic deletion.
+const comicBase={author:'',series:'Star Trek',format:'CBR',space:'Comics',available:true};
+const distinctComicVolumes=possibleLocalDuplicateGroups([
+  {id:100,uri:'comic-v1',title:'Star Trek 001',comicIssueNumber:'1',comicVolume:1,...comicBase},
+  {id:101,uri:'comic-v2',title:'Star Trek 001',comicIssueNumber:'1',comicVolume:2,...comicBase},
+]);
+assert.equal(distinctComicVolumes.length,0,
+ 'NAS RED: distinct comic volumes/issues cannot be labelled duplicate just because basename/title agrees');
+const distinctComicIssues=possibleLocalDuplicateGroups([
+  {id:110,uri:'comic-i1',title:'Judge Dredd Story',comicIssueNumber:'001',comicVolume:1,...comicBase},
+  {id:111,uri:'comic-i2',title:'Judge Dredd Story',comicIssueNumber:'002',comicVolume:1,...comicBase},
+]);
+assert.equal(distinctComicIssues.length,0,
+ 'NAS RED: different comic issue numbers cannot be labelled duplicate');
+const repeatComicIssue=possibleLocalDuplicateGroups([
+  {id:120,uri:'root-A',title:'Conan the Barbarian 001',comicIssueNumber:'001',comicVolume:1,format:'CBZ',space:'Comics',available:true},
+  {id:121,uri:'root-B',title:'Conan the Barbarian 001',comicIssueNumber:'1',comicVolume:1,format:'CBZ',space:'Comics',available:true},
+]);
+assert.equal(repeatComicIssue.length,1,
+ 'same-title same-volume same-issue repeated archive remains a duplicate CANDIDATE');
+assert.match(repeatComicIssue[0].reason,/not byte-verified|likely duplicate/);
+
 console.log('PASS: local duplicate review distinguishes duplicate, alternate format and different edition relationships');
