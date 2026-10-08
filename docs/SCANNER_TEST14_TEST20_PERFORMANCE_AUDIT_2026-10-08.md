@@ -1,6 +1,6 @@
 # Archivist scanner: Test 14 vs Test 20 performance and identity audit
 Date: 2026-10-08
-Status: **review and regression research only; product/runtime code unchanged**
+Status: **audit branch with scoped grouping regression test/fix; production integration branch and canonical UI untouched**
 Baseline: build/0.9.4-test14-20261006 @ 2b86358ae73de0d0231df2b52173149b7c38884a
 Regression: integration/test18-reliability / Test 20 @ 002fb184d2a64abdeebbe224d7deb81fbf63eb30
 
@@ -76,6 +76,14 @@ Regression: integration/test18-reliability / Test 20 @ 002fb184d2a64abdeebbe224d
 - Verify fresh/warm/resume/cancel/slow-provider/unsupported-MediaStore/large-library conditions.
 - Preserve published catalogue on failed scan or artwork fetch; no file deletion or reset.
 - Entire Node mobile suites, Android native instrumentation/CI, web/Fold Playwright UI contract, signed APK smoke test, then real-device onboarding acceptance before new APK approval.
+
+## Isolated source-control verification (audit branch only)
+- Audit branch: audit/test20-scanner-latency-20261008 based on Test 20 commit 002fb184.
+- Added mobile/scanner-conflicting-albums-regression.test.cjs with numbered chapters, mixed disc/part tags, missing album tags and a negative two-works-in-one-folder test.
+- GitHub Actions Mobile checks, run 37784970961 (commit 0f76cc6), **confirmed RED**: the 18 physical chapter tracks became **8** logical works instead of one (8 != 1). This is a verified design flaw in Test 20; it is NOT proof all 85 on the user's device arise from this same source.
+- A first narrowly scoped metadataSync.ts change on this audit branch normalizes only explicit album suffixes such as '(Disc 2)', while preserving the two-distinct-album guard. Added a 227-file / 12-work test (commit 574124a).
+- This isolated grouping fix does **not** optimize the underlying SAF/JS metadata data flow; the latency problem remains until a measured native-worker overhaul. No Test 21 APK should be published based only on these tests.
+- CI outcome for the latest commit must be checked before merging. Physical Fold acceptance remains mandatory.
 
 ## Official technical references
 - DocumentsContract: https://developer.android.com/reference/android/provider/DocumentsContract
