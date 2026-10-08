@@ -27,7 +27,7 @@ assert.ok(app.includes('label="Keep current layout"'),'users must be able to com
 assert.ok(app.includes("if(!onboardingDone&&refreshed&&result.failed.length===0)"),'successful organisation and refresh must complete onboarding automatically');
 assert.ok(app.includes("itemTimeoutMs:fastAudioProperties?1200:(refreshMetadata?5000:2500)"),'normal audio file-property reads must fail forward quickly instead of appearing frozen at 28%');
 assert.ok(app.includes("concurrency:1"),'normal file-property reads must use bounded concurrency');
-assert.ok(app.includes("maxConsecutiveTimeouts:1"),'normal file-property reads must circuit-break after repeated slow files');
+assert.ok(app.includes("maxConsecutiveTimeouts:3"),'normal file-property reads must circuit-break after repeated slow files');
 
 assert.ok(app.includes('>Library management<'),'ongoing library maintenance must live in Settings');
 assert.ok(app.includes('Folders, metadata, scanning and file organisation.'),'Settings must clearly own post-onboarding library maintenance');
