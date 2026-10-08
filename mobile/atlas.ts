@@ -80,7 +80,7 @@ export function buildAtlasRelationship<T extends AtlasWorkLike>(
     works:selected.slice().sort((a,b)=>a.title.localeCompare(b.title,undefined,{numeric:true})).slice(0,50),
     authors:counts(selected.map(work=>work.author.trim() || 'Unknown author')),
     series:counts(selected.map(work=>work.series)),
-    genres:counts(selected.map(work=>atlasGenre(work.genre))),
+    genres:counts(selected.map(work=>work.genre.trim()?atlasGenre(work.genre):'')),
     formats:counts(selected.map(work=>work.format)),
     spaces:counts(selected.map(work=>work.space)),
     availability:counts(selected.map(work=>work.available?'Available':'Unavailable')),
