@@ -24,7 +24,9 @@ OUT=Path(os.environ.get("ACCEPTANCE_OUT","android-acceptance-results")).resolve(
 OUT.mkdir(parents=True,exist_ok=True)
 MAX_STAGE_S=int(os.environ.get("MAX_STAGE_SECONDS","520"))
 NO_PROGRESS_S=int(os.environ.get("NO_PROGRESS_SECONDS","150"))
-PROFILES=os.environ.get("FIXTURE_PROFILES","grouped,split-discs").split(",")
+# Start with the 342-file case from the actual user's scanner diagnostic.
+# The smaller suites remain selectable with FIXTURE_PROFILES=grouped,split-discs.
+PROFILES=os.environ.get("FIXTURE_PROFILES","diagnostic342").split(",")
 
 def command(args,timeout=45,check=True,text=True):
     p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
@@ -151,13 +153,18 @@ def picker_select(folder_name,out):
         time.sleep(1.5)
     view(out,"folder-selected")
 def copy_fixture(profile,out):
-    dest="ArchivistQA"+("Grouped" if profile=="grouped" else "SplitDiscs")
+    names={"grouped":"ArchivistQAGrouped","split-discs":"ArchivistQASplitDiscs",
+           "diagnostic342":"ArchivistQADiagnostic342"}
+    if profile not in names:raise ValueError("Unknown synthetic fixture: "+profile)
+    dest=names[profile]
     source=MEDIA/profile
     files=list(source.rglob("*.mp3"))
-    if len(files)!=227:raise RuntimeError("Fixture not 227 audio files: "+str(len(files)))
+    expected=342 if profile=="diagnostic342" else 227
+    if len(files)!=expected:
+        raise RuntimeError("Fixture has "+str(len(files))+" real audio files, expected "+str(expected))
     adb("shell","mkdir","-p","/sdcard/Documents/"+dest,timeout=20)
     p=adb("push",str(source)+"/.","/sdcard/Documents/"+dest+"/",timeout=180)
-    log("Copied "+str(len(files))+" genuine MP3 files into Android documents; adb push: "+p.stdout[-330:])
+    log("Copied "+str(len(files))+" genuine MP3 files into Android Documents for "+profile+"; adb push: "+p.stdout[-330:])
     return dest
 def request_page(profile,out,button,timeout=35):
     tap_label(button,timeout=timeout)
@@ -296,8 +303,9 @@ def process_profile(profile,apk):
     out=OUT/profile
     out.mkdir(parents=True,exist_ok=True)
     log("=== Test 23 real Android fixture "+profile+" ===")
+    expected=342 if profile=="diagnostic342" else 227
     result={"profile":profile,"apk":Path(apk).name,"status":"running",
-            "expected_mp3_files":227,"expected_logical_works":12}
+            "expected_mp3_files":expected,"expected_logical_works":12}
     try:
         adb("shell","am","force-stop",PKG,check=False)
         adb("shell","pm","clear",PKG,timeout=35)
@@ -339,11 +347,30 @@ def process_profile(profile,apk):
             # The privacy-safe stage trace reflects the actual shipped native
             # scanner's work-grouping algorithm, not our fixture filename guesses.
             if stages:
+                result["native_stage_summary"]=stages
                 last=stages[-1]
                 result["final_native_work_count"]=last.get("logical_works")
-                if last.get("logical_works")!=12:
+                results_by_phase={record.get("phase"):record for record in stages}
+                result["phase_works"]={name:entry.get("logical_works")
+                                       for name,entry in results_by_phase.items()}
+                result["phase_elapsed_ms"]={name:entry.get("elapsed_ms")
+                                            for name,entry in results_by_phase.items()}
+                discovery=results_by_phase.get("discovery",{})
+                if discovery.get("physical_files")!=expected:
                     result["status"]="failed"
-                    result["reason"]="Shipped scanner trace grouped real fixture into "+str(last.get("logical_works"))+" works rather than 12"
+                    result["reason"]=("Native Find Books discovered "+
+                       str(discovery.get("physical_files"))+" physical files, expected "+str(expected))
+                if any(entry.get("logical_works")!=12 for entry in stages
+                       if entry.get("phase") in ("discovery","audio","publish","finish")):
+                    result["status"]="failed"
+                    result["reason"]=("Native scanner incorrectly fragmented 12 known books at phases "+
+                       str(result["phase_works"]))
+                if not results_by_phase.get("finish"):
+                    result["status"]="failed"
+                    result["reason"]="Native Identify never reached the final finish checkpoint"
+            else:
+                result["status"]="failed"
+                result["reason"]="No native scanner trace available; cannot claim actual media scan passed"
         except Exception as e:result["catalogue_error"]=str(e)
         (out/"result.json").write_text(json.dumps(result,indent=2,default=str)+"\n")
         log("RESULT "+profile+" "+json.dumps({k:v for k,v in result.items() if k not in ("traceback","discovery","identification")})[:2500])
@@ -358,7 +385,7 @@ def main():
     adb("install","--no-streaming","-r",apk,timeout=150)
     results=[]
     for profile in PROFILES:
-        if profile not in ("grouped","split-discs"):raise ValueError("Bad profile: "+profile)
+        if profile not in ("grouped","split-discs","diagnostic342"):raise ValueError("Bad profile: "+profile)
         results.append(process_profile(profile,apk))
     summary={"apk":Path(apk).name,"results":[{
         "profile":r["profile"],"status":r["status"],"review_count":r.get("review_count"),
