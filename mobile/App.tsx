@@ -1,3 +1,4 @@
+import {fastAudioProbeUris} from './audioProbePlan';
 import BookLoader from './BookLoader';
 import {canonicalPrimaryGenre} from './genreTaxonomy';
 import {hydrateBookCandidate} from './onlineBookMetadata';
@@ -2966,10 +2967,10 @@ function Client() {
 
   async function enrichPublishedLocalEmbeddedMetadata(baseBooks:LocalBook[],generation:number,refreshMetadata=false,fastAudioProperties=false):Promise<LocalBook[]|null>{
     if(!scanCommitGate.isCurrent(generation))return null;
+    const sampledAudioUris=fastAudioProperties?fastAudioProbeUris(groupLocalWorks(baseBooks)):null;
     const needsEmbeddedRead=(book:LocalBook)=>{
       if(fastAudioProperties){
-        if(book.format!=='Audio'||book.embeddedMetadata)return false;
-        return !!book.needsReview||!String(book.author||'').trim()||!String(book.title||'').trim();
+        return book.format==='Audio'&&!book.embeddedMetadata&&!!sampledAudioUris?.has(book.uri);
       }
       if(refreshMetadata)return book.format==='EPUB'||book.format==='Comic'||book.format==='Audio';
       if(!(book.format==='EPUB'||book.format==='Comic'||book.format==='Audio'))return false;
@@ -2986,7 +2987,7 @@ function Client() {
       // Fast properties are bounded header reads and fail forward aggressively.
       // Full archive/audio inspection remains explicit or refresh-only.
       itemTimeoutMs:fastAudioProperties?1200:(refreshMetadata?5000:2500),
-      maxConsecutiveTimeouts:1,
+      maxConsecutiveTimeouts:3,
       concurrency:1,
       shouldInspect:needsEmbeddedRead,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
