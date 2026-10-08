@@ -33,6 +33,14 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
   private val zipFiles = ConcurrentHashMap<String, File>()
 
   @ReactMethod
+  fun listLibraryDirectory(rootUri: String, parentUri: String, promise: Promise) {
+    FastSafDirectory.list(context, rootUri, parentUri, promise)
+  }
+
+  @ReactMethod
+  fun cancelLibraryDirectoryRead() { FastSafDirectory.cancel() }
+
+  @ReactMethod
   fun readAudioMetadataWindows(uri: String, extension: String, promise: Promise) {
     BoundedAudioReader.read(context, uri, extension, promise)
   }
