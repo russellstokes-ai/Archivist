@@ -4,6 +4,7 @@ const ts=require('typescript');
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
 const {cacheRequiredWorkArtwork}=require('./dualCoverPipeline.ts');
 const {partitionLocalBooksByPublication}=require('./publicationPipeline.ts');
+const {resolveLivingBookCover}=require('./livingBookCover.ts');
 
 function book(id,uri,extra={}){
   return {id,uri,title:'Dune',author:'Frank Herbert',series:'Dune',genre:'Science Fiction',format:'Audio',space:'Audio',available:true,coverShape:'square',needsReview:false,...extra};
@@ -56,6 +57,31 @@ function book(id,uri,extra={}){
   ],failedOps);
   assert.equal(failed.books[0].livingBookCoverUri,'file:///covers/square.jpg','valid local audiobook art must provide a temporary Living Book jacket when provider art is unavailable');
   assert.equal(failed.books[0].livingBookCoverConfidence,0.45);
+  assert.equal(failed.books[0].livingBookCoverSource,'jacket',
+    'a cached square audiobook cover reused for Living Book is a JACKET, never a verified portrait');
+  const resolvedFallback=resolveLivingBookCover({
+    format:'Audio',editionCoverUri:failed.books[0].libraryCoverUri,editionCoverShape:'square',
+    livingBookCoverUri:failed.books[0].livingBookCoverUri,
+    livingBookCoverSource:failed.books[0].livingBookCoverSource,
+    livingBookCoverConfidence:failed.books[0].livingBookCoverConfidence,
+  });
+  assert.equal(resolvedFallback.kind,'jacket','the renderer must not stretch square cover art into portrait');
+
+  const mixedEvidence=await cacheRequiredWorkArtwork([
+    book(60,'content://root/document/primary:Audio%2FMixed%2F01.mp3',{
+      title:'Mixed',libraryCoverUri:'https://bad.example/unavailable.jpg',
+      coverUri:'https://bad.example/unavailable.jpg',
+    }),
+    book(61,'content://root/document/primary:Audio%2FMixed%2F02.mp3',{
+      title:'Mixed',coverUri:'file:///covers/verified-local.jpg',
+    }),
+  ],failedOps);
+  assert.equal(mixedEvidence.attemptedDownloads,0);
+  assert.equal(mixedEvidence.books[0].libraryCoverUri,'file:///covers/verified-local.jpg',
+    'local cover found on another track must outrank remote first-track Library URL');
+  assert.equal(mixedEvidence.books[1].libraryCoverUri,'file:///covers/verified-local.jpg');
+  assert.equal(partitionLocalBooksByPublication(mixedEvidence.books).published.length,2,
+    'one locally usable work-level cover must publish both tracks');
   assert.equal(partitionLocalBooksByPublication(failed.books).published.length,1,'identified audiobook with valid local artwork must not be hidden by portrait-jacket availability');
 
   const ebook=[book(4,'content://root/document/primary:Books%2FDune.epub',{format:'EPUB',coverShape:'portrait',coverUri:'file:///covers/dune.jpg'})];
