@@ -3020,7 +3020,7 @@ function Client() {
         .catch(error=>{recordLibraryRefreshWarning('Publication artwork',error);return null;});
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(dualArtwork)currentBooks=dualArtwork.books;
-      await recordScannerStage('artwork',currentBooks,phaseStarted,{maxJsDelayMs:worstJsDelay});
+      await recordScannerStage('artwork',currentBooks,phaseStarted,{maxJsDelayMs:worstJsDelay,cachedCoverUrls:cachedKnownCovers?.cached||0,coverDownloads:dualArtwork?.downloaded||0});
       phaseStarted=Date.now();
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
@@ -3053,6 +3053,7 @@ function Client() {
     });
     if(!eligible.length)return baseBooks;
     reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'Archive evidence',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length},true);
+    const archiveStarted=Date.now();
     const enriched=await enrichLocalBoundedArchiveEvidence(baseBooks,{
       batchSize:4,
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
@@ -3063,6 +3064,7 @@ function Client() {
     }).catch(error=>{recordLibraryRefreshWarning('Archive evidence',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return null;
     if(!enriched)return baseBooks;
+    await recordScannerStage('archive-probe',enriched.books,archiveStarted,{archiveBlocked:enriched.blocked});
     if(enriched.blocked)recordLibraryRefreshWarning('Archive evidence',new Error(enriched.blocked+' archive'+(enriched.blocked===1?'':'s')+' could not be inspected within the safe probe limits'));
     setStagedLocalBooks(enriched.books.map(book=>({...book,source:'local' as const})));
     return enriched.books;
@@ -3083,6 +3085,7 @@ function Client() {
     const eligible=baseBooks.filter(needsEmbeddedRead);
     if(!eligible.length)return baseBooks;
     reportEnrichmentProgress({phase:'reading-metadata',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total:eligible.length},true);
+    const probeStarted=Date.now();
     const enriched=await enrichLocalEmbeddedMetadata(baseBooks,{
       refreshMetadata,
       fastAudioProperties,
@@ -3111,6 +3114,9 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
     })).books as LocalBook[];
     if(!scanCommitGate.isCurrent(generation))return null;
+    await recordScannerStage('audio-probe',synchronized,probeStarted,{
+      metadataAttempted:enriched.attempted,metadataTimedOut:enriched.timedOut,metadataSkipped:enriched.skipped,
+    });
     setStagedLocalBooks(synchronized.map(book=>({...book,source:'local' as const})));
     return synchronized;
   }
@@ -3126,6 +3132,7 @@ function Client() {
     const total=countLocalBookOnlineLookupUnits(baseBooks);
     if(!total)return baseBooks;
     reportEnrichmentProgress({phase:'online-books',currentFolder:'',entriesVisited:0,found:baseBooks.length,review:baseBooks.filter(book=>book.needsReview).length,processed:0,total},true);
+    const lookupStarted=Date.now();
     const enriched=await enrichLocalBookMetadataOnline(baseBooks,{
       cache,
       googleBooksApiKey,
@@ -3157,6 +3164,9 @@ function Client() {
       shouldContinue:()=>scanCommitGate.isCurrent(generation),
     })).books as LocalBook[];
     if(!scanCommitGate.isCurrent(generation))return null;
+    await recordScannerStage('book-metadata',finalBooks,lookupStarted,{
+      lookupUnits:enriched.attempted,cachedCoverUrls:cachedCovers?.cached||0,
+    });
 
     setStagedLocalBooks(finalBooks.map(book=>({...book,source:'local' as const})));
     await setPersistedJSON(onlineBookMetadataCacheKey,enriched.cache)

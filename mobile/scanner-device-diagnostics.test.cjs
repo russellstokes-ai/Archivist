@@ -19,6 +19,8 @@ assert.equal(record.schema,'archivist-scanner-stage-v1');
 assert.equal(record.counts.physicalFiles,3);
 assert.equal(record.counts.logicalWorks,1);
 assert.equal(record.counts.audioWorks,1);
+assert.equal(record.counts.audioFolderEvidence.total,1);
+assert.deepEqual(record.counts.audioFolderEvidence.largest[0],{position:1,files:3,logicalGroups:1,albumTagVariants:1,missingAlbumTags:0});
 assert.equal(record.counts.workFileCountBands.twoToThree,1);
 assert.equal(record.counters.metadataAttempted,1);
 assert.equal(record.counters.maxJsDelayMs,124);
