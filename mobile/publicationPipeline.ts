@@ -24,7 +24,14 @@ export function isVerifiedLocalArtworkUri(uri:unknown){
 }
 
 export function workLibraryCoverUri(work:LocalWork){
-  return String(work.libraryCoverUri||work.coverUri||'').trim()||undefined;
+  // Prefer a locally usable image from any chapter over a remote URL attached
+  // to the first chapter. This is a WORK-level publication decision.
+  const candidates=[
+    work.libraryCoverUri,work.coverUri,
+    ...work.tracks.map(track=>track.libraryCoverUri),
+    ...work.tracks.map(track=>track.coverUri),
+  ].map(uri=>String(uri||'').trim()).filter(Boolean);
+  return candidates.find(isVerifiedLocalArtworkUri)||candidates[0]||undefined;
 }
 
 export function workLivingBookCoverUri(work:LocalWork){
@@ -50,10 +57,13 @@ export function assessLocalWorkForPublication(work:LocalWork):PublicationAssessm
   if(!author&&!authorMayRemainIncomplete)blockers.push('missing-author');
   if(!libraryCoverUri)blockers.push('missing-library-cover');
   else if(!isVerifiedLocalArtworkUri(libraryCoverUri))blockers.push('remote-library-cover');
-  if(!livingBookCoverUri)blockers.push('missing-living-book-cover');
-  else if(!isVerifiedLocalArtworkUri(livingBookCoverUri))blockers.push('remote-living-book-cover');
+  // Living Book artwork is an OPTIONAL presentation enhancement, not a second
+  // catalogue publication gate. Audio uses the existing square-art jacket
+  // renderer, while portrait book/comic art uses its Library image.
+  // Never advertise a remote-only texture as locally available.
 
-  return {ready:blockers.length===0,blockers,libraryCoverUri,livingBookCoverUri};
+  return {ready:blockers.length===0,blockers,libraryCoverUri,
+    livingBookCoverUri:isVerifiedLocalArtworkUri(livingBookCoverUri)?livingBookCoverUri:undefined};
 }
 
 export function partitionLocalBooksByPublication(books:LocalBook[]){
