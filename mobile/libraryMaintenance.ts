@@ -20,12 +20,14 @@ export type MaintenanceWork = {
 };
 
 const present = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+const broadGenre = (value:unknown)=>/^(fiction|non[ -]?fiction|young adult|children|classics)$/i.test(String(value??'').trim());
+const genreNeedsEnrichment = (value:unknown)=>!present(value)||broadGenre(value);
 
 export function matchesMetadataGap(work: MaintenanceWork, gap: MetadataGapFilter): boolean {
   if (!gap) return true;
   if (gap === 'author') return !present(work.author);
   if (gap === 'series') return !present(work.series);
-  if (gap === 'genre') return !present(work.genre);
+  if (gap === 'genre') return genreNeedsEnrichment(work.genre);
   // Remote server works have a server-side cover route even when coverUri is not populated
   // on the unified client model, so only device-held works can be safely classified here.
   if (gap === 'cover') return work.source !== 'server' && !present(work.coverUri);
@@ -73,7 +75,7 @@ export function advancedMetadataCompleteness(work: AdvancedMaintenanceWork) {
   if (!present(work.author)) missing.push('author');
   if (!present(work.series)) missing.push('series');
   if (present(work.series) && (work.seriesNumber === undefined || work.seriesNumber === null)) missing.push('seriesNumber');
-  if (!present(work.genre)) missing.push('genre');
+  if (genreNeedsEnrichment(work.genre)) missing.push('genre');
   if (work.source !== 'server' && !present(work.coverUri)) missing.push('cover');
   if (work.publishedYear === undefined || work.publishedYear === null) missing.push('publishedYear');
   if (String(work.format || '').toLowerCase() === 'audio' && !present(work.narrator)) missing.push('narrator');
