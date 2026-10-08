@@ -2430,7 +2430,7 @@ function Client() {
         await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current));
         return;
       }
-      await enrichPublishedLocalLibrary(staged,generation,true);
+      await enrichPublishedLocalLibrary(staged,generation,true,false);
       if(!scanCommitGate.isCurrent(generation))return;
       // The completion marker is written only when the whole work-level stage
       // was durably committed, not when metadata enrichment merely returned.
@@ -2919,7 +2919,7 @@ function Client() {
       .catch(error=>{recordLibraryRefreshWarning('Enrichment checkpoint',error);return false;});
   }
 
-  async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false):Promise<LocalBook[]>{
+  async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false,forceRefresh=forceOnline):Promise<LocalBook[]>{
     let currentBooks=baseBooks;
     try{
       // Normal preparation is deliberately shallow. Discovery has already read
@@ -2947,13 +2947,13 @@ function Client() {
       // Prefer bounded network metadata/cover matches after file/path evidence.
       if(metadataSettings.onlineEnabled&&(metadataSettings.automaticEnrichment||forceOnline)){
         if(metadataSettings.books.enabled&&(metadataSettings.books.openLibrary||metadataSettings.books.googleBooks)){
-          const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceOnline);
+          const enrichedBooks=await enrichPublishedLocalBookMetadata(currentBooks,generation,forceRefresh);
           if(!scanCommitGate.isCurrent(generation))return currentBooks;
           if(enrichedBooks)currentBooks=enrichedBooks;
           if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
         }
         if(metadataSettings.comics.enabled&&metadataSettings.comics.metron){
-          const enrichedComics=await enrichPublishedLocalComicMetadata(currentBooks,generation,forceOnline);
+          const enrichedComics=await enrichPublishedLocalComicMetadata(currentBooks,generation,forceRefresh);
           if(!scanCommitGate.isCurrent(generation))return currentBooks;
           if(enrichedComics)currentBooks=enrichedComics;
           if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;

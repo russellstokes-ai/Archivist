@@ -55,6 +55,6 @@ assert.deepEqual(groupLocalWorks(mixed).map(x=>x.files).sort((a,b)=>a-b),[2,2],
   'never merge two true books just to reduce review counts');
 // Stage 2 must enrich already-found books while respecting provider caches.
 // A normal explicit Identify button is NOT an explicit force-refresh of existing matches.
-assert.match(app,/await enrichPublishedLocalLibrary\(staged,generation,false\)/,
-  'RED: routine identify must reuse online cache instead of force-refreshing providers');
+assert.match(app,/await enrichPublishedLocalLibrary\(staged,generation,true,false\)/,
+  'routine Identify uses configured providers while respecting cached results');
 console.log('PASS: Test23 chapter-like tags, distinct album boundary, 227/12 work counts and cached identify');

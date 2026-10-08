@@ -12,8 +12,8 @@ assert.match(source,/finaliseLocalScan\(result,previousLocal,generation,false,tr
 assert.match(source,/discoveryOnly=false/,'discovery-only mode must be explicit');
 assert.match(source,/if\(discoveryOnly\)return summary;/,
  'the first step ends before costly network/embedded cover extraction');
-assert.match(source,/enrichPublishedLocalLibrary\(staged,generation,true\)/,
- 'second button must enrich persisted discovered files WITHOUT repeating the scan');
+assert.match(source,/enrichPublishedLocalLibrary\(staged,generation,true,false\)/,
+ 'second button enriches persisted works without repeated discovery or forced cache refresh');
 assert.match(source,/getPersistedJSON<\{signature:string\}>\(onboardingDiscoveryKey\)/,
  'discovery state must recover after app restart');
 assert.ok(source.includes('const discovered=hasSource&&(hasFolder?localDiscovered:serverReady)'),
