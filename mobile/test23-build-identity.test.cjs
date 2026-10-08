@@ -13,7 +13,7 @@ assert.equal(stamp.candidate,'Test 23 device-truth candidate');
 assert.ok(source.includes("import buildStamp from './buildStamp.json'"));
 assert.ok(source.includes("buildStamp.sourceCommit.slice(0,9)"),'Settings About must show exact source fingerprint');
 assert.ok(source.includes('Export scanner trace'),'real device must be able to export stage timing evidence');
-assert.match(workflow,/TEST_BUILD:\\s*'23-scanner-device-truth'/);
+assert.match(workflow,/TEST_BUILD:\s*'23-scanner-device-truth'/);
 assert.ok(workflow.includes('feature/test23-scanner-device-truth-20261008'));
 assert.ok(workflow.includes('Stamp and verify Test 23 source identity'));
 assert.ok(workflow.includes('Verify exact SHA provenance inside the signed APK'));
