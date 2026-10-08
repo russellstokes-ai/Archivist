@@ -22,8 +22,14 @@ import java.util.concurrent.TimeoutException;
  * and further requests are refused until a fresh scan creates a fresh probe.
  */
 final class TimedSafProbe {
-  static final int FOLDER_DEADLINE_MS=7000;
-  static final int HEADER_DEADLINE_MS=2500;
+  // Network DocumentsProviders can need several seconds to enumerate large SMB shares.
+  // Deadlines remain bounded; the progress screen flags slow operations at 4 seconds.
+  static final int LOCAL_FOLDER_DEADLINE_MS=7000;
+  static final int NETWORK_FOLDER_DEADLINE_MS=25000;
+  static final int LOCAL_HEADER_DEADLINE_MS=2500;
+  static final int NETWORK_HEADER_DEADLINE_MS=10000;
+  private final int folderDeadlineMs;
+  private final int headerDeadlineMs;
   private final Context context;
   private final ExecutorService worker=Executors.newSingleThreadExecutor(task->{
     Thread t=new Thread(task,"archivist-diag-saf");
@@ -46,7 +52,11 @@ final class TimedSafProbe {
     boolean timeout=false;
     String error="";
   }
-  TimedSafProbe(Context context){this.context=context.getApplicationContext();}
+  TimedSafProbe(Context context,boolean networkMode){
+    this.context=context.getApplicationContext();
+    folderDeadlineMs=networkMode?NETWORK_FOLDER_DEADLINE_MS:LOCAL_FOLDER_DEADLINE_MS;
+    headerDeadlineMs=networkMode?NETWORK_HEADER_DEADLINE_MS:LOCAL_HEADER_DEADLINE_MS;
+  }
 
   void cancel(){
     CancellationSignal current=signal;
@@ -83,7 +93,7 @@ final class TimedSafProbe {
           while(cursor.moveToNext()){
             if(Thread.currentThread().isInterrupted()||operation.isCanceled())
               throw new InterruptedException("Read cancelled");
-            if(resultEntries.length()>=10000)throw new IllegalStateException("Folder exceeds 10,000 items");
+            if(resultEntries.length()>=MainActivity.MAX_ENTRIES)throw new IllegalStateException("Folder exceeds safe 100,000-item diagnostic limit");
             String id=cursor.getString(idIndex);
             if(id==null)continue;
             JSONObject entry=new JSONObject();
@@ -102,14 +112,14 @@ final class TimedSafProbe {
         return resultEntries;
       });
       try{
-        result.entries=future.get(FOLDER_DEADLINE_MS,TimeUnit.MILLISECONDS);
+        result.entries=future.get(folderDeadlineMs,TimeUnit.MILLISECONDS);
         result.fallback=attempt>0;
         result.error="";
         break;
       }catch(TimeoutException ex){
         blocked=true;
         result.timeout=true;
-        result.error="TIMEOUT: SAF directory listing exceeded "+FOLDER_DEADLINE_MS+"ms";
+        result.error="TIMEOUT: SAF directory listing exceeded "+folderDeadlineMs+"ms";
         future.cancel(true);
         cancel();
         break; // Never enqueue another query behind a potentially stuck provider
@@ -147,10 +157,10 @@ final class TimedSafProbe {
       }
     });
     try{
-      result.bytesRead=future.get(HEADER_DEADLINE_MS,TimeUnit.MILLISECONDS);
+      result.bytesRead=future.get(headerDeadlineMs,TimeUnit.MILLISECONDS);
     }catch(TimeoutException ex){
       blocked=true;result.timeout=true;
-      result.error="TIMEOUT: 64KB header access exceeded "+HEADER_DEADLINE_MS+"ms";
+      result.error="TIMEOUT: 64KB header access exceeded "+headerDeadlineMs+"ms";
       future.cancel(true);
     }catch(Exception ex){
       result.error=ex.getClass().getSimpleName()+": "+rootMessage(ex);
