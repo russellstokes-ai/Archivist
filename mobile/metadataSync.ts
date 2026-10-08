@@ -174,16 +174,16 @@ function audiobookFolderLooksLikeOneWork(books:SynchronizableBook[]){
   const stems=books.map(book=>fileStem(book.uri));
   const multipartFamilies=new Set(stems.map(rootAudioTrackFamily).map(normal).filter(Boolean));
   if(multipartFamilies.size>1)return false;
-  // A collection of individually named M4B books under an author/series
-  // folder is not a multipart work. Only trusted album tags could override it.
-  const mostlySingleFileBooks=books.every(book=>/\.(?:m4b|m4a)$/i.test(book.uri.split('?')[0]));
-  if(mostlySingleFileBooks&&!distinctAlbums.size)return false;
   // Strong book-folder structure, supplemented by common work tags or
   // chapter-style filenames. Mixed descriptive chapter titles are expected.
   const chapterLike=stems.filter(stem=>
     /^(?:(?:chapter|ch|part|pt|track|disc|cd|scene|section)\b|\d{1,4}(?:\s*[-._:]|\s+))/i.test(stem)
     ||/\b(?:chapter|part|track)\s*\d{1,4}\b/i.test(stem)
   ).length;
+  // Multiple standalone M4B/M4A books under an author folder must not merge,
+  // but chapter-numbered multipart M4B/M4A are still legitimate book parts.
+  const mostlySingleFileBooks=books.every(book=>/\.(?:m4b|m4a)$/i.test(book.uri.split('?')[0]));
+  if(mostlySingleFileBooks&&!distinctAlbums.size&&chapterLike<2)return false;
   return distinctAlbums.size===1||chapterLike>=2||books.length>=4;
 }
 
