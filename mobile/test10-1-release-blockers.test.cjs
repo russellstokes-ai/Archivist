@@ -27,8 +27,8 @@ assert.equal(app.includes("item.complete===false?{...item,complete:true}:item"),
 // never restore the historical catalogue-wide archive/deep-read stage.
 const normalEnrichment=app.slice(app.indexOf('async function enrichPublishedLocalLibrary'),app.indexOf('async function enrichPublishedLocalEmbeddedMetadata'));
 assert.ok(normalEnrichment.includes('enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true)'),'normal refresh must restore bounded audio property evidence before online matching');
-assert.ok(app.includes("if(fastAudioProperties){")&&app.includes("if(book.format!=='Audio'||book.embeddedMetadata)return false"),'normal property pass must exclude EPUB/comic archive reads and already-cached audio');
-assert.ok(app.includes('itemTimeoutMs:fastAudioProperties?1200')&&app.includes('maxConsecutiveTimeouts:1'),'normal property pass must retain a strict fail-forward watchdog');
+assert.ok(app.includes('fastAudioProbeUris(groupLocalWorks(baseBooks))')&&app.includes("return book.format==='Audio'&&!book.embeddedMetadata&&!!sampledAudioUris?.has(book.uri);"),'normal property pass must exclude EPUB/comic reads and sample only unresolved tracks within logical works');
+assert.ok(app.includes('itemTimeoutMs:fastAudioProperties?1200')&&app.includes('maxConsecutiveTimeouts:3'),'normal property pass must retain a strict fail-forward watchdog');
 assert.ok(feedback.includes("'reading-metadata':[40,44]"),'reading-metadata must remain a narrow bounded identification phase rather than the historical 28% bulk stage');
 assert.ok(library.includes('withOperationTimeout'),'explicit local forensic reads must still have an operation watchdog');
 const deepSearch=app.slice(app.indexOf('const runMetadataSearch=async'),app.indexOf('const acceptProposal=async'));
