@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const app=JSON.parse(fs.readFileSync(__dirname+'/app.json','utf8'));
+const gradle=fs.readFileSync(__dirname+'/android/app/build.gradle','utf8');
+const stamp=JSON.parse(fs.readFileSync(__dirname+'/buildStamp.json','utf8'));
+const source=fs.readFileSync(__dirname+'/App.tsx','utf8');
+assert.equal(app.expo.android.package,'app.archivist.reader','upgrades MUST keep package identity');
+assert.equal(app.expo.android.versionCode,108,'Test23 must supersede Test21/22 code 107');
+assert.match(gradle,/versionCode\s+108/);
+assert.match(gradle,/versionName\s+"0\.9\.4"/);
+assert.equal(stamp.candidate,'Test 23 device-truth candidate');
+assert.ok(source.includes("import buildStamp from './buildStamp.json'"));
+assert.ok(source.includes("buildStamp.sourceCommit.slice(0,9)"),'Settings About must show exact source fingerprint');
+assert.ok(source.includes('Export scanner trace'),'real device must be able to export stage timing evidence');
+console.log('PASS: Test23 uniquely numbered upgrade, preserved package, source label and scanner trace export');

@@ -10,8 +10,8 @@ const source=fs.readFileSync(__dirname+'/App.tsx','utf8');
 
 assert.equal(pkg.version,'0.9.4');
 assert.equal(app.expo.version,'0.9.4');
-assert.equal(app.expo.android.versionCode,107);
-assert.match(gradle,/versionCode\s+107/);
+assert.equal(app.expo.android.versionCode,108,'Test 23 upgrade must have a unique Android versionCode');
+assert.match(gradle,/versionCode\s+108/);
 assert.match(gradle,/versionName\s+"0\.9\.4"/);
 assert.match(apkWorkflow,/TEST_BUILD:\s*'(?:18-editor-render|19-reliability|20-work-grouping|21-scanner-book-loader|22-scanner-quality-gates)'/);
 assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'Test 13 branch must produce the verified APK');
