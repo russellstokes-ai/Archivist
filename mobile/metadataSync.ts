@@ -211,38 +211,49 @@ function audiobookFolderLooksLikeOneWork(books:SynchronizableBook[]){
  * numbered files with substantive titles provide the independent evidence.
  * An explicit shared embedded album/work title defeats the heuristic.
  */
-function distinctStandaloneSeriesAudioFiles(books:SynchronizableBook[]){
-  if(books.length<3)return false;
+function standaloneSeriesAudioUris(books:SynchronizableBook[]):Set<string>{
+  const standalone=new Set<string>();
+  if(books.length<3)return standalone;
   const albums=new Set(books.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
-  if(albums.size===1)return false; // album provides a stronger shared work identity
-  const descriptions=books.map(book=>{
+  const parentName=normal(audioBookFolderTitle(books[0].uri));
+  // A common *book* album ID is authoritative. A common album tag equal to
+  // the parent SERIES folder is not enough to collapse separate novels.
+  if(albums.size===1&&![...albums].includes(parentName))return standalone;
+  const numbered=books.filter(book=>{
     const stem=fileStem(book.uri);
     const match=stem.match(/^\s*\d{1,3}\s*\.\s+(.{4,})$/);
-    const title=clean(match?.[1]||'');
-    const generic=/^(?:chapter|ch|track|part|pt|disc|disk|cd|scene|section|intro|introduction|epilogue|prologue)\b/i.test(title);
-    return {title,generic};
+    const descriptive=clean(match?.[1]||'');
+    return !!descriptive
+      && !/^(?:chapter|ch|track|part|pt|disc|disk|cd|scene|section|intro|introduction|epilogue|prologue)\b/i.test(descriptive)
+      && !book.embeddedMetadata?.trackNumber && !book.embeddedMetadata?.discNumber;
   });
-  const descriptive=descriptions.every(x=>!!x.title&&!x.generic)
-    && new Set(descriptions.map(x=>normal(x.title))).size===books.length;
-  if(!descriptive)return false;
-  const series=books.map(book=>normal(book.series)).filter(Boolean);
-  const positions=books.map(book=>book.seriesNumber).filter((x):x is number=>typeof x==='number'&&Number.isFinite(x));
-  const verifiedSeries=series.length===books.length
-    && new Set(series).size===1 && positions.length===books.length
-    && new Set(positions).size===books.length;
-  if(verifiedSeries)return true;
-  // A bare "01 - Opening" list must NOT satisfy this. Require the precise
-  // dotted-series filename convention and all files to be substantially
-  // audiobook-sized, with no embedded track/disc identity clues.
-  const substantial=books.every(book=>
-    typeof book.fileSize==='number' && book.fileSize>=64*1024*1024
-    && !book.embeddedMetadata?.trackNumber && !book.embeddedMetadata?.discNumber
-  );
-  return substantial;
+  if(numbered.length<3||numbered.length<Math.ceil(books.length*.5))return standalone;
+  if(new Set(numbered.map(book=>normal(fileStem(book.uri)))).size!==numbered.length)return standalone;
+  const credibleSizes=numbered.every(book=>typeof book.fileSize==='number'&&book.fileSize>=64*1024*1024);
+  const namedSeries=numbered.map(book=>normal(book.series)).filter(Boolean);
+  const positions=numbered.map(book=>book.seriesNumber).filter((value):value is number=>typeof value==='number'&&Number.isFinite(value));
+  const credibleSeries=namedSeries.length===numbered.length
+    && new Set(namedSeries).size===1
+    && positions.length===numbered.length
+    && new Set(positions).size===numbered.length;
+  if(!credibleSizes&&!credibleSeries)return standalone;
+  for(const book of numbered)standalone.add(book.uri);
+  // Series folders sometimes include additional, unnumbered full audiobooks.
+  // Require audiobook-sized assets and substantive non-chapter filenames.
+  for(const book of books){
+    if(standalone.has(book.uri))continue;
+    if(typeof book.fileSize!=='number'||book.fileSize<64*1024*1024)continue;
+    if(book.embeddedMetadata?.trackNumber||book.embeddedMetadata?.discNumber)continue;
+    const stem=fileStem(book.uri);
+    if(stem.length<9||/^(?:\d{1,4}|chapter|track|part|pt|disc|disk|cd|scene|section)\b/i.test(stem))continue;
+    if(book.embeddedMetadata?.workTitle
+      && normal(albumWorkTitle(book.embeddedMetadata.workTitle))!==parentName)continue;
+    standalone.add(book.uri);
+  }
+  return standalone;
 }
 function shouldGroupAudioBooks(books:SynchronizableBook[]){
   if(books.length<=1)return true;
-  if(distinctStandaloneSeriesAudioFiles(books))return false;
   // Distinct embedded work titles are an explicit boundary: a mixed folder
   // must never collapse multiple actual books, even if filenames look generic.
   const distinctAlbums=new Set(books.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
@@ -283,7 +294,11 @@ export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
     }
     const group=directories.get(dir)||[];group.push(book);directories.set(dir,group);
   }
-  for(const [dir,group] of directories){
+  for(const [dir,allBooks] of directories){
+    const solo=standaloneSeriesAudioUris(allBooks);
+    for(const book of allBooks)if(solo.has(book.uri))result.set(book.uri,'audio-series-file:'+book.uri);
+    const group=allBooks.filter(book=>!solo.has(book.uri));
+    if(!group.length)continue;
     const albums=new Set(group.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
     if(albums.size>1){
       // Multiple album identities in one physical folder: partition only the
@@ -409,7 +424,7 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
   return ranked[0];
 }
 
-export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalMetadata{
+export function canonicalMetadataForBooks(books:SynchronizableBook[],standaloneSeries=false):CanonicalMetadata{
   const audio=books.some(book=>book.format==='Audio');
   const selected:Partial<Record<SyncField,ReturnType<typeof canonicalField>>>={};
   const inferredByUri=new Map<string,ReturnType<typeof inferLocalBookMetadata>>();
@@ -471,6 +486,33 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
         score:Number.MAX_SAFE_INTEGER,
         authority:1,
       } as any;
+    }
+  }
+
+  // A folder marked as a multi-book series has one independently sized audio
+  // file per edition. Recover each title from its filename if discovery
+  // mistakenly used the shared parent series folder as the work title.
+  if(audio&&standaloneSeries&&books.length===1){
+    const book=books[0],stem=fileStem(book.uri),folderTitle=audioBookFolderTitle(book.uri);
+    const numbered=stem.match(/^\s*(\d{1,3})\s*\.\s+(.+)$/);
+    const filenameTitle=clean(numbered?.[2]||stem);
+    const manual=sourceFor(book,'title')==='manual';
+    const trusted=selected.title?.source==='embedded'||selected.title?.source==='sidecar'
+      ||selected.title?.source==='online';
+    if(!manual&&!trusted&&filenameTitle
+      && !isGenericMediaTitle(filenameTitle,'Audio',1)
+      && (normal(selected.title?.value)===normal(folderTitle)||normal(book.title)===normal(folderTitle)
+        ||!selected.title)){
+      selected.title={book,value:filenameTitle,source:'path',confidence:'high',
+        key:normal(filenameTitle),workHint:true,score:Number.MAX_SAFE_INTEGER,authority:0} as any;
+    }
+    if(folderTitle&&!selected.series){
+      selected.series={book,value:folderTitle,source:'path',confidence:'medium',
+        key:normal(folderTitle),workHint:true,score:1,authority:0} as any;
+    }
+    if(numbered&&!selected.seriesNumber){
+      selected.seriesNumber={book,value:Number(numbered[1]),source:'path',confidence:'medium',
+        key:normal(numbered[1]),workHint:true,score:1,authority:0} as any;
     }
   }
 
@@ -564,9 +606,9 @@ export function synchronizeLocalMetadata<T extends SynchronizableBook>(books:T[]
     indexes.push(index);audioGroups.set(key,indexes);
   });
   let updated=0;
-  for(const indexes of audioGroups.values()){
+  for(const [key,indexes] of audioGroups.entries()){
     const group=indexes.map(index=>next[index]);
-    const canonical=canonicalMetadataForBooks(group);
+    const canonical=canonicalMetadataForBooks(group,key.startsWith('audio-series-file:'));
     for(const index of indexes){
       const before=next[index];
       const after=applyCanonical(before,canonical,indexes.length);
