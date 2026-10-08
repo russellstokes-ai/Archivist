@@ -383,7 +383,8 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
   const now=options.now||Date.now;
   const key=onlineBookCacheKey(input);
   const openLibraryEnabled=options.openLibraryEnabled!==false;
-  const googleBooksEnabled=!!String(options.googleBooksApiKey||'').trim();
+  const googleBooksApiKey=String(options.googleBooksApiKey||'').trim();
+  const googleBooksEnabled=!!googleBooksApiKey;
   if(!openLibraryEnabled&&!googleBooksEnabled)return {key,status:'unconfigured',candidates:[],autoApply:false,queried:[]};
   const cached=options.cache?.[key];
   if(!options.ignoreCache&&cached&&cached.expiresAt>now())return cached.result;
@@ -407,7 +408,7 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
       for(const plan of plans.slice(0,options.deep?8:3)){
         if(options.interactive&&Date.now()-started>=12000)break;
         try{
-          const found=await searchGoogleBooks(fetcher,plan,options.googleBooksApiKey,options.interactive?Math.min(timeoutMs,Math.max(500,12000-(Date.now()-started))):timeoutMs);
+          const found=await searchGoogleBooks(fetcher,plan,googleBooksApiKey,options.interactive?Math.min(timeoutMs,Math.max(500,12000-(Date.now()-started))):timeoutMs);
           queried.push('googlebooks:'+googleQuery(plan));raw.push(...found);ranked=rankCandidates(input,raw);
           if(!options.deep&&(ranked[0]?.exactIdentifier||ranked[0]?.score>=80))break;
         }catch{}
