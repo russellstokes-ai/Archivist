@@ -16,6 +16,8 @@ assert.match(source,/enrichPublishedLocalLibrary\(staged,generation,true\)/,
  'second button must enrich persisted discovered files WITHOUT repeating the scan');
 assert.match(source,/getPersistedJSON<\{signature:string\}>\(onboardingDiscoveryKey\)/,
  'discovery state must recover after app restart');
+assert.ok(source.includes('const discovered=hasSource&&(hasFolder?localDiscovered:serverReady)'),
+ 'offline/optional server must never prevent identifying already discovered local books');
 assert.match(source,/onboardingDiscoverySignature===currentLibraryFolderSignature/,
  'the saved discovery must be valid only for the selected folder set');
 assert.match(source,/activeStep==='discover'/,
