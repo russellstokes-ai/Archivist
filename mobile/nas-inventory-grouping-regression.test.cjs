@@ -34,7 +34,8 @@ const discworld=[
   ['04. Mort.mp3','Mort'],
   ['05. Sourcery.mp3','Sourcery'],
 ].map(([name,title],index)=>audio(100+index,'Terry Pratchett/Discworld/'+name,title,
-  {author:'Terry Pratchett',series:'Discworld',seriesNumber:index+1}));
+  {author:'Terry Pratchett',series:'Discworld',seriesNumber:index+1,
+   fileSize:[199590434,199119394,212822414,101716791,231649575][index]}));
 const discworldWorks=groupLocalWorks(discworld);
 assert.equal(discworldWorks.length,5,
   'NAS RED: numbered complete Discworld books in a series folder must be FIVE works, not one multipart audiobook');
@@ -42,6 +43,12 @@ assert.equal(new Set([...audioWorkGroupKeys(discworld).values()]).size,5,
   'series-volume numbers in filenames are not track indices');
 assert.ok(discworldWorks.every(work=>work.files===1),
   'each Discworld single-file MP3 must retain a separate edition');
+
+// Discovery may lack verified series numbers/tags; the real large MP3 sizes
+// and distinct non-chapter titles still provide strong single-file-book evidence.
+const discworldShallow=discworld.map(({seriesNumber,series,...rest})=>({...rest,series:''}));
+assert.equal(groupLocalWorks(discworldShallow).length,5,
+  'NAS RED: shallow file discovery must not require preexisting seriesNumber tags to avoid false-merge');
 
 // Positive case: chapters of *one* Expanse book share a book folder.
 // Another Expanse novella with a different narrator must be a DIFFERENT work.
