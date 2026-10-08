@@ -5032,7 +5032,7 @@ function Client() {
     };
     return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestEditorClose}>
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
-        <View style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
+        <View pointerEvents="box-none" style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
           <View accessible={false} accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden'}]}>
           <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:16,gap:8,borderBottomWidth:1,borderBottomColor:p.line}}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit book details</Text>
@@ -5898,7 +5898,7 @@ function Client() {
           </Pressable>
         </Pressable>
       </Modal>:null}
-      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View style={modalSheetBackdrop}><View accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
+      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View pointerEvents="box-none" style={modalSheetBackdrop}><View accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.filterWrap}>{([
           ['title','Title'],
           ['author','Author'],
