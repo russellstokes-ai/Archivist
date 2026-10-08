@@ -58,6 +58,7 @@ public final class MainActivity extends Activity {
   final ExecutorService io=Executors.newSingleThreadExecutor();
   final AtomicBoolean cancelled=new AtomicBoolean(false);
   volatile String stage="Idle";
+  volatile TimedSafProbe activeProbe;
   volatile long maxUiDelayMs=0;
   volatile long lastHeartbeat=0;
   final Runnable heartbeat=new Runnable(){
@@ -95,14 +96,14 @@ public final class MainActivity extends Activity {
     heading=text("Archivist Scanner Diagnostics",23,true,Color.rgb(18,31,40));
     root.addView(heading);
     root.addView(text("SEPARATE READ-ONLY APP  •  Archivist data remains untouched",12,true,Color.rgb(35,107,101)));
-    root.addView(text("1. Choose the same Android library folder.  2. Start Scan.  3. Export JSON and share it in ChatGPT. No book files are opened, moved or changed.",14,false,Color.rgb(65,67,69)));
+    root.addView(text("1. Choose the same Android library folder.  2. Start Scan.  3. Export JSON and share it in ChatGPT. Only read-only file headers are opened; no media is moved or changed.",14,false,Color.rgb(65,67,69)));
     select=button(root,"1 — Choose library folder",()->choose());
     start=button(root,"2 — Start diagnostic scan",()->launchScan());
     cancel=button(root,"Cancel scan",()->stopScan());
     export=button(root,"3 — Export diagnostic JSON",()->export());
     summary=text("No folder selected",16,true,Color.rgb(20,31,42));
     root.addView(summary);
-    log=text("This utility only reads directory listings and file properties. JSON includes filenames and paths so that grouping can be reproduced. Export is manual.",13,false,Color.rgb(65,70,72));
+    log=text("READ-ONLY. Times folder queries and up to 64 small 64KB header reads, with watchdogs. Export includes names and paths, not book contents.",13,false,Color.rgb(65,70,72));
     ScrollView scroll=new ScrollView(this);
     scroll.addView(log);
     root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -148,7 +149,7 @@ public final class MainActivity extends Activity {
       pickedUri=selected.toString();
       finishedReport=null;
       summary.setText("Folder selected. Ready to scan.");
-      log.setText("Selected SAF authority: "+selected.getAuthority()+"\nScan reads listings and metadata only; no file contents.\n");
+      log.setText("Selected SAF authority: "+selected.getAuthority()+"\nRead-only directory inventory and bounded 64KB header timing samples.\n");
       updateButtons();
     }else if(request==SAVE_JSON && finishedReport!=null){
       final JSONObject report=finishedReport;
@@ -176,6 +177,8 @@ public final class MainActivity extends Activity {
   void stopScan(){
     cancelled.set(true);
     stage="Cancelling";
+    TimedSafProbe live=activeProbe;
+    if(live!=null)live.cancel();
     append("Cancellation requested. Report will contain partial findings.");
   }
   void launchScan(){
@@ -200,6 +203,7 @@ public final class MainActivity extends Activity {
   void scan(){
     JSONObject finalResult=new JSONObject();
     TimedSafProbe probe=new TimedSafProbe(this);
+    activeProbe=probe;
     try{
       Uri tree=Uri.parse(pickedUri);
       String rootId=DocumentsContract.getTreeDocumentId(tree);
@@ -216,6 +220,7 @@ public final class MainActivity extends Activity {
         boolean fallback=listing.fallback;
         String error=listing.error;
         if(listing.timeout)providerTimeouts++;
+        if(fallback)retries++;
         long elapsed=SystemClock.elapsedRealtime()-started;
         queryTime+=elapsed;
         longestQuery=Math.max(longestQuery,elapsed);
@@ -348,6 +353,7 @@ public final class MainActivity extends Activity {
       try{finalResult.put("fatal",fatal.getClass().getName()+": "+fatal.getMessage());}catch(Exception ignored){}
     }finally{
       probe.close();
+      activeProbe=null;
       finalResult.putOpt("schema","archivist-saf-scanner-diagnostic-v1");
       finishedReport=finalResult;
       scanning=false;
@@ -364,10 +370,11 @@ public final class MainActivity extends Activity {
     lastUpdate=now;
     String text="Files: "+files+"   Audio: "+audio+"   Folders: "+dirs+"\n"
       +"Folder queries: "+queries+"   Fallbacks: "+retries+"\n"
-      +"Slow queries (1s+): "+slowQueries+"   Elapsed: "+((now-scanStart)/1000)+"s";
+      +"Slow queries (1s+): "+slowQueries+"   Elapsed: "+((now-scanStart)/1000)+"s\n"
+      +"Stage: "+stage+"   Header probes: "+headersAttempted+"   Timeouts: "+(providerTimeouts+headerTimeouts);
     ui.post(()->{
       summary.setText(text);
-      if(force)log.setText(text+"\n\nNo media contents were opened.\nThe exported JSON includes actual names and paths so that Archivist's exact grouping code can be replayed.");
+      if(force)log.setText(text+"\n\nNo media bytes are exported; header reads are bounded to 64KB each.\nThe exported JSON includes actual names and paths so that Archivist's exact grouping code can be replayed.");
     });
   }
   void append(String str){ui.post(()->log.append("\n"+str));}
