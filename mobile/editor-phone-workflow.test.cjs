@@ -10,7 +10,7 @@ const files=Array.from({length:227},(_,i)=>({id:i,uri:'file:///Books/Author/Book
 assert.equal(reviewBooksForDisplay(files).length,12,'227 chapters must display/count as 12 books');
 const start=app.indexOf('const runMetadataSearch=async'),end=app.indexOf('const useProposal=',start);
 assert.equal(/persistEditorWork|replaceLocalStageBooks/.test(app.slice(start,end)),false,'search must never save unaccepted drafts');
-const modal=app.slice(app.indexOf('    return <Modal transparent',app.indexOf('function MetadataEditorPanel')),app.indexOf('function BulkMetadataPanel'));
+const modal=app.slice(app.indexOf('    return <ArchivistModal transparent',app.indexOf('function MetadataEditorPanel')),app.indexOf('function BulkMetadataPanel'));
 assert.ok(modal.lastIndexOf('</ScrollView>')<modal.indexOf("label={busy?'Saving…':metadataSearchSelection"),'Save must stay outside scrolling fields');
 assert.ok(modal.includes("maxHeight:'100%'")&&modal.includes("keyboardShouldPersistTaps=\"handled\""));
 assert.ok(app.includes("const reviewCount=pendingReviewBooks.filter(book=>book.source!=='server').length"),'onboarding must use the same grouped review collection');
