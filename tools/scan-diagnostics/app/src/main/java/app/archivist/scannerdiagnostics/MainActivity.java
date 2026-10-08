@@ -354,7 +354,7 @@ public final class MainActivity extends Activity {
     }finally{
       probe.close();
       activeProbe=null;
-      finalResult.putOpt("schema","archivist-saf-scanner-diagnostic-v1");
+      try{finalResult.put("schema","archivist-saf-scanner-diagnostic-v1");}catch(Exception ignored){}
       finishedReport=finalResult;
       scanning=false;
       ui.post(()->{
