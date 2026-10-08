@@ -49,6 +49,25 @@ assert.ok(discworldWorks.every(work=>work.files===1),
 const discworldShallow=discworld.map(({seriesNumber,series,...rest})=>({...rest,series:''}));
 assert.equal(groupLocalWorks(discworldShallow).length,5,
   'NAS RED: shallow file discovery must not require preexisting seriesNumber tags to avoid false-merge');
+const discworldMixed=[
+  ...discworldShallow,
+  audio(107,'Terry Pratchett/Discworld/06. Wyrd Sisters.mp3','Wyrd Sisters',
+    {author:'Terry Pratchett',fileSize:300849614}),
+  audio(108,'Terry Pratchett/Discworld/The Science of Discworld  Revised Edition.mp3',
+    'The Science of Discworld Revised Edition',
+    {author:'Terry Pratchett',fileSize:197390393}),
+];
+assert.equal(groupLocalWorks(discworldMixed).length,7,
+  'NAS RED: Discworld series includes unnumbered full audiobooks alongside numbered novels; all stay separate');
+// Shallow discovery could have mislabeled the individual novel with the parent
+// series name. Do not ship five separate catalogue entries titled "Discworld".
+const discworldWrongTitles=discworldMixed.map(book=>({...book,title:'Discworld'}));
+const recatalogued=groupLocalWorks(discworldWrongTitles);
+assert.equal(recatalogued.length,7);
+assert.ok(recatalogued.some(work=>work.title==='The Colour of Magic'),
+  'NAS RED: standalone numbered audiobook title must be recovered from filename, not series folder');
+assert.ok(recatalogued.some(work=>work.title==='The Science of Discworld Revised Edition'),
+  'NAS RED: standalone unnumbered book title must not be replaced by the series folder');
 
 // Positive case: chapters of *one* Expanse book share a book folder.
 // Another Expanse novella with a different narrator must be a DIFFERENT work.
