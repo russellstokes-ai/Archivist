@@ -57,7 +57,7 @@ const remote=groupLocalWorks([
 ])[0];
 assert.equal(assessLocalWorkForPublication(remote).ready,false);
 assert.ok(assessLocalWorkForPublication(remote).blockers.includes('remote-library-cover'));
-assert.ok(assessLocalWorkForPublication(remote).blockers.includes('remote-living-book-cover'));
+assert.equal(assessLocalWorkForPublication(remote).blockers.includes('remote-living-book-cover'),false,'a remote optional portrait is not a catalogue blocker; a remote Library cover still is');
 
 const review=groupLocalWorks([
   audio(4,'content://root/document/primary:Audiobooks%2FReview%2F01.mp3',{title:'',author:'',needsReview:true,libraryCoverUri:undefined,livingBookCoverUri:undefined}),
@@ -69,7 +69,7 @@ assert.ok(reviewAssessment.blockers.includes('missing-library-cover'));
 
 const partition=partitionLocalBooksByPublication([
   audio(10,'content://root/document/primary:Audiobooks%2FReady%2F01.mp3',{title:'Ready'}),
-  audio(11,'content://root/document/primary:Audiobooks%2FWaiting%2F01.mp3',{title:'Waiting',livingBookCoverUri:undefined}),
+  audio(11,'content://root/document/primary:Audiobooks%2FWaiting%2F01.mp3',{title:'Waiting',libraryCoverUri:undefined,coverUri:undefined,livingBookCoverUri:undefined}),
 ]);
 assert.equal(partition.published.length,1);
 assert.equal(partition.staged.length,1);
@@ -77,7 +77,7 @@ assert.equal(partition.published[0].title,'Ready');
 assert.equal(partition.staged[0].title,'Waiting');
 
 const previous=[audio(20,'content://root/document/primary:Audiobooks%2FExisting%2F01.mp3',{title:'Existing'})];
-const replacement=[audio(20,'content://root/document/primary:Audiobooks%2FExisting%2F01.mp3',{title:'Existing revised',livingBookCoverUri:undefined})];
+const replacement=[audio(20,'content://root/document/primary:Audiobooks%2FExisting%2F01.mp3',{title:'Existing revised',libraryCoverUri:undefined,coverUri:undefined,livingBookCoverUri:undefined})];
 const reconciled=reconcilePublishedLocalBooks(previous,replacement);
 assert.equal(reconciled.published.length,1,'last verified publication remains while replacement is incomplete');
 assert.equal(reconciled.published[0].title,'Existing');
