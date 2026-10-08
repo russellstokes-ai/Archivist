@@ -154,8 +154,43 @@ function rootAudioIdentityKey(book:SynchronizableBook){
   return '';
 }
 
+function audiobookFolderLooksLikeOneWork(books:SynchronizableBook[]){
+  if(books.length<2)return false;
+  const first=books[0];
+  const dirs=decodedPathParts(first.uri).slice(0,-1).filter(Boolean);
+  const root=first.rootUri?decodedPathParts(first.rootUri).filter(Boolean):[];
+  const belongsToRoot=root.length>0&&dirs.length>=root.length
+    &&root.every((part,index)=>normal(dirs[index])===normal(part));
+  // A library-level folder is a container, never an individual book. The
+  // library may have a selected SAF tree root or only a content URI.
+  const relative=belongsToRoot?dirs.slice(root.length):
+    dirs.filter((part,index)=>!(index===0&&isLibraryRootLabel(clean(part).replace(/^primary:/i,''))));
+  const folder=clean(relative[relative.length-1]||'');
+  if(relative.length<2||!folder||looksLikeLibraryContainer(folder))return false;
+  const distinctAlbums=new Set(books.map(book=>normal(book.embeddedMetadata?.workTitle||'')).filter(Boolean));
+  if(distinctAlbums.size>1)return false;
+  const stems=books.map(book=>fileStem(book.uri));
+  const multipartFamilies=new Set(stems.map(rootAudioTrackFamily).map(normal).filter(Boolean));
+  if(multipartFamilies.size>1)return false;
+  // A collection of individually named M4B books under an author/series
+  // folder is not a multipart work. Only trusted album tags could override it.
+  const mostlySingleFileBooks=books.every(book=>/\.(?:m4b|m4a)$/i.test(book.uri.split('?')[0]));
+  if(mostlySingleFileBooks&&!distinctAlbums.size)return false;
+  // Strong book-folder structure, supplemented by common work tags or
+  // chapter-style filenames. Mixed descriptive chapter titles are expected.
+  const chapterLike=stems.filter(stem=>
+    /^(?:(?:chapter|ch|part|pt|track|disc|cd|scene|section)\b|\d{1,4}(?:\s*[-._:]|\s+))/i.test(stem)
+    ||/\b(?:chapter|part|track)\s*\d{1,4}\b/i.test(stem)
+  ).length;
+  return distinctAlbums.size===1||chapterLike>=2||books.length>=4;
+}
+
 function shouldGroupAudioBooks(books:SynchronizableBook[]){
   if(books.length<=1)return true;
+  // Distinct embedded work titles are an explicit boundary: a mixed folder
+  // must never collapse multiple actual books, even if filenames look generic.
+  const distinctAlbums=new Set(books.map(book=>normal(book.embeddedMetadata?.workTitle||'')).filter(Boolean));
+  if(distinctAlbums.size>1)return false;
   const trackLike=books.every(book=>isGenericMediaTitle(fileStem(book.uri),'Audio',books.length));
   if(trackLike)return true;
   // Album/work tags are work-level evidence even when individual filenames are
@@ -169,7 +204,10 @@ function shouldGroupAudioBooks(books:SynchronizableBook[]){
   }));
   if(inferred.size===1)return true;
   const explicit=new Set(books.map(book=>String(book.workKey||'')).filter(key=>key&&key!=='unknown'));
-  return explicit.size===1&&explicit.size>0;
+  if(explicit.size===1&&explicit.size>0)return true;
+  // Per-file scanner keys are not authoritative negative evidence; once a
+  // nested audiobook folder is identified as a single work, keep it together.
+  return audiobookFolderLooksLikeOneWork(books);
 }
 export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
   const result=new Map<string,string>();
@@ -190,7 +228,15 @@ export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
     const group=directories.get(dir)||[];group.push(book);directories.set(dir,group);
   }
   for(const [dir,group] of directories){
-    if(shouldGroupAudioBooks(group)){
+    const albums=new Set(group.map(book=>normal(book.embeddedMetadata?.workTitle||'')).filter(Boolean));
+    if(albums.size>1){
+      // Multiple album identities in one physical folder: partition only the
+      // positively identified tracks, leaving ambiguous tracks independent.
+      for(const book of group){
+        const album=normal(book.embeddedMetadata?.workTitle||'');
+        result.set(book.uri,album?'audio-album:'+dir+':'+album:'audio-file:'+book.uri);
+      }
+    }else if(shouldGroupAudioBooks(group)){
       for(const book of group)result.set(book.uri,'audio-dir:'+dir);
     }else{
       for(const book of group)result.set(book.uri,'audio-file:'+book.uri);
