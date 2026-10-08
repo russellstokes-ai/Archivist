@@ -7,6 +7,7 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
 
 const {audioWorkGroupKeys,canonicalMetadataForBooks,synchronizeLocalMetadata,synchronizeLocalMetadataCooperative}=require('./metadataSync.ts');
 const {groupLocalWorks}=require('./localWorks.ts');
+const {localWorksForReview}=require('./publicationPipeline.ts');
 
 function track(id,name,extra={}){
   return {
@@ -165,6 +166,53 @@ assert.equal(crossFormat[1].genre,'Science Fiction');
 assert.equal(crossFormat[1].description,'Arrakis.');
 assert.equal(crossFormat[1].coverUri,undefined,'covers must not leak between different formats/editions');
 
+
+
+// Device regression: 226 physical audiobook files belong to 12 works.
+// Distinct descriptive chapter names and incomplete tags must never turn a
+// book-folder library into 226 individual metadata-review tasks.
+const largeBookFolders=[];
+for(let workIndex=0;workIndex<12;workIndex++){
+  const chapterCount=workIndex<10?19:18;
+  for(let chapter=0;chapter<chapterCount;chapter++){
+    const filename='Scene '+String(chapter+1).padStart(2,'0')+' '+(chapter%2?'Return to the valley':'An unexpected visitor');
+    largeBookFolders.push(track(30000+workIndex*100+chapter,filename,{
+      uri:'content://media/document/primary:Audiobooks%2FWriter%20'+workIndex+'%2FNovel%20'+workIndex+'%2F'+encodeURIComponent(filename)+'.mp3',
+      rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks',
+      title:filename,
+      author:'',
+      series:'',
+      needsReview:true,
+      workKey:'chapter:'+workIndex+':'+chapter,
+      embeddedMetadata:chapter===0?{workTitle:'Novel '+workIndex}:{},
+    }));
+  }
+}
+assert.equal(largeBookFolders.length,226);
+const grouped226=groupLocalWorks(largeBookFolders);
+assert.equal(grouped226.length,12,
+  '226 physical chapters across 12 book folders must display as 12 works, even with descriptive filenames or partial album tags');
+assert.deepEqual(grouped226.map(work=>work.files).sort((a,b)=>a-b),[18,18,...Array(10).fill(19)]);
+const attention226=localWorksForReview(largeBookFolders).filter(book=>book.needsReview);
+assert.equal(attention226.length,12,
+  'Needs Attention must show one editable card per audiobook, not one card per physical chapter file');
+const synchronized226=synchronizeLocalMetadata(largeBookFolders).books;
+assert.equal(groupLocalWorks(synchronized226).length,12,
+  'the canonical metadata pass must not split already grouped audiobook works');
+const {applyManualCluesToWork}=require('./metadataSearchWorkflow.ts');
+const firstWorkUris=grouped226[0].tracks.map(track=>track.uri);
+const edited226=applyManualCluesToWork(largeBookFolders,firstWorkUris,{title:'The Correct Novel',author:'Correct Writer'});
+assert.equal(edited226.filter(book=>book.author==='Correct Writer').length,19,
+  'editing one review card must update every chapter of that book, never just the first file');
+assert.equal(edited226.filter(book=>book.author==='Correct Writer'&& !firstWorkUris.includes(book.uri)).length,0,
+  'a book edit must not spill across unrelated books');
+
+const unrelatedSingles=[
+ track(50001,'An original lecture',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Collection%2FAn%20original%20lecture.mp3',title:'An original lecture',embeddedMetadata:{}}),
+ track(50002,'A different lecture',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Collection%2FA%20different%20lecture.mp3',title:'A different lecture',embeddedMetadata:{}}),
+];
+assert.equal(groupLocalWorks(unrelatedSingles).length,2,
+  'separate standalone files in a collection folder must not be falsely merged');
 
 (async()=>{
   const many=[];
