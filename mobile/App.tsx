@@ -1,3 +1,4 @@
+import {canonicalPrimaryGenre} from './genreTaxonomy';
 import {hydrateBookCandidate} from './onlineBookMetadata';
 import {persistWorkEdit} from './metadataEditPersistence';
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
@@ -1466,8 +1467,8 @@ function Client() {
 
   const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
-  const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
-  const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>work.genre),genreColour),[sourceWorks]);
+  const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space).map(work=>({...work,genre:canonicalPrimaryGenre(work.genre)||work.genre})),[atlasRelationshipWorks,space]);
+  const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>canonicalPrimaryGenre(work.genre)||work.genre),genreColour),[sourceWorks]);
   const atlasGenreColor=(name:string)=>atlasGenreColors.get(name.trim()||'Unclassified')||genreColour(name);
   const atlasRingSize=Math.min(width-(width>=940?56:width>=600?48:width<360?28:32),width>=940?720:width>=600?620:520);
   const atlasDiameter=Math.max(1,atlasRingSize-64);
