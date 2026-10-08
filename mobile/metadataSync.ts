@@ -123,7 +123,9 @@ function looksLikeLibraryContainer(value:string){
   const label=clean(value);
   if(!label)return true;
   if(isLibraryRootLabel(label))return true;
-  return /\b(?:library|collection|media|audiobooks?|audio\s*books?|ebooks?|books?|comics?)\b/i.test(label);
+  // Container detection must not reject real books named "Book 01 - Title",
+  // "The Library Book", or "A Collection of ..." as library roots.
+  return /^(?:(?:my|all|shared|mixed|digital|local|the)\s+)*(?:library|libraries|collections?|media|audiobooks?|audio\s*books?|ebooks?|books?|comics?|downloads?|unsorted|misc)$/i.test(label);
 }
 function rootAudioIdentityKey(book:SynchronizableBook){
   const scope=normal(book.space||'library');
