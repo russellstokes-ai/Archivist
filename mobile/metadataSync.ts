@@ -32,7 +32,7 @@ export type SynchronizableBook={
   reviewReason?:string;
   identificationConfidence?:SyncConfidence;
   onlineMetadataMatch?:{fields?:Partial<Record<string,unknown>>;confidence?:SyncConfidence};
-  embeddedMetadata?:{workTitle?:string};
+  embeddedMetadata?:{workTitle?:string;trackNumber?:number;discNumber?:number};
 };
 
 export type CanonicalMetadata={
