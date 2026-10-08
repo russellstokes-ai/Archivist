@@ -19,8 +19,8 @@ Recoveries: `checkpoint/test18-before-architecture-20261007`; `canonical/archivi
 
 ## Evidence: TWO DIFFERENT benchmark scales
 ### Real Windows/NAS inventory (primary grouping benchmark; NOT verified match ground truth)
-`audiobooks-Windows-raw.json` (2026-10-08): `\\192.168.1.119\media\Audiobooks\Audiobook`, 1,821 audio files, 153 scanned directories, 45 ebooks, 33 sidecars, 25 ambiguous PDFs, elapsed 26,672 ms **including 351 sampled media headers**.
-`comics-Windows-raw.json`: `\\192.168.1.119\media\Comics`, 4,664 comic archives, 272 scanned directories, 229 ambiguous PDFs, elapsed 36,797 ms **including 339 sampled media headers**.
+`audiobooks-Windows-raw.json` (2026-10-08): `(private NAS audiobook root)`, 1,821 audio files, 153 scanned directories, 45 ebooks, 33 sidecars, 25 ambiguous PDFs, elapsed 26,672 ms **including 351 sampled media headers**.
+`comics-Windows-raw.json`: `(private NAS audiobook root)`, 4,664 comic archives, 272 scanned directories, 229 ambiguous PDFs, elapsed 36,797 ms **including 339 sampled media headers**.
 These manifests contain names/paths/properties and sampled headers, NOT verified book/issue identities or complete embedded tags. They must become *redacted, deterministic test fixtures plus separately validated golden identity mappings*. Do not upload private absolute filenames to public repos without sanitisation. Do not equate number of audio tracks, comic archives, volumes or folders with book count.
 Grounding cases to verify against actual paths:
 - `James S. A. Corey/The Expanse/narrated by Jefferson Mays/1.0 - Leviathan Wakes`: one audiobook edition across ordered tracks, not the whole series.
