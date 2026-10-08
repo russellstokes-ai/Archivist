@@ -96,6 +96,8 @@ def tap_label(query,timeout=25,exact=False,optional=False):
         root=dump()
         hits=nodes_matching(root,query,exact)
         hits=[n for n in hits if n.get("enabled")!="false"]
+        tappable=[n for n in hits if n.get("clickable")=="true"]
+        if tappable:hits=tappable
         if hits:
             tap_node(hits[0])
             log("TAPPED "+query+" @ "+str(bounds(hits[0])))
@@ -121,6 +123,8 @@ def tap_first(queries,timeout=20):
         root=dump()
         for q in queries:
             h=nodes_matching(root,q)
+            tappable=[n for n in h if n.get("clickable")=="true" and n.get("enabled")!="false"]
+            if tappable:h=tappable
             if h:
                 tap_node(h[0])
                 log("TAPPED "+q+" @ "+str(bounds(h[0])))
@@ -160,9 +164,11 @@ def picker_select(folder_name,out):
             root=view(out,"picker-fixture-inside")
     tap_first(["Use this folder","USE THIS FOLDER","Select"],timeout=22)
     time.sleep(1)
-    if tap_label("Allow",timeout=10,optional=True):
-        time.sleep(1.5)
-    view(out,"folder-selected")
+    if tap_label("ALLOW",timeout=15,exact=True,optional=True):
+        time.sleep(2)
+    root=view(out,"folder-selected")
+    if nodes_matching(root,"Allow Archivist to access files"):
+        raise RuntimeError("Android folder grant dialog remains open; ALLOW was not activated")
 def copy_fixture(profile,out):
     names={"grouped":"ArchivistQAGrouped","split-discs":"ArchivistQASplitDiscs",
            "diagnostic342":"ArchivistQADiagnostic342"}
@@ -378,8 +384,9 @@ def process_profile(profile,apk):
                        str(result["phase_works"]))
                 if not results_by_phase.get("finish"):
                     result["status"]="failed"
-                    result["reason"]="Native Identify never reached the final finish checkpoint"
-            else:
+                    if not result.get("reason"):
+                        result["reason"]="Native Identify never reached the final finish checkpoint"
+            elif not result.get("reason"):
                 result["status"]="failed"
                 result["reason"]="No native scanner trace available; cannot claim actual media scan passed"
         except Exception as e:result["catalogue_error"]=str(e)
