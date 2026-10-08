@@ -5032,9 +5032,8 @@ function Client() {
     };
     return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestEditorClose}>
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
-        <View style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={[StyleSheet.absoluteFill,{zIndex:0}]} onPress={requestEditorClose}/>
-          <View collapsable={false} accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden',position:'relative',zIndex:1}]}>
+        <Pressable accessible={false} style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]} onPress={requestEditorClose}>
+          <Pressable accessible={false} accessibilityViewIsModal onPress={()=>undefined} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden'}]}>
           <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:16,gap:8,borderBottomWidth:1,borderBottomColor:p.line}}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit book details</Text>
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
@@ -5126,8 +5125,8 @@ function Client() {
               <Button label="Close" tone="quiet" disabled={busy||metadataSearchBusy||coverPicking} onPress={requestEditorClose}/>
             </View>
           </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </KeyboardAvoidingView>
     </Modal>;
   }
@@ -5899,7 +5898,7 @@ function Client() {
           </Pressable>
         </Pressable>
       </Modal>:null}
-      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><Pressable accessibilityRole="button" accessibilityLabel="Close Library filters" style={modalSheetBackdrop} onPress={()=>setLibraryFiltersOpen(false)}><Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
+      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><Pressable accessible={false} style={modalSheetBackdrop} onPress={()=>setLibraryFiltersOpen(false)}><Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.filterWrap}>{([
           ['title','Title'],
           ['author','Author'],
