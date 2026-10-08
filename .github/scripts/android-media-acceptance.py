@@ -46,11 +46,17 @@ def screenshot(target:Path,subdir=""):
 def dump():
     for attempt in range(3):
         try:
-            d=adb("shell","uiautomator","dump","/sdcard/archivist-ui.xml",timeout=26,check=False)
+            d=adb("shell","uiautomator","dump","--compressed","/sdcard/archivist-ui.xml",timeout=26,check=False)
             if d.returncode!=0:
+                log("UIA dump failed "+str(d.returncode)+" stdout="+repr(d.stdout[-250:])+
+                    " stderr="+repr(d.stderr[-250:]))
                 time.sleep(0.8)
                 continue
             xml=adb("exec-out","cat","/sdcard/archivist-ui.xml",timeout=12).stdout
+            if not xml.lstrip().startswith("<?xml") and not xml.lstrip().startswith("<hierarchy"):
+                log("UIA dump not XML, prefix="+repr(xml[:340])+"; command="+repr(d.stdout[-300:]))
+                time.sleep(0.8)
+                continue
             return ET.fromstring(xml)
         except Exception as exc:
             log("UI dump retry: "+str(exc)[:170])
@@ -98,8 +104,13 @@ def tap_label(query,timeout=25,exact=False,optional=False):
     if optional:return False
     raise RuntimeError("Could not find Android control "+repr(query)+"; visible: "+repr(labels(root)[-65:]))
 def view(out:Path,label:str):
-    root=dump()
+    # Capture a native screenshot even when UiAutomator's "wait for idle"
+    # fails on continuous React Native/Lottie animations.
     screenshot(out/(label+".png"))
+    try:root=dump()
+    except Exception as e:
+        (out/(label+".hierarchy-error.txt")).write_text(str(e))
+        raise
     (out/(label+".xml")).write_text(ET.tostring(root,encoding="unicode"))
     text=labels(root)
     log("SCREEN "+label+": "+repr(text[-35:])[:1400])
@@ -383,6 +394,8 @@ def main():
     log("EXPECTED INPUT "+json.dumps(manifest)[:1800])
     adb("wait-for-device",timeout=90)
     adb("install","--no-streaming","-r",apk,timeout=150)
+    for setting in ("window_animation_scale","transition_animation_scale","animator_duration_scale"):
+        adb("shell","settings","put","global",setting,"0",timeout=10,check=False)
     results=[]
     for profile in PROFILES:
         if profile not in ("grouped","split-discs","diagnostic342"):raise ValueError("Bad profile: "+profile)
