@@ -114,7 +114,25 @@ test('Needs Attention save, restore, Smart Search and acceptance use the product
   await expect(page.getByLabel('Corrected title')).toBeVisible();
   await page.getByLabel('Corrected title').fill('Dune Messiah');
   await page.getByLabel('Author').fill('Frank Herbert');
-  await page.getByRole('button',{name:'Save',exact:true}).click();
+  const saveButton=page.getByRole('button',{name:'Save',exact:true});
+  const hitLayers=await saveButton.evaluate(element=>{
+    const rect=element.getBoundingClientRect();
+    const x=rect.left+rect.width/2,y=rect.top+rect.height/2;
+    return {
+      target:{x,y,width:rect.width,height:rect.height},
+      hit:document.elementsFromPoint(x,y).slice(0,9).map(node=>{
+        const el=node as HTMLElement;
+        const r=el.getBoundingClientRect(),style=getComputedStyle(el);
+        return {tag:el.tagName,role:el.getAttribute('role'),label:el.getAttribute('aria-label'),
+          className:String(el.className||'').slice(0,120),text:(el.textContent||'').trim().slice(0,80),
+          parent:el.parentElement?.getAttribute('aria-label')||'',position:style.position,zIndex:style.zIndex,
+          pointerEvents:style.pointerEvents,overflow:style.overflow,opacity:style.opacity,
+          rect:[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]};
+      }),
+    };
+  });
+  console.log('METADATA_EDITOR_SAVE_HIT_TEST',JSON.stringify(hitLayers));
+  await saveButton.click();
   await expect(page.getByText(/Search clues saved/)).toBeVisible();
   await page.getByRole('button',{name:'Close',exact:true}).click();
 
