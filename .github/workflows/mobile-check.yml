@@ -17,7 +17,7 @@ concurrency:
 jobs:
   mobile-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
 
@@ -59,3 +59,22 @@ jobs:
       - name: Expo web bundle
         working-directory: mobile
         run: npx expo export --platform web --output-dir "$RUNNER_TEMP/archivist-web"
+
+      - name: Install Playwright browser
+        working-directory: mobile
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright reliability workflows
+        working-directory: mobile
+        run: npm run test:e2e
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archivist-playwright-${{ github.sha }}
+          path: |
+            mobile/playwright-report
+            mobile/test-results
+          if-no-files-found: ignore
+          retention-days: 14
