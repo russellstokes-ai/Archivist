@@ -216,6 +216,26 @@ const numberedBookFolder=[
 assert.equal(groupLocalWorks(numberedBookFolder).length,1,
  'book folders prefixed Book 01 must group descriptive chapters instead of being mistaken for the Books collection');
 
+// Common SAF layout: the user selects Audiobooks, containing one folder per
+// book. There is no intermediate author folder. Scan must still return 12
+// logical works for 226 physical chapter files.
+const directBookFolders=largeBookFolders.map((book,index)=>{
+  const bookIndex=Math.floor(index/19); // do not depend on this for grouping
+  const sourceParts=book.uri.split('%2F');
+  const bookFolder=sourceParts[sourceParts.length-2];
+  const filename=sourceParts[sourceParts.length-1];
+  return {...book,uri:'content://media/document/primary:Audiobooks%2F'+bookFolder+'%2F'+filename,
+    rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks'};
+});
+assert.equal(directBookFolders.length,226);
+assert.equal(groupLocalWorks(directBookFolders).length,12,
+ 'selecting Audiobooks root with 12 immediate book subfolders must not produce 226 review rows');
+assert.equal(localWorksForReview(directBookFolders).filter(book=>book.needsReview).length,12,
+ 'immediate book folders must generate exactly one Needs Attention task per book');
+assert.equal(groupLocalWorks(synchronizeLocalMetadata(directBookFolders).books).length,12,
+ 'a rescan/metadata synchronization must preserve direct-child book grouping');
+
+
 const multipartM4a=['Part 01 - Arrival','Part 02 - Journey','Part 03 - Finale'].map((chapter,i)=>track(63000+i,chapter,{
   uri:'content://media/document/primary:Audiobooks%2FWriter%2FBook%20Four%2F'+encodeURIComponent(chapter)+'.m4a',
   rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks',
