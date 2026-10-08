@@ -64,7 +64,8 @@ const missingArtwork=[audio({coverUri:undefined,libraryCoverUri:undefined})];
 assert.equal(outcome(missingArtwork).published.length,0);
 const savedClues=[audio({identificationState:'clues-saved'})];
 assert.equal(outcome(savedClues).published.length,0,'saving metadata clues must not imply approval');
-const ambiguous=[audio({title:'Chapter 01',author:'',needsReview:true})];
+const ambiguous=[audio({uri:'content://root/document/primary:Audiobooks%2FChapter%2001.mp3',
+  title:'Chapter 01',author:'',needsReview:true,identificationState:'unresolved'})];
 assert.equal(outcome(ambiguous).published.length,0,'ambiguous chapter identity must remain staged');
 
 // On failed updated artwork, keep last ready edition and an attention item.
