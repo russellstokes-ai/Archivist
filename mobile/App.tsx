@@ -2753,6 +2753,7 @@ function Client() {
     if(!libraryRefreshRunningRef.current&&!activeLibraryProgress)return;
     scanCommitGate.invalidate();
     NativeModules.ArchivistArchive?.cancelAudioMetadataRead?.();
+    NativeModules.ArchivistArchive?.cancelLibraryDirectoryRead?.();
     libraryRefreshRunningRef.current=false;
     setLocalScanning(false);
     setScanProgress(null);
