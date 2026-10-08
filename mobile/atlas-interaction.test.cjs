@@ -1,7 +1,8 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
-const {stripTypeScriptTypes}=require('node:module');
-async function load(file){return import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(fs.readFileSync(__dirname+'/'+file,'utf8'),{mode:'transform'})).toString('base64'));}
+const ts=require('typescript');
+require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
+async function load(file){return require('./'+file);}
 (async()=>{
   const x=await load('atlasInteraction.ts');
   const {buildAtlasUniverse}=await load('atlasUniverse.ts');
