@@ -44,7 +44,17 @@ assert.equal(scene.nodes.filter(node=>node.kind==='genre').length,1,
   'Atlas should create one Science Fiction constellation, not a constellation per provider spelling');
 assert.equal(scene.nodes.find(node=>node.kind==='genre').label,'Science Fiction');
 
-const {lookupOnlineBook,hydrateBookCandidate}=require('./onlineBookMetadata.ts');
+const {lookupOnlineBook,hydrateBookCandidate,shouldLookupBookOnline,mergeOnlineBookCandidate}=require('./onlineBookMetadata.ts');
+const completeBase={title:'Dune',author:'Frank Herbert',format:'EPUB',coverUri:'file:///dune.jpg'};
+assert.equal(shouldLookupBookOnline({...completeBase,genre:'Fiction'}),true,
+ 'generic Fiction is insufficient Atlas classification and needs enrichment');
+assert.equal(shouldLookupBookOnline({...completeBase,genre:'Space Opera'}),false,
+ 'known specific genre aliases count as classified');
+const confirmedCandidate={provider:'openlibrary',providerId:'/works/OLG1W',fields:{title:'Dune',genre:'Science Fiction'},score:96,confidence:'high',reasons:[],exactIdentifier:true,query:'isbn'};
+assert.equal(mergeOnlineBookCandidate({...completeBase,genre:'Fiction',metadataProvenance:{genre:'embedded'}},confirmedCandidate,true).genre,'Science Fiction',
+ 'a high-confidence specific genre may improve an embedded broad label');
+assert.equal(mergeOnlineBookCandidate({...completeBase,genre:'Fiction',metadataProvenance:{genre:'manual'}},confirmedCandidate,true).genre,'Fiction',
+ 'manual genre edits must remain protected');
 (async()=>{
  const calls=[];
  const fetcher=async url=>{
