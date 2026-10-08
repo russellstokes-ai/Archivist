@@ -502,7 +502,7 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[],standaloneS
     if(!manual&&!trusted&&filenameTitle
       && !isGenericMediaTitle(filenameTitle,'Audio',1)
       && (normal(selected.title?.value)===normal(folderTitle)||normal(book.title)===normal(folderTitle)
-        ||!selected.title)){
+        ||normal(selected.title?.value)===normal(stem)||!selected.title)){
       selected.title={book,value:filenameTitle,source:'path',confidence:'high',
         key:normal(filenameTitle),workHint:true,score:Number.MAX_SAFE_INTEGER,authority:0} as any;
     }
@@ -554,13 +554,18 @@ function canPropagate(book:SynchronizableBook,field:SyncField,canonical:Canonica
   return sourceRank[canonicalSource]>sourceRank[targetSource];
 }
 
-function applyCanonical<T extends SynchronizableBook>(book:T,canonical:CanonicalMetadata,audioGroupSize:number):T{
+function applyCanonical<T extends SynchronizableBook>(book:T,canonical:CanonicalMetadata,audioGroupSize:number,standaloneSeries=false):T{
   const next:any={...book};
   const provenance={...(book.metadataProvenance||{})};
   const confidence={...(book.metadataFieldConfidence||{})};
   for(const field of fields){
     const value=(canonical as any)[field];
-    if(!present(value)||!canPropagate(book,field,canonical))continue;
+    const correctedSeriesTitle=field==='title'&&standaloneSeries
+      && sourceFor(book,'title')==='path'
+      && (normal(book.title)===normal(audioBookFolderTitle(book.uri))
+          ||normal(book.title)===normal(fileStem(book.uri)))
+      && normal(book.title)!==normal(canonical.title);
+    if(!present(value)||(!correctedSeriesTitle&&!canPropagate(book,field,canonical)))continue;
     next[field]=value;
     provenance[field]=canonical.provenance[field]||'path';
     confidence[field]=canonical.confidence[field]||'low';
@@ -611,7 +616,7 @@ export function synchronizeLocalMetadata<T extends SynchronizableBook>(books:T[]
     const canonical=canonicalMetadataForBooks(group,key.startsWith('audio-series-file:'));
     for(const index of indexes){
       const before=next[index];
-      const after=applyCanonical(before,canonical,indexes.length);
+      const after=applyCanonical(before,canonical,indexes.length,key.startsWith('audio-series-file:'));
       if(syncMateriallyChanged(before,after)){next[index]=after;updated++;}
     }
   }
@@ -678,14 +683,14 @@ export async function synchronizeLocalMetadataCooperative<T extends Synchronizab
   });
 
   let updated=0;
-  for(const indexes of audioGroups.values()){
+  for(const [key,indexes] of audioGroups.entries()){
     if(!shouldContinue())break;
     const group=indexes.map(index=>next[index]);
-    const canonical=canonicalMetadataForBooks(group);
+    const canonical=canonicalMetadataForBooks(group,key.startsWith('audio-series-file:'));
     for(const index of indexes){
       if(!shouldContinue())break;
       const before=next[index];
-      const after=applyCanonical(before,canonical,indexes.length);
+      const after=applyCanonical(before,canonical,indexes.length,key.startsWith('audio-series-file:'));
       if(syncMateriallyChanged(before,after)){next[index]=after;updated++;}
       await yieldIfNeeded();
     }
