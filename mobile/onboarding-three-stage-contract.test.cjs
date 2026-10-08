@@ -12,12 +12,14 @@ assert.match(source,/finaliseLocalScan\(result,previousLocal,generation,false,tr
 assert.match(source,/discoveryOnly=false/,'discovery-only mode must be explicit');
 assert.match(source,/if\(discoveryOnly\)return summary;/,
  'the first step ends before costly network/embedded cover extraction');
-assert.match(source,/enrichPublishedLocalLibrary\(staged,generation,false\)/,
+assert.match(source,/enrichPublishedLocalLibrary\(staged,generation,true\)/,
  'second button must enrich persisted discovered files WITHOUT repeating the scan');
 assert.match(source,/getPersistedJSON<\{signature:string\}>\(onboardingDiscoveryKey\)/,
  'discovery state must recover after app restart');
 assert.match(source,/onboardingDiscoverySignature===currentLibraryFolderSignature/,
  'the saved discovery must be valid only for the selected folder set');
+assert.match(source,/activeStep==='discover'/,
+ 'pulse advances to Find Books after a folder has been selected');
 assert.match(source,/>Find Books</);
 assert.match(source,/>Identify Books & Covers</);
 assert.match(source,/>Needs Attention</);
