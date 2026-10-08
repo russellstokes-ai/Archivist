@@ -84,7 +84,7 @@ test('published Library filters use the real controls and shared predicate',asyn
 
   await page.getByRole('button',{name:'All',exact:true}).click();
   await page.getByRole('button',{name:/^Filters/}).click();
-  await expect(page.getByLabel('Library filters')).toBeVisible();
+  await expect(page.getByText('Filter & sort',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Frank Herbert',exact:true}).click();
   await page.getByRole('button',{name:'Apply',exact:true}).click();
   await expect(page.getByText('Dune',{exact:true})).toBeVisible();
