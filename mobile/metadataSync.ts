@@ -7,6 +7,7 @@ export type SynchronizableBook={
   format:string;
   space?:string;
   rootUri?:string;
+  fileSize?:number;
   title:string;
   author?:string;
   series?:string;
@@ -200,8 +201,48 @@ function audiobookFolderLooksLikeOneWork(books:SynchronizableBook[]){
   return distinctAlbums.size===1||chapterLike>=2||books.length>=4;
 }
 
+/**
+ * Distinguish complete numbered novels sharing a SERIES folder from numbered
+ * CHAPTERS of one work. Discworld's real NAS MP3s are each 100–230 MB, use
+ * "01. The Colour of Magic" etc., and must never be one audiobook.
+ *
+ * Do not rely on just filename numbering, which also describes chapters.
+ * Verified distinct series positions OR large independent audiobook-sized
+ * numbered files with substantive titles provide the independent evidence.
+ * An explicit shared embedded album/work title defeats the heuristic.
+ */
+function distinctStandaloneSeriesAudioFiles(books:SynchronizableBook[]){
+  if(books.length<3)return false;
+  const albums=new Set(books.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
+  if(albums.size===1)return false; // album provides a stronger shared work identity
+  const descriptions=books.map(book=>{
+    const stem=fileStem(book.uri);
+    const match=stem.match(/^\s*\d{1,3}\s*\.\s+(.{4,})$/);
+    const title=clean(match?.[1]||'');
+    const generic=/^(?:chapter|ch|track|part|pt|disc|disk|cd|scene|section|intro|introduction|epilogue|prologue)\b/i.test(title);
+    return {title,generic};
+  });
+  const descriptive=descriptions.every(x=>!!x.title&&!x.generic)
+    && new Set(descriptions.map(x=>normal(x.title))).size===books.length;
+  if(!descriptive)return false;
+  const series=books.map(book=>normal(book.series)).filter(Boolean);
+  const positions=books.map(book=>book.seriesNumber).filter((x):x is number=>typeof x==='number'&&Number.isFinite(x));
+  const verifiedSeries=series.length===books.length
+    && new Set(series).size===1 && positions.length===books.length
+    && new Set(positions).size===books.length;
+  if(verifiedSeries)return true;
+  // A bare "01 - Opening" list must NOT satisfy this. Require the precise
+  // dotted-series filename convention and all files to be substantially
+  // audiobook-sized, with no embedded track/disc identity clues.
+  const substantial=books.every(book=>
+    typeof book.fileSize==='number' && book.fileSize>=64*1024*1024
+    && !book.embeddedMetadata?.trackNumber && !book.embeddedMetadata?.discNumber
+  );
+  return substantial;
+}
 function shouldGroupAudioBooks(books:SynchronizableBook[]){
   if(books.length<=1)return true;
+  if(distinctStandaloneSeriesAudioFiles(books))return false;
   // Distinct embedded work titles are an explicit boundary: a mixed folder
   // must never collapse multiple actual books, even if filenames look generic.
   const distinctAlbums=new Set(books.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
