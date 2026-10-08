@@ -128,8 +128,17 @@ assert.equal(localWorksForReview(tracks).filter(w=>w.needsReview).length,12,
   assert.equal(groupLocalWorks(restored).length,10,'restart restores ten published works');
   const offlineAgain=await cacheOnlineCoverUris(durablyStaged,ops,{concurrency:4});
   assert.equal(offlineAgain.attempted,1,'rescan retries only the one work with failed remote cover');
+  // Simulate losing ALL committed local cover references for Novel 0.
+  // Clearing only the visible fields is insufficient: coverCandidates is a
+  // legitimate recovery channel and its retained local path makes the work
+  // publishable, so that is NOT a failed-artwork scenario.
   const dropped=durablyStaged.map(item=>item.uri.includes('Novel%200%2F')?
-    {...item,libraryCoverUri:undefined,coverUri:undefined,livingBookCoverUri:undefined}:item);
+    {...item,libraryCoverUri:undefined,coverUri:undefined,
+      livingBookCoverUri:undefined,coverCandidates:undefined}:item);
+  const droppedPartition=partitionLocalBooksByPublication(dropped);
+  assert.equal(groupLocalWorks(droppedPartition.staged).length,3,
+    'failed refresh has two original attention works plus one lost-cover work');
+  assert.ok(groupLocalWorks(droppedPartition.staged).some(work=>work.title==='Novel 0'));
   const retained=retainPublishedSnapshots(dropped,durablyStaged);
   assert.equal(groupLocalWorks(restorePublishedCatalogue(retained)).length,10,
     'failed update must keep last known-good work visible across restart');
