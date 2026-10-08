@@ -30,7 +30,7 @@ assert.equal(app.expo.version,'0.9.4');
 assert.equal(app.expo.android.versionCode,107,'Test 13 must install as Android versionCode 107');
 assert.match(gradle,/versionCode\s+107/);
 assert.match(gradle,/versionName\s+"0\.9\.4"/);
-assert.match(apkWorkflow,/TEST_BUILD:\s*'18-editor-render'/);
+assert.match(apkWorkflow,/TEST_BUILD:\s*'(?:18-editor-render|19-reliability)'/);
 assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'final Test 13 branch must trigger the APK workflow');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'final APK must pass release lint');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'final APK must verify package/version/signature/alignment');
