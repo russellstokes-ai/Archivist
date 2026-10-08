@@ -67,6 +67,11 @@ function normal(value:unknown){return clean(value).normalize('NFKD').replace(/[\
 function albumWorkTitle(value:unknown){
   const original=clean(value);
   if(!original||/^(?:unknown(?: album)?|n\/a|none|null|untitled)$/i.test(original))return '';
+  // Device ID3/TALB pollution: some encoders mistakenly put a chapter, track
+  // or disc label in the ALBUM field. That is NOT negative book identity.
+  // Retain real distinct album names (Dune vs Project Hail Mary), but ignore
+  // generic sequence-only labels before deciding to split a folder.
+  if(/^(?:(?:chapter|chap(?:ter)?|ch|track|disc|disk|cd|part|pt|section|scene)\s*#?\s*\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?|(?:introduction|intro|outro|prologue|epilogue))$/i.test(original))return '';
   const withoutPart=original.replace(/(?:\s*[\[(]\s*|\s*[-:–]\s*|\s+)(?:disc|disk|cd|part|pt)\s*#?\s*\d{1,3}(?:\s*(?:of|\/)\s*\d{1,3})?\s*[\])]?\s*$/i,'').trim();
   return withoutPart||original;
 }
