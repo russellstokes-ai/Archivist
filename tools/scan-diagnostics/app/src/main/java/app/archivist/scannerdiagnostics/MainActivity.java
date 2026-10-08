@@ -33,6 +33,8 @@ import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Independent scanner with a distinct app ID. SAF READ grants only, no media writes,
@@ -56,6 +58,28 @@ public final class MainActivity extends Activity {
   };
   final Handler ui=new Handler(Looper.getMainLooper());
   final ExecutorService io=Executors.newSingleThreadExecutor();
+  final ScheduledExecutorService watchdog=Executors.newSingleThreadScheduledExecutor();
+  volatile long activeQueryStarted=0, lastProgress=0;
+  volatile String activeFolder="";
+  volatile boolean providerStalled=false;
+  volatile long observedStallMs=0;
+  volatile int stallEvents=0;
+  final long stallThresholdMs=4000L;
+  final Runnable heartbeat=new Runnable(){public void run(){
+    if(scanning){
+      long now=SystemClock.elapsedRealtime();
+      long idle=now-lastProgress;
+      long activeMs=activeQueryStarted==0?0:now-activeQueryStarted;
+      if(activeMs>=stallThresholdMs&&!providerStalled){
+        providerStalled=true;stallEvents++;
+      }
+      observedStallMs=Math.max(observedStallMs,activeMs);
+      summary.setText("Scanning… "+(now-scanStart)/1000+"s  •  files "+files+"  •  folders "+dirs+"\n"
+        +"Provider query: "+(activeMs/1000)+"s  •  idle: "+(idle/1000)+"s\n"
+        +(providerStalled?"STALLED — provider query exceeded 4 seconds. Cancel is available.":"Slow queries: "+slowQueries));
+    }
+    ui.postDelayed(this,500);
+  }};
   final AtomicBoolean cancelled=new AtomicBoolean(false);
   volatile String stage="Idle";
   volatile TimedSafProbe activeProbe;
@@ -109,6 +133,7 @@ public final class MainActivity extends Activity {
     root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     setContentView(root);
     updateButtons();
+    ui.postDelayed(heartbeat,500);
   }
 
   TextView text(String value,int size,boolean bold,int color){
@@ -192,6 +217,7 @@ public final class MainActivity extends Activity {
     inventoryElapsedMs=headerElapsedMs=maxUiDelayMs=lastHeartbeat=0;
     stage="Listing folders";
     scanStart=SystemClock.elapsedRealtime();
+    lastProgress=scanStart;activeQueryStarted=0;activeFolder="";providerStalled=false;observedStallMs=0;stallEvents=0;
     fileRecords=new JSONArray();folderRecords=new JSONArray();errors=new JSONArray();headerRecords=new JSONArray();
     samples=new ArrayList<>();sampledPerFolder=new HashMap<>();
     audioByParent=new HashMap<>();seenDirIds=new HashSet<>();
@@ -214,6 +240,7 @@ public final class MainActivity extends Activity {
         Folder folder=queue.removeFirst();
         if(folder.depth>MAX_DEPTH||!seenDirIds.add(folder.id))continue;
         long started=SystemClock.elapsedRealtime();
+        activeFolder=folder.id;
         stage="Directory "+(queries+1);
         TimedSafProbe.Result listing=probe.list(tree,folder.id);
         JSONArray folderEntries=listing.entries;
@@ -226,11 +253,13 @@ public final class MainActivity extends Activity {
         longestQuery=Math.max(longestQuery,elapsed);
         if(elapsed>=1000)slowQueries++;
         queries++;
+        lastProgress=SystemClock.elapsedRealtime();
         JSONObject stats=new JSONObject();
         stats.put("documentId",folder.id);
         stats.put("depth",folder.depth);
         stats.put("queryMs",elapsed);
         stats.put("count",folderEntries.length());
+        stats.put("exceeded4s",elapsed>=stallThresholdMs);
         stats.put("basicProjectionFallback",fallback);
         stats.put("timedOut",listing.timeout);
         stats.put("runningTotalMs",SystemClock.elapsedRealtime()-scanStart);
@@ -339,11 +368,15 @@ public final class MainActivity extends Activity {
       counts.put("uiThreadWorstLagMs",maxUiDelayMs);
       counts.put("blockedProvider",probe.isBlocked());
       counts.put("elapsedMs",SystemClock.elapsedRealtime()-scanStart);
+      counts.put("providerStallEvents",stallEvents);
+      counts.put("maximumObservedQueryMs",observedStallMs);
+      counts.put("cancelRequested",cancelled.get());
       finalResult.put("counts",counts);
       finalResult.put("entries",fileRecords);
       finalResult.put("directoryTimings",folderRecords);
       finalResult.put("headerReadTimings",headerRecords);
       finalResult.put("errors",errors);
+      finalResult.put("lastVisitedFolderId",activeFolder);
       JSONObject note=new JSONObject();
       note.put("grouping","No simulated work count is presented as authoritative. Export entries and run the exact Test 21 TypeScript grouping replay.");
       note.put("metadata","Timed representative 64KB header access, not full tags or archive parsing; no media payload is included in report.");
