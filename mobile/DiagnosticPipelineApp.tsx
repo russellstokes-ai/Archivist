@@ -194,7 +194,7 @@ export default function DiagnosticApp(){
       }),r=>({attempted:r.attempted,updated:r.updated,timedOut:r.timedOut,skipped:r.skipped}));
       finalBooks=recovered.books;
       if(cancelled.current)return;
-      const partition=await timed('10 Publication gate and Needs Attention',async()=>{
+      await timed('10 Publication gate and Needs Attention',async()=>{
         const partition=partitionLocalBooksByPublication(finalBooks);
         const review=localWorksForReview(finalBooks);
         return {partition,review};
@@ -230,7 +230,7 @@ export default function DiagnosticApp(){
     if(!available||!documentDirectory)return;
     try{
       const path=documentDirectory+'archivist-pipeline-diagnostic-'+Date.now()+'.json';
-      const snapshot={...available,steps:[...steps.current.length&&busy?steps.current:available.steps],events:[...(busy?events.current:available.events)],exportedWhileRunning:busy};
+      const snapshot={...available,steps:busy?[...steps.current]:[...available.steps],events:busy?[...events.current]:[...available.events],exportedWhileRunning:busy};
       await writeAsStringAsync(path,JSON.stringify(snapshot,null,2));
       await Sharing.shareAsync(path,{mimeType:'application/json',dialogTitle:'Share Archivist pipeline diagnostics'});
     }catch(error){setLines(prev=>[...prev,'Export failed: '+String(error)]);}
