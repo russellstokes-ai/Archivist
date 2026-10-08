@@ -22,4 +22,4 @@ assert.match(book,/progress=\{reduceMotion \? 0\.26 : undefined\}/,'Reduced Moti
 assert.match(book,/accessibilityRole="progressbar"/,'book loader is accessible');
 assert.match(app,/dark=\{darkMode\}/,'all App load indicators inherit canonical dark/light theme');
 assert.match(reader,/dark=\{paper==='#000000'\}/,'PDF indicator retains theme matching');
-console.log('PASS: user's exact Lottie book recoloured into both themes and replaces all 9 circular UI spinners');
+console.log('PASS: user-supplied Lottie book recoloured into both themes and replaces all 9 circular UI spinners');
