@@ -23,6 +23,8 @@ const seededStage=[
 
 async function seed(page:Page){
   await page.addInitScript(({stage})=>{
+    if(sessionStorage.getItem('archivist-e2e-fixture-seeded')==='1')return;
+    sessionStorage.setItem('archivist-e2e-fixture-seeded','1');
     localStorage.clear();
     localStorage.setItem('archivist.localStage.web.v1',JSON.stringify(stage));
     localStorage.setItem('archivist.metadata.settings.v1',JSON.stringify({
