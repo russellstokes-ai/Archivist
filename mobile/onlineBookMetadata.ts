@@ -38,7 +38,7 @@ export type OnlineBookCandidate={
 
 export type OnlineBookLookupResult={
   key:string;
-  status:'matched'|'review'|'none'|'offline';
+  status:'matched'|'review'|'none'|'offline'|'unconfigured';
   best?:OnlineBookCandidate;
   candidates:OnlineBookCandidate[];
   autoApply:boolean;
@@ -382,6 +382,9 @@ export function shouldLookupBookOnline(input:BookLookupInput){
 export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookLookupOptions={}):Promise<OnlineBookLookupResult>{
   const now=options.now||Date.now;
   const key=onlineBookCacheKey(input);
+  const openLibraryEnabled=options.openLibraryEnabled!==false;
+  const googleBooksEnabled=!!String(options.googleBooksApiKey||'').trim();
+  if(!openLibraryEnabled&&!googleBooksEnabled)return {key,status:'unconfigured',candidates:[],autoApply:false,queried:[]};
   const cached=options.cache?.[key];
   if(!options.ignoreCache&&cached&&cached.expiresAt>now())return cached.result;
   const fetcher=options.fetcher||(globalThis.fetch as unknown as FetchLike);
@@ -390,7 +393,6 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
   const started=Date.now();
   const plans=queryPlans(input,!!options.deep,!!options.interactive);const queried:string[]=[];const raw:Array<Omit<OnlineBookCandidate,'score'|'confidence'|'reasons'>>=[];
   try{
-    const openLibraryEnabled=options.openLibraryEnabled!==false;
     if(openLibraryEnabled){
       for(const plan of plans){
         if(options.interactive&&Date.now()-started>=12000)break;
@@ -401,7 +403,7 @@ export async function lookupOnlineBook(input:BookLookupInput,options:OnlineBookL
       }
     }
     let ranked=rankCandidates(input,raw);
-    if(options.googleBooksApiKey&&(options.deep||!ranked[0]||ranked[0].confidence!=='high')){
+    if(googleBooksEnabled&&(options.deep||!ranked[0]||ranked[0].confidence!=='high')){
       for(const plan of plans.slice(0,options.deep?8:3)){
         if(options.interactive&&Date.now()-started>=12000)break;
         try{
