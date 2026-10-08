@@ -1,4 +1,4 @@
-import {Platform} from 'react-native';
+import {NativeModules,Platform} from 'react-native';
 import {copyAsync, deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, readDirectoryAsync, StorageAccessFramework} from 'expo-file-system/legacy';
 import {applyLocalMetadata, applyResolvedLocalMetadata, decodedPathParts, inferLocalBookMetadata, IdentificationConfidence, isGenericMediaTitle, LocalMetadataFields, parseLocalSidecar, logicalWorkKey, editionKey, sanitizeDiscoveredMetadata} from './libraryIntelligence';
 import {MetadataCandidate, MetadataConflict, MetadataSource, resolveMetadataCandidates} from './metadataResolution';
@@ -337,6 +337,30 @@ async function importIOSFolder(): Promise<LocalFolder | null> {
 
 function isSAFUri(uri:string){return uri.startsWith('content://');}
 
+type FastDirectoryAttribute = {uri:string;size?:number;modified?:number;isDirectory:boolean};
+type ListedDirectory = {children:string[];attributes:Map<string,FastDirectoryAttribute>};
+const nativeDirectoryReader=Platform.OS==='android'?NativeModules?.ArchivistArchive:null;
+
+// One native DocumentsContract query supplies all lightweight sibling attributes.
+// Providers without this capability keep the reliable Expo SAF fallback.
+async function listDirectoryEntriesWithAttributes(uri:string,rootUri:string):Promise<ListedDirectory>{
+  if(isSAFUri(uri)&&nativeDirectoryReader?.listLibraryDirectory){
+    try{
+      const entries:FastDirectoryAttribute[]=await withOperationTimeout(
+        nativeDirectoryReader.listLibraryDirectory(rootUri,uri),4500,'Fast SAF directory',
+      );
+      if(!Array.isArray(entries)||entries.some(item=>!item||typeof item.uri!=='string'))
+        throw new Error('Invalid native SAF directory result');
+      return {children:entries.map(item=>item.uri),attributes:new Map(entries.map(item=>[item.uri,item]))};
+    }catch{
+      // Not all provider authorities support DocumentsContract child queries.
+      // Native deadline/cancellation bounds unreliable providers; preserve discovery.
+      nativeDirectoryReader.cancelLibraryDirectoryRead?.();
+    }
+  }
+  return {children:await listDirectoryEntries(uri),attributes:new Map()};
+}
+
 async function listDirectoryEntries(uri:string):Promise<string[]>{
   if(isSAFUri(uri))return StorageAccessFramework.readDirectoryAsync(uri);
   const entries=await readDirectoryAsync(uri);
@@ -413,8 +437,11 @@ export async function scanLocalFolders(
     if (!shouldContinue() || truncated || visitedDirectories.has(uri)) return;
     visitedDirectories.add(uri);
     let children: string[];
+    let attributes=new Map<string,FastDirectoryAttribute>();
     try {
-      children = await listDirectoryEntries(uri);
+      const listing=await listDirectoryEntriesWithAttributes(uri,folderRoot);
+      children=listing.children;
+      attributes=listing.attributes;
       if(!shouldContinue())return;
     } catch {
       if (countUnreadable) skipped += 1;
@@ -505,7 +532,10 @@ export async function scanLocalFolders(
           }
         }
 
-        const fileInfo = await getInfoAsync(child).catch(()=>null);
+        const indexed=attributes.get(child);
+        const fileInfo = indexed && !indexed.isDirectory
+          ? {exists:true,size:indexed.size,modificationTime:indexed.modified}
+          : await getInfoAsync(child).catch(()=>null);
         const fileSize = fileInfo && 'size' in fileInfo && typeof fileInfo.size==='number' ? fileInfo.size : undefined;
         const modificationTime = fileInfo && 'modificationTime' in fileInfo && typeof fileInfo.modificationTime==='number' ? fileInfo.modificationTime : undefined;
         const previous = previousByUri.get(child);
@@ -647,7 +677,9 @@ export async function scanLocalFolders(
         });
         if (books.length === 1 || books.length % 25 === 0) report(options.deferEmbeddedMetadata ? 'discovering' : 'reading-metadata', space);
       } else {
-        if (!ext) {
+        if(attributes.has(child)) {
+          if(attributes.get(child)?.isDirectory)await scanDir(child,space,depth+1,folderRoot);
+        } else if (!ext) {
           await scanDir(child, space, depth + 1, folderRoot);
         } else if (!knownNonDirectoryExtensions.has(ext)) {
           // SAF does not tell us whether a child is a file or directory.
