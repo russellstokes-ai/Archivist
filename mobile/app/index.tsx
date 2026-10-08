@@ -1,5 +1,5 @@
-import ArchivistApp from '../App';
+import DiagnosticPipelineApp from '../DiagnosticPipelineApp';
 
 export default function IndexRoute() {
-  return <ArchivistApp />;
+  return <DiagnosticPipelineApp />;
 }
