@@ -220,7 +220,6 @@ assert.equal(groupLocalWorks(numberedBookFolder).length,1,
 // book. There is no intermediate author folder. Scan must still return 12
 // logical works for 226 physical chapter files.
 const directBookFolders=largeBookFolders.map((book,index)=>{
-  const bookIndex=Math.floor(index/19); // do not depend on this for grouping
   const sourceParts=book.uri.split('%2F');
   const bookFolder=sourceParts[sourceParts.length-2];
   const filename=sourceParts[sourceParts.length-1];
@@ -234,6 +233,20 @@ assert.equal(localWorksForReview(directBookFolders).filter(book=>book.needsRevie
  'immediate book folders must generate exactly one Needs Attention task per book');
 assert.equal(groupLocalWorks(synchronizeLocalMetadata(directBookFolders).books).length,12,
  'a rescan/metadata synchronization must preserve direct-child book grouping');
+const descriptiveChapters=['The Arrival','Beyond the Hills','A Strange Invitation','The Return'].map((title,i)=>track(64000+i,title,{
+  uri:'content://media/document/primary:Audiobooks%2FThe%20Magic%20Mountain%2F'+encodeURIComponent(title)+'.mp3',
+  rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks',
+  title,author:'',embeddedMetadata:{},needsReview:true,
+}));
+const descriptiveWork=groupLocalWorks(descriptiveChapters);
+assert.equal(descriptiveWork.length,1,'one book folder with descriptive chapter filenames must be one book');
+assert.equal(descriptiveWork[0].title,'The Magic Mountain','work title must use book-folder identity rather than the first chapter');
+const descriptiveSynced=synchronizeLocalMetadata(descriptiveChapters).books;
+assert.equal(groupLocalWorks(descriptiveSynced)[0].title,'The Magic Mountain',
+  'rescan must keep book title while preserving original chapter track names');
+assert.deepEqual(descriptiveSynced.map(track=>track.title),['The Arrival','Beyond the Hills','A Strange Invitation','The Return'],
+  'individual playable chapter labels must remain unchanged');
+
 
 
 const multipartM4a=['Part 01 - Arrival','Part 02 - Journey','Part 03 - Finale'].map((chapter,i)=>track(63000+i,chapter,{
