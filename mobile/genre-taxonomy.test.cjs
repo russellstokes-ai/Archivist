@@ -32,6 +32,18 @@ assert.equal(selectPrimaryGenre(['Accessible book','Protected DAISY','Publicatio
 assert.equal(genreIsSpecific('Fiction'),false);
 assert.equal(genreIsSpecific('Science Fiction'),true);
 
+const {buildAtlasRelationship}=require('./atlas.ts');
+const {buildAtlasUniverse}=require('./atlasUniverse.ts');
+const exampleWorks=['Sci-Fi','Science Fiction','Space Opera'].map((genre,index)=>({
+  key:'genre-work-'+index,title:'Example '+index,author:'Author',series:'',genre,format:'EPUB',space:'Books',source:'local',available:true,
+}));
+assert.equal(buildAtlasRelationship(exampleWorks,'genre','Science Fiction').workCount,3,
+  'Atlas genre focus must include all canonical aliases');
+const scene=buildAtlasUniverse(exampleWorks);
+assert.equal(scene.nodes.filter(node=>node.kind==='genre').length,1,
+  'Atlas should create one Science Fiction constellation, not a constellation per provider spelling');
+assert.equal(scene.nodes.find(node=>node.kind==='genre').label,'Science Fiction');
+
 const {lookupOnlineBook,hydrateBookCandidate}=require('./onlineBookMetadata.ts');
 (async()=>{
  const calls=[];
