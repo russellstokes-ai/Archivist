@@ -1,5 +1,7 @@
 import {fastAudioProbeUris} from './audioProbePlan';
 import BookLoader from './BookLoader';
+import buildStamp from './buildStamp.json';
+import {makeScannerStageRecord,type ScannerStagePhase,type ScannerStageRecord} from './scannerDeviceDiagnostics';
 import {canonicalPrimaryGenre} from './genreTaxonomy';
 import {hydrateBookCandidate} from './onlineBookMetadata';
 import {persistWorkEdit} from './metadataEditPersistence';
@@ -325,6 +327,7 @@ const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const librarySetupPreparedKey = 'archivist.librarySetupPrepared.v1';
 const onboardingDiscoveryKey = 'archivist.onboardingDiscovery.v1';
+const scannerTraceKey = 'archivist.scannerTrace.v1';
 const shelfServerPromptKey = 'archivist.shelfServerPrompt.v1';
 const firstLibraryCelebratedKey = 'archivist.firstLibraryCelebrated.v1';
 const smartShelvesKey = 'archivist.smartShelves.v1';
@@ -1156,6 +1159,7 @@ function Client() {
   const [localFoldersReady,setLocalFoldersReady]=useState(false);
   const [localCatalogReady,setLocalCatalogReady]=useState(false);
   const [stagedLocalBooks,setStagedLocalBooks]=useState<Book[]>([]);
+  const scannerTraceRef=useRef<ScannerStageRecord[]>([]);
   const [offlineWorks,setOfflineWorks]=useState<Record<string,OfflineServerWork>>({});
   const [offlineWorksReady,setOfflineWorksReady]=useState(false);
   const [offlineCheckpoints,setOfflineCheckpoints]=useState<Record<string,OfflineDownloadCheckpoint>>({});
@@ -2384,11 +2388,13 @@ function Client() {
       try{
         const previousLocal=await loadLocalStageBooks();
         if(!scanCommitGate.isCurrent(generation))return;
+        const discoveryStartedAt=Date.now();
         const result=await scanLocalFolders(localFolders,reportLocalScan(generation),
           localMetadataOverrides,previousLocal,{
             deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata:false,
             shouldContinue:()=>scanCommitGate.isCurrent(generation),
           });
+        await recordScannerStage('discovery',result.books,discoveryStartedAt,result.diagnostics);
         const summary=await finaliseLocalScan(result,previousLocal,generation,false,true);
         if(!summary||!scanCommitGate.isCurrent(generation))return;
         const signature=localFolderSetSignature(result.folders);
@@ -2430,6 +2436,7 @@ function Client() {
         await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current));
         return;
       }
+      await recordScannerStage('identify-start',staged,Date.now());
       await enrichPublishedLocalLibrary(staged,generation,true,false);
       if(!scanCommitGate.isCurrent(generation))return;
       // The completion marker is written only when the whole work-level stage
@@ -2809,6 +2816,13 @@ function Client() {
     setLocalScanning(false);
     setScanProgress(null);
   };
+  // Non-identifying diagnostic records; persisted after each stage even in an
+  // optimised test-release APK. No path/title/URI metadata is exported.
+  async function recordScannerStage(phase:ScannerStagePhase,books:LocalBook[],startedAt:number,counters?:object){
+    const entry=makeScannerStageRecord(phase,books,Date.now()-startedAt,counters);
+    scannerTraceRef.current=[...scannerTraceRef.current,entry].slice(-24);
+    await setPersistedJSON(scannerTraceKey,scannerTraceRef.current).catch(()=>undefined);
+  }
   const recordLibraryRefreshWarning=(label:string,error:unknown)=>{
     const detail=String((error as any)?.message||error||'unknown error').trim();
     const message=detail?label+' · '+detail:label;
@@ -2921,6 +2935,14 @@ function Client() {
 
   async function enrichPublishedLocalLibrary(baseBooks:LocalBook[],generation:number,forceOnline=false,forceRefresh=forceOnline):Promise<LocalBook[]>{
     let currentBooks=baseBooks;
+    const pipelineStarted=Date.now();
+    let previousHeartbeat=Date.now(),worstJsDelay=0;
+    const heartbeat=setInterval(()=>{
+      const now=Date.now();
+      worstJsDelay=Math.max(worstJsDelay,Math.max(0,now-previousHeartbeat-250));
+      previousHeartbeat=now;
+    },250);
+    let phaseStarted=Date.now();
     try{
       // Normal preparation is deliberately shallow. Discovery has already read
       // file properties, folder/path evidence and safe sidecars. Do NOT reopen
@@ -2937,11 +2959,15 @@ function Client() {
       const propertyBooks=await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,false,true);
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(propertyBooks)currentBooks=propertyBooks;
+      await recordScannerStage('audio',currentBooks,phaseStarted,{maxJsDelayMs:worstJsDelay});
+      phaseStarted=Date.now();
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
       const archiveBooks=await enrichPublishedLocalBoundedArchiveEvidence(currentBooks,generation);
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(archiveBooks)currentBooks=archiveBooks;
+      await recordScannerStage('archive',currentBooks,phaseStarted,{maxJsDelayMs:worstJsDelay});
+      phaseStarted=Date.now();
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
       // Prefer bounded network metadata/cover matches after file/path evidence.
@@ -2959,6 +2985,9 @@ function Client() {
           if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
         }
       }
+
+      await recordScannerStage('online',currentBooks,phaseStarted,{maxJsDelayMs:worstJsDelay});
+      phaseStarted=Date.now();
 
       // Retry any remote cover already known to the catalogue even when no new
       // metadata lookup was required. Older scans could otherwise leave an
@@ -2990,6 +3019,8 @@ function Client() {
         .catch(error=>{recordLibraryRefreshWarning('Publication artwork',error);return null;});
       if(!scanCommitGate.isCurrent(generation))return currentBooks;
       if(dualArtwork)currentBooks=dualArtwork.books;
+      await recordScannerStage('artwork',currentBooks,phaseStarted,{maxJsDelayMs:worstJsDelay});
+      phaseStarted=Date.now();
       if(!await checkpointLocalEnrichment(currentBooks,generation))return currentBooks;
 
       if(scanCommitGate.isCurrent(generation)){
@@ -2997,11 +3028,14 @@ function Client() {
           .then(()=>true)
           .catch(error=>{recordLibraryRefreshWarning('Final catalogue save',error);return false;});
         if(persisted&&scanCommitGate.isCurrent(generation)){
-          publishCompletedLocalStage(currentBooks);
+          const publication=publishCompletedLocalStage(currentBooks);
+          await recordScannerStage('publish',currentBooks,phaseStarted,{publishedWorks:groupLocalWorks(publication.published).length,maxJsDelayMs:worstJsDelay});
         }
       }
       return currentBooks;
     }finally{
+      clearInterval(heartbeat);
+      await recordScannerStage('finish',currentBooks,pipelineStarted,{maxJsDelayMs:worstJsDelay});
       if(scanCommitGate.isCurrent(generation)){
         const review=currentBooks.filter(book=>book.needsReview).length;
         reportEnrichmentProgress({phase:'complete',currentFolder:'',entriesVisited:currentBooks.length,found:currentBooks.length,review,processed:currentBooks.length,total:currentBooks.length},true);
@@ -8024,6 +8058,22 @@ function Client() {
     </View>;
   }
 
+  async function exportScannerTraceFile(){
+    try{
+      if(!documentDirectory)throw Error('Local storage unavailable');
+      const saved=await getPersistedJSON<ScannerStageRecord[]>(scannerTraceKey).catch(()=>[]);
+      const stages=Array.isArray(saved)&&saved.length?saved:scannerTraceRef.current;
+      const payload={schema:'archivist-scanner-export-v1',build:buildStamp,exportedAt:new Date().toISOString(),stages};
+      const directory=documentDirectory+'diagnostics/';
+      await makeDirectoryAsync(directory,{intermediates:true});
+      const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+      const uri=directory+'Archivist-scanner-'+stamp+'.json';
+      await writeAsStringAsync(uri,JSON.stringify(payload,null,2));
+      if(await Sharing.isAvailableAsync())await Sharing.shareAsync(uri,{mimeType:'application/json',dialogTitle:'Export Archivist scanner trace'});
+      else Alert.alert('Scanner diagnostics','A privacy-safe trace was saved locally, but system sharing is unavailable.');
+    }catch(error){Alert.alert('Scanner diagnostics','Trace export failed: '+String((error as Error).message||error));}
+  }
+
   function privacyBackupJSON(){
     const snapshot={
       archivistBackup:1,
@@ -8336,7 +8386,8 @@ function Client() {
               <View style={[styles.settingsInfoRow,{borderBottomColor:p.line}]}><Text style={[styles.meta,{color:p.muted}]}>Server version</Text><Text style={[styles.settingsInfoValue,{color:p.muted}]}>{connected?'Not reported by server':'—'}</Text></View>
               <View style={[styles.settingsDiagnostics,{backgroundColor:p.card,borderColor:p.line}]}>
                 <Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Diagnostics</Text>
-                <Text selectable style={[styles.settingsDiagnosticText,{color:p.muted}]}>Local folders: {localFolders.length}\nLocal files: {localBooks.length}\nServer works: {serverWorks.length}\nOffline stored: {localStorageText}\nTheme: {theme}\nReduce motion: {reduceMotion?'on':'off'}\nHigh contrast: {accessibilityPrefs.highContrast?'on':'off'}\nLarge text: {accessibilityPrefs.largeText?'on':'off'}</Text>
+                <Text selectable style={[styles.settingsDiagnosticText,{color:p.muted}]}>Build: {buildStamp.candidate} · {buildStamp.sourceCommit.slice(0,9)}\nLocal folders: {localFolders.length}\nLocal files: {localBooks.length}\nServer works: {serverWorks.length}\nOffline stored: {localStorageText}\nTheme: {theme}\nReduce motion: {reduceMotion?'on':'off'}\nHigh contrast: {accessibilityPrefs.highContrast?'on':'off'}\nLarge text: {accessibilityPrefs.largeText?'on':'off'}</Text>
+                <Button label="Export scanner trace" tone="quiet" onPress={()=>void exportScannerTraceFile()}/>
               </View>
               <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>
             </View>
