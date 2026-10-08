@@ -68,10 +68,7 @@ jobs:
           emulator-build: 14214601
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -euo pipefail
-            python3 .github/scripts/android-media-acceptance.py \
-              "$GITHUB_WORKSPACE/android-acceptance-input/Archivist-0.9.4-test-23-scanner-device-truth.apk"
+          script: bash -lc 'python3 .github/scripts/android-media-acceptance.py "$GITHUB_WORKSPACE/android-acceptance-input/Archivist-0.9.4-test-23-scanner-device-truth.apk"'
 
       - name: Produce acceptance summary regardless of pass or failure
         if: always()
