@@ -207,6 +207,15 @@ assert.equal(edited226.filter(book=>book.author==='Correct Writer').length,19,
 assert.equal(edited226.filter(book=>book.author==='Correct Writer'&& !firstWorkUris.includes(book.uri)).length,0,
   'a book edit must not spill across unrelated books');
 
+const mixedAlbumDirectory=[
+  track(60001,'01 - Opening',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F01.mp3',embeddedMetadata:{workTitle:'Album One'}}),
+  track(60002,'02 - More',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F02.mp3',embeddedMetadata:{workTitle:'Album One'}}),
+  track(60003,'03 - Beginning',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F03.mp3',embeddedMetadata:{workTitle:'Album Two'}}),
+  track(60004,'04 - Ending',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F04.mp3',embeddedMetadata:{workTitle:'Album Two'}}),
+];
+assert.deepEqual(groupLocalWorks(mixedAlbumDirectory).map(work=>work.files).sort(),[2,2],
+  'two explicit album identities in one physical folder must not be merged into a single book');
+
 const unrelatedSingles=[
  track(50001,'An original lecture',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Collection%2FAn%20original%20lecture.mp3',title:'An original lecture',embeddedMetadata:{}}),
  track(50002,'A different lecture',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Collection%2FA%20different%20lecture.mp3',title:'A different lecture',embeddedMetadata:{}}),
