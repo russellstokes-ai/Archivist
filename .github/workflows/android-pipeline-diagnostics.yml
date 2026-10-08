@@ -1,0 +1,83 @@
+name: Android Actual Pipeline Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - diagnostics/actual-pipeline-20261008
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-pipeline-diagnostics.yml'
+permissions:
+  contents: write
+concurrency:
+  group: actual-pipeline-diag-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install Android build tools
+        run: |
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+          yes | sdkmanager --licenses >/dev/null || true
+      - name: Verify separate identity and locked original app
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "applicationId 'app.archivist.pipelineprobe'" mobile/android/app/build.gradle
+          grep -q 'app.archivist.pipelineprobe' mobile/app.json
+          grep -q 'DiagnosticPipelineApp' mobile/app/index.tsx
+          git diff --exit-code HEAD -- mobile/App.tsx mobile/localLibrary.ts mobile/metadataSync.ts mobile/localWorks.ts
+      - name: Install app dependencies
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+      - name: TypeScript diagnostics typecheck
+        working-directory: mobile
+        run: npm run typecheck
+      - name: App regression tests
+        working-directory: mobile
+        run: npm test
+      - name: Build signed optimized diagnostic APK
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
+      - name: Verify package ID and APK signature
+        run: |
+          set -euo pipefail
+          APK=$(find mobile/android/app/build/outputs/apk/release -name '*.apk' -type f | head -n1)
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee /tmp/diag-badging.txt
+          grep -F "package: name='app.archivist.pipelineprobe'" /tmp/diag-badging.txt
+          ! grep -F "package: name='app.archivist.reader'" /tmp/diag-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          cp "$APK" Archivist-Actual-Pipeline-Diagnostics.apk
+          sha256sum Archivist-Actual-Pipeline-Diagnostics.apk > Archivist-Actual-Pipeline-Diagnostics.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Archivist-Actual-Pipeline-Diagnostics
+          path: |
+            Archivist-Actual-Pipeline-Diagnostics.apk
+            Archivist-Actual-Pipeline-Diagnostics.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish independent diagnostic APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=pipeline-diagnostics-gate1-20261008
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title 'Archivist Actual Pipeline Diagnostics — Gate 1' --notes 'Independent Android app: app.archivist.pipelineprobe. Runs production scanning, grouping and enrichment code, records stage timing and local checkpoints. Does not replace Archivist or touch its app-private data. Read-only against selected library media.'
+          gh release upload "$TAG" Archivist-Actual-Pipeline-Diagnostics.apk Archivist-Actual-Pipeline-Diagnostics.apk.sha256 --clobber
