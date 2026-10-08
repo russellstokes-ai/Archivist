@@ -60,6 +60,15 @@ const confidenceRank:Record<SyncConfidence,number>={high:30,medium:15,low:0};
 
 function clean(value:unknown){return String(value??'').replace(/[_]+/g,' ').replace(/\s+/g,' ').trim();}
 function normal(value:unknown){return clean(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'');}
+// A multi-disc audiobook may have per-file ©alb/TALB tags that differ only
+// by disc/part number. Normalize ONLY these qualified album suffixes when
+// deriving the logical work boundary. Never rewrite the physical track tags.
+function albumWorkTitle(value:unknown){
+  const original=clean(value);
+  if(!original)return '';
+  const withoutPart=original.replace(/(?:\s*[\[(]\s*|\s*[-:–]\s*|\s+)(?:disc|disk|cd|part|pt)\s*#?\s*\d{1,3}(?:\s*(?:of|\/)\s*\d{1,3})?\s*[\])]?\s*$/i,'').trim();
+  return withoutPart||original;
+}
 function present(value:unknown){return value!==undefined&&value!==null&&clean(value)!=='';}
 
 function shallowRecordEqual(a:unknown,b:unknown){
@@ -131,7 +140,7 @@ function rootAudioIdentityKey(book:SynchronizableBook){
   const scope=normal(book.space||'library');
   const id=normal(book.asin||book.isbn||'');
   if(id)return 'audio-root:'+scope+':id:'+id;
-  const workTitle=clean(book.embeddedMetadata?.workTitle||'');
+  const workTitle=albumWorkTitle(book.embeddedMetadata?.workTitle);
   if(workTitle){
     const author=normal(book.author||'');
     return 'audio-root:'+scope+':work:'+normal(workTitle)+(author?'|'+author:'');
@@ -173,7 +182,7 @@ function audiobookFolderLooksLikeOneWork(books:SynchronizableBook[]){
   // Distinct album identities, multi-part family evidence and container names
   // are independently guarded below; file-count alone must not define a work.
   if(relative.length<1||!folder||looksLikeLibraryContainer(folder))return false;
-  const distinctAlbums=new Set(books.map(book=>normal(book.embeddedMetadata?.workTitle||'')).filter(Boolean));
+  const distinctAlbums=new Set(books.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
   if(distinctAlbums.size>1)return false;
   const stems=books.map(book=>fileStem(book.uri));
   const multipartFamilies=new Set(stems.map(rootAudioTrackFamily).map(normal).filter(Boolean));
@@ -195,14 +204,14 @@ function shouldGroupAudioBooks(books:SynchronizableBook[]){
   if(books.length<=1)return true;
   // Distinct embedded work titles are an explicit boundary: a mixed folder
   // must never collapse multiple actual books, even if filenames look generic.
-  const distinctAlbums=new Set(books.map(book=>normal(book.embeddedMetadata?.workTitle||'')).filter(Boolean));
+  const distinctAlbums=new Set(books.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
   if(distinctAlbums.size>1)return false;
   const trackLike=books.every(book=>isGenericMediaTitle(fileStem(book.uri),'Audio',books.length));
   if(trackLike)return true;
   // Album/work tags are work-level evidence even when individual filenames are
   // descriptive chapter names. Require every sibling to provide the same value
   // so unrelated standalone audiobooks in one folder are never collapsed.
-  const embeddedWorkTitles=books.map(book=>clean(book.embeddedMetadata?.workTitle||'')).filter(Boolean);
+  const embeddedWorkTitles=books.map(book=>albumWorkTitle(book.embeddedMetadata?.workTitle)).filter(Boolean);
   if(embeddedWorkTitles.length===books.length&&new Set(embeddedWorkTitles.map(normal)).size===1)return true;
   const inferred=new Set(books.map(book=>{
     const identity=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length});
@@ -234,12 +243,12 @@ export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
     const group=directories.get(dir)||[];group.push(book);directories.set(dir,group);
   }
   for(const [dir,group] of directories){
-    const albums=new Set(group.map(book=>normal(book.embeddedMetadata?.workTitle||'')).filter(Boolean));
+    const albums=new Set(group.map(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))).filter(Boolean));
     if(albums.size>1){
       // Multiple album identities in one physical folder: partition only the
       // positively identified tracks, leaving ambiguous tracks independent.
       for(const book of group){
-        const album=normal(book.embeddedMetadata?.workTitle||'');
+        const album=normal(albumWorkTitle(book.embeddedMetadata?.workTitle));
         result.set(book.uri,album?'audio-album:'+dir+':'+album:'audio-file:'+book.uri);
       }
     }else if(shouldGroupAudioBooks(group)){
@@ -293,7 +302,7 @@ function canonicalField(books:SynchronizableBook[],field:SyncField,audio:boolean
     }
     if(audio&&['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'].includes(field)){
       if(field==='title'){
-        const workTitle=book.embeddedMetadata?.workTitle;
+        const workTitle=albumWorkTitle(book.embeddedMetadata?.workTitle);
         if(present(workTitle)&&normal(workTitle)!==normal(value)){
           values.push({book,value:workTitle,source:'embedded',confidence:'high',key:normal(workTitle),workHint:true});
         }
@@ -412,7 +421,7 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
     const normalized=[...new Set(workTitles.map(normal))];
     if(workTitles.length>0&&normalized.length===1){
       selected.title={
-        book:books.find(book=>normal(book.embeddedMetadata?.workTitle||'')===normalized[0])||books[0],
+        book:books.find(book=>normal(albumWorkTitle(book.embeddedMetadata?.workTitle))===normalized[0])||books[0],
         value:workTitles[0],
         source:'embedded',
         confidence:'high',
