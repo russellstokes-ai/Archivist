@@ -16,6 +16,15 @@ assert.deepEqual(accepted[0].embeddedMetadata,track.embeddedMetadata);
 const blocked=partitionLocalBooksByPublication(JSON.parse(JSON.stringify(accepted)));
 assert.equal(blocked.published.length,0);
 assert.equal(blocked.staged.length,1,'accepted artwork failure remains staged across restart');
+const manualCover='data:image/png;base64,AQID';
+const withManualCover={...clues[0],coverUri:manualCover,libraryCoverUri:manualCover,livingBookCoverUri:manualCover,manualOverride:{coverUri:manualCover}};
+const acceptedWithManualCover=acceptBookCandidateForWork([withManualCover],[track.uri],candidate);
+assert.equal(acceptedWithManualCover[0].coverUri,manualCover,'Smart Search must not override manually accepted local cover art');
+assert.equal(acceptedWithManualCover[0].libraryCoverUri,manualCover,'Library artwork must remain locally cached after candidate acceptance');
+assert.equal(acceptedWithManualCover[0].livingBookCoverUri,manualCover,'Living Book artwork must survive a metadata-only edit');
+assert.equal(partitionLocalBooksByPublication(acceptedWithManualCover).published.length,1,
+ 'a real identification with pre-existing artwork must publish immediately rather than vanish into attention');
+
 const ready=accepted.map(b=>({...b,coverUri:'file:///cached.jpg',libraryCoverUri:'file:///cached.jpg',livingBookCoverUri:'file:///jacket.jpg'}));
 assert.equal(partitionLocalBooksByPublication(ready).published.length,1);
 const corrected=applyManualCluesToWork(ready,[track.uri],{title:'Dune',author:'Frank Herbert',genre:'Science Fiction'});
