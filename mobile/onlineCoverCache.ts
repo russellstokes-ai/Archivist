@@ -62,27 +62,41 @@ export async function cacheOnlineCoverUris<T extends OnlineCoverBook>(
   const shouldContinue=options.shouldContinue||(()=>true);
   const concurrency=Math.max(1,Math.min(4,Math.trunc(options.concurrency||3)));
   const next=books.slice();
-  const indexes=next.map((book,index)=>({book,index})).filter(({book})=>{
-    // A remote cover already attached to a work is trusted enough to cache
-    // locally even if it came from an older catalogue version that did not
-    // persist the provider-match object alongside it.
-    return isRemote(String(book.coverUri||''));
+  // Build one job per distinct remote cover URL. MP3 chapters commonly carry
+  // identical cover links, and simultaneous per-track workers previously
+  // downloaded into the same hashed destination before it existed on disk.
+  const jobs=new Map<string,number[]>();
+  books.forEach((book,index)=>{
+    const remote=String(book.coverUri||'').trim();
+    if(!isRemote(remote))return;
+    const indices=jobs.get(remote)||[];
+    indices.push(index);
+    jobs.set(remote,indices);
   });
-  let cursor=0,cached=0;
+
+  const queue=[...jobs.entries()];
+  let cursor=0,attempted=0,cached=0;
   const worker=async()=>{
     while(shouldContinue()){
       const slot=cursor++;
-      if(slot>=indexes.length)return;
-      const {book,index}=indexes[slot];
-      const remote=String(book.coverUri);
+      if(slot>=queue.length)return;
+      const [remote,indices]=queue[slot];
+      attempted+=1;
       const local=await persistOnlineCover(remote,ops);
+      // Never apply an incomplete or stale remote result after cancellation.
       if(!shouldContinue())return;
-      if(local!==remote){
-        cached+=1;
-        next[index]={...book,coverUri:local,coverCandidates:unique([local,...(book.coverCandidates||[]),remote])};
+      if(local===remote)continue;
+      cached+=1;
+      for(const index of indices){
+        const book=next[index];
+        next[index]={
+          ...book,
+          coverUri:local,
+          coverCandidates:unique([local,...(book.coverCandidates||[]),remote]),
+        };
       }
     }
   };
-  await Promise.all(Array.from({length:Math.min(concurrency,indexes.length)},()=>worker()));
-  return {books:next,attempted:indexes.length,cached};
+  await Promise.all(Array.from({length:Math.min(concurrency,queue.length)},()=>worker()));
+  return {books:next,attempted,cached};
 }
