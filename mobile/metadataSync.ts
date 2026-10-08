@@ -389,7 +389,10 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[]):CanonicalM
   // multiple distinct chapter titles, use the enclosing folder as the *work*
   // title. The individual track titles stay untouched. Repeated authoritative
   // work titles, explicit manual identity and embedded album/work titles win.
-  if(audio&&books.length>1&&selected.title?.source!=='manual'&&audiobookFolderLooksLikeOneWork(books)){
+  if(audio&&books.length>1&&selected.title?.source!=='manual'
+    &&!(selected.title?.source==='online'&&selected.title.confidence==='high'&&selected.title.workHint)
+    &&!(selected.title?.source==='sidecar'&&selected.title.confidence==='high')
+    &&audiobookFolderLooksLikeOneWork(books)){
     const folderTitle=audioBookFolderTitle(books[0].uri);
     const titleVotes=books.filter(book=>normal(book.title)===normal(selected.title?.value)).length;
     const distinctTitles=new Set(books.map(book=>normal(book.title)).filter(Boolean));
