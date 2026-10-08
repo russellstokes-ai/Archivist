@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:1,target:9}}).outputText,f);
-const {applyManualCluesToWork,acceptBookCandidateForWork}=require('./metadataSearchWorkflow.ts');
+const {applyManualCluesToWork,acceptBookCandidateForWork,acceptComicCandidateForWork,editorCoverOverride}=require('./metadataSearchWorkflow.ts');
 const {localWorksForReview,partitionLocalBooksByPublication}=require('./publicationPipeline.ts');
 const track={id:1,uri:'file:///Dune/01.mp3',title:'Dune',author:'',series:'',genre:'',format:'Audio',space:'Books',available:true,needsReview:true,embeddedMetadata:{title:'Chapter one',trackNumber:1,discNumber:2},libraryCoverUri:'file:///cover.jpg',livingBookCoverUri:'file:///cover.jpg'};
 const clues=applyManualCluesToWork([track],[track.uri],{title:'Dune',author:'Frank Herbert'});
@@ -25,6 +25,13 @@ assert.equal(acceptedWithManualCover[0].livingBookCoverUri,manualCover,'Living B
 assert.equal(partitionLocalBooksByPublication(acceptedWithManualCover).published.length,1,
  'a real identification with pre-existing artwork must publish immediately rather than vanish into attention');
 
+assert.equal(editorCoverOverride(candidate.coverUri,candidate.coverUri,false),undefined,'provider artwork suggestion must not overwrite verified manual artwork on Save');
+assert.equal(editorCoverOverride('file:///picked-cover.jpg',candidate.coverUri,true),'file:///picked-cover.jpg','an explicit user-picked cover must still apply');
+const comicCandidate={provider:'metron',providerId:'41',fields:{title:'Space Saga',series:'Space Saga',author:'Artist'},coverUri:candidate.coverUri,score:98,confidence:'high',exactIdentifier:true,reasons:[],query:'Space Saga'};
+const comicSource={...withManualCover,uri:'file:///Space-Saga.cbz',format:'Comic',title:'Space Saga',author:'Artist'};
+const comicAccepted=acceptComicCandidateForWork([comicSource],[comicSource.uri],comicCandidate);
+assert.equal(comicAccepted[0].coverUri,manualCover,'comic candidate acceptance must preserve a verified manual cover');
+assert.equal(partitionLocalBooksByPublication(comicAccepted).published.length,1,'comic must remain publishable when its verified cover already exists');
 const ready=accepted.map(b=>({...b,coverUri:'file:///cached.jpg',libraryCoverUri:'file:///cached.jpg',livingBookCoverUri:'file:///jacket.jpg'}));
 assert.equal(partitionLocalBooksByPublication(ready).published.length,1);
 const corrected=applyManualCluesToWork(ready,[track.uri],{title:'Dune',author:'Frank Herbert',genre:'Science Fiction'});
