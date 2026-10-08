@@ -26,7 +26,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '19-reliability'
+  TEST_BUILD: '20-work-grouping'
 
 concurrency:
   group: android-apk-${{ github.ref }}
