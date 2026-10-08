@@ -207,6 +207,15 @@ assert.equal(edited226.filter(book=>book.author==='Correct Writer').length,19,
 assert.equal(edited226.filter(book=>book.author==='Correct Writer'&& !firstWorkUris.includes(book.uri)).length,0,
   'a book edit must not spill across unrelated books');
 
+const numberedBookFolder=[
+  track(62001,'The unexpected visit',{uri:'content://media/document/primary:Audiobooks%2FAuthor%2FBook%2001%20-%20The%20Winter%20Night%2FThe%20unexpected%20visit.mp3',rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks'}),
+  track(62002,'A long journey',{uri:'content://media/document/primary:Audiobooks%2FAuthor%2FBook%2001%20-%20The%20Winter%20Night%2FA%20long%20journey.mp3',rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks'}),
+  track(62003,'A final promise',{uri:'content://media/document/primary:Audiobooks%2FAuthor%2FBook%2001%20-%20The%20Winter%20Night%2FA%20final%20promise.mp3',rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks'}),
+  track(62004,'The discovery',{uri:'content://media/document/primary:Audiobooks%2FAuthor%2FBook%2001%20-%20The%20Winter%20Night%2FThe%20discovery.mp3',rootUri:'content://media/tree/primary%3AAudiobooks/document/primary%3AAudiobooks'}),
+];
+assert.equal(groupLocalWorks(numberedBookFolder).length,1,
+ 'book folders prefixed Book 01 must group descriptive chapters instead of being mistaken for the Books collection');
+
 const mixedAlbumDirectory=[
   track(60001,'01 - Opening',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F01.mp3',embeddedMetadata:{workTitle:'Album One'}}),
   track(60002,'02 - More',{uri:'content://media/document/primary:Audiobooks%2FMixed%20Albums%2F02.mp3',embeddedMetadata:{workTitle:'Album One'}}),
