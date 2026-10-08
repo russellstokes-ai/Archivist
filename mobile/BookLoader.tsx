@@ -32,7 +32,6 @@ export default function BookLoader({
         progress={reduceMotion ? 0.26 : undefined}
         resizeMode="contain"
         style={{width:size,height:size}}
-        accessible={false}
       />
     </View>
   );
