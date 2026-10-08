@@ -23,6 +23,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.HashMap;
@@ -56,7 +57,19 @@ public final class MainActivity extends Activity {
   final Handler ui=new Handler(Looper.getMainLooper());
   final ExecutorService io=Executors.newSingleThreadExecutor();
   final AtomicBoolean cancelled=new AtomicBoolean(false);
-  volatile CancellationSignal activeQuery;
+  volatile String stage="Idle";
+  volatile long maxUiDelayMs=0;
+  volatile long lastHeartbeat=0;
+  final Runnable heartbeat=new Runnable(){
+    @Override public void run(){
+      if(!scanning)return;
+      long now=SystemClock.uptimeMillis();
+      if(lastHeartbeat!=0)maxUiDelayMs=Math.max(maxUiDelayMs,Math.max(0,now-lastHeartbeat-150));
+      lastHeartbeat=now;
+      heading.setText("Scanner Diagnostics · "+stage);
+      ui.postDelayed(this,150);
+    }
+  };
   volatile JSONObject finishedReport;
   volatile String pickedUri="";
   volatile boolean scanning=false;
@@ -64,8 +77,12 @@ public final class MainActivity extends Activity {
   Button select,start,cancel,export;
   TextView heading,summary,log;
   int files=0, dirs=0, audio=0, ebooks=0, comics=0, rootAudio=0, queries=0, retries=0, failures=0, slowQueries=0;
-  long scanStart=0L, queryTime=0L, longestQuery=0L;
-  JSONArray fileRecords,folderRecords,errors;
+  long scanStart=0L, queryTime=0L, longestQuery=0L, headerTime=0L, longestHeader=0L;
+  int providerTimeouts=0,headerTimeouts=0,headerErrors=0,slowHeaders=0,headersAttempted=0;
+  long inventoryElapsedMs=0,headerElapsedMs=0;
+  JSONArray fileRecords,folderRecords,errors,headerRecords;
+  ArrayList<JSONObject> samples;
+  HashMap<String,Integer> sampledPerFolder;
   HashMap<String,Integer> audioByParent;
   HashSet<String> seenDirIds;
 
@@ -158,10 +175,7 @@ public final class MainActivity extends Activity {
   }
   void stopScan(){
     cancelled.set(true);
-    // Some DocumentsProviders block synchronously in CancellationSignal.cancel.
-    // Never perform cancellation on the UI thread.
-    CancellationSignal query=activeQuery;
-    if(query!=null)new Thread(()->{try{query.cancel();}catch(Exception ignored){}},"saf-cancel").start();
+    stage="Cancelling";
     append("Cancellation requested. Report will contain partial findings.");
   }
   void launchScan(){
@@ -170,16 +184,22 @@ public final class MainActivity extends Activity {
     cancelled.set(false);
     finishedReport=null;
     files=dirs=audio=ebooks=comics=rootAudio=queries=retries=failures=slowQueries=0;
-    queryTime=longestQuery=0;
+    queryTime=longestQuery=headerTime=longestHeader=0;
+    providerTimeouts=headerTimeouts=headerErrors=slowHeaders=headersAttempted=0;
+    inventoryElapsedMs=headerElapsedMs=maxUiDelayMs=lastHeartbeat=0;
+    stage="Listing folders";
     scanStart=SystemClock.elapsedRealtime();
-    fileRecords=new JSONArray();folderRecords=new JSONArray();errors=new JSONArray();
+    fileRecords=new JSONArray();folderRecords=new JSONArray();errors=new JSONArray();headerRecords=new JSONArray();
+    samples=new ArrayList<>();sampledPerFolder=new HashMap<>();
     audioByParent=new HashMap<>();seenDirIds=new HashSet<>();
     log.setText("Scanning selected folder…\n");
     updateButtons();
+    ui.post(heartbeat);
     io.execute(this::scan);
   }
   void scan(){
     JSONObject finalResult=new JSONObject();
+    TimedSafProbe probe=new TimedSafProbe(this);
     try{
       Uri tree=Uri.parse(pickedUri);
       String rootId=DocumentsContract.getTreeDocumentId(tree);
@@ -190,49 +210,12 @@ public final class MainActivity extends Activity {
         Folder folder=queue.removeFirst();
         if(folder.depth>MAX_DEPTH||!seenDirIds.add(folder.id))continue;
         long started=SystemClock.elapsedRealtime();
-        JSONArray folderEntries=new JSONArray();
-        boolean fallback=false;
-        String error="";
-        for(int attempt=0;attempt<2&&!cancelled.get();attempt++){
-          CancellationSignal signal=new CancellationSignal();
-          activeQuery=signal;
-          try{
-            Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,folder.id);
-            String[] projection=attempt==0?PROJECTION:BASIC;
-            try(Cursor cursor=getContentResolver().query(children,projection,null,null,null,signal)){
-              if(cursor==null)throw new IllegalStateException("Null SAF cursor");
-              int idCol=cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
-              int mimeCol=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
-              int nameCol=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
-              int sizeCol=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE);
-              int dateCol=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
-              while(!cancelled.get()&&cursor.moveToNext()){
-                if(fileRecords.length()+folderRecords.length()+folderEntries.length()>MAX_ENTRIES)break;
-                String id=cursor.getString(idCol);
-                if(id==null)continue;
-                JSONObject entry=new JSONObject();
-                entry.put("documentId",id);
-                entry.put("uri",DocumentsContract.buildDocumentUriUsingTree(tree,id).toString());
-                entry.put("name",nameCol<0?"":cursor.getString(nameCol));
-                String mime=mimeCol<0?"":cursor.getString(mimeCol);
-                entry.put("mime",mime==null?"":mime);
-                entry.put("directory",DocumentsContract.Document.MIME_TYPE_DIR.equals(mime));
-                entry.put("parentId",folder.id);
-                entry.put("depth",folder.depth+1);
-                if(sizeCol>=0&&!cursor.isNull(sizeCol))entry.put("size",cursor.getLong(sizeCol));
-                if(dateCol>=0&&!cursor.isNull(dateCol))entry.put("modified",cursor.getLong(dateCol)/1000.0);
-                folderEntries.put(entry);
-              }
-            }
-            fallback=attempt!=0;
-            break;
-          }catch(Exception ex){
-            error=ex.getClass().getSimpleName()+": "+ex.getMessage();
-            if(cancelled.get())break;
-            if(attempt==0){retries++;folderEntries=new JSONArray();}
-            else failures++;
-          }finally{activeQuery=null;}
-        }
+        stage="Directory "+(queries+1);
+        TimedSafProbe.Result listing=probe.list(tree,folder.id);
+        JSONArray folderEntries=listing.entries;
+        boolean fallback=listing.fallback;
+        String error=listing.error;
+        if(listing.timeout)providerTimeouts++;
         long elapsed=SystemClock.elapsedRealtime()-started;
         queryTime+=elapsed;
         longestQuery=Math.max(longestQuery,elapsed);
@@ -244,6 +227,8 @@ public final class MainActivity extends Activity {
         stats.put("queryMs",elapsed);
         stats.put("count",folderEntries.length());
         stats.put("basicProjectionFallback",fallback);
+        stats.put("timedOut",listing.timeout);
+        stats.put("runningTotalMs",SystemClock.elapsedRealtime()-scanStart);
         if(!error.isEmpty()&&folderEntries.length()==0)stats.put("error",error);
         folderRecords.put(stats);
         if(folderEntries.length()==0&&!error.isEmpty()){
@@ -263,21 +248,61 @@ public final class MainActivity extends Activity {
             String ext=extension(name);
             if(isAudio(ext)){
               audio++;
+              if(sampledPerFolder.getOrDefault(folder.id,0)<3 && samples.size()<64){
+                samples.add(entry);
+                sampledPerFolder.put(folder.id,sampledPerFolder.getOrDefault(folder.id,0)+1);
+              }
               if(folder.depth==0)rootAudio++;
               audioByParent.put(folder.id,audioByParent.getOrDefault(folder.id,0)+1);
-            }else if(isBook(ext))ebooks++;
-            else if(isComic(ext))comics++;
+            }else if(isBook(ext)){
+              ebooks++;
+              if(sampledPerFolder.getOrDefault(folder.id,0)<3 && samples.size()<64){
+                samples.add(entry);sampledPerFolder.put(folder.id,sampledPerFolder.getOrDefault(folder.id,0)+1);
+              }
+            }else if(isComic(ext)){
+              comics++;
+              if(sampledPerFolder.getOrDefault(folder.id,0)<3 && samples.size()<64){
+                samples.add(entry);sampledPerFolder.put(folder.id,sampledPerFolder.getOrDefault(folder.id,0)+1);
+              }
+            }
           }
           // File and folder relationships are needed for a faithful replay of
           // Archivist's real, unchanged metadataSync.ts grouping algorithm.
           fileRecords.put(entry);
         }
         progress(false);
+        if(listing.timeout||probe.isBlocked()){
+          stage="Storage provider timeout";
+          break;
+        }
       }
+      inventoryElapsedMs=SystemClock.elapsedRealtime()-scanStart;
+      stage="Probing media header access";
+      long headerStageStarted=SystemClock.elapsedRealtime();
+      for(JSONObject entry:samples){
+        if(cancelled.get()||probe.isBlocked())break;
+        TimedSafProbe.HeaderResult sample=probe.sampleHeader(Uri.parse(entry.getString("uri")));
+        headersAttempted++;
+        headerTime+=sample.elapsedMs;
+        longestHeader=Math.max(longestHeader,sample.elapsedMs);
+        if(sample.elapsedMs>=1000)slowHeaders++;
+        if(sample.timeout)headerTimeouts++;
+        if(!sample.error.isEmpty())headerErrors++;
+        JSONObject outcome=new JSONObject();
+        outcome.put("uri",entry.optString("uri"));
+        outcome.put("durationMs",sample.elapsedMs);
+        outcome.put("bytesRead",sample.bytesRead);
+        outcome.put("timedOut",sample.timeout);
+        if(!sample.error.isEmpty())outcome.put("error",sample.error);
+        headerRecords.put(outcome);
+        progress(false);
+      }
+      headerElapsedMs=SystemClock.elapsedRealtime()-headerStageStarted;
+      stage="Report ready";
       finalResult.put("schema","archivist-saf-scanner-diagnostic-v1");
       finalResult.put("capturedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'",Locale.UK){{setTimeZone(TimeZone.getTimeZone("UTC"));}}.format(new Date()));
       finalResult.put("appPackage","app.archivist.scannerdiagnostics");
-      finalResult.put("dataPolicy","Read-only SAF; filenames and document IDs included; no file contents read.");
+      finalResult.put("dataPolicy","Read-only SAF listings and at most 64 bounded 64KB media header probes. No media contents exported; filenames and document IDs included.");
       finalResult.put("treeUri",pickedUri);
       finalResult.put("treeDocumentId",rootId);
       finalResult.put("authority",authority);
@@ -297,18 +322,32 @@ public final class MainActivity extends Activity {
       counts.put("slowFolderQueries1s",slowQueries);
       counts.put("providerQueryTotalMs",queryTime);
       counts.put("slowestFolderQueryMs",longestQuery);
+      counts.put("directoryTimeouts",providerTimeouts);
+      counts.put("inventoryElapsedMs",inventoryElapsedMs);
+      counts.put("headerSamplesAttempted",headersAttempted);
+      counts.put("headerReadTotalMs",headerTime);
+      counts.put("headerStageElapsedMs",headerElapsedMs);
+      counts.put("slowestHeaderMs",longestHeader);
+      counts.put("slowHeaderReads1s",slowHeaders);
+      counts.put("headerTimeouts",headerTimeouts);
+      counts.put("headerErrors",headerErrors);
+      counts.put("uiThreadWorstLagMs",maxUiDelayMs);
+      counts.put("blockedProvider",probe.isBlocked());
       counts.put("elapsedMs",SystemClock.elapsedRealtime()-scanStart);
       finalResult.put("counts",counts);
       finalResult.put("entries",fileRecords);
       finalResult.put("directoryTimings",folderRecords);
+      finalResult.put("headerReadTimings",headerRecords);
       finalResult.put("errors",errors);
       JSONObject note=new JSONObject();
       note.put("grouping","No simulated work count is presented as authoritative. Export entries and run the exact Test 21 TypeScript grouping replay.");
-      note.put("metadata","This first-pass scan does not open media streams. Header/tag effects require a separate explicit diagnostic.");
+      note.put("metadata","Timed representative 64KB header access, not full tags or archive parsing; no media payload is included in report.");
+      note.put("performance","This measures SAF query latency, shallow stream opens and UI heartbeat, not Archivist's JS metadata/network pipeline.");
       finalResult.put("notes",note);
     }catch(Exception fatal){
       try{finalResult.put("fatal",fatal.getClass().getName()+": "+fatal.getMessage());}catch(Exception ignored){}
     }finally{
+      probe.close();
       finalResult.putOpt("schema","archivist-saf-scanner-diagnostic-v1");
       finishedReport=finalResult;
       scanning=false;
