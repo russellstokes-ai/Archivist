@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "test": "node run-tests.cjs",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "expo": "55.0.31",
@@ -41,7 +42,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "@playwright/test": "^1.55.0"
   },
   "expo": {
     "install": {
