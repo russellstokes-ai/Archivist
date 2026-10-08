@@ -65,22 +65,6 @@ public final class MainActivity extends Activity {
   volatile long observedStallMs=0;
   volatile int stallEvents=0;
   final long stallThresholdMs=4000L;
-  final Runnable heartbeat=new Runnable(){public void run(){
-    if(scanning){
-      long now=SystemClock.elapsedRealtime();
-      long idle=now-lastProgress;
-      long activeMs=activeQueryStarted==0?0:now-activeQueryStarted;
-      if(activeMs>=stallThresholdMs&&!providerStalled){
-        providerStalled=true;stallEvents++;
-      }
-      observedStallMs=Math.max(observedStallMs,activeMs);
-      summary.setText("Scanning… "+(now-scanStart)/1000+"s  •  files "+files+"  •  folders "+dirs+"\n"
-        +"Audio: "+audio+"  •  Comics: "+comics+"  •  PDFs: "+comicPdfs+"\n"
-        +"Provider query: "+(activeMs/1000)+"s  •  idle: "+(idle/1000)+"s\n"
-        +(providerStalled?"STALLED — provider query exceeded 4 seconds. Cancel is available.":"Slow queries: "+slowQueries));
-    }
-    ui.postDelayed(this,500);
-  }};
   final AtomicBoolean cancelled=new AtomicBoolean(false);
   volatile String stage="Idle";
   volatile TimedSafProbe activeProbe;
