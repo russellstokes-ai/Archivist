@@ -4288,7 +4288,7 @@ function Client() {
       const percent=scanProgressPercent(activeProgress);
       const count=activeProgress.total&&activeProgress.total>0?`${Math.min(activeProgress.processed||0,activeProgress.total)} / ${activeProgress.total}`:'';
       return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={26} accessibilityLabel="Scanning local library"/>
+        <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?38:34} accessibilityLabel="Scanning local library"/>
         <View style={{flex:1,minWidth:0,gap:3}}>
           <View style={styles.scanProgressHeading}>
             <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{scanPhaseLabel(activeProgress.phase)}</Text>
@@ -6107,7 +6107,7 @@ function Client() {
                 disabled={!transportReady}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {!transportReady ? <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={22} accessibilityLabel="Loading audio player"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
+                {!transportReady ? <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={28} accessibilityLabel="Loading audio player"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipForward" color={p.ink} size={30}/>
@@ -6283,10 +6283,10 @@ function Client() {
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
-      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={30} accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
+      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?42:36} accessibilityLabel="Opening local reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri} source={{html:localReader.html}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
     }
     if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>{ReaderTools()}</View>;
-    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView style={styles.readerWebView} ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={30} accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}{ReaderTools()}</View>;
+    return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView style={styles.readerWebView} ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?42:36} accessibilityLabel="Opening server reader"/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}{ReaderTools()}</View>;
   }
 
   function LiveHub(){
@@ -7316,7 +7316,7 @@ function Client() {
         {supportingCards}
       </View>
 
-      {profileLoading&&session?<BookLoader dark={darkMode} reduceMotion={reduceMotion} size={24} accessibilityLabel="Loading reader statistics"/>:null}
+      {profileLoading&&session?<BookLoader dark={darkMode} reduceMotion={reduceMotion} size={30} accessibilityLabel="Loading reader statistics"/>:null}
     </ScrollView>;
   }
 
@@ -7645,7 +7645,7 @@ function Client() {
           </View>
           <Button label="Close" tone="quiet" onPress={()=>setDuplicatePanelOpen(false)} />
         </View>
-        {duplicateLoading?<BookLoader dark={darkMode} reduceMotion={reduceMotion} size={24} accessibilityLabel="Checking duplicate files"/>:null}
+        {duplicateLoading?<BookLoader dark={darkMode} reduceMotion={reduceMotion} size={30} accessibilityLabel="Checking duplicate files"/>:null}
         {session ? <>
           <Button label="Refresh candidates" tone="quiet" disabled={duplicateLoading} onPress={()=>void refreshDuplicateCandidates()} />
           {!serverDuplicateGroups.length && !duplicateLoading?<Text style={[styles.empty,{color:p.muted}]}>No same-size duplicate candidates found.</Text>:null}
@@ -7830,7 +7830,7 @@ function Client() {
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-                <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={26} accessibilityLabel="Scanning local library"/>
+                <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?38:34} accessibilityLabel="Scanning local library"/>
                 <View style={{flex:1,gap:6}}>
                   <View style={styles.scanProgressHeading}><Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(progress.phase)}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{percent}%</Text></View>
                   <Text style={{color:p.muted}}>{progress.total?Math.min(progress.processed||0,progress.total)+' / '+progress.total:progress.entriesVisited+' checked'} · {progress.found} found · {progress.review} review{progress.currentFolder?' · '+progress.currentFolder:''}</Text>
@@ -8310,7 +8310,7 @@ function Client() {
               </View>
             </View>
             <View style={styles.restoreFooter}>
-              <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={26} accessibilityLabel="Opening Archivist library"/>
+              <BookLoader dark={darkMode} reduceMotion={reduceMotion} size={width>=760?38:34} accessibilityLabel="Opening Archivist library"/>
               <Text style={[styles.meta,{color:p.muted}]}>Opening your library and restoring your catalogue…</Text>
             </View>
           </View>
