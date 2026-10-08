@@ -153,6 +153,16 @@ export type LocalMetadataOverride = {
   coverUri?: string;
 };
 
+export type LocalScanDiagnostics = {
+  elapsedMs:number;
+  nativeDirectoryQueries:number;
+  legacyDirectoryReads:number;
+  fallbackDirectoryReads:number;
+  perFileStats:number;
+  physicalFiles:number;
+  logicalWorks:number;
+};
+
 export type LocalScanResult = {
   folders: LocalFolder[];
   books: LocalBook[];
@@ -162,6 +172,7 @@ export type LocalScanResult = {
   identified: number;
   review: number;
   entriesVisited: number;
+  diagnostics?:LocalScanDiagnostics;
 };
 
 export type LocalScanOptions = {
@@ -338,27 +349,29 @@ async function importIOSFolder(): Promise<LocalFolder | null> {
 function isSAFUri(uri:string){return uri.startsWith('content://');}
 
 type FastDirectoryAttribute = {uri:string;size?:number;modified?:number;isDirectory:boolean};
-type ListedDirectory = {children:string[];attributes:Map<string,FastDirectoryAttribute>};
+type ListedDirectory = {children:string[];attributes:Map<string,FastDirectoryAttribute>;mode:'native'|'legacy'|'fallback'};
 const nativeDirectoryReader=Platform.OS==='android'?NativeModules?.ArchivistArchive:null;
 
 // One native DocumentsContract query supplies all lightweight sibling attributes.
 // Providers without this capability keep the reliable Expo SAF fallback.
 async function listDirectoryEntriesWithAttributes(uri:string,rootUri:string):Promise<ListedDirectory>{
+  let triedNative=false;
   if(isSAFUri(uri)&&nativeDirectoryReader?.listLibraryDirectory){
+    triedNative=true;
     try{
       const entries:FastDirectoryAttribute[]=await withOperationTimeout(
         nativeDirectoryReader.listLibraryDirectory(rootUri,uri),4500,'Fast SAF directory',
       );
       if(!Array.isArray(entries)||entries.some(item=>!item||typeof item.uri!=='string'))
         throw new Error('Invalid native SAF directory result');
-      return {children:entries.map(item=>item.uri),attributes:new Map(entries.map(item=>[item.uri,item]))};
+      return {children:entries.map(item=>item.uri),attributes:new Map(entries.map(item=>[item.uri,item])),mode:'native'};
     }catch{
       // Not all provider authorities support DocumentsContract child queries.
       // Native deadline/cancellation bounds unreliable providers; preserve discovery.
       nativeDirectoryReader.cancelLibraryDirectoryRead?.();
     }
   }
-  return {children:await listDirectoryEntries(uri),attributes:new Map()};
+  return {children:await listDirectoryEntries(uri),attributes:new Map(),mode:triedNative?'fallback':'legacy'};
 }
 
 async function listDirectoryEntries(uri:string):Promise<string[]>{
@@ -398,6 +411,8 @@ export async function scanLocalFolders(
   previousBooks: LocalBook[] = [],
   options: LocalScanOptions = {},
 ): Promise<LocalScanResult> {
+  const startedAt=Date.now();
+  const diagnostics:LocalScanDiagnostics={elapsedMs:0,nativeDirectoryQueries:0,legacyDirectoryReads:0,fallbackDirectoryReads:0,perFileStats:0,physicalFiles:0,logicalWorks:0};
   const books: LocalBook[] = [];
   const shouldContinue=options.shouldContinue||(()=>true);
   let skipped = 0;
@@ -442,6 +457,9 @@ export async function scanLocalFolders(
       const listing=await listDirectoryEntriesWithAttributes(uri,folderRoot);
       children=listing.children;
       attributes=listing.attributes;
+      if(listing.mode==='native')diagnostics.nativeDirectoryQueries++;
+      else if(listing.mode==='fallback')diagnostics.fallbackDirectoryReads++;
+      else diagnostics.legacyDirectoryReads++;
       if(!shouldContinue())return;
     } catch {
       if (countUnreadable) skipped += 1;
@@ -533,6 +551,7 @@ export async function scanLocalFolders(
         }
 
         const indexed=attributes.get(child);
+        if(!indexed||indexed.isDirectory)diagnostics.perFileStats++;
         const fileInfo = indexed && !indexed.isDirectory
           ? {exists:true,size:indexed.size,modificationTime:indexed.modified}
           : await getInfoAsync(child).catch(()=>null);
@@ -709,6 +728,11 @@ export async function scanLocalFolders(
   report('matching', '');
   const synchronized=(await synchronizeLocalMetadataCooperative(books,{shouldContinue})).books;
   review=synchronized.filter(book=>book.needsReview).length;
+  diagnostics.elapsedMs=Date.now()-startedAt;
+  diagnostics.physicalFiles=synchronized.length;
+  const audioKeys=audioWorkGroupKeys(synchronized);
+  const logicalIds=new Set(synchronized.map(book=>book.format==='Audio'?(audioKeys.get(book.uri)||'asset:'+book.uri):'asset:'+book.uri));
+  diagnostics.logicalWorks=logicalIds.size;
   return {
     folders: nextFolders.concat(folders.slice(nextFolders.length)),
     books:synchronized,
@@ -718,6 +742,7 @@ export async function scanLocalFolders(
     identified: synchronized.length - review,
     review,
     entriesVisited,
+    diagnostics,
   };
 }
 
