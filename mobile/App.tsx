@@ -2430,7 +2430,7 @@ function Client() {
         await persistLibraryPreparationCheckpoint(failLibraryPreparation(libraryPreparationCheckpointRef.current));
         return;
       }
-      await enrichPublishedLocalLibrary(staged,generation,false);
+      await enrichPublishedLocalLibrary(staged,generation,true);
       if(!scanCommitGate.isCurrent(generation))return;
       // The completion marker is written only when the whole work-level stage
       // was durably committed, not when metadata enrichment merely returned.
@@ -4270,8 +4270,8 @@ function Client() {
         ||(onboardingDiscoverySignature===currentLibraryFolderSignature&&stagedLocalBooks.length>0));
     const discovered=hasSource&&(!hasFolder||localDiscovered)&&(!hasServerFolders||serverReady);
     const setupReady=discovered&&(!hasFolder||libraryPreparationReady);
-    const activeStep: 'source'|'identify'|'review' =
-      !discovered?'source':!setupReady?'identify':'review';
+    const activeStep: 'source'|'discover'|'identify'|'review' =
+      !hasSource?'source':!discovered?'discover':!setupReady?'identify':'review';
     const pulseStyle=(active:boolean)=>active&&!reduceMotion?{
       transform:[{scale:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[1,1.045,1]})}],
     }:undefined;
@@ -4337,7 +4337,7 @@ function Client() {
         </View>
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {hasSource&&!discovered&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='source')}><Button label="Find Books" disabled={busy} onPress={()=>void discoverOnboardingLibrary()}/></Animated.View>:null}
+        {hasSource&&!discovered&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='discover')}><Button label="Find Books" disabled={busy} onPress={()=>void discoverOnboardingLibrary()}/></Animated.View>:null}
         {discovered&&!setupReady&&!libraryRefreshActive?<Animated.View style={pulseStyle(activeStep==='identify')}><Button label="Identify Books & Covers" disabled={busy} onPress={()=>void identifyOnboardingBooksAndCovers()}/></Animated.View>:null}
         {setupReady&&reviewCount>0?<Animated.View style={pulseStyle(activeStep==='review')}><Button label={'Review '+reviewCount+' book'+(reviewCount===1?'':'s')} onPress={openOnboardingReview}/></Animated.View>:null}
         {setupReady?<View style={styles.shelfSetupAction}><Button label="Finish setup" tone="quiet" onPress={()=>void finishOnboarding()}/></View>:null}
