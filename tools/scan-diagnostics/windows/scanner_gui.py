@@ -154,6 +154,7 @@ class Collector:
             counters = dict(self.counters)
             active = dict(self.active)
             complete = self.finished
+            warnings = list(self.warnings)
             cancelled = self.cancelled
             start = self.started_at
             end = self.ended_at
@@ -172,7 +173,7 @@ class Collector:
             "maxCompletedOperationMs": max_ms,
             "entries": entries, "folderTimings": folders,
             "slowFileOperations": sorted(files, key=lambda v: -v["ms"])[:1000],
-            "metadataSamples": samples, "errors": errors,
+            "metadataSamples": samples, "errors": errors, "warnings": warnings,
             "groupingCandidates": candidate_groups(entries),
             "limitations": [
                 "Folder-group candidates are hypotheses; the exact Archivist TypeScript grouping engine is not executed.",
@@ -221,7 +222,7 @@ def scan(collector, cancelled, out_queue):
     try:
         while folders and not cancelled.is_set():
             folder, relative = folders.popleft()
-            folder_key = os.path.normcase(os.path.realpath(folder))
+            folder_key = os.path.normcase(os.path.abspath(folder))
             if folder_key in visited:
                 continue
             visited.add(folder_key)
@@ -364,8 +365,8 @@ class App:
             messagebox.showinfo("Scanner running", "Cancel the current scan before starting another.")
             return
         path = self.folder.get().strip().strip('"')
-        if not path or not os.path.isdir(path):
-            messagebox.showerror("Folder unavailable", "Enter or browse to an accessible folder or UNC network share.")
+        if not path:
+            messagebox.showerror("Folder required", "Enter or browse to a local folder, mapped drive or UNC share.")
             return
         self.cancelled.clear()
         self.messages = queue.SimpleQueue()
