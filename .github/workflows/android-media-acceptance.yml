@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - test/android-emulator-media-acceptance-20261008
+      - test/android-emulator-kvm-342-20261008
     paths:
       - '.github/workflows/android-media-acceptance.yml'
       - '.github/scripts/android-fixture-media.py'
@@ -58,6 +59,16 @@ jobs:
           test "$(find android-media-fixtures/grouped -type f -name '*.mp3' | wc -l)" -eq 227
           test "$(find android-media-fixtures/split-discs -type f -name '*.mp3' | wc -l)" -eq 227
           test "$(find android-media-fixtures/diagnostic342 -type f -name '*.mp3' | wc -l)" -eq 342
+
+      - name: Enable KVM hardware acceleration for real emulator testing
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            echo "KVM device permissions:"
+            ls -l /dev/kvm
+          else
+            echo "::warning::KVM is not available; Android emulator will be software emulated."
+          fi
 
       - name: Run Test 23 real Android picker discovery and full identification on 342 MP3s
         id: emulator_acceptance
