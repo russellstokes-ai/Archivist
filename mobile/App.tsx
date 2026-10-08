@@ -5033,8 +5033,8 @@ function Client() {
     return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestEditorClose}>
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
         <View style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={StyleSheet.absoluteFill} onPress={requestEditorClose}/>
-          <View collapsable={false} accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden'}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={[StyleSheet.absoluteFill,{zIndex:0}]} onPress={requestEditorClose}/>
+          <View collapsable={false} accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden',position:'relative',zIndex:1}]}>
           <View collapsable={false} style={{backgroundColor:p.card,zIndex:1,flexShrink:0,padding:16,gap:8,borderBottomWidth:1,borderBottomColor:p.line}}>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Edit book details</Text>
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
