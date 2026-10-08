@@ -358,9 +358,9 @@ async function searchGoogleBooks(fetcher:FetchLike,plan:QueryPlan,apiKey:string,
 
 export function onlineBookCacheKey(input:BookLookupInput){
   const hints=buildBookLookupHints(input);
-  // v3 invalidates negative/ambiguous results produced by the earlier bulk
+  // v4 invalidates stale loose provider subjects used by earlier genre matching
   // scanner so the publication-focused matcher gets one clean retry.
-  return ['v3',hints.isbn,normalize(hints.titles[0]),normalize(hints.authors[0]),normalize(hints.series[0]),input.format||''].join('|');
+  return ['v4',hints.isbn,normalize(hints.titles[0]),normalize(hints.authors[0]),normalize(hints.series[0]),input.format||''].join('|');
 }
 
 export function shouldLookupBookOnline(input:BookLookupInput){
