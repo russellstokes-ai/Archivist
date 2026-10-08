@@ -65,7 +65,7 @@ function normal(value:unknown){return clean(value).normalize('NFKD').replace(/[\
 // deriving the logical work boundary. Never rewrite the physical track tags.
 function albumWorkTitle(value:unknown){
   const original=clean(value);
-  if(!original)return '';
+  if(!original||/^(?:unknown(?: album)?|n\/a|none|null|untitled)$/i.test(original))return '';
   const withoutPart=original.replace(/(?:\s*[\[(]\s*|\s*[-:–]\s*|\s+)(?:disc|disk|cd|part|pt)\s*#?\s*\d{1,3}(?:\s*(?:of|\/)\s*\d{1,3})?\s*[\])]?\s*$/i,'').trim();
   return withoutPart||original;
 }
