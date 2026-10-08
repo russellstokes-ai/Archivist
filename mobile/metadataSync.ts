@@ -478,7 +478,9 @@ export function canonicalMetadataForBooks(books:SynchronizableBook[],standaloneS
   // commonly a chapter title. When grouped tracks agree on one embedded work
   // title, use it explicitly unless the user supplied a manual title.
   if(audio&&selected.title?.source!=='manual'){
-    const workTitles=books.map(book=>clean(book.embeddedMetadata?.workTitle||'')).filter(Boolean);
+    // Always use validated work-level album evidence; a repeated "Disc 2" or
+    // "Chapter 03" TALB is not an audiobook title or a work identity.
+    const workTitles=books.map(book=>albumWorkTitle(book.embeddedMetadata?.workTitle)).filter(Boolean);
     const normalized=[...new Set(workTitles.map(normal))];
     if(workTitles.length>0&&normalized.length===1){
       selected.title={

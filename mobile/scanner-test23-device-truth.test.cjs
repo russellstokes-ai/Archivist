@@ -46,6 +46,19 @@ assert.equal(groupLocalWorks(synchronizeLocalMetadata(corpus).books).length,12,
 assert.equal(localWorksForReview(corpus).filter(x=>x.needsReview).length,12,
   'RED: work-level Needs Attention, not 85+ chapter-level cards');
 assert.equal(new Set([...audioWorkGroupKeys(corpus).values()]).size,12);
+
+// A bad encoder may put only an identical disc/chapter label into every TALB.
+// Even though tracks group correctly, canonical metadata must NEVER publish that
+// generic label as the actual work title. The enclosing book folder wins.
+const badAlbumOnly=Array.from({length:8},(_,index)=>audio('Real Book',index+1,'Disc 2'));
+const badBookWorks=groupLocalWorks(synchronizeLocalMetadata(badAlbumOnly).books);
+assert.equal(badBookWorks.length,1);
+assert.equal(badBookWorks[0].title,'Real Book',
+  'do not promote an identical Disc 2 tag to the publication work title');
+const badChapterOnly=Array.from({length:8},(_,index)=>audio('Another Novel',index+1,'Chapter 03'));
+assert.equal(groupLocalWorks(synchronizeLocalMetadata(badChapterOnly).books)[0].title,'Another Novel',
+  'do not promote an identical Chapter 03 tag to the work title');
+
 // Negative gate: distinct ALBUMS in one mixed folder must not combine.
 const mixed=[
   audio('Mixed',1,'Dune',''),audio('Mixed',2,'Dune',''),
