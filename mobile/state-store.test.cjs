@@ -22,6 +22,7 @@ const secureMock={
   async deleteItemAsync(key){deletedSecure.push(key);secure.delete(key);},
 };
 Module._load=function(request,parent,isMain){
+  if(request==='react-native')return {Platform:{OS:'android'}};
   if(request==='expo-file-system/legacy')return fsMock;
   if(request==='expo-secure-store')return secureMock;
   return originalLoad.call(this,request,parent,isMain);
