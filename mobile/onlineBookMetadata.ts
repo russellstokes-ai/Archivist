@@ -1,3 +1,4 @@
+import {selectPrimaryGenre,genreIsSpecific} from './genreTaxonomy';
 export type OnlineBookProvider='openlibrary'|'googlebooks';
 export type OnlineBookConfidence='high'|'medium'|'low';
 
@@ -197,16 +198,7 @@ function queryPlans(input:BookLookupInput,deep=false,interactive=false){
   return plans.filter(plan=>{const key=JSON.stringify(plan);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,deep?16:interactive?4:3);
 }
 
-function selectGenre(values:unknown){
-  const subjects=Array.isArray(values)?values.map(clean).filter(Boolean):[];
-  if(!subjects.length)return undefined;
-  const preferred=['Science Fiction','Fantasy','Mystery','Thriller','Romance','History','Biography','Memoir','Horror','Crime','Adventure','Young Adult','Children','Classics','Philosophy','Science','Technology','Business','Travel','Poetry'];
-  for(const label of preferred){
-    const hit=subjects.find(subject=>normalize(subject).includes(normalize(label)));
-    if(hit)return label;
-  }
-  return subjects.find(subject=>subject.length<=48&&!/accessible book|protected daisy|internet archive/i.test(subject));
-}
+function selectGenre(values:unknown){return selectPrimaryGenre(values);}
 function firstString(value:unknown){
   if(Array.isArray(value))return clean(value.find(item=>useful(item))||'')||undefined;
   return useful(value)?clean(value):undefined;
@@ -341,11 +333,11 @@ async function searchOpenLibrary(fetcher:FetchLike,plan:QueryPlan,timeoutMs:numb
 }
 async function hydrateOpenLibrary(fetcher:FetchLike,candidate:OnlineBookCandidate,timeoutMs:number){
   if(candidate.provider!=='openlibrary'||!candidate.providerId.startsWith('/works/'))return candidate;
-  if(candidate.fields.description&&candidate.fields.genre)return candidate;
+  if(candidate.fields.description&&genreIsSpecific(candidate.fields.genre))return candidate;
   try{
     await throttleOpenLibrary();
     const json=await fetchJson(fetcher,'https://openlibrary.org'+candidate.providerId+'.json',timeoutMs,{headers:{Accept:'application/json','User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'}});
-    return {...candidate,fields:compact({...candidate.fields,description:candidate.fields.description||descriptionValue(json?.description),genre:candidate.fields.genre||selectGenre(json?.subjects),series:candidate.fields.series||parseSeriesValue(json?.series).series,seriesNumber:candidate.fields.seriesNumber??parseSeriesValue(json?.series).seriesNumber})};
+    return {...candidate,fields:compact({...candidate.fields,description:candidate.fields.description||descriptionValue(json?.description),genre:genreIsSpecific(candidate.fields.genre)?candidate.fields.genre:(selectGenre(json?.subjects)||candidate.fields.genre),series:candidate.fields.series||parseSeriesValue(json?.series).series,seriesNumber:candidate.fields.seriesNumber??parseSeriesValue(json?.series).seriesNumber})};
   }catch{return candidate;}
 }
 export async function hydrateBookCandidate(candidate:OnlineBookCandidate,options:{fetcher?:FetchLike;timeoutMs?:number}={}){
