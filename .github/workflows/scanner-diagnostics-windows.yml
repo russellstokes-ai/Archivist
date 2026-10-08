@@ -1,0 +1,61 @@
+name: Windows Scanner Diagnostics Portable EXE
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - diagnostics/standalone-readonly-scanner-20261008
+    paths:
+      - 'tools/scan-diagnostics/windows/**'
+      - '.github/workflows/scanner-diagnostics-windows.yml'
+permissions:
+  contents: write
+concurrency:
+  group: windows-scanner-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax validation
+        shell: pwsh
+        run: python -m py_compile tools/scan-diagnostics/windows/scanner_gui.py
+      - name: Unit tests
+        shell: pwsh
+        run: python -m unittest discover -s tools/scan-diagnostics/windows -p 'test_*.py' -v
+      - name: Build portable Windows GUI EXE
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.16.0
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name Archivist-Scanner-Diagnostics-Windows --distpath dist --workpath build/diag --specpath build/diag tools/scan-diagnostics/windows/scanner_gui.py
+      - name: Confirm EXE and checksum
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'dist/Archivist-Scanner-Diagnostics-Windows.exe')) { throw 'Missing Windows EXE' }
+          $exe=Get-Item 'dist/Archivist-Scanner-Diagnostics-Windows.exe'
+          Write-Host ('Portable EXE size: ' + $exe.Length + ' bytes')
+          if ($exe.Length -lt 1000000) { throw 'Suspiciously small EXE' }
+          (Get-FileHash $exe.FullName -Algorithm SHA256).Hash | Out-File -Encoding ascii dist/Archivist-Scanner-Diagnostics-Windows.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Archivist-Scanner-Diagnostics-Windows
+          path: |
+            dist/Archivist-Scanner-Diagnostics-Windows.exe
+            dist/Archivist-Scanner-Diagnostics-Windows.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish direct Windows EXE download
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'scanner-diagnostics-windows-v1'
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create $tag --target $env:GITHUB_SHA --prerelease --title 'Archivist Scanner Diagnostics Windows v1' --notes 'Portable Windows GUI diagnostic for mapped/local/UNC share directories. Read-only inspection, optional bounded media-header samples and exportable JSON. Never modifies Archivist app or files.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          gh release upload $tag dist/Archivist-Scanner-Diagnostics-Windows.exe dist/Archivist-Scanner-Diagnostics-Windows.exe.sha256 --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
