@@ -1,0 +1,83 @@
+name: Standalone Scanner Diagnostics APK
+
+on:
+  push:
+    branches:
+      - diagnostics/standalone-readonly-scanner-20261008
+    paths:
+      - 'tools/scan-diagnostics/**'
+      - '.github/workflows/scanner-diagnostics-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnostic-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Android 36 platform
+        run: |
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+          yes | sdkmanager --licenses >/dev/null
+      - name: Build independent debug APK
+        run: gradle --project-dir tools/scan-diagnostics :app:assembleDebug --no-daemon --console=plain
+      - name: Confirm separate identity and read-only permissions
+        run: |
+          set -euo pipefail
+          APK=tools/scan-diagnostics/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee badging.txt
+          grep -F "package: name='app.archivist.scannerdiagnostics'" badging.txt
+          if grep -Fq "package: name='app.archivist.reader'" badging.txt; then exit 1; fi
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$APK" | tee permissions.txt
+          if grep -Eq 'android.permission.(INTERNET|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE|READ_MEDIA_|READ_EXTERNAL_STORAGE)' permissions.txt; then
+            echo "Unexpected broad storage or network permissions"; exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          cp "$APK" Archivist-Scanner-Diagnostics-1.0.apk
+          sha256sum Archivist-Scanner-Diagnostics-1.0.apk > Archivist-Scanner-Diagnostics-1.0.apk.sha256
+      - name: Upload separately installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Archivist-Scanner-Diagnostics-APK
+          path: |
+            Archivist-Scanner-Diagnostics-1.0.apk
+            Archivist-Scanner-Diagnostics-1.0.apk.sha256
+          retention-days: 30
+      - name: Install and launch in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            adb install -r Archivist-Scanner-Diagnostics-1.0.apk
+            adb shell am start -W -n app.archivist.scannerdiagnostics/.MainActivity
+            sleep 8
+            adb shell pidof app.archivist.scannerdiagnostics
+      - name: Publish direct APK URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="scanner-diagnostics-v1"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "Archivist Scanner Diagnostics v1" --notes "Separate read-only Android diagnostics app. No access to Archivist app storage, no network permission; user-picked SAF folders and manual export only."
+          gh release upload "$TAG" Archivist-Scanner-Diagnostics-1.0.apk Archivist-Scanner-Diagnostics-1.0.apk.sha256 --clobber
