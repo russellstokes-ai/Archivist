@@ -1,4 +1,4 @@
-name: Android Media Acceptance — real APK and MP3 files
+name: Android Media Acceptance — 342 Real MP3s
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   media-acceptance:
-    name: Test 23 native scanner — 227 real MP3s
+    name: Test 23 native scanner — 342 real MP3s
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
@@ -45,7 +45,7 @@ jobs:
           echo '97c6a1148fa2cf2b8317ca6ee2a6873af7a19abea8134bd4b9ee7b63edf9fd6d  Archivist-0.9.4-test-23-scanner-device-truth.apk' | sha256sum -c -
           echo 'Exact shipped Test 23 artifact verified by SHA256 (not rebuilt, not altered).'
 
-      - name: Generate 454 actual audio tracks across two independent 227-file test cases
+      - name: Generate 342-file diagnostic-reproduction suite plus 227-file controls
         run: |
           set -euo pipefail
           if ! command -v ffmpeg >/dev/null 2>&1; then
@@ -57,8 +57,9 @@ jobs:
           python .github/scripts/android-fixture-media.py android-media-fixtures
           test "$(find android-media-fixtures/grouped -type f -name '*.mp3' | wc -l)" -eq 227
           test "$(find android-media-fixtures/split-discs -type f -name '*.mp3' | wc -l)" -eq 227
+          test "$(find android-media-fixtures/diagnostic342 -type f -name '*.mp3' | wc -l)" -eq 342
 
-      - name: Drive installed Test 23 app through Android picker and two real scans
+      - name: Run Test 23 real Android picker discovery and full identification on 342 MP3s
         id: emulator_acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -68,7 +69,7 @@ jobs:
           emulator-build: 14214601
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash -lc 'python3 .github/scripts/android-media-acceptance.py "$GITHUB_WORKSPACE/android-acceptance-input/Archivist-0.9.4-test-23-scanner-device-truth.apk"'
+          script: bash -lc 'FIXTURE_PROFILES=diagnostic342 python3 .github/scripts/android-media-acceptance.py "$GITHUB_WORKSPACE/android-acceptance-input/Archivist-0.9.4-test-23-scanner-device-truth.apk"'
 
       - name: Produce acceptance summary regardless of pass or failure
         if: always()
@@ -111,7 +112,7 @@ jobs:
           dest=Path("docs/qa-evidence/test23-android-emulator")
           dest.mkdir(parents=True,exist_ok=True)
           if (root/"summary.json").exists():shutil.copyfile(root/"summary.json",dest/"summary.json")
-          for profile in ("grouped","split-discs"):
+          for profile in ("diagnostic342","grouped","split-discs"):
               src=root/profile
               if not src.exists():continue
               out=dest/profile;out.mkdir(parents=True,exist_ok=True)
