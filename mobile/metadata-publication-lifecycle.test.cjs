@@ -13,8 +13,12 @@ const candidate={provider:'openlibrary',providerId:'/works/dune',fields:{title:'
 const accepted=acceptBookCandidateForWork(clues,[track.uri],candidate);
 assert.equal(accepted[0].identificationState,'accepted');
 assert.deepEqual(accepted[0].embeddedMetadata,track.embeddedMetadata);
-const blocked=partitionLocalBooksByPublication(JSON.parse(JSON.stringify(accepted)));
-assert.equal(blocked.published.length,0);
+assert.equal(partitionLocalBooksByPublication(JSON.parse(JSON.stringify(accepted))).published.length,1,
+  'accepted metadata must preserve existing verified cover artwork and publish');
+const uncovered={...clues[0],coverUri:undefined,libraryCoverUri:undefined,livingBookCoverUri:undefined};
+const acceptedWithoutArtwork=acceptBookCandidateForWork([uncovered],[track.uri],candidate);
+const blocked=partitionLocalBooksByPublication(JSON.parse(JSON.stringify(acceptedWithoutArtwork)));
+assert.equal(blocked.published.length,0,'remote-only artwork must not publish without a local copy');
 assert.equal(blocked.staged.length,1,'accepted artwork failure remains staged across restart');
 const manualCover='data:image/png;base64,AQID';
 const withManualCover={...clues[0],coverUri:manualCover,libraryCoverUri:manualCover,livingBookCoverUri:manualCover,manualOverride:{coverUri:manualCover}};
@@ -38,8 +42,8 @@ const corrected=applyManualCluesToWork(ready,[track.uri],{title:'Dune',author:'F
 assert.equal(partitionLocalBooksByPublication(corrected).published.length,1,'editing established acceptance does not unpublish');
 console.log('PASS: production clue/accept/publication lifecycle, restart and chapter protection');
 
-assert.equal(localWorksForReview(accepted)[0].needsReview,true);
-assert.match(localWorksForReview(accepted)[0].reviewReason,/cover/);
+assert.equal(localWorksForReview(acceptedWithoutArtwork)[0].needsReview,true);
+assert.match(localWorksForReview(acceptedWithoutArtwork)[0].reviewReason,/cover/);
 assert.equal(localWorksForReview(ready)[0].needsReview,false);
 const {retainPublishedSnapshots,restorePublishedCatalogue}=require('./publicationPipeline.ts');
 const replacement=ready.map(b=>({...b,libraryCoverUri:undefined,livingBookCoverUri:undefined,coverUri:undefined}));
