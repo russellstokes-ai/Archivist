@@ -55,4 +55,10 @@ assert(attentionCounts.seriesNumber===1,'uncertain series-order count');
 assert(attentionCounts.incomplete===2,'incomplete count includes conflict and missing series number');
 assert(x.matchesMetadataGap(attention[1],'conflicts')===true,'conflict filter');
 assert(x.matchesMetadataGap(attention[2],'seriesNumber')===true,'series order filter');
+assert(x.matchesMetadataGap({title:'Novel',author:'Writer',genre:'Fiction',source:'local'},'genre')===true,
+  'a generic Fiction label must remain visible for genre enrichment');
+assert(x.matchesMetadataGap({title:'Novel',author:'Writer',genre:'Science Fiction',source:'local'},'genre')===false,
+  'canonical specific genres must not be flagged as missing');
+assert(x.advancedMetadataCompleteness({title:'Novel',author:'Writer',genre:'Non-fiction',source:'local'}).missing.includes('genre'),
+  'broad metadata must not silently count as a fully classified Atlas genre');
 console.log('needs-attention maintenance filters passed');
