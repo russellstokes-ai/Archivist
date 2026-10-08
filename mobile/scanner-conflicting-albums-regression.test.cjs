@@ -29,6 +29,8 @@ const multipart=Array.from({length:18},(_,i)=>chapter(
   i<6?'The Long Road':i<12?'The Long Road (Disc 2)':'',
 ));
 assert.equal(multipart.length,18);
+assert.equal(groupLocalWorks(multipart)[0].title,'The Long Road',
+ 'the logical work title must not inherit a disc-specific album label or a chapter title');
 assert.equal(groupLocalWorks(multipart).length,1,
  'RED: one folder of 18 numbered chapters with incomplete or disc-suffixed album tags must be ONE book');
 assert.equal(localWorksForReview(multipart).filter(work=>work.needsReview).length,1,
@@ -46,5 +48,25 @@ const mixed=[
 ];
 assert.deepEqual(groupLocalWorks(mixed).map(w=>w.files).sort((a,b)=>a-b),[2,2],
  'a mixed folder of two independently tagged works must NOT be over-merged');
+
+// The device gold standard must apply to the logical WORK count, not
+// the count of physical files. The data below adds 227 chapter assets from
+// 12 distinct physical books with mixed, missing and disc-suffixed work tags.
+const manyBooks=[];
+for(let w=0;w<12;w++){
+  const count=w<11?19:18; // 227 physical files
+  for(let i=0;i<count;i++){
+    manyBooks.push(chapter(30000+w*100+i,'Novel '+w,
+      String(i+1).padStart(2,'0')+' - Chapter '+String(i+1).padStart(2,'0'),
+      i<5?'Novel '+w:i<9?'Novel '+w+' (Disc 2)':''));
+  }
+}
+assert.equal(manyBooks.length,227);
+assert.equal(groupLocalWorks(manyBooks).length,12,
+ '227 physical chapters in 12 physical book folders must produce 12 logical works');
+assert.equal(groupLocalWorks(synchronizeLocalMetadata(manyBooks).books).length,12,
+ 'metadata synchronization must preserve the 12 groups');
+assert.equal(localWorksForReview(manyBooks).filter(w=>w.needsReview).length,12,
+ 'only twelve work-level review cards may appear for these 227 chapter files');
 
 console.log('PASS: conflicting disc tags are normalized without merging separate audiobooks');
