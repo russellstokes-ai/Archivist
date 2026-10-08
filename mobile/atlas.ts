@@ -1,3 +1,4 @@
+import {canonicalPrimaryGenre} from './genreTaxonomy';
 export type AtlasCount = {name:string;count:number};
 
 export type AtlasKind = 'author'|'series'|'genre'|'format'|'space'|'status'|'reading'|'rating'|'favourite';
@@ -31,6 +32,8 @@ export type AtlasRelationship<T extends AtlasWorkLike = AtlasWorkLike> = {
   favourites:AtlasCount[];
 };
 
+const atlasGenre=(value:string)=>canonicalPrimaryGenre(value)||value.trim()||'Unclassified';
+
 function counts(values:string[]):AtlasCount[] {
   const totals=new Map<string,number>();
   for(const value of values.map(value=>value.trim()).filter(Boolean)) {
@@ -51,7 +54,7 @@ function matches<T extends AtlasWorkLike>(work:T,kind:AtlasKind,value:string) {
   switch(kind) {
     case 'author': return value==='Unknown author' ? !work.author.trim() : work.author===value;
     case 'series': return work.series===value;
-    case 'genre': return work.genre===value;
+    case 'genre': return atlasGenre(work.genre)===atlasGenre(value);
     case 'format': return work.format===value;
     case 'space': return work.space===value;
     case 'status': return value==='Available' ? work.available : value==='Unavailable' ? !work.available : false;
@@ -77,7 +80,7 @@ export function buildAtlasRelationship<T extends AtlasWorkLike>(
     works:selected.slice().sort((a,b)=>a.title.localeCompare(b.title,undefined,{numeric:true})).slice(0,50),
     authors:counts(selected.map(work=>work.author.trim() || 'Unknown author')),
     series:counts(selected.map(work=>work.series)),
-    genres:counts(selected.map(work=>work.genre)),
+    genres:counts(selected.map(work=>atlasGenre(work.genre))),
     formats:counts(selected.map(work=>work.format)),
     spaces:counts(selected.map(work=>work.space)),
     availability:counts(selected.map(work=>work.available?'Available':'Unavailable')),
