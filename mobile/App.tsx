@@ -3,6 +3,7 @@ import {persistWorkEdit} from './metadataEditPersistence';
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {ArchivistModal} from './ArchivistModal';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -5030,7 +5031,7 @@ function Client() {
       }
       closeEditor();
     };
-    return <Modal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestEditorClose}>
+    return <ArchivistModal transparent hardwareAccelerated animationType="none" visible onRequestClose={requestEditorClose}>
       <KeyboardAvoidingView style={[styles.modalKeyboard,{paddingTop:safeArea.top+8,paddingBottom:safeArea.bottom+8}]} behavior={Platform.OS==='ios'?'padding':'height'}>
         <View pointerEvents="box-none" style={[styles.modalBackdrop,{padding:phoneLayout?8:20}]}>
           <View accessible={false} accessibilityViewIsModal style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line,flex:1,minHeight:0,maxHeight:'100%',padding:0,overflow:'hidden'}]}>
@@ -5128,7 +5129,7 @@ function Client() {
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>;
+    </ArchivistModal>;
   }
 
   function BulkMetadataPanel(){
@@ -5898,7 +5899,7 @@ function Client() {
           </Pressable>
         </Pressable>
       </Modal>:null}
-      {libraryFiltersOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View pointerEvents="box-none" style={modalSheetBackdrop}><View accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
+      {libraryFiltersOpen?<ArchivistModal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryFiltersOpen(false)}><View pointerEvents="box-none" style={modalSheetBackdrop}><View accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library filters" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.card,borderColor:p.line}]}><DismissSheetHandle onDismiss={()=>setLibraryFiltersOpen(false)} foldLayout={foldLayout}/><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetInnerScroll}><View style={styles.sectionHeader}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Filter & sort</Text><Pressable accessibilityRole="button" onPress={clearLibraryFilters}><Text style={{color:p.sage,fontWeight:'800'}}>Reset</Text></Pressable></View>
         <Text style={[styles.filterLabel,{color:p.muted}]}>SORT</Text><View style={styles.filterWrap}>{([
           ['title','Title'],
           ['author','Author'],
@@ -5924,7 +5925,7 @@ function Client() {
           ['cover','Missing device cover'],
         ] as Array<[MetadataGapFilter,string]>).map(([gap,label])=><Pressable key={gap||'all-metadata'} accessibilityRole="button" accessibilityState={{selected:metadataGapFilter===gap}} onPress={()=>{setReviewOnly(false);setMetadataGapFilter(gap)}} style={[styles.filterChip,{backgroundColor:metadataGapFilter===gap?p.card:'transparent'}]}><Text style={{color:metadataGapFilter===gap?p.sage:p.muted,fontWeight:'600'}}>{label}</Text></Pressable>)}</View>
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);beginSmartShelf(true)}}/>
-      </ScrollView></View></View></Modal>:null}
+      </ScrollView></View></View></ArchivistModal>:null}
     </View>;
     const libraryFolderRailWidth=layoutTier==='fold'?136:160;
     return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{width:libraryFolderRailWidth,minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0,backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={[styles.libraryRailContent,{width:'100%'}]} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
