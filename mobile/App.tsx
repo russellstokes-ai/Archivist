@@ -2765,6 +2765,7 @@ function Client() {
 
   async function finaliseLocalScan(result:LocalScanResult, previousLocal:LocalBook[], generation:number, forceOnline=false) {
     if(!scanCommitGate.isCurrent(generation))return null;
+    if(__DEV__&&result.diagnostics)console.info('[Archivist scanner diagnostic]',JSON.stringify(result.diagnostics));
     setScanProgress({phase:'checking-duplicates',currentFolder:'',entriesVisited:result.entriesVisited,found:result.books.length,review:result.review});
     await scanFrame();
     if(!scanCommitGate.isCurrent(generation))return null;
@@ -2998,6 +2999,7 @@ function Client() {
     }).catch(error=>{recordLibraryRefreshWarning('Embedded metadata',error);return null;});
     if(!scanCommitGate.isCurrent(generation))return null;
     if(!enriched)return baseBooks;
+    if(__DEV__)console.info('[Archivist audio metadata diagnostic]',JSON.stringify({fast:fastAudioProperties,eligible:eligible.length,attempted:enriched.attempted,timedOut:enriched.timedOut,skipped:enriched.skipped}));
     if(enriched.timedOut||enriched.skipped){
       recordLibraryRefreshWarning('Embedded metadata',new Error(
         [enriched.timedOut?enriched.timedOut+' file read'+(enriched.timedOut===1?'':'s')+' timed out':'',enriched.skipped?enriched.skipped+' remaining read'+(enriched.skipped===1?' was':'s were')+' skipped to keep the refresh responsive':''].filter(Boolean).join('; ')
