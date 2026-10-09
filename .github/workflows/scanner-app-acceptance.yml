@@ -2,7 +2,7 @@ name: Fresh scanner whole-app acceptance
 on:
   push:
     branches: ['feature/archivist-scanner-vnext-real-library']
-    paths: ['.github/workflows/scanner-app-acceptance.yml', '.github/scripts/scanner-app-acceptance.py', 'mobile/android/app/src/main/java/app/archivist/reader/Scanner*.java']
+    paths: ['.github/workflows/scanner-app-acceptance.yml', '.github/scripts/scanner-app-acceptance.py', '.github/scripts/scanner-launch-smoke.py', 'mobile/android/app/src/main/java/app/archivist/reader/Scanner*.java']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,6 +28,10 @@ jobs:
           packages: platform-tools
       - name: Install Android build packages
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      - name: Install playable fixture generator
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install and verify current mobile code
         working-directory: mobile
         run: |
@@ -52,7 +56,9 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: python3 .github/scripts/scanner-app-acceptance.py mobile/android/app/build/outputs/apk/release/app-release.apk
+          script: |
+            python3 .github/scripts/scanner-launch-smoke.py mobile/android/app/build/outputs/apk/release/app-release.apk
+            python3 .github/scripts/scanner-app-acceptance.py mobile/android/app/build/outputs/apk/release/app-release.apk
       - name: Save evidence without distributing an ungated APK
         if: always()
         uses: actions/upload-artifact@v4
