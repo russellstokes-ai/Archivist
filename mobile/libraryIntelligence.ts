@@ -432,9 +432,15 @@ export function decodedPathParts(uri: string): string[] {
   let value = uri;
   try { value = decodeURIComponent(value); } catch {}
   value = value.split('?')[0];
-  const marker = '/document/';
-  if (value.includes(marker)) value = value.split(marker).pop() || value;
-  value = value.replace(/^primary:/, '');
+  // Android returns tree URIs for the user's selected root, but document
+  // URIs for its children. Both must resolve to the same physical path prefix.
+  // Previous builds only handled /document/, so source-root chapters were
+  // interpreted as unrelated per-file books even when names shared a title.
+  const documentMarker = '/document/';
+  const treeMarker = '/tree/';
+  if (value.includes(documentMarker)) value = value.split(documentMarker).pop() || value;
+  else if (value.includes(treeMarker)) value = value.split(treeMarker).pop() || value;
+  value = value.replace(/^primary:/i, '');
   return value.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
 }
 
