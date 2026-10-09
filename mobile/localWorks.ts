@@ -99,7 +99,10 @@ function audioFolderTitle(uri: string) {
   const parts = decodedPathParts(uri);
   const dirs = parts.slice(0, -1).filter(Boolean);
   while (dirs.length && isLibraryRootLabel(dirs[0])) dirs.shift();
-  const parent = dirs[dirs.length - 1] || '';
+  const leaf = dirs[dirs.length - 1] || '';
+  // Physical CD/Part folders are chapters, not the logical book title.
+  const isPart=/^(?:cd|disc|disk|part|pt)\s*[-._#]?\s*\d{1,3}(?:\s*(?:of|\/)\s*\d{1,3})?$/i.test(cleanLabel(leaf));
+  const parent = isPart ? dirs[dirs.length - 2] || '' : leaf;
   return isLibraryRootLabel(parent) ? '' : cleanLabel(parent);
 }
 
