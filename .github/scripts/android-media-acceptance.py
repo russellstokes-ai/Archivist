@@ -319,7 +319,7 @@ def inspect_editor(out):
 def process_profile(profile,apk):
     out=OUT/profile
     out.mkdir(parents=True,exist_ok=True)
-    log("=== Test 23 real Android fixture "+profile+" ===")
+    log("=== Test 24 real Android fixture "+profile+" ===")
     expected=342 if profile=="diagnostic342" else 227
     result={"profile":profile,"apk":Path(apk).name,"status":"running",
             "expected_mp3_files":expected,"expected_logical_works":12}
@@ -341,7 +341,12 @@ def process_profile(profile,apk):
         result["review_count"]=review_count(labels(root))
         result["editor"]=inspect_editor(out)
         result["status"]="finished"
-        result["review_count_pass"]=result["review_count"] in (None,12)
+        result["review_count_pass"]=result["review_count"]==12
+        # No visible count is NOT a pass. The source-based tests used to hide
+        # this exact problem by accepting a missing assertion.
+        if result["review_count"] is None:
+            result["status"]="failed"
+            result["reason"]="Native Needs Attention count not visible; 12-work result unverified"
         if result["review_count"] is not None and result["review_count"]!=12:
             result["status"]="failed"
             result["reason"]="Android UI reports "+str(result["review_count"])+" reviewed works; expected 12"
@@ -395,7 +400,7 @@ def process_profile(profile,apk):
     return result
 
 def main():
-    if len(sys.argv)<2:raise RuntimeError("Usage: android-media-acceptance.py <verified Test23.apk>")
+    if len(sys.argv)<2:raise RuntimeError("Usage: android-media-acceptance.py <verified Test24.apk>")
     apk=sys.argv[1]
     manifest=json.loads((MEDIA/"manifest.json").read_text())
     log("EXPECTED INPUT "+json.dumps(manifest)[:1800])
