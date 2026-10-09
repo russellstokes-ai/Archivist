@@ -8,11 +8,11 @@ const apkWorkflow=fs.readFileSync(__dirname+'/../.github/workflows/android-apk.y
 const androidWorkflow=fs.readFileSync(__dirname+'/../.github/workflows/android-check.yml','utf8');
 const source=fs.readFileSync(__dirname+'/App.tsx','utf8');
 
-assert.equal(pkg.version,'0.9.4');
-assert.equal(app.expo.version,'0.9.4');
-assert.equal(app.expo.android.versionCode,108,'Test 23 upgrade must have a unique Android versionCode');
-assert.match(gradle,/versionCode\s+108/);
-assert.match(gradle,/versionName\s+"0\.9\.4"/);
+assert.equal(pkg.version,'0.9.4-test24','current candidate must have an independent version name');
+assert.equal(app.expo.version,pkg.version,'Expo and package metadata must remain aligned');
+assert.equal(app.expo.android.versionCode,109,'Test24 must be a distinguishable upgrade from code108');
+assert.match(gradle,/versionCode\s+109/);
+assert.match(gradle,/versionName\s+"0\.9\.4-test24"/);
 assert.match(apkWorkflow,/TEST_BUILD:\s*'(?:18-editor-render|19-reliability|20-work-grouping|21-scanner-book-loader|22-scanner-quality-gates|23-scanner-device-truth)'/);
 assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'Test 13 branch must produce the verified APK');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'release APK gate must lint the optimized release variant');
