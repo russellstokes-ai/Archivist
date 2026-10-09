@@ -17,8 +17,8 @@ assert.ok(source.includes('const autoLocalScanAttempted=useRef(false)'),'startup
 assert.ok(source.includes("folder.status==='Scanning…'||folder.status==='Ready to scan'"),'interrupted pending folders must be recoverable after restart');
 assert.ok(source.includes("autoLocalScanAttempted.current||!pendingFolder")&&source.includes('Only recover an explicitly interrupted legacy scan'),'onboarding folders must never auto-scan; only interrupted legacy scans may resume');
 assert.ok(source.includes("setTimeout(()=>setLocalFolderNotice(''),8000)"),'scan completion notice should be visible but not become stale chrome');
-assert.ok(source.includes('deferEmbeddedCovers:true')&&source.includes('deferEmbeddedMetadata:true'),'app scans must publish identity before expensive embedded metadata and cover recovery');
-assert.ok(source.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),'catalogue publication and enrichment must share one cancellable refresh job');
+assert.ok(source.includes('await scanFreshFolders(localFolders')&&source.includes('signal:controller.signal'),'fresh scanner must own bounded metadata and publication under the scan cancellation signal');
+assert.equal(source.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),false,'fresh preparation must not launch the historical deep sweep');
 assert.ok(source.includes('setScanProgress(null)')&&source.includes('libraryRefreshRunningRef.current=true'),'foreground discovery must hand off to enrichment without allowing a second refresh to overlap');
 assert.ok(source.includes('await enrichPublishedLocalEmbeddedMetadata(currentBooks,generation,forceOnline)'),'enrichment must move embedded archive/audio parsing out of foreground discovery and thread the in-memory catalogue forward');
 assert.ok(source.includes('shouldInspect:needsEmbeddedRead')&&source.includes('return true;'),'normal preparation must collect complete embedded details for each new or changed supported file');

@@ -21,6 +21,7 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
   private final ScannerDocumentAccess documents;
   public ArchivistScannerModule(ReactApplicationContext context){super(context);documents=new ScannerDocumentAccess(context.getContentResolver());}
   @Override public String getName(){return "ArchivistScanner";}
+  @ReactMethod public void allocateIdentityNamespace(Promise promise){promise.resolve(UUID.randomUUID().toString());}
   @ReactMethod public void beginScope(String rootUri,Promise promise){
     try{
       Uri root=Uri.parse(rootUri);

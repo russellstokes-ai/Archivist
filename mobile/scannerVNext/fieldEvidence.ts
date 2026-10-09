@@ -17,6 +17,7 @@ export async function createMetadataStore(db:ScannerDatabase){
  }
  return {
   get:(id:string)=>load(db,id),
+  confirmIdentity:(id:string,expected:number,signal?:AbortSignal)=>mutate(id,expected,work=>{if(!work.fields.title?.trim()||!work.fields.author?.trim())throw new Error('A title and author are required');work.identityConfirmed=true;},signal),
   updateMembership:(id:string,partIds:string[],expected:number,signal?:AbortSignal)=>mutate(id,expected,work=>{work.partIds=[...partIds];work.identityConfirmed=false;},signal),
   async ensure(value:MetadataWork){validate(value);let result:MetadataWork|undefined;await db.withExclusiveTransactionAsync(async tx=>{result=await load(tx,value.workId)??value;if(result===value)await write(tx,value);});return result!;},
   saveManual:(id:string,patch:WorkFields,expected:number,signal?:AbortSignal)=>mutate(id,expected,work=>{for(const [key,value] of Object.entries(patch)){if(value===undefined)continue;if(!fields.includes(key as typeof fields[number])||typeof value!=='string')throw new Error('Unknown manual field');const next=value.trim();if(['title','author','series','seriesNumber','isbn','asin'].includes(key)&&work.fields[key as keyof WorkFields]!==next)work.identityConfirmed=false;(work.fields as Record<string,string>)[key]=next;work.manual[key]=!!next;}},signal),

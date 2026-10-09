@@ -43,11 +43,15 @@ import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
 import {reorder} from './queue';
-import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortMode, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSort, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, recoverLocalSortOperation, removeLocalFolderSource, scanLocalFolders} from './localLibrary';
+import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortMode, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSort, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, recoverLocalSortOperation, removeLocalFolderSource} from './localLibrary';
 import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
+import {createAndroidCatalogueRuntime} from './scannerVNext/runtime.native';
+import {projectScannerWorks,toFields,type ScannerBook} from './scannerVNext/runtime';
+import type {AssistState} from './scannerVNext/assist';
+import {normalizeGenre} from './scannerVNext/genre';
 import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
@@ -145,6 +149,8 @@ if(nativeSplashEnabled){
 
 
 type Book = {
+  scannerWorkId?: string;
+  scannerPublished?: boolean;
   id: number;
   title: string;
   author: string;
@@ -1083,6 +1089,33 @@ function Client() {
   const [folderPath,setFolderPath]=useState('');
   const [folderSpace,setFolderSpace]=useState('My library');
   const [editing,setEditing]=useState<Book|null>(null);
+  const [assistState,setAssistState]=useState<AssistState|null>(null);
+  const editingScannerId=useRef<string|undefined>(undefined);
+  editingScannerId.current=editing?.scannerWorkId;
+  const freshRuntimeRef=useRef<Promise<Awaited<ReturnType<typeof createAndroidCatalogueRuntime>>>|null>(null);
+  function freshRuntime(){
+    if(!freshRuntimeRef.current)freshRuntimeRef.current=createAndroidCatalogueRuntime(async()=>({metadata:metadataSettingsRef.current,googleKey:metadataSettingsRef.current.books.googleBooks?(await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined:undefined})).catch(error=>{freshRuntimeRef.current=null;throw error;});
+    return freshRuntimeRef.current;
+  }
+  const assistPolicy=(explicit=false)=>({online:metadataSettingsRef.current.onlineEnabled&&metadataSettingsRef.current.books.enabled,automatic:metadataSettingsRef.current.automaticEnrichment,explicit});
+  const scannerRowsCommit=useRef<Promise<void>>(Promise.resolve());
+  async function applyScannerRows(rows:ScannerBook[]){
+    const id=rows[0]?.scannerWorkId;if(!id)return;
+    const commit=scannerRowsCommit.current.catch(()=>undefined).then(async()=>{
+      const current=await loadLocalStageBooks();
+      const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];
+      await replaceLocalStageBooks(updated);setLocalBooks(updated);
+    });scannerRowsCommit.current=commit;return commit;
+  }
+  async function scanFreshFolders(folders:LocalFolder[],onProgress:((value:LocalScanProgress)=>void)|undefined,overrides:Record<string,LocalMetadataOverride>,previous:LocalBook[],shouldContinue:()=>boolean){
+    if(Platform.OS!=='android')throw new Error('The fresh scanner currently requires Android device folders.');
+    const runtime=await freshRuntime(),controller=new AbortController();
+    const legacyKeys=new Map<string,string>();for(const work of groupLocalWorks(previous.filter(book=>!(book as ScannerBook).scannerWorkId)))for(const track of work.tracks)legacyKeys.set(track.uri,work.key);
+    for(const book of previous){const fresh=book as ScannerBook;if(fresh.scannerLegacyKey)legacyKeys.set(book.uri,fresh.scannerLegacyKey);}
+    const timer=setInterval(()=>{if(!shouldContinue())controller.abort();},50);
+    try{return await runtime.scan(folders,previous,overrides,assistPolicy(),{signal:controller.signal,progress:onProgress,legacyKeys,progressSnapshot:{...localWorkProgress,...localReadingProgress}});}
+    finally{clearInterval(timer);}
+  }
   const [editingUris,setEditingUris]=useState<string[]>([]);
   const [workPicker,setWorkPicker]=useState<WorkPicker|null>(null);
   const [editTitle,setEditTitle]=useState('');
@@ -1329,7 +1362,7 @@ function Client() {
 
   const phoneWorks = useMemo(() => {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
-    return groupLocalWorks(local);
+    return projectScannerWorks(local,groupLocalWorks);
   }, [localBooks]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
@@ -1425,7 +1458,12 @@ function Client() {
   useEffect(()=>{const next=normalizeSpaceSelection(sourceWorks,sourceFilter,space);if(next!==space)setSpace(next);},[sourceFilter,sourceWorks,space]);
 
 
-  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);
+  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>{
+    const eligible=sourceWorks.filter(work=>work.source!=='local'||work.localWork?.tracks.some(track=>(track as ScannerBook).scannerPublished));
+    const selected=sourceFilter==='all'?dedupeForAll(eligible):eligible.filter(work=>matchesSource(work.source,sourceFilter));
+    const unique=new Map<string,UnifiedWork>();for(const work of selected)unique.set(work.source==='local'?(work.logicalWorkKey||work.canonicalKey):work.canonicalKey,work);
+    return [...unique.values()];
+  },[sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
   const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
   const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>work.genre),genreColour),[sourceWorks]);
@@ -2720,7 +2758,8 @@ function Client() {
     setScanProgress(null);
     let enrichmentCompleted=false;
     try{
-      await enrichPublishedLocalLibrary(result.books,generation,forceOnline);
+      // Fresh runtime has already staged metadata and atomically checked publication.
+      // No historical deep metadata or cover sweep runs after discovery.
       enrichmentCompleted=scanCommitGate.isCurrent(generation);
     }catch(error){
       if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
@@ -3050,7 +3089,7 @@ function Client() {
     try{
       setScanProgress({phase:'discovering',currentFolder:localFolders[0]?.name||'Library',entriesVisited:0,found:0,review:0});
       const previousLocal=localBooks.filter((book):book is Book & {uri:string}=>!!book.uri) as LocalBook[];
-      const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata,shouldContinue:()=>scanCommitGate.isCurrent(generation)});
+      const result=await scanFreshFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,()=>scanCommitGate.isCurrent(generation));
       const summary=await finaliseLocalScan(result,previousLocal,generation,refreshMetadata);
       if(!summary)return false;
       setLocalFolderNotice(await completedLibraryRefreshNotice(result));
@@ -3094,7 +3133,7 @@ function Client() {
       const nextOverrides=Object.fromEntries(Object.entries(localMetadataOverrides).filter(([uri])=>!removedUris.has(uri)));
       setLocalMetadataOverrides(nextOverrides);
       await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
-      const result=await scanLocalFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true});
+      const result=await scanFreshFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal,()=>scanCommitGate.isCurrent(generation));
       const summary=await finaliseLocalScan(result,previousLocal,generation);
       if(!summary)return;
       if(sourceFilter==='local'&&space===folder.name&&libraryFolderExact){
@@ -4124,6 +4163,8 @@ function Client() {
 
   function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
     setEditing(item);
+    setAssistState(null);
+    if(item.scannerWorkId){const id=item.scannerWorkId;void freshRuntime().then(runtime=>runtime.assist.get(id)).then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);}
     setEditingUris(uris.filter(Boolean));
     setEditTitle(item.title);
     setEditAuthor(item.author || '');
@@ -4617,7 +4658,7 @@ function Client() {
       const publishedYear=/^\d{4}$/.test(yearText)?Number(yearText):undefined;
       const narrator=editNarrator.trim(),publisher=editPublisher.trim(),isbn=editISBN.trim(),asin=editASIN.trim(),language=editLanguage.trim(),description=editDescription.trim();
       let coverUri=editCoverUri.trim();
-      if(!title)return;
+      if(!title&&!author)return;
       if(localEdit&&editPickedCover){
         try{coverUri=await persistPickedCover(editPickedCover.uri,editPickedCover.fileName,editPickedCover.fileSize);}
         catch(e){setError('Could not save the selected cover: '+(e as Error).message);return;}
@@ -4628,6 +4669,18 @@ function Client() {
         request(session,'/api/assets/'+editing.id+'/metadata','PATCH',{title,author,series:seriesName,seriesNumber:seriesNumber??0,genre,publishedYear:publishedYear??0,narrator,publisher,isbn,asin,language,description})
           .then(()=>{setServerBooks(old=>old.map(b=>b.id===editing.id?{...b,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,needsReview:false,reviewReason:'',metadataSource:'manual',identificationConfidence:'high'}:b));setEditing(null);setEditingUris([]);setEditPickedCover(null);})
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
+      }else if(editing.scannerWorkId){
+        const id=editing.scannerWorkId;
+        try{
+          const runtime=await freshRuntime(),current=await runtime.metadata.get(id);if(!current)throw new Error('Work is unavailable. Prepare the library again.');
+          const draft=toFields({title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined});
+          const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));
+          const result=await runtime.save(id,patch,assistPolicy());
+          await applyScannerRows(await runtime.refresh(id));
+          setEditing({...editing,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);
+          setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});
+          void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);
+        }catch(e){setError((e as Error).message);}finally{setBusy(false);}
       }else if(editing.uri){
         const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
         const next={...localMetadataOverrides};
@@ -4645,6 +4698,26 @@ function Client() {
           })
           .catch(e=>setError(e.message)).finally(()=>setBusy(false));
       }else setBusy(false);
+    };
+    const runAssist=async()=>{
+      if(!editing.scannerWorkId||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;
+      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,assistPolicy(true));setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);}
+      catch(e){setError((e as Error).message);}finally{setBusy(false);}
+    };
+    const acceptAssist=async(candidateId:string,confirm=false)=>{
+      if(!editing.scannerWorkId||!assistState||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;
+      try{const runtime=await freshRuntime(),work=await runtime.assist.accept(id,candidateId,assistState.revision,confirm);await applyScannerRows(await runtime.refresh(id));setEditing({...editing,title:work.fields.title||'',author:work.fields.author||'',series:work.fields.series||'',seriesNumber:work.fields.seriesNumber?Number(work.fields.seriesNumber):undefined,genre:work.fields.genre||'',coverUri:work.fields.coverUri});setEditTitle(work.fields.title||'');setEditAuthor(work.fields.author||'');setEditSeries(work.fields.series||'');setEditSeriesNumber(work.fields.seriesNumber||'');setEditGenre(work.fields.genre||'');setEditCoverUri(work.fields.coverUri||'');setAssistState(await runtime.assist.get(id));}
+      catch(e){setError((e as Error).message);}finally{setBusy(false);}
+    };
+    const confirmDetails=async()=>{
+      if(!editing.scannerWorkId||busy)return;setBusy(true);setError('');
+      try{const runtime=await freshRuntime();await runtime.confirm(editing.scannerWorkId);await applyScannerRows(await runtime.refresh(editing.scannerWorkId));setAssistState(null);}
+      catch(e){setError((e as Error).message);}finally{setBusy(false);}
+    };
+    const moreAssist=async(provider:string,page:number)=>{
+      if(!editing.scannerWorkId||!assistState||busy)return;setBusy(true);setError('');
+      try{const runtime=await freshRuntime();setAssistState(await runtime.assist.more(editing.scannerWorkId,provider,page,assistState.revision,assistPolicy(true)));}
+      catch(e){setError((e as Error).message);}finally{setBusy(false);}
     };
     const chooseCoverFromDevice=async()=>{
       if(!localEdit||coverPicking)return;
@@ -4755,8 +4828,20 @@ function Client() {
               </View>:null}
             </View>:null}
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
-            <Button label="Save details" disabled={busy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>
-            {localEdit?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
+            <Button label="Save details" disabled={busy||coverPicking||(!editTitle.trim()&&!editAuthor.trim())} onPress={()=>void save()}/>
+            {editing.scannerWorkId?<View style={styles.settingsSubgroup}>
+              <Button label="Archivist Assist" tone="quiet" disabled={busy||coverPicking||editorDirty} onPress={()=>void runAssist()}/>
+              {assistState?<Text style={[styles.meta,{color:p.muted}]}>{assistState.state==='pending'?'Looking for this work…':assistState.state==='offline'?'Saved. Connect to search for missing details.':assistState.state==='disabled'?'Saved. Online metadata lookup is switched off.':assistState.state==='no-match'?'No close match. Add a title or author, save, then try Assist again.':assistState.state==='accepted'?'Match accepted. Genre and artwork must also be ready.':'Review a match below.'}</Text>:null}
+              {assistState?.result?.candidates.map(row=><Button key={row.candidate.provider+'|'+row.candidate.id} label={(row.candidate.fields.title||'Untitled')+' · '+(row.candidate.fields.author||'Unknown author')} tone="quiet" disabled={busy||editorDirty} onPress={()=>{
+                const id=row.candidate.provider+'|'+row.candidate.id;
+                if(row.conflicts.length)Alert.alert('Replace conflicting details?',row.conflicts.includes('anthology')?'This result is an anthology and cannot identify the individual story.':'This match conflicts with '+row.conflicts.join(', ')+'. Your saved details change only if you approve.',[{text:'Keep my details',style:'cancel'},...(row.conflicts.includes('anthology')?[]:[{text:'Accept replacement',onPress:()=>void acceptAssist(id,true)}])]);
+                else void acceptAssist(id);
+              }}/>) }
+              {Object.entries(assistState?.result?.nextPages||{}).filter(([,page])=>page!==null).map(([provider,page])=><Button key={provider} label={'More matches · '+provider} tone="quiet" disabled={busy||editorDirty} onPress={()=>void moreAssist(provider,page!)}/>)}
+              <Button label="Confirm saved identity" tone="quiet" disabled={busy||editorDirty||!editTitle.trim()||!editAuthor.trim()} onPress={()=>void confirmDetails()}/>
+              {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>A clear genre is needed before this work is ready for Atlas.</Text>:null}
+            </View>:null}
+            {localEdit&&!editing.scannerWorkId?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
             <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={requestEditorClose}/>
           </Pressable>
         </ScrollView></Pressable>
@@ -4826,10 +4911,21 @@ function Client() {
           }
         }
         if(localUpdates.size){
+          const runtime=await freshRuntime(),freshUpdates=new Map<string,ScannerBook>();
+          const ids=new Set(localBooks.filter(book=>book.uri&&localUpdates.has(book.uri)&&book.scannerWorkId).map(book=>book.scannerWorkId!));
+          for(const id of ids){
+            const representative=localBooks.find(book=>book.scannerWorkId===id&&book.uri&&localUpdates.has(book.uri));if(!representative?.uri)continue;
+            const current=await runtime.metadata.get(id);if(!current)throw new Error('Unknown work');
+            const draft=toFields(localUpdates.get(representative.uri)!);
+            const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));
+            const saved=await runtime.save(id,patch,assistPolicy());void saved.completion.catch(()=>undefined);
+            for(const book of await runtime.refresh(id))freshUpdates.set(book.uri,book);
+          }
           setLocalMetadataOverrides(nextOverrides);
           await setPersistedJSON(localMetadataOverridesKey,nextOverrides);
           const updated=localBooks.map(book=>{
             if(!book.uri)return book;
+            const fresh=freshUpdates.get(book.uri);if(fresh)return fresh;
             const override=localUpdates.get(book.uri);
             if(!override)return book;
             const next={...book,...override,metadataSource:'manual' as const,identificationConfidence:'high' as const,needsReview:false,reviewReason:'',metadataConflicts:[]};

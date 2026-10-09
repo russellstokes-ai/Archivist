@@ -7,9 +7,9 @@ import {createGroupingStore} from './groupingStore';
 import {createMetadataStore,type MetadataWork,type WorkFields} from './fieldEvidence';
 import {createPublicationStore} from './publication';
 import {normalizeGenre} from './genre';
-export type PipelineAsset=DiscoveredEntry&{assetId:string};
+export type PipelineAsset=DiscoveredEntry&{assetId:string;present?:boolean};
 export type PipelineWork={work:MetadataWork;editionId:string;assets:PipelineAsset[];needsAttention:boolean;issues:string[]};
-export async function createScannerPipeline(db:ScannerDatabase,newId:()=>string,ports:{access:SourceAccess;clues?:(source:Source,assets:PipelineAsset[],signal?:AbortSignal)=>Promise<WorkFields>}){
+export async function createScannerPipeline(db:ScannerDatabase,newId:()=>string,ports:{access:SourceAccess;groupingEvidence?:(source:Source,assets:PipelineAsset[])=>Record<string,GroupingEvidence>;clues?:(source:Source,assets:PipelineAsset[],signal?:AbortSignal)=>Promise<WorkFields>}){
  const store=await createScannerStore(db,newId),grouping=await createGroupingStore(db,newId),metadata=await createMetadataStore(db),publication=await createPublicationStore(db);
  let running=false;
  return {metadata,publication,store,
@@ -19,12 +19,12 @@ export async function createScannerPipeline(db:ScannerDatabase,newId:()=>string,
    try{
     const seen=new Set<string>();
     const summary=await discoverSource(source,ports.access,{...store,async saveBatch(id,entries,checkpoint,signal){await store.saveBatch(id,entries,checkpoint,signal);for(const entry of entries)seen.add(entry.documentId);options.progress?.({visited:checkpoint.visited,accounted:checkpoint.accounted});}},options);check();
-    const assets=await store.listAssets(source.id),byId=new Map(assets.map(a=>[a.assetId,a])),prior=await grouping.loadGrouping(source.id),evidence:Record<string,GroupingEvidence>={};
+    const assets=await store.listAssets(source.id),byId=new Map(assets.map(a=>[a.assetId,a])),prior=await grouping.loadGrouping(source.id),evidence:Record<string,GroupingEvidence>=ports.groupingEvidence?.(source,assets)??{};
     for(const group of prior.groups)if(group.evidence==='manual')for(const part of group.parts)evidence[part.assetId]={manualWorkId:group.workId,manualEditionId:group.editionId,provenance:'human_confirmed'};
     const present=assets.filter(a=>seen.has(a.documentId)&&!['directory','rejected'].includes(a.disposition.state)&&!['artwork','sidecar','directory'].includes(a.disposition.kind));
     const proposals=groupCandidates(present.map(a=>({assetId:a.assetId,sourceId:source.id,relativePath:a.relativePath,kind:a.disposition.kind})),evidence);
     const next=await grouping.commitGrouping(source.id,proposals,prior.revision,options.signal);check();const works:PipelineWork[]=[];let readsPaused=false;
-    for(const group of next.groups){check();const members=group.parts.map(p=>byId.get(p.assetId)).filter((a):a is PipelineAsset=>!!a),issues=[...group.issues];let clues:WorkFields={};
+    for(const group of next.groups){check();const members=group.parts.map(p=>byId.get(p.assetId)).filter((a):a is PipelineAsset=>!!a).map(a=>({...a,present:seen.has(a.documentId)})),issues=[...group.issues];let clues:WorkFields={};
      const existing=await metadata.get(group.workId);
      if(!existing&&ports.clues&&!readsPaused&&members.some(a=>seen.has(a.documentId))){try{clues=await ports.clues(source,members,options.signal);check();}catch(error){check();issues.push('bounded-clues-unavailable');if(error instanceof Error&&/circuit-open|queue-full/.test(error.message))readsPaused=true;}}
      const defaults:WorkFields={title:group.title??members[0]?.name.replace(/\.[^.]+$/,'')??'Unresolved work',author:group.author,...clues};

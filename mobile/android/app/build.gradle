@@ -90,6 +90,7 @@ android {
     namespace 'app.archivist.reader'
     defaultConfig {
         applicationId 'app.archivist.reader'
+        if (findProperty('scannerAcceptance') == 'true') applicationIdSuffix '.scanneracceptance'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 102

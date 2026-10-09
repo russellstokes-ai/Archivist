@@ -9,7 +9,7 @@ const localStageStoreNative=fs.readFileSync(__dirname+'/localStageStore.native.t
 
 assert.ok(app.includes('const activeLibraryProgress=scanProgress||enrichmentProgress'),'refresh progress must have one shared source');
 assert.ok(app.includes('const libraryRefreshRunningRef=useRef(false)'),'refresh must have a synchronous re-entry guard');
-assert.ok(app.includes('await enrichPublishedLocalLibrary(result.books,generation,forceOnline)'),'enrichment must remain inside the same refresh lifetime');
+assert.ok(app.includes('await scanFreshFolders(localFolders')&&app.includes('signal:controller.signal'),'fresh work stages must remain inside the same cancellable refresh lifetime');
 assert.ok(app.includes('{LocalScanStatus()}'),'shared progress surface must be reusable');
 assert.ok((app.match(/\{LocalScanStatus\(\)\}/g)||[]).length>=3,'Settings, Shelf and Library must all render the shared refresh status');
 assert.ok(app.includes('accessibilityLabel="Cancel library refresh"'),'refresh must expose cancellation');

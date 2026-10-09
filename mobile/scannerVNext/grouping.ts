@@ -1,7 +1,7 @@
 import type {AssetKind} from './types';
 
 export type GroupingAsset={assetId:string;sourceId:string;relativePath:string;kind:AssetKind};
-export type GroupingEvidence={title?:string;author?:string;edition?:string;disc?:number;track?:number;manualWorkId?:string;manualEditionId?:string;provenance:'embedded'|'sidecar'|'human_confirmed'|'unknown'};
+export type GroupingEvidence={title?:string;author?:string;edition?:string;disc?:number;track?:number;manualWorkId?:string;manualEditionId?:string;provenance:'embedded'|'sidecar'|'manual_metadata'|'human_confirmed'|'unknown'};
 export type OrderedPart={assetId:string;relativePath:string;disc?:number;track?:number};
 export type GroupingProposal={key:string;title?:string;author?:string;priorWorkId?:string;priorEditionId?:string;parts:OrderedPart[];needsAttention:boolean;issues:string[];evidence:'manual'|'bibliographic'|'path'|'unknown'};
 const normalize=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();

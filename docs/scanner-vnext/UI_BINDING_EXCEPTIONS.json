@@ -1,0 +1,88 @@
+{
+  "file": "mobile/App.tsx",
+  "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
+  "updatedSha256": "ee99f7885106fa9582f147928fbc9337e30373ab814df9224c65f976c59ccc48",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged",
+  "changes": [
+    {
+      "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
+      "new": "import {groupLocalWorks, LocalWork} from './localWorks';\r\nimport {createAndroidCatalogueRuntime} from './scannerVNext/runtime.native';\r\nimport {projectScannerWorks,toFields,type ScannerBook} from './scannerVNext/runtime';\r\nimport type {AssistState} from './scannerVNext/assist';\r\nimport {normalizeGenre} from './scannerVNext/genre';"
+    },
+    {
+      "old": "removeLocalFolderSource, scanLocalFolders}",
+      "new": "removeLocalFolderSource}"
+    },
+    {
+      "old": "type Book = {",
+      "new": "type Book = {\r\n  scannerWorkId?: string;\r\n  scannerPublished?: boolean;"
+    },
+    {
+      "old": "  const [editing,setEditing]=useState<Book|null>(null);",
+      "new": "  const [editing,setEditing]=useState<Book|null>(null);\r\n  const [assistState,setAssistState]=useState<AssistState|null>(null);\r\n  const editingScannerId=useRef<string|undefined>(undefined);\r\n  editingScannerId.current=editing?.scannerWorkId;\r\n  const freshRuntimeRef=useRef<Promise<Awaited<ReturnType<typeof createAndroidCatalogueRuntime>>>|null>(null);\r\n  function freshRuntime(){\r\n    if(!freshRuntimeRef.current)freshRuntimeRef.current=createAndroidCatalogueRuntime(async()=>({metadata:metadataSettingsRef.current,googleKey:metadataSettingsRef.current.books.googleBooks?(await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined:undefined})).catch(error=>{freshRuntimeRef.current=null;throw error;});\r\n    return freshRuntimeRef.current;\r\n  }\r\n  const assistPolicy=(explicit=false)=>({online:metadataSettingsRef.current.onlineEnabled&&metadataSettingsRef.current.books.enabled,automatic:metadataSettingsRef.current.automaticEnrichment,explicit});\r\n  async function applyScannerRows(rows:ScannerBook[]){\r\n    const id=rows[0]?.scannerWorkId;if(!id)return;\r\n    const current=await loadLocalStageBooks();\r\n    const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];\r\n    await replaceLocalStageBooks(updated);setLocalBooks(updated);\r\n  }\r\n  async function scanFreshFolders(folders:LocalFolder[],onProgress:((value:LocalScanProgress)=>void)|undefined,overrides:Record<string,LocalMetadataOverride>,previous:LocalBook[],shouldContinue:()=>boolean){\r\n    if(Platform.OS!=='android')throw new Error('The fresh scanner currently requires Android device folders.');\r\n    const runtime=await freshRuntime(),controller=new AbortController();\r\n    const legacyKeys=new Map<string,string>();for(const work of groupLocalWorks(previous.filter(book=>!(book as ScannerBook).scannerWorkId)))for(const track of work.tracks)legacyKeys.set(track.uri,work.key);\r\n    for(const book of previous){const fresh=book as ScannerBook;if(fresh.scannerLegacyKey)legacyKeys.set(book.uri,fresh.scannerLegacyKey);}\r\n    const timer=setInterval(()=>{if(!shouldContinue())controller.abort();},50);\r\n    try{return await runtime.scan(folders,previous,overrides,assistPolicy(),{signal:controller.signal,progress:onProgress,legacyKeys,progressSnapshot:{...localWorkProgress,...localReadingProgress}});}\r\n    finally{clearInterval(timer);}\r\n  }"
+    },
+    {
+      "old": "    return groupLocalWorks(local);",
+      "new": "    return projectScannerWorks(local,groupLocalWorks);"
+    },
+    {
+      "old": "  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>sourceFilter==='all'?dedupeForAll(sourceWorks):sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter)),[sourceFilter,sourceWorks]);",
+      "new": "  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>{\r\n    const eligible=sourceWorks.filter(work=>work.source!=='local'||work.localWork?.tracks.some(track=>(track as ScannerBook).scannerPublished));\r\n    const selected=sourceFilter==='all'?dedupeForAll(eligible):eligible.filter(work=>matchesSource(work.source,sourceFilter));\r\n    const unique=new Map<string,UnifiedWork>();for(const work of selected)unique.set(work.source==='local'?(work.logicalWorkKey||work.canonicalKey):work.canonicalKey,work);\r\n    return [...unique.values()];\r\n  },[sourceFilter,sourceWorks]);"
+    },
+    {
+      "old": "      await enrichPublishedLocalLibrary(result.books,generation,forceOnline);",
+      "new": "      // Fresh runtime has already staged metadata and atomically checked publication.\r\n      // No historical deep metadata or cover sweep runs after discovery."
+    },
+    {
+      "old": "const result=await scanLocalFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true,refreshMetadata,shouldContinue:()=>scanCommitGate.isCurrent(generation)});",
+      "new": "const result=await scanFreshFolders(localFolders,reportLocalScan(generation),overrides,previousLocal,()=>scanCommitGate.isCurrent(generation));"
+    },
+    {
+      "old": "const result=await scanLocalFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal,{deferEmbeddedCovers:true,deferEmbeddedMetadata:true});",
+      "new": "const result=await scanFreshFolders(remaining,reportLocalScan(generation),nextOverrides,previousLocal,()=>scanCommitGate.isCurrent(generation));"
+    },
+    {
+      "old": "    setEditing(item);",
+      "new": "    setEditing(item);\r\n    setAssistState(null);\r\n    if(item.scannerWorkId){const id=item.scannerWorkId;void freshRuntime().then(runtime=>runtime.assist.get(id)).then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);}"
+    },
+    {
+      "old": "      if(!title)return;",
+      "new": "      if(!title&&!author)return;"
+    },
+    {
+      "old": "      }else if(editing.uri){\r\n        const override:LocalMetadataOverride=",
+      "new": "      }else if(editing.scannerWorkId){\r\n        const id=editing.scannerWorkId;\r\n        try{\r\n          const runtime=await freshRuntime(),current=await runtime.metadata.get(id);if(!current)throw new Error('Work is unavailable. Prepare the library again.');\r\n          const draft=toFields({title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined});\r\n          const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));\r\n          const result=await runtime.save(id,patch,assistPolicy());\r\n          await applyScannerRows(await runtime.refresh(id));\r\n          setEditing({...editing,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);\r\n          setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});\r\n          void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);\r\n        }catch(e){setError((e as Error).message);}finally{setBusy(false);}\r\n      }else if(editing.uri){\r\n        const override:LocalMetadataOverride="
+    },
+    {
+      "old": "    const chooseCoverFromDevice=async()=>{",
+      "new": "    const runAssist=async()=>{\r\n      if(!editing.scannerWorkId||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;\r\n      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,assistPolicy(true));setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);});}\r\n      catch(e){setError((e as Error).message);}finally{setBusy(false);}\r\n    };\r\n    const acceptAssist=async(candidateId:string,confirm=false)=>{\r\n      if(!editing.scannerWorkId||!assistState||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;\r\n      try{const runtime=await freshRuntime(),work=await runtime.assist.accept(id,candidateId,assistState.revision,confirm);await applyScannerRows(await runtime.refresh(id));setEditTitle(work.fields.title||'');setEditAuthor(work.fields.author||'');setEditSeries(work.fields.series||'');setEditSeriesNumber(work.fields.seriesNumber||'');setEditGenre(work.fields.genre||'');setEditCoverUri(work.fields.coverUri||'');setAssistState(await runtime.assist.get(id));}\r\n      catch(e){setError((e as Error).message);}finally{setBusy(false);}\r\n    };\r\n    const confirmDetails=async()=>{\r\n      if(!editing.scannerWorkId||busy)return;setBusy(true);setError('');\r\n      try{const runtime=await freshRuntime();await runtime.confirm(editing.scannerWorkId);await applyScannerRows(await runtime.refresh(editing.scannerWorkId));setAssistState(null);}\r\n      catch(e){setError((e as Error).message);}finally{setBusy(false);}\r\n    };\r\n    const moreAssist=async(provider:string,page:number)=>{\r\n      if(!editing.scannerWorkId||!assistState||busy)return;setBusy(true);setError('');\r\n      try{const runtime=await freshRuntime();setAssistState(await runtime.assist.more(editing.scannerWorkId,provider,page,assistState.revision,assistPolicy(true)));}\r\n      catch(e){setError((e as Error).message);}finally{setBusy(false);}\r\n    };\r\n    const chooseCoverFromDevice=async()=>{"
+    },
+    {
+      "old": "            <Button label=\"Save details\" disabled={busy||coverPicking||!editTitle.trim()} onPress={()=>void save()}/>",
+      "new": "            <Button label=\"Save details\" disabled={busy||coverPicking||(!editTitle.trim()&&!editAuthor.trim())} onPress={()=>void save()}/>\r\n            {editing.scannerWorkId?<View style={styles.settingsSubgroup}>\r\n              <Button label=\"Archivist Assist\" tone=\"quiet\" disabled={busy||coverPicking||editorDirty} onPress={()=>void runAssist()}/>\r\n              {assistState?<Text style={[styles.meta,{color:p.muted}]}>{assistState.state==='pending'?'Looking for this work\u2026':assistState.state==='offline'?'Saved. Connect to search for missing details.':assistState.state==='disabled'?'Saved. Online metadata lookup is switched off.':assistState.state==='no-match'?'No close match. Add a title or author, save, then try Assist again.':assistState.state==='accepted'?'Match accepted. Genre and artwork must also be ready.':'Review a match below.'}</Text>:null}\r\n              {assistState?.result?.candidates.map(row=><Button key={row.candidate.provider+'|'+row.candidate.id} label={(row.candidate.fields.title||'Untitled')+' \u00b7 '+(row.candidate.fields.author||'Unknown author')} tone=\"quiet\" disabled={busy||editorDirty} onPress={()=>{\r\n                const id=row.candidate.provider+'|'+row.candidate.id;\r\n                if(row.conflicts.length)Alert.alert('Replace conflicting details?',row.conflicts.includes('anthology')?'This result is an anthology and cannot identify the individual story.':'This match conflicts with '+row.conflicts.join(', ')+'. Your saved details change only if you approve.',[{text:'Keep my details',style:'cancel'},...(row.conflicts.includes('anthology')?[]:[{text:'Accept replacement',onPress:()=>void acceptAssist(id,true)}])]);\r\n                else void acceptAssist(id);\r\n              }}/>) }\r\n              {Object.entries(assistState?.result?.nextPages||{}).filter(([,page])=>page!==null).map(([provider,page])=><Button key={provider} label={'More matches \u00b7 '+provider} tone=\"quiet\" disabled={busy||editorDirty} onPress={()=>void moreAssist(provider,page!)}/>)}\r\n              <Button label=\"Confirm saved identity\" tone=\"quiet\" disabled={busy||editorDirty||!editTitle.trim()||!editAuthor.trim()} onPress={()=>void confirmDetails()}/>\r\n              {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>A clear genre is needed before this work is ready for Atlas.</Text>:null}\r\n            </View>:null}"
+    },
+    {
+      "old": "            {localEdit?<Button label=\"Use scanned metadata & cover\"",
+      "new": "            {localEdit&&!editing.scannerWorkId?<Button label=\"Use scanned metadata & cover\""
+    },
+    {
+      "old": "  async function applyScannerRows(rows:ScannerBook[]){\r\n    const id=rows[0]?.scannerWorkId;if(!id)return;\r\n    const current=await loadLocalStageBooks();\r\n    const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];\r\n    await replaceLocalStageBooks(updated);setLocalBooks(updated);\r\n  }",
+      "new": "  const scannerRowsCommit=useRef<Promise<void>>(Promise.resolve());\r\n  async function applyScannerRows(rows:ScannerBook[]){\r\n    const id=rows[0]?.scannerWorkId;if(!id)return;\r\n    const commit=scannerRowsCommit.current.catch(()=>undefined).then(async()=>{\r\n      const current=await loadLocalStageBooks();\r\n      const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];\r\n      await replaceLocalStageBooks(updated);setLocalBooks(updated);\r\n    });scannerRowsCommit.current=commit;return commit;\r\n  }"
+    },
+    {
+      "old": "await applyScannerRows(await runtime.refresh(id));setEditTitle(work.fields.title||'');",
+      "new": "await applyScannerRows(await runtime.refresh(id));setEditing({...editing,title:work.fields.title||'',author:work.fields.author||'',series:work.fields.series||'',seriesNumber:work.fields.seriesNumber?Number(work.fields.seriesNumber):undefined,genre:work.fields.genre||'',coverUri:work.fields.coverUri});setEditTitle(work.fields.title||'');"
+    },
+    {
+      "old": "        if(localUpdates.size){\r\n          setLocalMetadataOverrides(nextOverrides);",
+      "new": "        if(localUpdates.size){\r\n          const runtime=await freshRuntime(),freshUpdates=new Map<string,ScannerBook>();\r\n          const ids=new Set(localBooks.filter(book=>book.uri&&localUpdates.has(book.uri)&&book.scannerWorkId).map(book=>book.scannerWorkId!));\r\n          for(const id of ids){\r\n            const representative=localBooks.find(book=>book.scannerWorkId===id&&book.uri&&localUpdates.has(book.uri));if(!representative?.uri)continue;\r\n            const current=await runtime.metadata.get(id);if(!current)throw new Error('Unknown work');\r\n            const draft=toFields(localUpdates.get(representative.uri)!);\r\n            const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));\r\n            const saved=await runtime.save(id,patch,assistPolicy());void saved.completion.catch(()=>undefined);\r\n            for(const book of await runtime.refresh(id))freshUpdates.set(book.uri,book);\r\n          }\r\n          setLocalMetadataOverrides(nextOverrides);"
+    },
+    {
+      "old": "            const override=localUpdates.get(book.uri);\r\n            if(!override)return book;",
+      "new": "            const fresh=freshUpdates.get(book.uri);if(fresh)return fresh;\r\n            const override=localUpdates.get(book.uri);\r\n            if(!override)return book;"
+    },
+    {
+      "old": "setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);});",
+      "new": "setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);"
+    }
+  ]
+}
