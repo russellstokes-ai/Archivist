@@ -1,0 +1,82 @@
+name: Fresh scanner Fold test APK
+on:
+  push:
+    branches: ['feature/archivist-scanner-vnext-real-library']
+    paths: ['.github/workflows/scanner-fold-test-apk.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: scanner-fold-test-apk
+  cancel-in-progress: false
+jobs:
+  fold-test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: 56dbe941ab1434af07c0bc8528c406ee1bacb2a8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android packages
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      - name: Verify source and mobile checks
+        working-directory: mobile
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+          npm run typecheck
+          npm test
+      - name: Check Android compatibility
+        working-directory: mobile/android
+        run: ./gradlew :app:lintRelease -PscannerAcceptance=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Build isolated Fold test APK
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleRelease -PscannerAcceptance=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Verify package, signing and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p scanner-fold-delivery
+          APK=mobile/android/app/build/outputs/apk/release/app-release.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          "$BUILD_TOOLS/zipalign" -c -P 16 4 "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" > scanner-fold-delivery/package.txt
+          grep -q "name='app.archivist.reader.scanneracceptance'" scanner-fold-delivery/package.txt
+          grep -q "native-code:.*'arm64-v8a'" scanner-fold-delivery/package.txt
+          cp "$APK" scanner-fold-delivery/Archivist-Fresh-Scanner-Fold-Test-20261009-56dbe94.apk
+          cd scanner-fold-delivery
+          sha256sum *.apk > SHA256SUMS.txt
+          printf 'Source: %s\nPurpose: user-authorized physical Fold testing, not production acceptance.\nIncludes: fresh scanner, canonical UI bindings, Assist, mandatory Genre, Atlas projection, artwork, metadata preservation, overlapping-grant deduplication and Android compatibility fixes.\nPassed before delivery: TypeScript, 90 mobile suites, release lint, package/signature/alignment checks. Native scanner tests passed 12/12 on Android 9 and 15 for this source.\nPending: whole-app end-to-end acceptance, large messy-library Android profiling, screenshot comparisons, provider calibration, ambiguous migration and physical Fold acceptance.\nIsolated package: app.archivist.reader.scanneracceptance. Existing app data is not imported automatically.\nSigning: repository debug test key. ABI: arm64-v8a.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+      - name: Provide direct test APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=scanner-vnext-fold-test-20261009-56dbe94
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$SOURCE_SHA" --prerelease --title 'Archivist Fresh Scanner — unvalidated Fold test' --notes-file scanner-fold-delivery/TEST-NOTES.txt
+          gh release upload "$TAG" scanner-fold-delivery/*.apk scanner-fold-delivery/SHA256SUMS.txt scanner-fold-delivery/TEST-NOTES.txt --clobber
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fresh-scanner-fold-test-56dbe94
+          path: |
+            scanner-fold-delivery/
+            mobile/android/app/build/reports/lint-results-release.*
+          retention-days: 14
