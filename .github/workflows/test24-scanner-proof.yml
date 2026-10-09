@@ -1,0 +1,41 @@
+name: Test 24 Scanner Grouping Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/test24-saf-work-grouping-20261009
+    paths:
+      - mobile/metadataSync.ts
+      - mobile/libraryIntelligence.ts
+      - mobile/localWorks.ts
+      - mobile/test24-saf342-work-regression.test.cjs
+      - .github/workflows/test24-scanner-proof.yml
+
+permissions:
+  contents: read
+
+jobs:
+  scanner-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install compiler and mobile dependencies
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+      - name: 342-file native-SAF reproduction (12 logical works)
+        working-directory: mobile
+        run: node test24-saf342-work-regression.test.cjs
+      - name: Check scanner quality and existing grouping regressions
+        working-directory: mobile
+        run: |
+          node scanner-test23-device-truth.test.cjs
+          node metadata-sync.test.cjs
+          node local-works.test.cjs
+      - name: Type check all application source
+        working-directory: mobile
+        run: npm run typecheck
