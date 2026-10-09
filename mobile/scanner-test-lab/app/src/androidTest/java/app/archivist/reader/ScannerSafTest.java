@@ -82,6 +82,13 @@ public final class ScannerSafTest {
   @Test public void rejectsDocumentsOutsideSelectedTree()throws Exception{
     try(ScannerTaskPool pool=new ScannerTaskPool(2,1,8000)){assertEquals("error",task(pool,"outside",token->documents.readHeader(root,"outside",64,token)).state);}
   }
+  @Test public void rejectsAbsentOrFalseChildProofBeforeOpening()throws Exception{
+    int before=resolver.call(root,"fixture-stats",null,null).getInt("opened");
+    try(ScannerTaskPool pool=new ScannerTaskPool(2,8,8000)){
+      for(String suffix:new String[]{"null","missing","false"})assertEquals("error",task(pool,"child-proof",token->documents.readHeader(root,"book/child-proof-"+suffix,64,token)).state);
+    }
+    assertEquals(before,resolver.call(root,"fixture-stats",null,null).getInt("opened"));
+  }
   @Test public void seekableReadsReachExactRangeAndCloseDescriptors()throws Exception{
     try(ScannerTaskPool pool=new ScannerTaskPool(2,128,8000)){
       ScannerTaskPool.Result seed=task(pool,"seed",token->documents.readHeader(root,"book/000001",64,token));assertEquals("ok",seed.state);

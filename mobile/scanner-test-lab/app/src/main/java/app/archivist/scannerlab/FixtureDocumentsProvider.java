@@ -71,6 +71,14 @@ public final class FixtureDocumentsProvider extends DocumentsProvider {
   }
   private static void delay(){long end=android.os.SystemClock.elapsedRealtime()+1500;while(android.os.SystemClock.elapsedRealtime()<end)try{Thread.sleep(20);}catch(InterruptedException ignored){/* Deliberately uncooperative provider. */}}
   @Override public Bundle call(String method,String arg,Bundle extras){
+    if(method.equals("android:isChildDocument")&&extras!=null){
+      android.net.Uri target=extras.getParcelable("android.content.extra.TARGET_URI");
+      if(target!=null){String id=DocumentsContract.getDocumentId(target);
+        if(id.equals("book/child-proof-null"))return null;
+        if(id.equals("book/child-proof-missing"))return new Bundle();
+        if(id.equals("book/child-proof-false")){Bundle result=new Bundle();result.putBoolean("result",false);return result;}
+      }
+    }
     if(method.equals("fixture-count")){int value=Integer.parseInt(arg);if(value<1||value>100000)throw new IllegalArgumentException("Fixture count");count.set(value);return Bundle.EMPTY;}
     if(method.equals("fixture-stats")){Bundle result=new Bundle();result.putInt("opened",opened.get());result.putInt("cancelled",cancelled.get());return result;}
     return super.call(method,arg,extras);

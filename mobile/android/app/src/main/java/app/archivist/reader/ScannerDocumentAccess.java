@@ -5,6 +5,7 @@ import android.content.ContentProviderClient;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.CancellationSignal;
+import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import java.util.*;
@@ -26,7 +27,15 @@ public final class ScannerDocumentAccess {
     if(id==null||id.isEmpty()||id.length()>16384)throw new IllegalArgumentException("Invalid document ID");
     Uri document=DocumentsContract.buildDocumentUriUsingTree(root,id);
     String rootId=DocumentsContract.getTreeDocumentId(root);token.check();
-    if(!rootId.equals(id)&&!DocumentsContract.isChildDocument(resolver,DocumentsContract.buildDocumentUriUsingTree(root,rootId),document))throw new SecurityException("Document is outside the selected tree or cannot be verified");
+    if(!rootId.equals(id)){
+      // The public isChildDocument wrapper requires API 29. Its provider protocol
+      // is available with tree grants on API 21; require an explicit true result.
+      Bundle input=new Bundle();input.putParcelable("uri",DocumentsContract.buildDocumentUriUsingTree(root,rootId));
+      input.putParcelable("android.content.extra.TARGET_URI",document);
+      Bundle result=resolver.call(root.getAuthority(),"android:isChildDocument",null,input);
+      token.check();
+      if(result==null||!result.containsKey("result")||!result.getBoolean("result"))throw new SecurityException("Document is outside the selected tree or cannot be verified");
+    }
     token.check();return document;
   }
   public Page queryChildren(Uri root,String parentId,int offset,int limit,ScannerTaskPool.Token token)throws Exception{
