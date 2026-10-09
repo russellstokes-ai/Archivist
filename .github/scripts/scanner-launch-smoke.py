@@ -26,6 +26,16 @@ try:
         try:nodes=list(ET.fromstring(raw).iter('node'))
         except ET.ParseError:continue
         (out/'launch-ui.xml').write_bytes(raw)
+        # A boot-time launcher ANR can cover a healthy app. Dismiss only the
+        # observed Quickstep dialog, never an Archivist ANR or generic error.
+        if any(n.get('text')=="Quickstep isn't responding" for n in nodes):
+            close=next((n for n in nodes if n.get('resource-id')=='android:id/aerr_close' and n.get('text')=='Close app'),None)
+            assert close is not None,'Launcher ANR dialog has no observed close control'
+            bounds=list(map(int,re.findall(r'\d+',close.get('bounds',''))))
+            assert len(bounds)==4,'Launcher dialog control has invalid bounds'
+            adb('shell','input','tap',str((bounds[0]+bounds[2])//2),str((bounds[1]+bounds[3])//2))
+            print('Closed observed Quickstep launcher ANR; app remains under test')
+            continue
         seen=[n.get('text') or n.get('content-desc') for n in nodes if n.get('package')==package and (n.get('text') or n.get('content-desc'))]
         if any(re.search(r'Add a folder|Shelf|Library|Get started|Welcome|Archivist',label,re.I) for label in seen):
             ready=True;break
