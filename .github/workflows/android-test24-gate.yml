@@ -1,0 +1,173 @@
+name: Archivist Test 24 — Android Release and 342-File Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/test24-saf-work-grouping-20261009
+    paths:
+      - 'mobile/**'
+      - '.github/scripts/android-fixture-media.py'
+      - '.github/scripts/android-media-acceptance.py'
+      - '.github/workflows/android-test24-gate.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-test24-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test24-native:
+    name: Build Test 24 and reproduce 342-to-12 work grouping
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+
+    steps:
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@v5
+
+      - name: Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android packages
+        run: |
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+          yes | sdkmanager --licenses >/dev/null || true
+
+      - name: Install mobile dependencies and stamp exact source identity
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+          node - <<'NODE'
+          const fs=require('fs');
+          const app=JSON.parse(fs.readFileSync('app.json','utf8'));
+          const gradle=fs.readFileSync('android/app/build.gradle','utf8');
+          const label=fs.readFileSync('android/app/src/main/res/values/strings.xml','utf8');
+          if(app.expo.name!=='Archivist Test 24'||app.expo.android.package!=='app.archivist.reader')
+            throw Error('Test 24 identity must use the same package ID and unique installed name');
+          if(app.expo.android.versionCode!==109||!/versionCode\s+109\b/.test(gradle)||!gradle.includes('versionName "0.9.4-test24"'))
+            throw Error('Test 24 version metadata mismatch');
+          if(!label.includes('app_name">Archivist Test 24</string>'))
+            throw Error('Android installed app label not changed');
+          const stamp={candidate:'Test 24 SAF work-grouping',sourceCommit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID};
+          if(!/^[a-f0-9]{40}$/.test(stamp.sourceCommit))throw Error('Missing build source SHA');
+          fs.writeFileSync('buildStamp.json',JSON.stringify(stamp,null,2)+'\n');
+          fs.mkdirSync('android/app/src/main/assets',{recursive:true});
+          fs.writeFileSync('android/app/src/main/assets/archivist-provenance.json',JSON.stringify(stamp,null,2)+'\n');
+          console.log('BUILD IDENTITY',JSON.stringify(stamp));
+          NODE
+
+      - name: Typecheck and scanner regression gates
+        working-directory: mobile
+        run: |
+          npm run typecheck
+          node test24-saf342-work-regression.test.cjs
+          node scanner-test23-device-truth.test.cjs
+          node metadata-sync.test.cjs
+          node local-works.test.cjs
+
+      - name: Mobile full test suite
+        working-directory: mobile
+        run: npm test
+
+      - name: Android native release lint
+        working-directory: mobile/android
+        run: ./gradlew :app:lintRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
+
+      - name: Build unique Test 24 APK (internal candidate)
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64
+
+      - name: Verify signed APK, package, version and provenance
+        run: |
+          set -euo pipefail
+          APK=$(find mobile/android/app/build/outputs/apk/release -name '*.apk' -type f | head -1)
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -1 | tee "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='app.archivist.reader'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "versionCode='109'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "versionName='0.9.4-test24'" "$RUNNER_TEMP/apk-badging.txt"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$APK"
+          unzip -p "$APK" assets/archivist-provenance.json > "$RUNNER_TEMP/provenance.json"
+          node - "$RUNNER_TEMP/provenance.json" <<'NODE'
+          const fs=require('fs');
+          const stamp=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(stamp.sourceCommit!==process.env.GITHUB_SHA||stamp.runId!==process.env.GITHUB_RUN_ID)
+            throw Error('APK provenance differs from checked-out tested commit');
+          console.log('SIGNED APK SOURCE VERIFIED',JSON.stringify(stamp));
+          NODE
+          cp "$APK" Archivist-Test-24.apk
+          sha256sum Archivist-Test-24.apk > Archivist-Test-24.apk.sha256
+
+      - name: Generate actual audio files and ID3 metadata for native scan
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          python -m pip install --disable-pip-version-check 'mutagen==1.47.0'
+          python3 .github/scripts/android-fixture-media.py android-media-fixtures
+          test "$(find android-media-fixtures/diagnostic342 -type f -name '*.mp3' | wc -l)" -eq 342
+
+      - name: Enable hardware-accelerated Android emulator
+        run: |
+          if test -e /dev/kvm; then
+            sudo chmod 666 /dev/kvm
+            ls -l /dev/kvm
+          else
+            echo "::warning::KVM unavailable — software emulator will be slow"
+          fi
+
+      - name: Android acceptance — same two scan buttons and real 342-file library
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          emulator-build: 14214601
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash -lc 'FIXTURE_PROFILES=diagnostic342 python3 .github/scripts/android-media-acceptance.py "$GITHUB_WORKSPACE/Archivist-Test-24.apk"'
+
+      - name: Retain native screenshots, scanner evidence and verified candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Archivist-Test24-Native-342-Work-Gate
+          path: |
+            Archivist-Test-24.apk
+            Archivist-Test-24.apk.sha256
+            android-acceptance-results/
+            android-media-fixtures/manifest.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Publish direct APK only after native acceptance passes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v0.9.4-test24-saf-grouping"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Archivist Test 24 — SAF work grouping" \
+            --notes "Distinct Test 24 APK (code 109, same package ID). 342 real Android MP3s must group as 12 works in the native Find Books and Identify Books & Covers workflow. Not a final physical-device performance or visual acceptance."
+          gh release upload "$TAG" Archivist-Test-24.apk Archivist-Test-24.apk.sha256 --clobber
