@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const {NativeArtworkReader}=require('./scannerVNext/nativeArtwork.ts');
+const asset={assetId:'cover',documentId:'cover-document',name:'cover.png',source:{id:'source',rootUri:'content://fixture/tree/root',name:'Generated'},size:100,modified:1};
+(async()=>{let closes=0;const port={async beginScope(){return {scope:'scope',rootDocumentId:'root'};},async cancelScope(){closes++;},async readArtwork(){return {state:'ok',uri:'file:///private/cache/cover.png',sha256:'a'.repeat(64),bytes:100,width:300,height:500};},async readPrivateArtwork(scope,uri){return this.readArtwork();}};
+ const reader=new NativeArtworkReader(port);assert.equal((await reader.read(asset)).state,'ready');assert.equal(closes,1);
+ const manual=await reader.read(asset,{manualUri:'file:///private/manual.png'});assert.equal(manual.uri,'file:///private/manual.png');assert.equal(manual.manual,true);
+ await assert.rejects(()=>new NativeArtworkReader({...port,async readArtwork(){return {...await port.readArtwork(),bytes:4194305};}}).read(asset),/Invalid/);
+ const stop=new AbortController();await assert.rejects(()=>new NativeArtworkReader({...port,async readArtwork(){stop.abort();return port.readArtwork();}}).read(asset,{signal:stop.signal}),/cancel/i);assert.equal(closes,4);
+ console.log('PASS: native validated artwork adapter preserves manual references, bounds dimensions/bytes and closes cancelled scopes');
+})().catch(e=>{console.error(e);process.exitCode=1;});

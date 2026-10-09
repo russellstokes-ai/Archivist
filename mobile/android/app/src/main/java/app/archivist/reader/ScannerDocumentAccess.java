@@ -71,6 +71,9 @@ public final class ScannerDocumentAccess {
   public ScannerArchiveReader.Clues readArchiveClues(Uri root,String id,ScannerTaskPool.Token token)throws Exception{
     return ScannerArchiveReader.read(t->openFile(root,id,t),token);
   }
+  public ScannerArtworkReader.Artwork readArtwork(Uri root,String id,java.io.File cache,ScannerTaskPool.Token token)throws Exception{
+    return ScannerArtworkReader.read(t->openFile(root,id,t),cache,token);
+  }
   private static String text(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getString(index);}
   private static Long number(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getLong(index);}
 }

@@ -115,4 +115,19 @@ public final class ScannerSafTest {
       assertTrue("Main looper responds while native slots remain occupied",tick.await(500,TimeUnit.MILLISECONDS));assertTrue(SystemClock.elapsedRealtime()-start<500);
     }
   }
+  @Test public void artworkDecodesCachesAtomicallyAndRejectsCorruptBytes()throws Exception{
+    java.io.File cache=new java.io.File(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir(),"artwork-test");cache.mkdirs();
+    android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(100,150,android.graphics.Bitmap.Config.ARGB_8888);
+    java.io.ByteArrayOutputStream encoded=new java.io.ByteArrayOutputStream();image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,encoded);image.recycle();byte[] png=encoded.toByteArray();
+    try(ScannerTaskPool pool=new ScannerTaskPool(2,1,8000)){
+      ScannerTaskPool.Result result=task(pool,"image",token->ScannerArtworkReader.read(t->new java.io.ByteArrayInputStream(png),cache,token));assertEquals("ok",result.state);
+      ScannerArtworkReader.Artwork artwork=(ScannerArtworkReader.Artwork)result.value;assertEquals(100,artwork.width);assertEquals(150,artwork.height);assertEquals(png.length,artwork.bytes);assertTrue(new java.io.File(android.net.Uri.parse(artwork.uri).getPath()).exists());
+      ScannerTaskPool.Result selected=task(pool,"selected-art",token->documents.readArtwork(root,"book/cover",cache,token));assertEquals("ok",selected.state);assertEquals(artwork.sha256,((ScannerArtworkReader.Artwork)selected.value).sha256);
+      assertEquals("error",task(pool,"corrupt-art",token->ScannerArtworkReader.read(t->new java.io.ByteArrayInputStream(new byte[]{1,2,3}),cache,token)).state);
+      assertEquals("error",task(pool,"truncated-art",token->ScannerArtworkReader.read(t->new java.io.ByteArrayInputStream(java.util.Arrays.copyOf(png,28)),cache,token)).state);
+      java.util.concurrent.atomic.AtomicBoolean closed=new java.util.concurrent.atomic.AtomicBoolean();
+      assertEquals("error",task(pool,"large-art",token->ScannerArtworkReader.read(t->new java.io.InputStream(){public int read(){return 1;}public int read(byte[] bytes,int offset,int count){java.util.Arrays.fill(bytes,offset,offset+count,(byte)1);return count;}public void close(){closed.set(true);}},cache,token)).state);assertTrue(closed.get());
+      assertEquals(1,cache.listFiles().length);
+    }finally{for(java.io.File file:cache.listFiles())file.delete();cache.delete();}
+  }
 }

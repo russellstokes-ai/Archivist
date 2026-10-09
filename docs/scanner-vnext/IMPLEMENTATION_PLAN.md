@@ -66,10 +66,10 @@ Files: new mobile/android/app/src/main/java/app/archivist/reader/ArchivistScanne
 
 Interfaces: native beginScan/nextBatch/cancelScan/readClues as specified in DESIGN.md; scheduleTask(task, generation) -> Promise<TaskOutcome>; collectClues(work, limits, signal) -> Promise<ClueResult>.
 
-- [ ] Reproduce slow query/open, ignored cancellation, descriptor failure and corrupt/bounded archive scenarios in failing tests.
-- [ ] Implement finite workers/queue, cancellation signals, quarantined slots, versioned clues cache and persisted checkpoints.
-- [ ] Record actual emulator provider query/read traces and slot counts during cancel/restart. A JS timeout alone cannot pass this sprint.
-- [ ] Pass descriptor cleanup, late-generation rejection and responsive-navigation targets; gate and commit S3.
+- [x] Reproduce slow query/open, ignored cancellation, descriptor failure and corrupt/bounded archive scenarios in failing tests.
+- [x] Implement finite workers/queue, cancellation signals, quarantined slots, versioned clues cache and persisted checkpoints.
+- [x] Record actual emulator provider query/read traces and slot counts during cancellation. Ten controlled Android cases pass.
+- [x] Pass descriptor cleanup, late-result rejection and native main-looper responsiveness; S3 component gate passes. Per ledger ruling, integrated React Native lifecycle/navigation remains mandatory in S7. RAR metadata and extended MP4 indexes remain explicitly unresolved; no full extraction coverage claim.
 
 ## S4: Automatic work-level Smart Search
 

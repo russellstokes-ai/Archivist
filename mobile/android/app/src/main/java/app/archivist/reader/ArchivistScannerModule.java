@@ -45,6 +45,22 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
     Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
     clues.submit(scopeId,token->{check(scope,token);return documents.readArchiveClues(scope.root,documentId,token);},result->resolve(scope,result,promise));
   }
+  @ReactMethod public void readArtwork(String scopeId,String documentId,Promise promise){
+    Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
+    java.io.File cache=new java.io.File(getReactApplicationContext().getCacheDir(),"scanner-vnext-artwork");
+    clues.submit(scopeId,token->{check(scope,token);return documents.readArtwork(scope.root,documentId,cache,token);},result->resolve(scope,result,promise));
+  }
+  @ReactMethod public void readPrivateArtwork(String scopeId,String fileUri,Promise promise){
+    Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
+    java.io.File cache=new java.io.File(getReactApplicationContext().getCacheDir(),"scanner-vnext-artwork");
+    clues.submit(scopeId,token->{
+      check(scope,token);Uri uri=Uri.parse(fileUri);if(!"file".equals(uri.getScheme())||uri.getPath()==null)throw new SecurityException("Private artwork file required");
+      java.io.File source=new java.io.File(uri.getPath()).getCanonicalFile();String path=source.getPath();
+      String privateFiles=getReactApplicationContext().getFilesDir().getCanonicalPath()+java.io.File.separator,privateCache=getReactApplicationContext().getCacheDir().getCanonicalPath()+java.io.File.separator;
+      if(!path.startsWith(privateFiles)&&!path.startsWith(privateCache))throw new SecurityException("Artwork is outside private app storage");
+      return ScannerArtworkReader.read(t->new java.io.FileInputStream(source),cache,token);
+    },result->resolve(scope,result,promise));
+  }
   @ReactMethod public void readRange(String scopeId,String documentId,double offset,double byteBudget,Promise promise){
     Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
     if(!Double.isFinite(offset)||offset!=Math.floor(offset)||offset<0||offset>8796093022208L||!Double.isFinite(byteBudget)||byteBudget!=Math.floor(byteBudget)||byteBudget<1||byteBudget>65536){promise.reject("scanner-budget","Invalid bounded range");return;}
@@ -57,6 +73,8 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
       ScannerDocumentAccess.Page page=(ScannerDocumentAccess.Page)result.value;WritableArray entries=Arguments.createArray();
       for(ScannerDocumentAccess.Entry entry:page.entries){WritableMap item=Arguments.createMap();item.putString("documentId",entry.documentId);item.putString("name",entry.name);if(entry.mimeType!=null)item.putString("mimeType",entry.mimeType);if(entry.size!=null)item.putDouble("size",entry.size);if(entry.modified!=null)item.putDouble("modified",entry.modified);item.putBoolean("directory",entry.directory);entries.pushMap(item);}
       output.putArray("entries",entries);if(page.nextOffset==null)output.putNull("nextOffset");else output.putInt("nextOffset",page.nextOffset);
+    }else if("ok".equals(state)&&result.value instanceof ScannerArtworkReader.Artwork){
+      ScannerArtworkReader.Artwork value=(ScannerArtworkReader.Artwork)result.value;output.putString("uri",value.uri);output.putString("sha256",value.sha256);output.putInt("bytes",value.bytes);output.putInt("width",value.width);output.putInt("height",value.height);
     }else if("ok".equals(state)&&result.value instanceof ScannerArchiveReader.Clues){
       ScannerArchiveReader.Clues value=(ScannerArchiveReader.Clues)result.value;output.putString("status",value.status);output.putString("reason",value.reason);output.putInt("bytesRead",(int)value.bytesRead);WritableMap fields=Arguments.createMap();for(Map.Entry<String,String> field:value.fields.entrySet())fields.putString(field.getKey(),field.getValue());output.putMap("fields",fields);output.putString("provenance","embedded");
     }else if("ok".equals(state)&&result.value instanceof ScannerBoundedIO.Header){

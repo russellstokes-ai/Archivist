@@ -14,13 +14,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class FixtureDocumentsProvider extends DocumentsProvider {
   private static final String[] DOC={"document_id","_display_name","mime_type","_size","last_modified","flags"};
   private final AtomicInteger count=new AtomicInteger(342),opened=new AtomicInteger(),cancelled=new AtomicInteger();
-  private File seed,archive;
+  private File seed,archive,cover;
   @Override public boolean onCreate(){
     archive=new File(getContext().getFilesDir(),"synthetic.cbz");
     try(java.util.zip.ZipOutputStream output=new java.util.zip.ZipOutputStream(new FileOutputStream(archive))){
       output.putNextEntry(new java.util.zip.ZipEntry("ComicInfo.xml"));output.write("<ComicInfo><Title>Generated Comic</Title><Writer>Fixture Writer</Writer></ComicInfo>".getBytes("UTF-8"));output.closeEntry();
     }catch(IOException error){return false;}
     seed=new File(getContext().getFilesDir(),"synthetic.mp3");
+    cover=new File(getContext().getFilesDir(),"synthetic-cover.png");
+    android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(100,150,android.graphics.Bitmap.Config.ARGB_8888);
+    try(OutputStream output=new FileOutputStream(cover)){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}catch(IOException error){return false;}finally{image.recycle();}
     try(InputStream in=getContext().getAssets().open("synthetic-tagged.mp3");OutputStream out=new FileOutputStream(seed)){byte[] buffer=new byte[4096];int n;while((n=in.read(buffer))>=0)out.write(buffer,0,n);}catch(IOException error){throw new IllegalStateException(error);}
     return true;
   }
@@ -35,7 +38,7 @@ public final class FixtureDocumentsProvider extends DocumentsProvider {
     MatrixCursor.RowBuilder row=cursor.newRow();
     for(String column:cursor.getColumnNames()){
       Object value=null;
-      switch(column){case "document_id":value=id;break;case "_display_name":value=directory?id:id.substring(id.lastIndexOf('/')+1)+".mp3";break;case "mime_type":value=directory?DocumentsContract.Document.MIME_TYPE_DIR:"audio/mpeg";break;case "_size":value=directory?0:seed.length();break;case "last_modified":value=1L;break;case "flags":value=0;break;}
+      switch(column){case "document_id":value=id;break;case "_display_name":value=directory?id:id.equals("book/cover")?"cover.png":id.substring(id.lastIndexOf('/')+1)+".mp3";break;case "mime_type":value=directory?DocumentsContract.Document.MIME_TYPE_DIR:id.equals("book/cover")?"image/png":"audio/mpeg";break;case "_size":value=directory?0:id.equals("book/cover")?cover.length():seed.length();break;case "last_modified":value=1L;break;case "flags":value=0;break;}
       row.add(column,value);
     }
   }
@@ -64,7 +67,7 @@ public final class FixtureDocumentsProvider extends DocumentsProvider {
         FileNotFoundException failure=new FileNotFoundException("Fixture pipe unavailable");failure.initCause(error);throw failure;
       }
     }
-    return ParcelFileDescriptor.open(id.equals("book/archive")?archive:seed,ParcelFileDescriptor.MODE_READ_ONLY);
+    return ParcelFileDescriptor.open(id.equals("book/archive")?archive:id.equals("book/cover")?cover:seed,ParcelFileDescriptor.MODE_READ_ONLY);
   }
   private static void delay(){long end=android.os.SystemClock.elapsedRealtime()+1500;while(android.os.SystemClock.elapsedRealtime()<end)try{Thread.sleep(20);}catch(InterruptedException ignored){/* Deliberately uncooperative provider. */}}
   @Override public Bundle call(String method,String arg,Bundle extras){

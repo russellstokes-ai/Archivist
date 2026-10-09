@@ -18,6 +18,7 @@ export async function createScannerStore(db:ScannerDatabase,newId:()=>string){
   const store:DiscoveryStore & {
     loadAsset(sourceId:string,documentId:string):Promise<(DiscoveredEntry & {assetId:string})|null>;
     loadCheckpoint(sourceId:string):Promise<DiscoveryCheckpoint|null>;
+    listAssets(sourceId:string):Promise<(DiscoveredEntry & {assetId:string})[]>;
   }={
     async saveSource(source:Source){
       if(!source.id||!source.rootUri)throw new Error('Selected source grant is required');
@@ -48,6 +49,11 @@ export async function createScannerStore(db:ScannerDatabase,newId:()=>string){
     async loadAsset(sourceId,documentId){
       const row=await db.getFirstAsync<{asset_id:string;payload:string}>('SELECT asset_id,payload FROM scanner_vnext_assets WHERE source_id=? AND document_id=?',sourceId,documentId);
       return row?{...JSON.parse(row.payload),assetId:row.asset_id}:null;
+    },
+    async listAssets(sourceId){
+      const assets:(DiscoveredEntry & {assetId:string})[]=[];let after=0;
+      while(true){const row=await db.getFirstAsync<{payload:string}>('SELECT json_group_array(json_object(\'row\',rowid,\'id\',asset_id,\'data\',payload)) AS payload FROM (SELECT rowid,asset_id,payload FROM scanner_vnext_assets WHERE source_id=? AND rowid>? ORDER BY rowid LIMIT 128)',sourceId,after);const page: {row:number;id:string;data:string}[]=JSON.parse(row?.payload??'[]');if(!page.length)break;for(const value of page)assets.push({...JSON.parse(value.data),assetId:value.id});after=page[page.length-1].row;if(assets.length>100000)throw new Error('Source asset budget');await new Promise<void>(resolve=>setTimeout(resolve,0));}
+      return assets;
     },
     async loadCheckpoint(sourceId){
       const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_checkpoints WHERE source_id=?',sourceId);
