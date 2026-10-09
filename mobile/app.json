@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Archivist",
+    "name": "Archivist Test 24",
     "slug": "archivist",
     "version": "0.9.4",
     "orientation": "default",
@@ -21,7 +21,7 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#072632"
       },
-      "versionCode": 108,
+      "versionCode": 109,
       "permissions": [
         "android.permission.POST_NOTIFICATIONS"
       ]
