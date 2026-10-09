@@ -1,6 +1,7 @@
 package app.archivist.reader;
 
 import android.content.ContentResolver;
+import android.content.ContentProviderClient;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.CancellationSignal;
@@ -49,7 +50,16 @@ public final class ScannerDocumentAccess {
   public ScannerBoundedIO.Header readHeader(Uri root,String id,int byteBudget,ScannerTaskPool.Token token)throws Exception{
     Uri uri=document(root,id,token);CancellationSignal cancellation=new CancellationSignal();token.onCancel(cancellation::cancel);
     return ScannerBoundedIO.readHeader(t->{
-      ParcelFileDescriptor descriptor=resolver.openFileDescriptor(uri,"r",cancellation);
+      ParcelFileDescriptor descriptor=null;
+      // Read-only ContentResolver opens use a typed-asset fallback which can drop
+      // cancellation on Android 15. Open the document directly with its signal.
+      try(ContentProviderClient provider=resolver.acquireUnstableContentProviderClient(uri)){
+        if(provider==null)throw new IllegalStateException("Document provider unavailable");
+        t.check();descriptor=provider.openFile(uri,"r",cancellation);
+      }catch(Exception|LinkageError error){
+        if(descriptor!=null)try{descriptor.close();}catch(Exception closeError){error.addSuppressed(closeError);}
+        throw error;
+      }
       if(descriptor==null)throw new IllegalStateException("Provider returned no file descriptor");
       try{return new ParcelFileDescriptor.AutoCloseInputStream(descriptor);}catch(RuntimeException error){descriptor.close();throw error;}
     },byteBudget,token);

@@ -1,0 +1,32 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+assert.ok(fs.existsSync(__dirname+'/scannerVNext/collectClues.ts'),'Work-scoped bounded clue collection must exist');
+const {collectWorkClues}=require('./scannerVNext/collectClues.ts');
+const bytes=Buffer.from([73,68,51,3,0,0,0,0,0,0]);
+const asset=id=>({assetId:id,documentId:id,name:id+'.mp3',source:{id:'source',rootUri:'content://test/tree',name:'Library'},size:100,modified:1});
+function cache(){const data=new Map();return {async load(id,f){return data.get(id+'|'+JSON.stringify(f))??null;},async save(id,f,result,signal){if(signal?.aborted)throw Error('Cancelled');data.set(id+'|'+JSON.stringify(f),result);return true;}};}
+(async()=>{
+ let opens=0;const reader={async readHeader(a,budget){opens++;assert.ok(budget<=65536);return {bytes:bytes.subarray(0,budget),budgetReached:budget<=bytes.length};}};
+ const persisted=cache(),assets=Array.from({length:342},(_,i)=>asset('part-'+i));
+ const cold=await collectWorkClues(assets,reader,persisted);assert.equal(opens,2);assert.equal(cold.samples.length,2);assert.equal(cold.skippedAssets,340);assert.equal(cold.bytesRead,20);
+ const warm=await collectWorkClues(assets,reader,persisted);assert.equal(opens,2);assert.ok(warm.samples.every(s=>s.source==='cache'));assert.equal(warm.bytesRead,0);
+ await collectWorkClues([{...assets[0],size:101}],reader,persisted);assert.equal(opens,3);
+ const bounded=await collectWorkClues(assets,reader,cache(),{maxBytes:4});assert.equal(bounded.bytesRead,4);assert.equal(bounded.samples.length,1);
+ const failed=await collectWorkClues([asset('bad'),asset('good')],{async readHeader(a){if(a.assetId==='bad')throw Error('Provider timeout');return {bytes,budgetReached:false};}},cache());
+ assert.equal(failed.samples[0].assetId,'good');assert.equal(failed.issues[0].assetId,'bad');assert.equal(failed.issues[0].reason,'clue-read-failed');
+ const stop=new AbortController();const stale=cache();
+ await assert.rejects(()=>collectWorkClues([asset('cancel')],{async readHeader(){stop.abort();return {bytes,budgetReached:false};}},stale,{signal:stop.signal}),/cancel/i);
+ assert.equal(await stale.load('cancel',{documentId:'cancel',size:100,modified:1}),null);
+ await assert.rejects(()=>collectWorkClues([asset('oversized')],{async readHeader(){return {bytes:new Uint8Array(65537),budgetReached:true};}},cache()),/budget/i);
+ await assert.rejects(()=>collectWorkClues(assets,reader,persisted,{maxAssets:0}),/budget/i);
+ assert.equal((await collectWorkClues([{...asset('unknown'),modified:null}],reader,cache())).issues[0].reason,'fingerprint-uncertain');
+ assert.ok(fs.existsSync(__dirname+'/scannerVNext/nativeClues.ts'),'Clue collection needs a scoped native header adapter');
+ const {NativeHeaderReader}=require('./scannerVNext/nativeClues.ts');let closed=0;
+ const nativePort={async beginScope(){return {scope:'test-scope',rootDocumentId:'root'};},async cancelScope(){closed++;},async readHeader(scope,id,budget){assert.equal(scope,'test-scope');assert.equal(id,'native');return {state:'ok',base64:bytes.toString('base64'),bytesRead:bytes.length,budgetReached:false,metadataStatus:'header-only'};}};
+ const nativeHeader=await new NativeHeaderReader(nativePort).readHeader(asset('native'),64);assert.deepEqual([...nativeHeader.bytes],[...bytes]);assert.equal(closed,1);
+ await assert.rejects(()=>new NativeHeaderReader({...nativePort,async readHeader(){return {state:'ok',base64:'!!!!',bytesRead:3,budgetReached:false};}}).readHeader(asset('native'),64),/header|base64/i);
+ const nativeCancel=new AbortController();
+ await assert.rejects(()=>new NativeHeaderReader({...nativePort,async readHeader(){nativeCancel.abort();return {state:'ok',base64:bytes.toString('base64'),bytesRead:bytes.length,budgetReached:false,metadataStatus:'header-only'};}}).readHeader(asset('native'),64,nativeCancel.signal),/cancel/i);
+ assert.equal(closed,3);
+ console.log('PASS: work-level clue sampling stays bounded, uses warm cache, invalidates fingerprints, retains failures and rejects late cancelled writes');
+})().catch(e=>{console.error(e);process.exitCode=1;});

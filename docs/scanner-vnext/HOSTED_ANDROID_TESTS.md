@@ -8,6 +8,8 @@ Six Android instrumented tests cover 342 and 5,000 entries, pages of at most 128
 
 The existing branch source/mobile workflows also compile the application and run maintained tests. New workflow uploads reports and diagnostics only, never test APKs or a release. The isolated lab installs only on an ephemeral hosted emulator.
 
-Local preparation verified Java compilation against API 36, exact AndroidX Test/JUnit classes and production scanner classes, plus YAML parsing. Runtime assertions still require an actual hosted run. S3 remains open until its full requirements pass; these tests alone do not complete missing seek/archive readers, clue collection wiring, React Native lifecycle integration or S7 picker/onboarding tests.
+First hosted runtime (run 37930856122, Android 15/API 35): five of six instrumented tests passed. Discovery returned 342 entries in three batches (221 ms) and 5,000 entries in forty batches (4,879 ms). These are controlled-provider query timings. The delayed-open test passed prompt caller cancellation, late-result suppression and descriptor cleanup, but failed the assertion that cancellation reached the provider.
+
+Android 15 platform source confirms read-mode ContentResolver opens route through a typed-asset fallback whose default overload drops the CancellationSignal. ScannerDocumentAccess now uses ContentProviderClient.openFile with the signal directly. The same failed runtime assertion remains mandatory; this correction is not considered proven until the next hosted run passes. Local compilation against API 36 passes. S3 remains open until its full requirements pass; these tests alone do not complete missing seek/archive readers, React Native lifecycle integration or S7 picker/onboarding tests.
 
 Dependencies use documented stable AndroidX Test versions: https://developer.android.com/jetpack/androidx/releases/test . Hosted emulator setup follows https://github.com/ReactiveCircus/android-emulator-runner .
