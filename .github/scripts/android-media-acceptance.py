@@ -27,6 +27,8 @@ NO_PROGRESS_S=int(os.environ.get("NO_PROGRESS_SECONDS","150"))
 # Start with the 342-file case from the actual user's scanner diagnostic.
 # The smaller suites remain selectable with FIXTURE_PROFILES=grouped,split-discs.
 PROFILES=os.environ.get("FIXTURE_PROFILES","diagnostic342").split(",")
+LEGACY=os.environ.get("ARCHIVIST_LEGACY_FLOW","0")=="1"
+CANDIDATE=os.environ.get("ARCHIVIST_CANDIDATE","Test 23")
 
 def command(args,timeout=45,check=True,text=True):
     p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
@@ -214,7 +216,14 @@ def trace_screen(profile,out,step,timeout=MAX_STAGE_S,settled_words=()):
         stage2_done=step=="identification" and (
             "finish setup" in available
             or bool(re.search(r"review\s+\d+\s+books?",available)))
-        if stage1_done or stage2_done:
+        # In Test 17/18/20, selection does not initiate enrichment. A single
+        # 'Prepare library' button drives the entire Android scan, and only
+        # appears as a REVIEW button when preparation has actually completed.
+        legacy_done=step=="legacy-preparation" and (
+            bool(re.search(r"review\s+\d+\s+books?",available))
+            or "keep current layout" in available
+            or "organise files" in available)
+        if stage1_done or stage2_done or legacy_done:
             log(step+" settled after "+str(int(time.monotonic()-started))+"s")
             return {"seconds":round(time.monotonic()-started,1),"settled":True,"visible":texts}
         if time.monotonic()-lastChange>NO_PROGRESS_S:
@@ -232,9 +241,21 @@ def collect_native_catalogue(out):
         return result
     time.sleep(3)
     adb("wait-for-device",timeout=25,check=False)
-    p=adb("shell","ls","/data/user/0/"+PKG+"/databases",check=False)
-    if p.returncode!=0 or "archivist-local.db" not in p.stdout:
-        result["reason"]="native database not present/readable"
+    # Expo SQLite stores databases under files/SQLite on Android. Testing
+    # only /databases previously caused misleading "not readable" results.
+    candidate_paths=[
+        "/data/user/0/"+PKG+"/files/SQLite/",
+        "/data/user/0/"+PKG+"/databases/",
+        "/data/data/"+PKG+"/files/SQLite/",
+    ]
+    dbdir=None
+    for candidate in candidate_paths:
+        check=adb("shell","ls",candidate,check=False)
+        if check.returncode==0 and "archivist-local.db" in check.stdout:
+            dbdir=candidate
+            break
+    if not dbdir:
+        result["reason"]="native database not present in Expo SQLite or conventional Android database locations"
         return result
     result["rooted"]=True
     state="/data/user/0/"+PKG+"/files/archivist-state/archivist.scannerTrace.v1.json"
@@ -258,7 +279,7 @@ def collect_native_catalogue(out):
     dst=out/"catalogue"
     dst.mkdir(exist_ok=True)
     for name in ["archivist-local.db","archivist-local.db-wal","archivist-local.db-shm"]:
-        adb("pull","/data/user/0/"+PKG+"/databases/"+name,str(dst/name),check=False,timeout=30)
+        adb("pull",dbdir+name,str(dst/name),check=False,timeout=30)
     db=dst/"archivist-local.db"
     if not db.exists():return result
     try:
@@ -319,7 +340,7 @@ def inspect_editor(out):
 def process_profile(profile,apk):
     out=OUT/profile
     out.mkdir(parents=True,exist_ok=True)
-    log("=== Test 23 real Android fixture "+profile+" ===")
+    log("=== "+CANDIDATE+" real Android fixture "+profile+" (legacy="+str(LEGACY)+") ===")
     expected=342 if profile=="diagnostic342" else 227
     result={"profile":profile,"apk":Path(apk).name,"status":"running",
             "expected_mp3_files":expected,"expected_logical_works":12}
@@ -331,16 +352,23 @@ def process_profile(profile,apk):
         time.sleep(12)
         view(out,"app-open")
         picker_select(folder,out)
-        request_page(profile,out,"Find Books")
-        result["discovery"]=trace_screen(profile,out,"discovery",timeout=240,
-                                         settled_words=("Identify Books & Covers",))
-        request_page(profile,out,"Identify Books & Covers")
-        result["identification"]=trace_screen(profile,out,"identification",timeout=MAX_STAGE_S,
-                          settled_words=("Finish setup","Review 12 books","Review 24 books","Review 85 books"))
-        root=view(out,"identify-complete")
-        result["review_count"]=review_count(labels(root))
-        result["editor"]=inspect_editor(out)
-        result["status"]="finished"
+        if LEGACY:
+            request_page(profile,out,"Prepare library",timeout=55)
+            result["preparation"]=trace_screen(profile,out,"legacy-preparation",timeout=MAX_STAGE_S)
+            root=view(out,"legacy-prepare-complete")
+            result["review_count"]=review_count(labels(root))
+            result["status"]="finished"
+        else:
+            request_page(profile,out,"Find Books")
+            result["discovery"]=trace_screen(profile,out,"discovery",timeout=240,
+                                             settled_words=("Identify Books & Covers",))
+            request_page(profile,out,"Identify Books & Covers")
+            result["identification"]=trace_screen(profile,out,"identification",timeout=MAX_STAGE_S,
+                              settled_words=("Finish setup","Review 12 books","Review 24 books","Review 85 books"))
+            root=view(out,"identify-complete")
+            result["review_count"]=review_count(labels(root))
+            result["editor"]=inspect_editor(out)
+            result["status"]="finished"
         result["review_count_pass"]=result["review_count"] in (None,12)
         if result["review_count"] is not None and result["review_count"]!=12:
             result["status"]="failed"
@@ -386,6 +414,18 @@ def process_profile(profile,apk):
                     result["status"]="failed"
                     if not result.get("reason"):
                         result["reason"]="Native Identify never reached the final finish checkpoint"
+            elif LEGACY:
+                # The historical APK has no Test 23 pipeline trace. Native UI
+                # review count + Android's actual SQLite records are the
+                # independent evidence. Unknown count != 12 and cannot pass.
+                count=result.get("review_count")
+                physical=result["catalogue"].get("physical_count")
+                if physical is not None and physical!=expected:
+                    result["status"]="failed"
+                    result["reason"]=f"Native SQLite has {physical} files; expected {expected}"
+                elif count is None:
+                    result["status"]="inconclusive"
+                    result["reason"]="Older app completed but has no visible work count; preserve screenshots and SQLite for review"
             elif not result.get("reason"):
                 result["status"]="failed"
                 result["reason"]="No native scanner trace available; cannot claim actual media scan passed"
@@ -395,7 +435,7 @@ def process_profile(profile,apk):
     return result
 
 def main():
-    if len(sys.argv)<2:raise RuntimeError("Usage: android-media-acceptance.py <verified Test23.apk>")
+    if len(sys.argv)<2:raise RuntimeError("Usage: android-media-acceptance.py <verified Archivist.apk>")
     apk=sys.argv[1]
     manifest=json.loads((MEDIA/"manifest.json").read_text())
     log("EXPECTED INPUT "+json.dumps(manifest)[:1800])
