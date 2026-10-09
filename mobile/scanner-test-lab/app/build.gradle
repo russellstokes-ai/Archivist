@@ -1,4 +1,12 @@
 plugins { id 'com.android.application' }
+def scannerSources = layout.buildDirectory.dir('generated/scanner-source')
+def copyScannerSources = tasks.register('copyScannerSources', Sync) {
+    from(file('../../android/app/src/main/java/app/archivist/reader')) {
+        include 'ScannerTaskPool.java', 'ScannerBoundedIO.java', 'ScannerDocumentAccess.java'
+    }
+    into scannerSources
+}
+tasks.withType(JavaCompile).configureEach { dependsOn copyScannerSources }
 android {
     namespace 'app.archivist.scannerlab'
     compileSdk 36
@@ -12,8 +20,7 @@ android {
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     sourceSets.main.java {
-        srcDirs = ['src/main/java', '../../android/app/src/main/java']
-        include '**/ScannerTaskPool.java', '**/ScannerBoundedIO.java', '**/ScannerDocumentAccess.java', '**/FixtureDocumentsProvider.java'
+        srcDirs = ['src/main/java', scannerSources.get().asFile]
     }
 }
 dependencies {
