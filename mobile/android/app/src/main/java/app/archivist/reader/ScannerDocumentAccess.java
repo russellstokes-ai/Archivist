@@ -68,6 +68,9 @@ public final class ScannerDocumentAccess {
       if(descriptor==null)throw new IllegalStateException("Provider returned no file descriptor");
       try{return new ParcelFileDescriptor.AutoCloseInputStream(descriptor);}catch(RuntimeException error){descriptor.close();throw error;}
   }
+  public ScannerArchiveReader.Clues readArchiveClues(Uri root,String id,ScannerTaskPool.Token token)throws Exception{
+    return ScannerArchiveReader.read(t->openFile(root,id,t),token);
+  }
   private static String text(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getString(index);}
   private static Long number(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getLong(index);}
 }

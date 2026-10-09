@@ -100,4 +100,19 @@ public final class ScannerSafTest {
       assertTrue("Nonseekable descriptor failures close handles",descriptors()<=before+2);assertEquals(0,pool.stats().quarantined);
     }
   }
+  @Test public void compressedArchiveMetadataUsesBoundedProductionReader()throws Exception{
+    try(ScannerTaskPool pool=new ScannerTaskPool(2,128,8000)){
+      ScannerTaskPool.Result value=task(pool,"archive",token->documents.readArchiveClues(root,"book/archive",token));assertEquals("ok",value.state);
+      ScannerArchiveReader.Clues clues=(ScannerArchiveReader.Clues)value.value;assertEquals("parsed",clues.status);assertEquals("Generated Comic",clues.fields.get("title"));assertEquals("Fixture Writer",clues.fields.get("author"));assertTrue(clues.bytesRead<8388608);
+      value=task(pool,"corrupt",token->documents.readArchiveClues(root,"book/000001",token));assertEquals("ok",value.state);assertEquals("unresolved",((ScannerArchiveReader.Clues)value.value).status);
+    }
+  }
+  @Test public void mainLooperRemainsResponsiveDuringBlockedProviderCalls()throws Exception{
+    try(ScannerTaskPool pool=new ScannerTaskPool(2,1,150)){
+      CountDownLatch ended=new CountDownLatch(2);for(int i=1;i<=2;i++){final String id="slow-query-"+i;pool.submit("slow",token->documents.queryChildren(root,id,0,128,token),value->ended.countDown());}
+      assertTrue(ended.await(2,TimeUnit.SECONDS));assertEquals(2,pool.stats().quarantined);
+      CountDownLatch tick=new CountDownLatch(1);long start=SystemClock.elapsedRealtime();new android.os.Handler(android.os.Looper.getMainLooper()).post(tick::countDown);
+      assertTrue("Main looper responds while native slots remain occupied",tick.await(500,TimeUnit.MILLISECONDS));assertTrue(SystemClock.elapsedRealtime()-start<500);
+    }
+  }
 }

@@ -4705,11 +4705,12 @@ function Client() {
       <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={styles.modalBackdrop} onPress={requestEditorClose}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
-            <Text style={[styles.playerEyebrow,{color:p.sage}]}>METADATA & COVER</Text>
+            <Text style={[styles.playerEyebrow,{color:p.sage}]}>{localEdit?'ARCHIVIST ASSIST':'METADATA & COVER'}</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
             <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
+            {localEdit?<Text style={[styles.meta,{color:p.muted}]}>Add a title or author, then tap Save. Assist will look for the missing details.</Text>:null}
             {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>

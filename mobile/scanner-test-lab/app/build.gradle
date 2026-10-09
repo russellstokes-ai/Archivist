@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 def scannerSources = layout.buildDirectory.dir('generated/scanner-source')
 def copyScannerSources = tasks.register('copyScannerSources', Sync) {
     from(file('../../android/app/src/main/java/app/archivist/reader')) {
-        include 'ScannerTaskPool.java', 'ScannerBoundedIO.java', 'ScannerDocumentAccess.java'
+        include 'ScannerTaskPool.java', 'ScannerBoundedIO.java', 'ScannerDocumentAccess.java', 'ScannerArchiveReader.java'
     }
     into scannerSources
 }

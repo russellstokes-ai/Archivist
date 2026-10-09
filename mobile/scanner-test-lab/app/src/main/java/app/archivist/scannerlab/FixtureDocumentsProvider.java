@@ -14,8 +14,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class FixtureDocumentsProvider extends DocumentsProvider {
   private static final String[] DOC={"document_id","_display_name","mime_type","_size","last_modified","flags"};
   private final AtomicInteger count=new AtomicInteger(342),opened=new AtomicInteger(),cancelled=new AtomicInteger();
-  private File seed;
+  private File seed,archive;
   @Override public boolean onCreate(){
+    archive=new File(getContext().getFilesDir(),"synthetic.cbz");
+    try(java.util.zip.ZipOutputStream output=new java.util.zip.ZipOutputStream(new FileOutputStream(archive))){
+      output.putNextEntry(new java.util.zip.ZipEntry("ComicInfo.xml"));output.write("<ComicInfo><Title>Generated Comic</Title><Writer>Fixture Writer</Writer></ComicInfo>".getBytes("UTF-8"));output.closeEntry();
+    }catch(IOException error){return false;}
     seed=new File(getContext().getFilesDir(),"synthetic.mp3");
     try(InputStream in=getContext().getAssets().open("synthetic-tagged.mp3");OutputStream out=new FileOutputStream(seed)){byte[] buffer=new byte[4096];int n;while((n=in.read(buffer))>=0)out.write(buffer,0,n);}catch(IOException error){throw new IllegalStateException(error);}
     return true;
@@ -60,7 +64,7 @@ public final class FixtureDocumentsProvider extends DocumentsProvider {
         FileNotFoundException failure=new FileNotFoundException("Fixture pipe unavailable");failure.initCause(error);throw failure;
       }
     }
-    return ParcelFileDescriptor.open(seed,ParcelFileDescriptor.MODE_READ_ONLY);
+    return ParcelFileDescriptor.open(id.equals("book/archive")?archive:seed,ParcelFileDescriptor.MODE_READ_ONLY);
   }
   private static void delay(){long end=android.os.SystemClock.elapsedRealtime()+1500;while(android.os.SystemClock.elapsedRealtime()<end)try{Thread.sleep(20);}catch(InterruptedException ignored){/* Deliberately uncooperative provider. */}}
   @Override public Bundle call(String method,String arg,Bundle extras){

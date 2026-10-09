@@ -30,5 +30,9 @@ function cache(){const data=new Map();return {async load(id,f){return data.get(i
  const nativeCancel=new AbortController();
  await assert.rejects(()=>new NativeHeaderReader({...nativePort,async readHeader(){nativeCancel.abort();return {state:'ok',base64:bytes.toString('base64'),bytesRead:bytes.length,budgetReached:false,metadataStatus:'header-only'};}}).readHeader(asset('native'),64,nativeCancel.signal),/cancel/i);
  assert.equal(closed,3);
+ const rangeReader=new NativeHeaderReader({...nativePort,async readRange(scope,id,offset,budget){assert.equal(offset,1000000);assert.equal(budget,64);return {state:'ok',base64:bytes.toString('base64'),bytesRead:bytes.length,budgetReached:false,metadataStatus:'bounded-range',offset};}});
+ assert.deepEqual([...(await rangeReader.readRange(asset('native'),1000000,64)).bytes],[...bytes]);assert.equal(closed,4);
+ await assert.rejects(()=>new NativeHeaderReader({...nativePort,async readRange(){return {state:'ok',base64:bytes.toString('base64'),bytesRead:bytes.length,budgetReached:false,metadataStatus:'bounded-range',offset:0};}}).readRange(asset('native'),1000000,64),/Invalid native/);assert.equal(closed,5);
+ await assert.rejects(()=>rangeReader.readRange(asset('native'),-1,64),/offset/);assert.equal(closed,5);
  console.log('PASS: work-level clue sampling stays bounded, uses warm cache, invalidates fingerprints, retains failures and rejects late cancelled writes');
 })().catch(e=>{console.error(e);process.exitCode=1;});
