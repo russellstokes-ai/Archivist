@@ -19,6 +19,7 @@ from pathlib import Path
 
 PKG="app.archivist.reader"
 ACTIVITY=PKG+"/.MainActivity"
+LEGACY_TEST14=os.environ.get("LEGACY_TEST14","0")=="1"
 MEDIA=Path(os.environ.get("MEDIA_FIXTURES","android-media-fixtures")).resolve()
 OUT=Path(os.environ.get("ACCEPTANCE_OUT","android-acceptance-results")).resolve()
 OUT.mkdir(parents=True,exist_ok=True)
@@ -212,8 +213,9 @@ def trace_screen(profile,out,step,timeout=MAX_STAGE_S,settled_words=()):
         available="|".join(n.get("text","")+" "+n.get("content-desc","") for n in targets).lower()
         stage1_done=step=="discovery" and "identify books & covers" in available
         stage2_done=step=="identification" and (
-            "finish setup" in available
-            or bool(re.search(r"review\s+\d+\s+books?",available)))
+            "finish setup" in available or "organise files" in available
+            or "keep current layout" in available
+            or bool(re.search(r"review\s+\d+\s+(?:books?|items?)",available)))
         if stage1_done or stage2_done:
             log(step+" settled after "+str(int(time.monotonic()-started))+"s")
             return {"seconds":round(time.monotonic()-started,1),"settled":True,"visible":texts}
@@ -287,8 +289,10 @@ def collect_native_catalogue(out):
     return result
 def review_count(text):
     s="|".join(text)
-    expressions=[r"review\s+(\d+)\s+books?",r"(\d+)\s+works?\s+need(?:s)?\s+review",
-                 r"(\d+)\s+books?\s+need(?:s)?\s+review"]
+    expressions=[r"review\s+(\d+)\s+(?:books?|items?)",
+                 r"(\d+)\s+works?\s+need(?:s)?\s+(?:review|attention)",
+                 r"(\d+)\s+books?\s+need(?:s)?\s+review",
+                 r"(\d+)\s+items?\s+need(?:s)?\s+review"]
     for p in expressions:
         m=re.search(p,s,re.I)
         if m:return int(m.group(1))
@@ -319,7 +323,7 @@ def inspect_editor(out):
 def process_profile(profile,apk):
     out=OUT/profile
     out.mkdir(parents=True,exist_ok=True)
-    log("=== Test 23 real Android fixture "+profile+" ===")
+    log("=== "+("Test 14" if LEGACY_TEST14 else "Test 23")+" real Android fixture "+profile+" ===")
     expected=342 if profile=="diagnostic342" else 227
     result={"profile":profile,"apk":Path(apk).name,"status":"running",
             "expected_mp3_files":expected,"expected_logical_works":12}
@@ -331,12 +335,26 @@ def process_profile(profile,apk):
         time.sleep(12)
         view(out,"app-open")
         picker_select(folder,out)
-        request_page(profile,out,"Find Books")
-        result["discovery"]=trace_screen(profile,out,"discovery",timeout=240,
-                                         settled_words=("Identify Books & Covers",))
-        request_page(profile,out,"Identify Books & Covers")
-        result["identification"]=trace_screen(profile,out,"identification",timeout=MAX_STAGE_S,
-                          settled_words=("Finish setup","Review 12 books","Review 24 books","Review 85 books"))
+        if LEGACY_TEST14:
+            # Test14's original one-stage UX uses "Prepare library", not the
+            # later Test23 "Find Books"/"Identify Books & Covers" buttons.
+            root=view(out,"test14-setup-after-folder")
+            available="|".join(labels(root)).lower()
+            if "prepare library" in available:
+                request_page(profile,out,"Prepare library",timeout=45)
+                result["identification"]=trace_screen(profile,out,"identification",timeout=MAX_STAGE_S)
+            elif "review " in available or "keep current layout" in available:
+                result["identification"]={"seconds":0,"settled":True,
+                    "detail":"Preparation auto-completed on folder selection"}
+            else:
+                result["identification"]=trace_screen(profile,out,"identification",timeout=MAX_STAGE_S)
+        else:
+            request_page(profile,out,"Find Books")
+            result["discovery"]=trace_screen(profile,out,"discovery",timeout=240,
+                                             settled_words=("Identify Books & Covers",))
+            request_page(profile,out,"Identify Books & Covers")
+            result["identification"]=trace_screen(profile,out,"identification",timeout=MAX_STAGE_S,
+                              settled_words=("Finish setup","Review 12 books","Review 24 books","Review 85 books"))
         root=view(out,"identify-complete")
         result["review_count"]=review_count(labels(root))
         result["editor"]=inspect_editor(out)
@@ -347,6 +365,9 @@ def process_profile(profile,apk):
             result["reason"]="Android UI reports "+str(result["review_count"])+" reviewed works; expected 12"
         if result["review_count"] is None:
             result["warning"]="No review count visible; native catalogue must be checked"
+            if LEGACY_TEST14:
+                result["status"]="failed"
+                result["reason"]="No observable Test14 review count: cannot establish 12-work grouping"
     except Exception as exc:
         result["status"]="failed"
         result["reason"]=str(exc)
@@ -382,20 +403,22 @@ def process_profile(profile,apk):
                     result["status"]="failed"
                     result["reason"]=("Native scanner incorrectly fragmented 12 known books at phases "+
                        str(result["phase_works"]))
-                if not results_by_phase.get("finish"):
+                if not results_by_phase.get("finish") and not LEGACY_TEST14:
                     result["status"]="failed"
                     if not result.get("reason"):
                         result["reason"]="Native Identify never reached the final finish checkpoint"
-            elif not result.get("reason"):
+            elif not result.get("reason") and not LEGACY_TEST14:
                 result["status"]="failed"
                 result["reason"]="No native scanner trace available; cannot claim actual media scan passed"
+            elif LEGACY_TEST14:
+                result["catalogue_note"]="Legacy Test14 predates the Test23 phase trace; compare Android review count and screenshots"
         except Exception as e:result["catalogue_error"]=str(e)
         (out/"result.json").write_text(json.dumps(result,indent=2,default=str)+"\n")
         log("RESULT "+profile+" "+json.dumps({k:v for k,v in result.items() if k not in ("traceback","discovery","identification")})[:2500])
     return result
 
 def main():
-    if len(sys.argv)<2:raise RuntimeError("Usage: android-media-acceptance.py <verified Test23.apk>")
+    if len(sys.argv)<2:raise RuntimeError("Usage: android-media-acceptance.py <exact built Android APK>")
     apk=sys.argv[1]
     manifest=json.loads((MEDIA/"manifest.json").read_text())
     log("EXPECTED INPUT "+json.dumps(manifest)[:1800])
