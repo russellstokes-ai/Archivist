@@ -104,6 +104,8 @@ jobs:
           cd "$RUNNER_TEMP/test14-original"
           echo '2e05f43f24db5d4bb3a0844af872239cddf56d086942f94e86bfe8e0ed226fc5  Archivist-0.9.4-test-14-scanner.apk' | sha256sum -c -
           echo 'EXACT ORIGINAL TEST 14 APK VERIFIED - NO REBUILD'
+      - name: Install fixture audio encoder
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Generate small/large synthetic audiobook fixtures
         shell: bash
         run: |
@@ -194,7 +196,6 @@ jobs:
               chosen=tap_label(['Add device folder','Add a folder','Add folder'],name+'-choose')
               if chosen:
                 for options,label in [
-                  (['Browse','Internal storage','Pixel_6','sdk_gphone64_x86_64'],name+'-storage'),
                   (['Download','Downloads'],name+'-download'),
                   (['Test14'],name+'-root'),
                   ([name],name+'-library'),
