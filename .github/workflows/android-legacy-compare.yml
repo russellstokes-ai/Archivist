@@ -1,0 +1,122 @@
+name: Android Legacy APK Grouping Comparison
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/android-legacy-apk-compare-20261009
+    paths:
+      - '.github/workflows/android-legacy-compare.yml'
+      - '.github/scripts/android-media-acceptance.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-legacy-comparison-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  legacy-apk-comparison:
+    name: Real Android Test ${{ matrix.test }} — 342 MP3, 12 audiobooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - test: '17'
+            tag: v0.9.4-testing.17-smart-search
+            apk: Archivist-0.9.4-test-17-smart-search.apk
+            digest: 537f11002cd2d1a8baf2735f5589ba6ea01b270adb92b24effae553adefa8ecc
+          - test: '18'
+            tag: v0.9.4-testing.18-editor-render
+            apk: Archivist-0.9.4-test-18-editor-render.apk
+            digest: 352ef1f467f2a19322804ccb5d26b31f3325ede5393b10a26ccc2b6174748578
+          - test: '20'
+            tag: v0.9.4-testing.20-work-grouping
+            apk: Archivist-0.9.4-test-20-work-grouping.apk
+            digest: e52031f95796dc31c34b7d5517153b0e7fceabc84822e3c5acde347ceb830805
+    steps:
+      - name: Checkout test-only comparison harness
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download exact historical APK and verify fingerprint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p android-acceptance-input android-acceptance-results
+          gh release download '${{ matrix.tag }}' \
+            --repo russellstokes-ai/Archivist \
+            --pattern '${{ matrix.apk }}' \
+            --dir android-acceptance-input
+          printf '%s  %s\n' '${{ matrix.digest }}' 'android-acceptance-input/${{ matrix.apk }}' | sha256sum -c -
+          echo "Verified unchanged released APK: Test ${{ matrix.test }}"
+
+      - name: Generate 342 genuine MP3 tracks from 12 audiobooks
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          python3 -m pip install --disable-pip-version-check 'mutagen==1.47.0'
+          python3 .github/scripts/android-fixture-media.py android-media-fixtures
+          test "$(find android-media-fixtures/diagnostic342 -type f -name '*.mp3' | wc -l)" -eq 342
+
+      - name: Enable Android hardware acceleration
+        run: |
+          set -euo pipefail
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            ls -l /dev/kvm
+          else
+            echo "::warning::KVM unavailable on runner; Android emulator will be slow."
+          fi
+
+      - name: Native scan historical APK using original Prepare library button
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          emulator-build: 14214601
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash -lc 'ARCHIVIST_LEGACY_FLOW=1 ARCHIVIST_CANDIDATE="Test ${{ matrix.test }}" FIXTURE_PROFILES=diagnostic342 python3 .github/scripts/android-media-acceptance.py "$GITHUB_WORKSPACE/android-acceptance-input/${{ matrix.apk }}"'
+
+      - name: Report native results, not unit-test claims
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          output=Path("android-acceptance-results/summary.json")
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              print("### Real Android version comparison — Test ${{ matrix.test }}",file=f)
+              if output.exists():
+                  results=json.loads(output.read_text()).get("results",[])
+                  for result in results:
+                      print(f"- {result.get('profile')}: **{result.get('status')}**, review cards: {result.get('review_count')} (expected 12), SQLite file records: {result.get('catalogue',{}).get('physical_count')}, reason: {result.get('reason','none')}",file=f)
+                  print(json.dumps(results)[:15000])
+              else:
+                  print("Native emulator did not produce a result; inspect failure logs",file=f)
+          PY
+
+      - name: Preserve real native screenshots, UI hierarchy, SQLite and logcat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Legacy-Test-${{ matrix.test }}-Native-342-MP3-Results
+          path: |
+            android-acceptance-results/
+            android-media-fixtures/manifest.json
+          retention-days: 30
+          if-no-files-found: warn
