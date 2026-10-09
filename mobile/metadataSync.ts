@@ -126,9 +126,15 @@ function fileStem(uri:string){
   const parts=decodedPathParts(uri);
   return clean((parts[parts.length-1]||'').replace(/\.[^.]+$/,''));
 }
+// Recognise physical disc/part *containers*, never regular numbered novels.
+// Restore Test13's stable enclosing-book identity across audiobook parts.
+function isAudioPartDirectory(label:string){
+  return /^(?:cd|disc|disk|part|pt)\s*[-._#]?\s*\d{1,3}(?:\s*(?:of|\/)\s*\d{1,3})?$/i.test(clean(label));
+}
 function audioBookFolderTitle(uri:string){
   const parts=decodedPathParts(uri);
-  const parent=clean(parts[parts.length-2]||'');
+  const lastDir=clean(parts[parts.length-2]||'');
+  const parent=isAudioPartDirectory(lastDir)?clean(parts[parts.length-3]||''):lastDir;
   if(!parent||isLibraryRootLabel(parent))return '';
   const indexed=parent.match(/^(?:(?:book|bk|vol(?:ume)?)\s*)?#?\s*\d+(?:\.\d+)?\s*[-._:]\s*(.+)$/i);
   return clean(indexed?.[1]||parent);
@@ -146,15 +152,15 @@ function rootAudioIdentityKey(book:SynchronizableBook){
   const scope=normal(book.space||'library');
   const id=normal(book.asin||book.isbn||'');
   if(id)return 'audio-root:'+scope+':id:'+id;
+  // A root-level multipart filename carries the stable book title. ID3 album
+  // and artist tags can vary or be missing on individual chapters. Prefer the
+  // shared filename family so online/embedded enrichment cannot split a work.
+  const family=rootAudioTrackFamily(fileStem(book.uri));
+  if(family)return 'audio-root:'+scope+':name:'+normal(family);
   const workTitle=albumWorkTitle(book.embeddedMetadata?.workTitle);
   if(workTitle){
     const author=normal(book.author||'');
     return 'audio-root:'+scope+':work:'+normal(workTitle)+(author?'|'+author:'');
-  }
-  const family=rootAudioTrackFamily(fileStem(book.uri));
-  if(family){
-    const author=normal(book.author||'');
-    return 'audio-root:'+scope+':name:'+normal(family)+(author?'|'+author:'');
   }
 
   // If the selected source is the audiobook folder itself, generic tracks such
@@ -281,6 +287,23 @@ function shouldGroupAudioBooks(books:SynchronizableBook[]){
   // nested audiobook folder is identified as a single work, keep it together.
   return audiobookFolderLooksLikeOneWork(books);
 }
+function audioPartParentDirectoryKey(book:SynchronizableBook){
+  const parts=decodedPathParts(book.uri);
+  const dirs=parts.slice(0,-1).filter(Boolean);
+  const final=dirs[dirs.length-1]||'';
+  if(!isAudioPartDirectory(final)||dirs.length<2)return '';
+  const parent=dirs[dirs.length-2]||'';
+  if(!parent||looksLikeLibraryContainer(parent))return '';
+  // Do not collapse an author/series folder that happens to contain CD 1/2:
+  // require the part container to sit inside a distinct book folder beneath
+  // the user's chosen library root.
+  const root=book.rootUri?decodedPathParts(book.rootUri):[];
+  if(root.length){
+    const underRoot=root.length<=dirs.length&&root.every((v,i)=>normal(v)===normal(dirs[i]));
+    if(!underRoot||dirs.length<=root.length+1)return '';
+  }
+  return (book.space||'')+':'+dirs.slice(0,-1).map(normal).join('/');
+}
 export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
   const result=new Map<string,string>();
   const directories=new Map<string,T[]>();
@@ -288,7 +311,10 @@ export function audioWorkGroupKeys<T extends SynchronizableBook>(books:T[]){
   const rootUngrouped:T[]=[];
   for(const book of books){
     if(book.format!=='Audio')continue;
-    const dir=audioDirectoryKey(book);
+    // Treat CD 1 / CD 2 (or Part 1 / Part 2) as chapters of the parent
+    // book, not independent works. Existing album and standalone-series
+    // guards still protect genuinely separate titles.
+    const dir=audioPartParentDirectoryKey(book)||audioDirectoryKey(book);
     if(!dir){
       const rootKey=rootAudioIdentityKey(book);
       if(rootKey){
