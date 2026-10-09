@@ -69,7 +69,7 @@ jobs:
           echo "$EXPECTED_SHA  android-acceptance-input/$TEST_APK" | sha256sum -c -
           echo "Verified exact historical release $TEST_TAG"
 
-      - name: Generate real audiobook library: 342 files, 12 works, complex structure
+      - name: Generate real audiobook library with 342 files and 12 works
         run: |
           set -euo pipefail
           if ! command -v ffmpeg >/dev/null 2>&1; then
