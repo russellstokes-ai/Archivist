@@ -1,0 +1,125 @@
+name: Android Historical APK Comparison — 342 actual audio tracks
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/android-historical-apk-compare-20261009
+    paths:
+      - '.github/workflows/android-historical-apk-comparison.yml'
+      - '.github/scripts/android-historical-acceptance.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: historical-android-comparison-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: "Historical Test ${{ matrix.test }}: 342 real MP3s"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include:
+          - test: 13
+            tag: v0.9.4-testing.13
+            apk: Archivist-0.9.4-test-13.apk
+            sha256: d0284430a8ee3d3da06c434d0993aeef5398ce727aacf346635c5530b3ec067a
+          - test: 17
+            tag: v0.9.4-testing.17-smart-search
+            apk: Archivist-0.9.4-test-17-smart-search.apk
+            sha256: 537f11002cd2d1a8baf2735f5589ba6ea01b270adb92b24effae553adefa8ecc
+          - test: 18
+            tag: v0.9.4-testing.18-editor-render
+            apk: Archivist-0.9.4-test-18-editor-render.apk
+            sha256: 352ef1f467f2a19322804ccb5d26b31f3325ede5393b10a26ccc2b6174748578
+          - test: 20
+            tag: v0.9.4-testing.20-work-grouping
+            apk: Archivist-0.9.4-test-20-work-grouping.apk
+            sha256: e52031f95796dc31c34b7d5517153b0e7fceabc84822e3c5acde347ceb830805
+          - test: 21
+            tag: v0.9.4-testing.21-scanner-book-loader
+            apk: Archivist-0.9.4-test-21-scanner-book-loader.apk
+            sha256: f6064e53d205cdeb0cb84fa48f4fd55ec3b8316dbf307fbcc6bd5ea16df784f9
+
+    steps:
+      - name: Checkout comparison harness only
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download and SHA256-verify the *original unchanged* Test ${{ matrix.test }} APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST_TAG: ${{ matrix.tag }}
+          TEST_APK: ${{ matrix.apk }}
+          EXPECTED_SHA: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir -p android-acceptance-input android-acceptance-results
+          gh release download "$TEST_TAG" --repo russellstokes-ai/Archivist --pattern "$TEST_APK" --dir android-acceptance-input
+          echo "$EXPECTED_SHA  android-acceptance-input/$TEST_APK" | sha256sum -c -
+          echo "Verified exact historical release $TEST_TAG"
+
+      - name: Generate real audiobook library: 342 files, 12 works, complex structure
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          python -m pip install --disable-pip-version-check 'mutagen==1.47.0'
+          python .github/scripts/android-fixture-media.py android-media-fixtures
+          test "$(find android-media-fixtures/diagnostic342 -type f -name '*.mp3' | wc -l)" -eq 342
+
+      - name: Enable Android hardware acceleration
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; ls -l /dev/kvm; fi
+
+      - name: Use the *historical APK* to Prepare library through Android's real folder picker
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          emulator-build: 14214601
+          emulator-boot-timeout: 600
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash -lc 'ACCEPTANCE_RELEASE="Test${{ matrix.test }}" python3 .github/scripts/android-historical-acceptance.py "$GITHUB_WORKSPACE/android-acceptance-input/${{ matrix.apk }}"'
+
+      - name: Report observed native book count (even if the test failed)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          path=Path("android-acceptance-results/summary.json")
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              print("## Historical Archivist real-device grouping",file=f)
+              if path.exists():
+                  report=json.loads(path.read_text())
+                  print("Test:",report.get("release")," | Android result:",report.get("status")," | Review count:",report.get("review_count")," | Scan seconds:",report.get("preparation_seconds")," | Error:",report.get("reason"),file=f)
+                  print(json.dumps({k:report.get(k) for k in ("release","status","review_count","preparation_seconds","reason")}))
+              else:
+                  print("No scan result: Android runner failed before onboarding",file=f)
+          PY
+
+      - name: Preserve screenshots, app logs and native test result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Archivist-Historical-Test-${{ matrix.test }}-342-MP3-Android-Results
+          path: |
+            android-acceptance-results/
+            android-media-fixtures/manifest.json
+          retention-days: 30
+          if-no-files-found: warn
