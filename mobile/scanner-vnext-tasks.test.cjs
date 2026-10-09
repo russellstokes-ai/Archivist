@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+assert.ok(fs.existsSync(__dirname+'/scannerVNext/tasks.ts'),'Bounded lifecycle-aware scheduler must exist');
+const {BoundedTasks}=require('./scannerVNext/tasks.ts');
+(async()=>{
+ const tasks=new BoundedTasks({slots:2,queueCapacity:1,deadlineMs:15});const releases=[];let starts=0;
+ const blocking=()=>{starts++;return new Promise(resolve=>releases.push(resolve));};
+ const first=tasks.run(blocking,0),second=tasks.run(blocking,0),queued=tasks.run(blocking,0);
+ assert.equal((await tasks.run(blocking,0)).state,'queue-full');
+ assert.equal((await first).state,'timeout');assert.equal((await second).state,'timeout');assert.equal((await queued).state,'circuit-open');
+ assert.deepEqual(tasks.snapshot(),{active:2,queued:0,quarantined:2,generation:0});assert.equal(starts,2);
+ assert.equal((await tasks.run(blocking,0)).state,'circuit-open');assert.equal(starts,2,'Timeout must not launch replacement workers');
+ releases.forEach(resolve=>resolve('late'));await new Promise(resolve=>setTimeout(resolve,0));assert.equal(tasks.snapshot().active,0);assert.equal(tasks.snapshot().quarantined,0);
+ assert.deepEqual(await tasks.run(async()=>7,0),{state:'ok',value:7});
+ const cancellation=new BoundedTasks({slots:1,queueCapacity:2,deadlineMs:100});let late;
+ const active=cancellation.run(signal=>new Promise(resolve=>{late=resolve;signal.addEventListener('abort',()=>{});}),0);
+ const pending=cancellation.run(async()=>99,0);cancellation.cancelGeneration();
+ assert.equal((await active).state,'cancelled');assert.equal((await pending).state,'cancelled');assert.equal(cancellation.snapshot().active,1);
+ late(123);await new Promise(resolve=>setTimeout(resolve,0));assert.equal(cancellation.snapshot().active,0);
+ assert.equal((await cancellation.run(async()=>10,0)).state,'stale');assert.equal((await cancellation.run(async()=>10,1)).state,'ok');
+ assert.equal((await cancellation.run(async()=>{throw new Error('corrupt data');},1)).state,'error');
+ console.log('PASS: bounded workers/queue, timeout quarantine without replacements, circuit breaker, late-result suppression, generation cancellation and recovery');
+})().catch(e=>{console.error(e);process.exitCode=1;});

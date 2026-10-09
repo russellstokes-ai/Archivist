@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="Archivist native test lab" android:allowBackup="false">
+        <provider android:name="app.archivist.scannerlab.FixtureDocumentsProvider"
+            android:authorities="app.archivist.scannerlab.documents"
+            android:process=":fixture" android:exported="true"
+            android:grantUriPermissions="true" android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter>
+        </provider>
+    </application>
+</manifest>
