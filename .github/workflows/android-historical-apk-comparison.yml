@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/android-historical-apk-comparison.yml'
       - '.github/scripts/android-historical-acceptance.py'
+      - '.github/scripts/android-historical-visual-acceptance.py'
 
 permissions:
   contents: read
@@ -84,7 +85,7 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; ls -l /dev/kvm; fi
 
-      - name: Use the *historical APK* to Prepare library through Android's real folder picker
+      - name: Control historical APK through Android SAF with native screenshots
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -94,7 +95,7 @@ jobs:
           emulator-boot-timeout: 600
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash -lc 'ACCEPTANCE_RELEASE="Test${{ matrix.test }}" python3 .github/scripts/android-historical-acceptance.py "$GITHUB_WORKSPACE/android-acceptance-input/${{ matrix.apk }}"'
+          script: bash -lc 'ACCEPTANCE_RELEASE="Test${{ matrix.test }}" python3 .github/scripts/android-historical-visual-acceptance.py "$GITHUB_WORKSPACE/android-acceptance-input/${{ matrix.apk }}"'
 
       - name: Report observed native book count (even if the test failed)
         if: always()
@@ -107,7 +108,7 @@ jobs:
               print("## Historical Archivist real-device grouping",file=f)
               if path.exists():
                   report=json.loads(path.read_text())
-                  print("Test:",report.get("release")," | Android result:",report.get("status")," | Review count:",report.get("review_count")," | Scan seconds:",report.get("preparation_seconds")," | Error:",report.get("reason"),file=f)
+                  print("Test:",report.get("release")," | Screenshots:",report.get("state")," | Visual review required",file=f)
                   print(json.dumps({k:report.get(k) for k in ("release","status","review_count","preparation_seconds","reason")}))
               else:
                   print("No scan result: Android runner failed before onboarding",file=f)
