@@ -2,7 +2,7 @@
   "expo": {
     "name": "Archivist Test 24",
     "slug": "archivist",
-    "version": "0.9.4",
+    "version": "0.9.4-test24",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
