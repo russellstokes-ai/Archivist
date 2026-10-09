@@ -1,0 +1,227 @@
+name: Validate original Test 14 APK only
+
+on:
+  push:
+    branches:
+      - validation/test14-exact-apk-only-20261009
+    paths:
+      - .github/workflows/test14-exact-apk-only.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  simulated-work-grouping:
+    name: Exact Test 14 source - workload simulations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install original source dependencies
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+      - name: Execute original Test 14 work grouping tests
+        working-directory: mobile
+        run: node local-works.test.cjs
+      - name: Run 12, 85 and 500-work synthetic cases against original modules
+        working-directory: mobile
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const ts=require('typescript');
+          const {performance}=require('node:perf_hooks');
+          require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,p);
+          const {groupLocalWorks}=require('./localWorks.ts');
+          const {assessLocalWorkPublication}=require('./publicationPipeline.ts');
+          const sha='3c8c577e4d83d3f12f39ba73fe2abcdcdf6547e2';
+          console.log('SOURCE COMMIT: '+sha);
+          function fixture(n,chapterWorks,chapters){
+            const items=[];
+            for(let i=0;i<n;i++){
+              const number=i+1, multipart=i<chapterWorks;
+              const author='Author '+String(number).padStart(3,'0');
+              const title='Book '+String(number).padStart(3,'0');
+              const parts=multipart?chapters:1;
+              for(let part=1;part<=parts;part++){
+                const file=multipart?String(part).padStart(2,'0')+' - Chapter.mp3':title+'.m4b';
+                const path=multipart?'Audio/'+author+'/'+title+'/'+file:'Audio/'+author+'/'+file;
+                items.push({
+                  id:items.length+1,
+                  uri:'content://com.android.externalstorage.documents/document/primary:'+encodeURIComponent(path),
+                  title:multipart?'Chapter '+part:title,
+                  author,
+                  series:'',
+                  genre:'',
+                  format:'Audio',
+                  space:'Audiobooks',
+                  available:true,
+                  coverShape:'square',
+                  coverUri:'file:///covers/'+number+'.jpg',
+                  libraryCoverUri:'file:///covers/'+number+'.jpg',
+                  livingBookCoverUri:'file:///covers/'+number+'.jpg',
+                  embeddedMetadata:multipart?{workTitle:title,trackNumber:part}:undefined,
+                  metadataSource:'path',
+                  metadataFieldConfidence:{title:'high',author:'high'},
+                  metadataProvenance:{title:'path',author:'path'},
+                });
+              }
+            }
+            return items;
+          }
+          const cases=[['small',12,4,12],['medium',85,20,36],['large',500,100,36]];
+          let failed=0;
+          for(const [name,count,chapterWorks,chapters] of cases){
+            const media=fixture(count,chapterWorks,chapters);
+            const start=performance.now();
+            const grouped=groupLocalWorks(media);
+            const elapsed=(performance.now()-start).toFixed(1);
+            const multipart=grouped.filter(w=>w.files>1).length;
+            const mistakes=grouped.filter(w=>w.files!==(Number(w.title.match(/\d+/)?.[0])<=chapterWorks?chapters:1)).length;
+            console.log(JSON.stringify({case:name,files:media.length,expectedWorks:count,actualWorks:grouped.length,multipartWorks:multipart,groupingErrors:mistakes,groupMilliseconds:elapsed,heapMB:Math.round(process.memoryUsage().heapUsed/1048576)}));
+            if(grouped.length!==count||mistakes)failed++;
+          }
+          if(failed)process.exit(1);
+          NODE
+
+  original-apk-emulator:
+    name: Install exact original APK; small/large scan probes
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    steps:
+      - name: Download original binary from successful run 37594231281
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/test14-original" "$RUNNER_TEMP/test14-reports"
+          gh run download 37594231281 --repo russellstokes-ai/Archivist -n Archivist-0.9.4-Test-14-scanner-APK -D "$RUNNER_TEMP/test14-original"
+          cd "$RUNNER_TEMP/test14-original"
+          echo '2e05f43f24db5d4bb3a0844af872239cddf56d086942f94e86bfe8e0ed226fc5  Archivist-0.9.4-test-14-scanner.apk' | sha256sum -c -
+          echo 'EXACT ORIGINAL TEST 14 APK VERIFIED - NO REBUILD'
+      - name: Generate small/large synthetic audiobook fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -v error -f lavfi -i anullsrc=r=22050:cl=mono -t 0.6 -codec:a libmp3lame -b:a 32k -y "$RUNNER_TEMP/sample.mp3"
+          python3 - <<'PY'
+          import os,shutil
+          root=os.environ['RUNNER_TEMP']+'/test14-fixtures'
+          os.makedirs(root,exist_ok=True)
+          base=os.environ['RUNNER_TEMP']+'/sample.mp3'
+          for name,works,multiparts,chapters in [('Small',12,4,12),('Large',85,20,36)]:
+            total=0
+            for i in range(1,works+1):
+              author=f'Author {i:03d}'
+              title=f'Book {i:03d}'
+              d=os.path.join(root,name,author,title) if i<=multiparts else os.path.join(root,name,author)
+              os.makedirs(d,exist_ok=True)
+              for j in range(1,chapters+1 if i<=multiparts else 2):
+                filename=f'{j:02d} - Chapter.mp3' if i<=multiparts else title+'.mp3'
+                shutil.copyfile(base,os.path.join(d,filename))
+                total+=1
+            print(f'{name}: {works} works in {total} valid MP3 files')
+          PY
+      - name: Install original Test 14 binary on Android 14 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          emulator-build: 14214601
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            OUT="$RUNNER_TEMP/test14-reports"
+            APK="$RUNNER_TEMP/test14-original/Archivist-0.9.4-test-14-scanner.apk"
+            adb install -r "$APK"
+            adb shell getprop sys.boot_completed > "$OUT/boot.txt"
+            adb shell pm path app.archivist.reader > "$OUT/package.txt"
+            adb shell mkdir -p /sdcard/Download/Test14
+            adb push "$RUNNER_TEMP/test14-fixtures/Small" /sdcard/Download/Test14/ > "$OUT/adb-push-small.txt"
+            adb push "$RUNNER_TEMP/test14-fixtures/Large" /sdcard/Download/Test14/ > "$OUT/adb-push-large.txt"
+            adb logcat -c || true
+            cat > "$RUNNER_TEMP/test14-ui.py" <<'PY'
+            import subprocess,os,time,re,xml.etree.ElementTree as ET,json
+            out=os.environ['RUNNER_TEMP']+'/test14-reports'
+            def adb(*args,timeout=30):
+              p=subprocess.run(['adb',*args],capture_output=True,text=True,timeout=timeout)
+              if p.returncode:print('ADB ERROR',args,p.stderr[-400:])
+              return p.stdout
+            def capture(tag):
+              adb('shell','uiautomator','dump','/sdcard/test14-window.xml',timeout=60)
+              xml=adb('exec-out','cat','/sdcard/test14-window.xml')
+              open(out+'/'+tag+'.xml','w').write(xml)
+              subprocess.run(['adb','exec-out','screencap','-p'],stdout=open(out+'/'+tag+'.png','wb'),timeout=30)
+              try:
+                nodes=list(ET.fromstring(xml).iter('node'))
+                visible=[x.attrib.get('text','') or x.attrib.get('content-desc','') for x in nodes]
+                print(tag+' UI: '+json.dumps([x for x in visible if x])[:2500],flush=True)
+                return nodes
+              except Exception as e:
+                print('UI DUMP ERROR',str(e),flush=True)
+                return []
+            def tap_label(options,label,maxtries=5):
+              for trial in range(maxtries):
+                nodes=capture(label+'-'+str(trial))
+                for term in options:
+                  for node in nodes:
+                    a=node.attrib
+                    txt=(a.get('text','')+' '+a.get('content-desc','')).strip().lower()
+                    if term.lower() in txt and a.get('bounds'):
+                      b=list(map(int,re.findall(r'\d+',a['bounds'])))
+                      if len(b)==4:
+                        adb('shell','input','tap',str((b[0]+b[2])//2),str((b[1]+b[3])//2))
+                        print('TAPPED '+term+' in '+txt,flush=True)
+                        time.sleep(3)
+                        return True
+                adb('shell','input','swipe','530','1670','530','850','450')
+                time.sleep(2)
+              return False
+            report=[]
+            for name,workCount,fileCount in [('Small',12,56),('Large',85,785)]:
+              print('BEGIN '+name,flush=True)
+              adb('shell','pm','clear','app.archivist.reader')
+              adb('shell','am','start','-n','app.archivist.reader/.MainActivity')
+              time.sleep(15)
+              capture(name+'-startup')
+              chosen=tap_label(['Add device folder','Add a folder','Add folder'],name+'-choose')
+              if chosen:
+                for options,label in [
+                  (['Browse','Internal storage','Pixel_6','sdk_gphone64_x86_64'],name+'-storage'),
+                  (['Download','Downloads'],name+'-download'),
+                  (['Test14'],name+'-root'),
+                  ([name],name+'-library'),
+                  (['USE THIS FOLDER','Use this folder'],name+'-use-folder'),
+                  (['ALLOW','Allow'],name+'-grant'),
+                ]:
+                  if not tap_label(options,label,maxtries=2):
+                    print('UNAVAILABLE UI STEP: '+label,flush=True)
+                tapped=tap_label(['Prepare library','Prepare Library'],name+'-prepare',maxtries=6)
+              else:
+                tapped=False
+              started=time.monotonic()
+              for t in range(0,151,30):
+                if t:time.sleep(30)
+                capture(name+'-scan-'+str(t))
+              adb('shell','dumpsys','meminfo','app.archivist.reader')
+              report.append({'case':name,'expectedWorks':workCount,'expectedFiles':fileCount,'folderAddPressed':chosen,'preparePressed':tapped,'observedSeconds':round(time.monotonic()-started,1)})
+            open(out+'/probe-summary.json','w').write(json.dumps(report,indent=2))
+            print('PROBE SUMMARY',json.dumps(report),flush=True)
+            PY
+            python3 "$RUNNER_TEMP/test14-ui.py" | tee "$OUT/emulator-probe.log"
+            adb logcat -d > "$OUT/logcat.txt" || true
+      - name: Archive emulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-test14-emulator-probes
+          path: ${{ runner.temp }}/test14-reports/
+          if-no-files-found: warn
+          retention-days: 7
