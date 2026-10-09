@@ -22,7 +22,7 @@ assert.ok(workflow.includes('sourceCommit:sha'),'source fingerprint must come fr
 const upgraded=fs.readFileSync(__dirname+'/../.github/workflows/android-test24-gate.yml','utf8');
 assert.ok(upgraded.includes('342-file library')&&upgraded.includes('Publish direct APK only after native acceptance passes'),
   'Test24 release MUST be gated on a real 342-MP3 Android scan, never code tests alone');
-assert.ok(upgraded.includes('Archivist-Test-24.apk')&&upgraded.includes('versionCode')===false,
+assert.ok(upgraded.includes('Archivist-Test-24.apk')&&upgraded.includes('versionCode'),
   'Test24 candidate must be distinguishable by direct APK filename');
 const installedName=fs.readFileSync(__dirname+'/android/app/src/main/res/values/strings.xml','utf8');
 assert.ok(installedName.includes('Archivist Test 24'),'installed launcher label must identify the Test24 build');
