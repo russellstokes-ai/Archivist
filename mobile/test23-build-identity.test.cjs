@@ -9,7 +9,7 @@ assert.equal(app.expo.android.package,'app.archivist.reader','upgrades MUST keep
 assert.equal(app.expo.android.versionCode,109,'Test24 must supersede Test23 code108');
 assert.match(gradle,/versionCode\s+109/);
 assert.match(gradle,/versionName\s+"0\.9\.4-test24"/);
-assert.equal(stamp.candidate,'Test 24 SAF work-grouping candidate');
+assert.equal(stamp.candidate,'Test 24 SAF work-grouping');
 assert.ok(source.includes("import buildStamp from './buildStamp.json'"));
 assert.ok(source.includes("buildStamp.sourceCommit.slice(0,9)"),'Settings About must show exact source fingerprint');
 assert.ok(source.includes('Export scanner trace'),'real device must be able to export stage timing evidence');
