@@ -40,15 +40,14 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            cd mobile/android
-            ./gradlew -p ../scanner-test-lab :app:connectedDebugAndroidTest --console=plain
+          script: bash .github/scripts/scanner-native-lab.sh
       - name: Collect Android diagnostics
         if: always()
         run: |
           mkdir -p scanner-native-results
-          adb logcat -d -s ScannerVNextLab:I '*:S' > scanner-native-results/metrics.log || true
-          adb shell dumpsys meminfo app.archivist.scannerlab > scanner-native-results/memory.log || true
+          if [ ! -f scanner-native-results/metrics.log ]; then
+            echo 'No Android runtime diagnostics: emulator tests did not reach collection.' > scanner-native-results/not-run.txt
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
