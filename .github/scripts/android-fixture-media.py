@@ -144,8 +144,67 @@ def diagnostic342():
             "purpose":"Reproduce the app's 342-discovered / 89-group / 69-single-file diagnostic class",
             "work_sizes":cases}
 
+def large2880():
+    """120 independent audiobooks with 2,880 genuine MP3s.
+
+    Six physical layouts, deliberately inconsistent ID3 albums, genuine cover
+    samples and root-level loose multipart chapters. Counts are fully known.
+    """
+    from mutagen.id3 import APIC
+    root=OUT/"large2880"
+    cases=[]
+    count=0
+    cover=OUT/"large-cover.png"
+    subprocess.run([
+        "ffmpeg","-nostdin","-hide_banner","-loglevel","error","-y",
+        "-f","lavfi","-i","color=c=0x304d68:s=256x384:d=1",
+        "-frames:v","1",str(cover)
+    ],check=True,timeout=35)
+    image=cover.read_bytes()
+    for work in range(120):
+        number=work+1
+        title=f"Large Library Work {number:03d}"
+        author=f"QA Writer {work//8+1:02d}"
+        series=f"QA Series {work//4+1:02d}"
+        layout=work%6
+        for chapter in range(1,25):
+            disc="CD 01" if chapter<=12 else "CD 02"
+            if layout==0:directory=root/author/title
+            elif layout==1:directory=root/author/title/disc
+            elif layout==2:directory=root/author/series/title/disc
+            elif layout==3:directory=root
+            elif layout==4:directory=root/series/title
+            else:directory=root/author/series/title/("Part 1" if chapter<=12 else "Part 2")
+            stem=f"{title} - Part {chapter:02d}" if layout==3 else f"{chapter:02d} - Chapter {chapter:02d}"
+            directory.mkdir(parents=True,exist_ok=True)
+            dest=directory/(stem+".mp3")
+            shutil.copyfile(template,dest)
+            if chapter%17==0:album=""
+            elif chapter%13==0:album=f"Disc {chapter//12+1}"
+            elif chapter%11==0:album=f"Chapter {chapter:02d}"
+            elif chapter%7==0:album=title+" (Disc 2)"
+            else:album=title
+            tags=ID3()
+            tags.add(TIT2(encoding=3,text=stem))
+            if album:tags.add(TALB(encoding=3,text=album))
+            if chapter%9!=0:tags.add(TPE1(encoding=3,text=author))
+            tags.add(TRCK(encoding=3,text=str(chapter)))
+            tags.add(TPOS(encoding=3,text="1" if chapter<=12 else "2"))
+            if chapter==1 and work%8==0:
+                tags.add(APIC(encoding=3,mime="image/png",type=3,
+                              desc="Front cover",data=image))
+            tags.save(dest,v2_version=3)
+            count+=1
+        cases.append({"ordinal":number,"chapters":24,"layout":layout,"title":title})
+    cover.unlink(missing_ok=True)
+    assert count==2880
+    return {"profile":"large2880","physical_mp3":2880,
+            "expected_logical_works":120,"has_actual_id3_tags":True,
+            "real_decodable_mp3":True,"layouts":6,"embedded_cover_work_count":15,
+            "work_sizes":cases}
+
 try:
-    manifests=[make("grouped"),make("split-discs"),diagnostic342()]
+    manifests=[make("grouped"),make("split-discs"),diagnostic342(),large2880()]
     template.unlink()
     (OUT/"manifest.json").write_text(json.dumps({"profiles":manifests},indent=2)+"\n")
     for entry in manifests:print("FIXTURE",json.dumps(entry))
