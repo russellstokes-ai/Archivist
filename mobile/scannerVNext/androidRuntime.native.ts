@@ -1,12 +1,12 @@
-import {createAndroidSourceAccess,createAndroidClueReader,createAndroidArchiveReader,createAndroidArtworkReader} from './nativeAccess.native';
-import {openScannerDatabase} from './store.native';
+import {createAndroidSourceAccess,createAndroidClueReader,createAndroidArchiveReader,createAndroidArtworkReader} from './androidAccess.native';
+import {openScannerDatabase} from './androidStore.native';
 import {createCatalogueRuntime,documentUri} from './runtime';
 import {createClueCache} from './clueCache';
 import {collectWorkClues,type ClueAsset} from './collectClues';
 import {createSearchCache,type WorkFields} from './fieldEvidence';
 import {SearchService,sharedRequestQueue} from './search';
 import {createBookProviders} from './providers';
-import {requestProviderJson} from './providers.native';
+import {requestProviderJson} from './androidProviders.native';
 import type {MetadataSettings} from '../metadataSettings';
 import type {Source} from './types';
 import type {PipelineAsset} from './pipeline';

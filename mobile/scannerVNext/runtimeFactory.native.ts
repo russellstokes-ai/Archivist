@@ -1,1 +1,1 @@
-export {createAndroidCatalogueRuntime} from './runtime.native';
+export {createAndroidCatalogueRuntime} from './androidRuntime.native';
