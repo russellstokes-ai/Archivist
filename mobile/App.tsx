@@ -48,7 +48,7 @@ import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {groupLocalWorks, LocalWork} from './localWorks';
-import {createAndroidCatalogueRuntime} from './scannerVNext/runtime.native';
+import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';
 import {projectScannerWorks,toFields,type ScannerBook} from './scannerVNext/runtime';
 import type {AssistState} from './scannerVNext/assist';
 import {normalizeGenre} from './scannerVNext/genre';

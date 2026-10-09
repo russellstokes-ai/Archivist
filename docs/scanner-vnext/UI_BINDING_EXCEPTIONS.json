@@ -1,7 +1,7 @@
 {
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
-  "updatedSha256": "ee99f7885106fa9582f147928fbc9337e30373ab814df9224c65f976c59ccc48",
+  "updatedSha256": "f847f79c1d3eb9460b1f00d5ce5d08afb67b7629558957eb2dbc6c4da09efbec",
   "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged",
   "changes": [
     {
@@ -83,6 +83,10 @@
     {
       "old": "setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);});",
       "new": "setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);"
+    },
+    {
+      "old": "import {createAndroidCatalogueRuntime} from './scannerVNext/runtime.native';",
+      "new": "import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';"
     }
   ]
 }

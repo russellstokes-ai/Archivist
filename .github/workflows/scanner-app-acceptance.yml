@@ -57,6 +57,8 @@ jobs:
         with:
           name: scanner-app-evidence-${{ github.sha }}
           path: |
+            mobile/android/app/build/reports/lint-results-release.*
+            mobile/android/app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt
             scanner-app-results/*.json
             scanner-app-results/*.xml
             scanner-app-results/*.png

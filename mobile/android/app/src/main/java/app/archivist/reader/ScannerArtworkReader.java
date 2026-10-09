@@ -4,8 +4,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import android.system.Os;
 import java.security.MessageDigest;
 
 /** Runs only inside the finite native worker pool; never decodes on the UI thread. */
@@ -36,7 +35,8 @@ public final class ScannerArtworkReader {
       StringBuilder hash=new StringBuilder();for(byte value:digest.digest())hash.append(String.format(java.util.Locale.ROOT,"%02x",value&255));File destination=new File(cache,hash+(png?".png":".jpg"));
       synchronized(ScannerArtworkReader.class){
         token.check();File[] files=cache.listFiles();if(files==null||files.length>MAX_FILES)throw new IOException("Artwork cache file budget exceeded");long bytes=0;for(File file:files){bytes+=file.length();if(bytes>MAX_CACHE_BYTES)throw new IOException("Artwork cache byte budget exceeded");}
-        Files.move(temporary.toPath(),destination.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);temporary=null;
+        // Same-directory POSIX rename atomically replaces the cache entry on every supported Android API.
+        Os.rename(temporary.getAbsolutePath(),destination.getAbsolutePath());temporary=null;
       }
       token.check();return new Artwork(destination,hash.toString(),total,width,height);
     }finally{if(temporary!=null)temporary.delete();}
