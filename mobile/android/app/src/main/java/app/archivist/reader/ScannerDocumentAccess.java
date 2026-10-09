@@ -32,7 +32,7 @@ public final class ScannerDocumentAccess {
       // is available with tree grants on API 21; require an explicit true result.
       Bundle input=new Bundle();input.putParcelable("uri",DocumentsContract.buildDocumentUriUsingTree(root,rootId));
       input.putParcelable("android.content.extra.TARGET_URI",document);
-      Bundle result=resolver.call(root.getAuthority(),"android:isChildDocument",null,input);
+      Bundle result=resolver.call(root,"android:isChildDocument",null,input);
       token.check();
       if(result==null||!result.containsKey("result")||!result.getBoolean("result"))throw new SecurityException("Document is outside the selected tree or cannot be verified");
     }
