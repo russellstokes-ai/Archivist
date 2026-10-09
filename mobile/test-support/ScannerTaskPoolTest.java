@@ -57,6 +57,22 @@ public final class ScannerTaskPoolTest {
       reads.submit("blocked-read",token->ScannerBoundedIO.readHeader(t->new InputStream(){public int read(){reading.countDown();awaitIgnoringInterrupts(returnRead);return 42;}public void close(){closesAfterCancel.incrementAndGet();}},4,token),result->{check("cancelled".equals(result.state),"Blocked read cancellation");cancelRead.countDown();});
       check(reading.await(3,TimeUnit.SECONDS),"Stream read genuinely blocked");reads.cancel("blocked-read");check(cancelRead.await(3,TimeUnit.SECONDS),"Caller unblocked by cancellation");check(reads.stats().active==1,"Blocked read retains slot");returnRead.countDown();waitFor(()->closesAfterCancel.get()==1,"Late read closes descriptor-owning stream");
     }finally{reads.close();}
-    System.out.println("PASS: actual JVM native workers; ignored cancellation, finite queue, timeout quarantine, no replacement workers, circuit breaker, late-result suppression, byte budgets and stream cleanup ("+TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)+"ms)");
+    File fixture=File.createTempFile("archivist-range-",".bin");
+    try(ScannerTaskPool ranges=new ScannerTaskPool(1,1,2000)){
+      try(RandomAccessFile output=new RandomAccessFile(fixture,"rw")){output.seek(2*1024*1024);output.write(new byte[]{11,22,33,44,55});}
+      AtomicInteger consumed=new AtomicInteger();AtomicBoolean rangeClosed=new AtomicBoolean();ArrayBlockingQueue<ScannerTaskPool.Result> result=new ArrayBlockingQueue<>(1);
+      ranges.submit("range",token->ScannerBoundedIO.readRange(t->new FileInputStream(fixture){
+        public int read(byte[] b,int off,int len)throws IOException{int n=super.read(b,off,len);if(n>0)consumed.addAndGet(n);return n;}
+        public long skip(long n){throw new AssertionError("Never consume preceding media to reach metadata");}
+        public void close()throws IOException{super.close();rangeClosed.set(!getFD().valid());}
+      },2*1024*1024,4,token),result::add);
+      ScannerTaskPool.Result value=result.poll(3,TimeUnit.SECONDS);check(value!=null&&"ok".equals(value.state),"Seekable range resolves");
+      check(Arrays.equals(((ScannerBoundedIO.Header)value.value).bytes,new byte[]{11,22,33,44}),"Read exact requested range");check(consumed.get()==4&&rangeClosed.get(),"Only requested bytes consumed and descriptor closed");
+      ranges.submit("eof",token->ScannerBoundedIO.readRange(t->new FileInputStream(fixture),fixture.length()+1,4,token),result::add);
+      value=result.poll(3,TimeUnit.SECONDS);check(value!=null&&"ok".equals(value.state)&&((ScannerBoundedIO.Header)value.value).bytes.length==0&&!((ScannerBoundedIO.Header)value.value).budgetReached,"EOF is explicit without unbounded fallback");
+      AtomicInteger invalidOpened=new AtomicInteger();ranges.submit("invalid",token->ScannerBoundedIO.readRange(t->{invalidOpened.incrementAndGet();return new FileInputStream(fixture);},-1,4,token),result::add);
+      value=result.poll(3,TimeUnit.SECONDS);check(value!=null&&"error".equals(value.state)&&invalidOpened.get()==0,"Invalid offset rejected before opening provider");
+    }finally{check(fixture.delete(),"Range fixture removed");}
+    System.out.println("PASS: actual JVM native workers, cancellation, quarantine, bounded seek reads and descriptor cleanup ("+TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)+"ms)");
   }
 }

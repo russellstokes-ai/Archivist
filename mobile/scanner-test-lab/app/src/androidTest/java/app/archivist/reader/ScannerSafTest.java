@@ -82,4 +82,22 @@ public final class ScannerSafTest {
   @Test public void rejectsDocumentsOutsideSelectedTree()throws Exception{
     try(ScannerTaskPool pool=new ScannerTaskPool(2,1,8000)){assertEquals("error",task(pool,"outside",token->documents.readHeader(root,"outside",64,token)).state);}
   }
+  @Test public void seekableReadsReachExactRangeAndCloseDescriptors()throws Exception{
+    try(ScannerTaskPool pool=new ScannerTaskPool(2,128,8000)){
+      ScannerTaskPool.Result seed=task(pool,"seed",token->documents.readHeader(root,"book/000001",64,token));assertEquals("ok",seed.state);
+      byte[] expected=Arrays.copyOfRange(((ScannerBoundedIO.Header)seed.value).bytes,10,14);int before=descriptors();
+      for(int i=0;i<50;i++){
+        ScannerTaskPool.Result result=task(pool,"range",token->documents.readRange(root,"book/000001",10,4,token));assertEquals("ok",result.state);
+        ScannerBoundedIO.Header range=(ScannerBoundedIO.Header)result.value;assertArrayEquals(expected,range.bytes);assertEquals(10,range.offset);assertTrue(range.budgetReached);
+      }
+      assertTrue("Seekable reads close descriptors",descriptors()<=before+2);
+    }
+  }
+  @Test public void nonseekableProviderFailsWithoutCopyingOrLeaking()throws Exception{
+    try(ScannerTaskPool pool=new ScannerTaskPool(2,128,8000)){
+      task(pool,"warm-pipe",token->documents.readRange(root,"book/pipe",2,4,token));int before=descriptors();
+      for(int i=0;i<20;i++)assertEquals("error",task(pool,"pipe",token->documents.readRange(root,"book/pipe",2,4,token)).state);
+      assertTrue("Nonseekable descriptor failures close handles",descriptors()<=before+2);assertEquals(0,pool.stats().quarantined);
+    }
+  }
 }

@@ -49,6 +49,17 @@ public final class FixtureDocumentsProvider extends DocumentsProvider {
     opened.incrementAndGet();
     if(cancellation!=null)cancellation.setOnCancelListener(cancelled::incrementAndGet);
     if(id.equals("slow-open"))delay();
+    if(id.equals("book/pipe")){
+      ParcelFileDescriptor[] pipe=null;
+      try{
+        pipe=ParcelFileDescriptor.createPipe();
+        try(OutputStream output=new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])){output.write(new byte[]{73,68,51,0});}
+        return pipe[0];
+      }catch(IOException error){
+        if(pipe!=null)for(ParcelFileDescriptor end:pipe)try{end.close();}catch(IOException ignored){}
+        FileNotFoundException failure=new FileNotFoundException("Fixture pipe unavailable");failure.initCause(error);throw failure;
+      }
+    }
     return ParcelFileDescriptor.open(seed,ParcelFileDescriptor.MODE_READ_ONLY);
   }
   private static void delay(){long end=android.os.SystemClock.elapsedRealtime()+1500;while(android.os.SystemClock.elapsedRealtime()<end)try{Thread.sleep(20);}catch(InterruptedException ignored){/* Deliberately uncooperative provider. */}}

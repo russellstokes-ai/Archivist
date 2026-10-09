@@ -41,6 +41,11 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
     clues.submit(scopeId,token->{check(scope,token);return documents.readHeader(scope.root,documentId,(int)byteBudget,token);},result->resolve(scope,result,promise));
   }
   private static void check(Scope scope,ScannerTaskPool.Token token){token.check();if(scope.cancelled.get())throw new CancellationException("Scanner scope cancelled");}
+  @ReactMethod public void readRange(String scopeId,String documentId,double offset,double byteBudget,Promise promise){
+    Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
+    if(!Double.isFinite(offset)||offset!=Math.floor(offset)||offset<0||offset>8796093022208L||!Double.isFinite(byteBudget)||byteBudget!=Math.floor(byteBudget)||byteBudget<1||byteBudget>65536){promise.reject("scanner-budget","Invalid bounded range");return;}
+    clues.submit(scopeId,token->{check(scope,token);return documents.readRange(scope.root,documentId,(long)offset,(int)byteBudget,token);},result->resolve(scope,result,promise));
+  }
   private static void resolve(Scope scope,ScannerTaskPool.Result result,Promise promise){
     WritableMap output=Arguments.createMap();String state=scope.cancelled.get()?"cancelled":result.state;output.putString("state",state);
     if(result.reason!=null)output.putString("reason",result.reason);
@@ -49,7 +54,7 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
       for(ScannerDocumentAccess.Entry entry:page.entries){WritableMap item=Arguments.createMap();item.putString("documentId",entry.documentId);item.putString("name",entry.name);if(entry.mimeType!=null)item.putString("mimeType",entry.mimeType);if(entry.size!=null)item.putDouble("size",entry.size);if(entry.modified!=null)item.putDouble("modified",entry.modified);item.putBoolean("directory",entry.directory);entries.pushMap(item);}
       output.putArray("entries",entries);if(page.nextOffset==null)output.putNull("nextOffset");else output.putInt("nextOffset",page.nextOffset);
     }else if("ok".equals(state)&&result.value instanceof ScannerBoundedIO.Header){
-      ScannerBoundedIO.Header header=(ScannerBoundedIO.Header)result.value;output.putString("base64",Base64.encodeToString(header.bytes,Base64.NO_WRAP));output.putInt("bytesRead",header.bytes.length);output.putBoolean("budgetReached",header.budgetReached);output.putString("metadataStatus","header-only");
+      ScannerBoundedIO.Header header=(ScannerBoundedIO.Header)result.value;output.putString("base64",Base64.encodeToString(header.bytes,Base64.NO_WRAP));output.putInt("bytesRead",header.bytes.length);output.putBoolean("budgetReached",header.budgetReached);output.putString("metadataStatus",header.offset<0?"header-only":"bounded-range");if(header.offset>=0)output.putDouble("offset",header.offset);
     }
     promise.resolve(output);
   }

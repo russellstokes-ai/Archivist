@@ -12,6 +12,8 @@ function cache(){const data=new Map();return {async load(id,f){return data.get(i
  const warm=await collectWorkClues(assets,reader,persisted);assert.equal(opens,2);assert.ok(warm.samples.every(s=>s.source==='cache'));assert.equal(warm.bytesRead,0);
  await collectWorkClues([{...assets[0],size:101}],reader,persisted);assert.equal(opens,3);
  const bounded=await collectWorkClues(assets,reader,cache(),{maxBytes:4});assert.equal(bounded.bytesRead,4);assert.equal(bounded.samples.length,1);
+ const shortCache=cache();await collectWorkClues([asset('short')],reader,shortCache,{maxBytes:4});
+ const retried=await collectWorkClues([asset('short')],reader,shortCache);assert.equal(retried.samples[0].source,'read','A short budget must not poison the normal header cache');assert.equal(retried.bytesRead,10);
  const failed=await collectWorkClues([asset('bad'),asset('good')],{async readHeader(a){if(a.assetId==='bad')throw Error('Provider timeout');return {bytes,budgetReached:false};}},cache());
  assert.equal(failed.samples[0].assetId,'good');assert.equal(failed.issues[0].assetId,'bad');assert.equal(failed.issues[0].reason,'clue-read-failed');
  const stop=new AbortController();const stale=cache();

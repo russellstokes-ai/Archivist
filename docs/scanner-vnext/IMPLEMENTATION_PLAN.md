@@ -78,6 +78,7 @@ Files: new scannerVNext/search.ts, providers.ts and fieldEvidence.ts; new mobile
 Interfaces: searchWork(workId, queryEvidence, policy, signal) -> Promise<SearchResult>; acceptCandidate(workId, candidate, expectedRevision) -> Promise<WorkRevision>. Providers expose search/hydrate under the shared request scheduler.
 
 - [ ] Add failing tests for one query unit per multipart work, duplicate editions, wrong author, identifier conflict, offline, 429 Retry-After, timeout, negative cache, explicit retry and manual edit racing an old response.
+- [ ] Add Save-triggered enrichment, sparse input, title punctuation, series/index and story/anthology tests; broaden weak searches across complementary providers and paginate beyond eight candidates. No search action triggers deep file scanning. Conflicting author suggestions require approval.
 - [ ] Implement consent-aware automatic missing-field lookup and selected-work candidate acceptance/Deep Search within specified budgets.
 - [ ] Calibrate matching against confirmed labels; keep uncalibrated or close candidates in Needs Attention.
 - [ ] Record requests/work and cache hits; gate and commit S4.

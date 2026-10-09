@@ -48,21 +48,25 @@ public final class ScannerDocumentAccess {
     }
   }
   public ScannerBoundedIO.Header readHeader(Uri root,String id,int byteBudget,ScannerTaskPool.Token token)throws Exception{
+    return ScannerBoundedIO.readHeader(t->openFile(root,id,t),byteBudget,token);
+  }
+  public ScannerBoundedIO.Header readRange(Uri root,String id,long offset,int byteBudget,ScannerTaskPool.Token token)throws Exception{
+    return ScannerBoundedIO.readRange(t->openFile(root,id,t),offset,byteBudget,token);
+  }
+  private ParcelFileDescriptor.AutoCloseInputStream openFile(Uri root,String id,ScannerTaskPool.Token token)throws Exception{
     Uri uri=document(root,id,token);CancellationSignal cancellation=new CancellationSignal();token.onCancel(cancellation::cancel);
-    return ScannerBoundedIO.readHeader(t->{
       ParcelFileDescriptor descriptor=null;
       // Read-only ContentResolver opens use a typed-asset fallback which can drop
       // cancellation on Android 15. Open the document directly with its signal.
       try(ContentProviderClient provider=resolver.acquireUnstableContentProviderClient(uri)){
         if(provider==null)throw new IllegalStateException("Document provider unavailable");
-        t.check();descriptor=provider.openFile(uri,"r",cancellation);
+        token.check();descriptor=provider.openFile(uri,"r",cancellation);
       }catch(Exception|LinkageError error){
         if(descriptor!=null)try{descriptor.close();}catch(Exception closeError){error.addSuppressed(closeError);}
         throw error;
       }
       if(descriptor==null)throw new IllegalStateException("Provider returned no file descriptor");
       try{return new ParcelFileDescriptor.AutoCloseInputStream(descriptor);}catch(RuntimeException error){descriptor.close();throw error;}
-    },byteBudget,token);
   }
   private static String text(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getString(index);}
   private static Long number(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getLong(index);}

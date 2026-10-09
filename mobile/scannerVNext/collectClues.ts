@@ -38,7 +38,9 @@ export async function collectWorkClues(assets:ClueAsset[],reader:ClueReader,cach
     if(!header||!(header.bytes instanceof Uint8Array)||header.bytes.length>budget||typeof header.budgetReached!=='boolean')throw new Error('Provider header exceeded work byte budget or returned invalid data');
     result.bytesRead+=header.bytes.length;result.skippedAssets--;
     const clues=parseHeaderClues(header.bytes,asset.name.split('.').pop()??'');
-    check(options.signal);if(!uncertain)await cache.save(asset.assetId,fingerprint,clues,options.signal);check(options.signal);
+    // The cache's budget class is header64k. A shorter, exhausted probe must not
+    // conceal metadata that a later normal-budget read could discover.
+    check(options.signal);if(!uncertain&&(budget===65536||!header.budgetReached))await cache.save(asset.assetId,fingerprint,clues,options.signal);check(options.signal);
     result.samples.push({assetId:asset.assetId,clues,source:'read'});
     if(header.budgetReached)result.issues.push({assetId:asset.assetId,reason:'header-budget-reached',detail:'Later metadata may require an explicit bounded seek or deeper read'});
     // A selected work remains cancellable between its bounded probes.
