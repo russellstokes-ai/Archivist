@@ -1010,7 +1010,9 @@ type LocalBookLookupUnit={indexes:number[];target:LocalBook};
 
 function localBookLookupUnits(books:LocalBook[]):LocalBookLookupUnit[]{
   const units:LocalBookLookupUnit[]=[];
-  const audioKeys=audioWorkGroupKeys(books);
+  const legacy=books.filter(book=>!(book as LocalBook & {scannerWorkId?:string}).scannerWorkId);
+  const audioKeys=audioWorkGroupKeys(legacy);
+  for(const book of books){const id=(book as LocalBook & {scannerWorkId?:string}).scannerWorkId;if(id)audioKeys.set(book.uri,'scanner:'+id);}
   const audioGroups=new Map<string,number[]>();
 
   books.forEach((book,index)=>{
@@ -1284,7 +1286,12 @@ export async function previewLocalSortSafely(
       checked.push(preview);
       continue;
     }
-    const preflight=await inspectLocalSortDestination(preview.rootUri,preview.relativePath,cache);
+    let preflight;
+    try{preflight=await withOperationTimeout(inspectLocalSortDestination(preview.rootUri,preview.relativePath,cache),5000,'Destination check');}
+    catch{
+      // Do not queue more native reads behind a stalled storage provider.
+      return [...checked,...previews.slice(checked.length).map(item=>item.state==='ready'?{...item,state:'review' as const,reason:'Storage is not responding. Try the preview again later.'}:item)];
+    }
     checked.push(preflight.exists
       ? {...preview,state:'conflict',reason:preflight.reason || 'Destination already exists.'}
       : preview);

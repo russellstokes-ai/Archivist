@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      SOURCE_SHA: 542ea0b160ab04ec616deac034ba42858327bf74
+      SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -41,26 +41,6 @@ jobs:
           node harden-forge.cjs
           npm run typecheck
           npm test
-      - name: Require successful release launch evidence
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          READY=false
-          for attempt in $(seq 1 40); do
-            STATUS=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/37994358817" --jq .status)
-            if [ "$STATUS" = completed ]; then READY=true; break; fi
-            sleep 30
-          done
-          test "$READY" = true
-          gh run download 37994358817 --name "scanner-app-evidence-$SOURCE_SHA" --dir launch-evidence
-          python3 - <<'PY'
-          import json,pathlib
-          files=list(pathlib.Path('launch-evidence').rglob('launch-result.json'))
-          assert len(files)==1,'Exact-source release launch evidence is missing'
-          result=json.loads(files[0].read_text())
-          assert result.get('passed') is True,'Release startup was not verified'
-          print('Exact-source release launch and visible canonical UI verified')
-          PY
       - name: Check Android compatibility
         working-directory: mobile/android
         run: ./gradlew :app:lintRelease -PscannerAcceptance=true -PreactNativeArchitectures=arm64-v8a --console=plain
@@ -79,24 +59,25 @@ jobs:
           "$BUILD_TOOLS/aapt" dump badging "$APK" > scanner-fold-delivery/package.txt
           grep -q "name='app.archivist.reader.scanneracceptance'" scanner-fold-delivery/package.txt
           grep -q "native-code:.*'arm64-v8a'" scanner-fold-delivery/package.txt
-          cp "$APK" scanner-fold-delivery/Archivist-Fresh-Scanner-Fold-Test-20261009-542ea0b.apk
+          cp "$APK" scanner-fold-delivery/Archivist-Fresh-Scanner-Fold-Test-20261010-${SOURCE_SHA:0:7}.apk
           cd scanner-fold-delivery
           sha256sum *.apk > SHA256SUMS.txt
-          printf 'Source: %s\nPurpose: user-authorized physical Fold testing, not production acceptance. Fixes the reproduced native-adapter module collision that crashed first render.\nIncludes: fresh scanner, canonical UI bindings, Assist, mandatory Genre, Atlas projection, artwork, metadata preservation, overlapping-grant deduplication and Android compatibility fixes.\nPassed before delivery: TypeScript, 91 mobile suites, release lint, package/signature/alignment checks. Unchanged native scanner components passed 12/12 on Android 9 and 15. Release startup is separately verified on this exact source.\nPending: whole-app end-to-end acceptance, large messy-library Android profiling, screenshot comparisons, provider calibration, ambiguous migration and physical Fold acceptance.\nIsolated package: app.archivist.reader.scanneracceptance. Existing app data is not imported automatically.\nSigning: repository debug test key. ABI: arm64-v8a.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+          printf 'Source: %s\nPhysical Fold test build: folder grouping, non-book filtering, background Assist, per-book metadata review, global Organise panel and bounded destination checks.\nAutomated checks: mobile suites, typecheck, release lint, package, signature and alignment. No emulator run for this build at user request. Phone behaviour, live provider matching and performance still require physical acceptance.\nUpdates the isolated app.archivist.reader.scanneracceptance test package. Existing test data remains; rescan to regroup it.\n' "$SOURCE_SHA" > TEST-NOTES.txt
       - name: Provide direct test APK download
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG=scanner-vnext-fold-fix-20261009-542ea0b
+          TAG=scanner-vnext-fold-fix-20261010-${SOURCE_SHA:0:7}
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$SOURCE_SHA" --prerelease --title 'Archivist Fresh Scanner — unvalidated Fold test' --notes-file scanner-fold-delivery/TEST-NOTES.txt
           gh release upload "$TAG" scanner-fold-delivery/*.apk scanner-fold-delivery/SHA256SUMS.txt scanner-fold-delivery/TEST-NOTES.txt --clobber
           gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fresh-scanner-fold-test-542ea0b
+          name: fresh-scanner-phone-fix-${{ github.sha }}
           path: |
             scanner-fold-delivery/
             mobile/android/app/build/reports/lint-results-release.*

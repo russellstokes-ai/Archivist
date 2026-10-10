@@ -1,8 +1,5 @@
 name: Fresh scanner whole-app acceptance
 on:
-  push:
-    branches: ['feature/archivist-scanner-vnext-real-library']
-    paths: ['.github/workflows/scanner-app-acceptance.yml', '.github/scripts/scanner-app-acceptance.py', '.github/scripts/scanner-launch-smoke.py', 'mobile/android/app/src/main/java/app/archivist/reader/Scanner*.java', 'mobile/scannerVNext/**', 'mobile/scanner-vnext-platform-resolution.test.cjs']
   workflow_dispatch:
 permissions:
   contents: read

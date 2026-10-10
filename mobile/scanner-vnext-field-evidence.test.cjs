@@ -16,6 +16,8 @@ const {createMetadataStore,createSearchCache}=require('./scannerVNext/fieldEvide
   await db.close();db=sqlite(file);store=await createMetadataStore(db);assert.equal((await store.get('work')).manual.genre,true);assert.equal((await store.get('work')).fields.author,'Corrected Author');assert.equal((await db.getFirstAsync('SELECT value FROM legacy_manual')).value,'protected');assert.equal((await (await createSearchCache(db)).load('query')).expires,100);
   const cleared=await store.saveManual('work',{author:''},3);assert.equal(cleared.fields.author,'');assert.equal(cleared.manual.author,false);assert.equal(cleared.identityConfirmed,false);
   const recovered=await store.accept('work',candidate,4);assert.equal(recovered.fields.author,'Fixture Author');
+  await store.ensure({workId:'placeholder',partIds:['p'],fields:{title:'Generated Novel',author:'Fixture Author',genre:'Unknown'},revision:0,manual:{},identityConfirmed:false});
+  assert.equal((await store.accept('placeholder',candidate,0)).fields.genre,'Science Fiction','Provider genre replaces an unprotected placeholder');
   console.log('PASS: real SQLite manual field protections, explicit missing-field recovery, accepted work membership, stale/cancelled rejection, durable cache and legacy preservation');
  }finally{await db.close();fs.rmSync(tmp,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

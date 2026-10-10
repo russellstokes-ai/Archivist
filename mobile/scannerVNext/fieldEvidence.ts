@@ -1,4 +1,5 @@
 import type {ScannerDatabase} from './store';
+import {normalizeGenre} from './genre';
 import {rankCandidates,type Candidate,type SearchFields,type SearchCache,type SearchResult} from './search';
 export type WorkFields=SearchFields&Partial<Record<'genre'|'coverUri'|'description'|'publisher'|'narrator'|'publishedYear',string>>;
 export type MetadataWork={workId:string;revision:number;fields:WorkFields;manual:Record<string,boolean|undefined>;identityConfirmed:boolean;partIds:string[]};
@@ -28,7 +29,7 @@ export async function createMetadataStore(db:ScannerDatabase){
     const target=key==='coverUrl'?'coverUri':key;if(!fields.includes(target as typeof fields[number])||typeof value!=='string'||!value.trim())continue;
     const identity=['title','author','series','seriesNumber','isbn','asin'].includes(target);
     if(work.manual[target]&&!(identity&&options.confirmIdentityConflicts))continue;
-    if(!identity&&work.fields[target as keyof WorkFields])continue;
+    if(!identity&&work.fields[target as keyof WorkFields]&&!(target==='genre'&&normalizeGenre([{value:work.fields.genre!,source:'embedded'}]).state==='unresolved'&&normalizeGenre([{value,source:'provider'}]).state==='confirmed'))continue;
     (work.fields as Record<string,string>)[target]=value.trim();
    }
    work.identityConfirmed=true;

@@ -74,7 +74,7 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true},
 }).outputText,file);
 
-const {applyLocalSort,previewLocalSortToRoot,recoverLocalSortOperation}=require('./localLibrary.ts');
+const {applyLocalSort,previewLocalSortToRoot,previewLocalSortSafely,recoverLocalSortOperation}=require('./localLibrary.ts');
 
 (async()=>{
   const sourceRoot='content://source/root';
@@ -128,5 +128,8 @@ const {applyLocalSort,previewLocalSortToRoot,recoverLocalSortOperation}=require(
   assert.equal(info.get(failedMove.copied[0].uri).exists,true,'verified destination is retained as the safety copy');
   assert.equal(failedMove.copied[0].sourceRemoved,false);
 
-  console.log('PASS: Test 10.1 Move is verified, cross-storage safe, interruption recoverable and loss-resistant');
+  const read=saf.readDirectoryAsync;let stalledCalls=0;saf.readDirectoryAsync=()=>{stalledCalls++;return new Promise(()=>{});};
+  const pending=await previewLocalSortSafely([book,{...book,id:2,uri:source+'2',title:'Another'}],'author-title',targetRoot);
+  assert.ok(pending.every(item=>item.state==='review'));assert.equal(stalledCalls,1,'A stalled provider must not receive more preview reads');saf.readDirectoryAsync=read;
+  console.log('PASS: verified moves, interrupted recovery and bounded destination preview');
 })().catch(error=>{console.error(error);process.exitCode=1;});

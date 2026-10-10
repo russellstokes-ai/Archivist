@@ -16,7 +16,7 @@ result=group([asset('a','Book/part 1/Whole Part.m4b'),asset('b','Book/part 2/001
 result=group([asset('a','Named Book/ABBREVP01.mp3'),asset('b','Named Book/ABBREVP02.mp3')]);assert.equal(result.length,1);assert.ok(result[0].needsAttention);
 result=group([asset('a','Author/01 - Whole Novel Alpha.m4b'),asset('b','Author/02 - Whole Novel Beta.m4b')]);assert.equal(result.length,2);
 result=group([asset('a','Comics/Issue 1.cbz','comic'),asset('b','Comics/Issue 2.cbz','comic')]);assert.equal(result.length,2);
-result=group([asset('a','Unknown/01.mp3'),asset('b','Unknown/02.mp3')]);assert.equal(result.length,2);assert.ok(result.every(g=>g.needsAttention));
+result=group([asset('a','Unknown/01.mp3'),asset('b','Unknown/02.mp3')]);assert.equal(result.length,1);assert.ok(result.every(g=>g.needsAttention));
 result=group([asset('a','Novel/Chapter 1.mp3'),asset('b','Novel/Chapter 1 copy.mp3')]);assert.equal(result.length,1);assert.ok(result[0].issues.includes('duplicate-part-number'));
 result=group([asset('a','Edition A/Chapter 1.mp3'),asset('b','Edition B/Chapter 2.mp3')],{a:{title:'Same Work',author:'Writer',edition:'Narrator A',provenance:'embedded'},b:{title:'Same Work',author:'Writer',edition:'Narrator B',provenance:'embedded'}});assert.equal(result.length,2);
 result=group([asset('a','Edition A/Chapter 1.mp3'),asset('b','Edition B/Chapter 2.mp3')],{a:{title:'Same Work',author:'Writer',provenance:'embedded'},b:{title:'Same Work',author:'Writer',provenance:'embedded'}});assert.equal(result.length,2,'Unknown editions must not merge on title/author alone');

@@ -1,7 +1,7 @@
 {
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
-  "updatedSha256": "f847f79c1d3eb9460b1f00d5ce5d08afb67b7629558957eb2dbc6c4da09efbec",
+  "updatedSha256": "83202429c4d06078e341aee319c2d7098331c275f4efc5712750ed07a2d716c9",
   "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged",
   "changes": [
     {
@@ -87,6 +87,50 @@
     {
       "old": "import {createAndroidCatalogueRuntime} from './scannerVNext/runtime.native';",
       "new": "import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';"
+    },
+    {
+      "old": "{WorkActionSheet()}{OrganisationPanel()}{MetadataEditorPanel()}{BulkMetadataPanel()}{LibraryManagementPanel()}",
+      "new": "{WorkActionSheet()}{OrganisationPanel()}{MetadataEditorPanel()}{BulkMetadataPanel()}"
+    },
+    {
+      "old": "      {ProfileMenu()}\r\n      {WorkDetailsPanel()}",
+      "new": "      {ProfileMenu()}\r\n      {LibraryManagementPanel()}\r\n      {WorkDetailsPanel()}"
+    },
+    {
+      "old": "      enrichmentCompleted=scanCommitGate.isCurrent(generation);",
+      "new": "      enrichmentCompleted=scanCommitGate.isCurrent(generation);\r\n      const controller=new AbortController();\r\n      const watch=setInterval(()=>{if(!scanCommitGate.isCurrent(generation))controller.abort();},150);\r\n      void freshRuntime().then(runtime=>runtime.enrich(result.books,assistPolicy(),async rows=>{\r\n        if(scanCommitGate.isCurrent(generation))await applyScannerRows(rows);\r\n      },controller.signal)).catch(()=>undefined).finally(()=>clearInterval(watch));"
+    },
+    {
+      "old": "void saved.completion.catch(()=>undefined);",
+      "new": "void saved.completion.then(async state=>{if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);"
+    },
+    {
+      "old": "          void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);",
+      "new": "          void result.completion.then(async state=>{if(editingScannerId.current===id)setAssistState(state);if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);"
+    },
+    {
+      "old": "      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,assistPolicy(true));setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);}",
+      "new": "      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,assistPolicy(true));setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(async state=>{if(editingScannerId.current===id)setAssistState(state);if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);}"
+    },
+    {
+      "old": "      const previews=await previewLocalSortSafely(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate,undefined,(done,total)=>setMoveStatus(`Checking destinations \u00b7 ${done} / ${total}`));",
+      "new": "      const eligible=localBooks.filter(book=>book.uri&&!book.needsReview&&normalizeGenre([{value:book.genre||'',source:'manual'}]).state==='confirmed');\r\n      if(!eligible.length){setMoveStatus('Finish metadata review before organising files.');return;}\r\n      const previews=await previewLocalSortSafely(eligible as LocalBook[],sortTemplate,undefined,(done,total)=>setMoveStatus(`Checking destinations \u00b7 ${done} / ${total}`));"
+    },
+    {
+      "old": "    if(sourceFilter==='local')return localBooks;\r\n    return [...localBooks,...serverBooks];\r\n  },[localBooks,serverBooks,sourceFilter]);",
+      "new": "    const reviewWorks=phoneWorks.map(work=>({...work.tracks[0],title:work.title,author:work.author,genre:work.genre,coverUri:work.coverUri,needsReview:work.needsReview,reviewReason:work.reviewReason}));\r\n    if(sourceFilter==='local')return reviewWorks;\r\n    return [...reviewWorks,...serverBooks];\r\n  },[phoneWorks,serverBooks,sourceFilter]);"
+    },
+    {
+      "new": "const reviewWorks=phoneWorks.map(work=>({...work.tracks[0],source:'local' as const,title:work.title",
+      "old": "const reviewWorks=phoneWorks.map(work=>({...work.tracks[0],title:work.title"
+    },
+    {
+      "new": "const openGap=(gap:MetadataGapFilter)=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(false);",
+      "old": "const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);"
+    },
+    {
+      "new": "const openReview=()=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(true);",
+      "old": "const openReview=()=>{clearLibraryFilters();setReviewOnly(true);"
     }
   ]
 }

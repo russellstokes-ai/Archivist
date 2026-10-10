@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const {groupCandidates}=require('./scannerVNext/grouping.ts');
+const assets=paths=>paths.map((relativePath,i)=>({assetId:String(i),sourceId:'library',relativePath,kind:'audio'}));
+const scan=paths=>groupCandidates(assets(paths));
+assert.equal(scan(['Novel/Opening.mp3','Novel/The journey.mp3','Novel/Ending.mp3']).length,1,'Unnumbered tracks share their book folder');
+assert.equal(scan(['Novel/01.mp3','Novel/02.mp3']).length,1,'Numeric-only tracks group');
+assert.equal(scan(['Series/One/Opening.mp3','Series/Two/Opening.mp3']).length,2,'Separate books in a series stay separate');
+assert.equal(scan(['Author/First.m4b','Author/Second.m4b']).length,2,'Whole-book containers do not blindly merge');
+assert.equal(scan(['Opening.mp3','Ending.mp3']).length,2,'Loose ambiguous root files stay visible separately');
+const split=groupCandidates(assets(['Mixed/Opening.mp3','Mixed/Ending.mp3']),{'0':{title:'First',author:'Writer',provenance:'embedded'},'1':{title:'Second',author:'Writer',provenance:'embedded'}});
+assert.equal(split.length,2,'Conflicting identities override folder grouping');
+const result=scan(['Novel/CD_2/10.mp3','Novel/CD_1/02.mp3']);assert.equal(result.length,1);assert.deepEqual(result[0].parts.map(p=>p.assetId),['1','0']);
+assert.ok(scan(['Novel/Opening.mp3','Novel/Ending.mp3'])[0].needsAttention,'Folder inference remains provisional');
+console.log('PASS: folder grouping, conflicts, series boundaries, root ambiguity, whole books and disc ordering');

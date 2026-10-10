@@ -1,5 +1,6 @@
 import type {ScannerDatabase} from './store';
 import type {SearchService,SearchResult} from './search';
+import {rankCandidates} from './search';
 import type {createMetadataStore,MetadataWork,WorkFields} from './fieldEvidence';
 type MetadataStore=Awaited<ReturnType<typeof createMetadataStore>>;
 type Policy={online:boolean;automatic:boolean;explicit?:boolean;retry?:boolean};
@@ -26,6 +27,14 @@ export async function createAssistController(db:ScannerDatabase,store:MetadataSt
   const completion=(async():Promise<AssistState>=>{
    try{
     const result=await service.search(work,{...policy,signal:controller.signal});
+    const eligible=rankCandidates(work.fields,result.candidates.map(row=>row.candidate)).filter(row=>row.automaticEligible&&!row.candidate.anthology);
+    const complete=result.state==='review'&&!result.issues.length&&!Object.values(result.nextPages).some(page=>page!==null);
+    if(policy.online&&policy.automatic&&complete&&eligible.length===1&&!controller.signal.aborted&&active.get(work.workId)===controller){
+     const enriched=await store.accept(work.workId,eligible[0].candidate,work.revision,{signal:controller.signal});
+     const accepted:AssistState={revision:enriched.revision,state:'accepted',result,updated:Date.now()};
+     if(await persist(enriched,accepted,controller))return accepted;
+     return {revision:enriched.revision,state:'stale',updated:Date.now()};
+    }
     const value:AssistState={revision:work.revision,state:result.state,result,updated:Date.now()};
     if(controller.signal.aborted||!await persist(work,value,controller))return {revision:work.revision,state:'stale',updated:Date.now()};return value;
    }catch(error){

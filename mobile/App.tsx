@@ -1616,9 +1616,10 @@ function Client() {
   const reviewAssetPool = useMemo(() => {
     if(sourceFilter==='server')return serverBooks;
     if(sourceFilter==='downloaded')return [] as Book[];
-    if(sourceFilter==='local')return localBooks;
-    return [...localBooks,...serverBooks];
-  },[localBooks,serverBooks,sourceFilter]);
+    const reviewWorks=phoneWorks.map(work=>({...work.tracks[0],source:'local' as const,title:work.title,author:work.author,genre:work.genre,coverUri:work.coverUri,needsReview:work.needsReview,reviewReason:work.reviewReason}));
+    if(sourceFilter==='local')return reviewWorks;
+    return [...reviewWorks,...serverBooks];
+  },[phoneWorks,serverBooks,sourceFilter]);
 
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -2761,6 +2762,11 @@ function Client() {
       // Fresh runtime has already staged metadata and atomically checked publication.
       // No historical deep metadata or cover sweep runs after discovery.
       enrichmentCompleted=scanCommitGate.isCurrent(generation);
+      const controller=new AbortController();
+      const watch=setInterval(()=>{if(!scanCommitGate.isCurrent(generation))controller.abort();},150);
+      void freshRuntime().then(runtime=>runtime.enrich(result.books,assistPolicy(),async rows=>{
+        if(scanCommitGate.isCurrent(generation))await applyScannerRows(rows);
+      },controller.signal)).catch(()=>undefined).finally(()=>clearInterval(watch));
     }catch(error){
       if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
     }
@@ -3503,7 +3509,9 @@ function Client() {
     setError('');
     setMoveStatus('Checking proposed destinations…');
     try{
-      const previews=await previewLocalSortSafely(localBooks.filter(book=>book.uri) as LocalBook[],sortTemplate,undefined,(done,total)=>setMoveStatus(`Checking destinations · ${done} / ${total}`));
+      const eligible=localBooks.filter(book=>book.uri&&!book.needsReview&&normalizeGenre([{value:book.genre||'',source:'manual'}]).state==='confirmed');
+      if(!eligible.length){setMoveStatus('Finish metadata review before organising files.');return;}
+      const previews=await previewLocalSortSafely(eligible as LocalBook[],sortTemplate,undefined,(done,total)=>setMoveStatus(`Checking destinations · ${done} / ${total}`));
       const readyIds=previews.filter(item=>item.state==='ready').map(item=>item.id);
       setLocalMovePreviews(previews);
       setLocalMoveSelection(readyIds);
@@ -4679,7 +4687,7 @@ function Client() {
           await applyScannerRows(await runtime.refresh(id));
           setEditing({...editing,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);
           setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});
-          void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);
+          void result.completion.then(async state=>{if(editingScannerId.current===id)setAssistState(state);if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);
         }catch(e){setError((e as Error).message);}finally{setBusy(false);}
       }else if(editing.uri){
         const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
@@ -4701,7 +4709,7 @@ function Client() {
     };
     const runAssist=async()=>{
       if(!editing.scannerWorkId||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;
-      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,assistPolicy(true));setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>{if(editingScannerId.current===id)setAssistState(state);}).catch(()=>undefined);}
+      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,assistPolicy(true));setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(async state=>{if(editingScannerId.current===id)setAssistState(state);if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);}
       catch(e){setError((e as Error).message);}finally{setBusy(false);}
     };
     const acceptAssist=async(candidateId:string,confirm=false)=>{
@@ -4918,7 +4926,7 @@ function Client() {
             const current=await runtime.metadata.get(id);if(!current)throw new Error('Unknown work');
             const draft=toFields(localUpdates.get(representative.uri)!);
             const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));
-            const saved=await runtime.save(id,patch,assistPolicy());void saved.completion.catch(()=>undefined);
+            const saved=await runtime.save(id,patch,assistPolicy());void saved.completion.then(async state=>{if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);
             for(const book of await runtime.refresh(id))freshUpdates.set(book.uri,book);
           }
           setLocalMetadataOverrides(nextOverrides);
@@ -5617,7 +5625,7 @@ function Client() {
         scrollEventThrottle={120}
         onContentSizeChange={()=>{if(libraryScrollOffset.current>0)libraryListRef.current?.scrollToOffset?.({offset:libraryScrollOffset.current,animated:false})}}
       />:null}
-      {WorkActionSheet()}{OrganisationPanel()}{MetadataEditorPanel()}{BulkMetadataPanel()}{LibraryManagementPanel()}
+      {WorkActionSheet()}{OrganisationPanel()}{MetadataEditorPanel()}{BulkMetadataPanel()}
       {librarySourcesOpen?<Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibrarySourcesOpen(false)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Library sources and folders" style={modalSheetBackdrop} onPress={()=>setLibrarySourcesOpen(false)}>
           <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library sources and folders" style={[styles.actionSheet,styles.actionSheetStable,foldLayout&&styles.actionSheetFold,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
@@ -7512,8 +7520,8 @@ function Client() {
     const reviewCount=reviewAssetPool.filter(item=>item.needsReview).length;
     const localDuplicateCount=localDuplicateGroups.reduce((sum,group)=>sum+group.items.length,0);
     const localDuplicateGroupCount=localDuplicateGroups.length;
-    const openGap=(gap:MetadataGapFilter)=>{clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
-    const openReview=()=>{clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
+    const openGap=(gap:MetadataGapFilter)=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
+    const openReview=()=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" style={modalSheetBackdrop} onPress={()=>setLibraryManageOpen(false)}>
         <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
@@ -8060,6 +8068,7 @@ function Client() {
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
       {ProfileMenu()}
+      {LibraryManagementPanel()}
       {WorkDetailsPanel()}
       {FormatPickerPanel()}
       {RatingPromptPanel()}

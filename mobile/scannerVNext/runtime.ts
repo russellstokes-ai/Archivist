@@ -9,6 +9,7 @@ import type {WorkFields,MetadataWork} from './fieldEvidence';
 import type {ArtworkResult} from './artwork';
 import {createLegacyMigration} from './migration';
 import type {GroupingEvidence} from './grouping';
+import {normalizeGenre} from './genre';
 export type ScannerBook=LocalBook&{scannerWorkId:string;scannerEditionId:string;scannerPublished:boolean;scannerOrder:number;scannerLegacyKey?:string;scannerDocumentKey?:string};
 type Policy={online:boolean;automatic:boolean;explicit?:boolean;retry?:boolean};
 export type RuntimePorts={access:SourceAccess;clues?:(source:Source,assets:PipelineAsset[],signal?:AbortSignal)=>Promise<WorkFields>;identityProof?:(assets:PipelineAsset[],fields:WorkFields)=>boolean;artwork:(source:Source,assets:PipelineAsset[],work:MetadataWork,signal?:AbortSignal)=>Promise<ArtworkResult>;search:Pick<SearchService,'search'>&Partial<Pick<SearchService,'more'>>};
@@ -25,7 +26,7 @@ export async function createCatalogueRuntime(db:ScannerDatabase,newId:()=>string
   check(signal);const stored=await load(id),work=await pipeline.metadata.get(id);if(!stored||!work)throw new Error('Unknown scanner work');
   let artwork:ArtworkResult={state:'missing'};try{artwork=await ports.artwork(stored.source,[...stored.entry.assets,...(stored.entry.artworkAssets??[])],work,signal);}catch{check(signal);artwork={state:'invalid',issues:['artwork-unavailable']};}
   const unsafe=stored.entry.assets.some(a=>['unsupported','unreadable'].includes(a.disposition.state))||stored.entry.issues.some(x=>['duplicate-part-number','manual-edition-unresolved','source-discovery-incomplete','source-parts-missing','overlapping-group-needs-review'].includes(x));
-  check(signal);await pipeline.publication.publish(unsafe?{...work,identityConfirmed:false}:work,artwork,signal);check(signal);const published=await pipeline.publication.load(id),display=published??work;
+  check(signal);await pipeline.publication.publish(unsafe?{...work,identityConfirmed:false}:work,artwork,signal);check(signal);const published=await pipeline.publication.load(id),display=published??{...work,fields:{...work.fields,...(artwork.state==='ready'?{coverUri:artwork.uri}:{}),genre:normalizeGenre(work.fields.genre?[{value:work.fields.genre,source:work.manual.genre?'manual':'embedded'}]:[]).label??work.fields.genre}};
   const attention=!published||published.revision!==work.revision||stored.entry.issues.some(x=>!['path-only-grouping-provisional','insufficient-grouping-evidence','edition-and-identity-review-required','meaningful-genre-required'].includes(x));
   const books:ScannerBook[]=[];
   for(let order=0;order<stored.entry.assets.length;order++){check(signal);const asset=stored.entry.assets[order],fields=display.fields,uri=documentUri(stored.source.rootUri,asset.documentId),kind=asset.disposition.kind;
@@ -33,6 +34,15 @@ export async function createCatalogueRuntime(db:ScannerDatabase,newId:()=>string
   }return books;
  }
  return {assist,metadata:pipeline.metadata,refresh,
+  async enrich(books:LocalBook[],policy:Policy,onRows:(rows:ScannerBook[])=>Promise<void>,signal?:AbortSignal){
+   if(!policy.online||!policy.automatic)return;
+   const ids=[...new Set(books.filter(book=>!(book as ScannerBook).scannerPublished).map(book=>(book as ScannerBook).scannerWorkId).filter(Boolean))];
+   for(const id of ids){check(signal);const cancel=()=>assist.cancel(id);signal?.addEventListener('abort',cancel,{once:true});
+    try{const result=await assist.search(id,policy),state=await result.completion;check(signal);if(state.state==='accepted')await onRows(await refresh(id,signal));}
+    catch(error){check(signal);}finally{signal?.removeEventListener('abort',cancel);}
+    await new Promise<void>(resolve=>setTimeout(resolve,0));
+   }
+  },
   async save(id:string,patch:WorkFields,policy:Policy){const work=await pipeline.metadata.get(id);if(!work)throw new Error('Unknown scanner work');return assist.save(id,patch,work.revision,policy);},
   async confirm(id:string){const work=await pipeline.metadata.get(id);if(!work)throw new Error('Unknown scanner work');return pipeline.metadata.confirmIdentity(id,work.revision);},
   async scan(folders:LocalFolder[],previous:LocalBook[],overrides:Record<string,LocalMetadataOverride>,policy:Policy,options:{signal?:AbortSignal;progress?:(value:LocalScanProgress)=>void;legacyKeys?:Map<string,string>;progressSnapshot?:Record<string,unknown>}={}):Promise<LocalScanResult>{
@@ -69,7 +79,6 @@ export async function createCatalogueRuntime(db:ScannerDatabase,newId:()=>string
      // The native adapter receives companions separately; they never become book parts.
      if(companion.length)await db.runAsync('UPDATE scanner_vnext_catalogue SET payload=? WHERE work_id=?',JSON.stringify({source,entry:{...withArtwork,artworkAssets:companion},legacyKey}),entry.work.workId);
      const projected=await refresh(entry.work.workId,options.signal);books.push(...projected);if(projected.some(b=>b.needsReview))review++;else identified++;
-     if(policy.online&&policy.automatic&&projected.some(book=>!book.scannerPublished))await assist.search(entry.work.workId,policy).then(({completion})=>completion).catch(()=>undefined);
      options.progress?.({phase:'preparing',currentFolder:folder.name,entriesVisited:visited,found:books.length,review});await new Promise<void>(resolve=>setTimeout(resolve,0));
     }
     updated.push({...folder,itemCount:result.works.length,status:result.summary.complete?'Ready':'Needs attention',scannedAt:new Date().toISOString()});

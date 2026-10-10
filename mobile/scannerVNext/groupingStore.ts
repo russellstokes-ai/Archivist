@@ -11,7 +11,7 @@ export async function createGroupingStore(db:ScannerDatabase,newId:()=>string){
   };
   return {
     loadGrouping:(sourceId:string)=>read(db,sourceId),
-    async commitGrouping(sourceId:string,proposals:GroupingProposal[],expectedRevision:number,signal?:AbortSignal):Promise<GroupingSnapshot>{
+    async commitGrouping(sourceId:string,proposals:GroupingProposal[],expectedRevision:number,signal?:AbortSignal,excludedAssetIds:ReadonlySet<string>=new Set()):Promise<GroupingSnapshot>{
       let result:GroupingSnapshot|undefined;
       const check=()=>{if(signal?.aborted)throw new Error('Scan cancelled');};
       check();
@@ -27,7 +27,7 @@ export async function createGroupingStore(db:ScannerDatabase,newId:()=>string){
         const assigned=new Set(groups.flatMap(g=>g.parts.map(p=>p.assetId)));
         // Missing source entries remain staged and visible; a rescan is not authority to delete a work.
         for(const prior of previous.groups){
-          const missing=prior.parts.filter(p=>!assigned.has(p.assetId));
+          const missing=prior.parts.filter(p=>!assigned.has(p.assetId)&&!excludedAssetIds.has(p.assetId));
           if(!missing.length)continue;
           const active=groups.find(g=>g.editionId===prior.editionId);
           if(active){active.parts.push(...missing);active.needsAttention=true;active.issues.push('source-parts-missing');}

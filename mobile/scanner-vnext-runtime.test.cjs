@@ -11,10 +11,12 @@ const {createCatalogueRuntime,projectScannerWorks}=require('./scannerVNext/runti
  });
  const folder={id:'source',uri:root,name:'Library',status:'',itemCount:0};
  const first=await runtime.scan([folder],[],{}, {online:false,automatic:false});
+ await runtime.scan([folder],[],{}, {online:true,automatic:true});assert.equal(lookups,0,'Discovery must finish without online searches');
  assert.equal(first.books.length,2);assert.equal(first.review,1);assert.equal(projectScannerWorks(first.books,()=>[]).length,1);
+ assert.equal(first.books[0].coverUri,'file:///private/cover.png','A reviewable work still displays its available cover');assert.equal(first.books[0].genre,'Science Fiction');
  const workId=first.books[0].scannerWorkId;assert.ok(workId);assert.equal(first.books[0].scannerPublished,false);
  const saved=await runtime.save(workId,{title:'Book',author:'Manual Writer',genre:'Sci-fi'}, {online:false,automatic:false});await saved.completion;
- assert.equal(queries,1,'Save must never enumerate or read files');assert.equal(lookups,1);
+ assert.equal(queries,2,'Save must never enumerate or read files');assert.equal(lookups,1);
  await runtime.confirm(workId);const ready=await runtime.refresh(workId);assert.equal(ready[0].scannerPublished,true);assert.equal(ready[0].genre,'Science Fiction');assert.equal(ready[0].author,'Manual Writer');
  const accepted=projectScannerWorks(ready,()=>[])[0];assert.equal(accepted.logicalWorkKey,workId);assert.equal(accepted.files,2);assert.equal(accepted.needsReview,false);
  const next=await runtime.scan([folder],ready,{}, {online:false,automatic:false});assert.equal(next.books[0].author,'Manual Writer');assert.equal(next.books[0].scannerPublished,true);

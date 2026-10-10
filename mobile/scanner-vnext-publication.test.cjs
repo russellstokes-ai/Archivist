@@ -6,6 +6,10 @@ const {createMetadataStore}=require('./scannerVNext/fieldEvidence.ts'),{createPu
  const work=await metadata.ensure({workId:'one',revision:0,fields:{title:'Generated title',author:'Fixture author',genre:'Space opera'},identityConfirmed:true,manual:{},partIds:['a','b']});
  assert.equal((await publication.publish(work,{state:'missing'})).state,'staged');
  const ready={state:'ready',uri:'file:///fixture-cover.png',manual:false,bytes:100,width:300,height:500};
+ for(const [index,genre] of [undefined,'','Unknown','Other','MP3','SF'].entries()){
+  const incomplete=await metadata.ensure({workId:'missing-genre-'+index,revision:0,fields:{title:'Known title',author:'Known author',...(genre===undefined?{}:{genre})},identityConfirmed:true,manual:{},partIds:['part']});
+  const decision=await publication.publish(incomplete,ready);assert.equal(decision.state,'staged');assert.ok(decision.reasons.includes('meaningful-genre-required'));assert.equal(await publication.load(incomplete.workId),null);
+ }
  assert.equal((await publication.publish(work,{...ready,bytes:999999999})).state,'staged');
  assert.equal((await publication.publish(work,ready)).state,'published');assert.equal((await publication.load('one')).revision,0);
  const edited=await metadata.saveManual('one',{genre:'Other'},0);assert.equal((await publication.publish(edited,ready)).state,'staged');assert.equal((await publication.load('one')).fields.genre,'Science Fiction');
