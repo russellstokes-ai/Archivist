@@ -1,0 +1,31 @@
+{
+  "sourceCommit": "c2fcbfeac538de2389bc9071b86c924f16d13d54",
+  "accepted": "2026-10-10 physical Fold: grouping worked well, no hang, quick scan",
+  "scope": "Discovery, grouping, native access and scan orchestration. Metadata UI, Genre choices, provider search and Assist may change independently. Do not update these hashes to bypass a failure. Changing the scanner requires explicit user instruction.",
+  "sha256": {
+    "mobile/android/app/src/main/java/app/archivist/reader/ArchivistScannerModule.java": "b2b3b61fecba0ea6e1fd52bfca5675a69c53cd6cfbc95862109e1dfb299ef703",
+    "mobile/android/app/src/main/java/app/archivist/reader/ArchivistScannerPackage.java": "428ff7088e59e6922ababd3359e8c0b91571e97415da287e7888cc4b8c6051ee",
+    "mobile/android/app/src/main/java/app/archivist/reader/ScannerArchiveReader.java": "fabee962ea3bbdf76aa67ebb8e884142fe55a59a31bffd29858c0170ac2cf9a2",
+    "mobile/android/app/src/main/java/app/archivist/reader/ScannerArtworkReader.java": "f3429560b3f0d01d86c597f75f00511c8db26fc01ae096d252663879ba6e55ca",
+    "mobile/android/app/src/main/java/app/archivist/reader/ScannerBoundedIO.java": "a6497fd3bd44128fd9121f88f8238e90a61d48a2fcf5b40626bf64ccf0048f7f",
+    "mobile/android/app/src/main/java/app/archivist/reader/ScannerDocumentAccess.java": "1816271c255a58bba7a78b3d3a977d31a6da0f5e787548e14b17d859417d59e5",
+    "mobile/android/app/src/main/java/app/archivist/reader/ScannerTaskPool.java": "873c616a5c4f6cea572bbf9de7294c2b64022771ab584dced6fda114b49d53dd",
+    "mobile/scannerVNext/androidAccess.native.ts": "9da43899f31c5991dbc6c5938c42685ea7255b6997d3efff25e397cb45486d91",
+    "mobile/scannerVNext/androidRuntime.native.ts": "1ed0a74969ab9e80f627f5cb5b17ccc8221a1a5b423dccb7786060b1bad9cdc0",
+    "mobile/scannerVNext/androidStore.native.ts": "3fa7f5401fd53baf6ed75bb40ca9692500b65791d783c76fd9774fa51459d040",
+    "mobile/scannerVNext/classify.ts": "0b1852831bf367bc601de95a649efcd28038c5de2b465f815e394540e9373ba1",
+    "mobile/scannerVNext/clueCache.ts": "cb65a53db8b4888adf5218391b3dc392d53cc20abf0e5409b22fddcc4338a2fc",
+    "mobile/scannerVNext/collectClues.ts": "734444d89fb5e694c893ebe050b370e40be92e6121a5574f05dd564a82b50426",
+    "mobile/scannerVNext/discovery.ts": "f45087b90d5f1ed2c13faf8787e82314f28dfa893b3484b35763c7975b93c876",
+    "mobile/scannerVNext/grouping.ts": "815ec37b97d3dff1f58ca04116f4f748f364afdacef3988b6c39de65aa6c2d22",
+    "mobile/scannerVNext/groupingStore.ts": "aaa6a09f22bc2809d8fb83e8f625b416f6a7e5b6062cc74696b59f6e4d74a87e",
+    "mobile/scannerVNext/identity.ts": "e832f6d33019823c2ede8d261de1ac4ac8c56b8179fdb39971ce0dc9bbada9e2",
+    "mobile/scannerVNext/nativeAccess.ts": "bbf22392d5ff02ec7b3cf4f6798509e94423f539456806f85accb968069d0440",
+    "mobile/scannerVNext/pipeline.ts": "dee9467da4ea2afe09d1c8f4ee5e10c80e2e3d058e785d53875db8125747e60d",
+    "mobile/scannerVNext/runtime.ts": "1903524d836af828753e9e3310b37ca027bae916ca5a041e4131a0a0f9b49cc6",
+    "mobile/scannerVNext/runtimeFactory.native.ts": "7229927cc948430b2be2e4111de76c1d4f21d8c8e0c1946014527c373e4ee6f6",
+    "mobile/scannerVNext/runtimeFactory.ts": "205394c215360afee671f38c3b50c4ade58ed0d16c05ff64a3651d4b554a22ba",
+    "mobile/scannerVNext/store.ts": "0616b6e2b2b3ded0faecd2d3c6661446c2aeac850bb862495579717330e127f7",
+    "mobile/scannerVNext/types.ts": "3d4fc3de8055d8910e5f6df71761adcb9cc993b6afaf2f3c1e9116e4b4382516"
+  }
+}

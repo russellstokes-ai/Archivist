@@ -18,8 +18,15 @@ export async function readBoundedJson(response:ResponsePort,signal?:AbortSignal)
 const text=(value:unknown,max=512)=>typeof value==='string'?value.trim().slice(0,max):undefined;
 const list=(value:unknown,max=20):unknown[]=>Array.isArray(value)?value.slice(0,max):[];
 const image=(value:unknown)=>{const url=text(value,2048)?.replace(/^http:/,'https:');if(!url)return undefined;try{const parsed=new URL(url);return parsed.protocol==='https:'&&['books.google.com','books.googleusercontent.com','covers.openlibrary.org'].includes(parsed.hostname)&&!parsed.username&&!parsed.password?url:undefined;}catch{return undefined;}};
+const year=(value:unknown)=>{const match=String(value??'').match(/^(\d{4})(?:-\d{2}(?:-\d{2})?)?$/);return match&&Number(match[1])>0&&Number(match[1])<=new Date().getFullYear()+1?match[1]:undefined;};
 const quote=(value:string)=>JSON.stringify(value);
-const providerGenre=(value:unknown)=>normalizeGenre(list(value,100).filter((v):v is string=>typeof v==='string').map(value=>({value:value.slice(0,512),source:'provider' as const}))).label;
+const providerGenre=(value:unknown)=>{
+ const evidence=list(value,100).filter((v):v is string=>typeof v==='string').map(value=>({value:value.slice(0,512),source:'provider' as const}));
+ const decision=normalizeGenre(evidence);if(decision.label)return decision.label;
+ // Audience is not a competing content genre: Fantasy + juvenile fiction is Fantasy.
+ const content=evidence.filter(item=>normalizeGenre([item]).id!=='children-ya');
+ return content.length?normalizeGenre(content).label:undefined;
+};
 export function createBookProviders(settings:{openLibrary:boolean;googleBooks:boolean;googleKey?:string},request:JsonRequest,queue:RequestQueue=sharedRequestQueue):SearchProvider[]{
  const providers:SearchProvider[]=[];
  if(settings.openLibrary)providers.push({id:'open-library',async search(query:Query,page,signal){
@@ -27,19 +34,19 @@ export function createBookProviders(settings:{openLibrary:boolean;googleBooks:bo
   if(query.isbn)params.set('isbn',query.isbn);else{if(query.title)params.set('title',query.title);if(query.author)params.set('author',query.author);if(query.series)params.set('q',query.series+(query.seriesNumber?' '+query.seriesNumber:''));}
   const raw=await queue.run('open-library',inner=>request('https://openlibrary.org/search.json?'+params,inner),signal) as {docs?:unknown;numFound?:number};
   const docs=list(raw?.docs),candidates:Candidate[]=[];
-  for(const value of docs){const row=value as Record<string,unknown>,id=text(row.key);if(!id||!/^\/works\/OL\d+W$/.test(id))continue;const title=text(row.title);if(!title)continue;const author=list(row.author_name,4).map(x=>text(x)).filter(Boolean).join(', '),genre=providerGenre(row.subject),cover=Number.isSafeInteger(row.cover_i)&&Number(row.cover_i)>0?'https://covers.openlibrary.org/b/id/'+row.cover_i+'-L.jpg':undefined;
-   candidates.push({id,provider:'open-library',identifiers:list(row.isbn).map(x=>text(x,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(cover?{coverUrl:cover}:{})}});
+  for(const value of docs){const row=value as Record<string,unknown>,id=text(row.key);if(!id||!/^\/works\/OL\d+W$/.test(id))continue;const title=text(row.title);if(!title)continue;const author=list(row.author_name,4).map(x=>text(x)).filter(Boolean).join(', '),genre=providerGenre(row.subject),publishedYear=year(row.first_publish_year),cover=Number.isSafeInteger(row.cover_i)&&Number(row.cover_i)>0?'https://covers.openlibrary.org/b/id/'+row.cover_i+'-L.jpg':undefined;
+   candidates.push({id,provider:'open-library',identifiers:list(row.isbn).map(x=>text(x,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(publishedYear?{publishedYear}:{}),...(cover?{coverUrl:cover}:{})}});
   }
   return {candidates,nextPage:typeof raw.numFound==='number'&&page*20+docs.length<raw.numFound?page+1:null};
  }});
  if(settings.googleBooks)providers.push({id:'google-books',available:!!settings.googleKey,async search(query,page,signal){
   if(!settings.googleKey)throw new Error('Google Books is unconfigured');
   const terms=query.isbn?'isbn:'+quote(query.isbn):[query.title?'intitle:'+quote(query.title):'',query.author?'inauthor:'+quote(query.author):'',query.series?quote(query.series):''].filter(Boolean).join(' ');
-  const params=new URLSearchParams({q:terms,startIndex:String(page*20),maxResults:'20',key:settings.googleKey,fields:'items(id,volumeInfo(title,authors,categories,industryIdentifiers,imageLinks/thumbnail,language)),totalItems'});
+  const params=new URLSearchParams({q:terms,startIndex:String(page*20),maxResults:'20',key:settings.googleKey,fields:'items(id,volumeInfo(title,authors,categories,industryIdentifiers,imageLinks/thumbnail,language,publishedDate)),totalItems'});
   const raw=await queue.run('google-books',inner=>request('https://www.googleapis.com/books/v1/volumes?'+params,inner),signal) as {items?:unknown;totalItems?:number};
   const items=list(raw?.items),candidates:Candidate[]=[];
-  for(const value of items){const row=value as {id?:unknown;volumeInfo?:Record<string,unknown>},info=row.volumeInfo,id=text(row.id);if(!id||!info)continue;const title=text(info.title);if(!title)continue;const author=list(info.authors,4).map(x=>text(x)).filter(Boolean).join(', '),genre=providerGenre(info.categories),cover=image((info.imageLinks as {thumbnail?:unknown}|undefined)?.thumbnail),language=text(info.language,32);
-   candidates.push({id,provider:'google-books',identifiers:list(info.industryIdentifiers).map(x=>text((x as {identifier?:unknown})?.identifier,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(cover?{coverUrl:cover}:{}),...(language?{language}:{})}});
+  for(const value of items){const row=value as {id?:unknown;volumeInfo?:Record<string,unknown>},info=row.volumeInfo,id=text(row.id);if(!id||!info)continue;const title=text(info.title);if(!title)continue;const author=list(info.authors,4).map(x=>text(x)).filter(Boolean).join(', '),genre=providerGenre(info.categories),publishedYear=year(info.publishedDate),cover=image((info.imageLinks as {thumbnail?:unknown}|undefined)?.thumbnail),language=text(info.language,32);
+   candidates.push({id,provider:'google-books',identifiers:list(info.industryIdentifiers).map(x=>text((x as {identifier?:unknown})?.identifier,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(publishedYear?{publishedYear}:{}),...(cover?{coverUrl:cover}:{}),...(language?{language}:{})}});
   }
   return {candidates,nextPage:typeof raw.totalItems==='number'&&page*20+items.length<raw.totalItems?page+1:null};
  }});

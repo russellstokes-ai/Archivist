@@ -1,5 +1,5 @@
 export type SearchFields=Partial<Record<'title'|'author'|'series'|'seriesNumber'|'isbn'|'asin'|'language',string>>;
-export type Candidate={id:string;provider:string;fields:SearchFields&{genre?:string;coverUrl?:string;description?:string};identifiers:string[];anthology?:boolean};
+export type Candidate={id:string;provider:string;fields:SearchFields&{genre?:string;coverUrl?:string;description?:string;publishedYear?:string};identifiers:string[];anthology?:boolean};
 export type SearchWork={workId:string;revision:number;fields:SearchFields;manual:Record<string,boolean|undefined>;partIds:string[]};
 export type Query=SearchFields;
 export interface SearchProvider {id:string;available?:boolean;search(query:Query,page:number,signal?:AbortSignal):Promise<{candidates:Candidate[];nextPage:number|null}>}

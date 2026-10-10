@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const {GENRE_CHOICES,genreChoiceLabel}=require('./scannerVNext/genreChoices.ts');
+const {normalizeGenre}=require('./scannerVNext/genre.ts'),{assistFeedback}=require('./scannerVNext/assistFeedback.ts');
+assert.equal(GENRE_CHOICES.length,23);assert.equal(new Set(GENRE_CHOICES.map(x=>x.id)).size,23);
+for(const choice of GENRE_CHOICES)assert.equal(normalizeGenre([{value:choice.value,source:'manual'}]).id,choice.id);
+assert.equal(genreChoiceLabel('Science Fiction'),'Sci-Fi');assert.equal(genreChoiceLabel('Space opera'),'Sci-Fi');assert.equal(genreChoiceLabel('Unknown'),'Choose genre');
+assert.match(assistFeedback({state:'error'}),/retry/);assert.doesNotMatch(assistFeedback({state:'error'}),/Looking/);
+assert.match(assistFeedback({state:'needs-clues'}),/title or author/);
+console.log('PASS: fixed 23-choice genres preserve taxonomy IDs and Assist failures finish with actionable feedback');

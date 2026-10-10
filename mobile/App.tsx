@@ -52,6 +52,8 @@ import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';
 import {projectScannerWorks,toFields,type ScannerBook} from './scannerVNext/runtime';
 import type {AssistState} from './scannerVNext/assist';
 import {normalizeGenre} from './scannerVNext/genre';
+import {GENRE_CHOICES,genreChoiceLabel} from './scannerVNext/genreChoices';
+import {assistFeedback} from './scannerVNext/assistFeedback';
 import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
@@ -1123,6 +1125,7 @@ function Client() {
   const [editSeries,setEditSeries]=useState('');
   const [editSeriesNumber,setEditSeriesNumber]=useState('');
   const [editGenre,setEditGenre]=useState('');
+  const [genreChoicesOpen,setGenreChoicesOpen]=useState(false);
   const [editYear,setEditYear]=useState('');
   const [editNarrator,setEditNarrator]=useState('');
   const [editPublisher,setEditPublisher]=useState('');
@@ -1134,6 +1137,8 @@ function Client() {
   const [editCoverUri,setEditCoverUri]=useState('');
   const [editPickedCover,setEditPickedCover]=useState<{uri:string;fileName?:string|null;fileSize?:number}|null>(null);
   const [coverPicking,setCoverPicking]=useState(false);
+  const metadataDraftRef=useRef('');
+  metadataDraftRef.current=JSON.stringify([editTitle,editAuthor,editSeries,editSeriesNumber,editGenre,editYear,editNarrator,editPublisher,editISBN,editASIN,editLanguage,editDescription,editCoverUri,editPickedCover]);
   const [sortTemplate,setSortTemplate]=useState('author-title');
   const [localSortMode,setLocalSortMode]=useState<LocalSortMode>('copy');
   const [moveStatus,setMoveStatus]=useState('');
@@ -4179,6 +4184,7 @@ function Client() {
     setEditSeries(item.series || '');
     setEditSeriesNumber(item.seriesNumber === undefined ? '' : String(item.seriesNumber));
     setEditGenre(item.genre || '');
+    setGenreChoicesOpen(false);
     setEditYear(item.publishedYear ? String(item.publishedYear) : '');
     setEditNarrator(item.narrator || '');
     setEditPublisher(item.publisher || '');
@@ -4658,6 +4664,17 @@ function Client() {
     if(!editing)return null;
     const localEdit=editing.source!=='server'&&!!editing.uri;
     const targets=editingUris.length?editingUris:(editing.uri?[editing.uri]:[]);
+    const draftVersion=metadataDraftRef.current;
+    const assistCompleted=async(id:string,state:AssistState)=>{
+      if(editingScannerId.current===id)setAssistState(state);
+      if(state.state!=='accepted')return;
+      const runtime=await freshRuntime(),rows=await runtime.refresh(id);await applyScannerRows(rows);
+      if(editingScannerId.current!==id||metadataDraftRef.current!==draftVersion)return;
+      const latest=await runtime.metadata.get(id);if(!latest||metadataDraftRef.current!==draftVersion)return;
+      const f=latest.fields,cover=rows[0]?.coverUri||f.coverUri||'';
+      setEditing(current=>current?.scannerWorkId===id?{...current,...f,seriesNumber:f.seriesNumber?Number(f.seriesNumber):undefined,publishedYear:f.publishedYear?Number(f.publishedYear):undefined,coverUri:cover}:current);
+      setEditTitle(f.title||'');setEditAuthor(f.author||'');setEditSeries(f.series||'');setEditSeriesNumber(f.seriesNumber||'');setEditGenre(f.genre||'');setEditYear(f.publishedYear||'');setEditNarrator(f.narrator||'');setEditPublisher(f.publisher||'');setEditISBN(f.isbn||'');setEditASIN(f.asin||'');setEditLanguage(f.language||'');setEditDescription(f.description||'');setEditCoverUri(cover);
+    };
     const save=async()=>{
       const title=editTitle.trim(),author=editAuthor.trim(),seriesName=editSeries.trim(),genre=editGenre.trim();
       const seriesNumberText=editSeriesNumber.trim();
@@ -4687,7 +4704,7 @@ function Client() {
           await applyScannerRows(await runtime.refresh(id));
           setEditing({...editing,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);
           setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});
-          void result.completion.then(async state=>{if(editingScannerId.current===id)setAssistState(state);if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);
+          void result.completion.then(state=>assistCompleted(id,state)).catch(()=>{if(editingScannerId.current===id)setAssistState({revision:result.work.revision,state:'error',updated:Date.now()});});
         }catch(e){setError((e as Error).message);}finally{setBusy(false);}
       }else if(editing.uri){
         const override:LocalMetadataOverride={title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined};
@@ -4709,12 +4726,12 @@ function Client() {
     };
     const runAssist=async()=>{
       if(!editing.scannerWorkId||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;
-      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,assistPolicy(true));setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(async state=>{if(editingScannerId.current===id)setAssistState(state);if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);}
+      try{const runtime=await freshRuntime(),result=await runtime.assist.search(id,{...assistPolicy(true),retry:true});setAssistState({revision:result.work.revision,state:'pending',updated:Date.now()});void result.completion.then(state=>assistCompleted(id,state)).catch(()=>{if(editingScannerId.current===id)setAssistState({revision:result.work.revision,state:'error',updated:Date.now()});});}
       catch(e){setError((e as Error).message);}finally{setBusy(false);}
     };
     const acceptAssist=async(candidateId:string,confirm=false)=>{
       if(!editing.scannerWorkId||!assistState||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;
-      try{const runtime=await freshRuntime(),work=await runtime.assist.accept(id,candidateId,assistState.revision,confirm);await applyScannerRows(await runtime.refresh(id));setEditing({...editing,title:work.fields.title||'',author:work.fields.author||'',series:work.fields.series||'',seriesNumber:work.fields.seriesNumber?Number(work.fields.seriesNumber):undefined,genre:work.fields.genre||'',coverUri:work.fields.coverUri});setEditTitle(work.fields.title||'');setEditAuthor(work.fields.author||'');setEditSeries(work.fields.series||'');setEditSeriesNumber(work.fields.seriesNumber||'');setEditGenre(work.fields.genre||'');setEditCoverUri(work.fields.coverUri||'');setAssistState(await runtime.assist.get(id));}
+      try{const runtime=await freshRuntime(),work=await runtime.assist.accept(id,candidateId,assistState.revision,confirm);await assistCompleted(id,{revision:work.revision,state:'accepted',updated:Date.now()});}
       catch(e){setError((e as Error).message);}finally{setBusy(false);}
     };
     const confirmDetails=async()=>{
@@ -4783,11 +4800,14 @@ function Client() {
       closeEditor();
     };
     return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={requestEditorClose}>
-      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':undefined}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close metadata editor" style={styles.modalBackdrop} onPress={requestEditorClose}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
-          <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{backgroundColor:p.card,borderColor:p.line}]} onPress={()=>undefined}>
+      <KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':'height'}>
+        <View style={[styles.modalBackdrop,{paddingHorizontal:12,paddingTop:Math.max(12,safeArea.top),paddingBottom:Math.max(12,safeArea.bottom)}]}>
+          <View accessibilityViewIsModal={true} accessibilityLabel={'Edit details for '+editing.title} style={[styles.modalCard,{flex:1,minHeight:0,maxHeight:'100%',backgroundColor:p.card,borderColor:p.line}]}>
+            <ScrollView style={{flex:1,width:'100%'}} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{gap:9,paddingBottom:12}}>
+
             <Text style={[styles.playerEyebrow,{color:p.sage}]}>{localEdit?'ARCHIVIST ASSIST':'METADATA & COVER'}</Text>
             <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Review details</Text>
+            {error?<Text accessibilityRole="alert" style={[styles.meta,{color:p.danger}]}>{error}</Text>:null}
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
             <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
@@ -4797,7 +4817,11 @@ function Client() {
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Series" value={editSeries} onChangeText={setEditSeries} placeholder="Series" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Series number" keyboardType="decimal-pad" value={editSeriesNumber} onChangeText={setEditSeriesNumber} placeholder="Series number (for example 2 or 2.5)" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
-            <TextInput accessibilityLabel="Genre" value={editGenre} onChangeText={setEditGenre} placeholder="Genre" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
+            <Pressable accessibilityRole="combobox" accessibilityLabel="Genre" accessibilityState={{expanded:genreChoicesOpen}} onPress={()=>setGenreChoicesOpen(open=>!open)} style={[styles.input,{borderColor:p.line,backgroundColor:p.raised}]}><Text style={{color:editGenre?p.ink:p.muted}}>{genreChoiceLabel(editGenre)} ▾</Text></Pressable>
+            {genreChoicesOpen?<ScrollView nestedScrollEnabled style={{maxHeight:220,borderWidth:1,borderColor:p.line,borderRadius:8}} keyboardShouldPersistTaps="handled">
+              {GENRE_CHOICES.map(choice=><Pressable key={choice.id} accessibilityRole="radio" accessibilityState={{selected:normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).id===choice.id}} onPress={()=>{setEditGenre(choice.value);setGenreChoicesOpen(false);}} style={{padding:12}}><Text style={{color:p.ink}}>{choice.label}</Text></Pressable>)}
+            </ScrollView>:null}
+            {!editYear?<Text style={[styles.meta,{color:p.muted}]}>Assist will fill the publication year when a matching source records it.</Text>:null}
             <TextInput accessibilityLabel="Publication year" keyboardType="number-pad" maxLength={4} value={editYear} onChangeText={setEditYear} placeholder="Publication year" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <Button label={editAdvancedOpen?'Hide additional details':'Additional details'} tone="quiet" onPress={()=>setEditAdvancedOpen(value=>!value)}/>
             {editAdvancedOpen?<View style={styles.settingsSubgroup}>
@@ -4836,10 +4860,9 @@ function Client() {
               </View>:null}
             </View>:null}
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
-            <Button label="Save details" disabled={busy||coverPicking||(!editTitle.trim()&&!editAuthor.trim())} onPress={()=>void save()}/>
             {editing.scannerWorkId?<View style={styles.settingsSubgroup}>
-              <Button label="Archivist Assist" tone="quiet" disabled={busy||coverPicking||editorDirty} onPress={()=>void runAssist()}/>
-              {assistState?<Text style={[styles.meta,{color:p.muted}]}>{assistState.state==='pending'?'Looking for this work…':assistState.state==='offline'?'Saved. Connect to search for missing details.':assistState.state==='disabled'?'Saved. Online metadata lookup is switched off.':assistState.state==='no-match'?'No close match. Add a title or author, save, then try Assist again.':assistState.state==='accepted'?'Match accepted. Genre and artwork must also be ready.':'Review a match below.'}</Text>:null}
+              <Button label={editorDirty?'Save details first':assistState?.state==='pending'?'Searching…':'Archivist Assist'} tone="quiet" disabled={busy||coverPicking||editorDirty||assistState?.state==='pending'} onPress={()=>void runAssist()}/>
+              {assistState?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:assistState.state==='error'?p.gold:p.muted}]}>{assistFeedback(assistState)}</Text>:null}
               {assistState?.result?.candidates.map(row=><Button key={row.candidate.provider+'|'+row.candidate.id} label={(row.candidate.fields.title||'Untitled')+' · '+(row.candidate.fields.author||'Unknown author')} tone="quiet" disabled={busy||editorDirty} onPress={()=>{
                 const id=row.candidate.provider+'|'+row.candidate.id;
                 if(row.conflicts.length)Alert.alert('Replace conflicting details?',row.conflicts.includes('anthology')?'This result is an anthology and cannot identify the individual story.':'This match conflicts with '+row.conflicts.join(', ')+'. Your saved details change only if you approve.',[{text:'Keep my details',style:'cancel'},...(row.conflicts.includes('anthology')?[]:[{text:'Accept replacement',onPress:()=>void acceptAssist(id,true)}])]);
@@ -4847,12 +4870,16 @@ function Client() {
               }}/>) }
               {Object.entries(assistState?.result?.nextPages||{}).filter(([,page])=>page!==null).map(([provider,page])=><Button key={provider} label={'More matches · '+provider} tone="quiet" disabled={busy||editorDirty} onPress={()=>void moreAssist(provider,page!)}/>)}
               <Button label="Confirm saved identity" tone="quiet" disabled={busy||editorDirty||!editTitle.trim()||!editAuthor.trim()} onPress={()=>void confirmDetails()}/>
-              {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>A clear genre is needed before this work is ready for Atlas.</Text>:null}
+              {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>Choose a genre, or let Assist find one. Books with missing details remain visible.</Text>:null}
             </View>:null}
             {localEdit&&!editing.scannerWorkId?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
-            <Button label="Cancel" tone="quiet" disabled={busy||coverPicking} onPress={requestEditorClose}/>
-          </Pressable>
-        </ScrollView></Pressable>
+            </ScrollView>
+            <View style={{gap:6,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:p.line,paddingTop:8}}>
+              <Button label="Save details" disabled={busy||coverPicking||(!editTitle.trim()&&!editAuthor.trim())} onPress={()=>void save()}/>
+              <Button label="Close" tone="quiet" disabled={busy||coverPicking} onPress={requestEditorClose}/>
+            </View>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>;
   }
@@ -7528,11 +7555,14 @@ function Client() {
           <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} style={styles.libraryManageBodyScroll} contentContainerStyle={styles.libraryManageBody}>
             <DismissSheetHandle onDismiss={()=>setLibraryManageOpen(false)} foldLayout={foldLayout}/>
             <View style={styles.sheetHeader}>
-              <View style={{flex:1,minWidth:0}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Manage Library</Text><Text style={[styles.meta,{color:p.muted}]}>Scan, repair metadata and organise safely. Archivist previews file changes before applying them.</Text></View>
+              <View style={{flex:1,minWidth:0}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Manage Library</Text><Text style={[styles.meta,{color:p.muted}]}>1. Review book details. 2. Fill gaps with Assist. 3. Move files only if you want to.</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" onPress={()=>setLibraryManageOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
             </View>
 
             <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEEDS ATTENTION</Text>
+            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEXT STEP</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{reviewCount?'Review uncertain books, save any corrections, then let Assist fill missing details.':'Your books are grouped. Check missing genres and publication years before exploring Atlas.'} Moving files is optional.</Text>
+            <Button label={reviewCount?'Review uncertain metadata ('+reviewCount+')':'Review missing details'} onPress={reviewCount?openReview:()=>openGap('incomplete')}/>
             <View style={styles.libraryHealthGrid}>
               {[
                 {label:'Missing metadata',value:gaps.incomplete,onPress:()=>openGap('incomplete')},
@@ -7544,9 +7574,9 @@ function Client() {
 
             <View style={[styles.libraryManageSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>SCAN & REPAIR</Text>
-              <Text style={[styles.meta,{color:p.muted}]}>Rescanning refreshes embedded, sidecar and folder-derived details and covers. Anything still uncertain stays in review rather than being guessed.</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Rescan after adding or removing files. Use metadata review above to fix book details.</Text>
               <View style={styles.toolRow}>
-                <Button label={libraryRefreshActive?'Refreshing…':rescanLocalFoldersLabel} disabled={libraryRefreshActive||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
+                <Button label={libraryRefreshActive?'Refreshing…':rescanLocalFoldersLabel} tone="quiet" disabled={libraryRefreshActive||!localFolders.length} onPress={()=>void rescanLocalFolders()}/>
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>

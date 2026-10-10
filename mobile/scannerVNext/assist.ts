@@ -1,10 +1,11 @@
 import type {ScannerDatabase} from './store';
 import type {SearchService,SearchResult} from './search';
 import {rankCandidates} from './search';
+import {normalizeGenre} from './genre';
 import type {createMetadataStore,MetadataWork,WorkFields} from './fieldEvidence';
 type MetadataStore=Awaited<ReturnType<typeof createMetadataStore>>;
 type Policy={online:boolean;automatic:boolean;explicit?:boolean;retry?:boolean};
-export type AssistState={revision:number;state:SearchResult['state']|'pending'|'stale'|'cancelled'|'accepted';result?:SearchResult;updated:number};
+export type AssistState={revision:number;state:SearchResult['state']|'pending'|'stale'|'cancelled'|'accepted'|'error'|'needs-clues';result?:SearchResult;updated:number};
 export async function createAssistController(db:ScannerDatabase,store:MetadataStore,service:Pick<SearchService,'search'>&Partial<Pick<SearchService,'more'>>){
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_assist(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL);');
  const active=new Map<string,AbortController>();
@@ -20,7 +21,7 @@ export async function createAssistController(db:ScannerDatabase,store:MetadataSt
    if(!owns())throw superseded;written=true;
   });}catch(error){if(error!==superseded)throw error;return false;}return written;
  }
- const get=async(id:string):Promise<AssistState|null>=>{const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_assist WHERE work_id=? AND length(payload)<=524288',id);return row?JSON.parse(row.payload):null;};
+ const get=async(id:string):Promise<AssistState|null>=>{const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_assist WHERE work_id=? AND length(payload)<=524288',id);const value:AssistState|null=row?JSON.parse(row.payload):null;return value?.state==='pending'&&!active.has(id)?{...value,state:'error'}:value;};
  async function start(work:MetadataWork,policy:Policy){
   active.get(work.workId)?.abort();const controller=new AbortController();active.set(work.workId,controller);
   await persist(work,{revision:work.revision,state:'pending',updated:Date.now()},controller);
@@ -29,16 +30,29 @@ export async function createAssistController(db:ScannerDatabase,store:MetadataSt
     const result=await service.search(work,{...policy,signal:controller.signal});
     const eligible=rankCandidates(work.fields,result.candidates.map(row=>row.candidate)).filter(row=>row.automaticEligible&&!row.candidate.anthology);
     const complete=result.state==='review'&&!result.issues.length&&!Object.values(result.nextPages).some(page=>page!==null);
+    if(policy.online&&policy.automatic&&work.identityConfirmed&&eligible.length&&!result.issues.length&&!controller.signal.aborted&&active.get(work.workId)===controller){
+     const genres=new Set(eligible.map(row=>normalizeGenre(row.candidate.fields.genre?[{value:row.candidate.fields.genre,source:'provider'}]:[]).label).filter((value):value is string=>!!value));
+     const years=new Set(eligible.map(row=>row.candidate.fields.publishedYear).filter((value):value is string=>!!value));
+     const publishedYear=!work.manual.publishedYear&&!work.fields.publishedYear&&years.size===1?[...years][0]:undefined;
+     const covers=new Set(eligible.map(row=>row.candidate.fields.coverUrl).filter((value):value is string=>!!value));
+     const genre=!work.manual.genre&&normalizeGenre(work.fields.genre?[{value:work.fields.genre,source:'embedded'}]:[]).state==='unresolved'&&genres.size===1?[...genres][0]:undefined;
+     const coverUrl=!work.manual.coverUri&&!work.fields.coverUri&&covers.size===1?[...covers][0]:undefined;
+     if(genre||coverUrl||publishedYear){
+      const enriched=await store.accept(work.workId,{id:'matching-work-consensus',provider:'assist',identifiers:[],fields:{...work.fields,...(genre?{genre}:{}),...(publishedYear?{publishedYear}:{}),...(coverUrl?{coverUrl}:{})}},work.revision,{signal:controller.signal});
+      const value:AssistState={revision:enriched.revision,state:'accepted',result,updated:Date.now()};
+      if(await persist(enriched,value,controller))return value;return {...value,state:'stale'};
+     }
+    }
     if(policy.online&&policy.automatic&&complete&&eligible.length===1&&!controller.signal.aborted&&active.get(work.workId)===controller){
      const enriched=await store.accept(work.workId,eligible[0].candidate,work.revision,{signal:controller.signal});
      const accepted:AssistState={revision:enriched.revision,state:'accepted',result,updated:Date.now()};
      if(await persist(enriched,accepted,controller))return accepted;
      return {revision:enriched.revision,state:'stale',updated:Date.now()};
     }
-    const value:AssistState={revision:work.revision,state:result.state,result,updated:Date.now()};
+    const value:AssistState={revision:work.revision,state:result.state==='pending'?(result.issues.length?'error':'needs-clues'):result.state,result,updated:Date.now()};
     if(controller.signal.aborted||!await persist(work,value,controller))return {revision:work.revision,state:'stale',updated:Date.now()};return value;
    }catch(error){
-    const value:AssistState={revision:work.revision,state:controller.signal.aborted?'cancelled':'pending',updated:Date.now()};
+    const value:AssistState={revision:work.revision,state:controller.signal.aborted?'cancelled':'error',updated:Date.now()};
     if(!await persist(work,value,controller))return {...value,state:'stale'};return value;
    }finally{if(active.get(work.workId)===controller)active.delete(work.workId);}
   })();

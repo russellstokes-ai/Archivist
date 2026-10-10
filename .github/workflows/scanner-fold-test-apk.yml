@@ -1,7 +1,7 @@
 name: Fresh scanner Fold test APK
 on:
   push:
-    branches: ['feature/archivist-scanner-vnext-real-library']
+    branches: ['feature/archivist-scanner-vnext-real-library', 'feature/archivist-metadata-review']
     paths: ['.github/workflows/scanner-fold-test-apk.yml']
   workflow_dispatch:
 permissions:
