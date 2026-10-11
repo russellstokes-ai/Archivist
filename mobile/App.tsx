@@ -1,6 +1,7 @@
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {rewardAnimationForTitle} from './motion/rewardMotion';
 import {ArchivistMotion} from './motion/ArchivistMotion';
 import type {ArchivistMotionKind} from './motion/ArchivistMotion';
 import {livingBookStageSize} from './livingBookStage';
@@ -602,7 +603,7 @@ function ArchivistLogo({size=44,opacity=1}:{size?:number;opacity?:number}={}) {
   return <Image accessible={false} source={require('./assets/icon.png')} resizeMode="contain" style={{width:size,height:size,borderRadius:Math.max(8,size*.22),opacity}}/>;
 }
 
-function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {
+function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0',motionKind='books-stack',foldLayout=false}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string;motionKind?:ArchivistMotionKind;foldLayout?:boolean}) {
   const burst = useRef(new Animated.Value(0)).current;
   const sparks=useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -646,7 +647,8 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
       <Animated.View pointerEvents="none" style={{position:'absolute',width:440,height:440,opacity:burst}}><AmbientGlow color="#B99A68" size={440} strength={2}/></Animated.View>
       <Animated.View style={[styles.celebrationBadge, {backgroundColor:paper,borderWidth:1,borderColor:'#B99A68',opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:reduceMotion?[1,1,1]:[0.96,1.01,1]})}]}]}>
         <Text style={{color:'#B99A68',fontSize:11,letterSpacing:2,marginBottom:12}}>A MOMENT TO REMEMBER</Text>
-        <UiIcon name="bookmark" color="#B99A68" size={32}/>
+        <ArchivistMotion kind={motionKind} active={active} reduceMotion={reduceMotion}
+          size={foldLayout?112:96} loop={false} fallback={<UiIcon name="bookmark" color="#B99A68" size={32}/>}/>
         <Text style={[styles.celebrationTitle,{color:ink,fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,textAlign:'center',marginTop:12}]}>{title}</Text>
         <Text style={[styles.celebrationCopy,{color:muted,textAlign:'center'}]}>{copy}</Text>
       </Animated.View>
@@ -5873,6 +5875,8 @@ function Client() {
             <View style={styles.playerStatusRow}>
               <Text style={[styles.playerStatusText,{color:p.muted}]}>{current.source==='server'?'Server':current.source==='downloaded'?'Downloaded':'On this device'}</Text>
               {offlineCopy?<Text style={[styles.playerStatusText,{color:p.sage}]}>Available offline</Text>:null}
+              <ArchivistMotion kind="audio-waveform" width={36} height={22} active={appActive&&isPlaying}
+                reduceMotion={reduceMotion} fallback={null}/>
               {current.source==='server'&&currentServerWork&&!offlineCopy?<Pressable accessibilityRole="button" disabled={offlineBusyId===currentServerWork.id} onPress={()=>void downloadServerWork(currentServerWork)} style={styles.playerStatusAction}><Text style={[styles.playerStatusText,{color:p.sage,fontWeight:'600'}]}>{offlineBusyId===currentServerWork.id?'Downloading…':'Download'}</Text></Pressable>:null}
             </View>
             </View>
@@ -5919,7 +5923,7 @@ function Client() {
                 disabled={!transportReady}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
+                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <ArchivistMotion kind="pause-play" iconTone={p.paper==='#000000'?'dark':'light'} size={31} playing={isPlaying} active={appActive} reduceMotion={reduceMotion} loop={false} fallback={<UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>} />}
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipForward" color={p.ink} size={30}/>
@@ -8134,6 +8138,8 @@ function Client() {
       </Animated.View>
       <CelebrationOverlay
         reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}
+        foldLayout={foldLayout}
+        motionKind={achievementCelebration?rewardAnimationForTitle(achievementCelebration.title):'books-stack'}
         active={celebrating || !!achievementCelebration}
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
@@ -8162,7 +8168,10 @@ function Client() {
             </View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={(playing.source==='server'?playback?.playing:audio.playing)?'Pause '+playing.title:'Play '+playing.title} hitSlop={6} onPress={()=>playing.source==='server'?controller.toggle():audio.playing?player.pause():player.play()} style={[styles.miniButton,{backgroundColor:p.raised}]}>
-            <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
+            <ArchivistMotion kind="pause-play" iconTone={p.paper==='#000000'?'light':'dark'} size={24}
+               playing={!!(playing.source==='server'?playback?.playing:audio.playing)} active={appActive}
+               reduceMotion={reduceMotion} loop={false}
+               fallback={<UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>} />
           </Pressable>
         </View>
       ) : !playing && (reading||lastReading) && !(activeTab==='now'&&liveMode==='reader') && activeTab!=='reader' ? (

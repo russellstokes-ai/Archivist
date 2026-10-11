@@ -169,3 +169,7 @@ On each sprint update only this living plan on its development branch: list exac
 ### 2026-10-11 P2 native loading candidate (NOT YET ACCEPTED)
 - Branch `polish/archivist-motion-native-20261011`: pinned `lottie-react-native@7.3.8` for RN 0.83 compatibility. Native-only Lottie wrapper, web fallback and direct replacement of TWO loading spinners with bundled Books Stack/Headphones/Book Loader. Full scan progress bar/counters and cancel control unchanged; protected scanner code untouched.
 - Native integration typecheck, Android Kotlin compile, iOS Simulator and visual/on-device checks are required. Do not claim Lottie validated or publish a candidate until green. Lottie play/pause, waveform and reward assets exist in Motion Lab but not promoted to production yet.
+
+### 2026-10-11 P3/P4 source checkpoint — native visual acceptance OPEN
+- Branch `polish/archivist-motion-player-rewards-20261011` adds palette-specific icon-only vector Lottie Play/Pause into existing Now and mini-player Pressables, a subtle waveform visible only while actually playing and in foreground, and 96/112dp milestone art inside the existing celebration overlay.
+- Existing achievement ledgers, play/pause action handlers, playback state, scanner core and exact Living Book renderer remain intact. Reward asset type is selected from already-earned title only. Native visual/timing/contrast tests needed before production promotion.

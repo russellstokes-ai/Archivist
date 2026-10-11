@@ -15,7 +15,7 @@ const sources={
   'level-up-confetti':require('../assets/motion/level-up-confetti.json'),
   'firework-burst':require('../assets/motion/firework-burst.json'),
 } as const;
-export function ArchivistMotion({kind,size=40,width=size,height=size,active=true,reduceMotion=false,playing=false,loop,fallback}:ArchivistMotionProps){
+export function ArchivistMotion({kind,size=40,width=size,height=size,active=true,reduceMotion=false,playing=false,loop,fallback,iconTone='light'}:ArchivistMotionProps){
   const animation=useRef<LottieView>(null);
   const previousPlaying=useRef<boolean|null>(null);
   const transport=kind==='pause-play';
@@ -28,8 +28,9 @@ export function ArchivistMotion({kind,size=40,width=size,height=size,active=true
   },[transport,active,reduceMotion,playing,kind]);
   useEffect(()=>()=>{animation.current?.pause();},[]);
   if(reduceMotion||!active)return <View pointerEvents="none" style={{width,height,alignItems:'center',justifyContent:'center'}}>{fallback||null}</View>;
+  const visual=transport?(iconTone==='dark'?require('../assets/motion/pause-play-dark-glyph.json'):require('../assets/motion/pause-play-light-glyph.json')):sources[kind];
   return <View pointerEvents="none" accessible={false} style={{width,height}}>
-    <LottieView ref={animation} source={sources[kind]} style={{width,height}}
+    <LottieView ref={animation} source={visual} style={{width,height}}
       resizeMode="contain" autoPlay={!transport}
       loop={transport?false:(loop??['book-loader','books-stack','headphones','audio-waveform'].includes(kind))}/>
   </View>;

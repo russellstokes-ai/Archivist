@@ -41,6 +41,34 @@
     {
       "old": "      return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n        <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
       "new": "      return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n        <ArchivistMotion kind={libraryMotionKind} size={38} active={appActive&&activeProgress.phase!=='complete'}\n          reduceMotion={reduceMotion} fallback={<UiIcon name=\"bookOpen\" color={p.sage} size={22}/>}/>"
+    },
+    {
+      "old": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';",
+      "new": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';\nimport {rewardAnimationForTitle} from './motion/rewardMotion';"
+    },
+    {
+      "old": "function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {",
+      "new": "function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0',motionKind='books-stack',foldLayout=false}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string;motionKind?:ArchivistMotionKind;foldLayout?:boolean}) {"
+    },
+    {
+      "old": "<UiIcon name=\"bookmark\" color=\"#B99A68\" size={32}/>",
+      "new": "<ArchivistMotion kind={motionKind} active={active} reduceMotion={reduceMotion}\n          size={foldLayout?112:96} loop={false} fallback={<UiIcon name=\"bookmark\" color=\"#B99A68\" size={32}/>}/>"
+    },
+    {
+      "old": "{!transportReady ? <ActivityIndicator color=\"#FFFFFF\"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}",
+      "new": "{!transportReady ? <ActivityIndicator color=\"#FFFFFF\"/> : <ArchivistMotion kind=\"pause-play\" iconTone={p.paper==='#000000'?'dark':'light'} size={31} playing={isPlaying} active={appActive} reduceMotion={reduceMotion} loop={false} fallback={<UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>} />}"
+    },
+    {
+      "old": "<UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>",
+      "new": "<ArchivistMotion kind=\"pause-play\" iconTone={p.paper==='#000000'?'light':'dark'} size={24}\n               playing={!!(playing.source==='server'?playback?.playing:audio.playing)} active={appActive}\n               reduceMotion={reduceMotion} loop={false}\n               fallback={<UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>} />"
+    },
+    {
+      "old": "{offlineCopy?<Text style={[styles.playerStatusText,{color:p.sage}]}>Available offline</Text>:null}",
+      "new": "{offlineCopy?<Text style={[styles.playerStatusText,{color:p.sage}]}>Available offline</Text>:null}\n              <ArchivistMotion kind=\"audio-waveform\" width={36} height={22} active={appActive&&isPlaying}\n                reduceMotion={reduceMotion} fallback={null}/>"
+    },
+    {
+      "old": "reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}",
+      "new": "reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}\n        foldLayout={foldLayout}\n        motionKind={achievementCelebration?rewardAnimationForTitle(achievementCelebration.title):'books-stack'}"
     }
   ]
 }
