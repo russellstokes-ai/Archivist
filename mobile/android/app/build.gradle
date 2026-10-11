@@ -92,6 +92,7 @@ android {
         applicationId 'app.archivist.reader'
         if (findProperty('scannerAcceptance') == 'true') applicationIdSuffix '.scanneracceptance'
         if (findProperty('livingBookScalePreview') == 'true') applicationIdSuffix '.bookscale'
+        if (findProperty('bookLoaderPreview') == 'true') applicationIdSuffix '.bookloader'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 102
