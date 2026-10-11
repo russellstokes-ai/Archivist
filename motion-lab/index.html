@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Archivist Motion Lab — isolated animation previews</title>
+<style>
+:root{color-scheme:dark;background:#08151b;color:#f3ecd9;font:14px/1.5 system-ui, sans-serif}
+*{box-sizing:border-box}body{margin:0;padding:24px;max-width:1400px;margin-inline:auto}
+header{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;align-items:center}h1{font-family:Georgia,serif;font-size:30px;margin:0}
+p{color:#abc0c0}.toolbar{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0 28px}
+button,select{border:1px solid #47736F;background:#102b35;color:#f3ecd9;border-radius:10px;padding:10px 16px;cursor:pointer;font:inherit}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:15px}
+.card{background:#10222a;border:1px solid #315153;border-radius:16px;padding:16px;min-width:0}
+.card canvas{width:min(100%,165px);aspect-ratio:1;display:block;margin:12px auto;background:transparent}
+.card h2{font:600 16px/1.4 system-ui;margin:0}.card p{font-size:12px;margin:0}
+body.light{background:#f3ecd9;color:#102b35}body.light .card{background:#fffdf8;border-color:#d9c9af}body.light p{color:#426566}
+.notice{font-size:12px;padding:10px 12px;border-left:3px solid #b99a68;margin-bottom:20px}
+</style></head><body><header><div><h1>Archivist — Motion Lab</h1><p>Isolated preview · local authored vector Lottie JSON · does not touch the app</p></div><strong>Source baseline df4c39b</strong></header>
+<div class="toolbar"><button id="play">Pause preview</button><button id="reset">Restart</button><button id="theme">Light mode</button><label><input type="checkbox" id="reduced"/> Reduced Motion</label><label>Speed <select id="speed"><option value=".5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select></label></div>
+<div class="notice">This static developer lab renders a supported subset of the authored Lottie vector shapes/keyframes for review. Native rendering in React Native must be verified independently. To run offline: from repository root, serve the folder locally (e.g. python -m http.server) and open /motion-lab/. No CDN or external requests.</div>
+<section class="grid" id="grid"></section>
+<script>
+const ids=['book-loader','books-stack','headphones','pause-play','audio-waveform','trophy','twinkle-crown','badge','level-up-confetti','firework-burst'];
+const states=[];let playing=true,reduced=false,speed=1,start=performance.now(),pausedFrame=0;
+function val(p,t){if(!p)return[0];if(!p.a)return p.k;const k=p.k||[];if(t<=k[0].t)return k[0].s;for(let i=0;i<k.length-1;i++){const a=k[i],b=k[i+1];if(t<=b.t){const f=Math.max(0,Math.min(1,(t-a.t)/(b.t-a.t)));const smooth=f*f*(3-2*f);return a.s.map((v,j)=>v+(b.s[j]-v)*smooth);}}return k[k.length-1].s;}
+function drawShape(ctx,s){if(s.ty==='rc'){const p=val(s.p,0),d=val(s.s,0),r=val(s.r,0)[0]||0;const x=p[0]-d[0]/2,y=p[1]-d[1]/2;ctx.beginPath();ctx.roundRect(x,y,d[0],d[1],r);}else if(s.ty==='el'){const p=val(s.p,0),d=val(s.s,0);ctx.beginPath();ctx.ellipse(p[0],p[1],d[0]/2,d[1]/2,0,0,Math.PI*2);}else if(s.ty==='sh'){const d=val(s.ks,0);ctx.beginPath();d.v.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));if(d.c)ctx.closePath();}}
+function draw(asset,canvas,frame){const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);const scale=canvas.width/128;ctx.save();ctx.scale(scale,scale);for(const layer of asset.layers){const o=val(layer.ks.o,frame)[0]/100;if(o<=0)continue;const pos=val(layer.ks.p,frame),sc=val(layer.ks.s,frame),rot=val(layer.ks.r,frame)[0]||0;ctx.save();ctx.translate(pos[0]||0,pos[1]||0);ctx.rotate(rot*Math.PI/180);ctx.scale(sc[0]/100,sc[1]/100);ctx.globalAlpha=o;for(const group of layer.shapes){let sh=null;for(const s of group.it){if(['rc','el','sh'].includes(s.ty)){drawShape(ctx,s);sh=s;}else if(sh&&s.ty==='fl'){const rgba=val(s.c,0);ctx.fillStyle='rgba('+rgba.slice(0,3).map(v=>Math.round(v*255)).join(',')+','+(rgba[3]??1)+')';ctx.fill();}else if(sh&&s.ty==='st'){const rgba=val(s.c,0);ctx.strokeStyle='rgb('+rgba.slice(0,3).map(v=>Math.round(v*255)).join(',')+')';ctx.lineWidth=val(s.w,0)[0];ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke();}}}ctx.restore();}ctx.restore();}
+for(const id of ids){const card=document.createElement('div');card.className='card';const title=id.replace(/-/g,' ').replace(/\b\w/g,x=>x.toUpperCase());card.innerHTML='<h2>'+title+'</h2><canvas width="256" height="256" aria-label="'+title+' animation"></canvas><p>Local vector JSON · 128 × 128 · 60fps</p>';grid.appendChild(card);fetch('../mobile/assets/motion/'+id+'.json').then(r=>{if(!r.ok)throw Error(id+' '+r.status);return r.json()}).then(asset=>states.push({asset,canvas:card.querySelector('canvas')})).catch(e=>card.querySelector('p').textContent='Cannot load JSON: '+e.message);}
+function tick(now){const elapsed=(playing?now-start:pausedFrame);let frame=(elapsed*60/1000*speed)%180;if(reduced)frame=90;for(const s of states)draw(s.asset,s.canvas,frame);requestAnimationFrame(tick);}requestAnimationFrame(tick);
+play.onclick=()=>{if(playing){pausedFrame=performance.now()-start;playing=false;play.textContent='Play preview';}else{start=performance.now()-pausedFrame;playing=true;play.textContent='Pause preview';}};
+reset.onclick=()=>{start=performance.now();pausedFrame=0;};theme.onclick=()=>{document.body.classList.toggle('light');theme.textContent=document.body.classList.contains('light')?'Dark mode':'Light mode';};
+document.getElementById('reduced').onchange=e=>reduced=e.target.checked;
+document.getElementById('speed').onchange=e=>{speed=Number(e.target.value);reset.click();};
+</script></body></html>

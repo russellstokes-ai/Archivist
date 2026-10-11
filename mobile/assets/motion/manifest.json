@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "baseline": "df4c39b44394d8c512ca0298bffa7f19da356490",
+  "source": "Original Archivist motion specifications from 7 October 2026",
+  "format": "local Lottie JSON 5.10.2 / vector only",
+  "framerate": 60,
+  "nominalPixels": [
+    128,
+    128
+  ],
+  "assets": [
+    {
+      "id": "book-loader",
+      "path": "mobile/assets/motion/book-loader.json",
+      "frames": 180
+    },
+    {
+      "id": "books-stack",
+      "path": "mobile/assets/motion/books-stack.json",
+      "frames": 180
+    },
+    {
+      "id": "headphones",
+      "path": "mobile/assets/motion/headphones.json",
+      "frames": 180
+    },
+    {
+      "id": "pause-play",
+      "path": "mobile/assets/motion/pause-play.json",
+      "frames": 180
+    },
+    {
+      "id": "audio-waveform",
+      "path": "mobile/assets/motion/audio-waveform.json",
+      "frames": 180
+    },
+    {
+      "id": "trophy",
+      "path": "mobile/assets/motion/trophy.json",
+      "frames": 180
+    },
+    {
+      "id": "twinkle-crown",
+      "path": "mobile/assets/motion/twinkle-crown.json",
+      "frames": 180
+    },
+    {
+      "id": "badge",
+      "path": "mobile/assets/motion/badge.json",
+      "frames": 180
+    },
+    {
+      "id": "level-up-confetti",
+      "path": "mobile/assets/motion/level-up-confetti.json",
+      "frames": 180
+    },
+    {
+      "id": "firework-burst",
+      "path": "mobile/assets/motion/firework-burst.json",
+      "frames": 180
+    }
+  ],
+  "reducedMotion": "Hold static representative frame; never run continuous loops",
+  "notes": "Book Loader/Books Stack/Headphones are standalone; Open Book concept was rejected. No production dependency installed until native test passes."
+}
