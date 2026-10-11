@@ -6,6 +6,8 @@
 
 > **Canonical full-app baseline (2026-10-11): df4c39b.** Read [AGENTS.md](AGENTS.md), [the baseline record](docs/scanner-vnext/CANONICAL_BASELINE.md) and **[the fixed commercial finishing & bug plan](docs/ARCHIVIST_COMMERCIAL_FINISHING_MASTER_PLAN_2026-10-11.md)** before any development. The scanner, direct-review flow, UI and exact Living Book animation are protected; only user-approved external Living Book resizing is permitted.
 
+> **Commercial finishing status (2026-10-11):** Source baseline `df4c39b` is frozen; active experimental code is on `polish/archivist-commercial-final-pass-20261011`. The iOS/Android mobile source is version **0.9.4**, but this animation candidate is **not yet a production release**. The Home Assistant add-on advertised on the older `main` branch is still **0.9.3** until a separately approved server promotion. Older 0.9.3 test APK names below document historical workflows, not the latest app APK. Read the [live commercial plan](docs/ARCHIVIST_COMMERCIAL_FINISHING_MASTER_PLAN_2026-10-11.md) for exact CI/artifact references, physical device acceptance and rollback rules. Do not overwrite canonical or promote this candidate without acceptance.
+
 **Your library. Yours.**
 
 Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The iOS and Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
