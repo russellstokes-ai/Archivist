@@ -1,9 +1,6 @@
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
-import {calculateLivingBookViewport} from './livingBookViewport';
-import {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';
-import {MotionLoader,MotionTransport,MotionWaveform,MotionReward,scanMotionVariant,achievementMotionKind,type MotionRewardKind} from './MotionAnimations';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -601,24 +598,19 @@ function ArchivistLogo({size=44,opacity=1}:{size?:number;opacity?:number}={}) {
   return <Image accessible={false} source={require('./assets/icon.png')} resizeMode="contain" style={{width:size,height:size,borderRadius:Math.max(8,size*.22),opacity}}/>;
 }
 
-function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0',rewardKind='books'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string;rewardKind?:MotionRewardKind}) {
-  const {width:rewardViewportWidth}=useWindowDimensions();
+function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {
   const burst = useRef(new Animated.Value(0)).current;
   const sparks=useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!active) {
       burst.setValue(0);
-      sparks.setValue(0);
       return;
     }
     burst.setValue(0);
-    sparks.setValue(0);
-    // The canonical reward burst omitted the sparks driver; particles stayed piled at centre.
-    if(!reduceMotion)Animated.timing(sparks,{toValue:1,duration:950,useNativeDriver:true}).start();
     Animated.sequence([
-      Animated.timing(burst, {toValue: 1, duration: reduceMotion?0:520, useNativeDriver: true}),
-      Animated.delay(reduceMotion?3000:2080),
-      Animated.timing(burst, {toValue: 0, duration: reduceMotion?0:420, useNativeDriver: true}),
+      Animated.timing(burst, {toValue: 1, duration: 520, useNativeDriver: true}),
+      Animated.delay(850),
+      Animated.timing(burst, {toValue: 0, duration: 420, useNativeDriver: true}),
     ]).start();
     return()=>{burst.stopAnimation();sparks.stopAnimation();};
   }, [active, burst,sparks,reduceMotion,title]);
@@ -650,7 +642,7 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
       <Animated.View pointerEvents="none" style={{position:'absolute',width:440,height:440,opacity:burst}}><AmbientGlow color="#B99A68" size={440} strength={2}/></Animated.View>
       <Animated.View style={[styles.celebrationBadge, {backgroundColor:paper,borderWidth:1,borderColor:'#B99A68',opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:reduceMotion?[1,1,1]:[0.96,1.01,1]})}]}]}>
         <Text style={{color:'#B99A68',fontSize:11,letterSpacing:2,marginBottom:12}}>A MOMENT TO REMEMBER</Text>
-        <MotionReward kind={rewardKind} reduceMotion={reduceMotion} size={rewardViewportWidth>=600?112:96}/>
+        <UiIcon name="bookmark" color="#B99A68" size={32}/>
         <Text style={[styles.celebrationTitle,{color:ink,fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,textAlign:'center',marginTop:12}]}>{title}</Text>
         <Text style={[styles.celebrationCopy,{color:muted,textAlign:'center'}]}>{copy}</Text>
       </Animated.View>
@@ -726,7 +718,7 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
-  const {width,height} = useWindowDimensions();
+  const {width} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const phoneLayout = width < 600;
@@ -1377,32 +1369,6 @@ function Client() {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return projectScannerWorks(local,groupLocalWorks);
   }, [localBooks]);
-  // Separate, non-scanner observer: no changes to canonical discovery/onboarding functions.
-  const firstEmptyScanObserved=useRef(false);
-  const firstLibraryCelebrationClaiming=useRef(false);
-  useEffect(()=>{
-    if(localCatalogReady&&localScanning&&phoneWorks.length===0)firstEmptyScanObserved.current=true;
-  },[localCatalogReady,localScanning,phoneWorks.length]);
-  useEffect(()=>{
-    const publishedWorks=phoneWorks.filter(work=>work.tracks.some(track=>(track as ScannerBook).scannerPublished)).length;
-    if(!shouldCelebrateFirstLibrary({
-      observedEmptyScan:firstEmptyScanObserved.current,eligible:celebrationEligible,
-      scanRunning:localScanning,prepared:libraryPreparationReady,catalogueReady:localCatalogReady,
-      restoring,publishedWorks,alreadyClaiming:firstLibraryCelebrationClaiming.current,
-      anotherCelebrationActive:!!achievementCelebration,
-    }))return;
-    firstLibraryCelebrationClaiming.current=true;
-    void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1').then(()=>{
-      firstEmptyScanObserved.current=false;
-      setCelebrationEligible(false);
-      setCelebrating(true);
-    }).catch(()=>{firstLibraryCelebrationClaiming.current=false;});
-  },[achievementCelebration,celebrationEligible,libraryPreparationReady,localCatalogReady,localScanning,phoneWorks,restoring]);
-  useEffect(()=>{
-    if(!celebrating)return;
-    const timer=setTimeout(()=>setCelebrating(false),3200);
-    return()=>clearTimeout(timer);
-  },[celebrating]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
 
@@ -4188,7 +4154,7 @@ function Client() {
       const percent=scanProgressPercent(activeProgress);
       const count=activeProgress.total&&activeProgress.total>0?`${Math.min(activeProgress.processed||0,activeProgress.total)} / ${activeProgress.total}`:'';
       return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={42}/>
+        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
         <View style={{flex:1,minWidth:0,gap:3}}>
           <View style={styles.scanProgressHeading}>
             <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{scanPhaseLabel(activeProgress.phase)}</Text>
@@ -5758,8 +5724,6 @@ function Client() {
   }
 
   function Player({embedded=false}:{embedded?:boolean}={}) {
-    // Approved screen-space enlargement only: never modify the book renderer or its motion.
-    const livingBookViewport=calculateLivingBookViewport(width,height,foldLayout);
     const current = playing?.uri ? {...playing,...localBooks.find(book=>book.uri===playing.uri)} : playing;
     const serverPlayer = current?.source==='server';
     const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
@@ -5848,13 +5812,12 @@ function Client() {
           <>
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
-            <View style={[styles.playerHeroColumn,{maxWidth:Math.max(360,livingBookViewport.width)}]}>
+            <View style={styles.playerHeroColumn}>
             <LivingBookCanvas
               title={current.title}
               author={current.author}
               chapter={currentChapter?.title}
               number={Math.max(1,currentChapterIndex+1)}
-              stageWidth={livingBookViewport.width}
               phase={livingBookMotion.phase}
               direction={skipDirection}
               skipping={skipTurning}
@@ -5875,7 +5838,7 @@ function Client() {
             </View>
             </View>
             <View style={styles.playerControlColumn}>
-            <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><MotionWaveform playing={isPlaying&&transportReady} reduceMotion={reduceMotion} running={appActive} size={28}/><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>
+            <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>
 
             <Pressable
               accessibilityRole="adjustable"
@@ -5917,7 +5880,7 @@ function Client() {
                 disabled={!transportReady}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <MotionTransport playing={isPlaying} reduceMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} size={29}/>}
+                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipForward" color={p.ink} size={30}/>
@@ -8133,7 +8096,6 @@ function Client() {
       <CelebrationOverlay
         reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}
         active={celebrating || !!achievementCelebration}
-        rewardKind={achievementCelebration?achievementMotionKind(achievementCelebration.id,achievementCelebration.category):'books'}
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
@@ -8155,14 +8117,13 @@ function Client() {
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>{setLiveMode('player');setActiveTab('now')}} style={styles.miniPlayerMain}>
             <MiniArtwork session={session} p={p} book={playing}/>
-            <MotionWaveform playing={!!(playing.source==='server'?(playback?.playing&&!playback?.loading):audio.playing&&audio.isLoaded)} reduceMotion={reduceMotion} running={appActive} size={28}/>
             <View style={{flex:1,minWidth:0}}>
               <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
               <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>
             </View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={(playing.source==='server'?playback?.playing:audio.playing)?'Pause '+playing.title:'Play '+playing.title} hitSlop={6} onPress={()=>playing.source==='server'?controller.toggle():audio.playing?player.pause():player.play()} style={[styles.miniButton,{backgroundColor:p.raised}]}>
-            <MotionTransport playing={!!(playing.source==='server'?playback?.playing:audio.playing)} reduceMotion={reduceMotion} inkTone={darkMode?'ivory':'navy'} size={20}/>
+            <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
           </Pressable>
         </View>
       ) : !playing && (reading||lastReading) && !(activeTab==='now'&&liveMode==='reader') && activeTab!=='reader' ? (

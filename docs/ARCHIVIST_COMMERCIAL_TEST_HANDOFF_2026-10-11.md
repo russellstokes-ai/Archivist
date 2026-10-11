@@ -1,3 +1,5 @@
+> **REJECTED / HISTORICAL TEST RECORD (11 October 2026).** The user rejected the 05fec3c experimental APK and explicitly returned to canonical df4c39b. The material below records what was built, but is **not an active test request or approval**. Do not use 05fec3c. Canonical download: https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-df4c39b/Archivist-Fresh-Scanner-Fold-Test-20261010-df4c39b.apk
+
 # Archivist — Commercial motion & Living Book test handoff
 **Prepared:** 2026-10-11, BEFORE device test. **Status:** Source verified, physical acceptance pending.
 

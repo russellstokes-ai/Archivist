@@ -4,7 +4,7 @@
 
 # Archivist
 
-> **Canonical full-app baseline (2026-10-11): df4c39b.** Read [AGENTS.md](AGENTS.md), [the baseline record](docs/scanner-vnext/CANONICAL_BASELINE.md) and **[the fixed commercial finishing & bug plan](docs/ARCHIVIST_COMMERCIAL_FINISHING_MASTER_PLAN_2026-10-11.md)** before any development. The scanner, direct-review flow, UI and exact Living Book animation are protected; only user-approved external Living Book resizing is permitted.
+> **Canonical full-app baseline (2026-10-11): df4c39b.** Read [AGENTS.md](AGENTS.md), [the baseline record](docs/scanner-vnext/CANONICAL_BASELINE.md) and **[the fixed commercial finishing & bug plan](docs/ARCHIVIST_COMMERCIAL_FINISHING_MASTER_PLAN_2026-10-11.md)** before any development. The scanner, direct-review flow, approved UI and the ENTIRE canonical Living Book size and animation are protected. The commercial-polish preview 05fec3c was rejected; no book enlargement or experimental polish is authorised.
 
 **Your library. Yours.**
 

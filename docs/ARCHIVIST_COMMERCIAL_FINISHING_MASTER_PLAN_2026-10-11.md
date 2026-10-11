@@ -1,5 +1,8 @@
-# ARCHIVIST — FIXED COMMERCIAL FINISHING & DEFECT MASTER PLAN
-**Record:** 2026-10-11 | **Status:** AUTHORITATIVE EXECUTION BACKLOG / DOCUMENTATION ONLY | **Owner:** Archivist product
+# ARCHIVIST — FIXED COMMERCIAL FINISHING & DEFECT MASTER PLAN (EXPERIMENT ARCHIVED)
+
+> **STOP — EXPERIMENTAL COMMERCIAL PREVIEW REJECTED AND ROLLED BACK (11 October 2026).** The user explicitly rejected APK `Archivist-Commercial-Polish-Preview-05fec3c.apk` because the book itself did not become larger: only its stage/container did. The user then withdrew the size-change request and directed a return to the EXACT canonical application at `df4c39b44394d8c512ca0298bffa7f19da356490`, discarding the experimental version. **This decision supersedes all earlier authorisation in this document to resize the book or integrate the polish experiment. Do not reuse, recommend, reinstall, publish or resume the 05fec3c preview as an accepted build. Do not scale the Living Book, change its animations or even enlarge its stage without a NEW explicit request.** The ledger and historical implementation details below are ARCHIVED EVIDENCE ONLY, not the active development plan. Production source on the rollback branch is byte-identical to canonical for all app files; only documentation remains as an audit trail.
+
+**Record:** 2026-10-11 | **Status:** PAUSED / EXPERIMENT REJECTED / CANONICAL RESTORED | **Owner:** Archivist product
 **Master plan branch:** plan/archivist-commercial-polish-20261011
 **Immutable accepted full-app parent:** df4c39b44394d8c512ca0298bffa7f19da356490
 **Canonical tree:** d39ec0a0a3e75a4160c8c687824e940ce768d8d4
@@ -194,3 +197,13 @@ This milestone is **SAVED BEFORE ASKING FOR DEVICE TESTING**. A documentation-on
 - **Installation state:** same isolated acceptance package as prior scanner/Fold test, not production app; can update an existing acceptance installation and retain its test-specific data. Back up important test-only data first.
 - **Physical acceptance status remains OPEN.** Test actual scanner behaviour, book open/close at enlarged size, Lottie and reduced-motion visibility, Fold keyboard/footer, playback, metadata Save/Assist contention, Atlas/Reader/Comic Focus and real-library performance. This is a validated **test APK**, not an accepted commercial release.
 - **Progress archival:** this post-build entry plus the companion `docs/ARCHIVIST_COMMERCIAL_TEST_HANDOFF_2026-10-11.md` are documentation-only, made **after** compiling the immutable `05fec3c` APK; the APK itself remains pinned to `05fec3c` and is not rebuilt by this docs-only commit.
+
+## Final user override and reversion — 2026-10-11
+
+**USER DECISION:** The experimental commercial-polish APK `05fec3c` was rejected. The user explicitly requested to revert to the canonical version and ditch the newly created version. This also withdraws the preceding Living Book enlargement authorisation. No book scaling, viewport changes, border changes, Lottie replacement or UI refinements from the experiment are approved for use.
+
+**IMPLEMENTATION ACTION:** Restore the active `feat/commercial-motion-and-reliability-20261011` development branch's ENTIRE application source to the exact canonical app snapshot (`df4c39b44394d8c512ca0298bffa7f19da356490`); retain only canonical baseline records and historical development/bug notes. This is a **full experiment abandonment**, not a claim that the abandoned build was accepted. The original immutable canonical branch remains untouched. The release-tagged 05fec3c preview remains a historical rejected artifact if still accessible from GitHub; it must not be presented as the current APK.
+
+**Canonical test APK to use instead:** [Archivist-Fresh-Scanner-Fold-Test-20261010-df4c39b.apk](https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-df4c39b/Archivist-Fresh-Scanner-Fold-Test-20261010-df4c39b.apk). This is the original pre-existing APK, not a newly built replacement. It also carries existing pre-release/native-device acceptance limitations.
+
+**Historical evidence retained:** mobile 100/100 and native workflows for the rejected variant and its production Lottie work may have passed earlier; those tests do not make its LOOK or user acceptance valid. `docs/ARCHIVIST_COMMERCIAL_TEST_HANDOFF_2026-10-11.md` is retained only as a historical rejected-test record. All commercial finishing sprints/P1–P9 are **PAUSED / NOT CURRENTLY APPROVED** pending new instructions; their past commits remain available in Git history for audit only. No further development should be inferred from this ledger.
