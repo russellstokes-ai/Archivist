@@ -4,8 +4,17 @@ const crypto=require('node:crypto');
 const path=require('node:path');
 const read=(n)=>fs.readFileSync(path.join(__dirname,n),'utf8');
 const source=read('localReader.ts'),app=read('App.tsx');
+const speech=read('speechFocus.ts');
+const archive=read('archiveReader.ts');
+const nativeZip=read('nativeZip.ts');
 const gitBlob=(s)=>crypto.createHash('sha1').update('blob '+Buffer.byteLength(s)+'\0').update(s).digest('hex');
 
+assert.equal(gitBlob(speech),'280b441936ce366554a908bbde9f0d20c047c71d',
+  'Canonical speech-bubble detection and focus overlay must not be changed');
+assert.equal(gitBlob(archive),'ec3ac7992be6956a6356329a2f5756d1e8865017',
+  'Comic CBZ/CBR/CBT archive decoding must not be changed');
+assert.equal(gitBlob(nativeZip),'1f38d8149a4d7c4a4b74219166fd517228ac6c05',
+  'Comic native ZIP decoder must not be changed');
 assert.equal(gitBlob(source),'827914360d70e33af63ed3e03b66095318144756',
   'Canonical comic reader gesture and zoom source MUST stay byte-for-byte unchanged');
 assert(source.includes("speechFocus?.focus?.(img,x,y,'page-'+page)"),
