@@ -604,19 +604,25 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
   const sparks=useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!active) {
-      burst.setValue(0);
+      burst.stopAnimation();sparks.stopAnimation();burst.setValue(0);sparks.setValue(0);
       return;
     }
-    burst.setValue(0);
-    Animated.sequence([
-      Animated.timing(burst, {toValue: 1, duration: 520, useNativeDriver: true}),
-      Animated.delay(850),
-      Animated.timing(burst, {toValue: 0, duration: 420, useNativeDriver: true}),
-    ]).start();
-    return()=>{burst.stopAnimation();sparks.stopAnimation();};
+    // Reduced Motion keeps a readable static milestone rather than animating.
+    if (reduceMotion) {burst.setValue(1);sparks.setValue(0);return;}
+    burst.setValue(0);sparks.setValue(0);
+    const effect=Animated.parallel([
+      Animated.sequence([
+        Animated.timing(burst,{toValue:1,duration:520,useNativeDriver:true}),
+        Animated.delay(850),
+        Animated.timing(burst,{toValue:0,duration:420,useNativeDriver:true}),
+      ]),
+      Animated.timing(sparks,{toValue:1,duration:1320,useNativeDriver:true}),
+    ]);
+    effect.start();
+    return()=>effect.stop();
   }, [active, burst,sparks,reduceMotion,title]);
   if (!active) return null;
-  const particles = reduceMotion?[]:Array.from({length:24},(_,i)=>i%3===0?'✦':'·');
+  const particles = reduceMotion||motion==='level-up-confetti'||motion==='firework-burst'?[]:Array.from({length:24},(_,i)=>i%3===0?'✦':'·');
   return (
     <View pointerEvents="none" accessibilityLiveRegion="polite" style={styles.celebration}>
       {particles.map((mark, index) => {

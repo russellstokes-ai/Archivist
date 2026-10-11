@@ -1,0 +1,135 @@
+name: Archivist commercial animation — signed Android candidate
+on:
+  push:
+    branches: ['feat/archivist-commercial-finish-20261011']
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/archivist-commercial-acceptance.yml'
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: archivist-commercial-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  commercial-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android build packages
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      - name: Install exact locked mobile dependencies
+        id: install
+        working-directory: mobile
+        run: |
+          npm ci --no-audit --no-fund
+          node harden-forge.cjs
+      - name: Verify Expo, TypeScript and full mobile regression suite
+        id: mobile
+        working-directory: mobile
+        run: |
+          npx expo-doctor
+          npm run typecheck
+          npm test
+      - name: Build and lint signed isolated Android candidate
+        id: android
+        working-directory: mobile/android
+        run: |
+          ./gradlew :app:lintRelease -PscannerAcceptance=true -PreactNativeArchitectures=arm64-v8a,x86_64 --no-daemon --console=plain
+          ./gradlew :app:assembleRelease -PscannerAcceptance=true -PreactNativeArchitectures=arm64-v8a,x86_64 --no-daemon --console=plain
+      - name: Emulator app launch smoke
+        id: emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          script: |
+            python3 .github/scripts/scanner-launch-smoke.py mobile/android/app/build/outputs/apk/release/app-release.apk
+      - name: Validate package signing, 16K alignment, ABI and checksum
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=mobile/android/app/build/outputs/apk/release/app-release.apk
+          TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+          "$TOOLS/apksigner" verify --verbose "$APK"
+          "$TOOLS/zipalign" -c -P 16 4 "$APK"
+          "$TOOLS/aapt" dump badging "$APK" > app-badging.txt
+          grep -q "name='app.archivist.reader.scanneracceptance'" app-badging.txt
+          grep -q "native-code:.*'arm64-v8a'" app-badging.txt
+          mkdir -p commercial-candidate
+          cp "$APK" "commercial-candidate/Archivist-Commercial-Motion-${SOURCE_SHA:0:7}.apk"
+          sha256sum commercial-candidate/*.apk > commercial-candidate/SHA256SUMS.txt
+          printf 'Source %s\nCommercial animation development candidate, not physical acceptance. Scanner and Living Book canonical protections required.\n' "$SOURCE_SHA" > commercial-candidate/TEST-NOTES.txt
+      - name: Publish unique GitHub prerelease only after all gates pass
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="archivist-commercial-motion-${SOURCE_SHA:0:7}"
+          gh release create "$TAG" --target "$SOURCE_SHA" --prerelease --title 'Archivist Commercial Motion — device acceptance candidate' --notes-file commercial-candidate/TEST-NOTES.txt
+          gh release upload "$TAG" commercial-candidate/*.apk commercial-candidate/SHA256SUMS.txt
+      - name: Upload verification artefacts without relaxing gates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archivist-commercial-qa-${{ github.sha }}
+          path: |
+            commercial-candidate/
+            app-badging.txt
+            mobile/android/app/build/reports/lint-results-release.*
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Persist exact-SHA automated evidence in branch docs
+        if: always()
+        shell: bash
+        env:
+          INSTALL_RESULT: ${{ steps.install.outcome }}
+          MOBILE_RESULT: ${{ steps.mobile.outcome }}
+          ANDROID_RESULT: ${{ steps.android.outcome }}
+          EMULATOR_RESULT: ${{ steps.emulator.outcome }}
+          PACKAGE_RESULT: ${{ steps.package.outcome }}
+          PUBLISH_RESULT: ${{ steps.publish.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/commercial
+          SHORT="${SOURCE_SHA:0:12}"
+          cat > "docs/commercial/CI-$SHORT.md" <<EOF
+          # Archivist commercial automation — $SOURCE_SHA
+          Source: $SOURCE_SHA
+          Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          - Install / lockfile: $INSTALL_RESULT
+          - Expo, typecheck, full mobile tests: $MOBILE_RESULT
+          - Android release lint / compilation: $ANDROID_RESULT
+          - Emulator launch: $EMULATOR_RESULT
+          - Signed package / alignment: $PACKAGE_RESULT
+          - Test release published: $PUBLISH_RESULT
+          - Physical Fold, real iPhone, large-library battery and Home Assistant: **NOT TESTED BY THIS WORKFLOW**
+          - Any skipped gate means the APK is NOT VERIFIED.
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "docs/commercial/CI-$SHORT.md"
+          git diff --cached --quiet && exit 0
+          git commit -m "docs(ci): record commercial Android gate for $SHORT"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin HEAD:"${GITHUB_REF_NAME}"

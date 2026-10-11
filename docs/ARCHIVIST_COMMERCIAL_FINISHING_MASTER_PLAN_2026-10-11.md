@@ -159,6 +159,7 @@ On each sprint update only this living plan on its development branch: list exac
 | P9 | TODO | Store release engineering | No production signing/store release |
 
 ### Change history
+- 2026-10-11: Corrected actual celebration spark motion and Reduced Motion static state. Added isolated exact-SHA Android CI pipeline that checks locked dependencies, full tests, native lint+build, emulator launch, signature/16 KB alignment and only then publishes a uniquely named prerelease APK. Bot writes CI result to docs/commercial/CI-<sha>.md; no CI/device pass claimed by this source commit.
 - 2026-10-11: Production-facing isolated Lottie wrapper using 7.3.8 on native, safe web fallback, truthful loader in LocalScanStatus, Now/mini-player pause/play, active waveform, and milestone visuals. Asset, Reduced Motion and preservation tests added. Native npm lockfile regeneration is committed as a branch-limited one-off workflow; no native/CI pass claimed yet. Internal Living Book renderer unchanged.
 - 2026-10-11: P1 isolated Motion Lab, ten independent Lottie JSON vector assets (including the exact approved books/headphones, player and reward inventory) and local validation script. No production runtime or native dependency changed; device integration remains outstanding.
 

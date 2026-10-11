@@ -13,5 +13,7 @@ assert.ok(app.includes('<MotionTransportIcon playing={isPlaying}'),'Player must 
 assert.ok(app.includes('name="waveform" size={22} active={appActive&&isPlaying}'),'Waveform must stop when not playing/offscreen');
 assert.ok(native.includes('if(reduceMotion){ref.current?.reset();ref.current?.pause();return;}'),'Reduced Motion must stop decorative loops');
 assert.ok(native.includes('autoPlay={active&&!reduceMotion}')&&native.includes('loop={loop&&!reduceMotion}'),'Motion must be controlled');
+assert.ok(app.includes("if (reduceMotion) {burst.setValue(1);sparks.setValue(0);return;}"),'Reward must become static with Reduced Motion');
+assert.ok(app.includes("Animated.timing(sparks,{toValue:1,duration:1320"),'Celebration particles must actually disperse, not remain stacked');
 assert.equal(fs.existsSync(path.join(__dirname,'assets/motion/open-book.json')),false);
 console.log('PASS: ten local Lottie sources, scanner/player/award hooks and Reduced Motion');
