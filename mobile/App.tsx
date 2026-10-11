@@ -894,6 +894,9 @@ function Client() {
   const [readerLoadError,setReaderLoadError]=useState('');
   const [comicReaderUseDataFallback,setComicReaderUseDataFallback]=useState(false);
   const comicWebViewFallbackAttempt=useRef(false);
+  const comicReaderReady=useRef(false);
+  const comicReaderReadyTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  useEffect(()=>()=>{if(comicReaderReadyTimer.current!==null)clearTimeout(comicReaderReadyTimer.current);},[]);
   const [readerReloadKey,setReaderReloadKey]=useState(0);
   const readerWebRef=useRef<WebView|null>(null);
   const readerOpenGeneration=useRef(0);
@@ -3680,6 +3683,34 @@ function Client() {
     await persistReaderAnnotations(next);setReaderNote('');
   }
   const readingIdentity=useRef(reading?.uri||reading?.id);readingIdentity.current=reading?.uri||reading?.id;
+  function clearComicReaderWatch(){
+    if(comicReaderReadyTimer.current!==null){clearTimeout(comicReaderReadyTimer.current);comicReaderReadyTimer.current=null;}
+  }
+  function retryComicReaderOriginOnce(){
+    clearComicReaderWatch();
+    if(Platform.OS==='android'&&!comicWebViewFallbackAttempt.current){
+      comicWebViewFallbackAttempt.current=true;
+      comicReaderReady.current=false;
+      setComicReaderUseDataFallback(true);
+      return true;
+    }
+    return false;
+  }
+  function armComicReaderReadyWatch(identity:string){
+    if(comicReaderReady.current)return;
+    clearComicReaderWatch();
+    // The unchanged comic HTML sends reader-ready on its first animation frame.
+    // Android's stock WebView error page may not send onError, so use a bounded
+    // watchdog only for this local-comic HTML route, never for EPUB or server.
+    comicReaderReadyTimer.current=setTimeout(()=>{
+      comicReaderReadyTimer.current=null;
+      if(comicReaderReady.current||readingIdentity.current!==identity)return;
+      if(!retryComicReaderOriginOnce()){
+        const message='This comic reader could not start. Try opening it again or reconnect its source folder.';
+        setReaderLoadError(message);setError(message);
+      }
+    },7000);
+  }
   function handleReaderMessage(raw:string){
     if(!reading)return;
     try{
@@ -3697,6 +3728,7 @@ function Client() {
           setReaderLoadError(text);setError(text);
         });
       }
+      if(message?.type==='reader-ready'&&reading.format==='Comic'){comicReaderReady.current=true;clearComicReaderWatch();}
       if(message?.type==='reader-position'||message?.type==='reader-ready'){
         if(Number.isInteger(message.page)&&message.page>=0)setReaderPage(message.page);
         if(Number.isInteger(message.count)&&message.count>=0)setReaderCount(message.count);
@@ -3729,6 +3761,8 @@ function Client() {
     }
     const generation=++readerOpenGeneration.current;
     comicWebViewFallbackAttempt.current=false;
+    comicReaderReady.current=false;
+    if(comicReaderReadyTimer.current!==null){clearTimeout(comicReaderReadyTimer.current);comicReaderReadyTimer.current=null;}
     setComicReaderUseDataFallback(false);
     setError('');
     setReaderLoadError('');
@@ -6109,7 +6143,7 @@ function Client() {
   }
 
   function Reader({embedded=false}:{embedded?:boolean}={}) {
-    const closeReader=()=>{++readerOpenGeneration.current;comicWebViewFallbackAttempt.current=false;setComicReaderUseDataFallback(false);setReaderFullscreen(false);setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
+    const closeReader=()=>{++readerOpenGeneration.current;comicWebViewFallbackAttempt.current=false;comicReaderReady.current=false;if(comicReaderReadyTimer.current!==null){clearTimeout(comicReaderReadyTimer.current);comicReaderReadyTimer.current=null;}setComicReaderUseDataFallback(false);setReaderFullscreen(false);setReading(null);setLocalReader(null);setReaderLoadError('');setReaderLoading(false);setReaderToolsOpen(false);setReaderChromeVisible(true);setActiveTab('shelf');};
     const readerBar=<View style={[styles.readerBar,{backgroundColor:p.paper,borderBottomColor:p.line}]}>
       <View style={styles.readerBarSide}>{!embedded?<Pressable accessibilityRole="button" accessibilityLabel="Back to Shelf" onPress={closeReader} style={styles.readerBack}><UiIcon name="back" color={p.ink} size={21}/></Pressable>:null}</View>
       <View style={styles.readerHeading}><Text numberOfLines={1} style={[styles.readerTitle,{color:p.ink}]}>{reading?.title || 'Reader'}</Text>{reading?<Text style={[styles.readerFormat,{color:p.muted}]}>{reading.format}</Text>:null}</View>
@@ -6122,7 +6156,7 @@ function Client() {
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
-      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ArchivistBookLoader label="Opening local reader" size="reader" reduceMotion={reduceMotion}/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>{reading.format==='Comic'?<Button label="Retry comic" onPress={()=>openBook(reading,readerPage)}/>:null}<Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri+(reading.format==='Comic'&&comicReaderUseDataFallback?':data':'')} source={reading.format==='Comic'?comicReaderWebViewSource(localReader.html,Platform.OS==='android'&&comicReaderUseDataFallback):{html:localReader.html}} renderError={reading.format==='Comic'?()=><View style={{flex:1,backgroundColor:'#000'}}/>:undefined} onError={event=>{if(reading.format==='Comic'&&Platform.OS==='android'&&!comicWebViewFallbackAttempt.current){comicWebViewFallbackAttempt.current=true;setComicReaderUseDataFallback(true);return;} const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}} onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
+      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ArchivistBookLoader label="Opening local reader" size="reader" reduceMotion={reduceMotion}/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>{reading.format==='Comic'?<Button label="Retry comic" onPress={()=>openBook(reading,readerPage)}/>:null}<Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri+(reading.format==='Comic'&&comicReaderUseDataFallback?':data':'')} source={reading.format==='Comic'?comicReaderWebViewSource(localReader.html,Platform.OS==='android'&&comicReaderUseDataFallback):{html:localReader.html}} renderError={reading.format==='Comic'?()=><View style={{flex:1,backgroundColor:'#000'}}/>:undefined} onError={event=>{if(reading.format==='Comic'&&retryComicReaderOriginOnce())return; const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}} onLoadEnd={()=>{sendReaderCommand('appearance',{value:readerAppearance});if(reading.format==='Comic')armComicReaderReadyWatch(reading.uri||reading.id);}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
     }
     if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>{ReaderTools()}</View>;
     return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView style={styles.readerWebView} ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=reading.format==='Comic'?comicWebViewFailure(e.nativeEvent,'server'):(e.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ArchivistBookLoader label="Opening server reader" size="reader" reduceMotion={reduceMotion}/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}{ReaderTools()}</View>;
