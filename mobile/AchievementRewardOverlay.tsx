@@ -9,6 +9,7 @@ const SOURCES={
   trophy:require('./assets/motion/rewards/trophy-original.json'),
   crown:require('./assets/motion/rewards/crown-original.json'),
   badge:require('./assets/motion/rewards/badge-original.json'),
+  'level-confetti':require('./assets/motion/rewards/level-confetti-original.json'),
 } as const;
 const CONFETTI=require('./assets/motion/rewards/level-confetti-original.json');
 const FIREWORK=require('./assets/motion/rewards/firework-original.json');
@@ -88,12 +89,12 @@ export const AchievementRewardOverlay=memo(function AchievementRewardOverlay({
           style={{width:size,height:size,transform:[{scale}]}}
         />
         {event.levelConfetti&&confettiVisible&&!reducedMotion?
-          <LottieView pointerEvents="none" source={CONFETTI} autoPlay loop={false} speed={1}
+          <LottieView source={CONFETTI} autoPlay loop={false} speed={1}
             onAnimationFinish={()=>setConfettiVisible(false)}
             style={{position:'absolute',width:size*1.46,height:size*1.46,transform:[{scale:REWARD_OPTICAL_SCALE['level-confetti']}]}}/>
           :null}
         {event.firework&&fireworkVisible&&!reducedMotion?
-          <LottieView pointerEvents="none" source={FIREWORK} autoPlay loop={false} speed={1}
+          <LottieView source={FIREWORK} autoPlay loop={false} speed={1}
             onAnimationFinish={()=>setFireworkVisible(false)}
             style={{position:'absolute',width:size*1.6,height:size*1.6,transform:[{scale:REWARD_OPTICAL_SCALE.firework}]}}/>
           :null}
