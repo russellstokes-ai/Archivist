@@ -1,6 +1,6 @@
 import type {Achievement} from './profileStats';
 
-export type RewardMotionKind='books-stack'|'headphones'|'trophy'|'crown'|'badge';
+export type RewardMotionKind='books-stack'|'headphones'|'trophy'|'crown'|'badge'|'level-confetti';
 export type RewardPresentation={kind:RewardMotionKind;major:boolean;firework:boolean;levelConfetti:boolean;title:string;description:string};
 
 /** Presentation only: categorisation does not change achievement IDs, XP or ledger. */
@@ -34,10 +34,10 @@ export function motionForLevelUp(level:number):RewardPresentation {
   const prestige=[10,25,40,60].includes(safe);
   const major=prestige||safe%5===0;
   return {
-    kind:prestige?'crown':'badge',
+    kind:prestige?'crown':'level-confetti',
     major,
     firework:[25,40,60].includes(safe),
-    levelConfetti:true,
+    levelConfetti:prestige,
     title:'Level '+safe+' unlocked',
     description:prestige?'A new chapter in your Archivist journey.':'Your reading life has reached a new level.',
   };
@@ -54,6 +54,7 @@ export const REWARD_SOURCE_DURATION_MS:Record<RewardMotionKind,number>={
   trophy:4000,
   crown:5042,
   badge:4037,
+  'level-confetti':1667,
 };
 
 export function rewardPresentationMs(kind:RewardMotionKind){
