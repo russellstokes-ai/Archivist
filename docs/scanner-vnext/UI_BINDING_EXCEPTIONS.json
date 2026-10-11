@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase; 2026-10-11: restricted local comic WebView secure HTML origin and reader-only error/retry messages. No scanner, media path permissions or render engine changes.",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase; 2026-10-11: restricted local comic WebView secure HTML origin and reader-only error/retry messages. No scanner, media path permissions or render engine changes.; 2026-10-11: lift only embedded portrait player spacing; avoid fullscreen/unfolded changes; Android local comic static HTML WebView attempts isolated data URI once after access denied, without changing comic gesture/rendering code.",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -455,6 +455,46 @@
     {
       "old": "onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false}",
       "new": "onError={e=>{const message=reading.format==='Comic'?comicWebViewFailure(e.nativeEvent,'server'):(e.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false}"
+    },
+    {
+      "old": "contentContainerStyle={[styles.playerScreen,phoneLayout&&styles.playerScreenPhone,narrowPhone&&styles.playerScreenNarrow,foldLayout&&styles.playerScreenFold,!current&&styles.playerScreenEmpty,embedded&&styles.playerScreenEmbedded]}",
+      "new": "contentContainerStyle={[styles.playerScreen,phoneLayout&&styles.playerScreenPhone,narrowPhone&&styles.playerScreenNarrow,foldLayout&&styles.playerScreenFold,!current&&styles.playerScreenEmpty,embedded&&styles.playerScreenEmbedded,embedded&&phoneLayout&&!foldLayout&&styles.playerScreenEmbeddedPhoneTight]}"
+    },
+    {
+      "old": "<View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>",
+      "new": "<View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide,embedded&&phoneLayout&&!foldLayout&&styles.playerAdaptivePhoneTight]}>"
+    },
+    {
+      "old": "<View style={styles.playerControlColumn}>",
+      "new": "<View style={[styles.playerControlColumn,embedded&&phoneLayout&&!foldLayout&&styles.playerControlColumnPhoneTight]}>"
+    },
+    {
+      "old": "<View style={styles.transport}>",
+      "new": "<View style={[styles.transport,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>"
+    },
+    {
+      "old": "  playerScreenEmbedded: {paddingTop:0,paddingBottom:96},",
+      "new": "  playerScreenEmbedded: {paddingTop:0,paddingBottom:96},\n  // Portrait ONLY: use the open space below NOW PLAYING instead of crowding the bottom navigation.\n  playerScreenEmbeddedPhoneTight: {gap:8,paddingTop:0},\n  playerAdaptivePhoneTight: {marginTop:-18,gap:8},\n  playerControlColumnPhoneTight: {gap:8},\n  transportPhoneTight: {marginVertical:4},"
+    },
+    {
+      "old": "import {comicWebViewFailure} from './readerAccessErrors';",
+      "new": "import {comicWebViewFailure} from './readerAccessErrors';\nimport {comicReaderWebViewSource} from './comicReaderWebViewSource';"
+    },
+    {
+      "old": "  const [readerLoadError,setReaderLoadError]=useState('');",
+      "new": "  const [readerLoadError,setReaderLoadError]=useState('');\n  const [comicReaderUseDataFallback,setComicReaderUseDataFallback]=useState(false);\n  const comicWebViewFallbackAttempt=useRef(false);"
+    },
+    {
+      "old": "    const generation=++readerOpenGeneration.current;\n    setError('');",
+      "new": "    const generation=++readerOpenGeneration.current;\n    comicWebViewFallbackAttempt.current=false;\n    setComicReaderUseDataFallback(false);\n    setError('');"
+    },
+    {
+      "old": "const closeReader=()=>{++readerOpenGeneration.current;setReaderFullscreen(false);",
+      "new": "const closeReader=()=>{++readerOpenGeneration.current;comicWebViewFallbackAttempt.current=false;setComicReaderUseDataFallback(false);setReaderFullscreen(false);"
+    },
+    {
+      "old": "key={reading.uri} source={reading.format==='Comic'?{html:localReader.html,baseUrl:'https://appassets.androidplatform.net/'}:{html:localReader.html}} onError={event=>{const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}}",
+      "new": "key={reading.uri+(reading.format==='Comic'&&comicReaderUseDataFallback?':data':'')} source={reading.format==='Comic'?comicReaderWebViewSource(localReader.html,Platform.OS==='android'&&comicReaderUseDataFallback):{html:localReader.html}} renderError={reading.format==='Comic'?()=><View style={{flex:1,backgroundColor:'#000'}}/>:undefined} onError={event=>{if(reading.format==='Comic'&&Platform.OS==='android'&&!comicWebViewFallbackAttempt.current){comicWebViewFallbackAttempt.current=true;setComicReaderUseDataFallback(true);return;} const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}}"
     }
   ],
   "loaderException": {
