@@ -19,6 +19,9 @@ on:
       - 'docs/REWARDS_LOTTIE_CHECKPOINT_2026-10-11.md'
       - 'mobile/android/app/build.gradle'
       - 'mobile/readerAccessErrors.ts'
+      - 'mobile/comicReaderWebViewSource.ts'
+      - 'mobile/comic-reader-startup-watchdog.test.cjs'
+      - 'mobile/player-portrait-comic-fallback.test.cjs'
       - 'mobile/comic-webview-access-regression.test.cjs'
       - 'docs/scanner-vnext/UI_BINDING_EXCEPTIONS.json'
       - 'mobile/assets/motion/live-forward-media-ink.json'
@@ -63,7 +66,7 @@ jobs:
           git diff --name-only "$BASE" HEAD > /tmp/ui-motion-changes.txt
           while IFS= read -r changed; do
             case "$changed" in
-              mobile/App.tsx|mobile/LivingBookCanvas.tsx|mobile/LocalPdfReader.tsx|mobile/android/app/build.gradle|mobile/package.json|mobile/package-lock.json|mobile/*loader*.test.cjs|mobile/*motion*.test.cjs|mobile/*waveform*.test.cjs|mobile/*skip*.test.cjs|mobile/live-player-play-pause-morph.test.cjs|mobile/living-book-render-scale.test.cjs|mobile/scanner-vnext-process-lock.test.cjs|mobile/test10-1-living-book-reentry.test.cjs|mobile/ui-contract.test.cjs|mobile/ArchivistBookLoader.tsx|mobile/LivePlayerPlayPauseMorph.tsx|mobile/LivePlayerSkipIcon.tsx|mobile/MiniAudioWaveform.tsx|mobile/readerAccessErrors.ts|mobile/comic-webview-access-regression.test.cjs|mobile/AchievementRewardOverlay.tsx|mobile/rewardMotion.ts|mobile/reward-motion-acceptance.test.cjs|mobile/assets/motion/*|docs/scanner-vnext/UI_BINDING_EXCEPTIONS.json|docs/ARCHIVIST_BASIC_UI_ANIMATIONS_CHECKPOINT_2026-10-11.md|docs/REWARDS_LOTTIE_CHECKPOINT_2026-10-11.md|.github/workflows/*) ;;
+              mobile/App.tsx|mobile/LivingBookCanvas.tsx|mobile/LocalPdfReader.tsx|mobile/android/app/build.gradle|mobile/package.json|mobile/package-lock.json|mobile/*loader*.test.cjs|mobile/*motion*.test.cjs|mobile/*waveform*.test.cjs|mobile/*skip*.test.cjs|mobile/live-player-play-pause-morph.test.cjs|mobile/living-book-render-scale.test.cjs|mobile/scanner-vnext-process-lock.test.cjs|mobile/test10-1-living-book-reentry.test.cjs|mobile/ui-contract.test.cjs|mobile/ArchivistBookLoader.tsx|mobile/LivePlayerPlayPauseMorph.tsx|mobile/LivePlayerSkipIcon.tsx|mobile/MiniAudioWaveform.tsx|mobile/readerAccessErrors.ts|mobile/comicReaderWebViewSource.ts|mobile/comic-reader-startup-watchdog.test.cjs|mobile/player-portrait-comic-fallback.test.cjs|mobile/comic-webview-access-regression.test.cjs|mobile/AchievementRewardOverlay.tsx|mobile/rewardMotion.ts|mobile/reward-motion-acceptance.test.cjs|mobile/assets/motion/*|docs/scanner-vnext/UI_BINDING_EXCEPTIONS.json|docs/ARCHIVIST_BASIC_UI_ANIMATIONS_CHECKPOINT_2026-10-11.md|docs/REWARDS_LOTTIE_CHECKPOINT_2026-10-11.md|.github/workflows/*) ;;
               *) echo "UNAPPROVED FILE CHANGED: $changed"; exit 1 ;;
             esac
           done < /tmp/ui-motion-changes.txt
@@ -97,7 +100,7 @@ jobs:
           cp "$APK" rewards-seven-qa-delivery/Archivist-Rewards-Seven-${SOURCE_SHA:0:7}.apk
           cd rewards-seven-qa-delivery
           sha256sum *.apk > SHA256SUMS.txt
-          printf 'Source: %s\nRewards QA: seven approved LottieFiles reward animation sources, native playback speed, optical scaling, non-looping, held final frames, format-specific award mappings, rare fireworks, and portrait Play/Pause optical alignment. Includes previous five UI animations and local comic WebView access handling, but comic ERR_ACCESS_DENIED is NOT yet confirmed fixed on device.\nAutomated checks: mobile suites, typecheck, release lint, package, signature and alignment. Device acceptance required: trigger legitimate rewards on phone/Fold and check 96/112dp layouts, natural speeds, held frames, 3-second minimum presentation (4-5s original assets finish naturally), level confetti, overlays and prestige rarity. Portrait icon alignment needs verification; comic ERR_ACCESS_DENIED remains unresolved.\nUses unique isolated app.archivist.reader.rewardsqa package; cannot overwrite the canonical app or scanner-acceptance app; separate empty test data.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+          printf 'Source: %s\nRewards QA: seven approved LottieFiles reward animation sources, native playback speed, optical scaling, non-looping, held final frames, format-specific award mappings, rare fireworks, and portrait Play/Pause optical alignment. Includes previous five UI animations and local comic WebView access handling, but includes tested 7-second one-time alternate WebView origin retry; original comic ERR_ACCESS_DENIED still requires on-device verification.\nAutomated checks: mobile suites, typecheck, release lint, package, signature and alignment. Device acceptance required: trigger legitimate rewards on phone/Fold and check 96/112dp layouts, natural speeds, held frames, 3-second minimum presentation (4-5s original assets finish naturally), level confetti, overlays and prestige rarity. Portrait icon alignment needs verification; comic ERR_ACCESS_DENIED remains unresolved.\nUses unique isolated app.archivist.reader.rewardsqa package; cannot overwrite the canonical app or scanner-acceptance app; separate empty test data.\n' "$SOURCE_SHA" > TEST-NOTES.txt
       - name: Provide direct test APK download
         continue-on-error: true
         env:
