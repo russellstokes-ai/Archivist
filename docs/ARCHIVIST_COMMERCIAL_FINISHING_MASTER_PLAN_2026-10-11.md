@@ -149,9 +149,9 @@ On each sprint update only this living plan on its development branch: list exac
 | P0 | IN PROGRESS | Durable plan and source audit | Code/document inspection only; no tests run |
 | P1 | TODO | Motion Lab and Lottie assets | Not integrated in canonical |
 | P2 | TODO | Scanner loader | Accepted scanner must remain locked |
-| P2A | TODO | Living Book outer sizing only | User approved; internal renderer locked |
+| P2A | CODE COMPLETE | Living Book outer sizing only | Outer stage updated, native/visual QA pending |
 | P3 | TODO | Play/Pause/waveform | Existing player locked |
-| P4 | TODO | Rewards and first-library celebration | B-001 identified |
+| P4 | IN PROGRESS | Rewards and first-library celebration | First-library observer coded; Lottie reward assets remain |
 | P5 | TODO | Shelf/Library/review polish | B-005/B-006 device checks pending |
 | P6 | TODO | Atlas/Stats/Reader | Native acceptance pending |
 | P7 | TODO | Accessibility/performance | B-002 impact unmeasured |
@@ -159,4 +159,9 @@ On each sprint update only this living plan on its development branch: list exac
 | P9 | TODO | Store release engineering | No production signing/store release |
 
 ### Change history
+
+### Implementation checkpoint — 2026-10-11, first code changes
+- **P2A CODE COMPLETE, UNVERIFIED ON DEVICE**: outer Living Book stage accepts a constrained numeric stageWidth, retaining fixed 340:290 aspect and byte-for-byte rendererHtml; parent computes width/height budget and reserves Fold controls. No internal canvas animation code changed; phone/Fold screenshots, native build and CI still required.
+- **B-001 CODE COMPLETE, UNVERIFIED ON DEVICE**: one-time first-library celebration observer after real local catalogue and onboarding completion, saved before showing; pre-existing completed libraries excluded. Protected finishOnboarding function unchanged; keyboard/SQLite/Assist remain outside this scope.
+- Regression test: mobile/commercial-polish-contract.test.cjs. Scanner and process locks MUST still pass.
 - 2026-10-11: Initial canonical df4c39b documentation/source audit and fixed commercial finishing backlog. No app code changed. B-001 confirmed disconnected first-library celebration; B-002 confirmed unconditional frame scheduling with no impact measurement; B-003 authorised screen-space improvement; B-004 uncertain sound intent; B-005 through B-011 documented acceptance/risk. User-authorised Living Book exception retained.

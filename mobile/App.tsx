@@ -718,7 +718,7 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
-  const {width} = useWindowDimensions();
+  const {width,height} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const phoneLayout = width < 600;
@@ -813,6 +813,7 @@ function Client() {
   const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
+  const firstLibraryCelebrationAttemptRef = useRef(false);
   const [ritualDays,setRitualDays]=useState<Record<string,number>>({});
   const [ritualReady,setRitualReady]=useState(false);
   const [awardCategory,setAwardCategory]=useState('All');
@@ -1955,14 +1956,17 @@ function Client() {
       achievementLedgerRef.current=empty;setAchievementLedger(empty);achievementLedgerBootstrapRef.current=true;
     }).finally(()=>setAchievementLedgerReady(true));
     AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
-    SecureStore.getItemAsync(onboardingDoneKey).then(value => {
-      setOnboardingDone(value === '1');
+    // Existing libraries are never treated as new first-library celebrations.
+    // Read both flags together to avoid a bootstrap race or a repeat on relaunch.
+    Promise.all([
+      SecureStore.getItemAsync(onboardingDoneKey).catch(() => null),
+      SecureStore.getItemAsync(firstLibraryCelebratedKey).catch(() => '1'),
+    ]).then(([done,shown]) => {
+      setOnboardingDone(done === '1');
+      setCelebrationEligible(done !== '1' && shown !== '1');
     }).catch(() => undefined);
     SecureStore.getItemAsync(shelfServerPromptKey).then(value => {
       setShelfServerPromptHidden(value === '1');
-    }).catch(() => undefined);
-    SecureStore.getItemAsync(firstLibraryCelebratedKey).then(value => {
-      setCelebrationEligible(value !== '1');
     }).catch(() => undefined);
     SecureStore.getItemAsync(storageKey)
       .then(async value => {
@@ -3954,6 +3958,26 @@ function Client() {
     />;
   }
 
+  // A visual observer only: it never changes scanner, publication or onboarding.
+  // The first published local library is celebrated after onboarding completes.
+  useEffect(() => {
+    if (!celebrationEligible || !onboardingDone || !localCatalogReady ||
+        !localBooks.length || localScanning || libraryRefreshActive ||
+        shelfLoading || restoring || firstLibraryCelebrationAttemptRef.current) return;
+    firstLibraryCelebrationAttemptRef.current = true;
+    // Persist BEFORE displaying so relaunch cannot repeat a claimed celebration.
+    void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1').then(() => {
+      setCelebrationEligible(false);
+      setCelebrating(true);
+    }).catch(() => { firstLibraryCelebrationAttemptRef.current = false; });
+  },[celebrationEligible,onboardingDone,localCatalogReady,localBooks.length,
+     localScanning,libraryRefreshActive,shelfLoading,restoring]);
+  useEffect(() => {
+    if (!celebrating) return;
+    const timer = setTimeout(() => setCelebrating(false),3200);
+    return () => clearTimeout(timer);
+  },[celebrating]);
+
   function ServerConnect() {
     return (
       <View style={styles.serverConnect}>
@@ -5724,6 +5748,12 @@ function Client() {
   }
 
   function Player({embedded=false}:{embedded?:boolean}={}) {
+    // Outer-stage sizing only. The Living Book's internal canvas and motion
+    // remain byte-for-byte canonical. Reserve the Fold control column and
+    // constrain by BOTH available viewport width and height.
+    const bookColumnBudget = foldLayout ? width-48-32-250 : width-(narrowPhone?28:32);
+    const bookHeightBudget = height*(foldLayout?.52:.42);
+    const livingBookStageWidth = Math.max(216,Math.min(440,bookColumnBudget,Math.floor(bookHeightBudget*340/290)));
     const current = playing?.uri ? {...playing,...localBooks.find(book=>book.uri===playing.uri)} : playing;
     const serverPlayer = current?.source==='server';
     const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
@@ -5812,8 +5842,9 @@ function Client() {
           <>
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
-            <View style={styles.playerHeroColumn}>
+            <View style={[styles.playerHeroColumn,{width:livingBookStageWidth}]}>
             <LivingBookCanvas
+              stageWidth={livingBookStageWidth}
               title={current.title}
               author={current.author}
               chapter={currentChapter?.title}
@@ -8416,7 +8447,7 @@ const styles = StyleSheet.create({
   playerHeading: {minHeight:28,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   playerAdaptive: {gap:16},
   playerAdaptiveWide: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:32,paddingVertical:2},
-  playerHeroColumn: {gap:8,alignItems:'center',flexShrink:1,maxWidth:360},
+  playerHeroColumn: {gap:8,alignItems:'center',flexShrink:1,maxWidth:440},
   playerControlColumn: {flex:1,minWidth:250,maxWidth:500,gap:12,justifyContent:'center'},
   playerEyebrow: {fontSize:11,lineHeight:14,fontWeight:'700',letterSpacing:1.6},
   playerArtworkFrame: {alignSelf:'center',borderWidth:0,borderRadius:18,padding:0,shadowColor:'#000',shadowOpacity:0.14,shadowRadius:22,shadowOffset:{width:0,height:10},elevation:5},

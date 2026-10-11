@@ -12,6 +12,8 @@ export type LivingBookCanvasProps={
   title:string;author:string;chapter?:string;number?:number;phase:LivingBookPhase;
   direction:1|-1;skipping:boolean;reduceMotion:boolean;coverUri?:string;
   coverMode?:'portrait'|'jacket'|'fallback';coverHeaders?:Record<string,string>;
+  /** Outer stage only; does not alter renderer geometry, timing or motion. */
+  stageWidth?:number;
 };
 
 function hash(value:string){let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(16);}
@@ -102,6 +104,9 @@ paint();requestAnimationFrame(tick);
 }
 
 export function LivingBookCanvas(props:LivingBookCanvasProps){
+  // Preserve the canonical 340:290 stage ratio and entire internal WebView.
+  const stageWidth = Math.max(216,Math.min(440,props.stageWidth??340));
+  const stageHeight = Math.round(stageWidth*290/340);
   const ref=useRef<WebView>(null);
   const [ready,setReady]=useState(false);
   const initialHtml=useMemo(()=>rendererHtml({
@@ -126,7 +131,7 @@ export function LivingBookCanvas(props:LivingBookCanvasProps){
     return()=>{live=false;};
   },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);
 
-  return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none">
+  return <View accessibilityLabel="Living book artwork" style={[styles.stage,{width:stageWidth,height:stageHeight}]} pointerEvents="none">
     <WebView ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
       bounces={false} overScrollMode="never" androidLayerType="hardware" style={styles.web} containerStyle={styles.container}
       onLoadEnd={()=>setReady(true)} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
