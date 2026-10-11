@@ -3,6 +3,7 @@ import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
 import {calculateLivingBookViewport} from './livingBookViewport';
 import {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';
+import {MotionLoader,MotionTransport,MotionWaveform,MotionReward,scanMotionVariant,achievementMotionKind,type MotionRewardKind} from './MotionAnimations';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -600,7 +601,8 @@ function ArchivistLogo({size=44,opacity=1}:{size?:number;opacity?:number}={}) {
   return <Image accessible={false} source={require('./assets/icon.png')} resizeMode="contain" style={{width:size,height:size,borderRadius:Math.max(8,size*.22),opacity}}/>;
 }
 
-function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {
+function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0',rewardKind='books'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string;rewardKind?:MotionRewardKind}) {
+  const {width:rewardViewportWidth}=useWindowDimensions();
   const burst = useRef(new Animated.Value(0)).current;
   const sparks=useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -648,7 +650,7 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
       <Animated.View pointerEvents="none" style={{position:'absolute',width:440,height:440,opacity:burst}}><AmbientGlow color="#B99A68" size={440} strength={2}/></Animated.View>
       <Animated.View style={[styles.celebrationBadge, {backgroundColor:paper,borderWidth:1,borderColor:'#B99A68',opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:reduceMotion?[1,1,1]:[0.96,1.01,1]})}]}]}>
         <Text style={{color:'#B99A68',fontSize:11,letterSpacing:2,marginBottom:12}}>A MOMENT TO REMEMBER</Text>
-        <UiIcon name="bookmark" color="#B99A68" size={32}/>
+        <MotionReward kind={rewardKind} reduceMotion={reduceMotion} size={rewardViewportWidth>=600?112:96}/>
         <Text style={[styles.celebrationTitle,{color:ink,fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,textAlign:'center',marginTop:12}]}>{title}</Text>
         <Text style={[styles.celebrationCopy,{color:muted,textAlign:'center'}]}>{copy}</Text>
       </Animated.View>
@@ -4186,7 +4188,7 @@ function Client() {
       const percent=scanProgressPercent(activeProgress);
       const count=activeProgress.total&&activeProgress.total>0?`${Math.min(activeProgress.processed||0,activeProgress.total)} / ${activeProgress.total}`:'';
       return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+        <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={42}/>
         <View style={{flex:1,minWidth:0,gap:3}}>
           <View style={styles.scanProgressHeading}>
             <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{scanPhaseLabel(activeProgress.phase)}</Text>
@@ -5873,7 +5875,7 @@ function Client() {
             </View>
             </View>
             <View style={styles.playerControlColumn}>
-            <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>
+            <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><MotionWaveform playing={isPlaying&&transportReady} reduceMotion={reduceMotion} running={appActive} size={28}/><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>
 
             <Pressable
               accessibilityRole="adjustable"
@@ -5915,7 +5917,7 @@ function Client() {
                 disabled={!transportReady}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
+                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <MotionTransport playing={isPlaying} reduceMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} size={29}/>}
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipForward" color={p.ink} size={30}/>
@@ -7621,7 +7623,7 @@ function Client() {
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-                <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+                <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={38}/>
                 <View style={{flex:1,gap:6}}>
                   <View style={styles.scanProgressHeading}><Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(progress.phase)}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{percent}%</Text></View>
                   <Text style={{color:p.muted}}>{progress.total?Math.min(progress.processed||0,progress.total)+' / '+progress.total:progress.entriesVisited+' checked'} · {progress.found} found · {progress.review} review{progress.currentFolder?' · '+progress.currentFolder:''}</Text>
@@ -8131,6 +8133,7 @@ function Client() {
       <CelebrationOverlay
         reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}
         active={celebrating || !!achievementCelebration}
+        rewardKind={achievementCelebration?achievementMotionKind(achievementCelebration.id,achievementCelebration.category):'books'}
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
@@ -8152,13 +8155,14 @@ function Client() {
         <View style={[styles.miniPlayer,{backgroundColor:p.card,borderTopColor:p.line}]}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Open player for '+playing.title} onPress={()=>{setLiveMode('player');setActiveTab('now')}} style={styles.miniPlayerMain}>
             <MiniArtwork session={session} p={p} book={playing}/>
+            <MotionWaveform playing={!!(playing.source==='server'?(playback?.playing&&!playback?.loading):audio.playing&&audio.isLoaded)} reduceMotion={reduceMotion} running={appActive} size={28}/>
             <View style={{flex:1,minWidth:0}}>
               <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
               <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>
             </View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={(playing.source==='server'?playback?.playing:audio.playing)?'Pause '+playing.title:'Play '+playing.title} hitSlop={6} onPress={()=>playing.source==='server'?controller.toggle():audio.playing?player.pause():player.play()} style={[styles.miniButton,{backgroundColor:p.raised}]}>
-            <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
+            <MotionTransport playing={!!(playing.source==='server'?playback?.playing:audio.playing)} reduceMotion={reduceMotion} inkTone={darkMode?'ivory':'navy'} size={20}/>
           </Pressable>
         </View>
       ) : !playing && (reading||lastReading) && !(activeTab==='now'&&liveMode==='reader') && activeTab!=='reader' ? (

@@ -41,19 +41,19 @@ function StaticMotionGlyph({label,size,color='#B99A68'}:{label:string;size:numbe
 
 /** Visual only: scan event/cancellation/progress remains owned by canonical scanner. */
 export function MotionLoader({variant,reduceMotion,running=true,size=42}:{variant:MotionLoaderVariant;reduceMotion:boolean;running?:boolean;size?:number}){
-  if(reduceMotion)return <StaticMotionGlyph label={variant==='audio'?'◉':'▤'} size={size}/>;
-  return <View accessible={false} pointerEvents="none" style={{width:size,height:size}}>
-    <LottieView source={loaderAssets[variant]} autoPlay loop speed={running?1:0} style={{width:size,height:size}}/>
+  return <View accessible accessibilityRole="progressbar" accessibilityLabel="Scanning local library" pointerEvents="none" style={{width:size,height:size}}>
+    {reduceMotion?<StaticMotionGlyph label={variant==='audio'?'◉':'▤'} size={size}/>:
+      <LottieView source={loaderAssets[variant]} autoPlay loop speed={running?1:0} style={{width:size,height:size}}/>}
   </View>;
 }
 
 /** Controlled play/pause progress, exactly within the pre-existing pressable/button geometry. */
 export function MotionTransport({playing,reduceMotion,inkTone='ivory',size=29}:{playing:boolean;reduceMotion:boolean;inkTone?:'ivory'|'navy';size?:number}){
-  const progress=useRef(new Animated.Value(playing?.52:0)).current;
+  const progress=useRef(new Animated.Value(playing?0.52:0)).current;
   useEffect(()=>{
     progress.stopAnimation();
-    if(reduceMotion){progress.setValue(playing?.52:0);return;}
-    Animated.timing(progress,{toValue:playing?.52:0,duration:180,useNativeDriver:false}).start();
+    if(reduceMotion){progress.setValue(playing?0.52:0);return;}
+    Animated.timing(progress,{toValue:playing?0.52:0,duration:180,useNativeDriver:false}).start();
     return()=>progress.stopAnimation();
   },[playing,reduceMotion,progress]);
   return <View accessible={false} pointerEvents="none" style={{width:size,height:size}}>

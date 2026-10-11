@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; explicitly approved isolated Living Book outer stage responsive enlargement; approved first-library celebration observer after published scanner works; corrected reward particles opacity/motion and ~3s hold (no UI geometry changes)",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; explicitly approved isolated Living Book outer stage responsive enlargement; approved first-library celebration observer after published scanner works; corrected reward particles opacity/motion and ~3s hold (no UI geometry changes); approved reversible motion-only loader, player, waveform and reward surfaces",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -347,6 +347,46 @@
     {
       "old": "    if (!active) {\n      burst.setValue(0);\n      return;\n    }\n    burst.setValue(0);\n    Animated.sequence([\n      Animated.timing(burst, {toValue: 1, duration: 520, useNativeDriver: true}),\n      Animated.delay(850),\n      Animated.timing(burst, {toValue: 0, duration: 420, useNativeDriver: true}),\n    ]).start();",
       "new": "    if (!active) {\n      burst.setValue(0);\n      sparks.setValue(0);\n      return;\n    }\n    burst.setValue(0);\n    sparks.setValue(0);\n    // The canonical reward burst omitted the sparks driver; particles stayed piled at centre.\n    if(!reduceMotion)Animated.timing(sparks,{toValue:1,duration:950,useNativeDriver:true}).start();\n    Animated.sequence([\n      Animated.timing(burst, {toValue: 1, duration: reduceMotion?0:520, useNativeDriver: true}),\n      Animated.delay(reduceMotion?3000:2080),\n      Animated.timing(burst, {toValue: 0, duration: reduceMotion?0:420, useNativeDriver: true}),\n    ]).start();"
+    },
+    {
+      "old": "import {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';",
+      "new": "import {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';\nimport {MotionLoader,MotionTransport,MotionWaveform,MotionReward,scanMotionVariant,achievementMotionKind,type MotionRewardKind} from './MotionAnimations';"
+    },
+    {
+      "old": "function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {",
+      "new": "function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0',rewardKind='books'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string;rewardKind?:MotionRewardKind}) {\n  const {width:rewardViewportWidth}=useWindowDimensions();"
+    },
+    {
+      "old": "        <UiIcon name=\"bookmark\" color=\"#B99A68\" size={32}/>",
+      "new": "        <MotionReward kind={rewardKind} reduceMotion={reduceMotion} size={rewardViewportWidth>=600?112:96}/>"
+    },
+    {
+      "old": "        active={celebrating || !!achievementCelebration}\n        title={achievementCelebration ? achievementCelebration.title : undefined}",
+      "new": "        active={celebrating || !!achievementCelebration}\n        rewardKind={achievementCelebration?achievementMotionKind(achievementCelebration.id,achievementCelebration.category):'books'}\n        title={achievementCelebration ? achievementCelebration.title : undefined}"
+    },
+    {
+      "old": "\n        <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
+      "new": "\n        <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={42}/>"
+    },
+    {
+      "old": "\n                <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
+      "new": "\n                <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={38}/>"
+    },
+    {
+      "old": "                {!transportReady ? <ActivityIndicator color=\"#FFFFFF\"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}",
+      "new": "                {!transportReady ? <ActivityIndicator color=\"#FFFFFF\"/> : <MotionTransport playing={isPlaying} reduceMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} size={29}/>}"
+    },
+    {
+      "old": "            <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>",
+      "new": "            <MotionTransport playing={!!(playing.source==='server'?playback?.playing:audio.playing)} reduceMotion={reduceMotion} inkTone={darkMode?'ivory':'navy'} size={20}/>"
+    },
+    {
+      "old": "<View style={{flexDirection:'row',justifyContent:'space-between',gap:12,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>",
+      "new": "<View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><MotionWaveform playing={isPlaying&&transportReady} reduceMotion={reduceMotion} running={appActive} size={28}/><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>"
+    },
+    {
+      "old": "            <MiniArtwork session={session} p={p} book={playing}/>\n            <View style={{flex:1,minWidth:0}}>",
+      "new": "            <MiniArtwork session={session} p={p} book={playing}/>\n            <MotionWaveform playing={!!(playing.source==='server'?(playback?.playing&&!playback?.loading):audio.playing&&audio.isLoaded)} reduceMotion={reduceMotion} running={appActive} size={28}/>\n            <View style={{flex:1,minWidth:0}}>"
     }
   ],
   "documentationOnlyException": "The five new exact reversible App.tsx changes above are user-approved Living Book OUTER viewport sizing only. Canonical baseSha256 remains unchanged. Do not relax base hash or wildcard these patterns."
