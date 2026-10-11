@@ -3696,7 +3696,7 @@ function Client() {
     }
     return false;
   }
-  function armComicReaderReadyWatch(identity:string){
+  function armComicReaderReadyWatch(identity:string|number){
     if(comicReaderReady.current)return;
     clearComicReaderWatch();
     // The unchanged comic HTML sends reader-ready on its first animation frame.
