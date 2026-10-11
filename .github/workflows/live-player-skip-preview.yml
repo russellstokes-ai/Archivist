@@ -1,0 +1,90 @@
+name: Archivist Live Player Forward Rewind micro-interaction prototype APK
+on:
+  push:
+    branches: ['feat/live-player-forward-rewind-lottie-20261011']
+    paths:
+      - '.github/workflows/live-player-skip-preview.yml'
+      - 'mobile/LivePlayerSkipIcon.tsx'
+      - 'mobile/live-player-skip-icons.test.cjs'
+      - 'mobile/assets/motion/live-forward-media-ink.json'
+      - 'mobile/assets/motion/live-forward-media-source.json'
+      - 'mobile/App.tsx'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: skip-motion-preview
+  cancel-in-progress: false
+jobs:
+  skip-motion-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android packages
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      - name: Verify source and mobile checks
+        working-directory: mobile
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+          npm run typecheck
+          npm test
+      - name: Check Android compatibility
+        working-directory: mobile/android
+        run: ./gradlew :app:lintRelease -PskipMotionPreview=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Build isolated Fold test APK
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleRelease -PskipMotionPreview=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Verify package, signing and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p skip-motion-delivery
+          APK=mobile/android/app/build/outputs/apk/release/app-release.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          "$BUILD_TOOLS/zipalign" -c -P 16 4 "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" > skip-motion-delivery/package.txt
+          grep -q "name='app.archivist.reader.skipmotion'" skip-motion-delivery/package.txt
+          grep -q "native-code:.*'arm64-v8a'" skip-motion-delivery/package.txt
+          cp "$APK" skip-motion-delivery/Archivist-FF-RW-${SOURCE_SHA:0:7}.apk
+          cd skip-motion-delivery
+          sha256sum *.apk > SHA256SUMS.txt
+          printf 'Source: %s\nExact user-selected LottieFiles Forward Media on the four original 50/58dp white skip buttons; mirror for rewind; 15 seconds commands 3 existing canvas turns, 30 seconds commands 6; original renderer unchanged.\nAutomated checks: mobile suites, typecheck, release lint, package, signature and alignment. Unvalidated physical Fold/phone preview. Check left/right direction, 15/30 labels, tap responsiveness and exactly 3/6 distinct fast page flips without modifying the book renderer.\nUses unique isolated app.archivist.reader.skipmotion package; cannot overwrite the canonical app or scanner-acceptance app; separate empty test data.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+      - name: Provide direct test APK download
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=skip-motion-preview-${SOURCE_SHA:0:7}
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$SOURCE_SHA" --prerelease --title 'Archivist Forward Rewind Lottie — unvalidated device preview' --notes-file skip-motion-delivery/TEST-NOTES.txt
+          gh release upload "$TAG" skip-motion-delivery/*.apk skip-motion-delivery/SHA256SUMS.txt skip-motion-delivery/TEST-NOTES.txt --clobber
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: skip-motion-preview-${{ github.sha }}
+          path: |
+            skip-motion-delivery/
+            mobile/android/app/build/reports/lint-results-release.*
+          retention-days: 14
