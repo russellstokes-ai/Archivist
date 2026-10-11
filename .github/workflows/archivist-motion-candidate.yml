@@ -1,7 +1,7 @@
 name: Archivist Commercial Motion Test APK
 on:
   push:
-    branches: ['polish/archivist-motion-player-rewards-20261011']
+    branches: ['polish/archivist-commercial-final-pass-20261011']
     paths: ['mobile/**', '.github/workflows/archivist-motion-candidate.yml']
   workflow_dispatch:
 permissions:
