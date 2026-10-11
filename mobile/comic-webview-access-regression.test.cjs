@@ -30,9 +30,12 @@ assert(source.includes("gestureKind='page-turn'"),
 assert(source.includes("function beginTurn(")&&source.includes("function finishTurn("),
   'No replacement of existing page-turn renderer');
 
-const localHtmlPattern=/source=\{reading\.format==='Comic'\?\{html:localReader\.html,baseUrl:'https:\/\/appassets\.androidplatform\.net\/'\}:\{html:localReader\.html\}\}/;
-assert(localHtmlPattern.test(app),
-  'Only comics may receive the restricted Android asset origin; EPUB must remain unchanged');
+assert(app.includes("source={reading.format==='Comic'?comicReaderWebViewSource(localReader.html,Platform.OS==='android'&&comicReaderUseDataFallback):{html:localReader.html}}"),
+  'Only local comics may attempt the origin-independent fallback; EPUB HTML stays unchanged');
+assert(app.includes("if(reading.format==='Comic'&&retryComicReaderOriginOnce())return;")&&app.includes("comicWebViewFallbackAttempt.current=true;"),
+  'Blocked Android comic must retry exactly once before reporting an error');
+assert(app.includes("key={reading.uri+(reading.format==='Comic'&&comicReaderUseDataFallback?':data':'')}"),
+  'Fallback must mount a new WebView with the same approved comic reader HTML');
 assert(app.includes("onMessage={event=>handleReaderMessage(event.nativeEvent.data)}"),
   'Native-to-WebView comic pagination bridge must stay active');
 assert(app.includes("readerWebRef.current?.injectJavaScript(script)"),
