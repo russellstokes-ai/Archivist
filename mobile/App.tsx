@@ -609,9 +609,14 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
   useEffect(() => {
     if (!active) {
       burst.setValue(0);
+      sparks.setValue(0);
       return;
     }
     burst.setValue(0);
+    sparks.setValue(0);
+    if(!reduceMotion){
+      Animated.timing(sparks,{toValue:1,duration:1500,useNativeDriver:true}).start();
+    }
     Animated.sequence([
       Animated.timing(burst, {toValue: 1, duration: 520, useNativeDriver: true}),
       Animated.delay(850),

@@ -69,6 +69,10 @@
     {
       "old": "reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}",
       "new": "reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}\n        foldLayout={foldLayout}\n        motionKind={achievementCelebration?rewardAnimationForTitle(achievementCelebration.title):'books-stack'}"
+    },
+    {
+      "old": "    if (!active) {\n      burst.setValue(0);\n      return;\n    }\n    burst.setValue(0);\n    Animated.sequence([",
+      "new": "    if (!active) {\n      burst.setValue(0);\n      sparks.setValue(0);\n      return;\n    }\n    burst.setValue(0);\n    sparks.setValue(0);\n    if(!reduceMotion){\n      Animated.timing(sparks,{toValue:1,duration:1500,useNativeDriver:true}).start();\n    }\n    Animated.sequence(["
     }
   ]
 }

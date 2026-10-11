@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'App.tsx'),'utf8');
+const start=source.indexOf('function CelebrationOverlay('),end=source.indexOf('function DismissSheetHandle(',start);
+assert(start>0&&end>start);
+const overlay=source.slice(start,end);
+assert(overlay.includes("Animated.timing(sparks,{toValue:1,duration:1500,useNativeDriver:true}).start();"));
+assert(overlay.includes("if(!reduceMotion)"),'no decorative particle movement under reduced motion');
+assert(overlay.includes("sparks.stopAnimation();"),'clean up when dismissing');
+assert(overlay.includes("sparks.setValue(0);"),'reset between celebrations');
+assert(overlay.includes("pointerEvents=\"none\""),'all celebration effects remain noninteractive');
+assert(source.includes('rewardAnimationForTitle(achievementCelebration.title)'));
+console.log('PASS: bounded, cancellable celebration particle motion respects Reduced Motion');
