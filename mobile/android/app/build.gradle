@@ -95,6 +95,7 @@ android {
         if (findProperty('bookLoaderPreview') == 'true') applicationIdSuffix '.bookloader'
         if (findProperty('playPausePrototype') == 'true') applicationIdSuffix '.playpause'
         if (findProperty('skipMotionPreview') == 'true') applicationIdSuffix '.skipmotion'
+        if (findProperty('uiMotionReview') == 'true') applicationIdSuffix '.uimotionreview'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 102
