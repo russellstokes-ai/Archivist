@@ -1,0 +1,1 @@
+# Approved Forward Media animation\n\nOriginal: https://lottiefiles.com/free-animation/forward-media-s7Vy5kFTbT\n\nSource JSON: https://assets-v2.lottiefiles.com/a/8488c7b0-1151-11ee-9924-535b8faf60c7/ddAlZIzDMQ.json\n\nSHA-256: 7598a66a5ea82a21f863648d837e0516e0a891c487069e4614d6a1660b9fa65a\n\nLicence: Lottie Simple License. Keep original file intact.\n
