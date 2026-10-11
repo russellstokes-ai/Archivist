@@ -58,5 +58,5 @@ export const REWARD_SOURCE_DURATION_MS:Record<RewardMotionKind,number>={
 };
 
 export function rewardPresentationMs(kind:RewardMotionKind){
-  return Math.max(REWARD_BASE_DISPLAY_MS,Math.ceil(REWARD_SOURCE_DURATION_MS[kind])+REWARD_FINAL_FRAME_HOLD_MS);
+  return Math.max(REWARD_BASE_DISPLAY_MS,Math.ceil(REWARD_SOURCE_DURATION_MS[kind])+REWARD_FINAL_FRAME_HOLD_MS+REWARD_FADE_MS);
 }
