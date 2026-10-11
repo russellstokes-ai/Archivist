@@ -91,6 +91,7 @@ android {
     defaultConfig {
         applicationId 'app.archivist.reader'
         if (findProperty('scannerAcceptance') == 'true') applicationIdSuffix '.scanneracceptance'
+        if (findProperty('livingBookScalePreview') == 'true') applicationIdSuffix '.bookscale'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 102
