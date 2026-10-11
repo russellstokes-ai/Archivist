@@ -5,7 +5,7 @@ const native=fs.readFileSync(path.join(root,'motion/ArchivistMotion.native.tsx')
 const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
 assert.equal(pkg.dependencies['lottie-react-native'],'7.3.8');
 assert(source.includes('<ArchivistMotion kind={libraryMotionKind} size={38}'),'Scanner view must have motion without changing scan engine');
-assert.equal((source.match(/<ArchivistMotion kind=\{libraryMotionKind\}/g)||[]).length,2);
+assert.equal((source.match(/<ArchivistMotion kind=\{libraryMotionKind\}/g)||[]).length,1);
 assert(native.includes("if(reduceMotion||!active)return"),'Reduced Motion and inactive app cannot loop');
 assert(native.includes("kind==='pause-play'"),'Native transport is supported for follow-up integration');
 assert(!fallback.includes('lottie-react-native'),'web needs no native dependency');
