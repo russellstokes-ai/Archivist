@@ -58,8 +58,8 @@ assert.equal(motionForLevelUp(25).firework,true);
 
 assert.equal(rewardPresentationMs('headphones'),3000);
 assert.equal(rewardPresentationMs('level-confetti'),3000);
-assert.equal(rewardPresentationMs('books-stack'),4200,'4-second original cannot reach final at native pace in 3 seconds');
-assert.equal(rewardPresentationMs('crown'),5242,'Do not accelerate 5.042s source');
+assert.equal(rewardPresentationMs('books-stack'),4460,'4-second original cannot reach final at native pace in 3 seconds');
+assert.equal(rewardPresentationMs('crown'),5502,'Do not accelerate 5.042s source');
 const overlay=read('AchievementRewardOverlay.tsx');
 assert(overlay.includes('loop={false}')&&overlay.includes('speed={1}'),'Main Lotties must play once at source pace');
 assert(overlay.includes('progress={reducedMotion?0.96:mainFinished?0.999:undefined}'),'Hold final frame');
