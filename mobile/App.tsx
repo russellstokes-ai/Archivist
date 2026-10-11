@@ -5861,7 +5861,7 @@ function Client() {
     }
 
     return (
-      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,phoneLayout&&styles.playerScreenPhone,narrowPhone&&styles.playerScreenNarrow,foldLayout&&styles.playerScreenFold,!current&&styles.playerScreenEmpty,embedded&&styles.playerScreenEmbedded]}>
+      <ScrollView style={embedded?styles.liveHubScroll:undefined} contentContainerStyle={[styles.playerScreen,phoneLayout&&styles.playerScreenPhone,narrowPhone&&styles.playerScreenNarrow,foldLayout&&styles.playerScreenFold,!current&&styles.playerScreenEmpty,embedded&&styles.playerScreenEmbedded,embedded&&phoneLayout&&!foldLayout&&styles.playerScreenEmbeddedPhoneTight]}>
         {!embedded?<View style={styles.playerHeading}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={()=>setActiveTab('shelf')} style={styles.iconButton}><UiIcon name="chevronDown" color={p.ink} size={22}/></Pressable>
           <Text style={[styles.playerEyebrow,{color:p.ink,flex:1}]}>NOW PLAYING</Text>
@@ -5870,7 +5870,7 @@ function Client() {
         {current ? (
           <>
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
-          <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
+          <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide,embedded&&phoneLayout&&!foldLayout&&styles.playerAdaptivePhoneTight]}>
             <View style={styles.playerHeroColumn}>
             <LivingBookCanvas
               title={current.title}
@@ -5896,7 +5896,7 @@ function Client() {
               {current.source==='server'&&currentServerWork&&!offlineCopy?<Pressable accessibilityRole="button" disabled={offlineBusyId===currentServerWork.id} onPress={()=>void downloadServerWork(currentServerWork)} style={styles.playerStatusAction}><Text style={[styles.playerStatusText,{color:p.sage,fontWeight:'600'}]}>{offlineBusyId===currentServerWork.id?'Downloading…':'Download'}</Text></Pressable>:null}
             </View>
             </View>
-            <View style={styles.playerControlColumn}>
+            <View style={[styles.playerControlColumn,embedded&&phoneLayout&&!foldLayout&&styles.playerControlColumnPhoneTight]}>
             <View style={{flexDirection:'row',justifyContent:'space-between',gap:12,marginBottom:8}}><Text numberOfLines={1} style={{color:p.ink,flex:1,fontSize:13}}>{currentChapter?.title||'Listening'}</Text><Text style={{color:p.muted,fontSize:13}}>{Math.round(visualProgress*100)}%</Text></View>
 
             <Pressable
@@ -5925,7 +5925,7 @@ function Client() {
               <Text style={[styles.playerTime,{color:p.muted}]}>−{formatTime(remaining)}</Text>
             </View>
 
-            <View style={styles.transport}>
+            <View style={[styles.transport,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>
               <Pressable accessibilityRole="button" accessibilityLabel="Rewind 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}>
                 <View pointerEvents="none" style={{height:31,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back30} size={44} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>30s</Text>
@@ -8612,6 +8612,11 @@ const styles = StyleSheet.create({
   liveHubBody: {flex:1,minHeight:0},
   liveHubScroll: {flex:1},
   playerScreenEmbedded: {paddingTop:0,paddingBottom:96},
+  // Portrait ONLY: use the open space below NOW PLAYING instead of crowding the bottom navigation.
+  playerScreenEmbeddedPhoneTight: {gap:8,paddingTop:0},
+  playerAdaptivePhoneTight: {marginTop:-18,gap:8},
+  playerControlColumnPhoneTight: {gap:8},
+  transportPhoneTight: {marginVertical:4},
   playerLiveKicker: {alignItems:'center',gap:4,paddingTop:2,paddingBottom:2},
   playerLiveMeta: {fontSize:10.5,lineHeight:14,fontWeight:'500'},
   tabIndicator: {position:'absolute',top:0,width:18,height:2,borderRadius:1},
