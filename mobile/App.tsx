@@ -968,6 +968,7 @@ function Client() {
   const skipBurstTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const skipBurstRunning=useRef(false);
   const skipPlaybackVisible=useRef(false);
+  const skipBookKeyRef=useRef(currentAudioKey);
 
   function transitionLivingBook(event:LivingBookMotionEvent){
     const next=reduceLivingBookMotion(livingBookMotionRef.current,event);
@@ -1386,6 +1387,18 @@ function Client() {
     if(playerMotionPlaying&&(phase==='closed'||phase==='closing'))animateLivingBookOpen();
     if(!playerMotionPlaying&&phase!=='closed'&&phase!=='closing')animateLivingBookClose();
   },[playerMotionPlaying,playbackVisible,playing?.id,playing?.uri,reduceMotion]);
+
+  // Skip bursts belong to one book and one visible player session. Never let
+  // scheduled turns continue into the next title or after leaving the player.
+  useEffect(()=>{
+    if(skipBookKeyRef.current!==currentAudioKey){
+      skipBookKeyRef.current=currentAudioKey;
+      cancelSkipBurst();
+    }
+  },[currentAudioKey]);
+  useEffect(()=>{
+    if(!playbackVisible||reduceMotion)cancelSkipBurst();
+  },[playbackVisible,reduceMotion]);
 
   useEffect(()=>{
     stopLivingBookPageLoop();
