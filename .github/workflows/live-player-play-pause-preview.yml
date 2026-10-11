@@ -1,0 +1,90 @@
+name: Archivist Live Player Play Pause micro-interaction prototype APK
+on:
+  push:
+    branches: ['feat/live-player-pause-play-lottie-prototype-20261011']
+    paths:
+      - '.github/workflows/live-player-play-pause-preview.yml'
+      - 'mobile/LivePlayerPlayPauseMorph.tsx'
+      - 'mobile/live-player-play-pause-morph.test.cjs'
+      - 'mobile/assets/motion/live-play-pause-ivory.json'
+      - 'mobile/assets/motion/live-play-pause-navy.json'
+      - 'mobile/App.tsx'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: play-pause-preview
+  cancel-in-progress: false
+jobs:
+  play-pause-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android packages
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      - name: Verify source and mobile checks
+        working-directory: mobile
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+          npm run typecheck
+          npm test
+      - name: Check Android compatibility
+        working-directory: mobile/android
+        run: ./gradlew :app:lintRelease -PplayPausePrototype=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Build isolated Fold test APK
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleRelease -PplayPausePrototype=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Verify package, signing and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p play-pause-delivery
+          APK=mobile/android/app/build/outputs/apk/release/app-release.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          "$BUILD_TOOLS/zipalign" -c -P 16 4 "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" > play-pause-delivery/package.txt
+          grep -q "name='app.archivist.reader.playpause'" play-pause-delivery/package.txt
+          grep -q "native-code:.*'arm64-v8a'" play-pause-delivery/package.txt
+          cp "$APK" play-pause-delivery/Archivist-Play-Pause-${SOURCE_SHA:0:7}.apk
+          cd play-pause-delivery
+          sha256sum *.apk > SHA256SUMS.txt
+          printf 'Source: %s\nUser-selected LottieFiles Play/Pause inside original 80dp transport; bidirectional segment transition, hold, no loop; original Living Book and scanner unchanged.\nAutomated checks: mobile suites, typecheck, release lint, package, signature and alignment. Unvalidated physical Fold/phone preview. Check rapid Play/Pause tapping, no flicker or double icon, book motion, playback control and Reduced Motion.\nUses unique isolated app.archivist.reader.playpause package; cannot overwrite the canonical app or scanner-acceptance app; separate empty test data.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+      - name: Provide direct test APK download
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=play-pause-preview-${SOURCE_SHA:0:7}
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$SOURCE_SHA" --prerelease --title 'Archivist Play Pause Lottie — unvalidated device preview' --notes-file play-pause-delivery/TEST-NOTES.txt
+          gh release upload "$TAG" play-pause-delivery/*.apk play-pause-delivery/SHA256SUMS.txt play-pause-delivery/TEST-NOTES.txt --clobber
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: play-pause-preview-${{ github.sha }}
+          path: |
+            play-pause-delivery/
+            mobile/android/app/build/reports/lint-results-release.*
+          retention-days: 14
