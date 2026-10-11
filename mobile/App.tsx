@@ -5898,7 +5898,7 @@ function Client() {
         {current ? (
           <>
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
-          <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
+          <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide,phoneLayout&&styles.playerAdaptivePortraitLift]}>
             <View style={styles.playerHeroColumn}>
             <LivingBookCanvas
               title={current.title}
@@ -8513,6 +8513,7 @@ const styles = StyleSheet.create({
   livingBookPageNumber: {position:'absolute',bottom:6,alignSelf:'center',fontSize:6,lineHeight:8,fontWeight:'600',letterSpacing:.6},
   playerHeading: {minHeight:28,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   playerAdaptive: {gap:16},
+  playerAdaptivePortraitLift: {marginTop:-20,gap:8},
   playerAdaptiveWide: {flexDirection:'row',alignItems:'center',justifyContent:'center',gap:32,paddingVertical:2},
   playerHeroColumn: {gap:8,alignItems:'center',flexShrink:1,maxWidth:360},
   playerControlColumn: {flex:1,minWidth:250,maxWidth:500,gap:12,justifyContent:'center'},
