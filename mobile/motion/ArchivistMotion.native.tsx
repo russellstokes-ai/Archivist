@@ -28,8 +28,9 @@ export function ArchivistMotion({kind,size=40,width=size,height=size,active=true
   },[transport,active,reduceMotion,playing,kind]);
   useEffect(()=>()=>{animation.current?.pause();},[]);
   if(reduceMotion||!active)return <View pointerEvents="none" style={{width,height,alignItems:'center',justifyContent:'center'}}>{fallback||null}</View>;
-  return <LottieView ref={animation} source={sources[kind]} style={{width,height}}
-    resizeMode="contain" autoPlay={!transport}
-    loop={transport?false:(loop??['book-loader','books-stack','headphones','audio-waveform'].includes(kind))}
-    accessible={false} pointerEvents="none"/>;
+  return <View pointerEvents="none" accessible={false} style={{width,height}}>
+    <LottieView ref={animation} source={sources[kind]} style={{width,height}}
+      resizeMode="contain" autoPlay={!transport}
+      loop={transport?false:(loop??['book-loader','books-stack','headphones','audio-waveform'].includes(kind))}/>
+  </View>;
 }
