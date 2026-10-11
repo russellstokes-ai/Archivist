@@ -1,7 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {AccessibilityInfo,Pressable,SafeAreaView,ScrollView,StyleSheet,Text,View,useColorScheme,useWindowDimensions} from 'react-native';
 import LottieView from 'lottie-react-native';
-type Asset={name:string;source:object;loop:boolean;group:string};
+type Asset={name:string;source:React.ComponentProps<typeof LottieView>['source'];loop:boolean;group:string};
 const ASSETS:Asset[]=[
   {name:'Books Stack',source:require('../mobile/assets/motion/books-stack.json'),loop:true,group:'Scanning'},
   {name:'Headphones',source:require('../mobile/assets/motion/headphones.json'),loop:true,group:'Scanning'},
