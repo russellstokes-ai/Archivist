@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase; 2026-10-11: restricted local comic WebView secure HTML origin and reader-only error/retry messages. No scanner, media path permissions or render engine changes.; 2026-10-11: render one-shot category reward Lottie overlay and authentic level-up transition; no rewards card layout, achievement ledger, scanner, reader or Fold layout modifications",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase; 2026-10-11: restricted local comic WebView secure HTML origin and reader-only error/retry messages. No scanner, media path permissions or render engine changes.; 2026-10-11: render one-shot category reward Lottie overlay and authentic level-up transition; no rewards card layout, achievement ledger, scanner, reader or Fold layout modifications; 2026-10-11: portrait-only 20dp vertical lift of existing Player content, all Fold layouts and renderer dimensions unchanged",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -471,6 +471,14 @@
     {
       "old": "      <CelebrationOverlay\n        reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}\n        active={celebrating || !!achievementCelebration}\n        title={achievementCelebration ? achievementCelebration.title : undefined}\n        copy={achievementCelebration ? achievementCelebration.description : undefined}\n      />",
       "new": "      <CelebrationOverlay\n        reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}\n        active={celebrating && !levelUpCelebration && !achievementCelebration}\n      />\n      <AchievementRewardOverlay\n        event={levelUpCelebration?motionForLevelUp(levelUpCelebration.level):\n          achievementCelebration?motionForAchievement(achievementCelebration):null}\n        eventKey={levelUpCelebration?'level-'+levelUpCelebration.level:\n          achievementCelebration?'achievement-'+achievementCelebration.id:null}\n        folded={foldLayout} reducedMotion={reduceMotion}\n        paper={p.paper} ink={p.ink} muted={p.muted}\n      />"
+    },
+    {
+      "old": "<View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>",
+      "new": "<View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide,phoneLayout&&styles.playerAdaptivePortraitLift]}>"
+    },
+    {
+      "old": "  playerAdaptive: {gap:16},",
+      "new": "  playerAdaptive: {gap:16},\n  playerAdaptivePortraitLift: {marginTop:-20,gap:8},"
     }
   ],
   "loaderException": {
