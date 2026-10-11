@@ -17,6 +17,7 @@ on:
       - 'mobile/comic-webview-access-regression.test.cjs'
       - 'mobile/comicReaderWebViewSource.ts'
       - 'mobile/player-portrait-comic-fallback.test.cjs'
+      - 'mobile/comic-reader-startup-watchdog.test.cjs'
       - 'docs/scanner-vnext/UI_BINDING_EXCEPTIONS.json'
       - 'mobile/assets/motion/live-forward-media-ink.json'
       - 'mobile/assets/motion/live-forward-media-source.json'
@@ -60,7 +61,7 @@ jobs:
           git diff --name-only "$BASE" HEAD > /tmp/ui-motion-changes.txt
           while IFS= read -r changed; do
             case "$changed" in
-              mobile/App.tsx|mobile/LivingBookCanvas.tsx|mobile/LocalPdfReader.tsx|mobile/android/app/build.gradle|mobile/package.json|mobile/package-lock.json|mobile/*loader*.test.cjs|mobile/*motion*.test.cjs|mobile/*waveform*.test.cjs|mobile/*skip*.test.cjs|mobile/live-player-play-pause-morph.test.cjs|mobile/living-book-render-scale.test.cjs|mobile/scanner-vnext-process-lock.test.cjs|mobile/test10-1-living-book-reentry.test.cjs|mobile/ui-contract.test.cjs|mobile/ArchivistBookLoader.tsx|mobile/LivePlayerPlayPauseMorph.tsx|mobile/LivePlayerSkipIcon.tsx|mobile/MiniAudioWaveform.tsx|mobile/readerAccessErrors.ts|mobile/comicReaderWebViewSource.ts|mobile/comic-webview-access-regression.test.cjs|mobile/player-portrait-comic-fallback.test.cjs|mobile/assets/motion/*|docs/scanner-vnext/UI_BINDING_EXCEPTIONS.json|docs/ARCHIVIST_BASIC_UI_ANIMATIONS_CHECKPOINT_2026-10-11.md|.github/workflows/*) ;;
+              mobile/App.tsx|mobile/LivingBookCanvas.tsx|mobile/LocalPdfReader.tsx|mobile/android/app/build.gradle|mobile/package.json|mobile/package-lock.json|mobile/*loader*.test.cjs|mobile/*motion*.test.cjs|mobile/*waveform*.test.cjs|mobile/*skip*.test.cjs|mobile/live-player-play-pause-morph.test.cjs|mobile/living-book-render-scale.test.cjs|mobile/scanner-vnext-process-lock.test.cjs|mobile/test10-1-living-book-reentry.test.cjs|mobile/ui-contract.test.cjs|mobile/ArchivistBookLoader.tsx|mobile/LivePlayerPlayPauseMorph.tsx|mobile/LivePlayerSkipIcon.tsx|mobile/MiniAudioWaveform.tsx|mobile/readerAccessErrors.ts|mobile/comicReaderWebViewSource.ts|mobile/comic-webview-access-regression.test.cjs|mobile/player-portrait-comic-fallback.test.cjs|mobile/comic-reader-startup-watchdog.test.cjs|mobile/assets/motion/*|docs/scanner-vnext/UI_BINDING_EXCEPTIONS.json|docs/ARCHIVIST_BASIC_UI_ANIMATIONS_CHECKPOINT_2026-10-11.md|.github/workflows/*) ;;
               *) echo "UNAPPROVED FILE CHANGED: $changed"; exit 1 ;;
             esac
           done < /tmp/ui-motion-changes.txt
