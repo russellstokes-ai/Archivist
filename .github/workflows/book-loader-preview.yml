@@ -1,0 +1,84 @@
+name: Archivist Book Loader complete spinner replacement APK
+on:
+  push:
+    branches: ['feat/book-loader-all-spinners-20261011']
+    paths: ['.github/workflows/book-loader-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: book-loader-preview
+  cancel-in-progress: false
+jobs:
+  book-loader-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android packages
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      - name: Verify source and mobile checks
+        working-directory: mobile
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+          npm run typecheck
+          npm test
+      - name: Check Android compatibility
+        working-directory: mobile/android
+        run: ./gradlew :app:lintRelease -PbookLoaderPreview=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Build isolated Fold test APK
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleRelease -PbookLoaderPreview=true -PreactNativeArchitectures=arm64-v8a --console=plain
+      - name: Verify package, signing and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p book-loader-delivery
+          APK=mobile/android/app/build/outputs/apk/release/app-release.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          "$BUILD_TOOLS/zipalign" -c -P 16 4 "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" > book-loader-delivery/package.txt
+          grep -q "name='app.archivist.reader.bookloader'" book-loader-delivery/package.txt
+          grep -q "native-code:.*'arm64-v8a'" book-loader-delivery/package.txt
+          cp "$APK" book-loader-delivery/Archivist-Book-Loader-${SOURCE_SHA:0:7}.apk
+          cd book-loader-delivery
+          sha256sum *.apk > SHA256SUMS.txt
+          printf 'Source: %s\nUploaded Book Loader Lottie replaces nine circular mobile loading spinners; preserves the canonical scanner, UI structure, state, and Living Book movement.\nAutomated checks: mobile suites, typecheck, release lint, package, signature and alignment. Unvalidated physical Fold/phone preview. Check spinner size, animation, nine loading states, cancellation, player, PDF reader and Reduced Motion.\nUses unique isolated app.archivist.reader.bookloader package; cannot overwrite the canonical app or scanner-acceptance app; separate empty test data.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+      - name: Provide direct test APK download
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=book-loader-preview-${SOURCE_SHA:0:7}
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$SOURCE_SHA" --prerelease --title 'Archivist Book Loader — unvalidated device preview' --notes-file book-loader-delivery/TEST-NOTES.txt
+          gh release upload "$TAG" book-loader-delivery/*.apk book-loader-delivery/SHA256SUMS.txt book-loader-delivery/TEST-NOTES.txt --clobber
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: book-loader-preview-${{ github.sha }}
+          path: |
+            book-loader-delivery/
+            mobile/android/app/build/reports/lint-results-release.*
+          retention-days: 14
