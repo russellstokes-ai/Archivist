@@ -26,7 +26,7 @@ const code=extract(app,['cancelSkipBurst','runSkipBurstStep','turnPages']);
 const phase=extract(phaseSource,['reduceLivingBookMotion']);
 const reducer=vm.runInNewContext(phase+'\nreduceLivingBookMotion');
 
-function scenario(input,queued,paused=false){
+function scenario(input,queued,paused=false,cancelImmediately=false){
   let now=0,nextId=1;
   let timers=[];
   const phases=[],directions=[],busy=[],counts=[];
@@ -61,6 +61,7 @@ function scenario(input,queued,paused=false){
   api.turnPages(input.count,input.direction);
   if(queued)api.turnPages(queued.count,queued.direction);
   if(paused)ctx.transitionLivingBook({type:'pause-request'});
+  if(cancelImmediately)api.cancelSkipBurst();
   let steps=0;
   while(timers.length>0){
     assert(++steps<100,'Timeout loop must terminate');
@@ -89,6 +90,19 @@ const consecutive=scenario({count:3,direction:1},{count:6,direction:-1});
 assert.equal(consecutive.phases.filter(p=>p.event==='turn-request').length,9);
 assert.deepEqual(consecutive.directions.slice(0,3),[1,1,1]);
 assert.deepEqual(consecutive.directions.slice(3),[-1,-1,-1,-1,-1,-1]);
+
+const interrupted=scenario({count:6,direction:-1},null,false,true);
+assert.equal(interrupted.phases.filter(p=>p.event==='turn-request').length,1);
+assert.equal(interrupted.phases.filter(p=>p.event==='turn-complete').length,1,
+  'Cancelling should settle the active renderer turn, not leave it spinning forever');
+assert.equal(interrupted.phases.filter(p=>p.event==='settle-complete').length,1);
+assert.equal(interrupted.phase,'open');
+assert.deepEqual(Array.from(interrupted.queue),[]);
+assert.equal(interrupted.busy.at(-1),false);
+assert.equal(interrupted.now,0,'Cancelled scheduled page-flip timers must never fire');
+
+assert(app.includes('skipBookKeyRef.current!==currentAudioKey'));
+assert(app.includes('if(!playbackVisible||reduceMotion)cancelSkipBurst()'));
 
 const paused=scenario({count:6,direction:1},null,true);
 assert.equal(paused.phases.filter(p=>p.event==='turn-request').length,1);
