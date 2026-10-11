@@ -1,6 +1,8 @@
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {livingBookStageSize} from './livingBookStage';
+import {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -718,11 +720,12 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
-  const {width} = useWindowDimensions();
+  const {width,height} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const phoneLayout = width < 600;
   const narrowPhone = width < 360;
+  const playerBookStageSize=livingBookStageSize({width,height,fold:foldLayout,topInset:safeArea.top,bottomInset:safeArea.bottom,embedded:true});
   const modalSheetBackdrop=[styles.sheetBackdrop,foldLayout&&styles.sheetBackdropFold,!foldLayout&&{paddingBottom:Math.max(12,safeArea.bottom+8)}];
   const [theme, setTheme] = useState<ThemeMode>('system');
   const [accessibilityPrefs,setAccessibilityPrefs]=useState<AccessibilityPreferences>({reduceMotion:false,highContrast:false,largeText:false});
@@ -813,6 +816,18 @@ function Client() {
   const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
+  const firstScanWasActiveRef=useRef(false);
+  const [firstScanCompleted,setFirstScanCompleted]=useState(false);
+  const firstLibraryCelebrationClaimedRef=useRef(false);
+  useEffect(()=>{
+    if(localScanning){firstScanWasActiveRef.current=true;setFirstScanCompleted(false);}
+    else if(firstScanWasActiveRef.current){firstScanWasActiveRef.current=false;setFirstScanCompleted(true);}
+  },[localScanning]);
+  useEffect(()=>{
+    if(!celebrating)return;
+    const timeout=setTimeout(()=>setCelebrating(false),3200);
+    return()=>clearTimeout(timeout);
+  },[celebrating]);
   const [ritualDays,setRitualDays]=useState<Record<string,number>>({});
   const [ritualReady,setRitualReady]=useState(false);
   const [awardCategory,setAwardCategory]=useState('All');
@@ -1452,6 +1467,24 @@ function Client() {
     return [...phone,...downloaded,...remote];
   },[downloadedPersonalWorks,phonePersonalWorks,serverPreferences,serverWorks,session]);
 
+  // Completion effect observes the accepted scanner from outside its protected functions.
+  // No success is shown for an empty, cancelled, unresolved or unpublished catalogue.
+  const hasPublishedLocalWork=sourceWorks.some(work=>work.source==='local'&&
+    !!work.localWork?.tracks.some(track=>(track as ScannerBook).scannerPublished));
+  useEffect(()=>{
+    if(!shouldCelebrateFirstLibrary({
+      eligible:celebrationEligible,finishedScan:firstScanCompleted,onboardingDone,
+      hasPublishedLocalWork,scanning:localScanning,restoring,
+      otherCelebrationActive:!!achievementCelebration,alreadyClaimed:firstLibraryCelebrationClaimedRef.current,
+    }))return;
+    firstLibraryCelebrationClaimedRef.current=true;
+    void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1').then(()=>{
+      setCelebrationEligible(false);
+      setFirstScanCompleted(false);
+      setCelebrating(true);
+    }).catch(()=>{firstLibraryCelebrationClaimedRef.current=false;});
+  },[celebrationEligible,firstScanCompleted,onboardingDone,hasPublishedLocalWork,localScanning,
+    restoring,achievementCelebration]);
   const sourceCounts = useMemo(() => ({
     all: dedupeForAll(sourceWorks).length,
     local: sourceWorks.filter(item=>matchesSource(item.source,'local')).length,
@@ -5812,8 +5845,9 @@ function Client() {
           <>
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
-            <View style={styles.playerHeroColumn}>
+            <View style={[styles.playerHeroColumn,{maxWidth:Math.max(360,playerBookStageSize.width)}]}>
             <LivingBookCanvas
+              stageSize={playerBookStageSize}
               title={current.title}
               author={current.author}
               chapter={currentChapter?.title}

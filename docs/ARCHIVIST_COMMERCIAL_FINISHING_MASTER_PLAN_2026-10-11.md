@@ -149,9 +149,9 @@ On each sprint update only this living plan on its development branch: list exac
 | P0 | IN PROGRESS | Durable plan and source audit | Code/document inspection only; no tests run |
 | P1 | TODO | Motion Lab and Lottie assets | Not integrated in canonical |
 | P2 | TODO | Scanner loader | Accepted scanner must remain locked |
-| P2A | TODO | Living Book outer sizing only | User approved; internal renderer locked |
+| P2A | CODE COMPLETE — native unverified | Living Book outer sizing only | Production wrapper sizing committed; renderer code preserved; device acceptance open |
 | P3 | TODO | Play/Pause/waveform | Existing player locked |
-| P4 | TODO | Rewards and first-library celebration | B-001 identified |
+| P4 | CODE COMPLETE — native unverified (first-library logic only) | Rewards and first-library celebration | First-library observer wired without protected scanner functions; Lottie reward assets still TODO |
 | P5 | TODO | Shelf/Library/review polish | B-005/B-006 device checks pending |
 | P6 | TODO | Atlas/Stats/Reader | Native acceptance pending |
 | P7 | TODO | Accessibility/performance | B-002 impact unmeasured |
@@ -160,3 +160,8 @@ On each sprint update only this living plan on its development branch: list exac
 
 ### Change history
 - 2026-10-11: Initial canonical df4c39b documentation/source audit and fixed commercial finishing backlog. No app code changed. B-001 confirmed disconnected first-library celebration; B-002 confirmed unconditional frame scheduling with no impact measurement; B-003 authorised screen-space improvement; B-004 uncertain sound intent; B-005 through B-011 documented acceptance/risk. User-authorised Living Book exception retained.
+
+### 2026-10-11 Stage 1 implementation checkpoint — source only (no physical/CI claim)
+- Proposed implementation branch: `polish/archivist-commercial-stage1-20261011`. First-library B-001 now has an external observer gated by completed scan, published local works and successful onboarding, persisted once-only with SecureStore. No protected scan functions altered. Unit tests added.
+- P2A: Responsive Living Book size is computed by a pure helper. The original HTML canvas renderer, its timings, texture/shape and page-turn logic are unchanged; outer View accepts an optional dynamic size, and the hosting hero column only changes its maximum allocation. Size tests added. Browser/native screenshots and Fold human acceptance remain OPEN.
+- Do not announce P2A or B-001 as accepted until normal mobile suite, native build and physical verification pass. This implementation did not perform those checks.
