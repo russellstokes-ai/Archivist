@@ -2,6 +2,7 @@ import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
 import {ArchivistBookLoader} from './ArchivistBookLoader';
+import {LivePlayerPlayPauseMorph} from './LivePlayerPlayPauseMorph';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -5744,13 +5745,13 @@ function Client() {
     if(embedded&&!current)return <LiveMediaEmpty mode="player" lastTitle={lastPlaying?.title} onResume={lastPlaying?()=>void playBook(lastPlaying):undefined}/>;
 
     async function togglePlayback(){
-      const targetPlaying=!isPlaying;
+      const targetPlaying=!playerMotionPlaying;
       // Drive the cover immediately from the user's tap; do not wait for the
       // native/server playback status round-trip before opening or closing.
       setPlayerMotionIntent(targetPlaying);
       try{
         if(serverPlayer){controller.toggle();return;}
-        if(isPlaying){player.pause();await persistLocalPlaybackPosition(position);}else player.play();
+        if(targetPlaying)player.play();else{player.pause();await persistLocalPlaybackPosition(position);}
       }catch(error){
         setPlayerMotionIntent(null);
         throw error;
@@ -5876,11 +5877,11 @@ function Client() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+                accessibilityLabel={playerMotionPlaying ? 'Pause' : 'Play'}
                 disabled={!transportReady}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {!transportReady ? <ArchivistBookLoader label="Loading audio playback" size="inline" reduceMotion={reduceMotion}/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
+                {!transportReady ? <ArchivistBookLoader label="Loading audio playback" size="inline" reduceMotion={reduceMotion}/> : <LivePlayerPlayPauseMorph playing={playerMotionPlaying} active={appActive} reducedMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} fallback={<UiIcon name={playerMotionPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}/>}
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipForward" color={p.ink} size={30}/>
