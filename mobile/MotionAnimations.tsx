@@ -65,10 +65,17 @@ export function MotionTransport({playing,reduceMotion,inkTone='ivory',size=29}:{
 /** Waveform movement is tied to real playback/ready/app state, not media metadata or a fake volume reading. */
 export function MotionWaveform({playing,reduceMotion,running=true,size=32}:{playing:boolean;reduceMotion:boolean;running?:boolean;size?:number}){
   const active=playing&&!reduceMotion&&running;
+  const animation=useRef<LottieView>(null);
+  // autoPlay is mount-time only. Restart an existing waveform on a real pause→play change.
+  useEffect(()=>{
+    if(active)animation.current?.play();
+    else animation.current?.reset();
+    return()=>animation.current?.pause();
+  },[active]);
   if(reduceMotion)return <StaticMotionGlyph label="▥" size={size} color="#47736F"/>;
   return <View accessible={false} pointerEvents="none" style={{width:size,height:size}}>
-    <LottieView source={require('./assets/motion/audio-waveform.json')} autoPlay={active} loop={active}
-      speed={active?1:0} progress={active?undefined:0} style={{width:size,height:size}}/>
+    <LottieView ref={animation} source={require('./assets/motion/audio-waveform.json')}
+      autoPlay={active} loop style={{width:size,height:size}}/>
   </View>;
 }
 

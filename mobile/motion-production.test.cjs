@@ -12,7 +12,9 @@ assert.equal(award('format-explorer'),'badge');
 assert.match(text,/Animated\.createAnimatedComponent\(LottieView\)/,'controlled native Lottie progress');
 assert.match(text,/reduceMotion\)/,'all animated components gate Reduced Motion');
 assert.ok(text.includes("speed={running?1:0}"),'scanner animation paused when backgrounded');
-assert.ok(text.includes("progress={active?undefined:0}"),'paused waveform stays still');
+assert.ok(text.includes("animation.current?.play()"),'waveform resumes explicitly after pause');
+assert.ok(text.includes("animation.current?.reset()"),'paused waveform is held still');
+assert.ok(text.includes("animation.current?.pause()"),'waveform unmount/background cleanup');
 for(const tone of ['ivory','navy']){
  const data=JSON.parse(fs.readFileSync(__dirname+'/assets/motion/play-pause-'+tone+'.json','utf8'));
  assert.equal(data.layers.length,3,'control disc must NOT be redrawn over existing button');
