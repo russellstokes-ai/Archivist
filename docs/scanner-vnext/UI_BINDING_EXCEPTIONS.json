@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -435,6 +435,10 @@
     {
       "old": "  },[playerMotionPlaying,playbackVisible,playing?.id,playing?.uri,reduceMotion]);\n",
       "new": "  },[playerMotionPlaying,playbackVisible,playing?.id,playing?.uri,reduceMotion]);\n\n  // Skip bursts belong to one book and one visible player session. Never let\n  // scheduled turns continue into the next title or after leaving the player.\n  useEffect(()=>{\n    if(skipBookKeyRef.current!==currentAudioKey){\n      skipBookKeyRef.current=currentAudioKey;\n      cancelSkipBurst();\n    }\n  },[currentAudioKey]);\n  useEffect(()=>{\n    if(!playbackVisible||reduceMotion)cancelSkipBurst();\n  },[playbackVisible,reduceMotion]);\n"
+    },
+    {
+      "old": "  function cancelSkipBurst(){\n    ++skipGeneration.current;\n    if(skipBurstTimer.current!==null){clearTimeout(skipBurstTimer.current);skipBurstTimer.current=null;}\n    skipBurstQueue.current=[];\n    skipBurstRunning.current=false;\n    setSkipTurning(false);\n  }",
+      "new": "  function cancelSkipBurst(){\n    const wasRunning=skipBurstRunning.current;\n    ++skipGeneration.current;\n    if(skipBurstTimer.current!==null){clearTimeout(skipBurstTimer.current);skipBurstTimer.current=null;}\n    skipBurstQueue.current=[];\n    skipBurstRunning.current=false;\n    setSkipTurning(false);\n    // A cleared timer must never strand the renderer in 'turning'. Settle\n    // only our own in-flight skip (never an unrelated ambient page turn).\n    if(wasRunning&&livingBookMotionRef.current.phase==='turning'){\n      transitionLivingBook({type:'turn-complete'});\n      const settled=transitionLivingBook({type:'settle-complete'});\n      if(settled.phase==='closing')animateLivingBookCoverClose();\n    }\n  }"
     }
   ],
   "loaderException": {
