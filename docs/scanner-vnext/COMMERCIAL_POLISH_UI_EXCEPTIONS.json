@@ -41,10 +41,6 @@
     {
       "old": "      return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n        <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
       "new": "      return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n        <ArchivistMotion kind={libraryMotionKind} size={38} active={appActive&&activeProgress.phase!=='complete'}\n          reduceMotion={reduceMotion} fallback={<UiIcon name=\"bookOpen\" color={p.sage} size={22}/>}/>"
-    },
-    {
-      "old": "              {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n                <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
-      "new": "              {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n                <ArchivistMotion kind={libraryMotionKind} size={38} active={appActive&&progress.phase!=='complete'}\n                  reduceMotion={reduceMotion} fallback={<UiIcon name=\"bookOpen\" color={p.sage} size={22}/>}/>"
     }
   ]
 }
