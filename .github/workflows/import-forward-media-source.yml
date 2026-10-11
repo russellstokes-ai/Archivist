@@ -24,8 +24,9 @@ jobs:
               page=response.read(1100000).decode('utf-8','replace')
           assert 's7Vy5kFTbT' in page and 'Forward Media' in page,'Unexpected LottieFiles page'
           page=html.unescape(page).replace('\\\\/','/')
-          refs=list(dict.fromkeys(re.findall(r'a/[0-9a-f-]{36}/[A-Za-z0-9_-]+\\.json',page)))
+          refs=list(dict.fromkeys(re.findall(r'a/[0-9a-f-]{36}/[A-Za-z0-9_-]+[.]json',page)))
           print('CANDIDATES',refs,flush=True)
+          print('SLUG_OFFSET',page.find('s7Vy5kFTbT'),'PAGE_BYTES',len(page),flush=True)
           candidates=[]
           for path in refs:
               url='https://assets-v2.lottiefiles.com/'+path
