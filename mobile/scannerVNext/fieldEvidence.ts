@@ -1,3 +1,4 @@
+import {metadataDatabase} from './metadataWrites';
 import type {ScannerDatabase} from './store';
 import {normalizeGenre} from './genre';
 import {rankCandidates,type Candidate,type SearchFields,type SearchCache,type SearchResult} from './search';
@@ -10,6 +11,7 @@ function validate(value:MetadataWork){
  for(const [key,data] of Object.entries(value.fields))if(!fields.includes(key as typeof fields[number])||typeof data!=='string'||data.length>(key==='description'?4096:key==='coverUri'?2048:512))throw new Error('Invalid metadata field');
 }
 export async function createMetadataStore(db:ScannerDatabase){
+ db=metadataDatabase(db);
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_metadata(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL);');
  const load=async(database:ScannerDatabase,id:string):Promise<MetadataWork|null>=>{const row=await database.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_metadata WHERE work_id=?',id);if(!row)return null;const value=JSON.parse(row.payload);validate(value);return value;};
  const write=async(database:ScannerDatabase,value:MetadataWork)=>{validate(value);await database.runAsync('INSERT INTO scanner_vnext_metadata VALUES(?,?,?) ON CONFLICT(work_id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload',value.workId,value.revision,JSON.stringify(value));};
@@ -41,6 +43,7 @@ function validResult(value:SearchResult){
  for(const row of value.candidates){if(!row.candidate||typeof row.candidate.id!=='string'||typeof row.candidate.provider!=='string'||!Number.isFinite(row.score)||!Array.isArray(row.conflicts)||typeof row.automaticEligible!=='boolean'||!Array.isArray(row.candidate.identifiers))throw new Error('Invalid cached candidate');for(const field of Object.values(row.candidate.fields))if(typeof field!=='string'||field.length>4096)throw new Error('Cached candidate field budget');}
 }
 export async function createSearchCache(db:ScannerDatabase):Promise<SearchCache>{
+ db=metadataDatabase(db);
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_search_cache(cache_key TEXT PRIMARY KEY,payload TEXT NOT NULL,touched INTEGER NOT NULL);');
  return {
   async load(key){const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_search_cache WHERE cache_key=? AND length(payload)<=524288',key);if(!row)return null;try{const value=JSON.parse(row.payload);if(!Number.isFinite(value.expires))return null;validResult(value.value);return value;}catch{return null;}},

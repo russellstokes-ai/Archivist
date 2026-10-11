@@ -1,4 +1,4 @@
-name: Fresh scanner Fold test APK
+name: Archivist full-app phone test APK
 on:
   push:
     branches: ['feature/archivist-scanner-vnext-real-library', 'feature/archivist-metadata-review']

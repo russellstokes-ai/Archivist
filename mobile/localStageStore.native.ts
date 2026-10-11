@@ -1,3 +1,4 @@
+import {metadataWrite} from './scannerVNext/metadataWrites';
 import * as SQLite from 'expo-sqlite';
 import type {LocalBook} from './localLibrary';
 
@@ -58,7 +59,7 @@ export async function localStageHasAssets(){
 export async function replaceLocalStageBooks(books:LocalBook[]){
   const db=await database();
   const now=Date.now();
-  await db.withExclusiveTransactionAsync(async txn=>{
+  await metadataWrite(()=>db.withExclusiveTransactionAsync(async txn=>{
     await txn.runAsync('DELETE FROM local_assets');
     const statement=await txn.prepareAsync(`
       INSERT INTO local_assets(uri,root_uri,payload,ordinal,updated_at)
@@ -79,14 +80,14 @@ export async function replaceLocalStageBooks(books:LocalBook[]){
     }finally{
       await statement.finalizeAsync();
     }
-  });
+  }));
 }
 
 export async function upsertLocalStageBooks(books:LocalBook[]){
   if(!books.length)return;
   const db=await database();
   const now=Date.now();
-  await db.withExclusiveTransactionAsync(async txn=>{
+  await metadataWrite(()=>db.withExclusiveTransactionAsync(async txn=>{
     const statement=await txn.prepareAsync(`
       INSERT INTO local_assets(uri,root_uri,payload,ordinal,updated_at)
       VALUES ($uri,$rootUri,$payload,COALESCE((SELECT ordinal FROM local_assets WHERE uri=$uri),(SELECT COALESCE(MAX(ordinal),-1)+1 FROM local_assets)),$updatedAt)
@@ -108,7 +109,7 @@ export async function upsertLocalStageBooks(books:LocalBook[]){
     }finally{
       await statement.finalizeAsync();
     }
-  });
+  }));
 }
 
 export async function migrateLegacyLocalStage(books:LocalBook[]){

@@ -1,0 +1,20 @@
+{
+  "file": "mobile/ui-contract.test.cjs",
+  "reason": "User explicitly requested removal of Manage Library and review-first onboarding on 2026-10-10. Only these obsolete presence assertions change; canonical style assertions remain intact.",
+  "baseSha256": "0fc328284d591da766b20d794b95ef3f222baefe8209ba8b2d093fb1d337cb9d",
+  "updatedSha256": "985ddf015099907431ef31eef516f809a7ccb70848d5dc877df2682dd7089328",
+  "changes": [
+    {
+      "old": "function LibraryManagementPanel()",
+      "new": "function LibrarySettingsTools()"
+    },
+    {
+      "old": "source.includes('Manage Library')",
+      "new": "source.includes('Folders, rescanning & file tools')"
+    },
+    {
+      "old": ">Organise files</Text>",
+      "new": ">Review book details</Text>"
+    }
+  ]
+}

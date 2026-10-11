@@ -1,9 +1,11 @@
+import {metadataDatabase} from './metadataWrites';
 import type {ScannerDatabase} from './store';
 import type {MetadataWork} from './fieldEvidence';
 import type {ArtworkResult} from './artwork';
 import {normalizeGenre,type GenreDecision,meaningfulGenre} from './genre';
 export type PublishedWork=MetadataWork&{genre:GenreDecision;artwork:ArtworkResult;publishedAt:number};
 export async function createPublicationStore(db:ScannerDatabase){
+ db=metadataDatabase(db);
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_published(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS scanner_vnext_staged(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL);');
  const load=async(id:string):Promise<PublishedWork|null>=>{const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_published WHERE work_id=?',id);return row?JSON.parse(row.payload):null;};
  return {load,

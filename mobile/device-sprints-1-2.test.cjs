@@ -12,7 +12,7 @@ assert.ok(source.includes("function DismissSheetHandle(")&&source.includes("shou
 assert.ok(source.includes('accessibilityHint="Tap or swipe down to close"'),'Sheet dismissal gesture needs an accessible equivalent');
 for(const label of [
   'Close Customise Shelf','Close organisation panel','Close Library filters','Close Library sources and folders',
-  'Close Reader tools','Close work details','Close Library management'
+  'Close Reader tools','Close work details'
 ]) assert.ok(source.includes('accessibilityLabel="'+label+'"'),'Missing tappable scrim: '+label);
 assert.ok(source.includes("actionSheetStable: {height:'76%',minHeight:360,maxHeight:680,overflow:'hidden'}"),'Long sheets must use the stable commercial detent');
 assert.ok(source.includes("sheetInnerScroll: {paddingBottom:8,gap:9}"),'Bounded sheets must scroll internally instead of moving the page');

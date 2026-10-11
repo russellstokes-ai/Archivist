@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
+const card=app.slice(app.indexOf('  function RawAssetCard('),app.indexOf('  function PersonalControls('));
+assert(!card.includes('openBook('),'Review cards must never invoke playback');
+assert(card.includes('onPress={editDetails}')&&card.includes('label="Edit details"'),'Card and visible button must open the editor');
+assert(!app.includes('LibraryManagementPanel')&&!app.includes('libraryManageOpen'),'Remove the separate Manage Library page');
+assert(app.includes('function LibrarySettingsTools()')&&app.includes('{libraryToolsOpen?LibrarySettingsTools():null}'),'Maintenance functions remain accessible in Settings');
+assert(app.includes('if(result.review>0)openMetadataReview();'),'Completed scans lead directly to metadata review');
+assert(app.includes('Tap a book to edit its details. Nothing plays in this list.'),'Explain the review interaction');
+console.log('PASS: scan -> metadata review -> tap to edit; no playback or Manage Library page; tools remain in Settings');

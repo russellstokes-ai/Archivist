@@ -37,7 +37,7 @@ assert.ok(source.includes("const foldLayout=width>=600") || source.includes("con
 assert.ok(source.includes('shelfContentFold') && source.includes('libraryMainFold') && source.includes('playerScreenFold') && source.includes('atlasScreenFold'),'Core Fold responsive styles are incomplete');
 assert.ok(source.includes("useColorScheme()") && (source.includes("theme === 'dark'") || source.includes("mode === 'dark'")),'Theme handling is missing');
 assert.ok(source.includes('reduceMotion') && source.includes('AccessibilityInfo.isReduceMotionEnabled()'),'Reduced-motion support is missing');
-assert.ok(source.includes('function LibraryManagementPanel()') && source.includes('SCAN & REPAIR') && source.includes('ADVANCED ORGANISATION'),'Sprint 4 Library management must remain intact through Sprint 7');
+assert.ok(source.includes('function LibrarySettingsTools()') && source.includes('SCAN & REPAIR') && source.includes('ADVANCED ORGANISATION'),'Sprint 4 Library management must remain intact through Sprint 7');
 assert.ok(source.includes("{WorkDetailsPanel()}"),'Global work-details panel mount is missing');
 
 console.log('PASS: Sprints 5-7 work details, branding, responsive integration and QA contracts are locked');

@@ -1,3 +1,4 @@
+import {metadataDatabase} from './metadataWrites';
 import type {ScannerDatabase} from './store';
 import type {SearchService,SearchResult} from './search';
 import {rankCandidates} from './search';
@@ -7,6 +8,7 @@ type MetadataStore=Awaited<ReturnType<typeof createMetadataStore>>;
 type Policy={online:boolean;automatic:boolean;explicit?:boolean;retry?:boolean};
 export type AssistState={revision:number;state:SearchResult['state']|'pending'|'stale'|'cancelled'|'accepted'|'error'|'needs-clues';result?:SearchResult;updated:number};
 export async function createAssistController(db:ScannerDatabase,store:MetadataStore,service:Pick<SearchService,'search'>&Partial<Pick<SearchService,'more'>>){
+ db=metadataDatabase(db);
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_assist(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL);');
  const active=new Map<string,AbortController>();
  async function persist(work:MetadataWork,value:AssistState,controller?:AbortController){

@@ -854,7 +854,7 @@ function Client() {
   const [collectionFilter,setCollectionFilter]=useState('');
   const [libraryFiltersOpen,setLibraryFiltersOpen]=useState(false);
   const [librarySourcesOpen,setLibrarySourcesOpen]=useState(false);
-  const [libraryManageOpen,setLibraryManageOpen]=useState(false);
+  const [libraryToolsOpen,setLibraryToolsOpen]=useState(false);
   const [metadataGapFilter,setMetadataGapFilter]=useState<MetadataGapFilter>('');
   const [libraryFolderExact,setLibraryFolderExact]=useState(false);
   const [shelfManageOpen,setShelfManageOpen]=useState(false);
@@ -1149,7 +1149,7 @@ function Client() {
   const [localSortHistory,setLocalSortHistory]=useState<LocalSortHistory[]>([]);
   const [scanResultSummary,setScanResultSummary]=useState<ScanResultSummary|null>(null);
   const [rescanPromptOpen,setRescanPromptOpen]=useState(false);
-  useEffect(()=>{if(!libraryManageOpen&&scanResultSummary)setScanResultSummary(null);},[libraryManageOpen,scanResultSummary]);
+  useEffect(()=>{if(!libraryToolsOpen&&scanResultSummary)setScanResultSummary(null);},[libraryToolsOpen,scanResultSummary]);
   const [localMetadataOverrides,setLocalMetadataOverrides]=useState<Record<string, LocalMetadataOverride>>({});
   const [localOverridesReady,setLocalOverridesReady]=useState(false);
   const [localFoldersReady,setLocalFoldersReady]=useState(false);
@@ -2751,6 +2751,7 @@ function Client() {
     if(!baselinePersisted||!scanCommitGate.isCurrent(generation))return null;
 
     setScanResultSummary(summary);
+    if(result.review>0)openMetadataReview();
     setLocalFolders(result.folders);
     setLocalBooks(nextBooks);
     setLocalMovePreviews([]);
@@ -3572,7 +3573,7 @@ function Client() {
       const refreshed=await rescanLocalFolders();
       if(!onboardingDone&&refreshed&&result.failed.length===0){
         await finishOnboarding();
-        setLibraryManageOpen(false);
+        setLibraryToolsOpen(false);
       }
     } catch (e) {
       setRescanPromptOpen(true);
@@ -4080,7 +4081,7 @@ function Client() {
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
         <Text style={[styles.onboardingTitle,{color:p.ink}]}>Set up your library</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Three simple steps prepare your library for reading, listening and safe file organisation.</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Add folders, scan, then review any uncertain book details. Your files can stay where they are.</Text>
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasSource?p.sage:p.muted}]}>01</Text>
@@ -4112,9 +4113,9 @@ function Client() {
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Organise files</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review book details</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
-              ? 'Preview your preferred layout, then copy or move eligible files.'
+              ? 'Tap a book to correct its details. Assist fills the gaps; file organisation is optional in Settings.'
               : 'Available when preparation finishes.'}</Text>
           </View>
         </View>
@@ -4139,8 +4140,8 @@ function Client() {
 
         {preparing&&!libraryRefreshActive?<Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}
         {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label="Organise files" onPress={()=>setLibraryManageOpen(true)}/></View>
-          <View style={styles.shelfSetupAction}><Button label="Keep current layout" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
+          <View style={styles.shelfSetupAction}><Button label="Review uncertain metadata" onPress={openMetadataReview}/></View>
+          <View style={styles.shelfSetupAction}><Button label="Start using library" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
         </View>:null}
       </View>
     );
@@ -4174,6 +4175,9 @@ function Client() {
     </View>;
   }
 
+  function openMetadataReview(){
+    clearLibraryFilters();setSourceFilter('all');setReviewOnly(true);setActiveTab('library');
+  }
   function beginEdit(item: Book, uris:string[] = item.uri?[item.uri]:[]) {
     setEditing(item);
     setAssistState(null);
@@ -4200,9 +4204,11 @@ function Client() {
 
   function RawAssetCard({item}: {item: Book}) {
     const detail=[item.format,item.space,item.author,item.series,item.genre].filter(Boolean).join(' · ');
+    const canEdit=item.source!=='server'||owner;
+    const editDetails=()=>{if(canEdit)beginEdit(item,item.scannerWorkId?localBooks.filter(book=>(book as ScannerBook).scannerWorkId===item.scannerWorkId).flatMap(book=>book.uri?[book.uri]:[]):item.uri?[item.uri]:[]);};
     return (
       <View style={[styles.maintenanceAssetCard,{borderBottomColor:p.line}]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={item.title + ', ' + item.format} onPress={() => openBook(item)} style={styles.maintenanceAssetMain}>
+        <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} disabled={!canEdit} onPress={editDetails} style={styles.maintenanceAssetMain}>
           <View style={styles.maintenanceAssetCover}>{Cover({book:item})}</View>
           <View style={styles.maintenanceAssetCopy}>
             <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text>
@@ -4213,7 +4219,7 @@ function Client() {
             {item.reviewReason?<Text numberOfLines={2} style={[styles.maintenanceAssetReason,{color:p.muted}]}>{item.reviewReason}</Text>:null}
           </View>
         </Pressable>
-        {(item.source!=='server' || owner) ? <Pressable accessibilityRole="button" accessibilityLabel={'Edit details for '+item.title} onPress={()=>beginEdit(item)} style={[styles.maintenanceAssetEdit,phoneLayout&&styles.maintenanceAssetEditPhone]}><Text style={{color:p.sage,fontWeight:'700'}}>Edit details</Text></Pressable> : null}
+        {canEdit?<Button label="Edit details" onPress={editDetails}/>:<Text style={[styles.meta,{color:p.muted}]}>Ask the server owner to edit these details.</Text>}
       </View>
     );
   }
@@ -4599,8 +4605,8 @@ function Client() {
       clearLibraryFilters();
       setSourceFilter('server');
       setQuery(work.title);
-      setActiveTab('library');
-      setLibraryManageOpen(true);
+      setActiveTab('settings');
+      setLibraryToolsOpen(true);
       close();
     };
     const refreshMetadata=()=>{
@@ -5584,8 +5590,8 @@ function Client() {
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.reviewQueue}
       ListHeaderComponent={<View style={[styles.maintenanceHeader,phoneLayout&&styles.maintenanceHeaderPhone]}>
-        <View style={{flex:1,minWidth:0}}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text maxFontSizeMultiplier={1.2} style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} file{visibleBooks.length===1?'':'s'} · review only what Archivist could not resolve confidently</Text></View>
-        <Button label="Done" tone="quiet" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/>
+        <View style={{flex:1,minWidth:0}}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{maintenanceTitle}</Text><Text maxFontSizeMultiplier={1.2} style={[styles.meta,{color:p.muted}]}>{visibleBooks.length} book{visibleBooks.length===1?'':'s'} · Tap a book to edit its details. Nothing plays in this list.</Text></View>
+        <Button label="Done reviewing" tone="quiet" onPress={()=>{setReviewOnly(false);clearLibraryFilters();if(!onboardingDone)void finishOnboarding();}}/>
       </View>}
       ListEmptyComponent={<Text style={[styles.empty,{color:p.muted}]}>Nothing needs attention in this view.</Text>}
       ListFooterComponent={serverBooksHasMore?<Text style={[styles.meta,{color:p.muted}]}>Showing the first 200 matching server files. Refine the source, folder or search to narrow the maintenance set.</Text>:null}
@@ -7541,24 +7547,14 @@ function Client() {
     );
   }
 
-  function LibraryManagementPanel(){
-    if(!libraryManageOpen)return null;
+  function LibrarySettingsTools(){
     const gaps=metadataGapCounts(reviewAssetPool);
     const reviewCount=reviewAssetPool.filter(item=>item.needsReview).length;
     const localDuplicateCount=localDuplicateGroups.reduce((sum,group)=>sum+group.items.length,0);
     const localDuplicateGroupCount=localDuplicateGroups.length;
-    const openGap=(gap:MetadataGapFilter)=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryManageOpen(false);};
-    const openReview=()=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(true);setLibraryManageOpen(false);};
-    return <Modal transparent animationType={reduceMotion?'none':foldLayout?'fade':'slide'} visible onRequestClose={()=>setLibraryManageOpen(false)}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" style={modalSheetBackdrop} onPress={()=>setLibraryManageOpen(false)}>
-        <Pressable accessible={false} accessibilityViewIsModal={true} accessibilityLabel="Library management" style={[styles.libraryManageSheet,{backgroundColor:p.paper,borderColor:p.line}]} onPress={()=>undefined}>
-          <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'} style={styles.libraryManageBodyScroll} contentContainerStyle={styles.libraryManageBody}>
-            <DismissSheetHandle onDismiss={()=>setLibraryManageOpen(false)} foldLayout={foldLayout}/>
-            <View style={styles.sheetHeader}>
-              <View style={{flex:1,minWidth:0}}><Text style={[styles.sheetTitle,{color:p.ink}]}>Manage Library</Text><Text style={[styles.meta,{color:p.muted}]}>1. Review book details. 2. Fill gaps with Assist. 3. Move files only if you want to.</Text></View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close Library management" onPress={()=>setLibraryManageOpen(false)} style={styles.sheetCloseButton}><UiIcon name="close" color={p.muted} size={18}/></Pressable>
-            </View>
-
+    const openGap=(gap:MetadataGapFilter)=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(false);setMetadataGapFilter(gap);setLibraryToolsOpen(false);};
+    const openReview=()=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(true);setLibraryToolsOpen(false);};
+    return <View style={{gap:16}}>
             <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEEDS ATTENTION</Text>
             <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEXT STEP</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{reviewCount?'Review uncertain books, save any corrections, then let Assist fill missing details.':'Your books are grouped. Check missing genres and publication years before exploring Atlas.'} Moving files is optional.</Text>
@@ -7657,10 +7653,7 @@ function Client() {
               })}
               {serverMovePreviews.length>20?<Text style={[styles.meta,{color:p.muted}]}>Showing first 20 of {serverMovePreviews.length} proposed changes.</Text>:null}
             </View>:null}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>;
+    </View>;
   }
 
   function OfflineDownloadsPanel(){
@@ -7837,10 +7830,9 @@ function Client() {
 
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
-              <View style={styles.settingsRow}>
-                <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Library management</Text><Text style={[styles.meta,{color:p.muted}]}>Folders, metadata, scanning and file organisation.</Text></View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Open Library management" onPress={()=>setLibraryManageOpen(true)} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>Open</Text></Pressable>
-              </View>
+              <Button label="Review uncertain metadata" onPress={openMetadataReview}/>
+              <Button label={libraryToolsOpen?'Hide library tools':'Folders, rescanning & file tools'} tone="quiet" onPress={()=>setLibraryToolsOpen(open=>!open)}/>
+              {libraryToolsOpen?LibrarySettingsTools():null}
               <View style={styles.settingsSubgroup}>
                 <View style={styles.settingsSubgroupHeading}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.settingsSubgroupTitle,{color:p.ink}]}>Metadata</Text><Text style={[styles.meta,{color:p.muted}]}>Books and comics</Text></View>
@@ -8098,7 +8090,6 @@ function Client() {
         copy={achievementCelebration ? achievementCelebration.description : undefined}
       />
       {ProfileMenu()}
-      {LibraryManagementPanel()}
       {WorkDetailsPanel()}
       {FormatPickerPanel()}
       {RatingPromptPanel()}
