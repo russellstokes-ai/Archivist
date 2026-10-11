@@ -1,0 +1,64 @@
+name: Import approved Forward Media Lottie source
+on:
+  push:
+    branches: ['feat/live-player-forward-rewind-lottie-20261011']
+    paths: ['.github/workflows/import-forward-media-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Download exact source listed on user's LottieFiles page
+        run: |
+          python3 - <<'PY'
+          import urllib.request,re,json,pathlib,hashlib,html
+          original_page='https://lottiefiles.com/free-animation/forward-media-s7Vy5kFTbT'
+          req=urllib.request.Request(original_page,headers={'User-Agent':'Mozilla/5.0 Chrome/125.0'})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              page=response.read(1100000).decode('utf-8','replace')
+          assert 's7Vy5kFTbT' in page and 'Forward Media' in page,'Unexpected LottieFiles page'
+          page=html.unescape(page).replace('\\\\/','/')
+          refs=list(dict.fromkeys(re.findall(r'a/[0-9a-f-]{36}/[A-Za-z0-9_-]+\\.json',page)))
+          print('CANDIDATES',refs,flush=True)
+          candidates=[]
+          for path in refs:
+              url='https://assets-v2.lottiefiles.com/'+path
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=20) as res:
+                  data=res.read(50000)
+              try:
+                  obj=json.loads(data)
+              except Exception:
+                  continue
+              if not all(x in obj for x in ('v','fr','ip','op','layers','w','h')):continue
+              print('CANDIDATE',path,'bytes',len(data),'metadata',{k:obj[k] for k in ('nm','w','h','ip','op','fr','v')},flush=True)
+              candidates.append((len(data),path,data,obj))
+          assert candidates,'Exact source JSON unavailable'
+          candidates.sort(key=lambda c:c[0],reverse=True)
+          size,src,data,animation=candidates[0]
+          assert 8000<size<18000,('Unexpected asset size',size)
+          assert isinstance(animation['layers'],list) and animation['layers']
+          assert animation['op']>animation['ip'] and animation['fr']>0
+          out=pathlib.Path('mobile/assets/motion/live-forward-media-source.json')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_bytes(data)
+          digest=hashlib.sha256(data).hexdigest()
+          readme=pathlib.Path('mobile/assets/motion/LIVE_FORWARD_MEDIA_SOURCE.md')
+          readme.write_text('# Approved Forward Media animation\\n\\n'
+              'Original: '+original_page+'\\n\\n'
+              'Source JSON: https://assets-v2.lottiefiles.com/'+src+'\\n\\n'
+              'SHA-256: '+digest+'\\n\\n'
+              'Licence: Lottie Simple License. Keep original file intact.\\n',encoding='utf-8')
+          print('SOURCE_SHA256',digest,'BYTES',size,'URL',src,flush=True)
+          PY
+      - name: Commit source only to isolated visual prototype branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/assets/motion/live-forward-media-source.json mobile/assets/motion/LIVE_FORWARD_MEDIA_SOURCE.md
+          git diff --cached --quiet || (git commit -m "assets(player): import exact approved Forward Media source JSON" && git push origin HEAD:feat/live-player-forward-rewind-lottie-20261011)
