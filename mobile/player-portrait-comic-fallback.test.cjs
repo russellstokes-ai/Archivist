@@ -14,9 +14,9 @@ const body=read('comicReaderWebViewSource.ts');
 const loaded=ts.transpileModule(body,{
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}
 }).outputText;
-const module={exports:{}};
-vm.runInNewContext('(function(module,exports){'+loaded+'\n})(module,module.exports)',{module});
-const make=module.exports.comicReaderWebViewSource;
+const parsedModule={exports:{}};
+vm.runInNewContext('(function(module,exports){'+loaded+'\n})(module,module.exports)',{module:parsedModule});
+const make=parsedModule.exports.comicReaderWebViewSource;
 assert.equal(typeof make,'function');
 
 const html='<!doctype html><main><script>window.__archivistSetComicPage=function(){};</script><img src="data:image/jpeg;base64,AQID"></main>';
