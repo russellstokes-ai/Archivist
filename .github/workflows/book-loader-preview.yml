@@ -2,7 +2,11 @@ name: Archivist Book Loader complete spinner replacement APK
 on:
   push:
     branches: ['feat/book-loader-all-spinners-20261011']
-    paths: ['.github/workflows/book-loader-preview.yml']
+    paths:
+      - '.github/workflows/book-loader-preview.yml'
+      - 'mobile/ArchivistBookLoader.tsx'
+      - 'mobile/book-loader-consistency.test.cjs'
+      - 'mobile/scanner-vnext-process-lock.test.cjs'
   workflow_dispatch:
 permissions:
   contents: write
