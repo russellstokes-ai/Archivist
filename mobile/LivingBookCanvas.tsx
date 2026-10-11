@@ -12,6 +12,8 @@ export type LivingBookCanvasProps={
   title:string;author:string;chapter?:string;number?:number;phase:LivingBookPhase;
   direction:1|-1;skipping:boolean;reduceMotion:boolean;coverUri?:string;
   coverMode?:'portrait'|'jacket'|'fallback';coverHeaders?:Record<string,string>;
+  /** Outer viewport only. The canonical physical book renderer and animation remain untouched. */
+  stageWidth?:number;
 };
 
 function hash(value:string){let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(16);}
@@ -126,7 +128,11 @@ export function LivingBookCanvas(props:LivingBookCanvasProps){
     return()=>{live=false;};
   },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);
 
-  return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none">
+  const externalWidth=props.stageWidth;
+  const responsiveStage=typeof externalWidth==='number'&&Number.isFinite(externalWidth)&&externalWidth>0
+    ? {width:externalWidth,height:externalWidth*290/340}
+    : undefined;
+  return <View accessibilityLabel="Living book artwork" style={[styles.stage,responsiveStage]} pointerEvents="none">
     <WebView ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
       bounces={false} overScrollMode="never" androidLayerType="hardware" style={styles.web} containerStyle={styles.container}
       onLoadEnd={()=>setReady(true)} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}

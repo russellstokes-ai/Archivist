@@ -1,6 +1,7 @@
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {calculateLivingBookViewport} from './livingBookViewport';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -718,7 +719,7 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
 function Client() {
   const systemScheme = useColorScheme();
   const safeArea=useSafeAreaInsets();
-  const {width} = useWindowDimensions();
+  const {width,height} = useWindowDimensions();
   const layoutTier = width < 430 ? 'compact' : width < 600 ? 'phone' : width < 760 ? 'fold' : 'wide';
   const foldLayout = width >= 600;
   const phoneLayout = width < 600;
@@ -5724,6 +5725,8 @@ function Client() {
   }
 
   function Player({embedded=false}:{embedded?:boolean}={}) {
+    // Approved screen-space enlargement only: never modify the book renderer or its motion.
+    const livingBookViewport=calculateLivingBookViewport(width,height,foldLayout);
     const current = playing?.uri ? {...playing,...localBooks.find(book=>book.uri===playing.uri)} : playing;
     const serverPlayer = current?.source==='server';
     const position = serverPlayer ? playback?.seconds || 0 : audio.currentTime || 0;
@@ -5812,12 +5815,13 @@ function Client() {
           <>
           {embedded?<View style={styles.playerLiveKicker}><Text style={[styles.playerEyebrow,{color:p.ink}]}>NOW PLAYING</Text><Text style={[styles.playerLiveMeta,{color:p.muted}]}>{current.source==='downloaded'?'Downloaded · Offline':current.source==='server'?'Streaming · '+speed+'×':'On device · '+speed+'×'}</Text></View>:null}
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide]}>
-            <View style={styles.playerHeroColumn}>
+            <View style={[styles.playerHeroColumn,{maxWidth:Math.max(360,livingBookViewport.width)}]}>
             <LivingBookCanvas
               title={current.title}
               author={current.author}
               chapter={currentChapter?.title}
               number={Math.max(1,currentChapterIndex+1)}
+              stageWidth={livingBookViewport.width}
               phase={livingBookMotion.phase}
               direction={skipDirection}
               skipping={skipTurning}
