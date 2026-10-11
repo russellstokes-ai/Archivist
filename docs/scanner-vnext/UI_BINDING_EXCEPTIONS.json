@@ -355,6 +355,10 @@
     {
       "old": "<ActivityIndicator accessibilityLabel=\"Opening Archivist library\" color={p.sage}/>",
       "new": "<ArchivistBookLoader label=\"Opening Archivist library\" size=\"startup\" reduceMotion={reduceMotion}/>"
+    },
+    {
+      "old": "sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(",
+      "new": "sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage("
     }
   ],
   "loaderException": {
