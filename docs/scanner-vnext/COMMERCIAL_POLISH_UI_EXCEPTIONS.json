@@ -1,0 +1,34 @@
+{
+  "parentSource": "df4c39b44394d8c512ca0298bffa7f19da356490",
+  "authority": "User explicitly approved outer Living Book size and commercial finishing; original canonical scanner binding manifest and SHA stay unchanged.",
+  "changes": [
+    {
+      "old": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';",
+      "new": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';\nimport {livingBookStageSize} from './livingBookStage';\nimport {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';"
+    },
+    {
+      "old": "  const {width} = useWindowDimensions();",
+      "new": "  const {width,height} = useWindowDimensions();"
+    },
+    {
+      "old": "  const narrowPhone = width < 360;",
+      "new": "  const narrowPhone = width < 360;\n  const playerBookStageSize=livingBookStageSize({width,height,fold:foldLayout,topInset:safeArea.top,bottomInset:safeArea.bottom,embedded:true});"
+    },
+    {
+      "old": "  const [celebrating, setCelebrating] = useState(false);",
+      "new": "  const [celebrating, setCelebrating] = useState(false);\n  const firstScanWasActiveRef=useRef(false);\n  const [firstScanCompleted,setFirstScanCompleted]=useState(false);\n  const firstLibraryCelebrationClaimedRef=useRef(false);\n  useEffect(()=>{\n    if(localScanning){firstScanWasActiveRef.current=true;setFirstScanCompleted(false);}\n    else if(firstScanWasActiveRef.current){firstScanWasActiveRef.current=false;setFirstScanCompleted(true);}\n  },[localScanning]);\n  useEffect(()=>{\n    if(!celebrating)return;\n    const timeout=setTimeout(()=>setCelebrating(false),3200);\n    return()=>clearTimeout(timeout);\n  },[celebrating]);"
+    },
+    {
+      "old": "  const sourceCounts = useMemo(() => ({",
+      "new": "  // Completion effect observes the accepted scanner from outside its protected functions.\n  // No success is shown for an empty, cancelled, unresolved or unpublished catalogue.\n  const hasPublishedLocalWork=sourceWorks.some(work=>work.source==='local'&&\n    !!work.localWork?.tracks.some(track=>(track as ScannerBook).scannerPublished));\n  useEffect(()=>{\n    if(!shouldCelebrateFirstLibrary({\n      eligible:celebrationEligible,finishedScan:firstScanCompleted,onboardingDone,\n      hasPublishedLocalWork,scanning:localScanning,restoring,\n      otherCelebrationActive:!!achievementCelebration,alreadyClaimed:firstLibraryCelebrationClaimedRef.current,\n    }))return;\n    firstLibraryCelebrationClaimedRef.current=true;\n    void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1').then(()=>{\n      setCelebrationEligible(false);\n      setFirstScanCompleted(false);\n      setCelebrating(true);\n    }).catch(()=>{firstLibraryCelebrationClaimedRef.current=false;});\n  },[celebrationEligible,firstScanCompleted,onboardingDone,hasPublishedLocalWork,localScanning,\n    restoring,achievementCelebration]);\n  const sourceCounts = useMemo(() => ({"
+    },
+    {
+      "old": "            <LivingBookCanvas\n              title={current.title}",
+      "new": "            <LivingBookCanvas\n              stageSize={playerBookStageSize}\n              title={current.title}"
+    },
+    {
+      "old": "            <View style={styles.playerHeroColumn}>\n            <LivingBookCanvas",
+      "new": "            <View style={[styles.playerHeroColumn,{maxWidth:Math.max(360,playerBookStageSize.width)}]}>\n            <LivingBookCanvas"
+    }
+  ]
+}
