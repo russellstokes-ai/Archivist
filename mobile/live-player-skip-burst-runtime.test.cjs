@@ -80,7 +80,7 @@ for(const [count,direction] of [[3,1],[6,-1]]){
   assert.equal(result.directions.length,count);
   assert(result.directions.every(d=>d===direction),'Skip book directions are wrong');
   assert.equal(result.phase,'open');
-  assert.deepEqual(result.queue,[]);
+  assert.deepEqual(Array.from(result.queue),[]);
   assert.equal(result.busy.at(-1),false);
   assert(result.now>=count*870,'Full existing short-turn physics must finish before committing each page');
 }
