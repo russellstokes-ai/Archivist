@@ -4,6 +4,8 @@
 
 # Archivist
 
+> **Canonical full-app baseline (2026-10-11): df4c39b.** Read [AGENTS.md](AGENTS.md), [the baseline record](docs/scanner-vnext/CANONICAL_BASELINE.md) and **[the fixed commercial finishing & bug plan](docs/ARCHIVIST_COMMERCIAL_FINISHING_MASTER_PLAN_2026-10-11.md)** before any development. The scanner, direct-review flow, UI and exact Living Book animation are protected; only user-approved external Living Book resizing is permitted.
+
 **Your library. Yours.**
 
 Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The iOS and Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
