@@ -29,6 +29,22 @@
     {
       "old": "            <View style={styles.playerHeroColumn}>\n            <LivingBookCanvas",
       "new": "            <View style={[styles.playerHeroColumn,{maxWidth:Math.max(360,playerBookStageSize.width)}]}>\n            <LivingBookCanvas"
+    },
+    {
+      "old": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';",
+      "new": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';\nimport {ArchivistMotion} from './motion/ArchivistMotion';\nimport type {ArchivistMotionKind} from './motion/ArchivistMotion';"
+    },
+    {
+      "old": "  const sourceCounts = useMemo(() => ({",
+      "new": "  const libraryMotionKind:ArchivistMotionKind=localBooks.length&&localBooks.every(b=>b.format==='Audio')\n    ?'headphones':localBooks.length&&localBooks.every(b=>b.format!=='Audio')?'books-stack':'book-loader';\n  const sourceCounts = useMemo(() => ({"
+    },
+    {
+      "old": "      return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n        <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
+      "new": "      return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n        <ArchivistMotion kind={libraryMotionKind} size={38} active={appActive&&activeProgress.phase!=='complete'}\n          reduceMotion={reduceMotion} fallback={<UiIcon name=\"bookOpen\" color={p.sage} size={22}/>}/>"
+    },
+    {
+      "old": "              {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n                <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
+      "new": "              {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n                <ArchivistMotion kind={libraryMotionKind} size={38} active={appActive&&progress.phase!=='complete'}\n                  reduceMotion={reduceMotion} fallback={<UiIcon name=\"bookOpen\" color={p.sage} size={22}/>}/>"
     }
   ]
 }

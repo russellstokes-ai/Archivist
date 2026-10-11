@@ -1,6 +1,8 @@
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {ArchivistMotion} from './motion/ArchivistMotion';
+import type {ArchivistMotionKind} from './motion/ArchivistMotion';
 import {livingBookStageSize} from './livingBookStage';
 import {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
@@ -1485,6 +1487,8 @@ function Client() {
     }).catch(()=>{firstLibraryCelebrationClaimedRef.current=false;});
   },[celebrationEligible,firstScanCompleted,onboardingDone,hasPublishedLocalWork,localScanning,
     restoring,achievementCelebration]);
+  const libraryMotionKind:ArchivistMotionKind=localBooks.length&&localBooks.every(b=>b.format==='Audio')
+    ?'headphones':localBooks.length&&localBooks.every(b=>b.format!=='Audio')?'books-stack':'book-loader';
   const sourceCounts = useMemo(() => ({
     all: dedupeForAll(sourceWorks).length,
     local: sourceWorks.filter(item=>matchesSource(item.source,'local')).length,
@@ -4187,7 +4191,8 @@ function Client() {
       const percent=scanProgressPercent(activeProgress);
       const count=activeProgress.total&&activeProgress.total>0?`${Math.min(activeProgress.processed||0,activeProgress.total)} / ${activeProgress.total}`:'';
       return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+        <ArchivistMotion kind={libraryMotionKind} size={38} active={appActive&&activeProgress.phase!=='complete'}
+          reduceMotion={reduceMotion} fallback={<UiIcon name="bookOpen" color={p.sage} size={22}/>}/>
         <View style={{flex:1,minWidth:0,gap:3}}>
           <View style={styles.scanProgressHeading}>
             <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{scanPhaseLabel(activeProgress.phase)}</Text>
@@ -7620,7 +7625,8 @@ function Client() {
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-                <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+                <ArchivistMotion kind={libraryMotionKind} size={38} active={appActive&&progress.phase!=='complete'}
+                  reduceMotion={reduceMotion} fallback={<UiIcon name="bookOpen" color={p.sage} size={22}/>}/>
                 <View style={{flex:1,gap:6}}>
                   <View style={styles.scanProgressHeading}><Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(progress.phase)}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{percent}%</Text></View>
                   <Text style={{color:p.muted}}>{progress.total?Math.min(progress.processed||0,progress.total)+' / '+progress.total:progress.entriesVisited+' checked'} · {progress.found} found · {progress.review} review{progress.currentFolder?' · '+progress.currentFolder:''}</Text>

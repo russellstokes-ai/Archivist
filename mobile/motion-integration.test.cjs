@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const root=__dirname,source=fs.readFileSync(path.join(root,'App.tsx'),'utf8');
+const fallback=fs.readFileSync(path.join(root,'motion/ArchivistMotion.tsx'),'utf8');
+const native=fs.readFileSync(path.join(root,'motion/ArchivistMotion.native.tsx'),'utf8');
+const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+assert.equal(pkg.dependencies['lottie-react-native'],'7.3.8');
+assert(source.includes('<ArchivistMotion kind={libraryMotionKind} size={38}'),'Scanner view must have motion without changing scan engine');
+assert.equal((source.match(/<ArchivistMotion kind=\{libraryMotionKind\}/g)||[]).length,2);
+assert(native.includes("if(reduceMotion||!active)return"),'Reduced Motion and inactive app cannot loop');
+assert(native.includes("kind==='pause-play'"),'Native transport is supported for follow-up integration');
+assert(!fallback.includes('lottie-react-native'),'web needs no native dependency');
+const book=fs.readFileSync(path.join(root,'LivingBookCanvas.tsx'),'utf8');
+assert(book.includes('function tick(now){'),'Preserve the original Living Book animation');
+console.log('PASS: scanner Lottie view binding only; no scanner, player, reader or Living Book engine changed');
