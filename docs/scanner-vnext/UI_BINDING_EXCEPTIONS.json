@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; explicitly approved isolated Living Book outer stage responsive enlargement",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; explicitly approved isolated Living Book outer stage responsive enlargement; approved first-library celebration observer after published scanner works",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -335,6 +335,14 @@
     {
       "old": "              number={Math.max(1,currentChapterIndex+1)}\n              phase={livingBookMotion.phase}",
       "new": "              number={Math.max(1,currentChapterIndex+1)}\n              stageWidth={livingBookViewport.width}\n              phase={livingBookMotion.phase}"
+    },
+    {
+      "old": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';\nimport {calculateLivingBookViewport} from './livingBookViewport';",
+      "new": "import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';\nimport {calculateLivingBookViewport} from './livingBookViewport';\nimport {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';"
+    },
+    {
+      "old": "  }, [localBooks]);\n  const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);",
+      "new": "  }, [localBooks]);\n  // Separate, non-scanner observer: no changes to canonical discovery/onboarding functions.\n  const firstEmptyScanObserved=useRef(false);\n  const firstLibraryCelebrationClaiming=useRef(false);\n  useEffect(()=>{\n    if(localCatalogReady&&localScanning&&phoneWorks.length===0)firstEmptyScanObserved.current=true;\n  },[localCatalogReady,localScanning,phoneWorks.length]);\n  useEffect(()=>{\n    const publishedWorks=phoneWorks.filter(work=>work.tracks.some(track=>(track as ScannerBook).scannerPublished)).length;\n    if(!shouldCelebrateFirstLibrary({\n      observedEmptyScan:firstEmptyScanObserved.current,eligible:celebrationEligible,\n      scanRunning:localScanning,prepared:libraryPreparationReady,catalogueReady:localCatalogReady,\n      restoring,publishedWorks,alreadyClaiming:firstLibraryCelebrationClaiming.current,\n      anotherCelebrationActive:!!achievementCelebration,\n    }))return;\n    firstLibraryCelebrationClaiming.current=true;\n    void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1').then(()=>{\n      firstEmptyScanObserved.current=false;\n      setCelebrationEligible(false);\n      setCelebrating(true);\n    }).catch(()=>{firstLibraryCelebrationClaiming.current=false;});\n  },[achievementCelebration,celebrationEligible,libraryPreparationReady,localCatalogReady,localScanning,phoneWorks,restoring]);\n  useEffect(()=>{\n    if(!celebrating)return;\n    const timer=setTimeout(()=>setCelebrating(false),3200);\n    return()=>clearTimeout(timer);\n  },[celebrating]);\n  const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);"
     }
   ],
   "documentationOnlyException": "The five new exact reversible App.tsx changes above are user-approved Living Book OUTER viewport sizing only. Canonical baseSha256 remains unchanged. Do not relax base hash or wildcard these patterns."

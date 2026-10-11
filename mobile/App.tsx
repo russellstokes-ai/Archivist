@@ -2,6 +2,7 @@ import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
 import {calculateLivingBookViewport} from './livingBookViewport';
+import {shouldCelebrateFirstLibrary} from './firstLibraryCelebration';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -1370,6 +1371,32 @@ function Client() {
     const local = localBooks.filter((book): book is Book & {uri: string} => !!book.uri) as LocalBook[];
     return projectScannerWorks(local,groupLocalWorks);
   }, [localBooks]);
+  // Separate, non-scanner observer: no changes to canonical discovery/onboarding functions.
+  const firstEmptyScanObserved=useRef(false);
+  const firstLibraryCelebrationClaiming=useRef(false);
+  useEffect(()=>{
+    if(localCatalogReady&&localScanning&&phoneWorks.length===0)firstEmptyScanObserved.current=true;
+  },[localCatalogReady,localScanning,phoneWorks.length]);
+  useEffect(()=>{
+    const publishedWorks=phoneWorks.filter(work=>work.tracks.some(track=>(track as ScannerBook).scannerPublished)).length;
+    if(!shouldCelebrateFirstLibrary({
+      observedEmptyScan:firstEmptyScanObserved.current,eligible:celebrationEligible,
+      scanRunning:localScanning,prepared:libraryPreparationReady,catalogueReady:localCatalogReady,
+      restoring,publishedWorks,alreadyClaiming:firstLibraryCelebrationClaiming.current,
+      anotherCelebrationActive:!!achievementCelebration,
+    }))return;
+    firstLibraryCelebrationClaiming.current=true;
+    void SecureStore.setItemAsync(firstLibraryCelebratedKey,'1').then(()=>{
+      firstEmptyScanObserved.current=false;
+      setCelebrationEligible(false);
+      setCelebrating(true);
+    }).catch(()=>{firstLibraryCelebrationClaiming.current=false;});
+  },[achievementCelebration,celebrationEligible,libraryPreparationReady,localCatalogReady,localScanning,phoneWorks,restoring]);
+  useEffect(()=>{
+    if(!celebrating)return;
+    const timer=setTimeout(()=>setCelebrating(false),3200);
+    return()=>clearTimeout(timer);
+  },[celebrating]);
   const downloadedWorks = useMemo(() => Object.values(offlineWorks).map(offlineToLocalWork), [offlineWorks]);
   const localWorks = useMemo(() => [...phoneWorks, ...downloadedWorks], [phoneWorks, downloadedWorks]);
 
