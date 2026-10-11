@@ -7623,7 +7623,7 @@ function Client() {
                 <Button label={addLocalFolderLabel} tone="quiet" disabled={localScanning} onPress={()=>void addLocalFolder()}/>
               </View>
               {(scanProgress||enrichmentProgress)?(()=>{const progress=scanProgress||enrichmentProgress!;const percent=scanProgressPercent(progress);return <View style={[styles.scanBanner,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-                <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={38}/>
+                <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
                 <View style={{flex:1,gap:6}}>
                   <View style={styles.scanProgressHeading}><Text style={{color:p.ink,fontWeight:'600'}}>{scanPhaseLabel(progress.phase)}</Text><Text style={[styles.scanProgressPercent,{color:p.muted}]}>{percent}%</Text></View>
                   <Text style={{color:p.muted}}>{progress.total?Math.min(progress.processed||0,progress.total)+' / '+progress.total:progress.entriesVisited+' checked'} · {progress.found} found · {progress.review} review{progress.currentFolder?' · '+progress.currentFolder:''}</Text>

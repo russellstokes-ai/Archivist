@@ -369,10 +369,6 @@
       "new": "\n        <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={42}/>"
     },
     {
-      "old": "\n                <ActivityIndicator accessibilityLabel=\"Scanning local library\" color={p.sage}/>",
-      "new": "\n                <MotionLoader variant={scanMotionVariant(localBooks)} reduceMotion={reduceMotion} running={appActive} size={38}/>"
-    },
-    {
       "old": "                {!transportReady ? <ActivityIndicator color=\"#FFFFFF\"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}",
       "new": "                {!transportReady ? <ActivityIndicator color=\"#FFFFFF\"/> : <MotionTransport playing={isPlaying} reduceMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} size={29}/>}"
     },
