@@ -5,7 +5,7 @@ on:
     paths: ['.github/workflows/commercial-polish-preview.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: archivist-commercial-polish-preview-${{ github.ref }}
   cancel-in-progress: false
@@ -62,7 +62,24 @@ jobs:
           cp "$APK" "commercial-preview/Archivist-Commercial-Polish-Preview-${SOURCE_SHA:0:7}.apk"
           cd commercial-preview
           sha256sum *.apk > SHA256SUMS.txt
-          printf 'EXPERIMENTAL preview, not commercial release or Fold acceptance.\nSource SHA %s\nChanges: Living Book outer size, first-library celebration and existing reward-burst correction. Local Lottie assets remain isolated in Motion Lab; production animations NOT yet integrated.\nCanonical df4c39b and scanner/process locks are unchanged.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+          printf 'EXPERIMENTAL physical test APK; not commercial release or verified Fold acceptance.\nSource SHA %s\nChanges: approved Living Book OUTER resize only; original renderer fully guarded; one-time first-library celebration fix; local production Lottie scanner, Play/Pause, waveform and reward assets (Reduced Motion supported).\nScanner, onboarding and Fold canonical locks unchanged.\nPackage app.archivist.reader.scanneracceptance may UPDATE previous scanner-acceptance installation and its data; back up test data before installing.\nFollow docs/ARCHIVIST_COMMERCIAL_TEST_HANDOFF_2026-10-11.md on this commit for device acceptance.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+      - name: Publish SHA-identified test prerelease
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="archivist-commercial-test-${SOURCE_SHA:0:7}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$SOURCE_SHA" --prerelease \
+              --title "Archivist Commercial Motion Test ${SOURCE_SHA:0:7} — unvalidated" \
+              --notes-file commercial-preview/TEST-NOTES.txt
+          fi
+          gh release upload "$TAG" commercial-preview/*.apk \
+            commercial-preview/SHA256SUMS.txt commercial-preview/package.txt \
+            commercial-preview/TEST-NOTES.txt --clobber
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
