@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only)",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -359,6 +359,26 @@
     {
       "old": "sage={p.sage} onPosition={(page,count,complete)=>handleReaderMessage(",
       "new": "sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage("
+    },
+    {
+      "old": "import {ArchivistBookLoader} from './ArchivistBookLoader';",
+      "new": "import {ArchivistBookLoader} from './ArchivistBookLoader';\nimport {LivePlayerPlayPauseMorph} from './LivePlayerPlayPauseMorph';"
+    },
+    {
+      "old": "      const targetPlaying=!isPlaying;\n      // Drive the cover immediately",
+      "new": "      const targetPlaying=!playerMotionPlaying;\n      // Drive the cover immediately"
+    },
+    {
+      "old": "        if(isPlaying){player.pause();await persistLocalPlaybackPosition(position);}else player.play();",
+      "new": "        if(targetPlaying)player.play();else{player.pause();await persistLocalPlaybackPosition(position);}"
+    },
+    {
+      "old": "accessibilityLabel={isPlaying ? 'Pause' : 'Play'}\n                disabled={!transportReady}",
+      "new": "accessibilityLabel={playerMotionPlaying ? 'Pause' : 'Play'}\n                disabled={!transportReady}"
+    },
+    {
+      "old": "!transportReady ? <ArchivistBookLoader label=\"Loading audio playback\" size=\"inline\" reduceMotion={reduceMotion}/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>",
+      "new": "!transportReady ? <ArchivistBookLoader label=\"Loading audio playback\" size=\"inline\" reduceMotion={reduceMotion}/> : <LivePlayerPlayPauseMorph playing={playerMotionPlaying} active={appActive} reducedMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} fallback={<UiIcon name={playerMotionPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}/>"
     }
   ],
   "loaderException": {
