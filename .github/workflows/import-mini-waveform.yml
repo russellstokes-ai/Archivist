@@ -1,0 +1,70 @@
+name: Import approved mini-player waveform Lottie
+on:
+  push:
+    branches: ['feat/archivist-ui-motion-waveform-20261011']
+    paths: ['.github/workflows/import-mini-waveform.yml']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Preserve exact selected waveform Lottie
+        run: |
+          python3 - <<'PY'
+          import urllib.request,re,json,hashlib,html,pathlib
+          url='https://lottiefiles.com/free-animation/audio-waveform-0kiw5n6eq2'
+          headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36'}
+          with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=30) as response:
+              page=response.read(1300000).decode('utf-8','replace')
+          assert '0kiw5n6eq2' in page,'Wrong LottieFiles asset page'
+          refs=list(dict.fromkeys(re.findall(r'a/[0-9a-f-]{36}/[A-Za-z0-9_-]+[.]json',html.unescape(page))))
+          print('Source JSON candidates:',refs)
+          candidates=[]
+          for ref in refs:
+              source_url='https://assets-v2.lottiefiles.com/'+ref
+              with urllib.request.urlopen(urllib.request.Request(source_url,headers=headers),timeout=25) as response:
+                  data=response.read(100000)
+              try:
+                  model=json.loads(data)
+              except (ValueError,UnicodeDecodeError):
+                  continue
+              if not all(k in model for k in ('v','fr','ip','op','layers','w','h')):continue
+              print('Candidate',ref,'length',len(data),'metadata',{k:model.get(k) for k in ('nm','w','h','fr','ip','op')})
+              candidates.append((len(data),ref,data,model))
+          assert candidates,'No matching Lottie source JSON found'
+          candidates.sort(key=lambda row:row[0],reverse=True)
+          size,ref,data,model=candidates[0]
+          assert 1000<size<100000,'Unexpected Lottie asset size'
+          assert 0 < float(model['fr']) <=120 and float(model['op'])>float(model['ip'])
+          assert isinstance(model['layers'],list) and model['layers']
+          assert not model.get('assets'),'Self-contained vector waveform is required'
+          path=pathlib.Path('mobile/assets/motion/mini-audio-waveform-original.json')
+          path.parent.mkdir(parents=True,exist_ok=True)
+          path.write_bytes(data)
+          digest=hashlib.sha256(data).hexdigest()
+          lines=[
+              '# Approved mini-player audio waveform asset',
+              '',
+              'Source: '+url,
+              'Exact source JSON: https://assets-v2.lottiefiles.com/'+ref,
+              'Original SHA-256: '+digest,
+              'Original dimensions: '+str(model['w'])+' × '+str(model['h']),
+              'Frame rate: '+str(model['fr']),
+              'Frame range: '+str(model['ip'])+'–'+str(model['op']),
+              'Original unmodified JSON preserved; licence: check LottieFiles Simple License.',
+              ''
+          ]
+          pathlib.Path('mobile/assets/motion/MINI_AUDIO_WAVEFORM_SOURCE.md').write_text(chr(10).join(lines),encoding='utf-8')
+          print('EXACT_WAVEFORM',digest,ref,model.get('nm'),flush=True)
+          PY
+      - name: Commit exact asset without touching canonical or building an APK
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/assets/motion/mini-audio-waveform-original.json mobile/assets/motion/MINI_AUDIO_WAVEFORM_SOURCE.md
+          git diff --cached --quiet || (git commit -m "assets(miniplayer): preserve approved Audio Waveform Lottie JSON" && git push origin HEAD:feat/archivist-ui-motion-waveform-20261011)
