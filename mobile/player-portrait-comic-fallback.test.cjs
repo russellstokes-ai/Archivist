@@ -56,7 +56,7 @@ const speechBlob=crypto.createHash('sha1').update('blob '+Buffer.byteLength(spee
 assert.equal(speechBlob,'280b441936ce366554a908bbde9f0d20c047c71d',
   'Canonical speech bubble focus script changed');
 assert(app.includes('source={reading.format===\'Comic\'?comicReaderWebViewSource(localReader.html,Platform.OS===\'android\'&&comicReaderUseDataFallback):{html:localReader.html}}'));
-assert(app.includes('comicWebViewFallbackAttempt.current=true;setComicReaderUseDataFallback(true);return;'));
+assert(app.includes("if(reading.format==='Comic'&&retryComicReaderOriginOnce())return;")&&app.includes('comicWebViewFallbackAttempt.current=true;'));
 assert(app.includes("setComicReaderUseDataFallback(false)"));
 assert(app.includes('key={reading.uri+(reading.format===\'Comic\'&&comicReaderUseDataFallback?\':data\':\'\')}'));
 assert(!app.includes('allowUniversalAccessFromFileURLs'),'Do not loosen WebView file-security boundary');
