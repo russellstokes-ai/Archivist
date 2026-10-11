@@ -1,0 +1,29 @@
+name: Archivist Dependency Reproducibility
+on:
+  push:
+    branches: ['polish/archivist-commercial-final-pass-20261011']
+    paths: ['.github/workflows/archivist-dependency-lock-gate.yml', 'mobile/package.json', 'mobile/package-lock.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Reproduce exact dependency graph from committed lockfile
+        working-directory: mobile
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ls lottie-react-native --depth=0
+          node - <<'NODE'
+          const f=require('fs');
+          const p=JSON.parse(f.readFileSync('package.json','utf8'));
+          const l=JSON.parse(f.readFileSync('package-lock.json','utf8'));
+          if(p.dependencies['lottie-react-native']!=='7.3.8')throw Error('Wrong Lottie 7.3.8 pin');
+          if(l.packages[''].dependencies['lottie-react-native']!==p.dependencies['lottie-react-native'])throw Error('Manifest mismatch');
+          NODE
