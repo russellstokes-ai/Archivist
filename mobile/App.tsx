@@ -3,6 +3,7 @@ import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
 import {ArchivistBookLoader} from './ArchivistBookLoader';
 import {LivePlayerPlayPauseMorph} from './LivePlayerPlayPauseMorph';
+import {LivePlayerSkipIcon} from './LivePlayerSkipIcon';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -962,6 +963,10 @@ function Client() {
   const [skipTurning,setSkipTurning]=useState(false);
   const [skipPageCount,setSkipPageCount]=useState(3);
   const skipGeneration=useRef(0);
+  const skipBurstQueue=useRef<Array<{remaining:number;direction:1|-1}>>([]);
+  const skipBurstTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const skipBurstRunning=useRef(false);
+  const skipPlaybackVisible=useRef(false);
 
   function transitionLivingBook(event:LivingBookMotionEvent){
     const next=reduceLivingBookMotion(livingBookMotionRef.current,event);
@@ -1043,25 +1048,49 @@ function Client() {
       });
     });
   }
-  function turnPages(pages:number,direction:1|-1){
-    if(reduceMotion||!playbackVisible||livingBookMotionRef.current.phase!=='open')return;
+  // Page rendering lives exclusively in the existing LivingBookCanvas WebView.
+  // A visible skip must deliver distinct turning -> settling -> open events for
+  // EVERY leaf. The old one-shot numeric Animated.Value only caused one turn.
+  function cancelSkipBurst(){
+    ++skipGeneration.current;
+    if(skipBurstTimer.current!==null){clearTimeout(skipBurstTimer.current);skipBurstTimer.current=null;}
+    skipBurstQueue.current=[];
+    skipBurstRunning.current=false;
+    setSkipTurning(false);
+  }
+  function runSkipBurstStep(epoch:number){
+    if(epoch!==skipGeneration.current)return;
+    const action=skipBurstQueue.current[0];
+    if(!action||!skipPlaybackVisible.current||livingBookMotionRef.current.phase!=='open'){cancelSkipBurst();return;}
     stopLivingBookPageLoop();
     const next=transitionLivingBook({type:'turn-request'});
-    if(next.phase!=='turning')return;
-    const count=Math.max(1,Math.min(6,Math.round(pages)));
-    const generation=++skipGeneration.current;
-    skipTurnAnim.stopAnimation();skipTurnAnim.setValue(0);
-    setSkipDirection(direction);setSkipPageCount(count);setSkipTurning(true);
-    Animated.timing(skipTurnAnim,{toValue:count,duration:count>=6?1040:780,useNativeDriver:true}).start(({finished})=>{
-      if(!finished||generation!==skipGeneration.current)return;
+    if(next.phase!=='turning'){cancelSkipBurst();return;}
+    setSkipDirection(action.direction);setSkipPageCount(action.remaining);setSkipTurning(true);
+    // Existing renderer finishes each short-page turn at 780ms. Allow for
+    // the React Native -> WebView phase delivery; do not interrupt halfway.
+    skipBurstTimer.current=setTimeout(()=>{
+      if(epoch!==skipGeneration.current)return;
       transitionLivingBook({type:'turn-complete'});
-      scheduleLivingBookSettle(()=>{
-        if(generation!==skipGeneration.current)return;
-        skipTurnAnim.setValue(0);setSkipTurning(false);
+      skipBurstTimer.current=setTimeout(()=>{
+        if(epoch!==skipGeneration.current)return;
         const settled=transitionLivingBook({type:'settle-complete'});
+        --action.remaining;
+        if(action.remaining<=0)skipBurstQueue.current.shift();
         if(settled.phase==='closing')animateLivingBookCoverClose();
-      });
-    });
+        if(settled.phase!=='open'||!skipPlaybackVisible.current||!skipBurstQueue.current.length){cancelSkipBurst();return;}
+        skipBurstTimer.current=setTimeout(()=>runSkipBurstStep(epoch),65);
+      },110);
+    },870);
+  }
+  function turnPages(pages:number,direction:1|-1){
+    if(reduceMotion||!playbackVisible)return;
+    if(!skipBurstRunning.current&&livingBookMotionRef.current.phase!=='open')return;
+    const count=Math.max(1,Math.min(6,Math.round(pages)));
+    skipBurstQueue.current.push({remaining:count,direction});
+    if(skipBurstRunning.current)return; // Rapid successive taps queue all leaves.
+    skipBurstRunning.current=true;
+    const epoch=++skipGeneration.current;
+    runSkipBurstStep(epoch);
   }
 
   const [queuedBooks, setQueuedBooks] = useState<Book[]>([]);
@@ -1226,6 +1255,7 @@ function Client() {
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
   const playbackIsPlaying = serverPlaybackActive ? !!playback?.playing : !!audio.playing;
   const playbackVisible = (activeTab==='player'||(activeTab==='now'&&liveMode==='player')) && appActive && !!playing;
+  skipPlaybackVisible.current=playbackVisible;
   function lockedLivingBookCover(book:Book){
     const editionCoverUri=book.source==='server'&&session
       ? session.server+'/api/assets/'+book.id+'/cover'
@@ -1274,6 +1304,7 @@ function Client() {
     }
   },[reading?.id,reading?.uri,readerPage]);
   const [playerMotionIntent,setPlayerMotionIntent]=useState<boolean|null>(null);
+  const [skipButtonPulse,setSkipButtonPulse]=useState({back30:0,back15:0,forward15:0,forward30:0});
   const playerMotionPlaying=playerMotionIntent??playbackIsPlaying;
   useLayoutEffect(()=>{
     // Transport taps drive the Living Book immediately; playback status only
@@ -1339,7 +1370,7 @@ function Client() {
   useEffect(()=>{
     if(!playing){
       ++livingBookGeneration.current;
-      ++skipGeneration.current;
+      cancelSkipBurst();
       stopLivingBookPageLoop();
       clearLivingBookSettle();
       bookOpenAnim.stopAnimation();bookOpenAnim.setValue(0);
@@ -5780,14 +5811,18 @@ function Client() {
       });
       if(target!==null){
         setPlayerSeekPreview({key,seconds:target});
-        if(pages && isPlaying)turnPages(pages,direction);
+        if(pages && playerMotionPlaying)turnPages(pages,direction);
       }
       return target;
     }
     function seekTo(seconds:number){return requestSeek({target:seconds});}
     function skipAudio(size:'small'|'large',direction:1|-1){
       const skip=PLAYER_SKIP[size];
-      requestSeek({delta:direction*skip.seconds},skip.pages,direction);
+      const target=requestSeek({delta:direction*skip.seconds},skip.pages,direction);
+      if(target!==null){
+        const key=direction===-1?(size==='small'?'back15':'back30'):(size==='small'?'forward15':'forward30');
+        setSkipButtonPulse(current=>({...current,[key]:current[key]+1}));
+      }
     }
 
     function setPlayerSpeed(rate: number) {
@@ -5868,12 +5903,13 @@ function Client() {
             </View>
 
             <View style={styles.transport}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
-                <UiIcon name="skipBack" color={p.ink} size={30}/><Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:31,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back30} size={44} reduceMotion={reduceMotion}/></View>
+                <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>30s</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
-                <UiIcon name="skipBack" color={p.ink} size={30}/>
-                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back15} size={52} reduceMotion={reduceMotion}/></View>
+                <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>15s</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -5883,12 +5919,13 @@ function Client() {
                 onPress={()=>void togglePlayback()}>
                 {!transportReady ? <ArchivistBookLoader label="Loading audio playback" size="inline" reduceMotion={reduceMotion}/> : <LivePlayerPlayPauseMorph playing={playerMotionPlaying} active={appActive} reducedMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} fallback={<UiIcon name={playerMotionPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}/>}
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
-                <UiIcon name="skipForward" color={p.ink} size={30}/>
-                <Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>15</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward15} size={52} reduceMotion={reduceMotion}/></View>
+                <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>15s</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forward 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,{backgroundColor:p.card}]}>
-                <UiIcon name="skipForward" color={p.ink} size={30}/><Text pointerEvents="none" style={[styles.skipNumber,{color:p.ink}]}>30</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:31,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward30} size={44} reduceMotion={reduceMotion}/></View>
+                <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>30s</Text>
               </Pressable>
             </View>
 
