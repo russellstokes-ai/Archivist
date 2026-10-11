@@ -15,7 +15,7 @@ assert.equal(app.includes('pauseGraceMs'),false,'the old pause grace must not ke
 assert.ok(player.includes("if(state.phase==='turning')return {...state,closeAfterSettle:true}")&&player.includes("if(state.phase==='settling')return {phase:'settling',closeAfterSettle:true}"),'Pause during a turn must wait for the page to settle rather than snap it away');
 assert.ok(player.includes("state.closeAfterSettle?{phase:'closing'"),'deferred Pause must close immediately after settling');
 assert.ok(app.includes('if(generation!==livingBookGeneration.current)return'),'stale animation callbacks from an earlier motion must be ignored');
-assert.ok(app.includes('++skipGeneration.current')&&app.includes('generation!==skipGeneration.current'),'manual multi-page turns must reject stale callbacks');
+assert.ok(app.includes('++skipGeneration.current')&&app.includes('epoch!==skipGeneration.current')&&app.includes('clearTimeout(skipBurstTimer.current)'),'manual multi-page turns must reject stale queued turns and cancel timers');
 assert.ok(app.includes('livingBookCoverSessionRef')&&app.includes('lockLivingBookCoverSession'),'leaving and returning to Now must not swap cover artwork mid-session');
 assert.ok(canvas.includes('window.ArchivistLivingBook')&&canvas.includes('setState:data=>'),'Canvas must retain one renderer instance and accept state updates without remounting');
 assert.ok(canvas.includes("if(next===phase)return"),'identical re-entry state must not replay an opening or page transition');
