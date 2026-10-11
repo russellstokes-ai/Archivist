@@ -146,12 +146,12 @@ On each sprint update only this living plan on its development branch: list exac
 ### Tracking ledger at creation
 | Sprint | Status | Work | Evidence at creation |
 | --- | --- | --- | --- |
-| P0 | IN PROGRESS | Durable plan and source audit | Code/document inspection only; no tests run |
-| P1 | TODO | Motion Lab and Lottie assets | Not integrated in canonical |
+| P0 | CODE COMPLETE; ACCEPTANCE OPEN | Versioned plan and protected branch | Exact reversible UI exceptions added; no base hash changes |
+| P1 | CODE COMPLETE; NATIVE CHECK RUNNING | Nine local Lottie JSON assets + isolated Expo 55 Motion Lab | Asset structural suite passed on 09847a8; native lab CI 38149605806 ongoing |
 | P2 | TODO | Scanner loader | Accepted scanner must remain locked |
-| P2A | TODO | Living Book outer sizing only | User approved; internal renderer locked |
+| P2A | CODE COMPLETE; DEVICE OPEN | Responsive outer stage only | d61d336 sizing helper + dedicated test, corrected exact UI whitelist db6b4c3; mobile 100/100 suites on 1a8d6a3 |
 | P3 | TODO | Play/Pause/waveform | Existing player locked |
-| P4 | TODO | Rewards and first-library celebration | B-001 identified |
+| P4 | PARTIAL CODE COMPLETE | Fixed first-library celebration observer; reward Lottie production integration remains | 1a8d6a3, 100/100 mobile suites; no native device signoff |
 | P5 | TODO | Shelf/Library/review polish | B-005/B-006 device checks pending |
 | P6 | TODO | Atlas/Stats/Reader | Native acceptance pending |
 | P7 | TODO | Accessibility/performance | B-002 impact unmeasured |
@@ -160,3 +160,13 @@ On each sprint update only this living plan on its development branch: list exac
 
 ### Change history
 - 2026-10-11: Initial canonical df4c39b documentation/source audit and fixed commercial finishing backlog. No app code changed. B-001 confirmed disconnected first-library celebration; B-002 confirmed unconditional frame scheduling with no impact measurement; B-003 authorised screen-space improvement; B-004 uncertain sound intent; B-005 through B-011 documented acceptance/risk. User-authorised Living Book exception retained.
+
+### Execution record — 2026-10-11 (documented same session)
+- Active implementation branch: `feat/commercial-motion-and-reliability-20261011` created from plan commit `8840818`, itself exactly one docs-only descendant of immutable canonical `df4c39b`. Canonical branch was never updated.
+- `d61d336`: introduced `livingBookViewport.ts`, pure viewport size test and React Native outer stage width/height. Original LivingBookCanvas rendererHtml body and every physical animation frame/timing remain exactly untouched. Dynamic hero maxWidth override only (not StyleSheet lock).
+- `db6b4c3`: extended `docs/scanner-vnext/UI_BINDING_EXCEPTIONS.json` by five EXACT reversible, user-authorised App.tsx snippets. Canonical base SHA256 `41e45b1...` was **not changed**. Initial mobile CI on d61d336 failed ONLY its byte-comparison UI binding guard; this is not concealed. Corrected commit passed later.
+- `1a8d6a3`: fixed confirmed B-001 using separate guarded observer, persistent first-library flag stored before overlay shown, actual scannerPublished works required. No scanner/onboarding protected function modified. Regression cases cover cancelled/empty/unprepared/restoring/in-progress/duplicate situations.
+- **Verified mobile CI**: [38149262591](https://github.com/russellstokes-ai/Archivist/actions/runs/38149262591) on `1a8d6a3` passed **100/100** suites, Expo Doctor and TypeScript, including scanner & process/UI guards. Note this does NOT replace native screen validation.
+- `09847a8`: nine independently authored local Lottie JSON vector assets; separate `motion-lab/` Expo SDK55+Lottie 7.3.8 preview. Production mobile package.json/package-lock.json untouched. [Mobile CI](https://github.com/russellstokes-ai/Archivist/actions/runs/38149518560) passed; native iOS workflow pending at time of note.
+- `ebfb2a5`: independent Android native Motion Lab compile workflow [38149605806](https://github.com/russellstokes-ai/Archivist/actions/runs/38149605806) running. DO NOT label it pass until green. Further production Lottie integration waits native gate.
+- Remaining: Motion Lab actual renders/native builds, Book Loader and Player/mini Lottie production integration, Rewards pack production integration, physical responsive-book screenshots, iOS/Fold real-device testing, P5-P9 release quality/reliability gates and uniquely named new test APK. Never mark these completed by implication.
