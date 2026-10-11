@@ -33,9 +33,9 @@ for(const [key,hash]of Object.entries(required)){
 
 const reward=read('rewardMotion.ts');
 const compiled=ts.transpileModule(reward,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-const exports={};
-vm.runInNewContext(compiled,{exports});
-const {motionForAchievement,motionForLevelUp,rewardPresentationMs}=exports;
+const compiledExports={};
+vm.runInNewContext(compiled,{exports:compiledExports});
+const {motionForAchievement,motionForLevelUp,rewardPresentationMs}=compiledExports;
 const item=(id,category)=>({id,category,title:id,description:'Verified achievement',unlocked:true,progress:1,target:1});
 for(const id of ['reader-1','reading-start-3','finished-25','collection-50','series-5']){
   assert.equal(motionForAchievement(item(id,'Reading')).kind,'books-stack','Books and comics: '+id);
