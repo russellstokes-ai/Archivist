@@ -1,0 +1,73 @@
+name: Archivist commercial polish preview APK
+on:
+  push:
+    branches: ['feat/commercial-motion-and-reliability-20261011']
+    paths: ['.github/workflows/commercial-polish-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: archivist-commercial-polish-preview-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preview-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+      - name: Install and validate source
+        working-directory: mobile
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+          npx expo-doctor
+          npm run typecheck
+          npm test
+      - name: Release lint for isolated acceptance package
+        working-directory: mobile/android
+        run: ./gradlew :app:lintRelease -PscannerAcceptance=true -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
+      - name: Build isolated acceptance APK
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleRelease -PscannerAcceptance=true -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
+      - name: Verify and name immutable candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p commercial-preview
+          APK=mobile/android/app/build/outputs/apk/release/app-release.apk
+          SDK="$ANDROID_HOME/build-tools/36.0.0"
+          "$SDK/apksigner" verify --verbose "$APK"
+          "$SDK/zipalign" -c -P 16 4 "$APK"
+          "$SDK/aapt" dump badging "$APK" > commercial-preview/package.txt
+          grep -q "name='app.archivist.reader.scanneracceptance'" commercial-preview/package.txt
+          grep -q "native-code:.*'arm64-v8a'" commercial-preview/package.txt
+          cp "$APK" "commercial-preview/Archivist-Commercial-Polish-Preview-${SOURCE_SHA:0:7}.apk"
+          cd commercial-preview
+          sha256sum *.apk > SHA256SUMS.txt
+          printf 'EXPERIMENTAL preview, not commercial release or Fold acceptance.\nSource SHA %s\nChanges: Living Book outer size, first-library celebration and existing reward-burst correction. Local Lottie assets remain isolated in Motion Lab; production animations NOT yet integrated.\nCanonical df4c39b and scanner/process locks are unchanged.\n' "$SOURCE_SHA" > TEST-NOTES.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: archivist-commercial-preview-${{ github.sha }}
+          path: |
+            commercial-preview/
+            mobile/android/app/build/reports/lint-results-release.*
+          retention-days: 21
