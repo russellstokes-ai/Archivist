@@ -61,6 +61,8 @@ import {assistFeedback} from './scannerVNext/assistFeedback';
 import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
+import {AchievementRewardOverlay} from './AchievementRewardOverlay';
+import {motionForAchievement,motionForLevelUp,rewardPresentationMs} from './rewardMotion';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {AtlasChartRing} from './AtlasChartRing';
@@ -823,6 +825,8 @@ function Client() {
   const [ritualToday,setRitualToday]=useState(localDay());
   const ritual=useMemo(()=>streakStats(ritualDays,ritualToday),[ritualDays,ritualToday]);
   const [achievementCelebration,setAchievementCelebration]=useState<Achievement|null>(null);
+  const [levelUpCelebration,setLevelUpCelebration]=useState<{level:number}|null>(null);
+  const observedRewardLevel=useRef<{source:string;level:number}|null>(null);
   const achievementCelebrationRef=useRef<Achievement|null>(null);achievementCelebrationRef.current=achievementCelebration;
   const [recentAchievementId,setRecentAchievementId]=useState<string|null>(null);
   const [ratingPrompt,setRatingPrompt]=useState<RatingPrompt|null>(null);
@@ -1659,7 +1663,31 @@ function Client() {
     });
   },[achievementCelebration,achievementLedgerReady,localCatalogReady,offlineWorksReady,profileAchievements,profileStats,restoring,rewardRestoreEpoch,ritualReady,shelfLoading]);
 
-  useEffect(()=>{if(!achievementCelebration)return;const timer=setTimeout(()=>setAchievementCelebration(null),3200);return()=>clearTimeout(timer);},[achievementCelebration]);
+  // Only real increases after initial catalogue restoration can generate a
+  // level-up event; switching source filters never produces a false reward.
+  useEffect(()=>{
+    if(!achievementLedgerReady||!profileStats||!ritualReady||restoring||!localCatalogReady||
+      !offlineWorksReady||shelfLoading||rewardRestoreGuard.current)return;
+    const level=profileProgression?.overall.level||1;
+    const previous=observedRewardLevel.current;
+    observedRewardLevel.current={source:sourceFilter,level};
+    if(previous?.source===sourceFilter&&level>previous.level){
+      setLevelUpCelebration({level});
+    }
+  },[achievementLedgerReady,profileProgression?.overall.level,sourceFilter,profileStats,
+    ritualReady,restoring,localCatalogReady,offlineWorksReady,shelfLoading,rewardRestoreEpoch]);
+  useEffect(()=>{
+    if(!levelUpCelebration)return;
+    const timer=setTimeout(()=>setLevelUpCelebration(null),
+      rewardPresentationMs(motionForLevelUp(levelUpCelebration.level).kind));
+    return()=>clearTimeout(timer);
+  },[levelUpCelebration]);
+  useEffect(()=>{
+    if(!achievementCelebration||levelUpCelebration)return;
+    const timer=setTimeout(()=>setAchievementCelebration(null),
+      rewardPresentationMs(motionForAchievement(achievementCelebration).kind));
+    return()=>clearTimeout(timer);
+  },[achievementCelebration,levelUpCelebration]);
   useEffect(()=>{if(!recentAchievementId)return;const timer=setTimeout(()=>setRecentAchievementId(null),15000);return()=>clearTimeout(timer);},[recentAchievementId]);
 
   const availabilityMatches = (available: boolean) =>
@@ -8156,9 +8184,15 @@ function Client() {
       </Animated.View>
       <CelebrationOverlay
         reduceMotion={reduceMotion} paper={p.paper} ink={p.ink} muted={p.muted}
-        active={celebrating || !!achievementCelebration}
-        title={achievementCelebration ? achievementCelebration.title : undefined}
-        copy={achievementCelebration ? achievementCelebration.description : undefined}
+        active={celebrating && !levelUpCelebration && !achievementCelebration}
+      />
+      <AchievementRewardOverlay
+        event={levelUpCelebration?motionForLevelUp(levelUpCelebration.level):
+          achievementCelebration?motionForAchievement(achievementCelebration):null}
+        eventKey={levelUpCelebration?'level-'+levelUpCelebration.level:
+          achievementCelebration?'achievement-'+achievementCelebration.id:null}
+        folded={foldLayout} reducedMotion={reduceMotion}
+        paper={p.paper} ink={p.ink} muted={p.muted}
       />
       {ProfileMenu()}
       {WorkDetailsPanel()}
