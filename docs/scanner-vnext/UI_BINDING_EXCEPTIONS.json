@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -427,6 +427,14 @@
     {
       "old": "              <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>",
       "new": "              <View style={{flexDirection:'row',alignItems:'center',gap:5,minHeight:20,maxWidth:'100%'}}>\n                <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted,flexShrink:1}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>\n                <MiniAudioWaveform playing={Boolean(playing.source==='server'?playback?.playing:audio.playing)} active={appActive} reducedMotion={reduceMotion} tone={darkMode?'ivory':'teal'}/>\n              </View>"
+    },
+    {
+      "old": "  const skipPlaybackVisible=useRef(false);\n",
+      "new": "  const skipPlaybackVisible=useRef(false);\n  const skipBookKeyRef=useRef(currentAudioKey);\n"
+    },
+    {
+      "old": "  },[playerMotionPlaying,playbackVisible,playing?.id,playing?.uri,reduceMotion]);\n",
+      "new": "  },[playerMotionPlaying,playbackVisible,playing?.id,playing?.uri,reduceMotion]);\n\n  // Skip bursts belong to one book and one visible player session. Never let\n  // scheduled turns continue into the next title or after leaving the player.\n  useEffect(()=>{\n    if(skipBookKeyRef.current!==currentAudioKey){\n      skipBookKeyRef.current=currentAudioKey;\n      cancelSkipBurst();\n    }\n  },[currentAudioKey]);\n  useEffect(()=>{\n    if(!playbackVisible||reduceMotion)cancelSkipBurst();\n  },[playbackVisible,reduceMotion]);\n"
     }
   ],
   "loaderException": {
