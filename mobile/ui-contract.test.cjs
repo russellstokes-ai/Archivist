@@ -51,7 +51,7 @@ assert.ok(source.includes("setActiveTab('now')") && source.includes("setLiveMode
 assert.ok(source.includes("const lastReadingKey = 'archivist.lastReading.v1'") && source.includes("const lastPlayingKey = 'archivist.lastPlaying.v1'"), 'Recent Player/Reader targets must persist for fast resume');
 assert.ok(source.includes("!playing && (reading||lastReading)") && source.includes("playing && !(activeTab==='now'&&liveMode==='player')"), 'Persistent activity bar must prioritise audio and fall back to reading');
 assert.ok(source.includes('tabCenterOrb') && source.includes('liveHubSegment'), 'Center live-tab visual treatment is missing');
-for(const label of ['Back 30 seconds','Back 15 seconds','Forward 15 seconds','Forward 30 seconds'])assert.ok(source.includes('accessibilityLabel="'+label+'"'),'Missing timed skip '+label);
+for(const label of ['Rewind 30 seconds','Rewind 15 seconds','Fast forward 15 seconds','Fast forward 30 seconds'])assert.ok(source.includes('accessibilityLabel="'+label+'"'),'Missing directional timed skip '+label);
 assert.ok(source.includes("skipAudio('large',-1)") && source.includes("skipAudio('large',1)") && source.includes("skipAudio('small',-1)") && source.includes("skipAudio('small',1)"),'Both skip sizes must work in both directions');
 assert.ok(source.includes('Math.min(6,Math.round(pages))'),'Living Book must allow up to six leaves for large skips');
 assert.ok(source.includes('<LivingBookCanvas') && source.includes('title={current.title}') && source.includes('coverUri={lockedLivingBookCover(current).uri}'), 'Living Book must use the current title and a session-locked metadata cover');
