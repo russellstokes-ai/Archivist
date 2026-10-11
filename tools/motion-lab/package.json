@@ -1,0 +1,13 @@
+{
+  "name": "archivist-motion-lab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node validate.cjs"
+  },
+  "devDependencies": {
+    "lottie-web": "5.13.0"
+  }
+}

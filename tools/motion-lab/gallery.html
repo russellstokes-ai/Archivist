@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Archivist Motion Lab</title>
+<style>:root{font-family:system-ui,sans-serif;color:#f3ecd9;background:#07151c}body{margin:0;padding:24px;min-width:290px}h1{font-weight:500;font-size:28px}.controls{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0}.controls button{background:#47736f;color:white;border:0;border-radius:10px;padding:12px;cursor:pointer}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px}.card{background:#10252e;border:1px solid #32474b;border-radius:16px;padding:16px;text-align:center}.stage{height:160px;max-width:180px;margin:auto}.name{font-size:13px}body.light{background:#fbfaf7;color:#07151c}body.light .card{background:#fff;border-color:#ddd}body.light .controls button{background:#47736f}</style></head>
+<body><h1>Archivist · Motion Lab</h1><p>Development preview only. The canonical app, scanner and Living Book are unchanged by this lab.</p>
+<div class="controls"><button id="replay">Replay all</button><button id="theme">Light / dark</button><button id="reduce">Reduced motion: Off</button><button id="pause">Pause</button></div><div class="cards" id="cards"></div>
+<script src="/tools/motion-lab/node_modules/lottie-web/build/player/lottie.min.js"></script><script>
+const files=['book-loader','books-stack','headphones','pause-play','waveform','achievement-badge','crown','trophy','level-up-confetti','firework-burst'];
+const holders=files.map(name=>{const card=document.createElement('section');card.className='card';const stage=document.createElement('div');stage.className='stage';const label=document.createElement('p');label.textContent=name.replaceAll('-',' ');label.className='name';card.append(stage,label);document.getElementById('cards').append(card);return stage});
+let reduced=false,paused=false;
+const players=files.map((name,i)=>lottie.loadAnimation({container:holders[i],renderer:'svg',loop:!/(trophy|badge|crown|confetti|firework)/.test(name),autoplay:true,path:'/mobile/assets/motion/'+name+'.json'}));
+document.getElementById('replay').onclick=()=>players.forEach(p=>{p.goToAndStop(0,true);if(!reduced)p.play()});
+document.getElementById('theme').onclick=()=>document.body.classList.toggle('light');
+document.getElementById('reduce').onclick=e=>{reduced=!reduced;e.target.textContent='Reduced motion: '+(reduced?'On':'Off');players.forEach(p=>reduced?p.goToAndStop(0,true):p.play())};
+document.getElementById('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Play':'Pause';if(!reduced)players.forEach(p=>paused?p.pause():p.play())};
+</script></body></html>

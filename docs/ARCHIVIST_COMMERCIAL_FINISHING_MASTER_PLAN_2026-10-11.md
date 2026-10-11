@@ -147,7 +147,7 @@ On each sprint update only this living plan on its development branch: list exac
 | Sprint | Status | Work | Evidence at creation |
 | --- | --- | --- | --- |
 | P0 | IN PROGRESS | Durable plan and source audit | Code/document inspection only; no tests run |
-| P1 | TODO | Motion Lab and Lottie assets | Not integrated in canonical |
+| P1 | CODE COMPLETE | Motion Lab and Lottie assets | 10 local JSON + local gallery committed; native lottie-react-native and actual screen integration pending |
 | P2 | TODO | Scanner loader | Accepted scanner must remain locked |
 | P2A | CODE COMPLETE | Living Book outer sizing only | Outer stage updated, native/visual QA pending |
 | P3 | TODO | Play/Pause/waveform | Existing player locked |
@@ -159,6 +159,7 @@ On each sprint update only this living plan on its development branch: list exac
 | P9 | TODO | Store release engineering | No production signing/store release |
 
 ### Change history
+- 2026-10-11: P1 isolated Motion Lab, ten independent Lottie JSON vector assets (including the exact approved books/headphones, player and reward inventory) and local validation script. No production runtime or native dependency changed; device integration remains outstanding.
 
 ### Implementation checkpoint — 2026-10-11, first code changes
 - **P2A CODE COMPLETE, UNVERIFIED ON DEVICE**: outer Living Book stage accepts a constrained numeric stageWidth, retaining fixed 340:290 aspect and byte-for-byte rendererHtml; parent computes width/height budget and reserves Fold controls. No internal canvas animation code changed; phone/Fold screenshots, native build and CI still required.
