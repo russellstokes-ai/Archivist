@@ -1,0 +1,72 @@
+name: Import all seven approved reward Lottie JSON assets
+on:
+  push:
+    branches: ['feat/rewards-seven-lottie-animations-20261011']
+    paths: ['.github/workflows/import-seven-reward-animations.yml']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Download source animations and verify seven distinct originals
+        run: |
+          python3 - <<'PY'
+          import urllib.request,re,json,hashlib,html,pathlib,time
+          animations=[
+            ('books-stack','books-stack-MixplAvd6D'),
+            ('headphones','headphones-entertainment-dpqGtGv4Ff'),
+            ('trophy','trophy-achievement-unlocked-ZW1uXJHSaL'),
+            ('crown','twinkle-crown-eqTd2xXkUS'),
+            ('level-confetti','level-up-confetti-animation-kHK5IsyvSQ'),
+            ('badge','badge-ar2befUUjY'),
+            ('firework','firework-burst-1-NlxbceJ4gC'),
+          ]
+          headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36'}
+          base=pathlib.Path('mobile/assets/motion/rewards');base.mkdir(parents=True,exist_ok=True)
+          manifest={}
+          for key,slug in animations:
+              page_url='https://lottiefiles.com/free-animation/'+slug
+              with urllib.request.urlopen(urllib.request.Request(page_url,headers=headers),timeout=30) as r:
+                  page=html.unescape(r.read(2100000).decode('utf-8','replace'))
+              if slug not in page:raise RuntimeError('Wrong source page '+slug)
+              links=list(dict.fromkeys(re.findall(r'a/[0-9a-f-]{36}/[A-Za-z0-9_-]+[.]json',page)))
+              if not links:raise RuntimeError('No source JSON URLs for '+slug)
+              candidates=[]
+              for link in links:
+                  src='https://assets-v2.lottiefiles.com/'+link
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(src,headers=headers),timeout=25) as rr:
+                          raw=rr.read(900000)
+                      data=json.loads(raw)
+                      if not all(z in data for z in ('v','fr','ip','op','layers','w','h')):continue
+                      candidates.append((len(raw),link,raw,data))
+                  except Exception as exc:
+                      print('SKIP',key,link,str(exc)[:110],flush=True)
+              if not candidates:raise RuntimeError('Lottie source JSON not retrievable for '+slug)
+              candidates.sort(reverse=True,key=lambda a:a[0])
+              size,link,raw,data=candidates[0]
+              if not 1000<size<800000:raise RuntimeError('Unusual JSON size '+slug)
+              if not (0<data['fr']<=120 and data['op']>data['ip']):raise RuntimeError('Invalid frame timings '+slug)
+              external=[a for a in data.get('assets',[]) if a.get('p') and not str(a.get('p')).startswith('data:')]
+              if external:raise RuntimeError('External resource dependencies: '+slug+' '+repr(external[:2]))
+              sha=hashlib.sha256(raw).hexdigest()
+              (base/(key+'-original.json')).write_bytes(raw)
+              manifest[key]={'page':page_url,'source':'https://assets-v2.lottiefiles.com/'+link,
+                'sha256':sha,'bytes':size,'name':data.get('nm',''),'width':data['w'],'height':data['h'],
+                'fps':data['fr'],'first':data['ip'],'last':data['op'],'durationSeconds':round((data['op']-data['ip'])/data['fr'],3),
+                'layers':len(data['layers']), 'assets':len(data.get('assets',[]))}
+              print('ASSET',key,json.dumps(manifest[key]),flush=True)
+          (base/'SOURCE_MANIFEST.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
+          assert len(manifest)==7 and len(set(x['sha256'] for x in manifest.values()))==7
+          PY
+      - name: Commit exact approved originals only to development branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile/assets/motion/rewards
+          git diff --cached --quiet || (git commit -m 'assets(rewards): preserve seven approved original Lottie animations' && git push origin HEAD:feat/rewards-seven-lottie-animations-20261011)
