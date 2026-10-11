@@ -1,5 +1,5 @@
 import React from 'react';
-import {Text,View} from 'react-native';
+import {View} from 'react-native';
 import LottieView from 'lottie-react-native';
 
 export type BookLoaderSize='inline'|'compact'|'standard'|'reader'|'startup';
@@ -31,9 +31,9 @@ export function ArchivistBookLoader({
   return <View accessibilityRole="progressbar" accessibilityLabel={label}
     accessibilityState={{busy:true}} pointerEvents="none"
     style={{width:containerSize,height:containerSize,alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0}}>
-    {reduceMotion
-      ? <Text accessible={false} style={{fontSize:Math.round(containerSize*.52),color:'#C6A374',lineHeight:containerSize,textAlign:'center'}}>▤</Text>
-      : <LottieView source={require('./assets/motion/book-loader.json')} autoPlay loop
-          style={{width:artworkSize,height:artworkSize,flexShrink:0}}/>}
+    <LottieView source={require('./assets/motion/book-loader.json')}
+      autoPlay={!reduceMotion} loop={!reduceMotion}
+      progress={reduceMotion?0.5:undefined}
+      style={{width:artworkSize,height:artworkSize,flexShrink:0}}/>
   </View>;
 }
