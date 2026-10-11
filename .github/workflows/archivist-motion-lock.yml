@@ -1,0 +1,36 @@
+name: Regenerate isolated Archivist Lottie lockfile
+on:
+  push:
+    branches: ['feat/archivist-commercial-finish-20261011']
+    paths:
+      - mobile/package.json
+      - .github/workflows/archivist-motion-lock.yml
+permissions:
+  contents: write
+concurrency:
+  group: archivist-motion-lock
+  cancel-in-progress: false
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Regenerate npm lock using verified package versions
+        working-directory: mobile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lockfile only if changed
+        run: |
+          if git diff --quiet -- mobile/package-lock.json; then
+            echo "Lockfile unchanged."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile/package-lock.json
+          git commit -m 'chore: synchronise locked Lottie 7.3.8 dependency'
+          git push origin HEAD:${{ github.ref_name }}

@@ -1,6 +1,7 @@
 import {publicationYear, logicalWorkKey, editionKey} from './libraryIntelligence';
 import {DataRing,genreColour,genreColours,ChartItem} from './LibraryCharts';
 import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
+import {MotionGlyph,MotionTransportIcon,type ArchivistMotionName} from './MotionGlyph';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -598,7 +599,7 @@ function ArchivistLogo({size=44,opacity=1}:{size?:number;opacity?:number}={}) {
   return <Image accessible={false} source={require('./assets/icon.png')} resizeMode="contain" style={{width:size,height:size,borderRadius:Math.max(8,size*.22),opacity}}/>;
 }
 
-function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0'}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string}) {
+function CelebrationOverlay({active,title='Your library is alive',copy='Archivist found your first books.',reduceMotion=false,paper='#111111',ink='#F5F5F5',muted='#A0A0A0',motion='books-stack',motionSize=96}: {active: boolean;title?: string;copy?: string;reduceMotion?:boolean;paper?:string;ink?:string;muted?:string;motion?:ArchivistMotionName;motionSize?:number}) {
   const burst = useRef(new Animated.Value(0)).current;
   const sparks=useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -642,7 +643,7 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
       <Animated.View pointerEvents="none" style={{position:'absolute',width:440,height:440,opacity:burst}}><AmbientGlow color="#B99A68" size={440} strength={2}/></Animated.View>
       <Animated.View style={[styles.celebrationBadge, {backgroundColor:paper,borderWidth:1,borderColor:'#B99A68',opacity: burst, transform: [{scale: burst.interpolate({inputRange:[0,0.3,1], outputRange:reduceMotion?[1,1,1]:[0.96,1.01,1]})}]}]}>
         <Text style={{color:'#B99A68',fontSize:11,letterSpacing:2,marginBottom:12}}>A MOMENT TO REMEMBER</Text>
-        <UiIcon name="bookmark" color="#B99A68" size={32}/>
+        <MotionGlyph name={motion} size={motionSize} active={active} reduceMotion={reduceMotion} loop={false}/>
         <Text style={[styles.celebrationTitle,{color:ink,fontFamily:'ArchivistEditorial',fontSize:24,lineHeight:30,textAlign:'center',marginTop:12}]}>{title}</Text>
         <Text style={[styles.celebrationCopy,{color:muted,textAlign:'center'}]}>{copy}</Text>
       </Animated.View>
@@ -4178,7 +4179,9 @@ function Client() {
       const percent=scanProgressPercent(activeProgress);
       const count=activeProgress.total&&activeProgress.total>0?`${Math.min(activeProgress.processed||0,activeProgress.total)} / ${activeProgress.total}`:'';
       return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
-        <ActivityIndicator accessibilityLabel="Scanning local library" color={p.sage}/>
+        <View accessibilityLabel="Scanning local library" style={{width:34,height:34}}>
+          <MotionGlyph name="book-loader" size={34} active={appActive} reduceMotion={reduceMotion}/>
+        </View>
         <View style={{flex:1,minWidth:0,gap:3}}>
           <View style={styles.scanProgressHeading}>
             <Text style={[styles.scanBannerTitle,{color:p.ink}]}>{scanPhaseLabel(activeProgress.phase)}</Text>
@@ -5752,7 +5755,7 @@ function Client() {
     // remain byte-for-byte canonical. Reserve the Fold control column and
     // constrain by BOTH available viewport width and height.
     const bookColumnBudget = foldLayout ? width-48-32-250 : width-(narrowPhone?28:32);
-    const bookHeightBudget = height*(foldLayout?.52:.42);
+    const bookHeightBudget = height*(foldLayout ? 0.52 : 0.42);
     const livingBookStageWidth = Math.max(216,Math.min(440,bookColumnBudget,Math.floor(bookHeightBudget*340/290)));
     const current = playing?.uri ? {...playing,...localBooks.find(book=>book.uri===playing.uri)} : playing;
     const serverPlayer = current?.source==='server';
@@ -5863,6 +5866,7 @@ function Client() {
               {current.series?<Text numberOfLines={1} style={[styles.playerSeries,{color:p.muted}]}>{current.series}</Text>:null}
             </View>
             <View style={styles.playerStatusRow}>
+              <MotionGlyph name="waveform" size={22} active={appActive&&isPlaying} reduceMotion={reduceMotion}/>
               <Text style={[styles.playerStatusText,{color:p.muted}]}>{current.source==='server'?'Server':current.source==='downloaded'?'Downloaded':'On this device'}</Text>
               {offlineCopy?<Text style={[styles.playerStatusText,{color:p.sage}]}>Available offline</Text>:null}
               {current.source==='server'&&currentServerWork&&!offlineCopy?<Pressable accessibilityRole="button" disabled={offlineBusyId===currentServerWork.id} onPress={()=>void downloadServerWork(currentServerWork)} style={styles.playerStatusAction}><Text style={[styles.playerStatusText,{color:p.sage,fontWeight:'600'}]}>{offlineBusyId===currentServerWork.id?'Downloading…':'Download'}</Text></Pressable>:null}
@@ -5911,7 +5915,7 @@ function Client() {
                 disabled={!transportReady}
                 style={({pressed})=>[styles.playButton,{backgroundColor:p.paper==='#000000'?'#F1EEE4':'#182C29',transform:[{scale:pressed?0.97:1}]}]}
                 onPress={()=>void togglePlayback()}>
-                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <UiIcon name={isPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}
+                {!transportReady ? <ActivityIndicator color="#FFFFFF"/> : <MotionTransportIcon playing={isPlaying} reduceMotion={reduceMotion} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>} 
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:p.card}]}>
                 <UiIcon name="skipForward" color={p.ink} size={30}/>
@@ -8129,6 +8133,12 @@ function Client() {
         active={celebrating || !!achievementCelebration}
         title={achievementCelebration ? achievementCelebration.title : undefined}
         copy={achievementCelebration ? achievementCelebration.description : undefined}
+        motion={achievementCelebration ? achievementCelebration.id==='deep-archive'?'firework-burst'
+          :achievementCelebration.id==='curator'?'crown'
+          :achievementCelebration.id.includes('finish')?'trophy'
+          :achievementCelebration.id.includes('ritual')?'level-up-confetti'
+          :'achievement-badge' : 'books-stack'}
+        motionSize={foldLayout?112:96}
       />
       {ProfileMenu()}
       {WorkDetailsPanel()}
@@ -8154,7 +8164,7 @@ function Client() {
             </View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={(playing.source==='server'?playback?.playing:audio.playing)?'Pause '+playing.title:'Play '+playing.title} hitSlop={6} onPress={()=>playing.source==='server'?controller.toggle():audio.playing?player.pause():player.play()} style={[styles.miniButton,{backgroundColor:p.raised}]}>
-            <UiIcon name={(playing.source==='server'?playback?.playing:audio.playing)?'pause':'play'} color={p.ink} size={20}/>
+            <MotionTransportIcon playing={!!(playing.source==='server'?playback?.playing:audio.playing)} reduceMotion={reduceMotion} color={p.ink} size={20}/>
           </Pressable>
         </View>
       ) : !playing && (reading||lastReading) && !(activeTab==='now'&&liveMode==='reader') && activeTab!=='reader' ? (

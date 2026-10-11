@@ -148,10 +148,10 @@ On each sprint update only this living plan on its development branch: list exac
 | --- | --- | --- | --- |
 | P0 | IN PROGRESS | Durable plan and source audit | Code/document inspection only; no tests run |
 | P1 | CODE COMPLETE | Motion Lab and Lottie assets | 10 local JSON + local gallery committed; native lottie-react-native and actual screen integration pending |
-| P2 | TODO | Scanner loader | Accepted scanner must remain locked |
+| P2 | CODE COMPLETE | Scanner loader | New loader on LocalScanStatus; native build pending |
 | P2A | CODE COMPLETE | Living Book outer sizing only | Outer stage updated, native/visual QA pending |
-| P3 | TODO | Play/Pause/waveform | Existing player locked |
-| P4 | IN PROGRESS | Rewards and first-library celebration | First-library observer coded; Lottie reward assets remain |
+| P3 | CODE COMPLETE | Play/Pause/waveform | Native Lottie glyphs wired, renderer unchanged; build and physical QA pending |
+| P4 | CODE COMPLETE | Rewards and first-library celebration | Local reward visuals wired to existing once-only ledger; native QA pending |
 | P5 | TODO | Shelf/Library/review polish | B-005/B-006 device checks pending |
 | P6 | TODO | Atlas/Stats/Reader | Native acceptance pending |
 | P7 | TODO | Accessibility/performance | B-002 impact unmeasured |
@@ -159,6 +159,7 @@ On each sprint update only this living plan on its development branch: list exac
 | P9 | TODO | Store release engineering | No production signing/store release |
 
 ### Change history
+- 2026-10-11: Production-facing isolated Lottie wrapper using 7.3.8 on native, safe web fallback, truthful loader in LocalScanStatus, Now/mini-player pause/play, active waveform, and milestone visuals. Asset, Reduced Motion and preservation tests added. Native npm lockfile regeneration is committed as a branch-limited one-off workflow; no native/CI pass claimed yet. Internal Living Book renderer unchanged.
 - 2026-10-11: P1 isolated Motion Lab, ten independent Lottie JSON vector assets (including the exact approved books/headphones, player and reward inventory) and local validation script. No production runtime or native dependency changed; device integration remains outstanding.
 
 ### Implementation checkpoint — 2026-10-11, first code changes
