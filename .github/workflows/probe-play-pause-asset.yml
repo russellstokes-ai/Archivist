@@ -42,4 +42,10 @@ jobs:
               vals=list(dict.fromkeys(re.findall(pattern,blob,re.I)))
               print('URL_MATCHES',len(vals))
               for u in vals[:18]: print('URL',u[:350])
+          print('--- HYDRATION TERMS ---')
+          for term in ('84930ac2-1151-11ee-992a-3f09814c2209','ThGRBFYJSo','b6ZZJKDfU4','.lottie','animationFile','downloadFile','fileUrl','fileName','animationSrc','animationFileUrl','jsonFile','sourceUrl'):
+              indices=[m.start() for m in re.finditer(re.escape(term),data,re.I)]
+              print('LOOK',term,'count',len(indices))
+              for i in indices[-4:]:
+                  print('DETAIL',term,i,repr(data[max(0,i-220):i+500])[:750])
           PY
