@@ -19,6 +19,14 @@
 6. Exact, reversible changes recorded by UI-binding exceptions. Strict canonical lock checks still green.
 7. Same-source code gates: [105/105 mobile suites; Expo Doctor, typecheck and web build](https://github.com/russellstokes-ai/Archivist/actions/runs/38151449352) and [unsigned iOS Simulator compile](https://github.com/russellstokes-ai/Archivist/actions/runs/38151449262) passed on `1913afe`. Android native check [38151276884](https://github.com/russellstokes-ai/Archivist/actions/runs/38151276884) passed on earlier source `171ff682`. A newer release APK workflow must pass before a newer build is distributed.
 
+## Verified current download — ready for physical testing
+- **[Download Archivist-Commercial-Polish-Preview-05fec3c.apk](https://github.com/russellstokes-ai/Archivist/releases/download/archivist-commercial-test-05fec3c/Archivist-Commercial-Polish-Preview-05fec3c.apk)**
+- [GitHub release page](https://github.com/russellstokes-ai/Archivist/releases/tag/archivist-commercial-test-05fec3c) | [SHA256SUMS.txt](https://github.com/russellstokes-ai/Archivist/releases/download/archivist-commercial-test-05fec3c/SHA256SUMS.txt) | [successful same-source build](https://github.com/russellstokes-ai/Archivist/actions/runs/38154082575)
+- Exact APK source commit: `05fec3cbf726712f0a156bacf48ed2484da9cb45`. APK size **45,560,886 bytes**. All source/native release-build/signature/ABI/alignment/upload workflow checks PASS.
+- Test pack includes **production** Lottie loader, NOW/mini-player, waveform and reward icons; do not use historical `c3465f5` for animation acceptance.
+- Source master plan and this handoff were written before testing; this release details addendum is **documentation only** and does not alter the APK.
+- Status: **APK VERIFIED, PHYSICAL DEVICE ACCEPTANCE OPEN**, not a production Play Store app.
+
 ## Install caution
 The test APK uses `app.archivist.reader.scanneracceptance`, an ISOLATED package from the production `app.archivist.reader`, **but the same test package identity as the previous Fold/scanner acceptance builds**. Installing it may UPDATE that earlier test app rather than create a third separate install. Preserve or back up important test-only data first. Its installer may be called an Android sideload/test prerelease; never call it a commercial store release.
 
