@@ -1054,11 +1054,19 @@ function Client() {
   // A visible skip must deliver distinct turning -> settling -> open events for
   // EVERY leaf. The old one-shot numeric Animated.Value only caused one turn.
   function cancelSkipBurst(){
+    const wasRunning=skipBurstRunning.current;
     ++skipGeneration.current;
     if(skipBurstTimer.current!==null){clearTimeout(skipBurstTimer.current);skipBurstTimer.current=null;}
     skipBurstQueue.current=[];
     skipBurstRunning.current=false;
     setSkipTurning(false);
+    // A cleared timer must never strand the renderer in 'turning'. Settle
+    // only our own in-flight skip (never an unrelated ambient page turn).
+    if(wasRunning&&livingBookMotionRef.current.phase==='turning'){
+      transitionLivingBook({type:'turn-complete'});
+      const settled=transitionLivingBook({type:'settle-complete'});
+      if(settled.phase==='closing')animateLivingBookCoverClose();
+    }
   }
   function runSkipBurstStep(epoch:number){
     if(epoch!==skipGeneration.current)return;
