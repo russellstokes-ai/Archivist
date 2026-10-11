@@ -606,13 +606,17 @@ function CelebrationOverlay({active,title='Your library is alive',copy='Archivis
   useEffect(() => {
     if (!active) {
       burst.setValue(0);
+      sparks.setValue(0);
       return;
     }
     burst.setValue(0);
+    sparks.setValue(0);
+    // The canonical reward burst omitted the sparks driver; particles stayed piled at centre.
+    if(!reduceMotion)Animated.timing(sparks,{toValue:1,duration:950,useNativeDriver:true}).start();
     Animated.sequence([
-      Animated.timing(burst, {toValue: 1, duration: 520, useNativeDriver: true}),
-      Animated.delay(850),
-      Animated.timing(burst, {toValue: 0, duration: 420, useNativeDriver: true}),
+      Animated.timing(burst, {toValue: 1, duration: reduceMotion?0:520, useNativeDriver: true}),
+      Animated.delay(reduceMotion?3000:2080),
+      Animated.timing(burst, {toValue: 0, duration: reduceMotion?0:420, useNativeDriver: true}),
     ]).start();
     return()=>{burst.stopAnimation();sparks.stopAnimation();};
   }, [active, burst,sparks,reduceMotion,title]);
