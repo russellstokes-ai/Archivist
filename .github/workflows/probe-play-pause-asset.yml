@@ -31,4 +31,15 @@ jobs:
           for val in dict.fromkeys(urls):
               if ('lottie' in val or '.json' in val or 'asset' in val):
                   print('REF',val[:220])
+          import html
+          blob=html.unescape(data).replace('\\\\/','/')
+          for term in ('animation_url','animationUrl','animation_url','jsonUrl','json_url','downloadUrl','assetPath','source_url','publicUrl','original_file','originalFile','lottie.host','graphql.lottiefiles','ThGRBFYJSo','b6ZZJKDfU4','"animation"','"animations"','"assetUrl"'):
+              offsets=[m.start() for m in re.finditer(re.escape(term),blob,re.I)]
+              print('FIND',term,len(offsets))
+              for i in offsets[:3]:
+                  print('AT',i,repr(blob[max(0,i-150):i+320])[:500])
+          for pattern in (r'https?://[^"\\s<>]{5,400}\\.(?:json|lottie)(?:\\?[^"\\s<>]{0,200})?',r'https?://[^"\\s<>]{5,300}lottie[^"\\s<>]{0,100}'):
+              vals=list(dict.fromkeys(re.findall(pattern,blob,re.I)))
+              print('URL_MATCHES',len(vals))
+              for u in vals[:18]: print('URL',u[:350])
           PY
