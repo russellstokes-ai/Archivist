@@ -93,6 +93,7 @@ android {
         if (findProperty('scannerAcceptance') == 'true') applicationIdSuffix '.scanneracceptance'
         if (findProperty('livingBookScalePreview') == 'true') applicationIdSuffix '.bookscale'
         if (findProperty('bookLoaderPreview') == 'true') applicationIdSuffix '.bookloader'
+        if (findProperty('playPausePrototype') == 'true') applicationIdSuffix '.playpause'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 102
