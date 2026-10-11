@@ -146,12 +146,12 @@ On each sprint update only this living plan on its development branch: list exac
 ### Tracking ledger at creation
 | Sprint | Status | Work | Evidence at creation |
 | --- | --- | --- | --- |
-| P0 | IN PROGRESS | Durable plan and source audit | Code/document inspection only; no tests run |
-| P1 | TODO | Motion Lab and Lottie assets | Not integrated in canonical |
-| P2 | TODO | Scanner loader | Accepted scanner must remain locked |
+| P0 | CODE COMPLETE | Durable plan and code audit | Commit 8840818; original canonical SHA and issue precedence fixed; physical issues remain open |
+| P1 | CODE COMPLETE / NATIVE TEST OPEN | Isolated Motion Lab and 10 local JSON animations | c838da1; Mobile checks 38142321598 SUCCESS; iOS Simulator checks 38142321583 SUCCESS; Motion Lab not yet visually approved |
+| P2 | SOURCE VERIFIED / DEVICE OPEN | External banner Lottie loader only | 97a8143 Mobile checks 38143245478 SUCCESS, prior native Kotlin compile 38142812637 SUCCESS; Settings protected indicator reverted |
 | P2A | CODE COMPLETE — native unverified | Living Book outer sizing only | Production wrapper sizing committed; renderer code preserved; device acceptance open |
-| P3 | TODO | Play/Pause/waveform | Existing player locked |
-| P4 | CODE COMPLETE — native unverified (first-library logic only) | Rewards and first-library celebration | First-library observer wired without protected scanner functions; Lottie reward assets still TODO |
+| P3 | SOURCE VERIFIED / NATIVE DEVICE OPEN | Play/Pause glyphs and truthful waveform | 4b7c503; Mobile checks 38143539984 SUCCESS; iOS Simulator and new isolated APK gate pending as of audit |
+| P4 | SOURCE VERIFIED / DEVICE OPEN | Earned reward art and once-only first-library celebration | c838da1 + 4b7c503; test passes; real-device animation/achievement persistence pending |
 | P5 | TODO | Shelf/Library/review polish | B-005/B-006 device checks pending |
 | P6 | TODO | Atlas/Stats/Reader | Native acceptance pending |
 | P7 | TODO | Accessibility/performance | B-002 impact unmeasured |
@@ -167,9 +167,18 @@ On each sprint update only this living plan on its development branch: list exac
 - Do not announce P2A or B-001 as accepted until normal mobile suite, native build and physical verification pass. This implementation did not perform those checks.
 
 ### 2026-10-11 P2 native loading candidate (NOT YET ACCEPTED)
-- Branch `polish/archivist-motion-native-20261011`: pinned `lottie-react-native@7.3.8` for RN 0.83 compatibility. Native-only Lottie wrapper, web fallback and direct replacement of TWO loading spinners with bundled Books Stack/Headphones/Book Loader. Full scan progress bar/counters and cancel control unchanged; protected scanner code untouched.
+- Branch `polish/archivist-motion-native-20261011`: pinned `lottie-react-native@7.3.8` for RN 0.83 compatibility. Native-only Lottie wrapper, web fallback and replacement of only the UNLOCKED LocalScanStatus spinner with bundled Books Stack/Headphones/Book Loader. Locked Settings spinner remains unchanged. Full scan progress bar/counters and cancel control unchanged; protected scanner code untouched.
 - Native integration typecheck, Android Kotlin compile, iOS Simulator and visual/on-device checks are required. Do not claim Lottie validated or publish a candidate until green. Lottie play/pause, waveform and reward assets exist in Motion Lab but not promoted to production yet.
 
 ### 2026-10-11 P3/P4 source checkpoint — native visual acceptance OPEN
 - Branch `polish/archivist-motion-player-rewards-20261011` adds palette-specific icon-only vector Lottie Play/Pause into existing Now and mini-player Pressables, a subtle waveform visible only while actually playing and in foreground, and 96/112dp milestone art inside the existing celebration overlay.
 - Existing achievement ledgers, play/pause action handlers, playback state, scanner core and exact Living Book renderer remain intact. Reward asset type is selected from already-earned title only. Native visual/timing/contrast tests needed before production promotion.
+
+### 2026-10-11 GitHub CI evidence and release gates
+- `c838da1` complete mobile CI [38142321598](https://github.com/russellstokes-ai/Archivist/actions/runs/38142321598) **PASS** and iOS Simulator CI [38142321583](https://github.com/russellstokes-ai/Archivist/actions/runs/38142321583) **PASS**. Baseline stage-size / first-library tests and all local vector motion asset tests included.
+- `97a8143` native scanner-animation branch full mobile CI [38143245478](https://github.com/russellstokes-ai/Archivist/actions/runs/38143245478) **PASS**; previous `e5283bd` Android Kotlin/manifest CI [38142812637](https://github.com/russellstokes-ai/Archivist/actions/runs/38142812637) **PASS**, before final locked Settings revert, so it is NOT final-head APK/device validation. Full iOS native check [38143245499](https://github.com/russellstokes-ai/Archivist/actions/runs/38143245499) is a separate gate.
+- `4b7c503` player/rewards source complete with full mobile CI [38143539984](https://github.com/russellstokes-ai/Archivist/actions/runs/38143539984) **PASS**. Separate iOS run [38143539957](https://github.com/russellstokes-ai/Archivist/actions/runs/38143539957) tracked independently.
+- `c925790` added [.github/workflows/archivist-motion-candidate.yml](../../.github/workflows/archivist-motion-candidate.yml), triggered [38143677656](https://github.com/russellstokes-ai/Archivist/actions/runs/38143677656). This *only* builds a uniquely named temporary isolated signed APK artifact if all protections and native release lint/assemble pass. Do not call it a shipped app until run SUCCESS and artifact SHA256 verified. Physical Fold/iPhone/HA acceptance still OPEN.
+- Canonical compare shows NO changes in `mobile/scannerVNext/**`, `docs/scanner-vnext/CANONICAL_SCANNER_LOCK.json` or `CANONICAL_PROCESS_LOCK.json`. The newer UI binding exception ledger reverses approved external changes to the exact original UI checksum, while scanner/process hashes still enforce untouched function bodies. `LivingBookCanvas` internal renderer is intact; only outer stage sizing is different.
+- Outstanding actual-device bug gates: B-005 SQLite Save/Assist contention, B-006 keyboard footer on Fold, B-007 provider accuracy, B-008 Atlas native gestures, B-009 media format/playback/Android Auto, Pi/HA and release signing. No on-device evidence has been gathered in this pass.
+- New audit note B-012 [P3, CONFIRMED SOURCE ISSUE]: `CelebrationOverlay` owns animated `sparks` value but does not run an `Animated.timing` on it (mobile/App.tsx at former canonical line ~601). This can make old background particles static, separate from new Lottie achievement badge. Fix only after motion visual review; not release-blocking if static confetti is acceptable.
