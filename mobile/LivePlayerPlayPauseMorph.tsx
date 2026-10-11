@@ -70,7 +70,7 @@ export const LivePlayerPlayPauseMorph=memo(function LivePlayerPlayPauseMorph({
         loop={false}
         progress={progress}
         resizeMode="contain"
-        style={{width:PLAY_PAUSE_ART_SIZE,height:PLAY_PAUSE_ART_SIZE}}
+        style={{width:PLAY_PAUSE_ART_SIZE,height:PLAY_PAUSE_ART_SIZE,transform:[{translateX:5},{translateY:2}]}}
       />
     </View>;
 });
