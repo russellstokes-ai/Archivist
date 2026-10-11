@@ -1,0 +1,49 @@
+name: Import selected Pause Play Lottie JSON
+on:
+  push:
+    branches: ['feat/live-player-pause-play-lottie-prototype-20261011']
+    paths: ['.github/workflows/import-play-pause-asset.yml']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Fetch and verify the exact LottieFiles standard JSON
+        run: |
+          python3 - <<'PY'
+          import urllib.request,json,hashlib,pathlib
+          url='https://assets-v2.lottiefiles.com/a/84930ac2-1151-11ee-992a-3f09814c2209/LQ0ZHAjPIs.json'
+          req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+          with urllib.request.urlopen(req,timeout=30) as res:
+              data=res.read(50000)
+              print('HTTP',res.status,'bytes',len(data),'content-type',res.headers.get('content-type'))
+          animation=json.loads(data)
+          print('ANIMATION_META', {k:animation.get(k) for k in ('v','nm','w','h','ip','op','fr')})
+          assert 14000<len(data)<22000,'Unexpected size: refusing substitute asset'
+          assert 20<=animation.get('fr',0)<=120 and 60<=animation.get('op',0)<=80
+          assert 100<=animation.get('w',0)<=1500 and 100<=animation.get('h',0)<=1500
+          assert isinstance(animation.get('layers'),list) and len(animation['layers'])>=1
+          assert not animation.get('assets'),'Source should be self-contained vector animation'
+          out=pathlib.Path('mobile/assets/motion/live-play-pause-lottiefiles.json')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_bytes(data)
+          digest=hashlib.sha256(data).hexdigest()
+          pathlib.Path('mobile/assets/motion/LIVE_PLAY_PAUSE_SOURCE.md').write_text(
+              '# Approved Live Player Play/Pause animation\n\n'
+              'Original asset: https://lottiefiles.com/free-animation/pause-play-ThGRBFYJSo\n\n'
+              'Standard Lottie JSON (not optimized): '+url+'\n\n'
+              'Licence: Lottie Simple License; attribution to LottieFiles recommended.\n\n'
+              'SHA-256: '+digest+'\n',encoding='utf-8')
+          print('SHA256',digest)
+          PY
+      - name: Commit immutable source asset only on isolated prototype branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/assets/motion/live-play-pause-lottiefiles.json mobile/assets/motion/LIVE_PLAY_PAUSE_SOURCE.md
+          git diff --cached --quiet || (git commit -m "assets(player): import exact LottieFiles Pause Play animation" && git push origin HEAD:feat/live-player-pause-play-lottie-prototype-20261011)
