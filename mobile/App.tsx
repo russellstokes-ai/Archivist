@@ -4,6 +4,7 @@ import {AmbientGlow,LivingBookCanvas} from './LivingBookCanvas';
 import {ArchivistBookLoader} from './ArchivistBookLoader';
 import {LivePlayerPlayPauseMorph} from './LivePlayerPlayPauseMorph';
 import {LivePlayerSkipIcon} from './LivePlayerSkipIcon';
+import {MiniAudioWaveform} from './MiniAudioWaveform';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
@@ -8157,7 +8158,10 @@ function Client() {
             <MiniArtwork session={session} p={p} book={playing}/>
             <View style={{flex:1,minWidth:0}}>
               <Text numberOfLines={1} style={[styles.miniTitle,{color:p.ink}]}>{playing.title}</Text>
-              <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>
+              <View style={{flexDirection:'row',alignItems:'center',gap:5,minHeight:20,maxWidth:'100%'}}>
+                <Text numberOfLines={1} style={[styles.miniMeta,{color:p.muted,flexShrink:1}]}>{formatTime(playing.source==='server'?playback?.seconds||0:audio.currentTime||0)} · {(playing.source==='server'?playback?.playing:audio.playing)?'Playing':'Paused'}</Text>
+                <MiniAudioWaveform playing={Boolean(playing.source==='server'?playback?.playing:audio.playing)} active={appActive} reducedMotion={reduceMotion} tone={darkMode?'ivory':'teal'}/>
+              </View>
             </View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={(playing.source==='server'?playback?.playing:audio.playing)?'Pause '+playing.title:'Play '+playing.title} hitSlop={6} onPress={()=>playing.source==='server'?controller.toggle():audio.playing?player.pause():player.play()} style={[styles.miniButton,{backgroundColor:p.raised}]}>
