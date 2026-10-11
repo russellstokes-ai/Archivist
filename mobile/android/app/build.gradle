@@ -98,8 +98,14 @@ android {
         if (findProperty('uiMotionReview') == 'true') applicationIdSuffix '.uimotionreview'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (findProperty('portraitComicFixPreview') == 'true' ? 103 : 102)
-        versionName (findProperty('portraitComicFixPreview') == 'true' ? "0.9.4-ui2" : "0.9.4")
+        versionCode 102
+        versionName "0.9.4"
+        // Only the separately installed UI-motion test package receives this version.
+        // Preserve canonical literals for native/Expo compatibility contracts.
+        if (findProperty('portraitComicFixPreview') == 'true') {
+            versionCode 103
+            versionName "0.9.4-ui2"
+        }
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
