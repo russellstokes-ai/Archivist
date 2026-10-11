@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase; 2026-10-11: restricted local comic WebView secure HTML origin and reader-only error/retry messages. No scanner, media path permissions or render engine changes.",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -439,6 +439,22 @@
     {
       "old": "  function cancelSkipBurst(){\n    ++skipGeneration.current;\n    if(skipBurstTimer.current!==null){clearTimeout(skipBurstTimer.current);skipBurstTimer.current=null;}\n    skipBurstQueue.current=[];\n    skipBurstRunning.current=false;\n    setSkipTurning(false);\n  }",
       "new": "  function cancelSkipBurst(){\n    const wasRunning=skipBurstRunning.current;\n    ++skipGeneration.current;\n    if(skipBurstTimer.current!==null){clearTimeout(skipBurstTimer.current);skipBurstTimer.current=null;}\n    skipBurstQueue.current=[];\n    skipBurstRunning.current=false;\n    setSkipTurning(false);\n    // A cleared timer must never strand the renderer in 'turning'. Settle\n    // only our own in-flight skip (never an unrelated ambient page turn).\n    if(wasRunning&&livingBookMotionRef.current.phase==='turning'){\n      transitionLivingBook({type:'turn-complete'});\n      const settled=transitionLivingBook({type:'settle-complete'});\n      if(settled.phase==='closing')animateLivingBookCoverClose();\n    }\n  }"
+    },
+    {
+      "old": "import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';",
+      "new": "import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';\nimport {comicWebViewFailure} from './readerAccessErrors';"
+    },
+    {
+      "old": "<Button label=\"Back to Shelf\" tone=\"quiet\" onPress={closeReader}/></View>:localReader?.html?",
+      "new": "{reading.format==='Comic'?<Button label=\"Retry comic\" onPress={()=>openBook(reading,readerPage)}/>:null}<Button label=\"Back to Shelf\" tone=\"quiet\" onPress={closeReader}/></View>:localReader?.html?"
+    },
+    {
+      "old": "source={{html:localReader.html}} onLoadEnd",
+      "new": "source={reading.format==='Comic'?{html:localReader.html,baseUrl:'https://appassets.androidplatform.net/'}:{html:localReader.html}} onError={event=>{const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}} onLoadEnd"
+    },
+    {
+      "old": "onError={e=>{const message=e.nativeEvent.description||'Reader failed to load.';setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false}",
+      "new": "onError={e=>{const message=reading.format==='Comic'?comicWebViewFailure(e.nativeEvent,'server'):(e.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false}"
     }
   ],
   "loaderException": {
