@@ -1,7 +1,7 @@
 {
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
-  "updatedSha256": "a20cdfb089c12928440a021c9810e64df7f9738a0b521a4ae3616d6915ac68cd",
+  "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
   "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged",
   "changes": [
     {
@@ -299,6 +299,22 @@
     {
       "old": "<Button label=\"Done\" tone=\"quiet\" onPress={()=>{setReviewOnly(false);setMetadataGapFilter('')}}/>",
       "new": "<Button label=\"Done reviewing\" tone=\"quiet\" onPress={()=>{setReviewOnly(false);clearLibraryFilters();if(!onboardingDone)void finishOnboarding();}}/>"
+    },
+    {
+      "old": "<KeyboardAvoidingView style={styles.modalKeyboard} behavior={Platform.OS==='ios'?'padding':'height'}>",
+      "new": "<KeyboardAvoidingView style={styles.modalKeyboard} enabled={Platform.OS==='ios'} behavior={Platform.OS==='ios'?'padding':undefined}>"
+    },
+    {
+      "old": "<View style={{gap:6,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:p.line,paddingTop:8}}>",
+      "new": "<View style={{flexShrink:0,gap:6,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:p.line,paddingTop:8}}>"
+    },
+    {
+      "old": "              <Button label={editorDirty?'Save details first':assistState?.state==='pending'?'Searching\u2026':'Archivist Assist'} tone=\"quiet\" disabled={busy||coverPicking||editorDirty||assistState?.state==='pending'} onPress={()=>void runAssist()}/>",
+      "new": "              <Animated.View style={!reduceMotion&&(!editTitle.trim()||!editAuthor.trim()||normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'||!editYear||!(editCoverUri||editing.coverUri))&&assistState?.state!=='pending'?{opacity:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[.72,1,.72]})}:undefined}>\r\n              <Button label={editorDirty?'Save details first':assistState?.state==='pending'?'Searching\u2026':'Archivist Assist'} tone=\"gold\" disabled={busy||coverPicking||editorDirty||assistState?.state==='pending'} onPress={()=>void runAssist()}/>\r\n              </Animated.View>"
+    },
+    {
+      "old": "              {assistState?.result?.candidates.map(row=><Button key={row.candidate.provider+'|'+row.candidate.id} label={(row.candidate.fields.title||'Untitled')+' \u00b7 '+(row.candidate.fields.author||'Unknown author')} tone=\"quiet\" disabled={busy||editorDirty} onPress={()=>{\r\n                const id=row.candidate.provider+'|'+row.candidate.id;\r\n                if(row.conflicts.length)Alert.alert('Replace conflicting details?',row.conflicts.includes('anthology')?'This result is an anthology and cannot identify the individual story.':'This match conflicts with '+row.conflicts.join(', ')+'. Your saved details change only if you approve.',[{text:'Keep my details',style:'cancel'},...(row.conflicts.includes('anthology')?[]:[{text:'Accept replacement',onPress:()=>void acceptAssist(id,true)}])]);\r\n                else void acceptAssist(id);\r\n              }}/>) }\r\n",
+      "new": "              {assistState?.result?.candidates.map(row=><Pressable accessibilityRole=\"button\" key={row.candidate.provider+'|'+row.candidate.id} accessibilityLabel={'Choose '+(row.candidate.fields.title||'Untitled')+' by '+(row.candidate.fields.author||'Unknown author')} style={{flexDirection:'row',alignItems:'center',gap:12,padding:12,borderWidth:1,borderColor:p.line,borderRadius:10}} disabled={busy||editorDirty} onPress={()=>{\r\n                const id=row.candidate.provider+'|'+row.candidate.id;\r\n                if(row.conflicts.length)Alert.alert('Replace conflicting details?',row.conflicts.includes('anthology')?'This result is an anthology and cannot identify the individual story.':'This match conflicts with '+row.conflicts.join(', ')+'. Your saved details change only if you approve.',[{text:'Keep my details',style:'cancel'},...(row.conflicts.includes('anthology')?[]:[{text:'Accept replacement',onPress:()=>void acceptAssist(id,true)}])]);\r\n                else void acceptAssist(id);\r\n              }}>\r\n                <View style={{width:48,flexShrink:0}}><Artwork session={session} p={p} title={row.candidate.fields.title||'Untitled'} format=\"EPUB\" coverShape=\"portrait\" coverUri={row.candidate.fields.coverUrl}/></View>\r\n                <View style={{flex:1,minWidth:0,gap:4}}>\r\n                  <Text style={[styles.bookTitle,{color:p.ink}]}>{row.candidate.fields.title||'Untitled'}</Text>\r\n                  <Text style={[styles.meta,{color:p.muted}]}>{row.candidate.fields.author||'Unknown author'}</Text>\r\n                  <Text style={[styles.meta,{color:p.muted}]}>{[row.candidate.fields.genre?genreChoiceLabel(row.candidate.fields.genre):'Genre not recorded',row.candidate.fields.publishedYear||'Year not recorded'].join(' \u00b7 ')}</Text>\r\n                  <Text style={[styles.meta,{color:p.sage}]}>{row.automaticEligible?'Choose this edition':'Review this possible match'}</Text>\r\n                </View>\r\n              </Pressable>) }\r\n"
     }
   ]
 }

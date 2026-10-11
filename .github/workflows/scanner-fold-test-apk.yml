@@ -1,7 +1,7 @@
 name: Archivist full-app phone test APK
 on:
   push:
-    branches: ['feature/archivist-scanner-vnext-real-library', 'feature/archivist-metadata-review']
+    branches: ['feature/archivist-scanner-vnext-real-library', 'feature/archivist-metadata-review', 'feature/archivist-assist-recall']
     paths: ['.github/workflows/scanner-fold-test-apk.yml']
   workflow_dispatch:
 permissions:

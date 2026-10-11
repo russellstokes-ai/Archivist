@@ -25,17 +25,19 @@ const providerGenre=(value:unknown)=>{
  const decision=normalizeGenre(evidence);if(decision.label)return decision.label;
  // Audience is not a competing content genre: Fantasy + juvenile fiction is Fantasy.
  const content=evidence.filter(item=>normalizeGenre([item]).id!=='children-ya');
- return content.length?normalizeGenre(content).label:undefined;
+ const specific=content.length?normalizeGenre(content):decision;if(specific.label)return specific.label;
+ return normalizeGenre(content.map(item=>({...item,value:item.value.replace(/,/g,' / ')}))).label;
 };
 export function createBookProviders(settings:{openLibrary:boolean;googleBooks:boolean;googleKey?:string},request:JsonRequest,queue:RequestQueue=sharedRequestQueue):SearchProvider[]{
  const providers:SearchProvider[]=[];
  if(settings.openLibrary)providers.push({id:'open-library',async search(query:Query,page,signal){
   const params=new URLSearchParams({limit:'20',offset:String(page*20),fields:'key,title,author_name,isbn,cover_i,first_publish_year,subject'});
-  if(query.isbn)params.set('isbn',query.isbn);else{if(query.title)params.set('title',query.title);if(query.author)params.set('author',query.author);if(query.series)params.set('q',query.series+(query.seriesNumber?' '+query.seriesNumber:''));}
+  if(query.broad||query.fuzzy){const tokens=(query.title??'').replace(/[^\p{L}\p{N} ]/gu,' ').split(/\s+/).filter(x=>x.length>2).slice(0,16);params.set('q',query.fuzzy?'title:('+tokens.map(x=>x+(x.length>6?'~2':'~1')).join(' AND ')+') OR title:'+tokens.join(''):query.title??'');}
+  else if(query.isbn)params.set('isbn',query.isbn);else{if(query.title)params.set('title',query.title);if(query.author)params.set('author',query.author);if(query.series)params.set('q',query.series+(query.seriesNumber?' '+query.seriesNumber:''));}
   const raw=await queue.run('open-library',inner=>request('https://openlibrary.org/search.json?'+params,inner),signal) as {docs?:unknown;numFound?:number};
   const docs=list(raw?.docs),candidates:Candidate[]=[];
   for(const value of docs){const row=value as Record<string,unknown>,id=text(row.key);if(!id||!/^\/works\/OL\d+W$/.test(id))continue;const title=text(row.title);if(!title)continue;const author=list(row.author_name,4).map(x=>text(x)).filter(Boolean).join(', '),genre=providerGenre(row.subject),publishedYear=year(row.first_publish_year),cover=Number.isSafeInteger(row.cover_i)&&Number(row.cover_i)>0?'https://covers.openlibrary.org/b/id/'+row.cover_i+'-L.jpg':undefined;
-   candidates.push({id,provider:'open-library',identifiers:list(row.isbn).map(x=>text(x,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(publishedYear?{publishedYear}:{}),...(cover?{coverUrl:cover}:{})}});
+   candidates.push({id,provider:'open-library',relatedMatch:!!(query.broad||query.fuzzy),identifiers:list(row.isbn).map(x=>text(x,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(publishedYear?{publishedYear}:{}),...(cover?{coverUrl:cover}:{})}});
   }
   return {candidates,nextPage:typeof raw.numFound==='number'&&page*20+docs.length<raw.numFound?page+1:null};
  }});

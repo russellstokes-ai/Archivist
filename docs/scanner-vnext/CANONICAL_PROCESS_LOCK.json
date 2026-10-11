@@ -1,0 +1,13 @@
+{
+  "sourceCommit": "63b67efe25bc1073d3300cf4a6a3e96149dc0885",
+  "accepted": "2026-10-11",
+  "sha256": {
+    "scanFreshFolders": "3b9b48c7da680d6c866ac4935ca0d5e4c979342cc151550fe290271bfbae7aab",
+    "prepareOnboardingLibrary": "958ba6d1b22ebfa0ecbc96095a90d70818d497d4f9d359b074d73908b70f5f05",
+    "finishOnboarding": "6de0fb2d72deee557b3718f926100083725c61fb08e0ab1fae65d129138300d5",
+    "OnboardingGuide": "4337f00f1a789e64a952dfea739d7332356f0380849f7c3cf41432efdb75c387",
+    "openMetadataReview": "2fb04348e7904f8c0267fcb1d99db42377392a37634fb03980e343dddf67c955",
+    "RawAssetCard": "7bdfe3c0bbd73099be29a5e8d44ecf598483dc88cc0bdfd642e6aecb05b0a798",
+    "LibrarySettingsTools": "9bc3f883fa1efc7f316e25c06cd11c9a9e85fb3dc539edf3b5e3d93e5e9f299f"
+  }
+}

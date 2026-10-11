@@ -1,7 +1,7 @@
 export type SearchFields=Partial<Record<'title'|'author'|'series'|'seriesNumber'|'isbn'|'asin'|'language',string>>;
-export type Candidate={id:string;provider:string;fields:SearchFields&{genre?:string;coverUrl?:string;description?:string;publishedYear?:string};identifiers:string[];anthology?:boolean};
+export type Candidate={id:string;provider:string;fields:SearchFields&{genre?:string;coverUrl?:string;description?:string;publishedYear?:string};identifiers:string[];anthology?:boolean;relatedMatch?:boolean};
 export type SearchWork={workId:string;revision:number;fields:SearchFields;manual:Record<string,boolean|undefined>;partIds:string[]};
-export type Query=SearchFields;
+export type Query=SearchFields&{broad?:boolean;fuzzy?:boolean};
 export interface SearchProvider {id:string;available?:boolean;search(query:Query,page:number,signal?:AbortSignal):Promise<{candidates:Candidate[];nextPage:number|null}>}
 export type RankedCandidate={candidate:Candidate;score:number;conflicts:string[];automaticEligible:boolean};
 export type SearchResult={state:'review'|'no-match'|'offline'|'disabled'|'pending';candidates:RankedCandidate[];requests:number;cacheHit:boolean;issues:string[];nextPages:Record<string,number|null>;nextPlans?:Record<string,number>};
@@ -12,20 +12,29 @@ const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw new Error('Search c
 export function queryPlans(fields:SearchFields):Query[]{
  const clean:Query={};for(const key of ['title','author','series','seriesNumber','isbn','asin','language'] as const){const value=fields[key]?.trim();if(!value)continue;if(value.length>512||/[\r\n]|(?:content|file):\/\/|[a-z]:[\\/]/i.test(value))throw new Error('Search accepts bibliographic clues, not file paths');clean[key]=value;}
  if(!clean.title&&!clean.author&&!clean.isbn&&!clean.asin)return [];
- const plans=[clean];if(clean.title&&(clean.author||clean.series||normalize(clean.title)!==clean.title)){plans.push({...clean,title:normalize(clean.title),author:undefined,series:undefined,seriesNumber:undefined});}return plans;
+ const plans:Query[]=[clean];if(clean.title){plans.push({title:normalize(clean.title),broad:true});plans.push({title:normalize(clean.title),fuzzy:true});}return plans;
 }
 export function rankCandidates(fields:SearchFields,candidates:Candidate[]):RankedCandidate[]{
  const identifiers=[fields.isbn,fields.asin].filter(Boolean).map(x=>normalize(x).replace(/ /g,''));
- return candidates.map(candidate=>{
+ const base=(title?:string)=>normalize((title??'').replace(/(?:\s*\([^)]*\))+\s*$/g,''));
+ const supplemented=candidates.map(candidate=>{
+  if(candidate.anthology||!candidate.fields.author)return candidate;
+  const peers=candidates.filter(other=>!other.anthology&&base(other.fields.title)===base(candidate.fields.title)&&normalize(other.fields.author)===normalize(candidate.fields.author));
+  const fields={...candidate.fields};for(const key of ['genre','publishedYear','coverUrl'] as const){if(fields[key])continue;const values=new Set(peers.map(other=>other.fields[key]).filter((v):v is string=>!!v));if(values.size===1)fields[key]=[...values][0];}
+  return {...candidate,fields};
+ });
+ return supplemented.map(candidate=>{
   const conflicts:string[]=[];const title=!!fields.title&&normalize(fields.title)===normalize(candidate.fields.title),author=!!fields.author&&normalize(fields.author)===normalize(candidate.fields.author);
   const ids=candidate.identifiers.map(x=>normalize(x).replace(/ /g,'')),identifier=identifiers.some(x=>ids.includes(x));
   if(fields.author&&candidate.fields.author&&!author)conflicts.push('author');
   if(identifiers.length&&ids.length&&!identifier)conflicts.push('identifier');
   if(fields.seriesNumber&&candidate.fields.seriesNumber&&normalize(fields.seriesNumber)!==normalize(candidate.fields.seriesNumber))conflicts.push('series-number');
   if(candidate.anthology)conflicts.push('anthology');
+  const words=normalize(fields.title).split(' ').filter(x=>x.length>2),candidateWords=new Set(normalize(candidate.fields.title).split(' '));
+  const partial=words.length>0&&words.filter(x=>candidateWords.has(x)).length/words.length>=.7;
   const series=!!fields.series&&normalize(fields.series)===normalize(candidate.fields.series);
-  return {candidate,score:(identifier?1000:0)+(title?100:0)+(author?40:0)+(series?10:0)-(conflicts.length*50),conflicts,automaticEligible:conflicts.length===0&&(identifier||title&&author)};
- }).sort((a,b)=>b.score-a.score||a.candidate.id.localeCompare(b.candidate.id));
+  return {candidate,score:(identifier?1000:0)+(title?100:partial?70:candidate.relatedMatch?5:0)+(author?40:0)+(series?10:0)-(conflicts.length*50),conflicts,automaticEligible:conflicts.length===0&&(identifier||title&&author)};
+ }).sort((a,b)=>b.score-a.score);
 }
 export class ProviderRequestError extends Error {constructor(public status:number,public retryAfterMs=0){super('Provider request failed ('+status+')');}}
 type Job={provider:string;operation:(signal:AbortSignal)=>Promise<unknown>;resolve:(value:unknown)=>void;reject:(error:Error)=>void;controller:AbortController;settled:boolean;timer?:ReturnType<typeof setTimeout>;signal?:AbortSignal;abort?:()=>void};
@@ -62,7 +71,7 @@ export const sharedRequestQueue=new RequestQueue();
 export class SearchService {
  private active=new Map<string,{promise:Promise<SearchResult>;signal?:AbortSignal}>();private now:()=>number;private sessions=new Map<string,Set<string>>();
  constructor(private providers:SearchProvider[],private cache:SearchCache,options:{now?:()=>number}={}){this.now=options.now??Date.now;if(providers.length>3||new Set(providers.map(p=>p.id)).size!==providers.length)throw new Error('Invalid provider set');}
- key(work:SearchWork){return JSON.stringify(['search-2',work.workId,queryPlans(work.fields),this.providers.map(p=>p.id).sort()]);}
+ key(work:SearchWork){return JSON.stringify(['search-3',work.workId,queryPlans(work.fields),this.providers.map(p=>p.id).sort()]);}
  search(work:SearchWork,options:SearchPolicy):Promise<SearchResult>{
   check(options.signal);if(!options.online)return Promise.resolve(this.empty('offline'));if(!options.automatic&&!options.explicit)return Promise.resolve(this.empty('disabled'));
   const activeKey=this.key(work)+'|revision='+work.revision;const existing=this.active.get(activeKey);if(existing&&!existing.signal?.aborted)return existing.promise;
@@ -81,7 +90,7 @@ export class SearchService {
   for(const provider of this.providers){
    if(provider.available===false){result.issues.push(provider.id+':unconfigured');continue;}
    for(const [planIndex,query] of plans.entries()){
-    check(options.signal);
+    check(options.signal);if(query.fuzzy&&(!options.explicit||rankCandidates(work.fields,[...candidates.values()]).some(row=>row.automaticEligible)))continue;
     try{result.requests++;const page=await provider.search(query,0,options.signal);check(options.signal);if(page.candidates.length>20)throw new Error('Provider candidate budget');for(const candidate of page.candidates)candidates.set(candidate.provider+'|'+candidate.id,candidate);if(page.nextPage!==null||result.nextPages[provider.id]===undefined){result.nextPages[provider.id]=page.nextPage;result.nextPlans![provider.id]=planIndex;}}
     catch(error){check(options.signal);result.issues.push(provider.id+':request-failed');break;}
    }
