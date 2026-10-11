@@ -2,7 +2,7 @@
   "file": "mobile/App.tsx",
   "baseSha256": "41e45b168ee1e2966e80a4c38c327b09b4ec547b8a4871dc7759527aa2cfd5c8",
   "updatedSha256": "9d3544ada17e1b9838ba8a4ed1965c15d7f55d10aac53411514a3e28d7c9712e",
-  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase; 2026-10-11: restricted local comic WebView secure HTML origin and reader-only error/retry messages. No scanner, media path permissions or render engine changes.; 2026-10-11: lift only embedded portrait player spacing; avoid fullscreen/unfolded changes; Android local comic static HTML WebView attempts isolated data URI once after access denied, without changing comic gesture/rendering code.",
+  "scope": "Controller/data bindings and explicitly targeted Archivist Assist controls only; styles, navigation and brand unchanged; 2026-10-11: user-approved replacement of circular loading indicators with Book Loader (visual only); 2026-10-11: separate explicitly scoped Live Player Play/Pause morph and immediate intent-based touch, canonical style unchanged; 2026-10-11: four Lottie FF/RW icons, white button backgrounds and exact existing 3/6 page-turn event sequencing; underlying LivingBookCanvas renderer untouched; 2026-10-11: mini-player only 20dp audio waveform with play pause and app-activity gate, no layout resize; Commercial review: cancel 3/6 leaf burst when media key changes, player hidden, or Reduced Motion; original renderer/scanner unchanged.; cancellation guarantees an in-flight skip cannot strand the unchanged Canvas renderer in a turning phase; 2026-10-11: restricted local comic WebView secure HTML origin and reader-only error/retry messages. No scanner, media path permissions or render engine changes.; 2026-10-11: lift only embedded portrait player spacing; avoid fullscreen/unfolded changes; Android local comic static HTML WebView attempts isolated data URI once after access denied, without changing comic gesture/rendering code.; protected comic WebView startup watchdog: seven seconds after initial HTML load, ready event cancels; no onError fallback callback required; retry once and report source reconnect if both fail. No reader zoom code touched.",
   "changes": [
     {
       "old": "import {groupLocalWorks, LocalWork} from './localWorks';",
@@ -495,6 +495,34 @@
     {
       "old": "key={reading.uri} source={reading.format==='Comic'?{html:localReader.html,baseUrl:'https://appassets.androidplatform.net/'}:{html:localReader.html}} onError={event=>{const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}}",
       "new": "key={reading.uri+(reading.format==='Comic'&&comicReaderUseDataFallback?':data':'')} source={reading.format==='Comic'?comicReaderWebViewSource(localReader.html,Platform.OS==='android'&&comicReaderUseDataFallback):{html:localReader.html}} renderError={reading.format==='Comic'?()=><View style={{flex:1,backgroundColor:'#000'}}/>:undefined} onError={event=>{if(reading.format==='Comic'&&Platform.OS==='android'&&!comicWebViewFallbackAttempt.current){comicWebViewFallbackAttempt.current=true;setComicReaderUseDataFallback(true);return;} const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}}"
+    },
+    {
+      "old": "  const comicWebViewFallbackAttempt=useRef(false);",
+      "new": "  const comicWebViewFallbackAttempt=useRef(false);\n  const comicReaderReady=useRef(false);\n  const comicReaderReadyTimer=useRef<ReturnType<typeof setTimeout>|null>(null);\n  useEffect(()=>()=>{if(comicReaderReadyTimer.current!==null)clearTimeout(comicReaderReadyTimer.current);},[]);"
+    },
+    {
+      "old": "    comicWebViewFallbackAttempt.current=false;\n    setComicReaderUseDataFallback(false);",
+      "new": "    comicWebViewFallbackAttempt.current=false;\n    comicReaderReady.current=false;\n    if(comicReaderReadyTimer.current!==null){clearTimeout(comicReaderReadyTimer.current);comicReaderReadyTimer.current=null;}\n    setComicReaderUseDataFallback(false);"
+    },
+    {
+      "old": "const closeReader=()=>{++readerOpenGeneration.current;comicWebViewFallbackAttempt.current=false;setComicReaderUseDataFallback(false);",
+      "new": "const closeReader=()=>{++readerOpenGeneration.current;comicWebViewFallbackAttempt.current=false;comicReaderReady.current=false;if(comicReaderReadyTimer.current!==null){clearTimeout(comicReaderReadyTimer.current);comicReaderReadyTimer.current=null;}setComicReaderUseDataFallback(false);"
+    },
+    {
+      "old": "  const readingIdentity=useRef(reading?.uri||reading?.id);readingIdentity.current=reading?.uri||reading?.id;\n  function handleReaderMessage(raw:string){",
+      "new": "  const readingIdentity=useRef(reading?.uri||reading?.id);readingIdentity.current=reading?.uri||reading?.id;\n  function clearComicReaderWatch(){\n    if(comicReaderReadyTimer.current!==null){clearTimeout(comicReaderReadyTimer.current);comicReaderReadyTimer.current=null;}\n  }\n  function retryComicReaderOriginOnce(){\n    clearComicReaderWatch();\n    if(Platform.OS==='android'&&!comicWebViewFallbackAttempt.current){\n      comicWebViewFallbackAttempt.current=true;\n      comicReaderReady.current=false;\n      setComicReaderUseDataFallback(true);\n      return true;\n    }\n    return false;\n  }\n  function armComicReaderReadyWatch(identity:string){\n    if(comicReaderReady.current)return;\n    clearComicReaderWatch();\n    // The unchanged comic HTML sends reader-ready on its first animation frame.\n    // Android's stock WebView error page may not send onError, so use a bounded\n    // watchdog only for this local-comic HTML route, never for EPUB or server.\n    comicReaderReadyTimer.current=setTimeout(()=>{\n      comicReaderReadyTimer.current=null;\n      if(comicReaderReady.current||readingIdentity.current!==identity)return;\n      if(!retryComicReaderOriginOnce()){\n        const message='This comic reader could not start. Try opening it again or reconnect its source folder.';\n        setReaderLoadError(message);setError(message);\n      }\n    },7000);\n  }\n  function handleReaderMessage(raw:string){"
+    },
+    {
+      "old": "      if(message?.type==='reader-position'||message?.type==='reader-ready'){",
+      "new": "      if(message?.type==='reader-ready'&&reading.format==='Comic'){comicReaderReady.current=true;clearComicReaderWatch();}\n      if(message?.type==='reader-position'||message?.type==='reader-ready'){"
+    },
+    {
+      "old": "if(reading.format==='Comic'&&Platform.OS==='android'&&!comicWebViewFallbackAttempt.current){comicWebViewFallbackAttempt.current=true;setComicReaderUseDataFallback(true);return;}",
+      "new": "if(reading.format==='Comic'&&retryComicReaderOriginOnce())return;"
+    },
+    {
+      "old": "onLoadEnd={()=>sendReaderCommand('appearance',{value:readerAppearance})} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'}",
+      "new": "onLoadEnd={()=>{sendReaderCommand('appearance',{value:readerAppearance});if(reading.format==='Comic')armComicReaderReadyWatch(reading.uri||reading.id);}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'}"
     }
   ],
   "loaderException": {
