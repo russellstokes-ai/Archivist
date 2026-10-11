@@ -4,6 +4,8 @@
 
 # Archivist
 
+> **Canonical app baseline (2026-10-11): `df4c39b`.** Agents and contributors: read [the baseline record](docs/scanner-vnext/CANONICAL_BASELINE.md) and [AGENTS.md](AGENTS.md) before making changes. Preserve the accepted scanner, onboarding and UI.
+
 **Your library. Yours.**
 
 Archivist 0.9.3 is a local-first personal library for ebooks, audiobooks, comics and PDFs. The iOS and Android app works on its own; an optional private server adds household sharing, remote storage, web administration and self-hosting through Home Assistant or Docker.
