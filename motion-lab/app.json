@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Archivist Motion Lab",
+    "slug": "archivist-motion-lab",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "app.archivist.motionlab"
+    },
+    "ios": {
+      "bundleIdentifier": "app.archivist.motionlab"
+    }
+  }
+}
