@@ -9,9 +9,9 @@ assert.ok(app.includes('projectScannerWorks(local,groupLocalWorks)'));assert.ok(
 const approvedPolish=JSON.parse(fs.readFileSync(path.join(repo,'docs/scanner-vnext/COMMERCIAL_POLISH_UI_EXCEPTIONS.json'),'utf8'));
 assert.equal(approvedPolish.parentSource,'df4c39b44394d8c512ca0298bffa7f19da356490');
 for(const change of [...approvedPolish.changes].reverse()){
-  const value=change.new.replaceAll('\\r\\n','\\n');
+  const value=change.new.replaceAll('\r\n','\n');
   assert.equal(app.split(value).length-1,1,'Approved polish difference not found exactly once');
-  app=app.replace(value,change.old.replaceAll('\\r\\n','\\n'));
+  app=app.replace(value,change.old.replaceAll('\r\n','\n'));
 }
 for(const change of [...manifest.changes].reverse()){const value=change.new.replaceAll('\r\n','\n');assert.equal(app.split(value).length-1,1,'Explicit binding differs');app=app.replace(value,change.old.replaceAll('\r\n','\n'));}
 assert.equal(crypto.createHash('sha256').update(app.replaceAll('\n','\r\n')).digest('hex'),manifest.baseSha256,'Changes beyond explicitly targeted scanner bindings');
