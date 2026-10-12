@@ -3,7 +3,9 @@ const fs=require('node:fs');
 const ts=require('typescript');
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
 
-const {buildBookLookupHints,scoreOnlineBookCandidate,mergeOnlineBookCandidate,lookupOnlineBook}=require('./onlineBookMetadata.ts');
+const {buildBookLookupHints,scoreOnlineBookCandidate,mergeOnlineBookCandidate,lookupOnlineBook,shouldLookupBookOnline,onlineBookCacheKey}=require('./onlineBookMetadata.ts');
+
+assert.match(onlineBookCacheKey({title:'Dune',author:'Frank Herbert',format:'EPUB'}),/^v2\|/,'optimized matcher must ignore stale cache entries from earlier scanner builds');
 
 const sparse={title:'Dune',author:'',series:'',format:'EPUB',uri:'content://root/document/primary:Books%2FFrank%20Herbert%2FDune%2F01%20-%20Dune.epub'};
 const hints=buildBookLookupHints(sparse);
@@ -45,6 +47,22 @@ assert.equal(sparseMerge.publisher,'Ace');
 assert.equal(sparseMerge.coverUri,'https://covers/dune.jpg');
 assert.equal(sparseMerge.needsReview,false);
 
+assert.equal(
+  shouldLookupBookOnline({title:'Dune',author:'Frank Herbert',format:'EPUB',coverUri:'file:///covers/dune.jpg'}),
+  false,
+  'missing optional description/genre/publisher/year must not trigger normal catalogue lookup'
+);
+assert.equal(
+  shouldLookupBookOnline({title:'Dune',author:'Frank Herbert',format:'EPUB'}),
+  true,
+  'a missing publication cover should trigger one normal lookup'
+);
+assert.equal(
+  shouldLookupBookOnline({title:'Dune',author:'',format:'EPUB',coverUri:'file:///covers/dune.jpg',needsReview:true}),
+  true,
+  'unresolved identity must still be searched'
+);
+
 (async()=>{
   const openLibraryCalls=[];
   const fetcher=async(url,init)=>{
@@ -82,6 +100,12 @@ assert.equal(sparseMerge.needsReview,false);
   const refreshed=await lookupOnlineBook(staleInput,{fetcher:bypassFetcher,cache:cachedMiss,ignoreCache:true});
   assert.ok(bypassCalls>0,'explicit refresh must bypass stale positive/negative metadata cache');
   assert.ok(refreshed.queried.length>0,'cache bypass must execute a fresh provider query even when the new result remains low-confidence');
+
+  let deepCalls=0;
+  const deepFetcher=async()=>{deepCalls++;return {ok:true,status:200,json:async()=>({docs:[]})}};
+  const deepResult=await lookupOnlineBook({title:'Dune',author:'Frank Herbert',series:'Dune Chronicles',format:'EPUB'},{fetcher:deepFetcher,openLibraryEnabled:true,deep:true,ignoreCache:true});
+  assert.ok(deepCalls>=3,'Deep Search must execute broader per-work query plans instead of stopping after the first weak result');
+  assert.ok(deepResult.queried.length>=3);
 
   const googleOnlyCalls=[];
   const googleOnlyFetcher=async(url)=>{

@@ -242,15 +242,10 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		a.db.Exec("UPDATE sources SET status='Unavailable' WHERE id=?", id)
 		return errors.New("source unavailable; previous catalogue retained")
 	}
-	total := 0
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() || d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
-			return nil
-		}
-		if kind(path) != "" { total++ }
-		return nil
-	})
-	if progress != nil { progress(0, total) }
+	// Large-library scans are single-pass. Counting with a complete first walk
+	// doubled NAS/USB I/O and delayed useful work. Total remains unknown until
+	// discovery completes, while progress reports the rolling discovered count.
+	if progress != nil { progress(0, 0) }
 	stage, e := os.CreateTemp("", "archivist-scan-*.jsonl")
 	if e != nil {
 		return e
@@ -276,27 +271,12 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
-	cached := map[string]cachedEntry{}
-	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
-	if cacheErr != nil {
-		return cacheErr
-	}
-	for rows.Next() {
-		var rel string
-		var item cachedEntry
-		var review int
-		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.Genre,&item.SeriesNumber,&item.PublishedYear,&item.Narrator,&item.Publisher,&item.ISBN,&item.ASIN,&item.Language,&item.Description,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
-			rows.Close()
-			return cacheErr
-		}
-		item.NeedsReview = review != 0
-		cached[rel] = item
-	}
-	if cacheErr = rows.Err(); cacheErr != nil {
-		rows.Close()
-		return cacheErr
-	}
-	rows.Close()
+	// Query unchanged-file fingerprints through one prepared SQLite statement
+	// instead of loading the whole previous catalogue into RAM. This keeps
+	// memory bounded when a source contains hundreds of thousands of files.
+	cacheStmt, cacheErr := a.db.Prepare(`SELECT title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=? AND relative_path=?`)
+	if cacheErr != nil { return cacheErr }
+	defer cacheStmt.Close()
 
 	count := 0
 	reused := 0
@@ -335,7 +315,17 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			SizeBytes: info.Size(),
 			ModifiedUnix: info.ModTime().Unix(),
 		}
-		if existing, ok := cached[rel]; ok && existing.ScanSignature == signature {
+		var existing cachedEntry
+		var existingReview int
+		cacheLookupErr:=cacheStmt.QueryRow(id,rel).Scan(
+			&existing.Title,&existing.Author,&existing.Series,&existing.Genre,&existing.SeriesNumber,&existing.PublishedYear,
+			&existing.Narrator,&existing.Publisher,&existing.ISBN,&existing.ASIN,&existing.Language,&existing.Description,
+			&existing.MetadataSource,&existing.MetadataConfidence,&existingReview,&existing.ReviewReason,
+			&existing.ScanSignature,&existing.SizeBytes,&existing.ModifiedUnix,
+		)
+		existing.NeedsReview=existingReview!=0
+		if cacheLookupErr!=nil && cacheLookupErr!=sql.ErrNoRows { return cacheLookupErr }
+		if cacheLookupErr==nil && existing.ScanSignature == signature {
 			item.Title = existing.Title
 			item.Author = existing.Author
 			item.Series = existing.Series
@@ -376,7 +366,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			reviewCount++
 		}
 		count++
-		if progress != nil && (count == total || count%10 == 0) { progress(count, total) }
+		if progress != nil && count%10 == 0 { progress(count, 0) }
 		return encoder.Encode(item)
 	})
 	if e != nil {
@@ -441,7 +431,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		a.db.Exec("UPDATE sources SET status=? WHERE id=?", "Scanned; library grouping needs attention", id)
 		return e
 	}
-	if progress != nil { progress(total, total) }
+	if progress != nil { progress(count, count) }
 	return nil
 }
 func (a *app) scan(id int64) error { return a.scanWithProgress(id, nil) }
@@ -638,6 +628,24 @@ func (a *app) routes() http.Handler {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
+		cursorEnabled:=0
+		afterReview:=0
+		afterTitle:=r.URL.Query().Get("afterTitle")
+		var afterID int64
+		if raw:=strings.TrimSpace(r.URL.Query().Get("afterId"));raw!="" {
+			n,err:=strconv.ParseInt(raw,10,64)
+			if err!=nil||n<0 { fail(w,400,errors.New("invalid asset cursor")); return }
+			afterID=n
+			if afterID>0 {
+				cursorEnabled=1
+				offset=0
+				if rawReview:=r.URL.Query().Get("afterReview");rawReview!="" {
+					n,err:=strconv.Atoi(rawReview)
+					if err!=nil||(n!=0&&n!=1) { fail(w,400,errors.New("invalid asset review cursor")); return }
+					afterReview=n
+				}
+			}
+		}
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.series_number,a.genre,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
 			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ?)
@@ -650,9 +658,12 @@ func (a *app) routes() http.Handler {
 			AND (?=0 OR a.needs_review=1)
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
+			AND (?=0 OR a.needs_review<? OR (a.needs_review=? AND (a.title>? OR (a.title=? AND a.id>?))))
 			ORDER BY a.needs_review DESC,a.title,a.id LIMIT ? OFFSET ?`,
 			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
-			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
+			availability, availability, availability, who(r).Owner, who(r).ID,
+			cursorEnabled,afterReview,afterReview,afterTitle,afterTitle,afterID,
+			limit, offset)
 		if e != nil {
 			fail(w, 500, e)
 			return

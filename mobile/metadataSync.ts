@@ -158,6 +158,11 @@ function shouldGroupAudioBooks(books:SynchronizableBook[]){
   if(books.length<=1)return true;
   const trackLike=books.every(book=>isGenericMediaTitle(fileStem(book.uri),'Audio',books.length));
   if(trackLike)return true;
+  // Album/work tags are work-level evidence even when individual filenames are
+  // descriptive chapter names. Require every sibling to provide the same value
+  // so unrelated standalone audiobooks in one folder are never collapsed.
+  const embeddedWorkTitles=books.map(book=>clean(book.embeddedMetadata?.workTitle||'')).filter(Boolean);
+  if(embeddedWorkTitles.length===books.length&&new Set(embeddedWorkTitles.map(normal)).size===1)return true;
   const inferred=new Set(books.map(book=>{
     const identity=inferLocalBookMetadata(book.uri,'Audio',{siblingMediaCount:books.length});
     return [normal(identity.title),normal(identity.author),normal(identity.series),identity.seriesNumber??''].join('|');

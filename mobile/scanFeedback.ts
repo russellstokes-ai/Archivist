@@ -77,14 +77,16 @@ export function scanProgressPercent(progress:LocalScanProgress){
     ? Math.max(0,Math.min(1,(progress.processed||0)/progress.total))
     : 0;
   const ranges:Record<LocalScanProgress['phase'],[number,number]>={
-    discovering:[3,18],
-    matching:[18,22],
-    'checking-duplicates':[22,24],
-    preparing:[24,28],
-    'reading-metadata':[28,46],
-    'online-books':[46,72],
-    'online-comics':[72,86],
-    covers:[86,97],
+    discovering:[3,26],
+    matching:[26,31],
+    'checking-duplicates':[31,34],
+    preparing:[34,40],
+    // reading-metadata is reserved for explicit work-scoped Deep Search and is
+    // no longer part of normal Prepare Library.
+    'reading-metadata':[40,44],
+    'online-books':[40,72],
+    'online-comics':[72,85],
+    covers:[85,97],
     complete:[100,100],
   };
   const [start,end]=ranges[progress.phase];

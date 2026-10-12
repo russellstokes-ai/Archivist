@@ -116,6 +116,47 @@ func TestScanBuildsConservativeLogicalWorks(t *testing.T) {
 }
 
 
+func TestServerAutoGroupingUsesWorkEvidence(t *testing.T) {
+	a:=fixture(t)
+	if e:=a.initCatalogue();e!=nil{t.Fatal(e)}
+	root:=t.TempDir()
+	for _,name:=range []string{"Dune - Part 01.mp3","Dune - Part 02.mp3","Standalone One.m4b","Standalone Two.m4b"} {
+		if e:=os.WriteFile(filepath.Join(root,name),[]byte("audio"),0600);e!=nil{t.Fatal(e)}
+	}
+	if e:=a.addSource("Main",root);e!=nil{t.Fatal(e)}
+	if e:=a.scan(1);e!=nil{t.Fatal(e)}
+
+	rows,e:=a.db.Query(`SELECT w.title,count(ea.asset_id)
+		FROM works w JOIN editions ed ON ed.work_id=w.id
+		JOIN edition_assets ea ON ea.edition_id=ed.id
+		WHERE ed.format='Audio' GROUP BY w.id ORDER BY w.title`)
+	if e!=nil{t.Fatal(e)}
+	defer rows.Close()
+	counts:=map[string]int{}
+	for rows.Next(){var title string;var files int;if e=rows.Scan(&title,&files);e!=nil{t.Fatal(e)};counts[title]=files}
+	if e=rows.Err();e!=nil{t.Fatal(e)}
+	if counts["Dune"]!=2{t.Fatalf("root multipart Dune files=%d want 2; all=%v",counts["Dune"],counts)}
+	if counts["Standalone One"]!=1 || counts["Standalone Two"]!=1 {
+		t.Fatalf("standalone root audiobooks were incorrectly merged: %v",counts)
+	}
+}
+
+func TestNestedFolderDoesNotMergeIndependentStandaloneAudiobooks(t *testing.T) {
+	a:=fixture(t)
+	if e:=a.initCatalogue();e!=nil{t.Fatal(e)}
+	root:=t.TempDir()
+	dir:=filepath.Join(root,"Loose Audiobooks")
+	if e:=os.MkdirAll(dir,0700);e!=nil{t.Fatal(e)}
+	for _,name:=range []string{"Book One.m4b","Book Two.m4b"} {
+		if e:=os.WriteFile(filepath.Join(dir,name),[]byte("audio"),0600);e!=nil{t.Fatal(e)}
+	}
+	if e:=a.addSource("Main",root);e!=nil{t.Fatal(e)}
+	if e:=a.scan(1);e!=nil{t.Fatal(e)}
+	var works int
+	if e:=a.db.QueryRow(`SELECT count(*) FROM works w JOIN editions e ON e.work_id=w.id WHERE e.format='Audio'`).Scan(&works);e!=nil{t.Fatal(e)}
+	if works!=2{t.Fatalf("works=%d want 2 independent standalone audiobooks",works)}
+}
+
 func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 	a:=fixture(t)
 	initAllProgressForTest(t,a)
@@ -156,6 +197,34 @@ func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 	var works []map[string]any
 	if e:=json.Unmarshal(res.Body.Bytes(),&works);e!=nil{t.Fatal(e)}
 	if len(works)!=1 || works[0]["title"]!="Unknown"{t.Fatalf("filtered works=%v",works)}
+
+	// Raw asset review/organisation pages use a stable
+	// needs-review/title/id keyset cursor as well.
+	assetRes:=call("/api/books?limit=1")
+	if assetRes.Code!=200{t.Fatalf("first asset cursor page=%d %s",assetRes.Code,assetRes.Body.String())}
+	var firstAssets []book
+	if e:=json.Unmarshal(assetRes.Body.Bytes(),&firstAssets);e!=nil{t.Fatal(e)}
+	if len(firstAssets)!=1{t.Fatalf("first asset cursor page=%v",firstAssets)}
+	firstAsset:=firstAssets[0]
+	assetRes=call("/api/books?limit=1&afterReview="+map[bool]string{true:"1",false:"0"}[firstAsset.NeedsReview]+"&afterTitle="+firstAsset.Title+"&afterId="+strconv.FormatInt(firstAsset.ID,10))
+	if assetRes.Code!=200{t.Fatalf("second asset cursor page=%d %s",assetRes.Code,assetRes.Body.String())}
+	var secondAssets []book
+	if e:=json.Unmarshal(assetRes.Body.Bytes(),&secondAssets);e!=nil{t.Fatal(e)}
+	if len(secondAssets)!=1 || secondAssets[0].ID==firstAsset.ID {t.Fatalf("asset cursor did not advance: first=%v second=%v",firstAssets,secondAssets)}
+
+	// Current clients can page large catalogues by the stable title/id cursor.
+	res=call("/api/works?limit=1")
+	if res.Code!=200{t.Fatalf("first cursor page=%d %s",res.Code,res.Body.String())}
+	var firstPage []map[string]any
+	if e:=json.Unmarshal(res.Body.Bytes(),&firstPage);e!=nil{t.Fatal(e)}
+	if len(firstPage)!=1{t.Fatalf("first cursor page=%v",firstPage)}
+	firstTitle,_:=firstPage[0]["title"].(string)
+	firstID:=int64(firstPage[0]["id"].(float64))
+	res=call("/api/works?limit=1&afterTitle="+firstTitle+"&afterId="+strconv.FormatInt(firstID,10))
+	if res.Code!=200{t.Fatalf("second cursor page=%d %s",res.Code,res.Body.String())}
+	var secondPage []map[string]any
+	if e:=json.Unmarshal(res.Body.Bytes(),&secondPage);e!=nil{t.Fatal(e)}
+	if len(secondPage)!=1 || int64(secondPage[0]["id"].(float64))==firstID { t.Fatalf("cursor did not advance: first=%v second=%v",firstPage,secondPage) }
 
 	res=call("/api/library-summary")
 	if res.Code!=200{t.Fatalf("summary=%d %s",res.Code,res.Body.String())}

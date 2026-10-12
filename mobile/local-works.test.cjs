@@ -32,6 +32,13 @@ assert.equal(grouped[0].files,2);
 assert.equal(grouped[0].tracks[0].id,1);
 assert.equal(grouped[0].coverUri,'content://root/Dune.jpg');
 
+const propertyOrdered=groupLocalWorks([
+  book(61,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2Fz-last.mp3',{title:'Chapter B',embeddedMetadata:{workTitle:'Dune',trackNumber:2}}),
+  book(60,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2Fa-first.mp3',{title:'Chapter A',embeddedMetadata:{workTitle:'Dune',trackNumber:1}}),
+]);
+assert.equal(propertyOrdered.length,1);
+assert.deepEqual(propertyOrdered[0].tracks.map(item=>item.id),[60,61],'embedded track numbers must order the parts without changing work metadata');
+
 const manuallyNamed = groupLocalWorks([
   book(11,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2F01%20-%20Opening.mp3',{title:'Dune (Author Cut)',metadataSource:'manual'}),
   book(12,'content://root/document/primary:Audiobooks%2FFrank%20Herbert%2FDune%2F02%20-%20Arrakis.mp3',{title:'Dune (Author Cut)',metadataSource:'manual'}),

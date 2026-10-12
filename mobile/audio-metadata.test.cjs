@@ -28,6 +28,8 @@ const frames=Buffer.concat([
   textFrame('TPE1','Frank Herbert'),
   textFrame('TDRC','1965'),
   textFrame('TPUB','Chilton'),
+  textFrame('TRCK','7/36'),
+  textFrame('TPOS','2/4'),
   userFrame('Narrator','Simon Vance'),
   userFrame('Series','Dune'),
   userFrame('Series Number','1'),
@@ -39,6 +41,8 @@ assert.equal(fields.title,'Dune');
 assert.equal(fields.author,'Frank Herbert');
 assert.equal(fields.publishedYear,1965);
 assert.equal(fields.publisher,'Chilton');
+assert.equal(fields.trackNumber,7);
+assert.equal(fields.discNumber,2);
 assert.equal(fields.narrator,'Simon Vance');
 assert.equal(fields.series,'Dune');
 assert.equal(fields.seriesNumber,1);
