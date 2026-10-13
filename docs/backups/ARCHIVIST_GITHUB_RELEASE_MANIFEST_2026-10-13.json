@@ -1,0 +1,922 @@
+{
+  "schema_version": 1,
+  "created_utc_date": "2026-10-13",
+  "repository": "russellstokes-ai/Archivist",
+  "source": "GitHub releases REST API",
+  "scope": "Release metadata and checksums only; release assets not duplicated or downloaded",
+  "count": 42,
+  "releases": [
+    {
+      "tag": "ui-motion-commercial-review-d176c74",
+      "target_commitish": "d176c74b30e94a4b875088327e64153c1db3b6eb",
+      "published_at": "2026-10-11T18:21:15Z",
+      "assets": [
+        {
+          "name": "Archivist-UI-Motion-Review-d176c74.apk",
+          "bytes": 45566826,
+          "sha256": "d362e8a62febe88aa5ef31e7a523dd43d2e8aa50efecf70290f9217597b138a6",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-d176c74/Archivist-UI-Motion-Review-d176c74.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 105,
+          "sha256": "8879bcb2761865e5657fb1d6ef623a2efd02df83e609afcd5801db5e21ec08c1",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-d176c74/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 750,
+          "sha256": "a8c672096b8e6b58c0ad2e40e8cca899364616dbf75eaeb19201d2916b5ce5d7",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-d176c74/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "ui-motion-commercial-review-c9a3e96",
+      "target_commitish": "c9a3e96dea749dbd3be7c67b4d6e5e51ddbdfb8b",
+      "published_at": "2026-10-11T18:08:40Z",
+      "assets": [
+        {
+          "name": "Archivist-UI-Motion-Review-c9a3e96.apk",
+          "bytes": 45565542,
+          "sha256": "46029279bd6af1d990cca3f606bd9e778458a8d8ecda633ee68154139b1a0de1",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-c9a3e96/Archivist-UI-Motion-Review-c9a3e96.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 105,
+          "sha256": "424d48729c9dfb92ea965efa5ff6ed6a41de784c434edfd375f2fc3718bb22a7",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-c9a3e96/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 750,
+          "sha256": "131a011448c64c2333cc3f48d7d084e1a70e578e40d7f7aa9894b08361b3e9af",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-c9a3e96/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "ui-motion-commercial-review-ad11c86",
+      "target_commitish": "ad11c86d592d3076095c07b64752ab84467d364d",
+      "published_at": "2026-10-11T18:32:11Z",
+      "assets": [
+        {
+          "name": "Archivist-Six-Features-Comic-ad11c86.apk",
+          "bytes": 45566826,
+          "sha256": "91408f51fd3587ddc405f1037e243b87f6f9e72fab241c2f6540a04b09b5424b",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-ad11c86/Archivist-Six-Features-Comic-ad11c86.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 107,
+          "sha256": "9fc67df984a054fb2f00b56f431667e2c4b5e49edd293fc1bf1c80435d3ac439",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-ad11c86/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 898,
+          "sha256": "e867dfc83f6f0baded50d174f544f27a0f980d18293d07c3c270ac067b2742c5",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-ad11c86/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "ui-motion-commercial-review-375badd",
+      "target_commitish": "375badd16906cd1f228922ac9019bfd92d9ffed5",
+      "published_at": "2026-10-11T18:31:21Z",
+      "assets": [
+        {
+          "name": "Archivist-UI-Motion-Review-375badd.apk",
+          "bytes": 45566826,
+          "sha256": "01827b1f29f93949abc5acd3a96f8f1aadeb74bb41f4502da7584c00a7610d4c",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-375badd/Archivist-UI-Motion-Review-375badd.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 105,
+          "sha256": "392686f778408c274d65a034e3c6d943de96f8bc9dfe22e7b29df21823c8b945",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-375badd/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 750,
+          "sha256": "ef125f3177a1caf5b2d35fa60b01d4c24faa1c7b6cb8a16a32240c7c203e048f",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/ui-motion-commercial-review-375badd/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "skip-motion-preview-26e4671",
+      "target_commitish": "26e4671cf9b81d0875b3a8e402a21955e955d5a5",
+      "published_at": "2026-10-11T17:43:45Z",
+      "assets": [
+        {
+          "name": "Archivist-FF-RW-26e4671.apk",
+          "bytes": 45551270,
+          "sha256": "f52c050265a43db19213c3e64d421a583239b65c35ed71d1ec1f1d1e6dde4414",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/skip-motion-preview-26e4671/Archivist-FF-RW-26e4671.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 94,
+          "sha256": "9aa6fecaa27997dd8c11b45a77f0224aa9919966fea2c47f2b417a5c01d6f0ce",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/skip-motion-preview-26e4671/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 682,
+          "sha256": "c053f543f7c8ea845f05bfd56ed5a9706c8aa2b8b4729af39b361cb9891f13c9",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/skip-motion-preview-26e4671/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-vnext-fold-fix-20261010-df4c39b",
+      "target_commitish": "df4c39b44394d8c512ca0298bffa7f19da356490",
+      "published_at": "2026-10-11T10:37:17Z",
+      "assets": [
+        {
+          "name": "Archivist-Fresh-Scanner-Fold-Test-20261010-df4c39b.apk",
+          "bytes": 45219072,
+          "sha256": "e6db9274c4f63ce6fd5a4c628c201ceab250c02fc2b16744a4d0266c67ad0fdf",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-df4c39b/Archivist-Fresh-Scanner-Fold-Test-20261010-df4c39b.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 121,
+          "sha256": "8ea0792629ab6f80420a7b4e37279aadfbebd36382e44179d373114192d04def",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-df4c39b/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 566,
+          "sha256": "288b52920d11311de3424f9641a5d80b5e9443dc844a1ab0b71c73aaafd73154",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-df4c39b/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-vnext-fold-fix-20261010-63b67ef",
+      "target_commitish": "63b67efe25bc1073d3300cf4a6a3e96149dc0885",
+      "published_at": "2026-10-11T09:42:56Z",
+      "assets": [
+        {
+          "name": "Archivist-Fresh-Scanner-Fold-Test-20261010-63b67ef.apk",
+          "bytes": 45199616,
+          "sha256": "3b3c3ac6b28c39bc6f07c4c225f7427208d48d9cba85d18d9c9a2b84d8bc39f1",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-63b67ef/Archivist-Fresh-Scanner-Fold-Test-20261010-63b67ef.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 121,
+          "sha256": "7e1a0a8c30274a673eba3c7659d5b9991fc9645257bec5747d9bafc17b491da7",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-63b67ef/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 566,
+          "sha256": "9e97529de6625a4dcef4fba7047bbdc9c1b2429377bfccd775c0ab1d55ede356",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-63b67ef/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "rewards-seven-qa-00c7f0e",
+      "target_commitish": "00c7f0ed3bf8e55fc7047a0ac02241eec15632e5",
+      "published_at": "2026-10-11T19:50:20Z",
+      "assets": [
+        {
+          "name": "Archivist-Rewards-Seven-00c7f0e.apk",
+          "bytes": 45789370,
+          "sha256": "5d8360dd43ea26f4d83dad5e0ed4f0adbdbaeafd0c2b63aeb2dd2ec987c6b36c",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/rewards-seven-qa-00c7f0e/Archivist-Rewards-Seven-00c7f0e.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 102,
+          "sha256": "3d6a00f297b16442d5c3a0ae9e465e015fc70a5681df4c2019177f8c9e333570",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/rewards-seven-qa-00c7f0e/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 1069,
+          "sha256": "4cadf19ec8589c09a78be5beba1f6ba352012fa994cb153917d9aab89d2c74c5",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/rewards-seven-qa-00c7f0e/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "rewards-all-fixes-final-131cabd",
+      "target_commitish": "131cabdc82ce7c6d6b36e0034540184bd990a3ab",
+      "published_at": "2026-10-11T19:48:01Z",
+      "assets": [
+        {
+          "name": "Archivist-Rewards-All-Fixes-131cabd.apk",
+          "bytes": 45789370,
+          "sha256": "c514133d0782d2e655679328f35335b82e40d3a67ea186d05932988319b7c6f9",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/rewards-all-fixes-final-131cabd/Archivist-Rewards-All-Fixes-131cabd.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 106,
+          "sha256": "ccf46016ddf64bc4b35fda518c7d818ad64c0bad7dd8e0b7f61877e4a1270a55",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/rewards-all-fixes-final-131cabd/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 1069,
+          "sha256": "33b28ddd4131318421a8c6c46e9891ea3453befb9269784688b2c468144d990a",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/rewards-all-fixes-final-131cabd/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "portrait-player-comic-fix-6af1a43",
+      "target_commitish": "6af1a4367674c97cd419690b1a6bac16de578bd1",
+      "published_at": "2026-10-11T19:02:11Z",
+      "assets": [
+        {
+          "name": "Archivist-Player-Centred-Comic-Fix-6af1a43.apk",
+          "bytes": 45568886,
+          "sha256": "1c3d94b58b059a68da3cb802b69ebdb5ee8805c96bc7bbd59b6ce49f32537d6a",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/portrait-player-comic-fix-6af1a43/Archivist-Player-Centred-Comic-Fix-6af1a43.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 113,
+          "sha256": "38b83484a7cc1f981f4410b60b42fe5d2df74e7a1c36e808d31feea33e76bf21",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/portrait-player-comic-fix-6af1a43/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 905,
+          "sha256": "4b341c7a1235b42794bb3b5b5ead4986f843e54171c2d65b555f0ebea555e57a",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/portrait-player-comic-fix-6af1a43/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "portrait-comic-final-beaab33",
+      "target_commitish": "beaab3378b9970cd9370602952e5b4d31ce49f0a",
+      "published_at": "2026-10-11T19:01:28Z",
+      "assets": [
+        {
+          "name": "Archivist-Portrait-Centred-Comic-Access-beaab33.apk",
+          "bytes": 45568886,
+          "sha256": "6f2b491a4903170908df0f3cbf0ce9b086dcb70ca4686ce07759873a4c7c2812",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/portrait-comic-final-beaab33/Archivist-Portrait-Centred-Comic-Access-beaab33.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 118,
+          "sha256": "b0efa1522c874a8cb2dbdd705f3dd4c499bb8fd17bdcaad54f8e24b5b153b9d5",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/portrait-comic-final-beaab33/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 905,
+          "sha256": "613c3121ee83075b88e6779ba43afd3439795ba46a15f5d8ab4d82067dd42b87",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/portrait-comic-final-beaab33/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "play-pause-preview-f7b4c16",
+      "target_commitish": "f7b4c163e1585cfc52262bf2789ee303efe882cd",
+      "published_at": "2026-10-11T17:17:27Z",
+      "assets": [
+        {
+          "name": "Archivist-Play-Pause-f7b4c16.apk",
+          "bytes": 45541438,
+          "sha256": "d8f472b3a207d117ec04b62059d0d003ee4e5c9e65cf886ddf65e9398540c215",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/play-pause-preview-f7b4c16/Archivist-Play-Pause-f7b4c16.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 99,
+          "sha256": "0a02b8a8b4ae10e785b90e52460ad337604ca3a4902b8e6faf3480f427d4221b",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/play-pause-preview-f7b4c16/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 602,
+          "sha256": "266808c19dbe8fa3db79a86fc91cdefc5d1a93a2c68142937570083294a72ccb",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/play-pause-preview-f7b4c16/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "living-book-scale-preview-c85094e",
+      "target_commitish": "c85094e3b96c988184b3c233fec9ec34023c5e72",
+      "published_at": "2026-10-11T16:48:55Z",
+      "assets": [
+        {
+          "name": "Archivist-Living-Book-Scaled-c85094e.apk",
+          "bytes": 45219132,
+          "sha256": "52fa63e0043b6492d46952d35e658a1ee50e5c2ac188d22386bf1fe178a87e14",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/living-book-scale-preview-c85094e/Archivist-Living-Book-Scaled-c85094e.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 107,
+          "sha256": "4c0baad2a3adacc6e1b34d50956b07c20024fc425ec54b3135a6729676d86b19",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/living-book-scale-preview-c85094e/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 658,
+          "sha256": "297c7242903cf34786ee77ad62d0b52ce2b1565416b5a0bff3d35d6301eae5c1",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/living-book-scale-preview-c85094e/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "book-loader-preview-84c72fb",
+      "target_commitish": "84c72fb445e46594973aad3d304b239129e7fea7",
+      "published_at": "2026-10-11T17:04:41Z",
+      "assets": [
+        {
+          "name": "Archivist-Book-Loader-84c72fb.apk",
+          "bytes": 45501698,
+          "sha256": "1d0af026423ab865dae3e3fc3ed97191d007d999165780e71405c0c887e80823",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/book-loader-preview-84c72fb/Archivist-Book-Loader-84c72fb.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 100,
+          "sha256": "9ffd17057a0fcb669a5001612e2e4d8f4d2fc6baa7c5345c591553543e0fa66a",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/book-loader-preview-84c72fb/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 593,
+          "sha256": "f656505af4226b6bffb6e18c5a6e4d65028d3a4c459e04d4706fff802da47510",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/book-loader-preview-84c72fb/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "archivist-commercial-test-05fec3c",
+      "target_commitish": "05fec3cbf726712f0a156bacf48ed2484da9cb45",
+      "published_at": "2026-10-11T16:15:13Z",
+      "assets": [
+        {
+          "name": "Archivist-Commercial-Polish-Preview-05fec3c.apk",
+          "bytes": 45560886,
+          "sha256": "d30429de194b3c9f86fe3f3906b9b4338808c04bdd158a3e98f4acf42e1d71e4",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/archivist-commercial-test-05fec3c/Archivist-Commercial-Polish-Preview-05fec3c.apk"
+        },
+        {
+          "name": "package.txt",
+          "bytes": 5611,
+          "sha256": "eb326a5812ce60941045d7335eb1ad60a9753758525cc4e436a056fd9e80335b",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/archivist-commercial-test-05fec3c/package.txt"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 114,
+          "sha256": "9bc911420b0f7ae6031e64c4ff2e0cc03dc7fc17fab4e656b62ad6e7ad2083f2",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/archivist-commercial-test-05fec3c/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 662,
+          "sha256": "58119a74be8252e97053665f31b484a82baa8952f9594c6c7c32da26fa24172d",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/archivist-commercial-test-05fec3c/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-vnext-fold-fix-20261010-ff9c6f3",
+      "target_commitish": "ff9c6f347f906184b20183a7ea2e2a11bfd25996",
+      "published_at": "2026-10-10T17:25:23Z",
+      "assets": [
+        {
+          "name": "Archivist-Fresh-Scanner-Fold-Test-20261010-ff9c6f3.apk",
+          "bytes": 45198636,
+          "sha256": "e76779d8eeb89cf619b6fc85563d2d9b6762c60f3817d2a5a1c285eef88df723",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-ff9c6f3/Archivist-Fresh-Scanner-Fold-Test-20261010-ff9c6f3.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 121,
+          "sha256": "8655ea4d3f8e68de22a57405ce3eb7353106d215faad051b5069fdf398e12492",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-ff9c6f3/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 566,
+          "sha256": "31460bec20779e4380b219fbd906405b30d77e62c95b039024c361c065627f2b",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-ff9c6f3/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-vnext-fold-fix-20261010-c2fcbfe",
+      "target_commitish": "c2fcbfeac538de2389bc9071b86c924f16d13d54",
+      "published_at": "2026-10-10T11:21:33Z",
+      "assets": [
+        {
+          "name": "Archivist-Fresh-Scanner-Fold-Test-20261010-c2fcbfe.apk",
+          "bytes": 45192872,
+          "sha256": "8de0f55adc882f306659635554236baeb85ef23a77126751726dfe1fbdeb3e5c",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-c2fcbfe/Archivist-Fresh-Scanner-Fold-Test-20261010-c2fcbfe.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 121,
+          "sha256": "c9ce1e2ac08c2504f27b5d5740a5f9e013a15ee81ee5d391502d03eadaac7f16",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-c2fcbfe/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 566,
+          "sha256": "99378790c4ff7ab5ef87f54e1a7ac863f0498089d794e19c5320933518ab974e",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-fix-20261010-c2fcbfe/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-vnext-fold-test-20261009-56dbe94",
+      "target_commitish": "56dbe941ab1434af07c0bc8528c406ee1bacb2a8",
+      "published_at": "2026-10-09T20:07:07Z",
+      "assets": [
+        {
+          "name": "Archivist-Fresh-Scanner-Fold-Test-20261009-56dbe94.apk",
+          "bytes": 45125848,
+          "sha256": "ecdcee377127697fce48e9eeba70738ebbf8f746cdbb9ff5be4c86b79e9062f8",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-test-20261009-56dbe94/Archivist-Fresh-Scanner-Fold-Test-20261009-56dbe94.apk"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "bytes": 121,
+          "sha256": "3e8d1dbf038614c73f8115f2416203bff8c097c9c45a846a5a934320e48c8f49",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-test-20261009-56dbe94/SHA256SUMS.txt"
+        },
+        {
+          "name": "TEST-NOTES.txt",
+          "bytes": 823,
+          "sha256": "8e885431fb052354ecd7ad02cbb97e5bfae6c4959bf060b1f3a8c9880353db60",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-vnext-fold-test-20261009-56dbe94/TEST-NOTES.txt"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.23-scanner-device-truth",
+      "target_commitish": "b81ac291f4dcb669b8ffd20fbdbd700633cc08ee",
+      "published_at": "2026-10-08T21:54:01Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-23-scanner-device-truth.apk",
+          "bytes": 67973620,
+          "sha256": "97c6a1148fa2cf2b8317ca6ee2a6873af7a19abea8134bd4b9ee7b63edf9fd6d",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.23-scanner-device-truth/Archivist-0.9.4-test-23-scanner-device-truth.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-23-scanner-device-truth.apk.sha256",
+          "bytes": 152,
+          "sha256": "97a91f53b645d0f69c7026dc208ebf8eb712265ba9d1014fb5b9c8a024e96dcb",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.23-scanner-device-truth/Archivist-0.9.4-test-23-scanner-device-truth.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.22-scanner-quality-gates",
+      "target_commitish": "e35d9f760c795521b235b109f053e9dffed8a910",
+      "published_at": "2026-10-08T20:29:58Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-22-scanner-quality-gates.apk",
+          "bytes": 67963594,
+          "sha256": "7b34dcaeaf8f53bfb90a51f50935d8a3c3a78c9dbab9721de04fa988afee912b",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.22-scanner-quality-gates/Archivist-0.9.4-test-22-scanner-quality-gates.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-22-scanner-quality-gates.apk.sha256",
+          "bytes": 153,
+          "sha256": "46d19bd255bb816b7bafb79e5f6a9b2080dc355ee55b5af57d942a02dfc77005",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.22-scanner-quality-gates/Archivist-0.9.4-test-22-scanner-quality-gates.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.21-scanner-book-loader",
+      "target_commitish": "aeefd4dc89c4de1c81b7e03eb998ae858da6aaff",
+      "published_at": "2026-10-08T14:38:35Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-21-scanner-book-loader.apk",
+          "bytes": 67956342,
+          "sha256": "f6064e53d205cdeb0cb84fa48f4fd55ec3b8316dbf307fbcc6bd5ea16df784f9",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.21-scanner-book-loader/Archivist-0.9.4-test-21-scanner-book-loader.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-21-scanner-book-loader.apk.sha256",
+          "bytes": 151,
+          "sha256": "cb416d83d6f84a07d7935c7646d26cd3fd72c71aad6625bc396f69eac9b06d75",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.21-scanner-book-loader/Archivist-0.9.4-test-21-scanner-book-loader.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.20-work-grouping",
+      "target_commitish": "002fb184d2a64abdeebbe224d7deb81fbf63eb30",
+      "published_at": "2026-10-08T12:03:55Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-20-work-grouping.apk",
+          "bytes": 67560220,
+          "sha256": "e52031f95796dc31c34b7d5517153b0e7fceabc84822e3c5acde347ceb830805",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.20-work-grouping/Archivist-0.9.4-test-20-work-grouping.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-20-work-grouping.apk.sha256",
+          "bytes": 145,
+          "sha256": "923728107cc27da0a3ee4f9a7d8a492e5dc73e4da515e8d584df134c1c611edb",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.20-work-grouping/Archivist-0.9.4-test-20-work-grouping.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-diagnostics-windows-v1",
+      "target_commitish": "87f6531cd90a1a74ebc6009d8daaee216d4af1b3",
+      "published_at": "2026-10-08T16:16:37Z",
+      "assets": [
+        {
+          "name": "Archivist-Scanner-Diagnostics-Windows.exe",
+          "bytes": 11420561,
+          "sha256": "47208e5b8bf5880d7eebbd57cae3af217d2fce52470b1b95fb6e4f8b949f8e8e",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-diagnostics-windows-v1/Archivist-Scanner-Diagnostics-Windows.exe"
+        },
+        {
+          "name": "Archivist-Scanner-Diagnostics-Windows.exe.sha256",
+          "bytes": 66,
+          "sha256": "fc369ee412f2b847224d6da9d03cd5ca0667975e9247a0435de6da45176a4dbc",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-diagnostics-windows-v1/Archivist-Scanner-Diagnostics-Windows.exe.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-diagnostics-v1.1",
+      "target_commitish": "661e73a0a4360fb9546146395ca58902f496b8f4",
+      "published_at": "2026-10-08T16:15:42Z",
+      "assets": [
+        {
+          "name": "Archivist-Scanner-Diagnostics-1.1.apk",
+          "bytes": 24797,
+          "sha256": "e77f8e70e1dcf26632c75251aae4829de93411806ae6dd31ca0e569bf399f8d5",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-diagnostics-v1.1/Archivist-Scanner-Diagnostics-1.1.apk"
+        },
+        {
+          "name": "Archivist-Scanner-Diagnostics-1.1.apk.sha256",
+          "bytes": 104,
+          "sha256": "6284fd395e27b1cd60e8391b990dbc05c24c5a8df6b5c8f339c9ae65a4b9467d",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-diagnostics-v1.1/Archivist-Scanner-Diagnostics-1.1.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "scanner-diagnostics-v1",
+      "target_commitish": "22d1c0bb37863130d359d0d25524f16ce260f797",
+      "published_at": "2026-10-08T15:51:03Z",
+      "assets": [
+        {
+          "name": "Archivist-Scanner-Diagnostics-1.0.apk",
+          "bytes": 24337,
+          "sha256": "5d60c681e92c72cc4f651a5d5475bbfbbb95ac4b4af9949580fe1ad26b75b015",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-diagnostics-v1/Archivist-Scanner-Diagnostics-1.0.apk"
+        },
+        {
+          "name": "Archivist-Scanner-Diagnostics-1.0.apk.sha256",
+          "bytes": 104,
+          "sha256": "341b5c4a47266baede5121e36860b9d78deb0c59990496fef0da268ebc85390a",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/scanner-diagnostics-v1/Archivist-Scanner-Diagnostics-1.0.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "pipeline-diagnostics-gate1-20261008",
+      "target_commitish": "6bcab946e05ca68169743854719b4009fde168de",
+      "published_at": "2026-10-08T17:00:49Z",
+      "assets": [
+        {
+          "name": "Archivist-Actual-Pipeline-Diagnostics.apk",
+          "bytes": 67136374,
+          "sha256": "5a93d9f6c8b36a16bf4e7f6ba4214b3bc9fb9381363686fe19a5375e04aa86cc",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/pipeline-diagnostics-gate1-20261008/Archivist-Actual-Pipeline-Diagnostics.apk"
+        },
+        {
+          "name": "Archivist-Actual-Pipeline-Diagnostics.apk.sha256",
+          "bytes": 108,
+          "sha256": "a59bd642ae956035fa045eb54fade66565b78655f2ed52a7c54524cdd1ab66b6",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/pipeline-diagnostics-gate1-20261008/Archivist-Actual-Pipeline-Diagnostics.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.18-editor-render",
+      "target_commitish": "461694e3b821742b2d2d0fdbb1a56357079abdca",
+      "published_at": "2026-10-07T17:35:39Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-18-editor-render.apk",
+          "bytes": 67500124,
+          "sha256": "352ef1f467f2a19322804ccb5d26b31f3325ede5393b10a26ccc2b6174748578",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.18-editor-render/Archivist-0.9.4-test-18-editor-render.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-18-editor-render.apk.sha256",
+          "bytes": 145,
+          "sha256": "69212d337b0c9ea348d3a7a29b99ec2550d3fae28e18e480754c930af914c9c2",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.18-editor-render/Archivist-0.9.4-test-18-editor-render.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.17-smart-search",
+      "target_commitish": "19b8fc7bb0fc9e77695b52d26755a97be709dc77",
+      "published_at": "2026-10-07T16:34:30Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-17-smart-search.apk",
+          "bytes": 67500052,
+          "sha256": "537f11002cd2d1a8baf2735f5589ba6ea01b270adb92b24effae553adefa8ecc",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.17-smart-search/Archivist-0.9.4-test-17-smart-search.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-17-smart-search.apk.sha256",
+          "bytes": 144,
+          "sha256": "fb7e8d6a3a3a6338bcd0c7c8767de2b73ac554a9ae0fb2a2406c7bebaa13f2eb",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.17-smart-search/Archivist-0.9.4-test-17-smart-search.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.16-editor-fix",
+      "target_commitish": "fdf8f1001c200cbde1f151046af6351bd70d65ab",
+      "published_at": "2026-10-07T13:06:46Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-16-editor-fix.apk",
+          "bytes": 67500476,
+          "sha256": "0679a910c62038452137e9e68c2101a78336b38bc9b31d9082f7672de5f38cc2",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.16-editor-fix/Archivist-0.9.4-test-16-editor-fix.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-16-editor-fix.apk.sha256",
+          "bytes": 142,
+          "sha256": "4708117ec9eacf670774d5c71a19e22826d49b12fd5610e509d91ebabdf202ab",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.16-editor-fix/Archivist-0.9.4-test-16-editor-fix.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.15-editor",
+      "target_commitish": "107c1485608ec158e5020e727088588fba010afd",
+      "published_at": "2026-10-07T11:38:44Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-15-editor.apk",
+          "bytes": 67498912,
+          "sha256": "9a14b748e6c8d7a3ae8901c66199f35f20e9af5ddbf7c210be36806b9c0814c7",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.15-editor/Archivist-0.9.4-test-15-editor.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-15-editor.apk.sha256",
+          "bytes": 138,
+          "sha256": "329445f5c7b2353bba4234feb063770ad46af1715891c4592330ab8301e3aed7",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.15-editor/Archivist-0.9.4-test-15-editor.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.14-scanner",
+      "target_commitish": "3c8c577e4d83d3f12f39ba73fe2abcdcdf6547e2",
+      "published_at": "2026-10-07T08:58:47Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-14-scanner.apk",
+          "bytes": 67499204,
+          "sha256": "2e05f43f24db5d4bb3a0844af872239cddf56d086942f94e86bfe8e0ed226fc5",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.14-scanner/Archivist-0.9.4-test-14-scanner.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-14-scanner.apk.sha256",
+          "bytes": 139,
+          "sha256": "37be5d4753ee62da534a384c395cf6fb4abc4d54aaca0454d460dc160dad5621",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.14-scanner/Archivist-0.9.4-test-14-scanner.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.5-testing",
+      "target_commitish": "dbfa138b6b4a35f440be3c52b2b4341c8acb633d",
+      "published_at": "2026-10-06T17:10:30Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.5-test.apk",
+          "bytes": 50913159,
+          "sha256": "77f105ec2654acf3373e45c8ed6b63f67ee09090734c2f128e08309d7b02ebd9",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.5-testing/Archivist-0.9.5-test.apk"
+        },
+        {
+          "name": "Archivist-0.9.5-test.apk.sha256",
+          "bytes": 128,
+          "sha256": "85ad058ccdeaa438d983afbe7abe6d8d1b7763274646d146d309885e5cbab5f8",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.5-testing/Archivist-0.9.5-test.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.14",
+      "target_commitish": "fc529cfc5e6adb167a75f5aa3d8f1ead66ca790d",
+      "published_at": "2026-10-06T11:59:07Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-14.apk",
+          "bytes": 67515280,
+          "sha256": "2765a82c529499e94e84229909135b0085dc636ed4d56ac076efae6637c9f188",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.14/Archivist-0.9.4-test-14.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-14.apk.sha256",
+          "bytes": 131,
+          "sha256": "329f6605f7046ef7331b312e72ab73f402422c0e83c014be87b0a88ab4f49548",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.14/Archivist-0.9.4-test-14.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.13",
+      "target_commitish": "583ec8dde2936a2979648c010a4bd44cdc75e01d",
+      "published_at": "2026-10-06T08:47:59Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-13.apk",
+          "bytes": 67468836,
+          "sha256": "d0284430a8ee3d3da06c434d0993aeef5398ce727aacf346635c5530b3ec067a",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.13/Archivist-0.9.4-test-13.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-13.apk.sha256",
+          "bytes": 131,
+          "sha256": "f253173130a82b4fb9029df9e18d2d31927e69b3581673c6ba7023cfe4b27d30",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.13/Archivist-0.9.4-test-13.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.9",
+      "target_commitish": "68b13f649d8ca011f14ba9442a42015f6ac3398f",
+      "published_at": "2026-10-05T12:08:29Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-9.apk",
+          "bytes": 59420661,
+          "sha256": "fa9dc2aba409585e72aad33fb035b126bd1a6249a98995cf672204cb83dd59d5",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.9/Archivist-0.9.4-test-9.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-9.apk.sha256",
+          "bytes": 130,
+          "sha256": "bf45db1628bb568ea1afbaa61ae1feb37c1de319fd024634a68bee29b3140e45",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.9/Archivist-0.9.4-test-9.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.8",
+      "target_commitish": "3ad2ba3677435ede5d41398259f89874721e402e",
+      "published_at": "2026-10-05T09:05:58Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-8.apk",
+          "bytes": 59395517,
+          "sha256": "0220186f130708817596dfc56342cbb4d3af43095c575bb790944c4ceda1276d",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.8/Archivist-0.9.4-test-8.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-8.apk.sha256",
+          "bytes": 130,
+          "sha256": "1b5de2e1b4ab476d7745778f80ded4a8c2f54e351b569f3273a29d991a3ec913",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.8/Archivist-0.9.4-test-8.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.12",
+      "target_commitish": "c343261e751f962352e9ef88a64321138f933573",
+      "published_at": "2026-10-05T17:34:45Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-12.apk",
+          "bytes": 59455517,
+          "sha256": "50e2578d6314bef72400c574ed5efa10b7dd866b2ed11bf4fef5cb071f517452",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.12/Archivist-0.9.4-test-12.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-12.apk.sha256",
+          "bytes": 131,
+          "sha256": "2e13c845983456d2e8eb5c5247eb0e88794108734c70ad5f35f70bcde2d07743",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.12/Archivist-0.9.4-test-12.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.10",
+      "target_commitish": "d0bb3ca74e2b3fc9fcb9eeef57f609eb0677de90",
+      "published_at": "2026-10-05T15:45:20Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-10.apk",
+          "bytes": 59443401,
+          "sha256": "b3bfc9ef9db474f54578190ef6fcb98d94ee936a039fbb5e9e5fcd6b9d58d207",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.10/Archivist-0.9.4-test-10.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-10.apk.sha256",
+          "bytes": 131,
+          "sha256": "ea54d8612c2e1527d80fae575d2232056ec14173d6004f62ced73732651fa38a",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.10/Archivist-0.9.4-test-10.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.6",
+      "target_commitish": "6ff1ef1606dc882e97cc3c774fb55398c3330e33",
+      "published_at": "2026-10-04T23:31:42Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-6.apk",
+          "bytes": 59361797,
+          "sha256": "b5194e683497d6734e1f39368b6dd72772bc44800cb5f56361e1b2a47de66177",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.6/Archivist-0.9.4-test-6.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-6.apk.sha256",
+          "bytes": 130,
+          "sha256": "ddce9c44bdd4469da96522297198d9d393ea168f4dc70c1b4ecc86552d1c2d09",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.6/Archivist-0.9.4-test-6.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing.5",
+      "target_commitish": "6bc68362f1ab48e24ff47aa684bbbd1bd3c7e468",
+      "published_at": "2026-10-04T20:04:00Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test-5.apk",
+          "bytes": 59288557,
+          "sha256": "e6915b85f57cd86ea7da9436d5ac7ecc5f189bd85f5119cbbe726a73dfe9603f",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.5/Archivist-0.9.4-test-5.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test-5.apk.sha256",
+          "bytes": 130,
+          "sha256": "6d39d589234ac92e50ff5c4f5c8df7408678599646bb40901ffccec7b0296f91",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing.5/Archivist-0.9.4-test-5.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.4-testing",
+      "target_commitish": "4d64f21ad64f63fe863f1bbd73418f620ff590ea",
+      "published_at": "2026-10-04T09:12:33Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.4-test.apk",
+          "bytes": 59242305,
+          "sha256": "d91fc6afe1bd8aa11857d8f682b1bc6171f04e775a5114aa240d83851441861b",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing/Archivist-0.9.4-test.apk"
+        },
+        {
+          "name": "Archivist-0.9.4-test.apk.sha256",
+          "bytes": 128,
+          "sha256": "69fa1c6449ea55f46ccdb5f44a40fffb8c48ef493705cdd91b7413be9e0bdacc",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.4-testing/Archivist-0.9.4-test.apk.sha256"
+        }
+      ]
+    },
+    {
+      "tag": "v0.9.3-testing",
+      "target_commitish": "990dc6054a1e4815ebf61a5cf1a4a114d22c3d49",
+      "published_at": "2026-10-02T21:50:45Z",
+      "assets": [
+        {
+          "name": "Archivist-0.9.3-test.apk",
+          "bytes": 50905751,
+          "sha256": "4f9e5bde089e1fdff60805a4bb7015a0e9f089b797e649ad4914d61b7f3e910c",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.3-testing/Archivist-0.9.3-test.apk"
+        },
+        {
+          "name": "Archivist-0.9.3-test.apk.sha256",
+          "bytes": 128,
+          "sha256": "e4072a0c4af41e254094e450526949359071f9de8bce394b0d8dbc6f9e888384",
+          "url": "https://github.com/russellstokes-ai/Archivist/releases/download/v0.9.3-testing/Archivist-0.9.3-test.apk.sha256"
+        }
+      ]
+    }
+  ]
+}
