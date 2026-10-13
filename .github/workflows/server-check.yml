@@ -90,6 +90,42 @@ jobs:
           node scripts/docker-compose-contract.test.cjs
           docker compose -f compose.yaml config --quiet
 
+      - name: Standalone Docker runtime and persistence smoke
+        env:
+          ARCHIVIST_MEDIA_PATH: ${{ runner.temp }}/archivist-ci-media
+          ARCHIVIST_BIND_ADDRESS: 127.0.0.1
+          ARCHIVIST_PORT: '15057'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARCHIVIST_MEDIA_PATH"
+          cleanup() {
+            docker compose -f compose.yaml logs --tail=100 || true
+            docker compose -f compose.yaml down -v --remove-orphans || true
+          }
+          trap cleanup EXIT
+          docker compose -f compose.yaml up -d --build
+          healthy=0
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:15057/healthz >/dev/null; then healthy=1; break; fi
+            sleep 2
+          done
+          test "$healthy" = 1
+          docker compose -f compose.yaml exec -T server sh -ec 'touch /data/archivist-ci-persistence-marker'
+          if docker compose -f compose.yaml exec -T server sh -c 'touch /media/archivist-ci-forbidden-write >/dev/null 2>&1'; then
+            echo 'FAIL: media mount is writable despite read_only configuration' >&2
+            exit 1
+          fi
+          test ! -e "$ARCHIVIST_MEDIA_PATH/archivist-ci-forbidden-write"
+          docker compose -f compose.yaml down
+          docker compose -f compose.yaml up -d
+          healthy=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:15057/healthz >/dev/null; then healthy=1; break; fi
+            sleep 2
+          done
+          test "$healthy" = 1
+          docker compose -f compose.yaml exec -T server test -f /data/archivist-ci-persistence-marker
+
       - name: Home Assistant add-on smoke test
         run: |
           set -euo pipefail
