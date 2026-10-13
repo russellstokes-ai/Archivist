@@ -30,7 +30,7 @@ func makeReaderEPUB(t *testing.T) []byte {
 func TestComicArchiveSupportContract(t *testing.T) {
 	if got:=kind("issue.cbz");got!="Comic"{t.Fatalf("CBZ kind=%q",got)}
 	if got:=kind("issue.cbt");got!="Comic"{t.Fatalf("CBT kind=%q",got)}
-	if got:=kind("issue.cbr");got!=""{t.Fatalf("CBR must remain unsupported, kind=%q",got)}
+	if got:=kind("issue.cbr");got!="Comic"{t.Fatalf("CBR must be recognised as Comic, kind=%q",got)}
 
 	var b bytes.Buffer
 	tw:=tar.NewWriter(&b)
