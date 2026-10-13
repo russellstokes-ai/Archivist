@@ -63,7 +63,7 @@ Pin a tested source commit/image when making a reproducible deployment. Before u
 
 ## ARM64 runtime and NAS-style storage regression gate
 
-GitHub Actions workflow `.github/workflows/server-arm64-check.yml` runs on a **native Linux ARM64 runner**, separately from the existing AMD64/Home Assistant server workflow. Its Docker image is built from the existing `archivist/Dockerfile` and Go server source.
+The `arm64-smoke` job in GitHub Actions workflow `.github/workflows/server-check.yml` runs on a **native Linux ARM64 runner**, alongside a separate AMD64/Home Assistant server job. Its Docker image is built from the existing `archivist/Dockerfile` and Go server source.
 
 The ARM64 gate checks:
 
