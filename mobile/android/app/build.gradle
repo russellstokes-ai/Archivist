@@ -81,6 +81,14 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Production upload credentials are injected by the release operator.
+// Never sign a Google Play artifact with the debug keystore.
+def archivistReleaseStore = System.getenv('ARCHIVIST_UPLOAD_STORE_FILE')
+def archivistReleaseStorePassword = System.getenv('ARCHIVIST_UPLOAD_STORE_PASSWORD')
+def archivistReleaseKeyAlias = System.getenv('ARCHIVIST_UPLOAD_KEY_ALIAS')
+def archivistReleaseKeyPassword = System.getenv('ARCHIVIST_UPLOAD_KEY_PASSWORD')
+def archivistReleaseSigningComplete = [archivistReleaseStore, archivistReleaseStorePassword, archivistReleaseKeyAlias, archivistReleaseKeyPassword].every { it != null && !it.trim().isEmpty() }
+
 android {
     ndkVersion rootProject.ext.ndkVersion
 
@@ -111,6 +119,14 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (archivistReleaseSigningComplete) {
+            release {
+                storeFile file(archivistReleaseStore)
+                storePassword archivistReleaseStorePassword
+                keyAlias archivistReleaseKeyAlias
+                keyPassword archivistReleaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
@@ -119,7 +135,7 @@ android {
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            if (archivistReleaseSigningComplete) signingConfig signingConfigs.release
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
@@ -188,5 +204,12 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// Fail closed for production artifact tasks if upload signing isn't configured.
+gradle.taskGraph.whenReady { graph ->
+    if (!archivistReleaseSigningComplete && graph.allTasks.any { it.project == project && (it.name == 'bundleRelease' || it.name == 'assembleRelease') }) {
+        throw new GradleException('Archivist release signing credentials are missing. Never publish a debug-signed build.')
     }
 }
