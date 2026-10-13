@@ -60,6 +60,9 @@ jobs:
       - name: UI wiring contract
         run: node scripts/ui-contract.cjs
 
+      - name: Advanced manager contract
+        run: node scripts/v1-manager-contract.test.cjs
+
       - name: Home Assistant package contract
         run: node scripts/package-ha.test.cjs
 
