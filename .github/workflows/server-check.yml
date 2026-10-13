@@ -181,6 +181,106 @@ jobs:
           curl -kfsS https://127.0.0.1:15443/healthz
 
 
+  arm64-smoke:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      ARCHIVIST_MEDIA_PATH: ${{ github.workspace }}/Archivist NAS share - Books
+      ARCHIVIST_SECONDARY_MEDIA: ${{ github.workspace }}/Archivist NFS share - Audiobooks
+      ARCHIVIST_BIND_ADDRESS: 127.0.0.1
+      ARCHIVIST_PORT: '15058'
+      ARCHIVIST_VERSION: arm64-ci
+      COMPOSE_PROJECT_NAME: archivist-arm64-ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify protected app source and standalone contract
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = aarch64
+          node scripts/v1-protection-gate.cjs
+          node scripts/docker-compose-contract.test.cjs
+
+      - name: Prepare two isolated NAS-style source folders
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARCHIVIST_MEDIA_PATH/Fiction collection" "$ARCHIVIST_SECONDARY_MEDIA"
+          printf 'Read-only, synthetic file. No user content.\n' > "$ARCHIVIST_MEDIA_PATH/Fiction collection/sample.txt"
+          printf 'Secondary synthetic volume.\n' > "$ARCHIVIST_SECONDARY_MEDIA/sample.txt"
+          cat > "$RUNNER_TEMP/arm64-nas.override.yaml" <<'YAML'
+          services:
+            server:
+              volumes:
+                - type: bind
+                  source: ${ARCHIVIST_SECONDARY_MEDIA:?Set a secondary host media directory}
+                  target: /media-external
+                  read_only: true
+                  bind:
+                    create_host_path: false
+          YAML
+
+      - name: Validate resolved storage contract
+        run: |
+          set -euo pipefail
+          docker compose -f compose.yaml -f "$RUNNER_TEMP/arm64-nas.override.yaml" config --format json > "$RUNNER_TEMP/arm64-compose.json"
+          python3 - <<'PY'
+          import json, os
+          with open(os.path.join(os.environ['RUNNER_TEMP'],'arm64-compose.json'), encoding='utf-8') as f:
+              c=json.load(f)
+          service=c['services']['server']
+          volumes={v['target']:v for v in service['volumes']}
+          assert set(('/data','/media','/media-external')).issubset(volumes), volumes
+          assert volumes['/data']['type']=='volume'
+          for target in ('/media','/media-external'):
+              assert volumes[target]['type']=='bind'
+              assert bool(volumes[target]['read_only']) is True
+              assert volumes[target]['bind']['create_host_path'] is False
+          ports=service['ports']
+          assert len(ports)==1 and ports[0]['host_ip']=='127.0.0.1',ports
+          print('PASS: ARM64 NAS-style Compose preserves /data, both read-only mounts, and loopback binding')
+          PY
+
+      - name: Build and exercise native ARM64 container
+        run: |
+          set -euo pipefail
+          compose() { docker compose -f compose.yaml -f "$RUNNER_TEMP/arm64-nas.override.yaml" "$@"; }
+          cleanup() {
+            compose logs --tail=100 || true
+            compose down -v --remove-orphans || true
+          }
+          trap cleanup EXIT
+          compose up -d --build
+          test "$(compose exec -T server uname -m | tr -d '\r')" = aarch64
+          ready=0
+          for i in $(seq 1 90); do
+            if curl --silent --show-error --fail http://127.0.0.1:15058/healthz >/dev/null 2>&1; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          compose exec -T server test -r '/media/Fiction collection/sample.txt'
+          compose exec -T server test -r /media-external/sample.txt
+          if compose exec -T server sh -c 'touch /media/forbidden-write >/dev/null 2>&1'; then
+            echo 'FAIL: primary NAS-style media source is writable' >&2
+            exit 1
+          fi
+          if compose exec -T server sh -c 'touch /media-external/forbidden-write >/dev/null 2>&1'; then
+            echo 'FAIL: secondary NAS-style media source is writable' >&2
+            exit 1
+          fi
+          test ! -e "$ARCHIVIST_MEDIA_PATH/forbidden-write"
+          test ! -e "$ARCHIVIST_SECONDARY_MEDIA/forbidden-write"
+          compose exec -T server sh -c "printf 'persisted' > /data/arm64-ci-persistence-marker"
+          compose down
+          compose up -d
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --silent --show-error --fail http://127.0.0.1:15058/healthz >/dev/null 2>&1; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          compose exec -T server grep -q persisted /data/arm64-ci-persistence-marker
+          echo 'PASS: native ARM64 runtime, NAS-style read-only mounts, health and persistent data'
+
 # Final verification trigger 2026-09-28
 
 # Recovery validation trigger 2026-09-30
