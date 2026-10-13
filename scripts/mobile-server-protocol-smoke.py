@@ -3,6 +3,7 @@
 import argparse
 import json
 import secrets
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,6 +31,22 @@ def request(origin, path, method="GET", payload=None, bearer=None, action=False)
     assert "application/json" in ctype, (path,status,ctype)
     assert len(raw)<=1024*1024, (path,"oversized JSON")
     return status,json.loads(raw.decode("utf-8"))
+
+
+
+def request_bytes(origin, path, bearer=None, byte_range=None):
+    headers={}
+    if bearer is not None:
+        headers["Authorization"]="Bearer "+bearer
+    if byte_range is not None:
+        headers["Range"]=byte_range
+    req=urllib.request.Request(origin+path, headers=headers, method="GET")
+    opener=urllib.request.build_opener(NoRedirect())
+    try:
+        with opener.open(req, timeout=10) as response:
+            return response.status, response.headers, response.read(1024*1024)
+    except urllib.error.HTTPError as error:
+        return error.code,error.headers,error.read(1024*1024)
 
 
 def check(origin,source):
@@ -73,9 +90,30 @@ def check(origin,source):
     assert status==200 and info.get("configured") is True and info.get("sources",0)>=1,(status,info)
     assert request(origin,"/api/sources")[0]==401,"Unauthenticated source listing must fail"
 
+    # Scan synthetic, extension-classified media and verify real content delivery.
+    source_id=next(row["id"] for row in sources if row.get("path")==source)
+    status,scan_job=request(origin,"/api/sources/"+str(source_id)+"/scan","POST",bearer=session,action=True)
+    assert status==202 and isinstance(scan_job.get("job_id"),int),(status,scan_job)
+    book=None
+    for _ in range(80):
+        status,items=request(origin,"/api/books?limit=10",bearer=session)
+        assert status==200 and isinstance(items,list),(status,items)
+        book=next((item for item in items if item.get("format")=="Audio" and item.get("available") is True),None)
+        if book:
+            break
+        time.sleep(0.5)
+    assert book is not None, "Synthetic audio was not discovered through the API"
+    asset_path="/api/assets/"+str(book["id"])
+    status,_,_=request_bytes(origin,asset_path)
+    assert status==401,"Unauthenticated media streaming must be denied"
+    status,headers,data=request_bytes(origin,asset_path,bearer=session,byte_range="bytes=2-5")
+    assert status==206 and data==b"2345" and headers.get("Content-Range","").startswith("bytes 2-5/"),(status,headers.get("Content-Range"),data)
+    status,_,data=request_bytes(origin,asset_path,bearer=session)
+    assert status==200 and data==b"0123456789",(status,data)
+
     assert request(origin,"/logout","POST",{},bearer=session,action=True)[0]==200,"Logout must succeed"
     assert request(origin,"/api/me",bearer=session)[0]==401,"Revoked session must no longer work"
-    print("PASS: mobile-compatible setup/status, session, bearer auth, library/source listing and revocation")
+    print("PASS: mobile-compatible setup, session, catalogue scan, authenticated byte-range streaming and revocation")
 
 
 if __name__=="__main__":
