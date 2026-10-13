@@ -12,6 +12,10 @@ on:
       - 'scripts/package-ha*'
       - 'repository.yaml'
       - 'archivist/**'
+      - 'compose.yaml'
+      - '.env.example'
+      - 'DOCKER-DEPLOYMENT.md'
+      - 'scripts/docker-compose-contract.test.cjs'
       - '.github/workflows/server-check.yml'
 
 concurrency:
@@ -78,6 +82,13 @@ jobs:
           for file in index.html app.js style.css catalogue.js household.js filemoves.js organise.js reader.html reader.js reader.css speech-focus.js; do
             cmp "web/$file" "archivist/app/web/$file"
           done
+
+      - name: Standalone Docker Compose contract
+        env:
+          ARCHIVIST_MEDIA_PATH: ${{ github.workspace }}
+        run: |
+          node scripts/docker-compose-contract.test.cjs
+          docker compose -f compose.yaml config --quiet
 
       - name: Home Assistant add-on smoke test
         run: |
