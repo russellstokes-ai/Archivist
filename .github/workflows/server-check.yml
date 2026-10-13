@@ -17,6 +17,7 @@ on:
       - '.gitignore'
       - 'DOCKER-DEPLOYMENT.md'
       - 'scripts/docker-compose-contract.test.cjs'
+      - 'scripts/mobile-server-protocol-smoke.py'
       - '.github/workflows/server-check.yml'
   pull_request:
     paths:
@@ -32,6 +33,7 @@ on:
       - '.env.example'
       - 'DOCKER-DEPLOYMENT.md'
       - 'scripts/docker-compose-contract.test.cjs'
+      - 'scripts/mobile-server-protocol-smoke.py'
       - '.github/workflows/server-check.yml'
 
 concurrency:
@@ -126,6 +128,7 @@ jobs:
             sleep 2
           done
           test "$healthy" = 1
+          python3 scripts/mobile-server-protocol-smoke.py --origin http://127.0.0.1:15057 --source /media
           docker compose -f compose.yaml exec -T server sh -ec 'touch /data/archivist-ci-persistence-marker'
           if docker compose -f compose.yaml exec -T server sh -c 'touch /media/archivist-ci-forbidden-write >/dev/null 2>&1'; then
             echo 'FAIL: media mount is writable despite read_only configuration' >&2
