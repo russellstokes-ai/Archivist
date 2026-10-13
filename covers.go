@@ -147,6 +147,13 @@ func archiveCover(root, rel, format string) ([]byte,string,error) {
 	info, err := f.Stat()
 	if err != nil { return nil,"",err }
 	ext := strings.ToLower(filepath.Ext(rel))
+	if format=="Comic" && ext==".cbr" {
+		parts, e := rarComicParts(f)
+		if e != nil { return nil,"",e }
+		data, e := rarComicEntry(f, parts[0], coverReadLimit)
+		if e != nil { return nil,"",e }
+		return safeImageData(data)
+	}
 	if format=="Comic" && ext==".cbt" {
 		tr:=tar.NewReader(f)
 		for {
