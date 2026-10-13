@@ -76,8 +76,37 @@
       rows=results;renderRows();notice();
     }catch(err){if(id===requestId){rows=[];renderRows();notice(err.message,true)}}
   }
+  async function findCandidates(){
+    if(!editing)return;
+    const query=$('candidate-query').value.trim();
+    if(query.length<2){notice('Enter at least two characters to search.',true);return}
+    const button=$('candidate-search-button'),box=$('candidate-results');
+    button.disabled=true;box.replaceChildren(e('p','Searching Open Library…','subtext'));
+    try{
+      const response=await api('./api/manage/metadata-candidates?q='+encodeURIComponent(query));
+      box.replaceChildren();
+      const candidates=Array.isArray(response.candidates)?response.candidates:[];
+      if(!candidates.length){box.append(e('p','No matches found. Your current metadata has not changed.','subtext'));return}
+      for(const candidate of candidates){
+        const card=e('article',undefined,'candidate-card');
+        card.append(e('strong',candidate.title||'Untitled'),e('small',[candidate.author,candidate.publishedYear,candidate.publisher].filter(Boolean).join(' · '),'subtext'));
+        const buttons=e('div',undefined,'candidate-fields');
+        for(const [key,label] of [['title','Title'],['author','Author'],['publishedYear','Year'],['isbn','ISBN'],['publisher','Publisher']]){
+          if(!candidate[key])continue;
+          const field=$('editor-fields').querySelector('[name="'+key+'"]');if(!field)continue;
+          const choose=e('button','Use '+label,'quiet');choose.type='button';choose.title='Replace '+label+': '+field.value+' → '+String(candidate[key]);
+          choose.onclick=()=>{field.value=String(candidate[key]);field.focus();notice('Selected '+label+' from Open Library. Review your changes before saving.')};
+          buttons.append(choose);
+        }
+        card.append(buttons);box.append(card);
+      }
+    }catch(err){box.replaceChildren(e('p','Provider search failed: '+err.message,'subtext'));notice(err.message,true)}
+    finally{button.disabled=false}
+  }
   function openEditor(item){
     editing=item;
+    $('candidate-query').value=[item.title,item.author].filter(Boolean).join(' ');
+    $('candidate-results').replaceChildren();
     $('editor-title').textContent='Edit '+(item.title||'metadata');
     $('editor-context').textContent=[item.format,item.space,'Source: '+(item.metadataSource||'not identified'),item.identificationConfidence?item.identificationConfidence+' confidence':null].filter(Boolean).join(' · ');
     const grid=$('editor-fields');grid.replaceChildren();
@@ -168,6 +197,8 @@
       await loadCatalogue();
     }catch(err){notice(err.message,true)}
   }
+  $('candidate-search-button').onclick=findCandidates;
+  $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};
   $('editor-form').addEventListener('submit',saveEditor);
   $('close-editor').onclick=()=>{$('editor').close();editing=null};
   $('cancel-editor').onclick=()=>{$('editor').close();editing=null};
