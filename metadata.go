@@ -326,9 +326,6 @@ func epubMetadata(filename string) embeddedMetadata {
 }
 
 func comicMetadata(filename string) embeddedMetadata {
-	z, e := zip.OpenReader(filename)
-	if e != nil { return embeddedMetadata{} }
-	defer z.Close()
 	var info struct {
 		Title       string  `xml:"Title"`
 		Series      string  `xml:"Series"`
@@ -340,7 +337,18 @@ func comicMetadata(filename string) embeddedMetadata {
 		Summary     string  `xml:"Summary"`
 		Year        int     `xml:"Year"`
 	}
-	if !readZipXML(&z.Reader, "ComicInfo.xml", &info) { return embeddedMetadata{} }
+	if strings.EqualFold(filepath.Ext(filename), ".cbr") {
+		f, err := os.Open(filename)
+		if err != nil { return embeddedMetadata{} }
+		defer f.Close()
+		raw, err := rarComicInfo(f)
+		if err != nil || xml.Unmarshal(raw, &info) != nil { return embeddedMetadata{} }
+	} else {
+		z, err := zip.OpenReader(filename)
+		if err != nil { return embeddedMetadata{} }
+		defer z.Close()
+		if !readZipXML(&z.Reader, "ComicInfo.xml", &info) { return embeddedMetadata{} }
+	}
 	return embeddedMetadata{
 		Title:cleanMetadata(info.Title), Author:normalizeAuthor(info.Writer),
 		Series:cleanMetadata(info.Series), SeriesNumber:info.Number, Genre:cleanMetadata(info.Genre),
