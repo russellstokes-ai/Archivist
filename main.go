@@ -638,6 +638,18 @@ func (a *app) routes() http.Handler {
 		if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
 		offset := 0
 		if n, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && n >= 0 { offset = n }
+		sortOrder := "a.needs_review DESC,a.title,a.id"
+		switch r.URL.Query().Get("sort") {
+		case "", "review":
+		case "title": sortOrder = "a.title COLLATE NOCASE,a.id"
+		case "author": sortOrder = "a.author COLLATE NOCASE,a.title COLLATE NOCASE,a.id"
+		case "series": sortOrder = "a.series COLLATE NOCASE,a.series_number,a.title COLLATE NOCASE,a.id"
+		case "year": sortOrder = "a.published_year DESC,a.title COLLATE NOCASE,a.id"
+		case "format": sortOrder = "a.format,a.title COLLATE NOCASE,a.id"
+		default:
+			fail(w,400,errors.New("invalid sort option"))
+			return
+		}
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.author,a.series,a.series_number,a.genre,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,a.format,s.space,a.available,a.metadata_confidence,a.needs_review,a.review_reason,a.metadata_source
 			FROM assets a JOIN sources s ON s.id=a.source_id
 			WHERE (a.title LIKE ? OR a.author LIKE ? OR a.series LIKE ? OR a.genre LIKE ?)
@@ -650,7 +662,7 @@ func (a *app) routes() http.Handler {
 			AND (?=0 OR a.needs_review=1)
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
-			ORDER BY a.needs_review DESC,a.title,a.id LIMIT ? OFFSET ?`,
+			ORDER BY `+sortOrder+` LIMIT ? OFFSET ?`,
 			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
 			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
 		if e != nil {
