@@ -116,6 +116,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$ARCHIVIST_MEDIA_PATH"
+          # Disposable extension-classified fixture to verify API streaming; not a playable MP3.
+          printf '0123456789' > "$ARCHIVIST_MEDIA_PATH/CI Test Track.mp3"
           cleanup() {
             docker compose -f compose.yaml logs --tail=100 || true
             docker compose -f compose.yaml down -v --remove-orphans || true
