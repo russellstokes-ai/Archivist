@@ -32,6 +32,9 @@ class ArchivistAutoService : MediaLibraryService() {
   private val ioExecutor = Executors.newSingleThreadExecutor()
   private val progressHandler = Handler(Looper.getMainLooper())
   private val artworkCache = ConcurrentHashMap<String, ByteArray>()
+  private var snapshotCache: AutoSnapshot? = null
+  private var snapshotModified: Long = -1L
+  private var snapshotSize: Long = -1L
 
   private val progressTicker = object : Runnable {
     override fun run() {
@@ -476,9 +479,14 @@ class ArchivistAutoService : MediaLibraryService() {
     }
   }
 
+  @Synchronized
   private fun loadSnapshot(): AutoSnapshot {
     val file = File(filesDir, "android-auto/library.json")
-    if (!file.isFile) return AutoSnapshot(emptyList())
+    if (!file.isFile) { snapshotCache = null; snapshotModified = -1L; snapshotSize = -1L; return AutoSnapshot(emptyList()) }
+    val modified = file.lastModified()
+    val size = file.length()
+    val existing = snapshotCache
+    if (existing != null && modified == snapshotModified && size == snapshotSize) return existing
     return try {
       val root = JSONObject(file.readText())
       val version = root.optInt("version", 0)
@@ -518,13 +526,18 @@ class ArchivistAutoService : MediaLibraryService() {
           )
         }
       }
-      AutoSnapshot(
+      val current = AutoSnapshot(
         works = parsed,
         resumeWorkKey = root.optString("resumeWorkKey").trim().takeIf { it.isNotBlank() },
         resumeUpdatedAt = root.optLong("resumeUpdatedAt", 0L).coerceAtLeast(0L)
       )
+      snapshotCache = current
+      snapshotModified = modified
+      snapshotSize = size
+      current
     } catch (_: Throwable) {
-      AutoSnapshot(emptyList())
+      // The phone can be updating its snapshot. Keep the previous verified list.
+      snapshotCache ?: AutoSnapshot(emptyList())
     }
   }
 
