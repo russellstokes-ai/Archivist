@@ -19,4 +19,7 @@ assert(compose.includes('${ARCHIVIST_MEDIA_PATH:?'), 'Media path must be explici
 assert(compose.includes('${ARCHIVIST_BIND_ADDRESS:-127.0.0.1}'), 'HTTP port must be loopback-only by default');
 assert(env.includes('ARCHIVIST_MEDIA_PATH='), 'Missing media-root configuration example');
 assert(!/privileged:\s*true/.test(compose), 'Container must not be privileged');
+const ignore=fs.readFileSync('.gitignore','utf8');
+assert(ignore.split(/\r?\n/).includes('.env'), 'Local .env must be ignored');
+assert(ignore.split(/\r?\n/).includes('compose.override.yaml'), 'Machine-specific Docker overrides must be ignored');
 console.log('PASS: standalone Archivist container uses shared source, persistent data, readonly media and safe default binding');
