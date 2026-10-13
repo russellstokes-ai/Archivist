@@ -25,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify protected Archivist features
+        run: node scripts/v1-protection-gate.cjs
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
