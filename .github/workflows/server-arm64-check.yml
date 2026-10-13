@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     env:
-      ARCHIVIST_MEDIA_PATH: ${{ runner.temp }}/Archivist NAS share - Books
-      ARCHIVIST_SECONDARY_MEDIA: ${{ runner.temp }}/Archivist NFS share - Audiobooks
+      ARCHIVIST_MEDIA_PATH: ${{ github.workspace }}/Archivist NAS share - Books
+      ARCHIVIST_SECONDARY_MEDIA: ${{ github.workspace }}/Archivist NFS share - Audiobooks
       ARCHIVIST_BIND_ADDRESS: 127.0.0.1
       ARCHIVIST_PORT: '15058'
       ARCHIVIST_VERSION: arm64-ci
