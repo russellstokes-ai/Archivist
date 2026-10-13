@@ -234,7 +234,7 @@ jobs:
           for target in ('/media','/media-external'):
               assert volumes[target]['type']=='bind'
               assert bool(volumes[target]['read_only']) is True
-              assert volumes[target]['bind']['create_host_path'] is False
+              assert volumes[target].get('bind',{}).get('create_host_path',False) is False
           ports=service['ports']
           assert len(ports)==1 and ports[0]['host_ip']=='127.0.0.1',ports
           print('PASS: ARM64 NAS-style Compose preserves /data, both read-only mounts, and loopback binding')
@@ -279,7 +279,18 @@ jobs:
           done
           test "$ready" = 1
           compose exec -T server grep -q persisted /data/arm64-ci-persistence-marker
-          echo 'PASS: native ARM64 runtime, NAS-style read-only mounts, health and persistent data'
+          compose down
+          missing="$RUNNER_TEMP/archivist-ci-missing-media-root"
+          test ! -e "$missing"
+          original_media="$ARCHIVIST_MEDIA_PATH"
+          export ARCHIVIST_MEDIA_PATH="$missing"
+          if compose up -d --no-build; then
+            echo 'FAIL: container started with an absent required media mount' >&2
+            exit 1
+          fi
+          test ! -e "$missing"
+          export ARCHIVIST_MEDIA_PATH="$original_media"
+          echo 'PASS: native ARM64 runtime, NAS-style read-only mounts, health, persistence, and missing-root safety'
 
 # Final verification trigger 2026-09-28
 
