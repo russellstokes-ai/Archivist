@@ -199,14 +199,12 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			return
 		}
 		ext := strings.ToLower(filepath.Ext(f.Name()))
-		if format == "Comic" && ext == ".cbr" {
-			fail(w, 415, errors.New("CBR/RAR comics are not supported; convert this comic to CBZ/ZIP"))
-			return
-		}
 		var parts []string
 		var z *zip.Reader
 		if format == "Comic" && ext == ".cbt" {
 			parts, e = tarComicParts(f)
+		} else if format == "Comic" && ext == ".cbr" {
+			parts, e = rarComicParts(f)
 		} else {
 			z, e = zip.NewReader(f, info.Size())
 			if e == nil { parts, e = readerParts(z, format) }
@@ -240,6 +238,8 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 		var data []byte
 		if format == "Comic" && ext == ".cbt" {
 			data, e = tarComicEntry(f, parts[index], limit)
+		} else if format == "Comic" && ext == ".cbr" {
+			data, e = rarComicEntry(f, parts[index], limit)
 		} else {
 			data, e = zipEntry(z, parts[index], limit)
 		}
