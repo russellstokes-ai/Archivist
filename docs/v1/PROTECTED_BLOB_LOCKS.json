@@ -1,0 +1,238 @@
+{
+  "schema": 1,
+  "source_commit": "131cabdc82ce7c6d6b36e0034540184bd990a3ab",
+  "protected_against": "unreviewed changes on dev/archivist-v1-protected-20261013",
+  "approval_rule": "Do not change a locked path without explicit user approval and an intentionally reviewed lock-update commit.",
+  "locks": [
+    {
+      "path": "archivist/app/web/assets/archivist-app-icon.png",
+      "git_blob_sha": "f1c18bc119a98b6101fb9614c962a0cb21713b6c",
+      "bytes": 3862
+    },
+    {
+      "path": "archivist/app/web/assets/archivist-primary-logo.png",
+      "git_blob_sha": "3dd724c49b34ae1495b2bbaa6465b5931b885424",
+      "bytes": 25077
+    },
+    {
+      "path": "archivist/app/web/assets/LibreCaslonText.ttf",
+      "git_blob_sha": "01377705e6bc046f6f81e86235abebb0e948ebad",
+      "bytes": 126876
+    },
+    {
+      "path": "archivist/app/web/assets/OFL.txt",
+      "git_blob_sha": "d718bc9c02ee10a8106b57025190c432875fcd2b",
+      "bytes": 4404
+    },
+    {
+      "path": "archivist/icon.png",
+      "git_blob_sha": "bd26f992468e4b4a8fe831cd9ce253c447faa810",
+      "bytes": 9058
+    },
+    {
+      "path": "archivist/logo.png",
+      "git_blob_sha": "3dd724c49b34ae1495b2bbaa6465b5931b885424",
+      "bytes": 25077
+    },
+    {
+      "path": "mobile/App.tsx",
+      "git_blob_sha": "aacfe887ae535242a22bac414eb7cf823f190563",
+      "bytes": 696284
+    },
+    {
+      "path": "mobile/assets/fonts/LibreCaslonText.ttf",
+      "git_blob_sha": "01377705e6bc046f6f81e86235abebb0e948ebad",
+      "bytes": 126876
+    },
+    {
+      "path": "mobile/assets/fonts/OFL.txt",
+      "git_blob_sha": "d718bc9c02ee10a8106b57025190c432875fcd2b",
+      "bytes": 4404
+    },
+    {
+      "path": "mobile/assets/icon.png",
+      "git_blob_sha": "f1c18bc119a98b6101fb9614c962a0cb21713b6c",
+      "bytes": 3862
+    },
+    {
+      "path": "mobile/assets/motion/book-loader.json",
+      "git_blob_sha": "0c23907d9e3221de2fdb0a0ce0d529b1d065f64e",
+      "bytes": 15858
+    },
+    {
+      "path": "mobile/assets/motion/LIVE_FORWARD_MEDIA_SOURCE.md",
+      "git_blob_sha": "7e6c0f66a45a97d9a15aca106a86af1bf3c01a69",
+      "bytes": 357
+    },
+    {
+      "path": "mobile/assets/motion/LIVE_PLAY_PAUSE_SOURCE.md",
+      "git_blob_sha": "a327afbf089ab6ff861c8cb317f8833f62887a56",
+      "bytes": 398
+    },
+    {
+      "path": "mobile/assets/motion/live-forward-media-ink.json",
+      "git_blob_sha": "fc0b9db63394ae13fbc83daae9c138e4769c0853",
+      "bytes": 10635
+    },
+    {
+      "path": "mobile/assets/motion/live-forward-media-source.json",
+      "git_blob_sha": "f2e55c2c46aa6f329f9a836e21d376ba6395980e",
+      "bytes": 13107
+    },
+    {
+      "path": "mobile/assets/motion/live-play-pause-ivory.json",
+      "git_blob_sha": "ff4c779e5fcabac4c40dc78cec0109a1a353675c",
+      "bytes": 14550
+    },
+    {
+      "path": "mobile/assets/motion/live-play-pause-lottiefiles.json",
+      "git_blob_sha": "efc44cc29ccb2761fdef232c7d5e92498dbfcb5a",
+      "bytes": 16852
+    },
+    {
+      "path": "mobile/assets/motion/live-play-pause-navy.json",
+      "git_blob_sha": "59000e0d47fa2afa5e2ec6b6ece956040bd9a285",
+      "bytes": 14656
+    },
+    {
+      "path": "mobile/assets/motion/MINI_AUDIO_WAVEFORM_SOURCE.md",
+      "git_blob_sha": "a1dcf3914c1495e0b5f07fa73d1ecdfbb8ca7f55",
+      "bytes": 455
+    },
+    {
+      "path": "mobile/assets/motion/mini-audio-waveform-ivory.json",
+      "git_blob_sha": "3caefb02303bf155df36f8402bf247cea9fcade6",
+      "bytes": 7961
+    },
+    {
+      "path": "mobile/assets/motion/mini-audio-waveform-original.json",
+      "git_blob_sha": "284e643d918d4d7c4171511d730e8adc3fedc28c",
+      "bytes": 7966
+    },
+    {
+      "path": "mobile/assets/motion/mini-audio-waveform-teal.json",
+      "git_blob_sha": "557d618beb10b09a52677f4e0f126c24746626b6",
+      "bytes": 7961
+    },
+    {
+      "path": "mobile/assets/motion/rewards/badge-original.json",
+      "git_blob_sha": "e84319bb18c27c8159458eaef26e8807677c06e6",
+      "bytes": 15840
+    },
+    {
+      "path": "mobile/assets/motion/rewards/books-stack-original.json",
+      "git_blob_sha": "0b08ae4895094f307845f81e04ee3d15f000e78f",
+      "bytes": 76919
+    },
+    {
+      "path": "mobile/assets/motion/rewards/crown-original.json",
+      "git_blob_sha": "537f055ea80d6dc904eaeb57efe901776dbda27b",
+      "bytes": 77875
+    },
+    {
+      "path": "mobile/assets/motion/rewards/firework-original.json",
+      "git_blob_sha": "16602ff2570c5773e1e3c6d4c4bf4b0a052bafdc",
+      "bytes": 17355
+    },
+    {
+      "path": "mobile/assets/motion/rewards/headphones-original.json",
+      "git_blob_sha": "77c09f36923c1e7580f9997977d67783ec2b2778",
+      "bytes": 12773
+    },
+    {
+      "path": "mobile/assets/motion/rewards/level-confetti-original.json",
+      "git_blob_sha": "0e378e09ef37c6e3952a724111886ca468c16018",
+      "bytes": 42214
+    },
+    {
+      "path": "mobile/assets/motion/rewards/SOURCE_MANIFEST.json",
+      "git_blob_sha": "b55e59d6dc6905c69a5be2b162f2e848cf357fd6",
+      "bytes": 3446
+    },
+    {
+      "path": "mobile/assets/motion/rewards/trophy-original.json",
+      "git_blob_sha": "5fda0333cf5b19ff07d4b0b5e8e414d0f453f1d0",
+      "bytes": 22832
+    },
+    {
+      "path": "mobile/AtlasChartRing.tsx",
+      "git_blob_sha": "212afcabe1760e768563890336932f83ab7c16fb",
+      "bytes": 1280
+    },
+    {
+      "path": "mobile/atlasUniverse.ts",
+      "git_blob_sha": "ddeaf5e246e61e59a87f1d620130b7c683e24419",
+      "bytes": 9482
+    },
+    {
+      "path": "mobile/comicReaderWebViewSource.ts",
+      "git_blob_sha": "4274b03f81249a8a91b8a38f3c04715c35de0de0",
+      "bytes": 746
+    },
+    {
+      "path": "mobile/localLibrary.ts",
+      "git_blob_sha": "8a9b4071a3bc4188e9d1932e665ad9b32a2ff5ff",
+      "bytes": 66354
+    },
+    {
+      "path": "mobile/localReader.ts",
+      "git_blob_sha": "827914360d70e33af63ed3e03b66095318144756",
+      "bytes": 30284
+    },
+    {
+      "path": "mobile/localWorks.ts",
+      "git_blob_sha": "80553511d1af26d8d51ec466d9d6435b4fa32a8a",
+      "bytes": 6875
+    },
+    {
+      "path": "mobile/metadataResolution.ts",
+      "git_blob_sha": "84636f74540911cb3bc0f1e83bb72ee837934b61",
+      "bytes": 3485
+    },
+    {
+      "path": "mobile/metadataSync.ts",
+      "git_blob_sha": "dfa9fa7bc07dce6ce38590a73b90a65cca5e65bc",
+      "bytes": 24425
+    },
+    {
+      "path": "mobile/rewardMotion.ts",
+      "git_blob_sha": "30d613b1e810e03d669a34d121498349f9177278",
+      "bytes": 2824
+    },
+    {
+      "path": "mobile/scanFeedback.ts",
+      "git_blob_sha": "5289408a4b125a5f516d5b9f58180f7c2ab33f0e",
+      "bytes": 3083
+    },
+    {
+      "path": "mobile/scanLifecycle.ts",
+      "git_blob_sha": "54e53133d54d4769d57e023f31eb63bc21481618",
+      "bytes": 1661
+    },
+    {
+      "path": "mobile/shelfPresentation.ts",
+      "git_blob_sha": "fafa676d7d7340a0769dd178c08694574603c49b",
+      "bytes": 3985
+    },
+    {
+      "path": "web/assets/archivist-app-icon.png",
+      "git_blob_sha": "f1c18bc119a98b6101fb9614c962a0cb21713b6c",
+      "bytes": 3862
+    },
+    {
+      "path": "web/assets/archivist-primary-logo.png",
+      "git_blob_sha": "3dd724c49b34ae1495b2bbaa6465b5931b885424",
+      "bytes": 25077
+    },
+    {
+      "path": "web/assets/LibreCaslonText.ttf",
+      "git_blob_sha": "01377705e6bc046f6f81e86235abebb0e948ebad",
+      "bytes": 126876
+    },
+    {
+      "path": "web/assets/OFL.txt",
+      "git_blob_sha": "d718bc9c02ee10a8106b57025190c432875fcd2b",
+      "bytes": 4404
+    }
+  ]
+}
