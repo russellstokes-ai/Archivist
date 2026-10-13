@@ -49,7 +49,7 @@ func rarComicParts(f *os.File) ([]string, error) {
 		if nextErr != nil {
 			return nil, nextErr
 		}
-		if h.IsDir || h.LinkType != 0 || !rarComicImage(h.Name) {
+		if h.IsDir || !h.Mode().IsRegular() || !rarComicImage(h.Name) {
 			continue
 		}
 		if h.Encrypted || (!h.UnKnownSize && (h.UnPackedSize < 1 || h.UnPackedSize > maxRARComicPage)) {
@@ -88,7 +88,7 @@ func rarComicEntry(f *os.File, name string, limit uint64) ([]byte, error) {
 		if h.Name != name {
 			continue
 		}
-		if h.IsDir || h.LinkType != 0 || h.Encrypted {
+		if h.IsDir || !h.Mode().IsRegular() || h.Encrypted {
 			return nil, errors.New("comic page unavailable or encrypted")
 		}
 		if !h.UnKnownSize && (h.UnPackedSize < 1 || uint64(h.UnPackedSize) > limit) {
@@ -125,7 +125,7 @@ func rarComicInfo(f *os.File) ([]byte, error) {
 		if nextErr != nil {
 			return nil, nextErr
 		}
-		if h.IsDir || h.LinkType != 0 || !strings.EqualFold(path.Base(h.Name), "ComicInfo.xml") {
+		if h.IsDir || !h.Mode().IsRegular() || !strings.EqualFold(path.Base(h.Name), "ComicInfo.xml") {
 			continue
 		}
 		const xmlLimit = 2 << 20
