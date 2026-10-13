@@ -60,3 +60,18 @@ Pin a tested source commit/image when making a reproducible deployment. Before u
 - No prepublished versioned multi-arch image, NAS marketplace template or automated Docker-upgrade procedure is supplied here.
 - Docker runtime, NAS permissions, data migration, media scanning, and mobile remote access have not been validated by this chat session.
 - Home Assistant packaging and mobile source are unchanged. Do not treat this candidate as a full commercial release.
+
+## ARM64 runtime and NAS-style storage regression gate
+
+GitHub Actions workflow `.github/workflows/server-arm64-check.yml` runs on a **native Linux ARM64 runner**, separately from the existing AMD64/Home Assistant server workflow. Its Docker image is built from the existing `archivist/Dockerfile` and Go server source.
+
+The ARM64 gate checks:
+
+- Protected-file hashes and the standalone Compose contract.
+- Native `aarch64` inside the running container and a functioning `/healthz` endpoint.
+- Two synthetic host media roots (including **spaces in their paths**), both mapped read-only as would be the case for mounted NAS or external disks.
+- Both media roots are readable but cannot be written through the container.
+- `/data` remains a Docker-managed persistent volume and survives container recreation.
+- The published HTTP port remains bound to localhost in the test.
+
+**Important:** these are representative host bind mounts on GitHub's runner, **not real SMB/NFS mounts** and **not a Synology/QNAP/TrueNAS/Unraid certification test**. Real host filesystems, NAS firmware, drive disconnect/reconnect, write-authorised organiser actions, and Android remote access require separate acceptance on actual target installations. This test uses disposable synthetic content and must never mount or modify a user's media.
