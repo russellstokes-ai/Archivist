@@ -381,6 +381,15 @@ export async function removeOfflineWork(work:OfflineServerWork){
   await deleteAsync(offlineDirectory(work.server,work.workId),{idempotent:true});
 }
 
+// A local file is playable only if it exists, has real content and, when
+// the server supplied a trustworthy byte length, still matches that length.
+// Never delete an invalid file here: partial media may be recoverable.
+function offlineTrackSizeValid(actual:number,declared?:number):boolean {
+  if(!Number.isSafeInteger(actual)||actual<=0)return false;
+  const expected=Number(declared);
+  return !Number.isSafeInteger(expected)||expected<=0||actual===expected;
+}
+
 export async function inspectOfflineStorage(
   works:Record<string,OfflineServerWork>,
   checkpoints:OfflineDownloadCheckpoint[]=[],
@@ -390,7 +399,8 @@ export async function inspectOfflineStorage(
     let missing=false;
     for(const track of work.tracks){
       const size=await existingSize(track.uri);
-      if(size<0){missingFiles++;missing=true;}else actualBytes+=size;
+      if(!offlineTrackSizeValid(size,track.size)){missingFiles++;missing=true;}
+      if(size>0)actualBytes+=size;
     }
     if(work.coverUri){
       const size=await existingSize(work.coverUri);
@@ -435,7 +445,8 @@ export async function cleanupOfflineStorage(
   for(const [key,work] of Object.entries(works)){
     const missingTrackIds:number[]=[];
     for(const track of work.tracks){
-      if(await existingSize(track.uri)<0)missingTrackIds.push(track.id);
+      if(!offlineTrackSizeValid(await existingSize(track.uri),track.size))
+        missingTrackIds.push(track.id);
     }
     const dir=offlineDirectory(work.server,work.workId);
     // A missing track never authorises deleting the other downloaded files.
