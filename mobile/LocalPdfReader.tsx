@@ -17,7 +17,10 @@ export default function LocalPdfReader({uri,title,initialPage,requestedPage,pape
   // Mask the old document immediately on the first render with a new URI,
   // even before React schedules the lifecycle reset effect.
   const active=session.uri===uri?session:openPdfSession(uri,initialPage,session.generation+1);
-  const {page,count,loading,error}=active;
+  const {count,loading,error}=active;
+  // Keep the saved page internally while the document is uncounted, but
+  // display a disabled first-page control until native paging succeeds.
+  const page=count>0?active.page:0;
   const preferredPage=requestedPage===null||requestedPage===undefined?null:
     (count?Math.min(count-1,safePdfPage(requestedPage)):safePdfPage(requestedPage));
   const appliedRequest=useRef('');
