@@ -63,6 +63,7 @@ const {
   offlineKey,
   offlineToLocalWork,
   removeOfflineWork,
+  removeOfflineCheckpoint,
 }=require('./offlineLibrary.ts');
 
 (async()=>{
@@ -193,6 +194,23 @@ const {
     ]),
     /8 GB/,
   );
+
+  // Discarding an unfinished download must not delete the chapters which
+  // were already downloaded or any arbitrary persisted path.
+  const abandonDir=offlineDirectory(session.server,65);
+  const completedUri=abandonDir+'001-complete.mp3';
+  const incompleteUri=abandonDir+'002-partial.mp3';
+  files.set(completedUri,Buffer.alloc(100));
+  files.set(incompleteUri,Buffer.alloc(30));
+  const abandon={version:1,key:offlineKey(session.server,65),server:session.server,workId:65,
+    completedTrackIds:[1],current:{trackId:2,uri:incompleteUri,bytesWritten:30},updatedAt:new Date().toISOString()};
+  await removeOfflineCheckpoint(abandon);
+  assert(files.has(completedUri),'discarding partial chapter must preserve completed chapter');
+  assert(!files.has(incompleteUri),'unfinished direct-child track should be discarded');
+  await removeOfflineCheckpoint({...abandon,current:{trackId:1,uri:completedUri,bytesWritten:100}});
+  assert(files.has(completedUri),'a completed track ID must never be removed by stale checkpoint');
+  await removeOfflineCheckpoint({...abandon,current:{trackId:2,uri:protectedUri,bytesWritten:1}});
+  assert(files.has(protectedUri),'untrusted checkpoint URI must never permit deleting external files');
 
   // Repeated download requests must reuse verified files instead of deleting
   // a completed book before its replacement has been downloaded.
