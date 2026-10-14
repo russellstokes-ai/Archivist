@@ -7,9 +7,9 @@ const ts=require('typescript');
 
 const source=fs.readFileSync(path.join(__dirname,'connection.ts'),'utf8');
 const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
-const exports={};
-vm.runInNewContext(js,{exports,module:{exports},URL},{filename:'connection.ts'});
-const {validateServer}=exports;
+const moduleExports={};
+vm.runInNewContext(js,{exports:moduleExports,module:{exports:moduleExports},URL},{filename:'connection.ts'});
+const {validateServer}=moduleExports;
 assert.equal(typeof validateServer,'function');
 
 for(const [input,expected] of [
