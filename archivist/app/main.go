@@ -477,6 +477,7 @@ func (a *app) routes() http.Handler {
 	a.catalogueRoutes(mux)
 	a.coverRoutes(mux)
 	a.progressRoutes(mux)
+	a.syncProgressRoutes(mux)
 	a.listeningRoutes(mux)
 	a.playerFeatureRoutes(mux)
 	a.householdRoutes(mux)
