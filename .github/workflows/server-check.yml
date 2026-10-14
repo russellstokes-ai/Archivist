@@ -16,6 +16,7 @@ on:
       - '.env.example'
       - '.gitignore'
       - 'DOCKER-DEPLOYMENT.md'
+      - 'deploy/nas/**'
       - 'scripts/docker-compose-contract.test.cjs'
       - 'scripts/mobile-server-protocol-smoke.py'
       - '.github/workflows/server-check.yml'
@@ -32,6 +33,7 @@ on:
       - 'compose.yaml'
       - '.env.example'
       - 'DOCKER-DEPLOYMENT.md'
+      - 'deploy/nas/**'
       - 'scripts/docker-compose-contract.test.cjs'
       - 'scripts/mobile-server-protocol-smoke.py'
       - '.github/workflows/server-check.yml'
@@ -107,6 +109,28 @@ jobs:
         run: |
           node scripts/docker-compose-contract.test.cjs
           docker compose -f compose.yaml config --quiet
+
+      - name: NAS multi-library storage profile
+        env:
+          ARCHIVIST_MEDIA_PATH: ${{ github.workspace }}
+          ARCHIVIST_AUDIO_HOST_PATH: ${{ github.workspace }}
+          ARCHIVIST_COMICS_HOST_PATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          docker compose -f compose.yaml -f deploy/nas/compose.volumes.yaml config --format json > "$RUNNER_TEMP/archivist-nas.json"
+          python3 - <<'PY'
+          import json, os
+          with open(os.path.join(os.environ['RUNNER_TEMP'],'archivist-nas.json'), encoding='utf-8') as f:
+              config=json.load(f)
+          mounts={v['target']:v for v in config['services']['server']['volumes']}
+          assert set(('/data','/media','/extra-media/audiobooks','/extra-media/comics')).issubset(mounts), mounts
+          assert mounts['/data']['type']=='volume', mounts['/data']
+          for path in ('/media','/extra-media/audiobooks','/extra-media/comics'):
+              v=mounts[path]
+              assert v['type']=='bind' and v['read_only'] is True, v
+              assert v.get('bind',{}).get('create_host_path',False) is False, v
+          print('PASS: NAS multi-library profile has durable database and three existing read-only media roots')
+          PY
 
       - name: Standalone Docker runtime and persistence smoke
         env:
