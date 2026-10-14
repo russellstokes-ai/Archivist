@@ -26,7 +26,6 @@ export async function readCbrMetadataText(uri:string):Promise<string>{
 const maxArchiveBytes=256*1024*1024;
 const maxEntryBytes=64*1024*1024;
 const maxPages=500;
-const maxTarMembers=10000;
 const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 function decodeBase64(input:string){
   const clean=input.replace(/[^A-Za-z0-9+/=]/g,'');const out:number[]=[];let buffer=0,bits=0;
@@ -41,21 +40,13 @@ function octal(bytes:Uint8Array,start:number,length:number){const raw=text(bytes
 function mime(name:string){const lower=name.toLowerCase();return lower.endsWith('.png')?'image/png':lower.endsWith('.webp')?'image/webp':lower.endsWith('.gif')?'image/gif':'image/jpeg';}
 function imageName(name:string){return /\.(jpe?g|png|gif|webp)$/i.test(name);}
 export function parseTarImages(bytes:Uint8Array):ArchiveImage[]{
-  const images:ArchiveImage[]=[];let offset=0,total=0,members=0;
-  while(offset+512<=bytes.length){
+  const images:ArchiveImage[]=[];let offset=0,total=0;
+  while(offset+512<=bytes.length&&images.length<maxPages){
     let empty=true;for(let i=offset;i<offset+512;i++)if(bytes[i]!==0){empty=false;break;}if(empty)break;
-    if(++members>maxTarMembers)throw Error('Comic archive contains too many TAR entries.');
     const name=text(bytes,offset,100);const size=octal(bytes,offset+124,12);const type=String.fromCharCode(bytes[offset+156]||48);
     if(size<0||size>maxEntryBytes)throw Error('Comic archive entry exceeds the 64 MB safety limit.');
     const dataStart=offset+512,dataEnd=dataStart+size;if(dataEnd>bytes.length)throw Error('Comic archive is truncated.');
-    // Only regular TAR members contain pages. Symlinks, hard links, PAX
-    // headers and folders may have image-looking names but aren't images.
-    if(type==='0'&&size>0&&imageName(name)){
-      if(images.length>=maxPages)throw Error('Comic archive exceeds the 500-page reader safety limit.');
-      total+=size;
-      if(total>maxArchiveBytes)throw Error('Comic archive expands beyond the 256 MB reader safety limit.');
-      images.push({name,mime:mime(name),base64:encodeBase64(bytes.slice(dataStart,dataEnd))});
-    }
+    if(type!=='5'&&imageName(name)){total+=size;if(total>maxArchiveBytes)throw Error('Comic archive expands beyond the 256 MB reader safety limit.');images.push({name,mime:mime(name),base64:encodeBase64(bytes.slice(dataStart,dataEnd))});}
     offset=dataStart+Math.ceil(size/512)*512;
   }
   return images.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
