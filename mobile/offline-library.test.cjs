@@ -164,6 +164,48 @@ const {
   const recovered=await cleanupOfflineStorage(incomplete.retained);
   assert.equal(recovered.retained[resumed.key].missingTrackIds,undefined,'restored chapter must become available');
 
+  // #31 integrity regression: an existing file can be damaged without
+  // disappearing from the filesystem (truncation or zero-byte corruption).
+  // Never silently prioritise that local file over a healthy server copy.
+  const {sourceIdentity,dedupeForAll}=require('./librarySources.ts');
+  const serverIdentity=sourceIdentity({source:'server',server:session.server,serverWorkId:resumed.workId});
+  const offlineIdentity=sourceIdentity({source:'downloaded',server:session.server,serverWorkId:resumed.workId});
+  const serverReady={...serverIdentity,available:true};
+  const localItem=(work)=>({...offlineIdentity,available:true,localWork:offlineToLocalWork(work)});
+  const fullLocal=localItem(recovered.retained[resumed.key]);
+  assert.equal(dedupeForAll([serverReady,fullLocal])[0].source,'downloaded',
+    'verified complete local work must beat an available server');
+  const originalOne=files.get(resumed.tracks[0].uri);
+  const originalTwo=files.get(resumed.tracks[1].uri);
+  files.set(resumed.tracks[0].uri,Buffer.alloc(15));
+  files.set(resumed.tracks[1].uri,Buffer.alloc(0));
+  const damagedStorage=await inspectOfflineStorage(recovered.retained);
+  assert.equal(damagedStorage.missingFiles,2,
+    'both truncated and empty tracks must count as unavailable');
+  assert.equal(damagedStorage.incompleteWorks,1);
+  assert(damagedStorage.actualBytes>=15,'damaged bytes remain accounted for on disk');
+  const integrity=await cleanupOfflineStorage(recovered.retained);
+  assert.deepEqual(integrity.retained[resumed.key].missingTrackIds,[1,2]);
+  assert(files.has(resumed.tracks[0].uri)&&files.has(resumed.tracks[1].uri),
+    'validation must not erase potentially recoverable media');
+  const invalidLocal=localItem(integrity.retained[resumed.key]);
+  assert.equal(invalidLocal.localWork.available,false);
+  assert.equal(invalidLocal.localWork.files,0);
+  assert.equal(dedupeForAll([serverReady,invalidLocal])[0].source,'server',
+    'corrupt downloads must not hide playable online work');
+  assert.equal(dedupeForAll([invalidLocal,serverReady])[0].source,'server',
+    'server fallback must not depend on source ordering');
+  const offlineServer={...serverReady,available:false};
+  assert.equal(dedupeForAll([invalidLocal,offlineServer])[0].localWork?.available,false,
+    'neither unavailable source should be misrepresented as a playable download');
+  files.set(resumed.tracks[0].uri,originalOne);
+  files.set(resumed.tracks[1].uri,originalTwo);
+  const restoredIntegrity=await cleanupOfflineStorage(integrity.retained);
+  assert.equal(restoredIntegrity.retained[resumed.key].missingTrackIds,undefined,
+    'verified restored file sizes must recover offline availability');
+  assert.equal(dedupeForAll([serverReady,localItem(restoredIntegrity.retained[resumed.key])])[0].source,'downloaded',
+    'restored downloads must reclaim offline-first priority');
+
   // Unknown directories containing media may be an interrupted but recoverable
   // offline work. Cleanup must not irreversibly delete those media files.
   dirs.add('file:///docs/archivist-offline/orphan/');
