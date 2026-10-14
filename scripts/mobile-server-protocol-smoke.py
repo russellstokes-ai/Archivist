@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 import secrets
+import sqlite3
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -112,6 +114,22 @@ def check(origin,source,state_out=None):
     status,_,data=request_bytes(origin,asset_path,bearer=session)
     assert status==200 and data==b"0123456789",(status,data)
 
+    # Test the actual database export without staging a restore or using live media.
+    assert request_bytes(origin,"/api/backup")[0]==401,"Anonymous database backup must be denied"
+    backup_status,_,backup_bytes=request_bytes(origin,"/api/backup",bearer=session)
+    assert backup_status==200 and backup_bytes.startswith(b"SQLite format 3\x00"),(backup_status,len(backup_bytes))
+    with tempfile.TemporaryDirectory(prefix="archivist-ci-backup-") as directory:
+        backup_path=os.path.join(directory,"export.db")
+        with open(backup_path,"wb") as copy:
+            copy.write(backup_bytes)
+        with sqlite3.connect(backup_path) as database:
+            integrity=database.execute("PRAGMA integrity_check").fetchone()[0]
+            exported_sources=database.execute("SELECT count(*) FROM sources").fetchone()[0]
+            exported_assets=database.execute("SELECT count(*) FROM assets").fetchone()[0]
+        assert integrity=="ok" and exported_sources==1 and exported_assets>=1,(integrity,exported_sources,exported_assets)
+    assert request(origin,"/api/library-health")[0]==401,"Anonymous host-path diagnostics must be denied"
+    status,report=request(origin,"/api/library-health",bearer=session)
+    assert status==200 and report["summary"]["sourceCount"]==1 and report["sources"][0]["online"] is True,(status,report)
     assert request(origin,"/logout","POST",{},bearer=session,action=True)[0]==200,"Logout must succeed"
     assert request(origin,"/api/me",bearer=session)[0]==401,"Revoked session must no longer work"
     if state_out:
