@@ -36,4 +36,9 @@ for(const input of [
   'https://books.example.com/?key=secret',
   'javascript:alert(1)'
 ]) assert.throws(()=>validateServer(input),undefined,'Expected rejected host: '+input);
+const appConfig=JSON.parse(fs.readFileSync(path.join(__dirname,'app.json'),'utf8'));
+const iosPlist=appConfig.expo.ios.infoPlist;
+assert.equal(iosPlist.NSAppTransportSecurity?.NSAllowsLocalNetworking,true,'iOS must permit private local media servers');
+assert.notEqual(iosPlist.NSAppTransportSecurity?.NSAllowsArbitraryLoads,true,'iOS must not disable ATS for public hosts');
+assert(iosPlist.NSLocalNetworkUsageDescription?.includes('self-hosted'),'iOS LAN permission must explain local servers');
 console.log('PASS: mobile server allows reserved LAN names but requires HTTPS for public origins');
