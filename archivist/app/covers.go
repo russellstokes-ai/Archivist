@@ -8,6 +8,7 @@ import (
 	"errors"
 	"image"
 	"image/jpeg"
+	_ "image/gif"
 	_ "image/png"
 	"io"
 	"net/http"
@@ -20,11 +21,31 @@ import (
 const coverReadLimit = 24 << 20
 const audioCoverChunk = 4 << 20
 
+// DecodeConfig reads image dimensions without allocating the raster. Enforce
+// a decoded-pixel budget before allowing JPEG/PNG processing on small hosts.
+const maxCoverDimension = 8192
+const maxCoverDecodedPixels int64 = 12000000
+
+func safeCoverDimensions(width, height int) bool {
+	return width > 0 && height > 0 &&
+		width <= maxCoverDimension && height <= maxCoverDimension &&
+		int64(width)*int64(height) <= maxCoverDecodedPixels
+}
+
 func safeImageData(data []byte) ([]byte, string, error) {
 	if len(data) == 0 || len(data) > coverReadLimit {
 		return nil, "", errors.New("cover unavailable")
 	}
 	mime := http.DetectContentType(data)
+	// Do not allow a tiny compressed JPEG, PNG or GIF with an enormous declared
+	// raster to exhaust a Raspberry Pi or NAS before thumbnail generation.
+	switch mime {
+	case "image/jpeg", "image/png", "image/gif":
+		config, _, err := image.DecodeConfig(bytes.NewReader(data))
+		if err != nil || !safeCoverDimensions(config.Width, config.Height) {
+			return nil, "", errors.New("cover dimensions exceed safe memory limits or image is invalid")
+		}
+	}
 	switch mime {
 	case "image/jpeg", "image/png":
 		src, _, err := image.Decode(bytes.NewReader(data))
