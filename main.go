@@ -604,6 +604,7 @@ func (a *app) routes() http.Handler {
 			fail(w, 400, e)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		reply(w, map[string]int64{"job_id": job})
 	})
