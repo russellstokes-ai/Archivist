@@ -185,8 +185,10 @@ const {
   assert.equal(partialLocal.localWork.available,true);
   assert.equal(partialLocal.localWork.offlineIncomplete,true);
   assert.equal(partialLocal.localWork.files,1);
-  assert.equal(dedupeForAll([partialLocal,serverReady])[0].source,'server',
-    'online complete server should win over damaged partial downloaded work');
+  assert.equal(dedupeForAll([partialLocal,{...serverReady,reachable:true}])[0].source,'server',
+    'confirmed reachable complete server should win over damaged partial downloaded work');
+  assert.equal(dedupeForAll([partialLocal,serverReady])[0].source,'downloaded',
+    'stale server catalogue availability cannot strand a partially downloaded audiobook offline');
   assert.equal(dedupeForAll([{...serverReady,available:false},partialLocal])[0].source,'downloaded',
     'offline partial chapters must still be usable without server');
   files.set(resumed.tracks[1].uri,Buffer.alloc(0));
