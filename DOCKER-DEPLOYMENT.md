@@ -79,6 +79,16 @@ Back up the Archivist database/configuration using its server backup controls an
 
 Pin a tested source commit/image when making a reproducible deployment. Before updating, preserve a recoverable data snapshot. Do not migrate real family data until native/server acceptance passes.
 
+### Verified restore safety rules
+
+The server's existing administrator-only backup API exports a consistent SQLite database. It is a **catalogue/state backup**, not a copy of the original media. Keep an off-server copy before any platform change.
+
+A submitted restore is staged as `archivist.db.restore.pending` and applied on the next controlled server restart. A second upload **cannot silently replace a pending restore**. The pre-restore database, including any SQLite WAL files, is retained as `archivist.db.before-restore` after a successful restore. Applying another restore is blocked if that previous recovery snapshot still exists. Copy it outside the running data volume, verify the copy and follow an explicit administrator recovery procedure before considering its removal or replacement. Never delete a rollback copy as part of an automatic update.
+
+If applying a staged restore encounters a filesystem error, the server attempts to restore the original database files, returning an error if recovery is incomplete rather than quietly booting with unknown data. Validate restores on disposable copies before migrating a real household.
+
+When moving between Home Assistant, Raspberry Pi, Docker and NAS, retain or consciously remap the container-visible library roots. A valid restored database can still reference paths that are not mounted on the destination host. Do not remove those source records or perform an empty-library rescan until storage mapping and file access are verified.
+
 ## Known limitations of this first deployment candidate
 
 - No prepublished versioned multi-arch image, NAS marketplace template or automated Docker-upgrade procedure is supplied here.
