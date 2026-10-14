@@ -20,7 +20,10 @@ export default function LocalPdfReader({uri,title,initialPage,requestedPage,pape
   const {page,count,loading,error}=active;
   const preferredPage=requestedPage===null||requestedPage===undefined?null:
     (count?Math.min(count-1,safePdfPage(requestedPage)):safePdfPage(requestedPage));
-  const image=preferredPage!==null&&preferredPage!==page?'':visiblePdfImage(active,uri,page,renderWidth);
+  const appliedRequest=useRef('');
+  const requestSignature=preferredPage===null?'':uri+'|'+active.generation+'|'+requestedPage;
+  const requestPending=!!requestSignature&&!!count&&appliedRequest.current!==requestSignature;
+  const image=requestPending&&preferredPage!==page?'':visiblePdfImage(active,uri,page,renderWidth);
   const latest=useRef({uri,page,width:renderWidth});
   latest.current={uri,page,width:renderWidth};
 
@@ -49,14 +52,19 @@ export default function LocalPdfReader({uri,title,initialPage,requestedPage,pape
   },[uri,module,turn]);
 
   useEffect(()=>{
-    if(preferredPage===null||!count||active.uri!==uri||preferredPage===page)return;
-    setSession(s=>pdfSessionReducer(s,{type:'page',uri,generation:active.generation,page:preferredPage}));
-  },[preferredPage,count,uri,page,active.generation,active.uri]);
+    if(!requestPending||preferredPage===null||active.uri!==uri)return;
+    // requestedPage is a one-time seek instruction. Later manual page turns
+    // must not snap back to the old prop value.
+    appliedRequest.current=requestSignature;
+    if(preferredPage!==page)setSession(s=>pdfSessionReducer(s,{
+      type:'page',uri,generation:active.generation,page:preferredPage,
+    }));
+  },[requestPending,requestSignature,preferredPage,count,uri,active.generation,active.uri]);
 
   useEffect(()=>{
     if(!count||active.uri!==uri||!module?.renderPdfPage)return;
     // A new requested position takes precedence over rendering the old page.
-    if(preferredPage!==null&&preferredPage!==page)return;
+    if(requestPending&&preferredPage!==page)return;
     let live=true;
     const generation=active.generation;
     const request=++renderSeq.current;
@@ -77,7 +85,7 @@ export default function LocalPdfReader({uri,title,initialPage,requestedPage,pape
       }
     });
     return ()=>{live=false};
-  },[uri,active.uri,active.generation,page,count,renderWidth,module,preferredPage]);
+  },[uri,active.uri,active.generation,page,count,renderWidth,module,requestPending,preferredPage]);
 
   const move=(delta:number)=>{
     if(!count||active.uri!==uri)return;
