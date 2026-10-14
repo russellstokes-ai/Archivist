@@ -72,6 +72,43 @@ function parseEnvelope(serialized:string|null):Envelope{
   return x as Envelope;
 }
 
+// Fetch all pages before planning any replay. A partial page must never be
+// mistaken for missing server history; fail closed on duplicates or gaps.
+export async function fetchCompleteProgressSnapshot(
+  read:(path:string)=>Promise<unknown>,limit=100,maxPages=100,
+):Promise<RemoteProgress[]>{
+  if(!Number.isSafeInteger(limit)||limit<1||limit>200
+     ||!Number.isSafeInteger(maxPages)||maxPages<1||maxPages>100){
+    throw Error('Invalid progress snapshot bounds');
+  }
+  const all:RemoteProgress[]=[];
+  const seen=new Set<string>();
+  let offset=0;
+  for(let page=0;page<maxPages;page++){
+    const raw=await read('/api/sync/progress?limit='+limit+'&offset='+offset);
+    const response=raw as {items?:unknown;hasMore?:unknown;nextOffset?:unknown}|null;
+    if(!response||!Array.isArray(response.items)||typeof response.hasMore!=='boolean'
+       ||!Number.isSafeInteger(response.nextOffset)
+       ||response.items.length>limit || response.nextOffset!==offset+response.items.length
+       ||(response.hasMore && response.items.length!==limit)){
+      throw Error('Progress snapshot incomplete or malformed; preserve all offline bookmarks');
+    }
+    for(const entry of response.items){
+      if(!entry||typeof entry!=='object')throw Error('Invalid server progress snapshot entry');
+      const item=entry as RemoteProgress;
+      if(!validRecord(item.kind,item.id,item,item.revision)){
+        throw Error('Invalid server progress snapshot entry');
+      }
+      const key=item.kind+':'+item.id;
+      if(seen.has(key))throw Error('Duplicate server progress snapshot entry; preserve offline bookmarks');
+      seen.add(key);all.push({...item});
+    }
+    if(!response.hasMore)return all;
+    offset=response.nextOffset as number;
+  }
+  throw Error('Progress snapshot exceeded page limit; preserve offline bookmarks');
+}
+
 // Works on a complete, profile-authorised server snapshot. A single incomplete
 // page is never enough to conclude that an entry is missing on the server.
 export function planProgressReplay(
