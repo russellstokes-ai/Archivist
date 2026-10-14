@@ -3,6 +3,8 @@ package app.archivist.reader
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.AtomicFile
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -22,6 +24,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
@@ -463,18 +466,22 @@ class ArchivistAutoService : MediaLibraryService() {
       .put("updatedAt", System.currentTimeMillis())
       .toString()
     ioExecutor.execute {
+      val dir = File(filesDir, "android-auto")
+      if (!dir.exists() && !dir.mkdirs()) {
+        Log.w("ArchivistAuto", "Unable to create private playback state directory")
+        return@execute
+      }
+      // AtomicFile never removes the last valid position before the new
+      // payload is durable, even if Android kills playback during the write.
+      val atomic = AtomicFile(File(dir, "progress.json"))
+      var output: FileOutputStream? = null
       try {
-        val dir = File(filesDir, "android-auto")
-        if (!dir.exists()) dir.mkdirs()
-        val tmp = File(dir, "progress.json.tmp")
-        tmp.writeText(payload)
-        val target = File(dir, "progress.json")
-        if (target.exists()) target.delete()
-        if (!tmp.renameTo(target)) {
-          target.writeText(payload)
-          tmp.delete()
-        }
-      } catch (_: Throwable) {
+        output = atomic.startWrite()
+        output.write(payload.toByteArray(Charsets.UTF_8))
+        atomic.finishWrite(output)
+      } catch (error: Exception) {
+        output?.let { atomic.failWrite(it) }
+        Log.w("ArchivistAuto", "Unable to persist playback progress", error)
       }
     }
   }
