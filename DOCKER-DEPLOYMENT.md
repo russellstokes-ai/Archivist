@@ -43,6 +43,30 @@ services:
 
 When using an override, specify both files: `docker compose -f compose.yaml -f compose.override.yaml up -d`. Verify that the original `/data` and `/media` mounts are preserved in the resolved configuration. Bind mount entries appended by a local override must not unintentionally replace application-data mounts.
 
+## Portable multi-library NAS configuration
+
+For a server using **separate host volumes for books, audiobooks and comics**, use the checked-in, read-only NAS storage profile. This is the **same Go server** on Docker, Synology Container Manager, QNAP Container Station, TrueNAS SCALE, Unraid and Linux; it does not depend on Home Assistant.
+
+1. Copy `deploy/nas/nas.env.example` to `deploy/nas/nas.env`.
+2. Set `ARCHIVIST_MEDIA_PATH` (primary books), `ARCHIVIST_AUDIO_HOST_PATH` (audiobooks) and `ARCHIVIST_COMICS_HOST_PATH` (comics) to absolute **existing directories on your Docker host**. For SMB/NFS, mount the remote folders through your NAS/host OS first.
+3. Inspect the resolved project before launching:
+
+```sh
+docker compose --env-file deploy/nas/nas.env -f compose.yaml -f deploy/nas/compose.volumes.yaml config
+```
+
+4. Start the existing Archivist backend:
+
+```sh
+docker compose --env-file deploy/nas/nas.env -f compose.yaml -f deploy/nas/compose.volumes.yaml up -d --build
+```
+
+5. In Archivist Server → Settings → Library, add the three container paths: `/media`, `/extra-media/audiobooks`, `/extra-media/comics`, giving each a unique library space if desired. No media-folder rescan is automatically triggered by Compose itself.
+
+This profile refuses unset or missing host media paths and never silently creates the directories. Media mounts are read-only. The separate database volume remains writable and survives normal container recreation; do not run `down -v`.
+
+**Host examples are illustrative, not guaranteed paths:** Synology often uses `/volume1/...`, Unraid `/mnt/user/...`, and TrueNAS `/mnt/<pool>/...`. QNAP paths vary by installed volume/firmware. Confirm the actual directories and mount permissions on each host; do not assume the examples exist. A production NAS marketplace package and pre-published multi-architecture image are separate later deliverables.
+
 ## Networking
 
 The default published port is bound to `127.0.0.1`. For trusted-LAN clients set `ARCHIVIST_BIND_ADDRESS=0.0.0.0` and secure access with your host firewall/network policy. Never forward the HTTP port directly to the public internet.
