@@ -31,7 +31,7 @@ Module._load=function(request,parent,isMain){
         async pauseAsync(){return {resumeData:'mock-resume'};},
       };
     },
-    async getInfoAsync(uri){const body=files.get(uri);return body?{exists:true,size:body.length}:{exists:dirs.has(uri)};},
+    async getInfoAsync(uri){const body=files.get(uri);return body?{exists:true,size:body.length,isDirectory:false}:{exists:dirs.has(uri),isDirectory:dirs.has(uri)};},
     async getFreeDiskStorageAsync(){return 8*1024*1024*1024;},
     async getTotalDiskCapacityAsync(){return 16*1024*1024*1024;},
     async readDirectoryAsync(uri){
@@ -39,6 +39,11 @@ Module._load=function(request,parent,isMain){
       for(const dir of dirs){
         if(dir===uri||!dir.startsWith(uri))continue;
         const rest=dir.slice(uri.length).replace(/\/$/,'');
+        if(rest&&!rest.includes('/'))out.add(rest);
+      }
+      for(const key of files.keys()){
+        if(!key.startsWith(uri))continue;
+        const rest=key.slice(uri.length);
         if(rest&&!rest.includes('/'))out.add(rest);
       }
       return [...out];
@@ -58,6 +63,7 @@ const {
   offlineKey,
   offlineToLocalWork,
   removeOfflineWork,
+  removeOfflineCheckpoint,
 }=require('./offlineLibrary.ts');
 
 (async()=>{
@@ -144,11 +150,29 @@ const {
   await removeOfflineWork({...restarted,tracks:[{...restarted.tracks[0],uri:protectedUri}]});
   assert.equal(files.has(protectedUri),true,'removeOfflineWork must only delete the derived Archivist work directory');
 
+  // A missing chapter must not erase any intact chapters or the work record.
+  files.delete(resumed.tracks[1].uri);
+  const incomplete=await cleanupOfflineStorage({[resumed.key]:resumed});
+  assert.deepEqual(incomplete.removedWorks,[]);
+  assert.deepEqual(incomplete.retained[resumed.key].missingTrackIds,[2]);
+  assert(files.has(resumed.tracks[0].uri),'intact chapter must survive cleanup');
+  const stillPlayable=offlineToLocalWork(incomplete.retained[resumed.key]);
+  assert.equal(stillPlayable.files,1);
+  assert.equal(stillPlayable.available,true);
+  assert.equal(stillPlayable.tracks[0].uri,resumed.tracks[0].uri);
+  files.set(resumed.tracks[1].uri,Buffer.alloc(200));
+  const recovered=await cleanupOfflineStorage(incomplete.retained);
+  assert.equal(recovered.retained[resumed.key].missingTrackIds,undefined,'restored chapter must become available');
+
+  // Unknown directories containing media may be an interrupted but recoverable
+  // offline work. Cleanup must not irreversibly delete those media files.
   dirs.add('file:///docs/archivist-offline/orphan/');
   files.set('file:///docs/archivist-offline/orphan/junk.bin',Buffer.alloc(10));
+  dirs.add('file:///docs/archivist-offline/empty-orphan/');
   const cleaned=await cleanupOfflineStorage({[resumed.key]:resumed});
   assert.equal(cleaned.removedWorks.length,0);
-  assert(cleaned.removedOrphans>=1);
+  assert.equal(cleaned.removedOrphans,1,'only provably empty orphans may be removed');
+  assert(files.has('file:///docs/archivist-offline/orphan/junk.bin'),'orphan files must be kept for possible recovery');
 
   await assert.rejects(
     downloadOfflineWork(session,{...work,id:45,format:'Comic'},[
@@ -171,5 +195,40 @@ const {
     /8 GB/,
   );
 
-  console.log('PASS: offline server works resume/restart safely, derive deletion paths, report storage, clean orphans, preserve auth/covers and enforce safety limits');
+  // Discarding an unfinished download must not delete the chapters which
+  // were already downloaded or any arbitrary persisted path.
+  const abandonDir=offlineDirectory(session.server,65);
+  const completedUri=abandonDir+'001-complete.mp3';
+  const incompleteUri=abandonDir+'002-partial.mp3';
+  files.set(completedUri,Buffer.alloc(100));
+  files.set(incompleteUri,Buffer.alloc(30));
+  const abandon={version:1,key:offlineKey(session.server,65),server:session.server,workId:65,
+    completedTrackIds:[1],current:{trackId:2,uri:incompleteUri,bytesWritten:30},updatedAt:new Date().toISOString()};
+  await removeOfflineCheckpoint(abandon);
+  assert(files.has(completedUri),'discarding partial chapter must preserve completed chapter');
+  assert(!files.has(incompleteUri),'unfinished direct-child track should be discarded');
+  await removeOfflineCheckpoint({...abandon,current:{trackId:1,uri:completedUri,bytesWritten:100}});
+  assert(files.has(completedUri),'a completed track ID must never be removed by stale checkpoint');
+  await removeOfflineCheckpoint({...abandon,current:{trackId:2,uri:protectedUri,bytesWritten:1}});
+  assert(files.has(protectedUri),'untrusted checkpoint URI must never permit deleting external files');
+
+  // Repeated download requests must reuse verified files instead of deleting
+  // a completed book before its replacement has been downloaded.
+  const safeWork={...work,id:60,title:'Already Downloaded'};
+  const first=await downloadOfflineWork(session,safeWork,tracks);
+  const before=first.tracks.map(t=>files.get(t.uri));
+  const downloadCount=downloads.length;
+  const second=await downloadOfflineWork(session,safeWork,tracks);
+  assert.equal(second.bytes,300);
+  assert.equal(downloads.length,downloadCount,'verified completed tracks and cover should not redownload');
+  first.tracks.forEach((t,i)=>assert.equal(files.get(t.uri),before[i],'completed track was changed'));
+  const oldTrack=files.get(first.tracks[0].uri);
+  await assert.rejects(
+    downloadOfflineWork(session,safeWork,[tracks[0],{...tracks[1],size:999}]),
+    /cannot be safely verified or replaced/,
+  );
+  assert.equal(files.get(first.tracks[0].uri),oldTrack,'preflight failure must not erase previous work');
+  assert(files.has(first.tracks[1].uri),'second completed track must survive failed replacement');
+
+  console.log('PASS: offline downloads recover, retain partial works, protect orphan media, reuse verified downloads and reject destructive redownloads');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -11,7 +11,16 @@ assert(online.canonicalKey===downloaded.canonicalKey,'online/downloaded canonica
 assert(local.canonicalKey!==online.canonicalKey,'local copy must not be merged by title');
 const all=x.dedupeForAll([{...downloaded,space:'Main'},{...online,space:'Main'},{...local,space:'Device'}]);
 assert(all.length===2,'All must suppress downloaded duplicate while online server copy exists');
-assert(all.some(i=>i.source==='server'),'All must prefer server copy when connected');
+assert(all.some(i=>i.source==='downloaded'),'All must prefer the downloaded copy for reliable offline playback');
+assert(!all.some(i=>i.source==='server'),'All must not return duplicate remote work when local copy is ready');
+const fallback=x.dedupeForAll([{...downloaded,space:'Main',available:false},{...online,space:'Main',available:true}]);
+assert(fallback.length===1&&fallback[0].source==='server','An unavailable downloaded copy must not hide an available server work');
+const offlineLocalMissing=x.dedupeForAll([{...online,space:'Main',available:true},{...downloaded,space:'Main',available:true,localWork:{available:false}}]);
+assert(offlineLocalMissing.length===1&&offlineLocalMissing[0].source==='server','Actually unavailable local media must fall back to server even if the display wrapper marks it available');
+const disconnected=x.dedupeForAll([{...online,space:'Main',available:false},{...downloaded,space:'Main',available:true}]);
+assert(disconnected.length===1&&disconnected[0].source==='downloaded','Local media must win when server is unavailable');
+const serverFirst=x.dedupeForAll([{...online,space:'Main'},{...downloaded,space:'Main'}]);
+assert(serverFirst[0].source==='downloaded','Offline-first playback must not depend on item insertion order');
 assert(x.spacesForSource([{...downloaded,space:'Offline'},{...local,space:'Device'}],'downloaded').join(',')==='Offline','source spaces');
 assert(x.matchesSource('downloaded','local')===true,'On this device must include offline server downloads');
 assert(x.matchesSource('server','local')===false,'On this device must not include remote-only server content');

@@ -38,6 +38,8 @@ export type OfflineServerWork={
   tracks:Array<OfflineServerTrack & {uri:string;localFormat:string}>;
   coverUri?:string;
   chaptersByTrackId?:Record<string,Chapter[]>;
+  // Preserved when a file is missing, so intact tracks remain playable.
+  missingTrackIds?:number[];
 };
 
 export type OfflineDownloadCheckpoint={
@@ -172,9 +174,16 @@ export async function pauseActiveOfflineDownload(){
 }
 
 export async function removeOfflineCheckpoint(checkpoint:OfflineDownloadCheckpoint){
-  // Never trust a persisted directory string for deletion; derive the only
-  // allowed work directory from the server/work identity.
-  await deleteAsync(offlineDirectory(checkpoint.server,checkpoint.workId),{idempotent:true});
+  // Discard only the unfinished direct-child track; previously completed
+  // chapters may also be referenced by an already published offline work.
+  // Never interpret a persisted directory or arbitrary URI as deletion authority.
+  const dir=offlineDirectory(checkpoint.server,checkpoint.workId);
+  const current=checkpoint.current;
+  if(!current || checkpoint.completedTrackIds.includes(current.trackId))return;
+  if(!current.uri.startsWith(dir))return;
+  const filename=current.uri.slice(dir.length);
+  if(!/^\d{3}-[a-z0-9._-]+\.[a-z0-9]{1,8}$/i.test(filename))return;
+  await deleteAsync(current.uri,{idempotent:true});
 }
 
 export async function downloadOfflineWork(
@@ -210,10 +219,22 @@ export async function downloadOfflineWork(
     ? {...options!.checkpoint!,completedTrackIds:[...options!.checkpoint!.completedTrackIds],current:options!.checkpoint!.current?{...options!.checkpoint!.current}:undefined}
     : {version:1,key,server:session.server,workId:work.id,title:work.title,directory:dir,completedTrackIds:[],updatedAt:new Date().toISOString()};
 
-  await makeDirectoryAsync(root,{intermediates:true});
+  // Never erase a complete download just because a fresh request has no
+  // checkpoint. Check every pre-existing track before touching anything.
   if(!compatibleCheckpoint){
-    await deleteAsync(dir,{idempotent:true}).catch(()=>undefined);
+    for(let index=0;index<available.length;index++){
+      const track=available[index];
+      const ext=extensionFor(track);
+      const base=safePart((track.name||track.title||('track-'+(index+1))).replace(/\.[^.]+$/,''));
+      const uri=dir+String(index+1).padStart(3,'0')+'-'+base+ext;
+      const size=await existingSize(uri);
+      const expected=Math.max(0,Number(track.size)||0);
+      if(size>=0 && (expected===0 || size!==expected)){
+        throw Error('An existing offline file cannot be safely verified or replaced. Keep the current download and use Remove offline download explicitly before downloading again.');
+      }
+    }
   }
+  await makeDirectoryAsync(root,{intermediates:true});
   await makeDirectoryAsync(dir,{intermediates:true});
 
   let written=0;
@@ -318,14 +339,18 @@ export async function downloadOfflineWork(
     let coverUri:string|undefined;
     try{
       const candidate=dir+'cover.jpg';
-      const cover=await downloadAsync(
-        session.server+'/api/works/'+work.id+'/cover',
-        candidate,
-        {headers:{Authorization:'Bearer '+session.token}},
-      );
-      if(cover.status>=200&&cover.status<300)coverUri=candidate;
+      if(await existingSize(candidate)>0){
+        coverUri=candidate;
+      }else{
+        const cover=await downloadAsync(
+          session.server+'/api/works/'+work.id+'/cover',
+          candidate,
+          {headers:{Authorization:'Bearer '+session.token}},
+        );
+        if(cover.status>=200&&cover.status<300 && await existingSize(candidate)>0)coverUri=candidate;
+      }
     }catch{
-      // Cover artwork is optional; never invalidate a successfully downloaded work.
+      // Offline artwork is best-effort; leave any previously cached cover intact.
     }
 
     await options?.onCheckpoint?.(null);
@@ -408,18 +433,15 @@ export async function cleanupOfflineStorage(
   for(const checkpoint of protectedCheckpoints)referenced.add(offlineDirectory(checkpoint.server,checkpoint.workId));
 
   for(const [key,work] of Object.entries(works)){
-    let valid=work.tracks.length>0;
+    const missingTrackIds:number[]=[];
     for(const track of work.tracks){
-      if(await existingSize(track.uri)<0){valid=false;break;}
+      if(await existingSize(track.uri)<0)missingTrackIds.push(track.id);
     }
     const dir=offlineDirectory(work.server,work.workId);
-    if(valid){
-      retained[key]=work;
-      referenced.add(dir);
-    }else{
-      removedWorks.push(key);
-      await deleteAsync(dir,{idempotent:true}).catch(()=>undefined);
-    }
+    // A missing track never authorises deleting the other downloaded files.
+    // Retain the work record so the user can recover tracks or re-download.
+    retained[key]=missingTrackIds.length?{...work,missingTrackIds}:{...work,missingTrackIds:undefined};
+    referenced.add(dir);
   }
 
   let removedOrphans=0;
@@ -427,13 +449,21 @@ export async function cleanupOfflineStorage(
   for(const entry of entries){
     const dir=normalizeDirectoryEntry(root,entry);
     if(referenced.has(dir))continue;
-    await deleteAsync(dir,{idempotent:true}).catch(()=>undefined);
+    // Unknown folders may contain recoverable completed downloads after a
+    // crash. Only remove an orphan when proven to be an empty directory.
+    const info=await getInfoAsync(dir).catch(()=>null);
+    if(!info?.exists || !('isDirectory' in info) || !info.isDirectory)continue;
+    const contents=await readDirectoryAsync(dir).catch(()=>null);
+    if(contents===null || contents.length>0)continue;
+    await deleteAsync(dir,{idempotent:true});
     removedOrphans++;
   }
   return {retained,removedWorks,removedOrphans};
 }
 
 export function offlineToLocalWork(work:OfflineServerWork):LocalWork{
+  const missing=new Set(work.missingTrackIds||[]);
+  const tracks=work.tracks.map((track,index)=>({track,index})).filter(({track})=>!missing.has(track.id));
   return {
     key:'offline:'+work.key,
     source:'downloaded',
@@ -445,9 +475,9 @@ export function offlineToLocalWork(work:OfflineServerWork):LocalWork{
     genre:work.genre,
     format:work.format==='Ebook'?'EPUB':work.format,
     space:work.space,
-    available:true,
-    files:work.tracks.length,
-    tracks:work.tracks.map((track,index)=>({
+    available:tracks.length>0,
+    files:tracks.length,
+    tracks:tracks.map(({track,index})=>({
       id:-(work.workId*10000+index+1),
       uri:track.uri,
       title:track.title||work.title,
