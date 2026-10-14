@@ -8,9 +8,9 @@ const source=fs.readFileSync(path.join(__dirname,'pdfDocumentSession.ts'),'utf8'
 const code=ts.transpileModule(source,{compilerOptions:{
   module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,
 }}).outputText;
-const exports={};
-vm.runInNewContext(code,{exports,module:{exports},Number,String,Math});
-const {openPdfSession,pdfSessionReducer,visiblePdfImage,safePdfPage}=exports;
+const resultExports={};
+vm.runInNewContext(code,{exports:resultExports,module:{exports:resultExports},Number,String,Math});
+const {openPdfSession,pdfSessionReducer,visiblePdfImage,safePdfPage}=resultExports;
 const reduce=(s,a)=>pdfSessionReducer(s,a);
 const image=(uri,page,width,request,dataUri='data:image/png;base64,AQID')=>({
   type:'render-success',uri,generation:1,page,width,request,dataUri,
