@@ -17,6 +17,19 @@ const fallback=x.dedupeForAll([{...downloaded,space:'Main',available:false},{...
 assert(fallback.length===1&&fallback[0].source==='server','An unavailable downloaded copy must not hide an available server work');
 const offlineLocalMissing=x.dedupeForAll([{...online,space:'Main',available:true},{...downloaded,space:'Main',available:true,localWork:{available:false}}]);
 assert(offlineLocalMissing.length===1&&offlineLocalMissing[0].source==='server','Actually unavailable local media must fall back to server even if the display wrapper marks it available');
+const partial={...downloaded,available:true,localWork:{available:true,offlineIncomplete:true}};
+const partialServerReady=x.dedupeForAll([partial,{...online,available:true,reachable:true}]);
+assert(partialServerReady[0].source==='server',
+  'proven reachable complete work must outrank partial downloaded chapters');
+const staleServer=x.dedupeForAll([partial,{...online,available:true}]);
+assert(staleServer[0].source==='downloaded',
+  'stale server catalogue availability is not proof it can be reached offline');
+const partialDisconnected=x.dedupeForAll([{...online,available:false},partial]);
+assert(partialDisconnected[0].source==='downloaded',
+  'verified partial local chapter must remain usable without the server');
+const bothUnusable=x.dedupeForAll([{...online,available:false},{...downloaded,available:true,localWork:{available:false}}]);
+assert(bothUnusable[0].source==='server'&&bothUnusable[0].available===false,
+  'when nothing is playable, never select a ghost downloaded file');
 const disconnected=x.dedupeForAll([{...online,space:'Main',available:false},{...downloaded,space:'Main',available:true}]);
 assert(disconnected.length===1&&disconnected[0].source==='downloaded','Local media must win when server is unavailable');
 const serverFirst=x.dedupeForAll([{...online,space:'Main'},{...downloaded,space:'Main'}]);
