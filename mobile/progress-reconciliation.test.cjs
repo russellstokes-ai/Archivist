@@ -7,7 +7,7 @@ const source=fs.readFileSync(path.join(__dirname,'progressReconciliation.ts'),'u
 const transpiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
 const moduleExports={};
 vm.runInNewContext(transpiled,{exports:moduleExports,module:{exports:moduleExports},URL,Promise,Set,Map,Number,JSON,encodeURIComponent,Error});
-const {OfflineProgressOutbox,planProgressReplay}=moduleExports;
+const {OfflineProgressOutbox,planProgressReplay,fetchCompleteProgressSnapshot}=moduleExports;
 
 (async()=>{
   const disk=new Map();
@@ -31,6 +31,37 @@ const {OfflineProgressOutbox,planProgressReplay}=moduleExports;
   assert.equal((await a.list()).length,1);
   const recording=new OfflineProgressOutbox(storage,'https://library.example',1);
   assert.equal((await recording.list())[0].position.seconds,200,'journal must survive manager restart');
+
+  // Reconciliation is only safe after every profile-authorised page is read.
+  const batch=[
+    {kind:'edition',id:12,asset:101,seconds:80,revision:2,complete:false},
+    {kind:'listening',id:9,asset:9,seconds:0,revision:1,complete:false},
+    {kind:'reading',id:88,part:2,fraction:0.1,revision:1,complete:false},
+  ];
+  const history=[];
+  const loaded=await fetchCompleteProgressSnapshot(async path=>{
+    history.push(path);
+    const offset=Number(new URL('https://local.test'+path).searchParams.get('offset'));
+    return {items:batch.slice(offset,offset+2),hasMore:offset+2<batch.length,
+      nextOffset:Math.min(offset+2,batch.length)};
+  },2);
+  assert.equal(loaded.length,3,'complete paginated snapshot should contain all progress types');
+  assert.equal(history.length,2);
+  assert.equal(planProgressReplay(await a.list(),loaded,false)[0].action,'upload');
+  await assert.rejects(fetchCompleteProgressSnapshot(async()=>({
+    items:[batch[0]],hasMore:true,nextOffset:1,
+  }),2),/snapshot incomplete/);
+  await assert.rejects(fetchCompleteProgressSnapshot(async path=>{
+    const offset=Number(new URL('https://local.test'+path).searchParams.get('offset'));
+    return offset===0?{items:[batch[0]],hasMore:true,nextOffset:1}
+      :{items:[batch[0]],hasMore:false,nextOffset:2};
+  },1),/Duplicate server progress/);
+  await assert.rejects(fetchCompleteProgressSnapshot(async()=>({
+    items:[],hasMore:true,nextOffset:0,
+  }),1),/snapshot incomplete/);
+  await assert.rejects(fetchCompleteProgressSnapshot(async()=>({
+    items:[batch[0]],hasMore:false,nextOffset:999,
+  }),1),/snapshot incomplete/);
 
   const pending=(await a.list());
   const remote=(revision,seconds)=>[{kind:'edition',id:12,asset:101,seconds,revision,complete:false}];
