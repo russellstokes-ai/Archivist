@@ -11,7 +11,11 @@
       "bundleIdentifier": "app.archivist.reader",
       "infoPlist": {
         "UIFileSharingEnabled": true,
-        "LSSupportsOpeningDocumentsInPlace": true
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "Archivist connects to the self-hosted media servers you choose on your local network."
       }
     },
     "android": {
