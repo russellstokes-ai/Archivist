@@ -26,7 +26,7 @@ type SourceLike = {
   serverWorkId?: number;
   space?: string;
   available?: boolean;
-  localWork?: {available?:boolean};
+  localWork?: {available?:boolean; offlineIncomplete?:boolean};
 };
 
 function stableServer(server?: string) {
@@ -71,9 +71,16 @@ export function dedupeForAll<T extends SourceLike>(items: T[]): T[] {
   const order: string[] = [];
   // A verified local download should open without requiring server access.
   // If that copy is completely unavailable, an available remote version wins.
-  const priority = (item:T):number =>
-    item.available===false || (item.source==='downloaded' && item.localWork?.available===false)
-      ? 0 : ({local: 1, server: 2, downloaded: 3} as Record<WorkSource,number>)[item.source];
+  const priority = (item:T):number => {
+    // Never advertise missing downloaded media as playable. If both copies
+    // are unavailable, the honest unavailable server record wins.
+    if(item.source==='downloaded'&&item.localWork?.available===false)return -1;
+    if(item.available===false)return 0;
+    // Keep intact chapters for offline use, but prefer the complete server
+    // edition when a verified downloaded work has missing/damaged tracks.
+    if(item.source==='downloaded'&&item.localWork?.offlineIncomplete)return 1;
+    return ({local:1,server:2,downloaded:3} as Record<WorkSource,number>)[item.source];
+  };
   for (const item of items) {
     const key = item.canonicalKey || item.key;
     const current = selected.get(key);
