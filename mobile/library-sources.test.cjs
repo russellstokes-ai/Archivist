@@ -15,6 +15,8 @@ assert(all.some(i=>i.source==='downloaded'),'All must prefer the downloaded copy
 assert(!all.some(i=>i.source==='server'),'All must not return duplicate remote work when local copy is ready');
 const fallback=x.dedupeForAll([{...downloaded,space:'Main',available:false},{...online,space:'Main',available:true}]);
 assert(fallback.length===1&&fallback[0].source==='server','An unavailable downloaded copy must not hide an available server work');
+const offlineLocalMissing=x.dedupeForAll([{...online,space:'Main',available:true},{...downloaded,space:'Main',available:true,localWork:{available:false}}]);
+assert(offlineLocalMissing.length===1&&offlineLocalMissing[0].source==='server','Actually unavailable local media must fall back to server even if the display wrapper marks it available');
 const disconnected=x.dedupeForAll([{...online,space:'Main',available:false},{...downloaded,space:'Main',available:true}]);
 assert(disconnected.length===1&&disconnected[0].source==='downloaded','Local media must win when server is unavailable');
 const serverFirst=x.dedupeForAll([{...online,space:'Main'},{...downloaded,space:'Main'}]);
