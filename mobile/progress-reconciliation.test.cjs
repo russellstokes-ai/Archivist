@@ -5,9 +5,9 @@ const vm=require('node:vm');
 const ts=require('typescript');
 const source=fs.readFileSync(path.join(__dirname,'progressReconciliation.ts'),'utf8');
 const transpiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
-const exports={};
-vm.runInNewContext(transpiled,{exports,module:{exports},URL,Promise,Set,Map,Number,JSON,encodeURIComponent,Error});
-const {OfflineProgressOutbox,planProgressReplay}=exports;
+const moduleExports={};
+vm.runInNewContext(transpiled,{exports:moduleExports,module:{exports:moduleExports},URL,Promise,Set,Map,Number,JSON,encodeURIComponent,Error});
+const {OfflineProgressOutbox,planProgressReplay}=moduleExports;
 
 (async()=>{
   const disk=new Map();
