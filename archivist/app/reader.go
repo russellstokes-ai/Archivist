@@ -46,15 +46,18 @@ func (a *app) openAsset(id string) (*os.File, string, error) {
 	f, e := dir.Open(rel)
 	return f, format, e
 }
+const maxTarComicEntries = 10000
+
 func tarComicParts(f *os.File) ([]string, error) {
 	if _, e := f.Seek(0, 0); e != nil { return nil, e }
 	tr := tar.NewReader(f)
 	parts := []string{}
-	for count := 0; ; count++ {
-		if count > 10000 { return nil, errors.New("comic contains too many entries") }
+	for count := 0; ; {
 		h, e := tr.Next()
 		if e == io.EOF { break }
 		if e != nil { return nil, e }
+		count++
+		if count > maxTarComicEntries { return nil, errors.New("comic contains too many entries") }
 		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA { continue }
 		switch strings.ToLower(path.Ext(h.Name)) {
 		case ".jpg", ".jpeg", ".png", ".webp":
@@ -66,21 +69,27 @@ func tarComicParts(f *os.File) ([]string, error) {
 	return parts, nil
 }
 func tarComicEntry(f *os.File, name string, limit uint64) ([]byte, error) {
+	if limit == 0 || limit > 24<<20 { return nil, errors.New("invalid comic read limit") }
 	if _, e := f.Seek(0, 0); e != nil { return nil, e }
 	tr := tar.NewReader(f)
-	for {
+	for count := 0; ; {
 		h, e := tr.Next()
 		if e == io.EOF { break }
 		if e != nil { return nil, e }
-		if h.Name != name { continue }
-		if h.Size < 0 || uint64(h.Size) > limit { return nil, errors.New("comic page exceeds size limit") }
+		count++
+		if count > maxTarComicEntries { return nil, errors.New("comic contains too many entries") }
+		// The page list ignores links and non-regular members; page lookup
+		// must apply exactly the same rule, even for duplicate member names.
+		if h.Name != name || (h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA) { continue }
+		if h.Size <= 0 || uint64(h.Size) > limit { return nil, errors.New("comic page exceeds size limit") }
 		b, e := io.ReadAll(io.LimitReader(tr, int64(limit)+1))
+		if e != nil { return nil, e }
 		if uint64(len(b)) > limit { return nil, errors.New("comic page exceeds size limit") }
-		return b, e
+		if int64(len(b)) != h.Size { return nil, errors.New("comic page truncated") }
+		return b, nil
 	}
 	return nil, errors.New("comic page missing")
 }
-
 func zipEntry(z *zip.Reader, name string, limit uint64) ([]byte, error) {
 	for _, f := range z.File {
 		if f.Name == name {
