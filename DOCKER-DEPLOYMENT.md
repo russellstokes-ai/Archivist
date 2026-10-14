@@ -61,6 +61,14 @@ Pin a tested source commit/image when making a reproducible deployment. Before u
 - Docker runtime, NAS permissions, data migration, media scanning, and mobile remote access have not been validated by this chat session.
 - Home Assistant packaging and mobile source are unchanged. Do not treat this candidate as a full commercial release.
 
+## Library availability diagnostics (administrator)
+
+Archivist provides an authenticated, administrator-only `GET /api/library-health` endpoint. It returns each registered library root with its space/name, stored scan status, a **current root-availability probe**, indexed physical-file counts, stored availability flags and Needs Review counts. Household users do not receive server filesystem paths.
+
+This check is deliberately **read-only** and shallow: it does not run a full scan, change `available` flags, remove catalogue records, or write to disconnected NAS volumes. If a drive or NAS share goes offline, the report marks the source root offline while preserving its database entries. When the root returns, the online indicator recovers without requiring deletion/reimport. A mounted but empty directory or a deeper inaccessible file may still need a scan or host-level diagnostic, so root availability is not proof every file is readable.
+
+The web server uses the same endpoint on Home Assistant, Docker and NAS hosts. For external administration, use the existing authenticated API over a secured private network or HTTPS; do not expose an unauthenticated diagnostics route.
+
 ## ARM64 runtime and NAS-style storage regression gate
 
 The `arm64-smoke` job in GitHub Actions workflow `.github/workflows/server-check.yml` runs on a **native Linux ARM64 runner**, alongside a separate AMD64/Home Assistant server job. Its Docker image is built from the existing `archivist/Dockerfile` and Go server source.
