@@ -19,6 +19,13 @@ type progress struct {
 
 var errConflict = errors.New("progress changed in another session; reopen the audiobook to load that position")
 
+// listenedDelta only counts forward movement within the same track. A bookmark
+// load, rewind, or track change is not itself evidence of listening time.
+func listenedDelta(previous, current float64, sameTrack bool) float64 {
+	if !sameTrack || current <= previous { return 0 }
+	return current - previous
+}
+
 func (a *app) initProgress() error {
 	if _, e := a.db.Exec(`CREATE TABLE IF NOT EXISTS progress(edition_id INTEGER PRIMARY KEY REFERENCES editions(id) ON DELETE CASCADE,asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,seconds REAL NOT NULL,revision INTEGER NOT NULL,complete INTEGER NOT NULL DEFAULT 0);`); e != nil {
 		return e
@@ -80,9 +87,10 @@ func (a *app) saveProfileProgress(profile, edition int64, p progress) (progress,
 		return p, e
 	}
 	if e=tx.Commit();e!=nil{return p,e}
-	delta:=p.Seconds
-	if previousAsset==p.Asset && p.Seconds>=previousSeconds { delta=p.Seconds-previousSeconds }
-	if workID,workErr:=a.workForEdition(edition);workErr==nil { _=a.recordActivity(profile,workID,"Listening",delta) }
+	delta:=listenedDelta(previousSeconds,p.Seconds,previousAsset==p.Asset && revision>0)
+	if delta>0 {
+		if workID,workErr:=a.workForEdition(edition);workErr==nil { _=a.recordActivity(profile,workID,"Listening",delta) }
+	}
 	return p,nil
 }
 func (a *app) progressRoutes(mux *http.ServeMux) {
