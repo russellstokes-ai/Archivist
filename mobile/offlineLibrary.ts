@@ -182,7 +182,7 @@ export async function removeOfflineCheckpoint(checkpoint:OfflineDownloadCheckpoi
   if(!current || checkpoint.completedTrackIds.includes(current.trackId))return;
   if(!current.uri.startsWith(dir))return;
   const filename=current.uri.slice(dir.length);
-  if(!/^\\d{3}-[a-z0-9._-]+\\.[a-z0-9]{1,8}$/i.test(filename))return;
+  if(!/^\d{3}-[a-z0-9._-]+\.[a-z0-9]{1,8}$/i.test(filename))return;
   await deleteAsync(current.uri,{idempotent:true});
 }
 
