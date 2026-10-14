@@ -37,7 +37,9 @@ export function pdfSessionReducer(s:PdfDocumentSession,a:PdfSessionAction):PdfDo
   if(s.uri!==a.uri||s.generation!==a.generation)return s;
   if(a.type==='count'){
     const total=Number.isSafeInteger(a.total)&&a.total>=0?a.total:0;
-    return {...s,count:total,page:total?Math.min(safePdfPage(s.page),total-1):0,
+    // A zero-page response is a recoverable read failure, not permission to
+    // destroy the original saved page; a subsequent valid count must restore it.
+    return {...s,count:total,page:total?Math.min(safePdfPage(s.page),total-1):s.page,
       image:null,loading:total>0,error:total?'':'PDF contains no readable pages.'};
   }
   if(a.type==='count-error')return {...s,image:null,loading:false,error:a.message};
