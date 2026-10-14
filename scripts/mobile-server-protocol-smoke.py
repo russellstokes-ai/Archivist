@@ -2,6 +2,7 @@
 """Ephemeral mobile-to-standalone-server protocol smoke; never use live user data."""
 import argparse
 import json
+import os
 import secrets
 import time
 import urllib.error
@@ -49,7 +50,7 @@ def request_bytes(origin, path, bearer=None, byte_range=None):
         return error.code,error.headers,error.read(1024*1024)
 
 
-def check(origin,source):
+def check(origin,source,state_out=None):
     parsed=urllib.parse.urlparse(origin)
     assert parsed.scheme=="http" and parsed.hostname in ("127.0.0.1","localhost"),"Only ephemeral loopback servers are permitted"
     assert parsed.path in ("","/") and not parsed.query
@@ -113,12 +114,48 @@ def check(origin,source):
 
     assert request(origin,"/logout","POST",{},bearer=session,action=True)[0]==200,"Logout must succeed"
     assert request(origin,"/api/me",bearer=session)[0]==401,"Revoked session must no longer work"
+    if state_out:
+        # This credential is randomly generated for a disposable CI server only.
+        # Keep it private on the ephemeral runner; never print it or commit it.
+        fd=os.open(state_out,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        with os.fdopen(fd,"w",encoding="utf-8") as out:
+            json.dump({"key":key,"source":source,"asset_id":book["id"]},out)
     print("PASS: mobile-compatible setup, session, catalogue scan, authenticated byte-range streaming and revocation")
+
+
+def verify_after_restart(origin,state_file):
+    parsed=urllib.parse.urlparse(origin)
+    assert parsed.scheme=="http" and parsed.hostname in ("127.0.0.1","localhost"),"Only test loopback servers are permitted"
+    with open(state_file,encoding="utf-8") as f:
+        saved=json.load(f)
+    assert request(origin,"/setup/status")[1].get("configured") is True,"Owner account lost after restart"
+    assert request(origin,"/api/books")[0]==401,"Server must still reject anonymous catalogue access"
+    status,body=request(origin,"/session","POST",{"token":saved["key"]},action=True)
+    assert status==200 and isinstance(body.get("token"),str),(status,body)
+    session=body["token"]
+    status,sources=request(origin,"/api/sources",bearer=session)
+    assert status==200 and any(row.get("path")==saved["source"] for row in sources),(status,sources)
+    status,books=request(origin,"/api/books?limit=20",bearer=session)
+    assert status==200 and any(item.get("id")==saved["asset_id"] for item in books),(status,books)
+    path="/api/assets/"+str(saved["asset_id"])
+    assert request_bytes(origin,path)[0]==401,"Restarted server exposed media anonymously"
+    status,headers,data=request_bytes(origin,path,bearer=session,byte_range="bytes=2-5")
+    assert status==206 and data==b"2345",(status,data)
+    assert request(origin,"/logout","POST",{},bearer=session,action=True)[0]==200
+    assert request(origin,"/api/me",bearer=session)[0]==401
+    print("PASS: restarted server retained owner, catalogue, source, authenticated audio ranges and revocation")
 
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--origin",required=True)
-    parser.add_argument("--source",required=True)
+    parser.add_argument("--source")
+    parser.add_argument("--state-out")
+    parser.add_argument("--verify-state")
     args=parser.parse_args()
-    check(args.origin.rstrip("/"),args.source)
+    if args.verify_state:
+        assert not args.source and not args.state_out
+        verify_after_restart(args.origin.rstrip("/"),args.verify_state)
+    else:
+        assert args.source, "--source is required for the initial scan"
+        check(args.origin.rstrip("/"),args.source,args.state_out)
