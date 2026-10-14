@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -22,6 +23,15 @@ type metadataPatch struct {
 	Description   *string  `json:"description"`
 }
 
+// hasFields prevents empty or null-only PATCH requests from silently
+// clearing a file's Needs Review state.
+func (p metadataPatch) hasFields() bool {
+ return p.Title != nil || p.Author != nil || p.Series != nil ||
+  p.SeriesNumber != nil || p.Genre != nil || p.PublishedYear != nil ||
+  p.Narrator != nil || p.Publisher != nil || p.ISBN != nil ||
+  p.ASIN != nil || p.Language != nil || p.Description != nil
+}
+
 func cleanMetadataValue(value *string, current string) string {
 	if value == nil {
 		return current
@@ -32,8 +42,19 @@ func cleanMetadataValue(value *string, current string) string {
 func (a *app) organisationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/assets/{id}/metadata", func(w http.ResponseWriter, r *http.Request) {
 		var in metadataPatch
-		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 32768)).Decode(&in) != nil {
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32768))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&in) != nil {
 			fail(w, 400, errors.New("invalid metadata"))
+			return
+		}
+		var trailing any
+		if decoder.Decode(&trailing) != io.EOF {
+			fail(w, 400, errors.New("metadata must be a single JSON object"))
+			return
+		}
+		if !in.hasFields() {
+			fail(w, 400, errors.New("provide at least one metadata field"))
 			return
 		}
 
@@ -91,15 +112,25 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
 			return
 		}
 
+		// Saving a partial correction does not mean identification is complete.
+		// A missing author must remain reviewable, including after rescans.
+		needsReview := strings.TrimSpace(author) == ""
+		reviewReason := ""
+		confidence := 100
+		if needsReview {
+			reviewReason = "Title or author still needs review."
+			confidence = 60
+		}
 		res, err := a.db.Exec(`UPDATE assets
 			SET title=?,author=?,series=?,series_number=?,genre=?,published_year=?,narrator=?,publisher=?,isbn=?,asin=?,language=?,description=?,
 				metadata_source='manual',
-				metadata_confidence=100,
-				needs_review=0,
-				review_reason=''
+				metadata_confidence=?,
+				needs_review=?,
+				review_reason=?
 			WHERE id=?`,
 			title, author, series, seriesNumber, genre, publishedYear,
-			narrator, publisher, isbn, asin, language, description, r.PathValue("id"))
+			narrator, publisher, isbn, asin, language, description,
+			confidence, needsReview, reviewReason, r.PathValue("id"))
 		if err != nil {
 			fail(w, 500, err)
 			return
