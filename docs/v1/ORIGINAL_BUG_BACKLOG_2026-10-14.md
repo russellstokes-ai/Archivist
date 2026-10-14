@@ -24,6 +24,10 @@
 | [#25](https://github.com/russellstokes-ai/Archivist/issues/25) | Living Book sometimes absent until Play/Pause is pressed | **Unresolved; renderer locked.** | Reproduce initial mount, animation state, measurement and title switching; preserve the exact canonical geometry/animation. |
 | [#23](https://github.com/russellstokes-ai/Archivist/issues/23) | Reader asks to Resume instead of returning to saved book/audio/comic position | **Unresolved as a mobile UX defect.** Progress journal PRs #46/#47 do not change this prompt. | Verify persisted page/time after app kill/relaunch/reboot, direct resume with no extra prompt and no accidental autoplay. |
 
+### Existing scanner candidate evidence — do not lose this work
+
+The [#15 scanner acceptance thread](https://github.com/russellstokes-ai/Archivist/issues/15) documents more progress than its original issue description alone indicates. On **8 October**, the isolated `feature/scanner-quality-gates-20261008` branch had passing synthetic regression results for false-merging Discworld novels, separate comic issue/volume identities, cached-cover deduplication and a mocked **227 files → 12 works** publication pipeline. It also produced a Test 22 candidate with a three-stage onboarding workflow and a synthetic 6,485-file JS benchmark. **These were candidate-branch tests, not verified on-device/real-NAS acceptance**; the issue's latest handover records Android APK, Mobile and iOS final runs as pending. Do not copy/rewrite the scanner or assume that isolated branch is the current installed app. Check exact APK provenance and protect improvements already accepted in newer references before discussing any reintegration.
+
 ## P1 — mobile library/UX defects and requested behaviour
 
 | Issue | Problem | Status / next gate |
