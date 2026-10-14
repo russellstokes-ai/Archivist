@@ -118,9 +118,10 @@ func (a *app) listeningRoutes(mux *http.ServeMux) {
 			fail(w, 500, err)
 			return
 		}
-		delta:=p.Seconds
-		if p.Revision>0 && p.Seconds>=previousSeconds { delta=p.Seconds-previousSeconds }
-		if workID,workErr:=a.workForAsset(id);workErr==nil { _=a.recordActivity(who(r).ID,workID,"Listening",delta) }
+		delta:=listenedDelta(previousSeconds,p.Seconds,p.Revision>0)
+		if delta>0 {
+			if workID,workErr:=a.workForAsset(id);workErr==nil { _=a.recordActivity(who(r).ID,workID,"Listening",delta) }
+		}
 		p.Revision++
 		reply(w, p)
 	})
