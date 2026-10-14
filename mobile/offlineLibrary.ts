@@ -509,5 +509,9 @@ export function offlineToLocalWork(work:OfflineServerWork):LocalWork{
     reviewReason:'',
     coverUri:work.coverUri,
     coverShape:work.format==='Audio'?'square':'portrait',
-  };
+    // A partial work is still useful offline, but a complete reachable
+    // server copy must win while connected. This is derived solely from the
+    // verified manifest, not from guessing at file names or titles.
+    offlineIncomplete:missing.size>0,
+  } as LocalWork & {offlineIncomplete:boolean};
 }
