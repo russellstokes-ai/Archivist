@@ -22,4 +22,14 @@ assert(!/privileged:\s*true/.test(compose), 'Container must not be privileged');
 const ignore=fs.readFileSync('.gitignore','utf8');
 assert(ignore.split(/\r?\n/).includes('.env'), 'Local .env must be ignored');
 assert(ignore.split(/\r?\n/).includes('compose.override.yaml'), 'Machine-specific Docker overrides must be ignored');
+const nas=fs.readFileSync('deploy/nas/compose.volumes.yaml','utf8');
+const nasEnv=fs.readFileSync('deploy/nas/nas.env.example','utf8');
+for(const key of ['ARCHIVIST_AUDIO_HOST_PATH','ARCHIVIST_COMICS_HOST_PATH']){
+  assert(nas.includes('${'+key+':?'), 'NAS profile must require '+key);
+  assert(nasEnv.includes(key+'='), 'NAS example must describe '+key);
+}
+for(const token of ['/extra-media/audiobooks','/extra-media/comics','read_only: true','create_host_path: false']){
+  assert(nas.includes(token), 'NAS multi-volume contract missing '+token);
+}
+assert(ignore.split(/\r?\n/).includes('deploy/nas/nas.env'), 'Machine-local NAS paths must not be committed');
 console.log('PASS: standalone Archivist container uses shared source, persistent data, readonly media and safe default binding');
