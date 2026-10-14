@@ -494,6 +494,7 @@ func (a *app) routes() http.Handler {
 	a.manageCandidateRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
+	a.libraryHealthRoutes(mux)
 	static, _ := fs.Sub(web, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
 	mux.HandleFunc("GET /api/sources", func(w http.ResponseWriter, r *http.Request) {
@@ -604,6 +605,7 @@ func (a *app) routes() http.Handler {
 			fail(w, 400, e)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		reply(w, map[string]int64{"job_id": job})
 	})

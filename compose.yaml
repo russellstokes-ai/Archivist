@@ -1,0 +1,38 @@
+# Standalone Archivist Server, using the existing Home Assistant-compatible Go core.
+# Run: cp .env.example .env ; edit ARCHIVIST_MEDIA_PATH ; docker compose up -d --build
+name: archivist
+
+services:
+  server:
+    build:
+      context: ./archivist
+      dockerfile: Dockerfile
+      args:
+        BUILD_VERSION: ${ARCHIVIST_VERSION:-dev}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      # Do not accidentally load Home Assistant-specific options from a restored /data volume.
+      ARCHIVIST_OPTIONS: /data/standalone-options.json
+    ports:
+      # Loopback-only by default. Bind to 0.0.0.0 explicitly for trusted LAN access.
+      - "${ARCHIVIST_BIND_ADDRESS:-127.0.0.1}:${ARCHIVIST_PORT:-5056}:5056"
+    volumes:
+      - archivist-data:/data
+      - type: bind
+        source: ${ARCHIVIST_MEDIA_PATH:?Set ARCHIVIST_MEDIA_PATH to an existing absolute host directory}
+        target: /media
+        read_only: true
+        bind:
+          create_host_path: false
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5056/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  archivist-data:

@@ -429,3 +429,30 @@ func TestServerScanPersistsRichMetadata(t *testing.T) {
 	if e := a.db.QueryRow("SELECT series_number FROM assets WHERE id=1").Scan(&cachedSeriesNumber); e != nil { t.Fatal(e) }
 	if cachedSeriesNumber != 1 { t.Fatalf("incremental rescan lost rich metadata: %v", cachedSeriesNumber) }
 }
+// TestScanAcceptedResponseIsJSON protects the mobile client's strict API contract.
+func TestScanAcceptedResponseIsJSON(t *testing.T) {
+	a := fixture(t)
+	if err := a.initJobs(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.addSource("CI", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/sources/1/scan", nil)
+	req.Header.Set("X-Archivist-Action", "1")
+	req.AddCookie(&http.Cookie{Name: "archivist_session", Value: "test-key"})
+	res := httptest.NewRecorder()
+	a.routes().ServeHTTP(res, req)
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("scan job status = %d, body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("mobile API requires JSON; content type = %q", got)
+	}
+	var body struct {
+		JobID int64 `json:"job_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil || body.JobID <= 0 {
+		t.Fatalf("scan job JSON invalid: id=%d err=%v response=%q", body.JobID, err, res.Body.String())
+	}
+}

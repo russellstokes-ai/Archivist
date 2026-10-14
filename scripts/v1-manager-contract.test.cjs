@@ -13,6 +13,9 @@ for(const token of ['id="catalogue"','id="editor"','id="candidate-search-form"',
   assert(html.includes(token),'manager HTML missing '+token);
 }
 assert(js.includes("if(!me.owner)"),'server manager must hide admin controls from non-owners');
+assert(js.includes("api('./api/library-health')"),'manager health panel must use live root availability diagnostics');
+assert(js.includes('Storage unavailable'),'manager must distinguish missing NAS storage from stored catalogue flags');
+
 assert(!js.includes('innerHTML'),'render external provider metadata only as text, not HTML');
 assert(js.includes("encodeURIComponent(query)"),'encode optional provider searches');
 assert(js.includes("candidate[key]"),'metadata candidates need per-field selection');

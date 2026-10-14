@@ -25,3 +25,10 @@ coverage.out
 # Atlas exported-web acceptance artifacts
 mobile/dist-atlas/
 mobile/atlas-preview-results/
+
+# Standalone Docker machine-local configuration
+.env
+compose.override.yaml
+
+# Per-host NAS mount configuration (may contain private paths)
+deploy/nas/nas.env

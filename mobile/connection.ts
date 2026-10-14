@@ -7,6 +7,15 @@ export class RequestError extends Error {
 function isPrivateHTTPHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host === '::1') return true;
+  // mDNS (.local) and RFC 8375 home-network DNS (.home.arpa) are
+  // reserved local namespaces, not arbitrary internet hostnames.
+  if (host.endsWith('.local') || host.endsWith('.home.arpa')) {
+    const labels = host.endsWith('.home.arpa')
+      ? host.slice(0, -'.home.arpa'.length).split('.')
+      : host.slice(0, -'.local'.length).split('.');
+    return labels.length > 0 && labels.every(label =>
+      /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+  }
   const parts = host.split('.');
   if (parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part))) {
     const octets = parts.map(Number);

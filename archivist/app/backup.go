@@ -56,8 +56,14 @@ func (a *app) stageRestore(reader io.Reader) error {
 	if n<=0 || n>maxRestoreBytes{return errors.New("restore file is empty or too large")}
 	if e=validateArchivistBackup(tempPath);e!=nil{return e}
 	pending:=a.dbPath+".restore.pending"
-	_ = os.Remove(pending)
-	return os.Rename(tempPath,pending)
+	// Do not delete a previously verified restore that is awaiting restart.
+	// Link is atomic on the local container filesystem and refuses to replace
+	// an existing path, even if two upload requests race with each other.
+	if e:=os.Link(tempPath,pending);e!=nil {
+		if errors.Is(e,os.ErrExist) { return errors.New("a restore is already staged; restart or resolve it before uploading another") }
+		return e
+	}
+	return nil
 }
 
 func applyPendingRestore(dbPath string)(bool,error){
@@ -65,13 +71,31 @@ func applyPendingRestore(dbPath string)(bool,error){
 	if _,e:=os.Stat(pending);os.IsNotExist(e){return false,nil}else if e!=nil{return false,e}
 	if e:=validateArchivistBackup(pending);e!=nil{return false,e}
 	before:=dbPath+".before-restore"
-	for _,suffix:=range []string{"","-wal","-shm"}{
-		_ = os.Remove(before+suffix)
-		if _,e:=os.Stat(dbPath+suffix);e==nil{
-			if e=os.Rename(dbPath+suffix,before+suffix);e!=nil{return false,e}
+	suffixes:=[]string{"","-wal","-shm"}
+	// Never overwrite the previous recovery snapshot. An operator must archive
+	// it before the next restore, rather than silently losing a working copy.
+	for _,suffix:=range suffixes {
+		if _,e:=os.Lstat(before+suffix);e==nil {
+			return false,errors.New("previous before-restore backup still exists; archive it before applying another restore")
 		}else if !os.IsNotExist(e){return false,e}
 	}
-	if e:=os.Rename(pending,dbPath);e!=nil{return false,e}
+	moved:=[]string{}
+	rollback:=func(original error)(bool,error){
+		var rollbackError error
+		for i:=len(moved)-1;i>=0;i-- {
+			suffix:=moved[i]
+			if e:=os.Rename(before+suffix,dbPath+suffix);e!=nil { rollbackError=errors.Join(rollbackError,e) }
+		}
+		if rollbackError!=nil{return false,errors.Join(original,errors.New("could not fully roll back old database files"),rollbackError)}
+		return false,original
+	}
+	for _,suffix:=range suffixes {
+		if _,e:=os.Lstat(dbPath+suffix);e==nil{
+			if e=os.Rename(dbPath+suffix,before+suffix);e!=nil{return rollback(e)}
+			moved=append(moved,suffix)
+		}else if !os.IsNotExist(e){return rollback(e)}
+	}
+	if e:=os.Rename(pending,dbPath);e!=nil{return rollback(e)}
 	return true,nil
 }
 

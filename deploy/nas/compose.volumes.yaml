@@ -1,0 +1,17 @@
+# Optional multi-library NAS storage profile. Apply with compose.yaml.
+# All host paths must already exist and are read-only inside Archivist.
+services:
+  server:
+    volumes:
+      - type: bind
+        source: ${ARCHIVIST_AUDIO_HOST_PATH:?Set an existing absolute audiobooks host folder}
+        target: /extra-media/audiobooks
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ARCHIVIST_COMICS_HOST_PATH:?Set an existing absolute comics host folder}
+        target: /extra-media/comics
+        read_only: true
+        bind:
+          create_host_path: false

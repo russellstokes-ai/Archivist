@@ -38,3 +38,41 @@ func TestRestoreRejectsNonArchivistDatabase(t *testing.T){
 	a:=fixture(t)
 	if e:=a.stageRestore(bytes.NewReader([]byte("not a sqlite database")));e==nil{t.Fatal("invalid restore accepted")}
 }
+
+func TestStagedRestoreCannotBeSilentlyReplaced(t *testing.T) {
+    a:=fixture(t)
+    backup,err:=a.createBackup()
+    if err!=nil {t.Fatal(err)}
+    defer os.Remove(backup)
+    payload,err:=os.ReadFile(backup)
+    if err!=nil {t.Fatal(err)}
+    if err:=a.stageRestore(bytes.NewReader(payload));err!=nil {t.Fatal(err)}
+    pending:=a.dbPath+".restore.pending"
+    original,err:=os.ReadFile(pending)
+    if err!=nil {t.Fatal(err)}
+    if err:=a.stageRestore(bytes.NewReader(payload));err==nil {t.Fatal("overwrote an already staged restore")}
+    after,err:=os.ReadFile(pending)
+    if err!=nil {t.Fatal(err)}
+    if !bytes.Equal(original,after) {t.Fatal("pending restore bytes were changed")}
+}
+
+func TestPendingRestoreDoesNotOverwriteExistingRecoverySnapshot(t *testing.T) {
+    a:=fixture(t)
+    if err:=a.addSource("Original",t.TempDir());err!=nil {t.Fatal(err)}
+    backup,err:=a.createBackup()
+    if err!=nil {t.Fatal(err)}
+    defer os.Remove(backup)
+    payload,err:=os.ReadFile(backup)
+    if err!=nil {t.Fatal(err)}
+    if err:=a.stageRestore(bytes.NewReader(payload));err!=nil {t.Fatal(err)}
+    snapshot:=a.dbPath+".before-restore"
+    sentinel:=[]byte("an existing backup must be retained")
+    if err:=os.WriteFile(snapshot,sentinel,0600);err!=nil {t.Fatal(err)}
+    applied,err:=applyPendingRestore(a.dbPath)
+    if err==nil || applied {t.Fatalf("overwrote an existing recovery snapshot: applied=%v err=%v",applied,err)}
+    preserved,err:=os.ReadFile(snapshot)
+    if err!=nil || !bytes.Equal(preserved,sentinel) {t.Fatal("existing recovery snapshot was destroyed")}
+    if _,err:=os.Stat(a.dbPath+".restore.pending");err!=nil {t.Fatal("staged restore was lost")}
+    var n int
+    if err:=a.db.QueryRow("SELECT count(*) FROM sources").Scan(&n);err!=nil || n!=1 {t.Fatalf("active library changed: %d %v",n,err)}
+}

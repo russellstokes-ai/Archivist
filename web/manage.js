@@ -164,13 +164,17 @@
     picker.value=Array.from(picker.options).some(o=>o.value===before)?before:'';
   }
   async function loadHealth(){
-    const [sources,jobs]=await Promise.all([api('./api/sources'),api('./api/jobs')]);
+    const [sources,health,jobs]=await Promise.all([api('./api/sources'),api('./api/library-health'),api('./api/jobs')]);
     const list=$('source-health');list.replaceChildren();
     if(!sources.length)list.append(e('p','No source folders configured.','subtext'));
+    const healthById=new Map((health.sources||[]).map(item=>[Number(item.id),item]));
+    if((health.summary?.offlineSources||0)>0)list.append(e('p',health.summary.offlineSources+' source folder(s) disconnected. The indexed catalogue is preserved.','subtext'));
     for(const item of sources){
+      const live=healthById.get(Number(item.id));
       const card=e('article',undefined,'health-row');
-      card.append(e('strong',item.space||'Unnamed source'),e('span',item.status||'Not scanned','subtext'));
-      card.append(e('small',(item.works||0)+' works · '+(item.files||0)+' available files','subtext'));list.append(card);
+      const mount=live?.online===false?'Storage unavailable':live?.online===true?'Storage connected':'Storage not checked';
+      card.append(e('strong',item.space||'Unnamed source'),e('span',mount+' · '+(item.status||'Not scanned'),'subtext'));
+      card.append(e('small',(item.works||0)+' works · '+(live?.indexedFiles??item.files??0)+' indexed files · '+(live?.needsReview??0)+' need review','subtext'));list.append(card);
     }
     const tasks=$('jobs-health');tasks.replaceChildren();
     if(!jobs.length)tasks.append(e('p','No recent scan jobs.','subtext'));
