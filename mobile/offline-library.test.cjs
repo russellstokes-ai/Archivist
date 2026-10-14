@@ -177,7 +177,18 @@ const {
     'verified complete local work must beat an available server');
   const originalOne=files.get(resumed.tracks[0].uri);
   const originalTwo=files.get(resumed.tracks[1].uri);
+  // A partly damaged audiobook should choose the complete server online,
+  // but its verified local chapter stays accessible while disconnected.
   files.set(resumed.tracks[0].uri,Buffer.alloc(15));
+  const partiallyDamaged=await cleanupOfflineStorage(recovered.retained);
+  const partialLocal=localItem(partiallyDamaged.retained[resumed.key]);
+  assert.equal(partialLocal.localWork.available,true);
+  assert.equal(partialLocal.localWork.offlineIncomplete,true);
+  assert.equal(partialLocal.localWork.files,1);
+  assert.equal(dedupeForAll([partialLocal,serverReady])[0].source,'server',
+    'online complete server should win over damaged partial downloaded work');
+  assert.equal(dedupeForAll([{...serverReady,available:false},partialLocal])[0].source,'downloaded',
+    'offline partial chapters must still be usable without server');
   files.set(resumed.tracks[1].uri,Buffer.alloc(0));
   const damagedStorage=await inspectOfflineStorage(recovered.retained);
   assert.equal(damagedStorage.missingFiles,2,
@@ -196,8 +207,10 @@ const {
   assert.equal(dedupeForAll([invalidLocal,serverReady])[0].source,'server',
     'server fallback must not depend on source ordering');
   const offlineServer={...serverReady,available:false};
-  assert.equal(dedupeForAll([invalidLocal,offlineServer])[0].localWork?.available,false,
-    'neither unavailable source should be misrepresented as a playable download');
+  assert.equal(dedupeForAll([invalidLocal,offlineServer])[0].source,'server',
+    'unavailable remote must not be hidden by a falsely playable corrupt download');
+  assert.equal(dedupeForAll([invalidLocal,offlineServer])[0].available,false,
+    'do not claim a usable file if neither server nor device can play it');
   files.set(resumed.tracks[0].uri,originalOne);
   files.set(resumed.tracks[1].uri,originalTwo);
   const restoredIntegrity=await cleanupOfflineStorage(integrity.retained);
