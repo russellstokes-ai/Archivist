@@ -432,6 +432,9 @@ func TestServerScanPersistsRichMetadata(t *testing.T) {
 // TestScanAcceptedResponseIsJSON protects the mobile client's strict API contract.
 func TestScanAcceptedResponseIsJSON(t *testing.T) {
 	a := fixture(t)
+	if err := a.initJobs(); err != nil {
+		t.Fatal(err)
+	}
 	if err := a.addSource("CI", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
