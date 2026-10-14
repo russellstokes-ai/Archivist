@@ -174,9 +174,16 @@ export async function pauseActiveOfflineDownload(){
 }
 
 export async function removeOfflineCheckpoint(checkpoint:OfflineDownloadCheckpoint){
-  // Never trust a persisted directory string for deletion; derive the only
-  // allowed work directory from the server/work identity.
-  await deleteAsync(offlineDirectory(checkpoint.server,checkpoint.workId),{idempotent:true});
+  // Discard only the unfinished direct-child track; previously completed
+  // chapters may also be referenced by an already published offline work.
+  // Never interpret a persisted directory or arbitrary URI as deletion authority.
+  const dir=offlineDirectory(checkpoint.server,checkpoint.workId);
+  const current=checkpoint.current;
+  if(!current || checkpoint.completedTrackIds.includes(current.trackId))return;
+  if(!current.uri.startsWith(dir))return;
+  const filename=current.uri.slice(dir.length);
+  if(!/^\\d{3}-[a-z0-9._-]+\\.[a-z0-9]{1,8}$/i.test(filename))return;
+  await deleteAsync(current.uri,{idempotent:true});
 }
 
 export async function downloadOfflineWork(
