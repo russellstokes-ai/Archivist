@@ -26,6 +26,8 @@ type SourceLike = {
   serverWorkId?: number;
   space?: string;
   available?: boolean;
+  // A catalogue asset flag is not proof the network server is reachable.
+  reachable?: boolean;
   localWork?: {available?:boolean; offlineIncomplete?:boolean};
 };
 
@@ -78,8 +80,12 @@ export function dedupeForAll<T extends SourceLike>(items: T[]): T[] {
     if(item.available===false)return 0;
     // Keep intact chapters for offline use, but prefer the complete server
     // edition when a verified downloaded work has missing/damaged tracks.
-    if(item.source==='downloaded'&&item.localWork?.offlineIncomplete)return 1;
-    return ({local:1,server:2,downloaded:3} as Record<WorkSource,number>)[item.source];
+    if(item.source==='downloaded'&&item.localWork?.offlineIncomplete)return 2;
+    // Prefer a *confirmed reachable* complete server copy over a partial
+    // download, but never trust a stale 'available' catalogue flag as proof
+    // of connectivity. In that case keep the usable local chapter offline.
+    if(item.source==='server')return item.reachable===true?3:1;
+    return item.source==='downloaded'?4:1;
   };
   for (const item of items) {
     const key = item.canonicalKey || item.key;
