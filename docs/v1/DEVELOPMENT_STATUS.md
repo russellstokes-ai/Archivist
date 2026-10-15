@@ -14,7 +14,7 @@
 | **Current unmerged development stack** | Draft [PR #50](https://github.com/russellstokes-ai/Archivist/pull/50) head **`ea2222c6ee15272185aae1ca2567e8ae7a87227e`** on `fix/archivist-offline-integrity-fallback-20261015` | Contains PRs #40–#50 stacked on the protected baseline. **Not canonical, not accepted/released.** |
 | **Current documentation branch** | `docs/archivist-v1-state-ledger-20261015` | This documentation and consistency checks only; still draft and unmerged. |
 | **Installed phone APK** | **Source SHA/package provenance not verified** | Do not assume it comes from the canonical or draft branch. No device-level pass can be claimed without identifying its build. |
-| **Approved requirements, not code** | [Master Plan (12 Oct)](../ARCHIVIST_V1_MASTER_DEVELOPMENT_PLAN_2026-10-12.md) on `plan/archivist-v1-master-2026-10-12` | Original commercial v1.0 work plan; later explicit **eight-bug restriction and source locks supersede broader historical issue suggestions**. |
+| **Approved requirements, not code** | [Master Plan (12 Oct)](https://github.com/russellstokes-ai/Archivist/blob/plan/archivist-v1-master-2026-10-12/docs/ARCHIVIST_V1_MASTER_DEVELOPMENT_PLAN_2026-10-12.md) on `plan/archivist-v1-master-2026-10-12` | Original commercial v1.0 work plan; later explicit **eight-bug restriction and source locks supersede broader historical issue suggestions**. |
 
 The final consolidated scope is [ORIGINAL_BUG_BACKLOG_2026-10-14.md](./ORIGINAL_BUG_BACKLOG_2026-10-14.md). **#15 scanner reliability is excluded** despite appearing in the original historic bug list. Both scanners, Archivist Assist and the existing canonical mobile layout are **frozen**. Reading protected code or running unchanged tests does not authorise altering it.
 
