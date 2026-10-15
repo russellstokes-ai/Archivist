@@ -1,5 +1,7 @@
 # Archivist v1.0 — Approved bug scope and canonical source protection
 
+> **Current implementation status has moved.** This document records the immutable user-approved **eight-bug scope** and source locks as of 14 October 2026. For all later PRs, #31/#32 implementation, CI, canonical provenance and Work milestones use **[DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md)** and **[DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json)**. Historic descriptions below are dated snapshots, not present-day release claims.
+
 **User-confirmed scope: 14 October 2026.** Supersedes the broader historical bug ledger in this file. The user supplied **nine entries** and expressly directed: **ignore all scanner-related work**. The sole scanner entry, **#15**, is therefore **out of scope**. The eight remaining bugs/risks below are the **only active bug scope** until the user directs otherwise.
 
 ## Absolute source and visual locks

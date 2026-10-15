@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-15",
+  "purpose": "Point-in-time manifest distinguishing canonical source, draft fixes, commercial development work and acceptance; not an automated report of GitHub or installed-device state",
+  "repo": "russellstokes-ai/Archivist",
+  "approved_requirements": {
+    "master_plan_branch": "plan/archivist-v1-master-2026-10-12",
+    "master_plan_file": "docs/ARCHIVIST_V1_MASTER_DEVELOPMENT_PLAN_2026-10-12.md",
+    "current_bug_scope_file": "docs/v1/ORIGINAL_BUG_BACKLOG_2026-10-14.md"
+  },
+  "source_references": {
+    "original_canonical": {
+      "sha": "df4c39b44394d8c512ca0298bffa7f19da356490",
+      "branch": "canonical/archivist-20261011-df4c39b",
+      "role": "approved reference, must not be overwritten"
+    },
+    "protected_development": {
+      "sha": "72bbf177aecc92f31724b48c6cf11a7eddd7a216",
+      "branch": "dev/archivist-v1-protected-20261013",
+      "role": "read-only comparison baseline for draft chain"
+    },
+    "lock_snapshot_source": "131cabdc82ce7c6d6b36e0034540184bd990a3ab",
+    "original_main_as_documented": "22ee7645b78b752b9e954a286528fddbedfc1320",
+    "installed_apk_source": "unverified",
+    "installed_apk_acceptance": "unverified"
+  },
+  "current_unmerged_stack": {
+    "base_branch": "dev/archivist-v1-protected-20261013",
+    "head_branch": "fix/archivist-offline-integrity-fallback-20261015",
+    "head_sha": "ea2222c6ee15272185aae1ca2567e8ae7a87227e",
+    "last_pr": 50,
+    "pr_range": [
+      40,
+      50
+    ],
+    "comparison": {
+      "commits_ahead": 122,
+      "commits_behind": 0,
+      "net_changed_paths": 65,
+      "protected_paths_checked": 46,
+      "protected_paths_net_changed": 0,
+      "scanner_assist_paths_net_changed": 0,
+      "canonical_mobile_ui_paths_net_changed": 0,
+      "additional_archive_reader_lock_unchanged": true
+    },
+    "merged": false,
+    "deployed": false,
+    "release_built": false
+  },
+  "ci_latest_head": {
+    "mobile": {
+      "status": "passed",
+      "run_id": 38655627405,
+      "url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38655627405"
+    },
+    "ios": {
+      "status": "passed",
+      "run_id": 38655627435,
+      "url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38655627435"
+    },
+    "meaning": "automated source/tests/build gates only; not device or release acceptance"
+  },
+  "protect": {
+    "frozen": [
+      "both scanners and workflows",
+      "Archivist Assist/editor/search",
+      "mobile canonical App.tsx layout and navigation",
+      "Living Book renderer and motion",
+      "Comic Focus/zoom/gesture renderer",
+      "Atlas/Stats/Rewards presentation",
+      "approved fonts, logos, icon, Lottie graphics and Fold layout"
+    ],
+    "protected_file": "docs/v1/PROTECTED_BLOB_LOCKS.json",
+    "rule": "Change to protected functionality requires separate explicit user approval; no lock/test bypass"
+  },
+  "bugs": {
+    "active": [
+      {
+        "issue": 16,
+        "title": "Comics won't open",
+        "status": "diagnosis_only",
+        "primary_pr": 48,
+        "evidence": "Supported archive can fall through unrecognised format to generic URI WebView; classification/root cause not proven",
+        "required_acceptance": "CBR/CBZ/CBT/comic PDF, 2000AD Annual 1978, Android URI grant and reader replay",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/16"
+      },
+      {
+        "issue": 19,
+        "title": "Atlas blank",
+        "status": "diagnosis_only",
+        "primary_pr": null,
+        "evidence": "Published work source and Atlas extra filter may disagree; no fix to locked Atlas",
+        "required_acceptance": "Atlas entries/charts match Library/Shelf published works",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/19"
+      },
+      {
+        "issue": 25,
+        "title": "Living Book disappears",
+        "status": "unfixed",
+        "primary_pr": null,
+        "evidence": "Protected renderer unchanged",
+        "required_acceptance": "Visible reliably on first entry without Play/Pause workaround",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/25"
+      },
+      {
+        "issue": 23,
+        "title": "Unwanted Resume prompt",
+        "status": "unfixed",
+        "primary_pr": null,
+        "evidence": "Progress sync scaffolding is not the actual player resume fix",
+        "required_acceptance": "All three media types return to saved position after process restart; no unexpected autoplay",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/23"
+      },
+      {
+        "issue": 17,
+        "title": "Play/Pause alignment",
+        "status": "unfixed",
+        "primary_pr": null,
+        "evidence": "No recent canonical transport visual changes",
+        "required_acceptance": "Approved five-control row optically centred on Fold closed/open",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/17"
+      },
+      {
+        "issue": 20,
+        "title": "Rewards unreliable",
+        "status": "unfixed",
+        "primary_pr": null,
+        "evidence": "Approved motion/Rewards files unchanged",
+        "required_acceptance": "Each approved Lottie plays once, holds final frame, no blank/freeze",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/20"
+      },
+      {
+        "issue": 31,
+        "title": "Offline download overrides",
+        "status": "code_verified_ci_unmerged",
+        "primary_pr": 50,
+        "evidence": "PR #41 plus PR #50 code/tests; integrity and fallback logic; UI wiring lacks live reachable flag and only acts after reconciliation",
+        "required_acceptance": "Actual device online/offline, complete/partial/zero/missing/size-mismatch and reconnect; retain media",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/31"
+      },
+      {
+        "issue": 32,
+        "title": "PDF page state",
+        "status": "code_verified_ci_unmerged",
+        "primary_pr": 49,
+        "evidence": "Document/URI/generation-scoped state and stale native callback rejection; UI JSX unchanged",
+        "required_acceptance": "Two real PDFs, force-close/relaunch, rapid switches and Fold resizing with correct saved page",
+        "device_accepted": false,
+        "url": "https://github.com/russellstokes-ai/Archivist/issues/32"
+      }
+    ],
+    "excluded": [
+      {
+        "issue": 15,
+        "reason": "User explicitly excluded scanner work. Both scanners and Archivist Assist remain frozen."
+      }
+    ],
+    "other_historical_issues": "Not active under user-approved eight-issue scope"
+  },
+  "commercial_work": [
+    {
+      "id": "server_docker_nas",
+      "prs": [
+        40
+      ],
+      "status": "coded_ci_unmerged",
+      "remaining": "Real Pi/NAS and Docker acceptance, operational recovery/load/performance"
+    },
+    {
+      "id": "media_security_metadata",
+      "prs": [
+        42,
+        43,
+        44,
+        45
+      ],
+      "status": "coded_ci_unmerged",
+      "remaining": "Server release qualification; security/auth/real archive and metadata acceptance; scanner remains frozen"
+    },
+    {
+      "id": "cross_device_progress",
+      "prs": [
+        46,
+        47
+      ],
+      "status": "foundation_only",
+      "remaining": "Wire to playback and durable device store; authenticated replay/conflict UI and real cross-device acceptance; locked App.tsx requires user approval"
+    },
+    {
+      "id": "android_auto",
+      "prs": [
+        40
+      ],
+      "status": "partially_coded",
+      "remaining": "Car, search, voice, audio focus, reconnect and offline device tests"
+    },
+    {
+      "id": "google_play_release",
+      "prs": [],
+      "status": "not_verified",
+      "remaining": "Final signed AAB, policies, target API/native compatibility, privacy/disclosures/accessibility/crash/performance and Play review"
+    }
+  ],
+  "draft_pull_requests": [
+    {
+      "number": 40,
+      "head_sha": "be67e57c17f246feab95db6b8934bfa3801e6896",
+      "category": "feat/server",
+      "change": "Docker/NAS deployment, library health, secure connectivity and Android Auto support",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/40"
+    },
+    {
+      "number": 41,
+      "head_sha": "ffc9ae1b54254cf408afbcf7205b2bd7e42c4cdd",
+      "category": "bug/31",
+      "change": "Offline downloads retained and local-first selection",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/41"
+    },
+    {
+      "number": 42,
+      "head_sha": "026cc888187918a0c1ccd2b0d6f2f30b38ac9b30",
+      "category": "work/reliability",
+      "change": "Listening/rewind activity accounting",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/42"
+    },
+    {
+      "number": 43,
+      "head_sha": "52884fbef3f2e8e253143c5c03e43c2c510b2119",
+      "category": "work/metadata",
+      "change": "Server metadata review-state save correction; scanner untouched",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/43"
+    },
+    {
+      "number": 44,
+      "head_sha": "2d62ea861baa744fa594c48225837c02ae463903",
+      "category": "work/server-comics",
+      "change": "Server CBT regular page lookup safeguards; mobile Comic Focus untouched",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/44"
+    },
+    {
+      "number": 45,
+      "head_sha": "61277410fb6fc156130e9d9ba30561a337a4722d",
+      "category": "work/security",
+      "change": "Server JPEG/PNG/GIF image decode bounds",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/45"
+    },
+    {
+      "number": 46,
+      "head_sha": "1d9d350a2a0378a179da9d7d3e86fbe06d7ab2fa",
+      "category": "work/sync",
+      "change": "Profile-scoped read-only paged server progress snapshot",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/46"
+    },
+    {
+      "number": 47,
+      "head_sha": "9e270e00fd54bafd826739dd6a92e5e0e95c4500",
+      "category": "work/sync",
+      "change": "Profile-scoped offline progress outbox and conflict planning, not wired into locked playback",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/47"
+    },
+    {
+      "number": 48,
+      "head_sha": "345fda5d09a58f732c345dea931c2e792f0ce812",
+      "category": "bug/16-diagnostic",
+      "change": "Comic WebView versus file-permission error classification only; bug still open",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/48"
+    },
+    {
+      "number": 49,
+      "head_sha": "f80bd801b531383ff5f7d18428456961407e7a68",
+      "category": "bug/32",
+      "change": "URI/generation-specific PDF page and image lifecycle, stale callbacks rejected",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/49"
+    },
+    {
+      "number": 50,
+      "head_sha": "ea2222c6ee15272185aae1ca2567e8ae7a87227e",
+      "category": "bug/31",
+      "change": "Offline file integrity and partial-download fallback, with live reachability integration still pending",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/50"
+    }
+  ],
+  "acceptance_contract": {
+    "statuses": [
+      "diagnosis_only",
+      "unfixed",
+      "code_verified_ci_unmerged",
+      "device_accepted",
+      "released"
+    ],
+    "rule": "No issue may be marked accepted merely because CI passed. State changes require exact issue reproduction, regression and review. A release requires explicit approval.",
+    "no_unsanctioned_merges": true
+  },
+  "update_instructions": "Update this manifest, docs/v1/DEVELOPMENT_STATUS.md, and append to docs/v1/DEVELOPMENT_LOG.md in every future PR; refresh real SHA/CI from GitHub, preserve historical snapshots, never infer installed APK SHA."
+}
