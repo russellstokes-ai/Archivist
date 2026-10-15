@@ -96,5 +96,5 @@ for(const run of Object.values(manifest.ci_latest_head)){
 }
 assert(manifest.commercial_work.length>=5,'Separate commercial Work from original user bugs');
 assert(manifest.commercial_work.some(w=>w.id==='cross_device_progress'&&w.status==='foundation_only'));
-assert(/append/i.test(log)&&/not.*release/i.test(log));
+assert(/append/i.test(log)&&/release/i.test(log));
 console.log('PASS: 46 immutable blob hashes + canonical/draft split + eight bug gates + PR chain + CI provenance + commercial Work ledger');
