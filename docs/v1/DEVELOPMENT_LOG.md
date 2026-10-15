@@ -42,6 +42,17 @@ The following rows capture the existing PRs as **unmerged source-level work**, n
 
 **Preservation decision:** Neither scanner, Archivist Assist nor canonical mobile layouts may be changed. Any intentional exception to protected functionality requires specific user approval *before* a narrow patch. Documentation-only branch `docs/archivist-v1-state-ledger-20261015` is **not a source promotion**, not an APK, not a merge. Any later head/runs must be re-queried and this snapshot updated.
 
+## 2026-10-15 — Draft PR #51: auditable status ledger and automated immutable-source checks
+
+- **Lane:** documentation / source-integrity protection, **not** a bug fix or UI feature.
+- **Before:** development head of #50 `ea2222c6ee15272185aae1ca2567e8ae7a87227e`; canonical reference `df4c39b44394d8c512ca0298bffa7f19da356490` unchanged.
+- **After:** isolated documentation branch `docs/archivist-v1-state-ledger-20261015`, draft [PR #51](https://github.com/russellstokes-ai/Archivist/pull/51) stacked on #50. No merge/production artifact.
+- **Source diff:** `docs/v1/README.md`, `docs/v1/DEVELOPMENT_STATUS.md`, `docs/v1/DEVELOPMENT_STATUS.json`, this append-only log, a clarifying cross-link in the original eight-bug scope, and **one new non-UI test**, `mobile/development-ledger.test.cjs`.
+- **Protection:** 46 stored source/blob SHA-1 values are individually rechecked; the current recorded upstream code diff already shows zero locked changes. No scanner, Archivist Assist, App.tsx, renderer, graphic or existing test changed by this documentation PR.
+- **CI:** documentation PR #51 full mobile and iOS workflow results must be captured after completion; do not premark them as passed.
+- **Acceptance:** no device-level or release gates advanced; all eight user bugs retain their earlier status.
+- **Next gate:** verify PR #51 mobile/iOS CI; the index and manifest must be updated for future PRs, and the log must only **append** new events, including failures and corrections.
+
 ## New event entry template (append on every subsequent change)
 
 ```markdown
