@@ -45,6 +45,10 @@ func safeImageData(data []byte) ([]byte, string, error) {
 		if err != nil || !safeCoverDimensions(config.Width, config.Height) {
 			return nil, "", errors.New("cover dimensions exceed safe memory limits or image is invalid")
 		}
+	case "image/webp":
+		if _, _, err := webpCanvasDimensions(data); err != nil {
+			return nil, "", err
+		}
 	}
 	switch mime {
 	case "image/jpeg", "image/png":
