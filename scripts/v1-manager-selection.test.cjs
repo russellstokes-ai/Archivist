@@ -78,6 +78,7 @@ const flush=async()=>{for(let i=0;i<6;i++){await new Promise(setImmediate);await
   assert.equal(records.children.length,2,'fixture must render both records');
   const rowCheckbox=index=>records.children[index].children[0].children[0];
   const first=rowCheckbox(0);
+  assert.equal(first.attributes?.['aria-label'],'Select Illustrated Atlas','selection must retain an accessible row label');
   first.checked=true;
   assert.doesNotThrow(()=>first.onchange(),'individual row selection must not throw');
   assert.equal(elements.get('selected-count').textContent,'1 selected');
