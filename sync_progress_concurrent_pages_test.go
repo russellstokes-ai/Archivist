@@ -42,6 +42,7 @@ func TestSyncProgressConcurrentPageMutationCannotSilentlyLoseEntry(t *testing.T)
         Items []syncProgressEntry `json:"items"`
         HasMore bool `json:"hasMore"`
         NextOffset int `json:"nextOffset"`
+        Snapshot string `json:"snapshot"`
     }
     request:=func(url string)(int,page){
         t.Helper()
@@ -63,7 +64,8 @@ func TestSyncProgressConcurrentPageMutationCannotSilentlyLoseEntry(t *testing.T)
     // A second device (or a revocation) can alter the authorised set before
     // the next HTTP page. OFFSET advances beyond the missing earlier row.
     if _,err:=a.db.Exec("DELETE FROM asset_progress WHERE profile_id=1 AND asset_id=?",ids[0]);err!=nil{t.Fatal(err)}
-    status,last:=request("/api/sync/progress?limit=2&offset=2")
+    if len(first.Snapshot)!=48{t.Fatalf("first page lacks snapshot token: %+v",first)}
+    status,last:=request("/api/sync/progress?limit=2&offset=2&snapshot="+first.Snapshot)
     if status==409{return} // An invalidated snapshot is safely retried.
     if status!=200{t.Fatalf("unexpected page status %d",status)}
     for _,item:=range last.Items {
