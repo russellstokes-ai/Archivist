@@ -31,7 +31,9 @@ assert.equal(app.expo.android.versionCode,102,'Test 13 must install as Android v
 assert.match(gradle,/versionCode\s+102/);
 assert.match(gradle,/versionName\s+"0\.9\.4"/);
 assert.match(apkWorkflow,/TEST_BUILD:\s*'13'/);
-assert.ok(apkWorkflow.includes('build/0.9.4-test12-20261005'),'final Test 13 branch must trigger the APK workflow');
+assert.ok(apkWorkflow.includes('workflow_dispatch:')&&apkWorkflow.includes('qa_confirmation'),'Test 13 QA build must require explicit owner confirmation');
+assert.ok(!/^  push:/m.test(apkWorkflow)&&!apkWorkflow.includes('gh release upload'),'Test 13 QA artifact cannot publish automatically');
+assert.ok(apkWorkflow.includes("app.archivist.reader.qa"),'Test 13 QA APK must not overwrite the installed production package');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'final APK must pass release lint');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'final APK must verify package/version/signature/alignment');
 assert.ok(apkWorkflow.includes('Launch test APK in Android emulator'),'final APK must cold-launch in the emulator');
