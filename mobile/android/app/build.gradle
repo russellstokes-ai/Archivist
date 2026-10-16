@@ -88,6 +88,11 @@ def archivistReleaseStorePassword = System.getenv('ARCHIVIST_UPLOAD_STORE_PASSWO
 def archivistReleaseKeyAlias = System.getenv('ARCHIVIST_UPLOAD_KEY_ALIAS')
 def archivistReleaseKeyPassword = System.getenv('ARCHIVIST_UPLOAD_KEY_PASSWORD')
 def archivistReleaseSigningComplete = [archivistReleaseStore, archivistReleaseStorePassword, archivistReleaseKeyAlias, archivistReleaseKeyPassword].every { it != null && !it.trim().isEmpty() }
+// Device-only QA is an explicit build opt-in. It uses a different Android
+// application ID and the DEBUG test key; it can never create a Play AAB.
+def archivistQATest = (findProperty('archivistQATest') ?: 'false').toBoolean()
+if (archivistQATest && archivistReleaseSigningComplete)
+    throw new GradleException('Never mix Archivist QA testing with production upload signing credentials.')
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -98,6 +103,7 @@ android {
     namespace 'app.archivist.reader'
     defaultConfig {
         applicationId 'app.archivist.reader'
+        if (archivistQATest) applicationIdSuffix '.qa'
         if (findProperty('scannerAcceptance') == 'true') applicationIdSuffix '.scanneracceptance'
         if (findProperty('livingBookScalePreview') == 'true') applicationIdSuffix '.bookscale'
         if (findProperty('bookLoaderPreview') == 'true') applicationIdSuffix '.bookloader'
@@ -136,6 +142,7 @@ android {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
             if (archivistReleaseSigningComplete) signingConfig signingConfigs.release
+            else if (archivistQATest) signingConfig signingConfigs.debug
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
@@ -209,7 +216,13 @@ dependencies {
 
 // Fail closed for production artifact tasks if upload signing isn't configured.
 gradle.taskGraph.whenReady { graph ->
-    if (!archivistReleaseSigningComplete && graph.allTasks.any { it.project == project && (it.name == 'bundleRelease' || it.name == 'assembleRelease') }) {
+    def bundles = graph.allTasks.any { it.project == project && it.name == 'bundleRelease' }
+    def releases = graph.allTasks.any { it.project == project && it.name == 'assembleRelease' }
+    // Google Play bundles are production ONLY. Even an explicit QA opt-in
+    // cannot produce a misleading test-signed upload candidate.
+    if (archivistQATest && bundles)
+        throw new GradleException('Archivist QA builds cannot produce a Play bundleRelease task.')
+    if (!archivistReleaseSigningComplete && (bundles || (releases && !archivistQATest))) {
         throw new GradleException('Archivist release signing credentials are missing. Never publish a debug-signed build.')
     }
 }

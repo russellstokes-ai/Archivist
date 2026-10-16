@@ -166,3 +166,10 @@ Never use a blank/placeholder pass, guessed APK SHA, hypothetical merge or stale
 - Server P0: pre-fix RED PR #66 empty mount and same-media rename loss; old identities/progress retained by eliminating automatic destructive stale work prune and retaining marked-unavailable assets. Server #38931521408 passed original tests, expanded unplug/replug and no-false-merge test #38932545632 pending independent outcome. Automatic verified rename re-link is not implemented.
 - Auto P1: previous onMediaItemTransition wrote new/current track; new onPositionDiscontinuity writes the outgoing track ID and last oldPosition timestamp. Mobile #38932145335 passed; Android compile #38932145317/iOS #38932145302 pending at documentation snapshot. Native car device and acknowledged phone progress transfer remain untested.
 - Full combined-source exact-head CI required. All branches remain draft/unmerged; zero original eight owner-Fold accepted. Other P1 commercial server/Android Auto/app/Play functionality not completed; branding update and splash animations await final media and explicit approval.
+
+## 2026-10-16 — consolidated P0/P1/P2 QA-only source assembly
+
+- Based on PR #78 c74464e8311ae9e78ec910fe08779f5a3a04fee0 with exact disjoint server manager PR #75 7db4e701e15a54c2e1b71c5246e2b71075b13f1f and Android release QA PR #79 087e89cea2c5d1d5baf359d1ff7afb3092df1ce2 code/test blobs. Code from RED-only review branches not merged.
+- Full same-head Mobile/iOS/Server/Android-native checks must pass; predecessor PR CI successes are cited in PR descriptions but do not establish a commercial release.
+- All canonical protected UI/scanner/art untouched; existing App.tsx one-file user-approved logic variant remains exact and reversible. No user media, release install, signer keys or public APK upload.
+- Original eight bug device acceptance zero; advanced commercial server, hardware car/NAS, new logo/splash and Play Store disclosure work pending.

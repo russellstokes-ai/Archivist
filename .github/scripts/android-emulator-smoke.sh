@@ -2,8 +2,10 @@
 set -euo pipefail
 
 APK="${1:?APK path required}"
-PACKAGE="app.archivist.reader"
-ACTIVITY="$PACKAGE/.MainActivity"
+PACKAGE="${2:-app.archivist.reader}"
+# Java Activity class stays in the fixed native namespace even when the QA
+# variant has an application ID suffix that prevents replacing the real app.
+ACTIVITY="$PACKAGE/app.archivist.reader.MainActivity"
 INFRA_EXIT=86
 
 test -f "$APK"

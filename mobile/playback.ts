@@ -4,6 +4,11 @@ export type Position = {asset: number; seconds: number; revision: number; comple
 export type Chapter = {title: string; start: number; end: number};
 export type PlaybackState = {tracks: Track[]; index: number; seconds: number; duration: number; playing: boolean; loading: boolean; speed: number; sleepAt: number | null; error: string; completed: boolean};
 type API = (path: string, method?: string, data?: unknown) => Promise<any>;
+export type PlaybackSaveReceipt={path:string;sequence:number;scope?:string};
+export type PlaybackProgressJournal={
+  record:(path:string,position:{asset:number;seconds:number;complete:boolean},baseRevision:number)=>Promise<PlaybackSaveReceipt>;
+  acknowledge:(receipt:PlaybackSaveReceipt)=>Promise<void>;
+};
 export type AudioPort = {
   load(track: Track, seconds: number): Promise<void>;
   play(): void; pause(): void; seek(seconds: number): Promise<void>; speed(rate: number): void;
@@ -21,7 +26,11 @@ export class Playback {
   private advancing = false;
   private lastSave = 0;
   private sleepExpired = false;
-  constructor(private api: API, private audio: AudioPort, private changed: (state: PlaybackState) => void) {}
+  constructor(
+    private api: API, private audio: AudioPort,
+    private changed: (state: PlaybackState) => void,
+    private readonly journal?:PlaybackProgressJournal,
+  ) {}
   private emit() { this.changed({...this.state}); }
   private fail(e: unknown) { this.state.error = e instanceof Error ? e.message : String(e); this.emit(); }
   async open(asset: number) {
@@ -70,8 +79,14 @@ export class Playback {
     this.saves = this.saves.then(async () => {
       if (this.blocked || url !== this.progressURL) return;
       try {
+        // Journal before any server mutation; a network failure, timeout or
+        // app kill must never erase the only unreplayed local position. When
+        // the server commits but the receipt fails, later reconciliation will
+        // see an already-synced value and safely acknowledge the same event.
+        const receipt = await this.journal?.record(url,snapshot,this.revision);
         const result: Position = await this.api(url, 'PUT', {...snapshot, revision: this.revision});
         this.revision = result.revision;
+        if(receipt)await this.journal?.acknowledge(receipt);
       } catch (e) {
         if (e instanceof RequestError && [401,403,409].includes(e.status)) { this.blocked = true; this.audio.pause(); this.state.playing = false; }
         if (generation === this.generation) this.fail(e);
