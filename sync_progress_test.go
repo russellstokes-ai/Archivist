@@ -8,6 +8,7 @@ import (
     "path/filepath"
     "strings"
     "testing"
+    "time"
 )
 
 func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
@@ -90,6 +91,15 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
         t.Fatalf("last page: %d %+v",code,last)
     }
     all:=append(page.Items,last.Items...)
+    // An expired cursor cannot silently produce an independent later page.
+    a.syncMu.Lock()
+    cached:=a.syncSnapshots[page.Snapshot]
+    if cached!=nil{cached.expires=time.Now().Add(-time.Second)}
+    a.syncMu.Unlock()
+    if cached==nil{t.Fatal("multipage view was not cached")}
+    if expired,_:=call(alice,"/api/sync/progress?limit=2&offset=2&snapshot="+page.Snapshot,"GET");expired!=409{
+        t.Fatalf("expired progress snapshot continued: %d",expired)
+    }
     kinds:=map[string]bool{}
     for _,item:=range all{
         kinds[item.Kind]=true
