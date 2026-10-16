@@ -14,7 +14,9 @@ assert.match(gradle,/if \(archivistQATest\) applicationIdSuffix '\.qa'/,
 assert.match(gradle,/if \(archivistQATest\) signingConfig signingConfigs\.debug/,
   'only an explicitly opted-in QA APK may use debug signing');
 assert.match(gradle,/bundleRelease/,'bundle release must be guarded');
-assert.match(gradle,/if \(archivistQATest &&.*bundleRelease/,
+assert.match(gradle,/def bundles = graph\.allTasks\.any.*bundleRelease/,
+  'bundleRelease must be separately identifiable');
+assert.match(gradle,/if \(archivistQATest && bundles\)/,
   'production Play bundle may NEVER be produced under QA/debug signing flag');
 assert.match(gradle,/ARCHIVIST_UPLOAD_KEY_ALIAS/,'production signing remains user-supplied');
 assert.match(workflow,/-ParchivistQATest=true/);
