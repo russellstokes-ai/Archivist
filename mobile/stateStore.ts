@@ -204,7 +204,9 @@ async function writeGeneration(key:string,data:string,deleted:boolean):Promise<s
   return target.uri;
 }
 function persistEncoded(key:string,encoded:string):Promise<void>{
-  keyHex(key);
+  // Keep the async storage API's Promise-rejection contract even when a key
+  // fails filename validation: callers must never crash before .catch().
+  try{keyHex(key)}catch(error){return Promise.reject(error)}
   return queueWrite(key,async()=>{
     if(!(await ensureRoot())){
       if(writeBrowserValue(key,encoded))return;
@@ -243,7 +245,7 @@ export async function setPersistedJSONArrayCooperative(
   return true;
 }
 export function deletePersistedJSON(key:string):Promise<void>{
-  keyHex(key);
+  try{keyHex(key)}catch(error){return Promise.reject(error)}
   return queueWrite(key,async()=>{
     if(await ensureRoot()){
       // Commit a durable V2 tombstone BEFORE removing legacy backups and
