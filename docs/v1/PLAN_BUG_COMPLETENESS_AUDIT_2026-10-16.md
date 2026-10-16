@@ -25,6 +25,20 @@ No real user file or server was touched. This **source-confirmed data-loss path 
 
 **Design constraint for Astra:** preserve historical work identity and saved progress when a source turns unavailable, even if individual physical assets are accurately marked unavailable. Distinguish accidental empty mount from intentional source deletion with explicit, journalled owner action; use source generation/mount identity or verified reconciliation semantics, not just `if total==0 return`, which misses partial mount/permission failures and might strand intentional clear operations. Cover 100→0, 100→1, nested mount loss, recovery, watched jobs, process restart, profile grants and migration. Do not touch either scanner/workflow without a separately approved exact scope. Don't merge failing PR #66 until safely GREEN.
 
+### A2. New confirmed P0 on the same source path: ordinary audiobook rename removes work identity and bookmark
+
+The same automatic catalogue uses source-relative filenames in work identity. After the 143-second mount-loss failure, a second **separate** source-level test renamed an audiobook file without changing its bytes, rescanned the library and checked the existing logical work ID and 222-second owner bookmark. [Latest Server RED CI #38910250772](https://github.com/russellstokes-ai/Archivist/actions/runs/38910250772) failed both tests:
+
+```text
+EMPTY MOUNT DATA LOSS: scanErr=<nil>, works=0,
+former work present=0, saved playback bookmark=0
+
+RENAME STATE LOSS: scanErr=<nil>, previous work id=1 retained=0,
+saved bookmark retained=0
+```
+
+**Impact:** manually renaming an audiobook in an indexed server library can replace its automatically generated work with a fresh ID and cascade-delete previously saved playback progress. This is a confirmed synthetic source behavior, not a user's observed data-loss incident. It must be handled in the *same* Astra identity-preservation design as mount outages: stable logical work identity independent of simple filename edits, bounded proof of renamed assets, explicit conflict cases for same-title duplicates, file hash/metadata when appropriate, portable NAS mounts, progress foreign keys and safe old/new path mapping. Never simply copy one work's progress to another unrelated file based on name similarity. **Both existing scanners remain frozen until a narrowly approved server-only scope is agreed.** New test-only PR #66 head `6c2d22fdab9d9cd82d18e438b53db2672e264b1e`, no production scan/catalogue edits.
+
 ## B. Requirement-to-implementation trace — accepted contract versus evidence
 
 | ID | Approved outcome | Source-level position | Remaining / acceptance |
@@ -44,7 +58,7 @@ No real user file or server was touched. This **source-confirmed data-loss path 
 | SRV-01 | Universal same-core Docker, HA, NAS, Pi | Compose, HA add-on, native ARM64 and Docker smoke tests pass in drafts | Real Pi4 4GB SSD/NAS platforms, boot, mounts and upgrade acceptance missing |
 | SRV-02 | NAS outage preserves catalogue and bookmarks | Missing-root condition handled, but empty-root not | **New P0 RED #66**, identity/progress loss; also partially mounted directories |
 | SRV-03 | Scan control: truthful cancel, retry, incremental status | `background.go` supports queued/running persisted jobs and `watcher` | **No genuine cancellation route/cancellation context found** in reviewed server worker; no claim cancel works; approved server UI S6 still incomplete |
-| SRV-04 | Correct work, edition, audiobook chapter, comic-issue grouping | `catalogue.go` automatic work + user grouping and test coverage | Real 10k mixed-library, renames, per-issue and multi-volume/editions consistency |
+| SRV-04 | Correct work, edition, audiobook chapter, comic-issue grouping | `catalogue.go` automatic work + user grouping and test coverage; **RED #66 confirms filename rename can lose work ID and bookmark** | P0 stable identity/rename migration, 10k mixed-library, per-issue and multi-volume consistency |
 | SRV-05 | Advanced Work/Edition metadata workbench | `web/manage.*` offers source-file table, optional candidate search and per-file editor | **Not full S2–S5:** cover grid/list, work/edition detail, per-field locks/provenance, safe bulk preview/undo, work-centric review |
 | SRV-06 | Owner / User, household scopes and per-user position | `household.go` auth/session/grants and progress ownership; `initHousehold` intentionally grants every active User every source | **Policy decision required:** master calls for profile/library grants and isolation; implementation has all-library User by design. Do not silently assume per-child space restrictions |
 | SRV-07 | Secure LAN / remote HTTPS / credentials | Session auth, localhost-first Docker, HTTPS/Tailscale support, PR #62 mobile-origin checks | Verify reverse proxy trust, physical network, password retry/rate limiting and access-key entropy; no rate-limit enforcement seen in inspected `/session`/`/unlock` handlers |
@@ -78,7 +92,8 @@ No real user file or server was touched. This **source-confirmed data-loss path 
 
 | Priority | New finding | Confidence | Required next verification |
 |---|---|---|---|
-| **P0** | Empty but reachable NAS mount can cascade-delete auto work identity and 143s bookmark | **Deterministic RED CI #38908960336** | Integrate RED-only #66 test into a safe correction, test partial/mounted-dropout and explicit removal semantics |
+| **P0** | Empty but reachable NAS mount can cascade-delete auto work identity and 143s bookmark | **Deterministic RED CI #38910250772** | Integrate RED-only #66 test into a safe correction, test partial/mounted-dropout and explicit removal semantics |
+| **P0** | Renaming an indexed audiobook file without changing media bytes replaces its auto work ID and deletes saved 222s bookmark | **Deterministic RED CI #38910250772** | Stable work/edition/asset identity across rename, conflict handling, progress migration without false merges |
 | **P1** | Android Auto handoff is delete-on-read; phone persists progress asynchronously and swallows storage errors | **Source-proven timing window; no native RED** | Force-stop at read-before-save, ENOSPC, double-reader; add acknowledged durable transfer protocol without protected App.tsx changes unless approved |
 | **P1 / policy** | Server household all-space access conflicts with narrower private-grants expectation | **Confirmed implementation, unresolved product policy** | Decide all-space default versus per-profile opt-in/restrictions and migration/security tests |
 | **P1** | Server jobs can't demonstrably cancel scans despite workplan | **Source-level missing command/context** | Verify current UI/API contract and design truthful cancel with safe rollback and protected scanner approval |
@@ -90,7 +105,7 @@ No real user file or server was touched. This **source-confirmed data-loss path 
 
 ## E. Astra ownership and release boundary
 
-**First:** make the existing P0 shared state-store (#63) and offline chapter replacement (#56) regressions GREEN, plus new server mount-loss deletion (#66), with saved-work/bookmark preservation verified under storage and network failure. **Second:** fix consistent progress snapshots (#56) and test Android Auto handoff. **Third:** address six original protected mobile issues after reproducible device diagnosis and narrowly approved exceptions. **Fourth:** deliver advanced server workbench, truthful scanner controls, family grant decision, backups/migrations, real Pi/NAS/vehicle and Play readiness. End with one controlled integrated release candidate, not a collection of unmerged drafts.
+**First:** make the existing P0 shared state-store (#63) and offline chapter replacement (#56) regressions GREEN, plus BOTH server mount-loss and rename-driven identity/bookmark deletion tests (#66), with saved-work/bookmark preservation verified under storage and network failure. **Second:** fix consistent progress snapshots (#56) and test Android Auto handoff. **Third:** address six original protected mobile issues after reproducible device diagnosis and narrowly approved exceptions. **Fourth:** deliver advanced server workbench, truthful scanner controls, family grant decision, backups/migrations, real Pi/NAS/vehicle and Play readiness. End with one controlled integrated release candidate, not a collection of unmerged drafts.
 
 **Absolutely prohibited without explicit owner approval:** touching protected scanner implementation/Archivist Assist, canonical mobile layout/reader/Atlas/Rewards/icon/Lotties, merging to canonical/main, installing APK, migrating personal database or publishing Play/HA/NAS release. Keep all 46 protected blob SHAs, both Astra queues, historical failed CI, human `DEVELOPMENT_STATUS.md`, machine `DEVELOPMENT_STATUS.json` and append-only `DEVELOPMENT_LOG.md` auditable.
 
