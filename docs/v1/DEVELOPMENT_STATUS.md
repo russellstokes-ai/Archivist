@@ -4,6 +4,15 @@
 
 > **IMPORTANT: No work in PRs #40–#50 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 16 October robustness audit — pending verification
+
+**New draft [PR #53](https://github.com/russellstokes-ai/Archivist/pull/53)** is stacked on the documentation [PR #51](https://github.com/russellstokes-ai/Archivist/pull/51). It is **not merged, released or device-accepted**. The prior CI-green implementation snapshot remains **PR #50**; this new audit's CI is pending.
+
+- **[Astra review queue](./ASTRA_ROBUSTNESS_REVIEW_QUEUE.md):** ten independently verifiable robustness concerns, prioritising potentially destructive offline checkpoint handling and inconsistent paginated progress snapshots.
+- **One small, isolated source correction:** `mobile/progressReconciliation.ts` now fails closed if the replay planner receives duplicate server progress records instead of silently using the last entry. A regression test checks duplicate IDs carrying different revisions. **No claim of successful CI until the exact audit head passes.**
+- **Preservation:** Both scanners, Archivist Assist, canonical mobile UI/App.tsx, Living Book, Comic Focus, Atlas/Rewards and approved assets remain unchanged by this draft. Riskier issues are logged for Astra, not patched by guesswork.
+- **Status semantics:** Current source SHAs, releases, user-installed APK provenance and device acceptance remain separate; a successful unit test does not close the eight reported bugs.
+
 ## 1. Which state is which?
 
 | Lane | Git source or evidence | Meaning / permission |

@@ -72,3 +72,13 @@ The following rows capture the existing PRs as **unmerged source-level work**, n
 ```
 
 Never use a blank/placeholder pass, guessed APK SHA, hypothetical merge or stale CI status to advance any acceptance state.
+
+## 2026-10-16 — Draft PR #53: robustness audit and one isolated sync correction
+
+- **Lane:** audit + commercial cross-device reliability, not accepted end-user bug closure.
+- **Base:** Draft PR #51 at `70921ca808940f65e6e409fedb74251c194297dd` on top of protected baseline `72bbf177aecc92f31724b48c6cf11a7eddd7a216`; canonical `df4c39b` unchanged.
+- **Scope:** [Astra independent review queue](./ASTRA_ROBUSTNESS_REVIEW_QUEUE.md), prioritising offline media deletion paths, snapshot concurrency, Android Auto transition positions, backup rollback, PDF races and cover safety.
+- **Source fix:** Unprotected `mobile/progressReconciliation.ts` now rejects duplicate remote progress identities rather than last-write-wins. Regression in `mobile/progress-reconciliation.test.cjs`.
+- **PR:** [#53](https://github.com/russellstokes-ai/Archivist/pull/53), draft, unmerged, not deployed.
+- **Acceptance:** Independent Astra findings require reproduction; source test success does not establish real-device acceptance. CI outcome pending at initial entry.
+- **Protection:** Neither scanner, Archivist Assist, canonical `mobile/App.tsx`, Living Book, Comic Focus, Atlas, Rewards nor approved assets intentionally changed.
