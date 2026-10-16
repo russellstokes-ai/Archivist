@@ -37,6 +37,8 @@ type app struct {
 	scanMu sync.Mutex
 	syncMu sync.Mutex
 	syncSnapshots map[string]*progressSnapshot
+	loginMu sync.Mutex
+	loginRates map[string]*loginAttempt
 }
 type source struct {
 	ID           int64  `json:"id"`
@@ -813,15 +815,23 @@ func (a *app) routes() http.Handler {
 				fail(w, 403, errors.New("invalid request"))
 				return
 			}
+			if !a.beginLoginAttempt(r.RemoteAddr) {
+				w.Header().Set("Retry-After", "120")
+				fail(w, http.StatusTooManyRequests, errors.New("too many attempts; please wait before trying again"))
+				return
+			}
 			var body struct {
 				Token string `json:"token"`
 			}
 			json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body)
 			if _, valid := a.identify(body.Token); !valid {
+				a.finishLoginAttempt(r.RemoteAddr, false)
 				fail(w, 401, errors.New("incorrect access key"))
 				return
 			}
 			session, e := a.newSession(body.Token)
+			// Correct credentials must not be punished for a transient DB failure.
+			a.finishLoginAttempt(r.RemoteAddr, true)
 			if e != nil {
 				fail(w, 500, e)
 				return
