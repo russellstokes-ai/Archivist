@@ -558,5 +558,43 @@
     "google_play_approved": false,
     "status": "late_stage_draft_only_not_commercial_quality",
     "release_allowed": false
+  },
+  "pre_astra_ready_20261016": {
+    "repo": "russellstokes-ai/Archivist",
+    "latest_implementation_pr": 65,
+    "latest_implementation_branch": "fix/archivist-server-manager-stale-candidates-20261016",
+    "parent_pr": 62,
+    "source_code_test_sha": "63ad2e7e3e88d1dfc6c4e46e41383a04cc914bb7",
+    "test_name": "scripts/v1-manager-candidate-race.test.cjs",
+    "server_red_run": 38903515420,
+    "server_red_observation": "stale Alpha candidate appeared in Beta metadata editor while Beta was active",
+    "server_green_run": 38903734355,
+    "server_green_result": "success, Go root+packaged, manager behavioural tests, Docker/HA, ARM64 smoke",
+    "corrections": [
+      "server manager candidate responses gated by current editor generation and original work identity",
+      "stale provider errors ignored",
+      "close/reopen re-enables new search"
+    ],
+    "root_packaged_manager_parity": true,
+    "no_canonical_source_changes": true,
+    "protected_locked_count": 46,
+    "protected_locked_changed": 0,
+    "approved_original_bug_hardware_accepted": 0,
+    "pending_high_risk_red_branches": [
+      56,
+      63
+    ],
+    "red_manager_historical_only": 59,
+    "remaining_integrity": [
+      "offline file replacement deletes existing media before failed network transfer",
+      "SQLite progress paging can silently omit unchanged positions",
+      "state store can overwrite only valid backup on ENOSPC",
+      "state storage key collisions"
+    ],
+    "real_device_accepted": false,
+    "owner_installed_apk_sha": "unverified",
+    "commercial_release_go": false,
+    "no_merge_or_install_authorized": true,
+    "ready_handoff": "docs/v1/ASTRA_START_POINT_AND_ACCEPTANCE_2026-10-16.md"
   }
 }

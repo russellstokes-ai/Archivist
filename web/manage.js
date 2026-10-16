@@ -10,7 +10,7 @@
     ['isbn','ISBN','text'], ['asin','ASIN','text'],
     ['language','Language','text'], ['description','Description','textarea']
   ];
-  let activeView='library', offset=0, rows=[], selected=new Set(), requestId=0, timer=0, editing=null;
+  let activeView='library', offset=0, rows=[], selected=new Set(), requestId=0, timer=0, editing=null, candidateGeneration=0;
   const selectedDetails=new Map();
   const savedViewsKey='archivist-manager-v1-views';
   const e=(tag,text,className)=>{
@@ -82,12 +82,16 @@
   }
   async function findCandidates(){
     if(!editing)return;
+    const target=editing;
+    const generation=++candidateGeneration;
     const query=$('candidate-query').value.trim();
     if(query.length<2){notice('Enter at least two characters to search.',true);return}
     const button=$('candidate-search-button'),box=$('candidate-results');
     button.disabled=true;box.replaceChildren(e('p','Searching Open Library…','subtext'));
     try{
       const response=await api('./api/manage/metadata-candidates?q='+encodeURIComponent(query));
+      // A previous title's late provider response cannot populate this editor.
+      if(generation!==candidateGeneration||editing!==target)return;
       box.replaceChildren();
       const candidates=Array.isArray(response.candidates)?response.candidates:[];
       if(!candidates.length){box.append(e('p','No matches found. Your current metadata has not changed.','subtext'));return}
@@ -104,15 +108,24 @@
         }
         card.append(buttons);box.append(card);
       }
-    }catch(err){box.replaceChildren(e('p','Provider search failed: '+err.message,'subtext'));notice(err.message,true)}
-    finally{button.disabled=false}
+    }catch(err){
+      if(generation===candidateGeneration&&editing===target){
+        box.replaceChildren(e('p','Provider search failed: '+err.message,'subtext'));
+        notice(err.message,true);
+      }
+    }finally{if(generation===candidateGeneration)button.disabled=false}
   }
   function readSavedViews(){try{const x=JSON.parse(localStorage.getItem(savedViewsKey)||'[]');return Array.isArray(x)?x.filter(v=>v&&typeof v.name==='string'&&v.filters&&typeof v.filters==='object').slice(0,20):[]}catch{return []}}
   function updateViews(){const picker=$('saved-views');const views=readSavedViews();picker.replaceChildren(new Option('Choose saved view…',''));views.forEach((v,i)=>picker.add(new Option(v.name,String(i))))}
   function saveView(){const name=$('view-name').value.trim();if(!name){notice('Name the filter before saving.',true);$('view-name').focus();return}const filters={q:s('search'),space:s('space'),format:s('format'),availability:s('availability'),sort:s('sort'),review:activeView==='review'};const views=readSavedViews().filter(v=>v.name.toLowerCase()!==name.toLowerCase());views.unshift({name,filters});try{localStorage.setItem(savedViewsKey,JSON.stringify(views.slice(0,20)));$('view-name').value='';updateViews();notice('Saved filter: '+name)}catch{notice('This browser does not permit saving views.',true)}}
   function applyView(){const i=Number(s('saved-views'));const view=readSavedViews()[i];if(s('saved-views')===''||!view)return;const v=view.filters;activeView=v.review?'review':'library';$('view-library').hidden=false;$('view-health').hidden=true;for(const item of document.querySelectorAll('[data-view]')){item.classList.toggle('is-current',item.dataset.view===activeView);if(item.dataset.view===activeView)item.setAttribute('aria-current','page');else item.removeAttribute('aria-current')}for(const [id,key] of [['search','q'],['space','space'],['format','format'],['availability','availability'],['sort','sort']])$(id).value=v[key]||'';offset=0;loadCatalogue()}
   function exportSelected(){const items=[...selectedDetails.values()];if(!items.length)return;const columns=[['id','ID'],['title','Title'],['author','Author'],['series','Series'],['seriesNumber','Number'],['format','Format'],['space','Space'],['publishedYear','Year'],['genre','Genre'],['isbn','ISBN'],['metadataSource','Metadata source']];const cell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text.trimStart()))text="'"+text;return '"'+text.replaceAll('"','""')+'"'};const lines=[columns.map(x=>cell(x[1])).join(','),...items.map(row=>columns.map(x=>cell(row[x[0]])).join(','))];const url=URL.createObjectURL(new Blob([lines.join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'}));const anchor=e('a');anchor.href=url;anchor.download='archivist-selected-metadata.csv';document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Exported '+items.length+' selected metadata records.')}
+  function invalidateCandidateLookup(){
+    ++candidateGeneration;
+    $('candidate-search-button').disabled=false;
+  }
   function openEditor(item){
+    invalidateCandidateLookup();
     editing=item;
     $('candidate-query').value=[item.title,item.author].filter(Boolean).join(' ');
     $('candidate-results').replaceChildren();
@@ -213,8 +226,13 @@
   $('candidate-search-button').onclick=findCandidates;
   $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};
   $('editor-form').addEventListener('submit',saveEditor);
-  $('close-editor').onclick=()=>{$('editor').close();editing=null};
-  $('cancel-editor').onclick=()=>{$('editor').close();editing=null};
+  function closeEditor(){invalidateCandidateLookup();$('editor').close();editing=null}
+  $('close-editor').onclick=closeEditor;
+  $('cancel-editor').onclick=closeEditor;
+  // Escape/native dialog close does not use either explicit close button.
+  $('editor').addEventListener('close',()=>{
+    if(!$('editor').open){invalidateCandidateLookup();editing=null}
+  });
   $('filters').onsubmit=event=>{event.preventDefault();offset=0;loadCatalogue()};
   $('search').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>{offset=0;loadCatalogue()},260)});
   for(const key of ['space','format','availability','sort'])$(key).addEventListener('change',()=>{offset=0;loadCatalogue()});

@@ -2,7 +2,14 @@
 
 **Single current-status entrypoint · updated 16 October 2026.** This is a **point-in-time snapshot**, not a live dashboard. It differentiates the approved canonical app, protected development baseline, unmerged bug-fix candidates, separate commercial feature work and on-device acceptance. The machine-readable source is [DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json); retain every historical change in the [append-only development log](./DEVELOPMENT_LOG.md).
 
-> **IMPORTANT: No development work in PRs #40–#63 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+> **IMPORTANT: No development work in PRs #40–#65 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+
+## 16 October 2026 — Pre-Astra handoff ready, PR #65 server-admin race corrected
+
+- **Authoritative Astra start point:** [ASTRA_START_POINT_AND_ACCEPTANCE_2026-10-16.md](./ASTRA_START_POINT_AND_ACCEPTANCE_2026-10-16.md). Start from unmerged [PR #65](https://github.com/russellstokes-ai/Archivist/pull/65) on top of prior approved development draft #62. PR #65 makes **no changes to mobile App.tsx, scanner/Assist, artwork or protected reader/UI**, only paired server manager JS, behavioural test/CI registration and this documentation.
+- **Verified test-first failure:** [Server checks #38903515420](https://github.com/russellstokes-ai/Archivist/actions/runs/38903515420) failed in `v1-manager-candidate-race.test.cjs` because an old Book Alpha Open Library candidate response appeared in Book Beta's editor after the original search was abandoned. This is a server admin race, **not** the separately frozen mobile Assist/editor. Native ARM64 smoke on that test-only head succeeded.
+- **Verified correction:** Manager now associates candidate requests with an editor generation and title identity; stale success/errors cannot populate another title and closing/reopening enables fresh searches. Mirrored `web/manage.js` and `archivist/app/web/manage.js` are byte-identical. [Server checks #38903734355](https://github.com/russellstokes-ai/Archivist/actions/runs/38903734355) **completed SUCCESS** on code/test commit `63ad2e7e3e88d1dfc6c4e46e41383a04cc914bb7` (including manager regression, Go root/package, native ARM64, standalone Docker and HA smoke). Documentation later on this branch is **not** equivalent to a freshly tested exact-head source revision.
+- **Release decision unchanged:** original eight user bugs **0 device accepted**; PR #56 offline deletion and progress omission, PR #63 shared state corruption and key collision remain verified RED and unfixed; Docker/HA/NAS/Pi4, real Fold, vehicle, advanced admin and Google Play acceptance incomplete. Neither canonical, main, installed APK, real user media nor production server was altered.
 
 ## 16 October 2026 — Final all-product source robustness sweep, PRs #60–#63
 

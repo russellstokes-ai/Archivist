@@ -9,6 +9,8 @@ Use these four records **together**. They separate the approved app from pending
 3. **[DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)** — append-only dated actions, diagnostics, changes, failed/passing CI, safeguards, approval and rollback notes. Never overwrite old entries to hide failed attempts.
 4. **[ORIGINAL_BUG_BACKLOG_2026-10-14.md](./ORIGINAL_BUG_BACKLOG_2026-10-14.md)** — *scope* authority. Only #16, #19, #25, #23, #17, #20, #31, #32 are active user bugs. Scanner #15 excluded.
 
+**Current Astra engineering start (PR #65):** [Authoritative short source pointer, confirmed regression fixes, priority P0/P1 blockers and exact release acceptance](./ASTRA_START_POINT_AND_ACCEPTANCE_2026-10-16.md). The latest server manager metadata race has RED #38903515420 → GREEN #38903734355; no protected mobile/scanner code was touched. This document supersedes older handoff starting SHAs; never treat documentation as release approval.
+
 **Full 16 October mobile/server/Android Auto/Play robustness audit:** [Verified fixes, four proven state/integrity defects, security risks and hardware acceptance](./FINAL_COMMERCIAL_SOURCE_SWEEP_2026-10-16.md). PRs #60–#62 are isolated draft fixes; #63 is expected-RED only. The canonical and scanners/Assist are untouched. Nothing is commercial release approved.
 
 **Astra final commercial delivery handoff:** [Risk-ordered remaining implementation, RED tests, protected boundaries and hardware release gates](./ASTRA_FINAL_COMMERCIAL_DELIVERY_HANDOFF_2026-10-16.md). Server GIF page support PR #57 has green CI, manager selection PR #58 has a green code checkpoint, and test-only PR #59 is quarantined. No original eight issues are accepted on the Fold.
