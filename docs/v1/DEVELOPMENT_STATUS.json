@@ -798,5 +798,74 @@
     "real_device_accepted": false,
     "original_eight_device_accepted": 0,
     "full_commercial_release": false
+  },
+  "astra_execution_start_pr83_20261016": {
+    "canonical_commit": "df4c39b44394d8c512ca0298bffa7f19da356490",
+    "protected_development_commit": "72bbf177aecc92f31724b48c6cf11a7eddd7a216",
+    "source_pr": 83,
+    "implementation_branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "exact_source_commit": "70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9",
+    "document": "docs/v1/ASTRA_EXECUTION_START_PR83_2026-10-16.md",
+    "exact_head_ci": {
+      "mobile": {
+        "run_id": 38948050600,
+        "conclusion": "success"
+      },
+      "ios": {
+        "run_id": 38948050648,
+        "conclusion": "success"
+      },
+      "android_native": {
+        "run_id": 38948050610,
+        "conclusion": "success"
+      },
+      "server": {
+        "run_id": 38948050770,
+        "conclusion": "success"
+      }
+    },
+    "source_compare_to_protected_development": {
+      "ahead": 254,
+      "behind": 0,
+      "net_changed_paths": 137,
+      "original_locked_paths": 46,
+      "locked_paths_changed": [
+        "mobile/App.tsx"
+      ],
+      "original_other_locked_changed": 0
+    },
+    "approved_app_logic_git_blob_sha": "8fdf3b2cea9fd92f0edf4bef0168cc97acfe9935",
+    "approved_app_logic_exception_document": "docs/v1/APP_LOGIC_EXCEPTION_2026-10-16.json",
+    "original_eight_bug_count": 8,
+    "original_bugs_device_accepted": 0,
+    "unresolved_six_original_bug_ids": [
+      16,
+      19,
+      25,
+      23,
+      17,
+      20
+    ],
+    "draft_device_pending_bug_ids": [
+      31,
+      32
+    ],
+    "major_unfinished": [
+      "advanced S1-S10 server manager",
+      "safe rename relinking",
+      "Pi/NAS real hardware and durable power-loss acceptance",
+      "Android Auto real car/voice/audio focus",
+      "Fold closed/open tests and exact APK provenance",
+      "full production Play AAB, privacy, licensing, approved splash/logo"
+    ],
+    "release_go": false,
+    "canonical_merge": false,
+    "installed_apk_source": "unverified",
+    "physical_devices_accepted": false,
+    "historical_red_prs_not_to_merge": [
+      56,
+      63,
+      66
+    ]
   }
 }
