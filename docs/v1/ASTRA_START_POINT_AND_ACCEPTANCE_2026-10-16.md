@@ -16,6 +16,8 @@
 
 **Do NOT merge quarantined RED branches #56, #63 or #66.** The most inclusive already CI-green implementation start remains PR #65. Maintain the new P0 in both development status files and append-only log. Source hardware/Play acceptance remains unfinished.
 
+**Latest verified implementation head before this docs-only follow-up:** [PR #65](https://github.com/russellstokes-ai/Archivist/pull/65) commit `2808a4c8a004b6fd9d2b55c07de535b9eb19b4c2`, [final same-head Server CI #38904306519](https://github.com/russellstokes-ai/Archivist/actions/runs/38904306519) **completed SUCCESS**. The separate PR #67 documentation branch is not an implementation integration target. Earlier paragraphs are historical checkpoint instructions; use this verified final PR #65 source and refresh on actual Astra start.
+
 ## 1. Exact code to continue, not canonical or a RED-only test branch
 
 Use the **latest verified head** of draft [PR #65](https://github.com/russellstokes-ai/Archivist/pull/65), branch `fix/archivist-server-manager-stale-candidates-20261016`, **only if its exact-head CI is green**. This branch descends from unmerged #62 ← #61 ← #60 ← #58 ← #57 ← #55 and contains the earlier protected feature foundation #40–54. The **server manager source correction checkpoint** is `63ad2e7e3e88d1dfc6c4e46e41383a04cc914bb7`; Server checks [#38903734355](https://github.com/russellstokes-ai/Archivist/actions/runs/38903734355) must be checked for a **completed SUCCESS conclusion**, not assumed. Root and packaged server manager JS are SHA-identical, and a dedicated executable slow-response regression is required by the server manager contract. **If CI fails, fix the exact defect on a separate reviewable draft; do not use an unverified state as release candidate.**
