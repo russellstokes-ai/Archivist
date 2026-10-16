@@ -4,6 +4,10 @@
 **Role:** definitive short *execution start* for Astra, not permission to merge, deploy or publish.  
 **Repository:** `russellstokes-ai/Archivist`. **One production core**, universal server on Docker/HA/NAS/Pi and Android client working even without the server.
 
+## Latest P0/P1 source assembly — newest safe engineering head pending CI
+
+The newer `integration/archivist-v1-p0-p1-reviewed-20261016` combines isolated code/tests from PRs #71 (shared stateStore), #72 (non-destructive server catalogue) and #73 (outgoing Android Auto chapter progress) with CI-green PR #70. **Do not promote this integration or merge to canonical until same-head Server/Mobile/iOS/Android-native CI succeeds and protected code is independently reviewed.** Shared stateStore migration indirectly affects frozen scanner/Assist; only surgical authorisation may permit actual installed-device integration. Automatic renamed-file progress relinking, real NAS/Pi/Fold/Auto tests, and full commercial server/admin/Play requirements remain unfinished.
+
 ## Latest chat-integrated candidate (supersedes older implementation-start pointers)
 
 Review `integration/archivist-v1-offline-sync-reviewed-20261016` for source-level **offline media copy-on-write** and **immutable cross-device progress paging** assembled from CI-green draft PR #68 and #69; this does not prove native behaviour or fix shared stateStore PR #63, server catalogue PR #66, the six protected original bugs or protected App.tsx's async manifest commit. Use the current exact branch SHA and full CI before proposing any integration or merge. Original frozen scanners/Assist/UI/renderer and all 46 locks remain untouched. Read [the known limitations](./V1_INTEGRATED_COW_SYNC_LIMITS_2026-10-16.md) before hardware tests.

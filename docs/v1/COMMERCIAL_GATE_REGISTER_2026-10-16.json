@@ -287,5 +287,33 @@
   "merged": false,
   "hardware_accepted": false,
   "commercial_go": false,
-  "note": "Latest PR66 RED 38910250772 proves both mount-loss and simple rename state loss using synthetic data. No production scanner changes. This is point-in-time, not a live dashboard."
+  "note": "Latest PR66 RED 38910250772 proves both mount-loss and simple rename state loss using synthetic data. No production scanner changes. This is point-in-time, not a live dashboard.",
+  "new_p0_p1_draft_corrections_20261016": {
+    "branch": "integration/archivist-v1-p0-p1-reviewed-20261016",
+    "not_merged": true,
+    "state_v2": {
+      "pr": 71,
+      "mobile_run": 38931620224,
+      "prior_red": 38899466348,
+      "ios": "pending",
+      "device": false
+    },
+    "server_catalogue": {
+      "pr": 72,
+      "server_green_checkpoint": 38931521408,
+      "extended_ci": 38932545632,
+      "prior_red": 38910250772,
+      "device": false,
+      "verified_rename_link": false
+    },
+    "android_auto": {
+      "pr": 73,
+      "mobile_green": 38932145335,
+      "native_run": 38932145317,
+      "vehicle": false,
+      "ack_required": true
+    },
+    "original_bugs_hardware_accepted": 0,
+    "branding": "new logo and splash animation pending"
+  }
 }

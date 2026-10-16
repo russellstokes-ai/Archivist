@@ -702,5 +702,52 @@
     "protected_source_changed": 0,
     "canonical_merged": false,
     "commercial_go": false
+  },
+  "p0_p1_chat_fixes_20261016": {
+    "branch": "integration/archivist-v1-p0-p1-reviewed-20261016",
+    "source_parent_pr": 70,
+    "source_parent_sha": "0330786e943889c8c54da5094d42a25db882fdf9",
+    "source_heads": {
+      "state": "1fad44731c363e92ee29f84c8f8b275ac05a1a09",
+      "catalogue": "2f1bc3f673e8356d1d655fcbfcc28930d556aa10",
+      "auto": "04aea17080e655fc075ccf15bd941d7b069caa16"
+    },
+    "p0_mobile_state": {
+      "pr": 71,
+      "red_pr": 63,
+      "mobile_green": 38931620224,
+      "ios_run": 38931620283,
+      "source_code_ci_passed": true,
+      "device_accepted": false,
+      "shared_workflows_locked": true
+    },
+    "p0_server_catalogue": {
+      "pr": 72,
+      "red_pr": 66,
+      "first_green_server": 38931521408,
+      "extended_server_run": 38932545632,
+      "scope": "preserve old work/edition/bookmark on unplug and rename; availability accurately unavailable",
+      "verified_relink": false,
+      "device_accepted": false
+    },
+    "p1_android_auto": {
+      "pr": 73,
+      "mobile_green": 38932145335,
+      "android_native_run": 38932145317,
+      "ios_run": 38932145302,
+      "scope": "explicit outgoing Media3 PositionInfo rather than new currentMediaItem",
+      "acknowledged_phone_handoff": false,
+      "real_vehicle_accepted": false
+    },
+    "already_integrated": [
+      "offline COW #68",
+      "bounded immutable server progress #69"
+    ],
+    "new_logo_and_splash_status": "pending owner-provided final animation and explicit assets approval",
+    "protected_46_blob_changed": 0,
+    "canonical_merged": false,
+    "signed_apk": false,
+    "all_original_8_on_device_accepted": 0,
+    "commercial_go": false
   }
 }

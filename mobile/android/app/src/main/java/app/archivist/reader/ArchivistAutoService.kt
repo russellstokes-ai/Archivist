@@ -64,8 +64,20 @@ class ArchivistAutoService : MediaLibraryService() {
         if (isPlaying) progressHandler.postDelayed(progressTicker, PROGRESS_INTERVAL_MS)
         else persistProgress(false)
       }
-      override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-        persistProgress(false)
+      override fun onPositionDiscontinuity(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+        reason: Int
+      ) {
+        // MediaItemTransition observes the *new* active media item. Save the
+        // outgoing chapter using Media3's explicit old item and position
+        // before it is lost. Do not treat an in-track seek as leaving a book.
+        val oldMediaId = oldPosition.mediaItem?.mediaId ?: return
+        val incomingId = newPosition.mediaItem?.mediaId
+        if (incomingId != oldMediaId && oldPosition.positionMs != C.TIME_UNSET &&
+            oldPosition.positionMs >= 0) {
+          persistProgressFor(oldMediaId, oldPosition.positionMs, false)
+        }
       }
       override fun onPlaybackStateChanged(playbackState: Int) {
         if (playbackState == Player.STATE_ENDED) persistProgress(true)
@@ -451,11 +463,15 @@ class ArchivistAutoService : MediaLibraryService() {
   private fun persistProgress(complete: Boolean) {
     if (!::player.isInitialized) return
     val item = player.currentMediaItem ?: return
+    persistProgressFor(item.mediaId, player.currentPosition, complete)
+  }
+
+  private fun persistProgressFor(mediaId: String, positionMs: Long, complete: Boolean) {
     val snapshot = loadSnapshot()
-    val pair = resolveTrack(snapshot, item.mediaId) ?: return
+    val pair = resolveTrack(snapshot, mediaId) ?: return
     val work = pair.first
     val track = pair.second
-    val seconds = player.currentPosition.coerceAtLeast(0) / 1000.0
+    val seconds = positionMs.coerceAtLeast(0) / 1000.0
     val finalTrack = work.tracks.lastOrNull()?.id == track.id
     val payload = JSONObject()
       .put("version", 1)

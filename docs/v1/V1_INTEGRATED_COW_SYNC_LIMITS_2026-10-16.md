@@ -1,4 +1,6 @@
 # Archivist v1.0 — COW Offline + Immutable Sync: Engineering Limits and Acceptance
+
+**Later P0/P1 development draft** `integration/archivist-v1-p0-p1-reviewed-20261016` adds reviewed three-slot crash-resistant state storage (PR #71), preservation of disappeared/renamed server works/bookmarks (PR #72), and prior-chapter Media3 transition persistence (PR #73) in unmerged source. Prior risk descriptions below remain historical and are **not physical acceptance**; relink, app manifest acknowledgement, native crash, device permissions and phone-to-car ack still outstanding.
 **Draft integration only, 16 October 2026.** Source branch `integration/archivist-v1-offline-sync-reviewed-20261016`.
 
 **Implemented in unmerged PRs #68 and #69:** copy-on-write app-owned media staging with no deletion of published bytes; strict absent-target checks, versioned new copies and non-destructive legacy checkpoint migration; bounded single-transaction authorised server progress snapshot with profile/grant-scoped 48-character cursors, 3-minute expiry, 10k record cap and explicit 409 on inconsistent continuation; client refuses mixed/absent multipage cursor.
