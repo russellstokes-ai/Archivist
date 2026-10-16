@@ -3847,13 +3847,19 @@ function Client() {
     return offlineWorks[session.server+'|'+work.id];
   }
 
-  async function saveOfflineCheckpoint(key:string, checkpoint:OfflineDownloadCheckpoint|null){
-    setOfflineCheckpoints(current=>{
-      const next={...current};
+  const offlineCheckpointWriteTail=useRef<Promise<void>>(Promise.resolve());
+  function saveOfflineCheckpoint(key:string,checkpoint:OfflineDownloadCheckpoint|null):Promise<void>{
+    // The downloader awaits this returned promise before proceeding.
+    // Never acknowledge or clear a checkpoint from an uncommitted React setter.
+    const write=offlineCheckpointWriteTail.current.catch(()=>undefined).then(async()=>{
+      const stored=await getPersistedJSON<Record<string,OfflineDownloadCheckpoint>>(offlineCheckpointsKey);
+      const next={...(stored||{})};
       if(checkpoint)next[key]=checkpoint;else delete next[key];
-      void setPersistedJSON(offlineCheckpointsKey,next);
-      return next;
+      await setPersistedJSON(offlineCheckpointsKey,next);
+      setOfflineCheckpoints(next);
     });
+    offlineCheckpointWriteTail.current=write;
+    return write;
   }
 
   async function refreshOfflineStorage(){
@@ -3908,16 +3914,21 @@ function Client() {
         {
           checkpoint:offlineCheckpoints[checkpointKey],
           onCheckpoint:checkpoint=>saveOfflineCheckpoint(checkpointKey,checkpoint),
+          onPublished:async completedWork=>{
+            // Persist the complete manifest before the helper clears the
+            // recoverable download checkpoint. Never fire-and-forget this.
+            const saved=await getPersistedJSON<Record<string,OfflineServerWork>>(offlineWorksKey);
+            const next={...(saved||{}),[completedWork.key]:completedWork};
+            await setPersistedJSON(offlineWorksKey,next);
+            setOfflineWorks(next);
+          },
           chaptersByTrackId,
         },
       );
-      setOfflineWorks(current=>{
-        const next={...current,[downloaded.key]:downloaded};
-        void setPersistedJSON(offlineWorksKey,next);
-        return next;
-      });
+      const committed=await getPersistedJSON<Record<string,OfflineServerWork>>(offlineWorksKey);
+      if(!committed?.[downloaded.key])throw Error('Offline manifest was not durably published; the recovery checkpoint was kept.');
       setOfflineProgress('Downloaded · '+formatBytes(downloaded.bytes));
-      setOfflineStorage(await inspectOfflineStorage({...offlineWorks,[downloaded.key]:downloaded},Object.values(offlineCheckpoints).filter(item=>item.key!==downloaded.key)));
+      setOfflineStorage(await inspectOfflineStorage(committed,Object.values(offlineCheckpoints).filter(item=>item.key!==downloaded.key)));
     }catch(e){
       if(isOfflineDownloadPaused(e)){
         setOfflineProgress('Paused · tap Resume download');
