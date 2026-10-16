@@ -33,7 +33,7 @@ func publicationSnapshot(t *testing.T,a *app,id int64)workPublication{
 
 func TestPublicationRequiresReviewCoverAndExplicitOwnerAction(t *testing.T){
     a:=fixture(t)
-    for _,init:=range []func()error{a.initPreferences,a.initProgress,a.initReader,a.initCompletions}{
+    for _,init:=range []func()error{a.initPreferences,a.initProgress,a.initListening,a.initReader,a.initCompletions}{
         if err:=init();err!=nil{t.Fatal(err)}
     }
     dir:=filepath.Join(t.TempDir(),"My Novel")

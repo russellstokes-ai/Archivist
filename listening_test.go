@@ -23,7 +23,7 @@ func TestListeningProgressAndReaderHandoff(t *testing.T) {
 		a.routes().ServeHTTP(w, r)
 		return w
 	}
-	if w := call("GET", "/api/assets/1/listening", "", "test-key"); w.Code != 200 || !strings.Contains(w.Body.String(), "listening-progress") {
+	if w := call("GET", "/api/assets/1/listening", "", "test-key"); w.Code != 200 || !strings.Contains(w.Body.String(), "/api/editions/") {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	if w := call("PUT", "/api/assets/1/listening-progress", `{"asset":1,"seconds":20,"revision":5}`, "test-key"); w.Code != 409 {
