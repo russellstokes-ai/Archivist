@@ -10,7 +10,15 @@ Module._load=function(request,parent,isMain){
   if(request==='expo-file-system/legacy')return {
     documentDirectory:'file:///docs/',
     async makeDirectoryAsync(uri){dirs.add(uri);},
-    async deleteAsync(uri){for(const key of [...files.keys()])if(key.startsWith(uri))files.delete(key);dirs.delete(uri);},
+    async deleteAsync(uri){for(const key of [...files.keys()])if(key===uri||key.startsWith(uri.endsWith('/')?uri:uri+'/'))files.delete(key);dirs.delete(uri);},
+    async copyAsync({from,to}){
+      if(!files.has(from)||files.has(to))throw Error('unsafe mock copy');
+      files.set(to,Buffer.from(files.get(from)));
+    },
+    async moveAsync({from,to}){
+      if(!files.has(from)||files.has(to))throw Error('unsafe mock overwrite or missing stage');
+      files.set(to,files.get(from));files.delete(from);
+    },
     async downloadAsync(url,uri,options){
       downloads.push({url,uri,options});
       files.set(uri,bodyFor(url));
@@ -86,6 +94,10 @@ const {
   assert(progress.some(([written,total])=>written===300&&total===300));
   assert.equal(checkpoints.at(-1),null);
   assert(downloads.every(item=>item.options.headers.Authorization==='Bearer secret'));
+  assert(downloads.filter(item=>item.url.includes('/api/assets/')).every(item=>item.uri.includes('.archivist-partial-')),
+    'all media downloads must target a private stage, never a published file');
+  assert(offline.tracks.every(item=>!item.uri.includes('.archivist-partial-')),
+    'readers must only receive verified published paths');
 
   const local=offlineToLocalWork(offline);
   assert.equal(local.format,'Audio');
@@ -263,7 +275,12 @@ const {
     completedTrackIds:[1],current:{trackId:2,uri:incompleteUri,bytesWritten:30},updatedAt:new Date().toISOString()};
   await removeOfflineCheckpoint(abandon);
   assert(files.has(completedUri),'discarding partial chapter must preserve completed chapter');
-  assert(!files.has(incompleteUri),'unfinished direct-child track should be discarded');
+  assert(files.has(incompleteUri),'legacy direct-file checkpoint must NOT delete potentially published user media');
+  const ownedStage=incompleteUri+'.archivist-partial-20261016-test';
+  files.set(ownedStage,Buffer.alloc(30));
+  await removeOfflineCheckpoint({...abandon,current:{trackId:2,uri:ownedStage,targetUri:incompleteUri,bytesWritten:30}});
+  assert(!files.has(ownedStage),'discarding a verified new-format staging file may delete that stage only');
+  assert(files.has(incompleteUri),'staging discard must never delete the old direct-file bytes');
   await removeOfflineCheckpoint({...abandon,current:{trackId:1,uri:completedUri,bytesWritten:100}});
   assert(files.has(completedUri),'a completed track ID must never be removed by stale checkpoint');
   await removeOfflineCheckpoint({...abandon,current:{trackId:2,uri:protectedUri,bytesWritten:1}});
