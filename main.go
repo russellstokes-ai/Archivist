@@ -675,9 +675,14 @@ func (a *app) routes() http.Handler {
 			AND (?=0 OR a.needs_review=1)
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
+            AND (? OR EXISTS (
+                SELECT 1 FROM published_works w JOIN editions ed ON ed.work_id=w.id
+                JOIN edition_assets ea ON ea.edition_id=ed.id
+                WHERE ea.asset_id=a.id
+            ))
 			ORDER BY `+sortOrder+` LIMIT ? OFFSET ?`,
 			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
-			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
+			availability, availability, availability, who(r).Owner, who(r).ID, who(r).Owner, limit, offset)
 		if e != nil {
 			fail(w, 500, e)
 			return
