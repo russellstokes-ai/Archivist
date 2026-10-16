@@ -1,7 +1,7 @@
 package main
 
-// Quarantined RED safety regression. Do NOT merge until a production design
-// protects indexed library state without changing the accepted scanner workflow.
+// Originally RED P0 tests from quarantined PR #66. Keep catalogue identity
+// stable and visible through storage outages and source filename changes.
 // An unmounted NAS share can still leave an existing empty mountpoint: a
 // successful shallow directory probe is NOT proof that the library was deleted.
 import (
@@ -42,6 +42,18 @@ func TestPreviouslyIndexedMountBecomingEmptyMustNotEraseWorkOrBookmark(t *testin
     if originalWork!=1||bookmarks!=1 {
         t.Fatalf("EMPTY MOUNT DATA LOSS: scanErr=%v, works=%d, former work present=%d, saved playback bookmark=%d; empty but reachable source silently destroyed catalogue identity/progress",scanErr,indexedWorks,originalWork,bookmarks)
     }
+    var available int
+    if err:=a.db.QueryRow("SELECT available FROM assets WHERE id=?",assetID).Scan(&available);err!=nil{t.Fatal(err)}
+    if available!=0{t.Fatal("disconnected mount incorrectly advertises playable media")}
+    // Reconnect with the exact same location: prior work identity and bookmark
+    // must be restored without an irreversible reimport or new logical work.
+    if err:=os.WriteFile(media,[]byte("test-audiobook-bytes"),0600);err!=nil{t.Fatal(err)}
+    if err:=a.scan(1);err!=nil{t.Fatal(err)}
+    if err:=a.db.QueryRow("SELECT available FROM assets WHERE id=?",assetID).Scan(&available);err!=nil{t.Fatal(err)}
+    if available!=1{t.Fatal("reconnected media did not regain available state")}
+    if err:=a.db.QueryRow("SELECT count(*) FROM works WHERE id=?",workID).Scan(&originalWork);err!=nil{t.Fatal(err)}
+    if err:=a.db.QueryRow("SELECT count(*) FROM profile_progress WHERE profile_id=0 AND edition_id=? AND seconds=143",editionID).Scan(&bookmarks);err!=nil{t.Fatal(err)}
+    if originalWork!=1||bookmarks!=1{t.Fatal("reconnecting mount lost original work identity or saved bookmark")}
 }
 
 
@@ -69,5 +81,12 @@ func TestFileRenameCannotSilentlyDestroyAutoWorkBookmark(t *testing.T) {
     if err:=a.db.QueryRow("SELECT count(*) FROM profile_progress WHERE profile_id=0 AND edition_id=? AND seconds=222",oldEdition).Scan(&retainedProgress);err!=nil{t.Fatal(err)}
     if retainedWork!=1||retainedProgress!=1 {
         t.Fatalf("RENAME STATE LOSS: scanErr=%v, previous work id=%d retained=%d, saved bookmark retained=%d; non-destructive filename change erased logical work/progress",scanErr,oldWork,retainedWork,retainedProgress)
+    }
+    var oldAvailable,newAvailable,totalWorks int
+    if err:=a.db.QueryRow("SELECT available FROM assets WHERE id=?",oldAsset).Scan(&oldAvailable);err!=nil{t.Fatal(err)}
+    if err:=a.db.QueryRow("SELECT available FROM assets WHERE relative_path='Renamed Title.m4b'").Scan(&newAvailable);err!=nil{t.Fatal(err)}
+    if err:=a.db.QueryRow("SELECT count(*) FROM works").Scan(&totalWorks);err!=nil{t.Fatal(err)}
+    if oldAvailable!=0||newAvailable!=1||totalWorks!=2 {
+        t.Fatalf("unverified rename must preserve inaccessible original and offer new file separately: old=%d new=%d works=%d",oldAvailable,newAvailable,totalWorks)
     }
 }
