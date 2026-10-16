@@ -30,7 +30,7 @@ func (a *app) initCatalogue() error {
 			return alterErr
 		}
 	}
-	return nil
+	return a.initPublication()
 }
 
 // Natural ordering makes Track 2 precede Track 10 without modifying filenames.
@@ -153,6 +153,18 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 		for pos,item := range items {
 			if _, err = tx.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?) ON CONFLICT(asset_id) DO UPDATE SET edition_id=excluded.edition_id,position=excluded.position",item.id,edition,pos); err != nil { return err }
 		}
+        // A new unresolved file can invalidate a previously published group.
+        // Once staged, completing Save never silently republishes it.
+        result, updateErr := tx.Exec(`UPDATE work_publication
+          SET state='staged',revision=revision+1,published_at=0
+          WHERE work_id=? AND state='published' AND EXISTS (
+            SELECT 1 FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id
+            JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? AND a.needs_review=1
+          )`,work,work)
+        if updateErr!=nil{return updateErr}
+        if affected,_:=result.RowsAffected();affected>0{
+            if _,err=tx.Exec("INSERT INTO work_publication_events(work_id,title,action,recorded_at) VALUES(?,?,'review_reopened',strftime('%s','now'))",work,title);err!=nil{return err}
+        }
 	}
 
 	// Never automatically delete an indexed work simply because its source
@@ -363,7 +375,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			COALESCE((SELECT wp.rating FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
 			COALESCE((SELECT wp.favourite FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
 			`+workStateExpression(who(r).ID)+`
-			FROM works w JOIN editions e ON e.work_id=w.id
+			FROM published_works w JOIN editions e ON e.work_id=w.id
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ? OR w.genre LIKE ?)
 			AND (?='' OR w.space=?) AND (?='' OR e.format=?)
@@ -400,7 +412,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			count(DISTINCT e.id),count(ea.asset_id),
 			CASE WHEN count(DISTINCT e.format)=1 THEN min(e.format) ELSE 'Mixed' END,
 			sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)
-			FROM works w
+			FROM published_works w
 			JOIN editions e ON e.work_id=w.id
 			JOIN edition_assets ea ON ea.edition_id=e.id
 			JOIN assets a ON a.id=ea.asset_id
@@ -439,33 +451,35 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("GET /api/library-summary", func(w http.ResponseWriter, r *http.Request) {
+        var cataloguedWorks int
+        if who(r).Owner { _=a.db.QueryRow("SELECT count(*) FROM works").Scan(&cataloguedWorks) }
 		var total int
-		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)`,who(r).Owner,who(r).ID).Scan(&total)
+		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM published_works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)`,who(r).Owner,who(r).ID).Scan(&total)
 		formats := []map[string]any{}
-		rows, e := a.db.Query(`SELECT e.format,count(DISTINCT w.id) FROM works w JOIN editions e ON e.work_id=w.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY e.format ORDER BY count(DISTINCT w.id) DESC,e.format`,who(r).Owner,who(r).ID)
+		rows, e := a.db.Query(`SELECT e.format,count(DISTINCT w.id) FROM published_works w JOIN editions e ON e.work_id=w.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY e.format ORDER BY count(DISTINCT w.id) DESC,e.format`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{formats=append(formats,map[string]any{"name":name,"count":count})}};rows.Close() }
 		spaces := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.space,count(*) FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY w.space ORDER BY count(*) DESC,w.space`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.space,count(*) FROM published_works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY w.space ORDER BY count(*) DESC,w.space`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{spaces=append(spaces,map[string]any{"name":name,"count":count})}};rows.Close() }
 		authors := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.author,count(*) FROM works w WHERE w.author<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.author ORDER BY count(*) DESC,w.author LIMIT 12`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.author,count(*) FROM published_works w WHERE w.author<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.author ORDER BY count(*) DESC,w.author LIMIT 12`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{authors=append(authors,map[string]any{"name":name,"count":count})}};rows.Close() }
 		var unknownAuthors int
-		_ = a.db.QueryRow(`SELECT count(*) FROM works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
+		_ = a.db.QueryRow(`SELECT count(*) FROM published_works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
 		var needsReview, reviewWorks int
 		_ = a.db.QueryRow(`SELECT count(*) FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.needs_review=1 AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&needsReview)
-		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id WHERE a.needs_review=1 AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&reviewWorks)
+		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id LEFT JOIN work_publication pub ON pub.work_id=w.id WHERE (a.needs_review=1 OR COALESCE(pub.state,'staged')='staged') AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&reviewWorks)
 		series := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.series,count(*) FROM works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.series,count(*) FROM published_works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{series=append(series,map[string]any{"name":name,"count":count})}};rows.Close() }
 		genres := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.genre,count(*) FROM works w WHERE trim(w.genre)<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.genre ORDER BY count(*) DESC,w.genre LIMIT 20`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.genre,count(*) FROM published_works w WHERE trim(w.genre)<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.genre ORDER BY count(*) DESC,w.genre LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{genres=append(genres,map[string]any{"name":name,"count":count})}};rows.Close() }
 		availability := []map[string]any{}
 		rows, e = a.db.Query(`
 			SELECT status,count(*) FROM (
 				SELECT w.id,CASE WHEN sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0 THEN 'Available' ELSE 'Unavailable' END AS status
-				FROM works w
+				FROM published_works w
 				JOIN editions ed ON ed.work_id=w.id
 				JOIN edition_assets ea ON ea.edition_id=ed.id
 				JOIN assets a ON a.id=ea.asset_id
@@ -477,7 +491,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		readingSummary := []map[string]any{}
 		rows, e = a.db.Query(`SELECT state,count(*) FROM (
 			SELECT w.id,`+workStateExpression(who(r).ID)+` AS state
-			FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
+			FROM published_works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
 		) GROUP BY state ORDER BY count(*) DESC,state`,who(r).Owner,who(r).ID)
 		if e == nil {
 			for rows.Next(){var state string;var count int;if rows.Scan(&state,&count)==nil{
@@ -489,7 +503,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		ratings := []map[string]any{}
 		rows, e = a.db.Query(`SELECT rating,count(*) FROM (
 			SELECT w.id,`+atlasRatingExpression(who(r).ID)+` AS rating
-			FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
+			FROM published_works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
 		) GROUP BY rating ORDER BY CASE rating
 			WHEN '5★' THEN 10 WHEN '4½★' THEN 9 WHEN '4★' THEN 8 WHEN '3½★' THEN 7
 			WHEN '3★' THEN 6 WHEN '2½★' THEN 5 WHEN '2★' THEN 4 WHEN '1½★' THEN 3
@@ -503,7 +517,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			who(r).ID,who(r).Owner,who(r).ID).Scan(&favouriteCount)
 		if favouriteCount>0 { favourites=append(favourites,map[string]any{"name":"Favourites","count":favouriteCount}) }
 
-		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"reviewWorks":reviewWorks,"series":series,"genres":genres,"availability":availability,"reading":readingSummary,"ratings":ratings,"favourites":favourites})
+		reply(w,map[string]any{"total":total,"cataloguedWorks":cataloguedWorks,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"reviewWorks":reviewWorks,"series":series,"genres":genres,"availability":availability,"reading":readingSummary,"ratings":ratings,"favourites":favourites})
 	})
 	mux.HandleFunc("GET /api/works/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available,a.relative_path,a.size_bytes FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))

@@ -179,15 +179,19 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 		(len(parts) == 4 && parts[3] == "listening" && r.Method == "GET") ||
 		(len(parts) == 4 && parts[3] == "listening-progress" && (r.Method == "GET" || r.Method == "PUT")) ||
 		(len(parts) == 4 && parts[3] == "chapters" && r.Method == "GET")) {
-		query = `SELECT s.space FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.id=?`
+		query = `SELECT s.space FROM assets a JOIN sources s ON s.id=a.source_id
+          WHERE a.id=? AND EXISTS (
+            SELECT 1 FROM published_works w JOIN editions ed ON ed.work_id=w.id
+            JOIN edition_assets ea ON ea.edition_id=ed.id WHERE ea.asset_id=a.id
+          )`
 	}
 	if len(parts) == 4 && parts[1] == "works" && (
 		((parts[3] == "tracks" || parts[3] == "cover") && r.Method == "GET") ||
 		(parts[3] == "preference" && r.Method == "PUT")) {
-		query = `SELECT space FROM works WHERE id=?`
+		query = `SELECT space FROM published_works WHERE id=?`
 	}
 	if len(parts) == 4 && parts[1] == "editions" && parts[3] == "progress" && (r.Method == "GET" || r.Method == "PUT") {
-		query = `SELECT w.space FROM editions e JOIN works w ON w.id=e.work_id WHERE e.id=?`
+		query = `SELECT w.space FROM editions e JOIN published_works w ON w.id=e.work_id WHERE e.id=?`
 	}
 	if query == "" {
 		return false

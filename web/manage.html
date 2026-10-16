@@ -28,7 +28,8 @@
 <div id="app" hidden>
  <section class="metrics" aria-label="Library overview">
   <div class="metric"><span>Logical works</span><strong id="metric-works">—</strong></div>
-  <div class="metric"><span>Books needing review</span><strong id="metric-review">—</strong></div>
+  <div class="metric"><span>Published</span><strong id="metric-published">—</strong></div>
+  <div class="metric"><span>Review / publish queue</span><strong id="metric-review">—</strong></div>
   <div class="metric"><span>Library spaces</span><strong id="metric-spaces">—</strong></div>
   <div class="metric"><span>Unavailable works</span><strong id="metric-unavailable">—</strong></div>
  </section>
@@ -47,8 +48,8 @@
   <div class="pager"><button id="previous" type="button" class="quiet">← Previous</button><span id="page-label">Page 1</span><button id="next" type="button" class="quiet">Next →</button></div>
  </section>
  <section id="view-assist" hidden aria-labelledby="assist-title">
-  <div class="section-head"><div><p class="eyebrow">ARCHIVIST ASSIST</p><h2 id="assist-title">Books requiring identification</h2>
-   <p class="footnote">A book can contain several files. Review metadata without moving originals. Saving an individual file is not the same as publishing a book.</p></div>
+  <div class="section-head"><div><p class="eyebrow">ARCHIVIST ASSIST</p><h2 id="assist-title">Review &amp; publish your books</h2>
+   <p class="footnote">Review grouped files and covers, save any metadata corrections, then publish explicitly. Scanning and saving never publish a new book automatically.</p></div>
    <button id="refresh-assist" type="button" class="quiet">Refresh</button></div>
   <p id="assist-range" role="status" aria-live="polite">Choose Archivist Assist to load books.</p>
   <div id="assist-works" class="assist-works"></div>

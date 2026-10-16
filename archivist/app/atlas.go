@@ -142,7 +142,7 @@ func (a *app) atlasRelationshipFor(p identity,kind,value string) (atlasRelations
 	baseArgs:=append([]any{},args...)
 	baseArgs=append(baseArgs,p.Owner,p.ID)
 
-	countSQL:=`SELECT count(*) FROM works w
+	countSQL:=`SELECT count(*) FROM published_works w
 		WHERE `+filter+`
 		AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`
 	if e=a.db.QueryRow(countSQL,baseArgs...).Scan(&out.WorkCount);e!=nil{return out,e}
@@ -151,7 +151,7 @@ func (a *app) atlasRelationshipFor(p identity,kind,value string) (atlasRelations
 		count(DISTINCT ed.id),count(ea.asset_id),
 		CASE WHEN count(DISTINCT ed.format)=1 THEN min(ed.format) ELSE 'Mixed' END,
 		sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)
-		FROM works w
+		FROM published_works w
 		JOIN editions ed ON ed.work_id=w.id
 		JOIN edition_assets ea ON ea.edition_id=ed.id
 		JOIN assets a ON a.id=ea.asset_id
@@ -178,42 +178,42 @@ func (a *app) atlasRelationshipFor(p identity,kind,value string) (atlasRelations
 	}
 	specs:=[]relationSpec{
 		{&out.Authors,`SELECT CASE WHEN trim(w.author)='' THEN 'Unknown author' ELSE w.author END,count(*)
-			FROM works w WHERE `+filter+`
+			FROM published_works w WHERE `+filter+`
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY CASE WHEN trim(w.author)='' THEN 'Unknown author' ELSE w.author END
 			ORDER BY count(*) DESC,1 LIMIT 20`},
 		{&out.Series,`SELECT w.series,count(*)
-			FROM works w WHERE `+filter+` AND trim(w.series)<>''
+			FROM published_works w WHERE `+filter+` AND trim(w.series)<>''
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`},
 		{&out.Genres,`SELECT w.genre,count(*)
-			FROM works w WHERE `+filter+` AND trim(w.genre)<>''
+			FROM published_works w WHERE `+filter+` AND trim(w.genre)<>''
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY w.genre ORDER BY count(*) DESC,w.genre LIMIT 20`},
 		{&out.Formats,`SELECT ed.format,count(DISTINCT w.id)
-			FROM works w JOIN editions ed ON ed.work_id=w.id
+			FROM published_works w JOIN editions ed ON ed.work_id=w.id
 			WHERE `+filter+`
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY ed.format ORDER BY count(DISTINCT w.id) DESC,ed.format LIMIT 20`},
 		{&out.Spaces,`SELECT w.space,count(*)
-			FROM works w WHERE `+filter+`
+			FROM published_works w WHERE `+filter+`
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY w.space ORDER BY count(*) DESC,w.space LIMIT 20`},
 		{&out.Availability,`SELECT
 			CASE WHEN `+atlasAvailabilityClause(true)+` THEN 'Available' ELSE 'Unavailable' END,
 			count(*)
-			FROM works w WHERE `+filter+`
+			FROM published_works w WHERE `+filter+`
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY CASE WHEN `+atlasAvailabilityClause(true)+` THEN 'Available' ELSE 'Unavailable' END
 			ORDER BY 1`},
 		{&out.Reading,`SELECT CASE `+workStateExpression(p.ID)+`
 			WHEN 'finished' THEN 'Finished' WHEN 'in-progress' THEN 'In progress' ELSE 'Not started' END,count(*)
-			FROM works w WHERE `+filter+`
+			FROM published_works w WHERE `+filter+`
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY `+workStateExpression(p.ID)+`
 			ORDER BY count(*) DESC,1`},
 		{&out.Ratings,`SELECT `+atlasRatingExpression(p.ID)+`,count(*)
-			FROM works w WHERE `+filter+`
+			FROM published_works w WHERE `+filter+`
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY `+atlasRatingExpression(p.ID)+`
 			ORDER BY CASE `+atlasRatingExpression(p.ID)+`
@@ -221,7 +221,7 @@ func (a *app) atlasRelationshipFor(p identity,kind,value string) (atlasRelations
 				WHEN '3★' THEN 6 WHEN '2½★' THEN 5 WHEN '2★' THEN 4 WHEN '1½★' THEN 3
 				WHEN '1★' THEN 2 WHEN '½★' THEN 1 ELSE 0 END DESC`},
 		{&out.Favourites,`SELECT 'Favourites',count(*)
-			FROM works w WHERE `+filter+`
+			FROM published_works w WHERE `+filter+`
 			AND EXISTS (SELECT 1 FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(p.ID,10)+` AND wp.work_id=w.id AND wp.favourite=1)
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			HAVING count(*)>0`},

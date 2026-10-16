@@ -204,7 +204,8 @@
         const details=e('div',undefined,'assist-details');
         details.append(e('strong',work.title||'Untitled'));
         details.append(e('span',[work.author||'Unknown author',work.series,work.format,work.space].filter(Boolean).join(' · '),'subtext'));
-        details.append(e('span',work.reviewFiles+' of '+work.files+' files need review','pill warn'));
+        details.append(e('span',Number(work.reviewFiles)+' of '+work.files+' files need review','pill '+(work.reviewFiles?'warn':'ok')));
+        details.append(e('span',work.publicationState==='published'?'Published – review reopened':'Awaiting explicit publication','subtext'));
         const controls=e('div',undefined,'assist-controls');
         const reveal=e('button','Review book files','quiet');reveal.type='button';reveal.setAttribute('aria-expanded','false');
         const filePanel=e('div',undefined,'assist-files');filePanel.hidden=true;
@@ -243,10 +244,50 @@
           if(opening&&fileOffset===0)void loadFiles(true);
         };
         controls.append(reveal);
+        if(work.publicationState!=='published'){
+          const publish=e('button',work.reviewFiles?'Finish review before publishing':'Publish book','primary');
+          publish.type='button';
+          publish.disabled=!!work.reviewFiles;
+          publish.title=work.reviewFiles?'Review every file before publishing':'Explicitly make this book visible in Library, Atlas and OPDS';
+          publish.onclick=async()=>{
+            if(!window.confirm('Publish '+work.title+' to Library, Atlas and family readers? Confirm its cover and metadata first.'))return;
+            publish.disabled=true;
+            try {
+              const current=await api('./api/manage/works/'+encodeURIComponent(String(work.id))+'/publication');
+              if(current.state!=='staged')throw Error('Publication changed. Refresh this book.');
+              const result=await api('./api/manage/works/'+encodeURIComponent(String(work.id))+'/publication','POST',{
+                action:'publish',confirm:true,expectedRevision:current.revision
+              });
+              if(result.state!=='published')throw Error('The server did not confirm publication.');
+              await Promise.all([loadAssist(),loadSummary()]);
+              notice('Published '+work.title+' to your library.');
+            }catch(error){notice(error.message,true)}
+            finally{publish.disabled=false}
+          };
+          controls.append(publish);
+        }else{
+          const unpublish=e('button','Unpublish book','quiet');
+          unpublish.type='button';
+          unpublish.onclick=async()=>{
+            if(!window.confirm('Remove '+work.title+' from the published catalogue? Media, metadata and bookmarks are retained.'))return;
+            unpublish.disabled=true;
+            try{
+              const current=await api('./api/manage/works/'+encodeURIComponent(String(work.id))+'/publication');
+              if(current.state!=='published')throw Error('Publication changed. Refresh this book.');
+              await api('./api/manage/works/'+encodeURIComponent(String(work.id))+'/publication','POST',{
+                action:'unpublish',confirm:true,expectedRevision:current.revision
+              });
+              await Promise.all([loadAssist(),loadSummary()]);
+              notice('Book unpublished; originals and progress retained.');
+            }catch(error){notice(error.message,true)}
+            finally{unpublish.disabled=false}
+          };
+          controls.append(unpublish);
+        }
         article.append(cover,details,controls,filePanel);
         container.append(article);
       }
-      $('assist-range').textContent=result.total+' logical books need review · '+(works.length?location+1:0)+'–'+(location+works.length)+' shown';
+      $('assist-range').textContent=result.total+' books require review or publication · '+(works.length?location+1:0)+'–'+(location+works.length)+' shown';
       $('assist-page').textContent='Page '+(Math.floor(location/assistPageSize)+1);
       $('assist-previous').disabled=location===0;
       $('assist-next').disabled=location+works.length>=result.total;
@@ -261,7 +302,8 @@
   }
   async function loadSummary(){
     const [summary,sources]=await Promise.all([api('./api/library-summary'),api('./api/sources')]);
-    $('metric-works').textContent=Number(summary.total||0).toLocaleString();
+    $('metric-works').textContent=Number(summary.cataloguedWorks??summary.total??0).toLocaleString();
+    $('metric-published').textContent=Number(summary.total||0).toLocaleString();
     $('metric-review').textContent=Number(summary.reviewWorks??0).toLocaleString();
     $('assist-badge').textContent=Number(summary.reviewWorks??0).toLocaleString();
     $('metric-spaces').textContent=Array.isArray(summary.spaces)?summary.spaces.length:0;

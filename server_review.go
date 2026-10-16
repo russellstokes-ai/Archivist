@@ -16,6 +16,8 @@ type serverReviewWork struct {
     Format string `json:"format"`
     Files int `json:"files"`
     ReviewFiles int `json:"reviewFiles"`
+    PublicationState string `json:"publicationState"`
+    Revision int64 `json:"revision"`
     Available bool `json:"available"`
 }
 
@@ -44,15 +46,20 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
         var total int
         err = a.db.QueryRowContext(r.Context(), `SELECT count(DISTINCT w.id) FROM works w
             JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id
-            JOIN assets ast ON ast.id=ea.asset_id WHERE ast.needs_review=1`).Scan(&total)
+            JOIN assets ast ON ast.id=ea.asset_id
+            LEFT JOIN work_publication pub ON pub.work_id=w.id
+            WHERE ast.needs_review=1 OR COALESCE(pub.state,'staged')='staged'`).Scan(&total)
         if err != nil { fail(w, 500, err); return }
         rows, err := a.db.QueryContext(r.Context(), `SELECT w.id,w.title,w.author,w.series,w.genre,w.space,
             CASE WHEN count(DISTINCT ed.format)=1 THEN min(ed.format) ELSE 'Mixed' END,
             count(ast.id),sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END),
-            sum(CASE WHEN ast.available=1 THEN 1 ELSE 0 END)
-            FROM works w JOIN editions ed ON ed.work_id=w.id
+            sum(CASE WHEN ast.available=1 THEN 1 ELSE 0 END),
+            COALESCE(max(pub.state),'staged'),COALESCE(max(pub.revision),0)
+            FROM works w LEFT JOIN work_publication pub ON pub.work_id=w.id
+            JOIN editions ed ON ed.work_id=w.id
             JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets ast ON ast.id=ea.asset_id
             GROUP BY w.id HAVING sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)>0
+            OR COALESCE(max(pub.state),'staged')='staged'
             ORDER BY sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END) DESC,w.title COLLATE NOCASE,w.id
             LIMIT ? OFFSET ?`, limit, offset)
         if err != nil { fail(w, 500, err); return }
@@ -61,7 +68,7 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
         for rows.Next() {
             var item serverReviewWork
             var available int
-            if err = rows.Scan(&item.ID, &item.Title, &item.Author, &item.Series, &item.Genre, &item.Space, &item.Format, &item.Files, &item.ReviewFiles, &available); err != nil {
+            if err = rows.Scan(&item.ID, &item.Title, &item.Author, &item.Series, &item.Genre, &item.Space, &item.Format, &item.Files, &item.ReviewFiles, &available,&item.PublicationState,&item.Revision); err != nil {
                 fail(w, 500, err); return
             }
             item.Available = available > 0

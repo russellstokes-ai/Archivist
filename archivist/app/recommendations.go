@@ -14,6 +14,10 @@ func (a *app) recommendationRoutes(mux *http.ServeMux) {
 			JOIN sources s ON s.id=a.source_id
 			WHERE a.available=1
 			AND s.status!='Unavailable'
+            AND EXISTS (SELECT 1 FROM published_works w
+                JOIN editions ed ON ed.work_id=w.id
+                JOIN edition_assets ea ON ea.edition_id=ed.id
+                WHERE ea.asset_id=a.id)
 			AND (? OR s.space IN(SELECT space FROM grants WHERE profile_id=?))
 			AND NOT EXISTS(
 				SELECT 1 FROM reading_progress p

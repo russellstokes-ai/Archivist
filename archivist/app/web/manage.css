@@ -91,3 +91,10 @@ dialog::backdrop{background:#010b12cf}
 .assist-file strong{display:block;font-weight:500}
 .assist-controls{justify-self:end}
 @media(max-width:590px){.assist-work{grid-template-columns:52px minmax(0,1fr);gap:11px;padding:12px}.assist-cover{width:49px}.assist-details>strong{font-size:19px}.assist-controls{grid-column:1/-1;justify-self:stretch}.assist-controls button{width:100%}.assist-file{align-items:flex-start}.assist-file .edit-button{flex-shrink:0}}
+
+/* The two independent actions are never conflated: metadata Save edits a file;
+   Publish is an explicit, owner-confirmed catalogue transition. */
+.assist-controls{display:flex;flex-wrap:wrap;gap:8px}
+.assist-controls .primary{background:#2F8B86;border-color:#2F8B86;color:#fff}
+.assist-controls button:disabled{cursor:not-allowed;opacity:.48}
+@media(max-width:760px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.assist-controls{grid-column:1/-1;justify-self:stretch}}

@@ -510,10 +510,16 @@ func (a *app) routes() http.Handler {
 			count(DISTINCT CASE WHEN a.format='PDF' THEN e.work_id END)
 			FROM sources s
 			LEFT JOIN assets a ON a.source_id=s.id AND a.available=1
+            AND (? OR EXISTS (
+                SELECT 1 FROM published_works pw
+                JOIN editions ed2 ON ed2.work_id=pw.id
+                JOIN edition_assets ea2 ON ea2.edition_id=ed2.id
+                WHERE ea2.asset_id=a.id
+            ))
 			LEFT JOIN edition_assets ea ON ea.asset_id=a.id
 			LEFT JOIN editions e ON e.id=ea.edition_id
 			WHERE ? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)
-			GROUP BY s.id ORDER BY s.id`, who(r).Owner, who(r).ID)
+			GROUP BY s.id ORDER BY s.id`, who(r).Owner, who(r).Owner, who(r).ID)
 		if e != nil {
 			fail(w, 500, e)
 			return
