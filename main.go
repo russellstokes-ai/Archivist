@@ -35,6 +35,8 @@ type app struct {
 	dbPath string
 	token  string
 	scanMu sync.Mutex
+	syncMu sync.Mutex
+	syncSnapshots map[string]*progressSnapshot
 }
 type source struct {
 	ID           int64  `json:"id"`
