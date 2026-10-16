@@ -28,6 +28,13 @@ func (a *app) initPublication() error {
         action TEXT NOT NULL CHECK(action IN ('publish','unpublish','review_reopened')),
         recorded_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS selected_work_covers(
+        work_id INTEGER PRIMARY KEY REFERENCES works(id) ON DELETE CASCADE,
+        image BLOB NOT NULL,
+        mime TEXT NOT NULL CHECK(mime='image/jpeg'),
+        digest TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
     CREATE VIEW IF NOT EXISTS published_works AS SELECT w.* FROM works w
       JOIN work_publication pub ON pub.work_id=w.id AND pub.state='published'
       WHERE NOT EXISTS (
@@ -37,7 +44,22 @@ func (a *app) initPublication() error {
         WHERE ed.work_id=w.id AND ast.needs_review=1
       );
     CREATE INDEX IF NOT EXISTS idx_publication_events_work ON work_publication_events(work_id,id);
-    CREATE INDEX IF NOT EXISTS idx_edition_assets_edition ON edition_assets(edition_id,asset_id);`)
+    CREATE INDEX IF NOT EXISTS idx_edition_assets_edition ON edition_assets(edition_id,asset_id);
+    CREATE TRIGGER IF NOT EXISTS publication_review_reopened
+      AFTER UPDATE OF needs_review ON assets
+      WHEN NEW.needs_review=1 AND OLD.needs_review=0
+      BEGIN
+        INSERT INTO work_publication_events(work_id,title,action,recorded_at)
+        SELECT w.id,w.title,'review_reopened',strftime('%s','now')
+        FROM works w JOIN editions ed ON ed.work_id=w.id
+        JOIN edition_assets ea ON ea.edition_id=ed.id
+        JOIN work_publication pub ON pub.work_id=w.id AND pub.state='published'
+        WHERE ea.asset_id=NEW.id;
+        UPDATE work_publication SET state='staged',revision=revision+1,published_at=0
+        WHERE state='published' AND work_id IN (
+          SELECT ed.work_id FROM editions ed JOIN edition_assets ea ON ea.edition_id=ed.id WHERE ea.asset_id=NEW.id
+        );
+      END;`)
     if err!=nil {return err}
     tx,err:=a.db.Begin()
     if err!=nil{return err}

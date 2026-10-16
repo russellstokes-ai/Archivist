@@ -49,7 +49,7 @@ function coverFor(work){
   const title=element('strong',work.title||'Untitled');
   const imprint=element('small','ARCHIVIST');imprint.className='cover-imprint';
   fallback.append(author,title,imprint);
-  const img=element('img');img.loading='lazy';img.alt='';img.decoding='async';img.src='./api/works/'+work.id+'/cover';
+  const img=element('img');img.loading='lazy';img.alt='';img.decoding='async';img.src='./api/works/'+work.id+'/cover'+(typeof work.coverHash==='string'&&/^[0-9a-f]{64}$/.test(work.coverHash)?'?v='+work.coverHash:'');
   img.addEventListener('load',()=>wrap.classList.add('has-cover'));
   img.addEventListener('error',()=>img.remove());
   wrap.append(fallback,img);return wrap;
@@ -421,7 +421,7 @@ async function loadAtlasUniverse(){
       const g=nodeEls.find(item=>item.node===n)?.el;
       if(g&&!g.querySelector('image')){
         const image=make('image',{x:-11,y:-17,width:22,height:34,
-          href:'./api/works/'+encodeURIComponent(String(n.work.id))+'/cover'});
+          href:'./api/works/'+encodeURIComponent(String(n.work.id))+'/cover'+(typeof n.work.coverHash==='string'&&/^[0-9a-f]{64}$/.test(n.work.coverHash)?'?v='+n.work.coverHash:'')});
         g.insertBefore(image,g.querySelector('text'));
       }
       inspector.append(element('p',[n.work.author,n.work.series,n.work.format].filter(Boolean).join(' · ')));
@@ -442,7 +442,7 @@ async function loadAtlasUniverse(){
     if(n.kind==='work'){
       g.append(make('rect',{x:-13,y:-19,width:26,height:38,rx:3,class:'node-cover'}));
       if(coverBudget-->0)g.append(make('image',{x:-11,y:-17,width:22,height:34,
-        href:'./api/works/'+encodeURIComponent(String(n.work.id))+'/cover'}));
+        href:'./api/works/'+encodeURIComponent(String(n.work.id))+'/cover'+(typeof n.work.coverHash==='string'&&/^[0-9a-f]{64}$/.test(n.work.coverHash)?'?v='+n.work.coverHash:'')}));
     }else{
       g.append(make('circle',{r:22,class:'node-target'}),make('circle',{r:8,class:'node-dot'}));
     }

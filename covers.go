@@ -330,6 +330,12 @@ func (a *app) assetCover(id string) ([]byte,string,error) {
 }
 
 func (a *app) workCover(id string) ([]byte,string,error) {
+    var chosen []byte
+    var chosenMime string
+    if err:=a.db.QueryRow("SELECT image,mime FROM selected_work_covers WHERE work_id=?",id).
+        Scan(&chosen,&chosenMime);err==nil&&len(chosen)>0{
+        return chosen,chosenMime,nil
+    }
 	var root, rel, format string
 	err:=a.db.QueryRow(`SELECT s.path,a.relative_path,a.format FROM works w
 		JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id

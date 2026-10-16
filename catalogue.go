@@ -380,7 +380,8 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END),
 			COALESCE((SELECT wp.rating FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
 			COALESCE((SELECT wp.favourite FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
-			`+workStateExpression(who(r).ID)+`
+			`+workStateExpression(who(r).ID)+`,
+            COALESCE((SELECT digest FROM selected_work_covers sc WHERE sc.work_id=w.id),'')
 			FROM published_works w JOIN editions e ON e.work_id=w.id
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ? OR w.genre LIKE ?)
@@ -410,9 +411,9 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			var id, editions, files, available int64
 			var ratingValue int
 			var favouriteValue bool
-			var title, author, series, genre, workSpace, workFormat, state string
-			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available,&ratingValue,&favouriteValue,&state); e != nil { fail(w,500,e); return }
-			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0,"rating":ratingValue,"favourite":favouriteValue,"state":state})
+			var title, author, series, genre, workSpace, workFormat, state, coverHash string
+			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available,&ratingValue,&favouriteValue,&state,&coverHash); e != nil { fail(w,500,e); return }
+			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0,"rating":ratingValue,"favourite":favouriteValue,"state":state,"coverHash":coverHash})
 		}
 		reply(w,out)
 	})

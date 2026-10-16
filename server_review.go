@@ -16,6 +16,7 @@ type serverReviewWork struct {
     Format string `json:"format"`
     Files int `json:"files"`
     ReviewFiles int `json:"reviewFiles"`
+    CoverHash string `json:"coverHash"`
     PublicationState string `json:"publicationState"`
     Revision int64 `json:"revision"`
     Available bool `json:"available"`
@@ -54,8 +55,10 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
             CASE WHEN count(DISTINCT ed.format)=1 THEN min(ed.format) ELSE 'Mixed' END,
             count(ast.id),sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END),
             sum(CASE WHEN ast.available=1 THEN 1 ELSE 0 END),
-            COALESCE(max(pub.state),'staged'),COALESCE(max(pub.revision),0)
+            COALESCE(max(pub.state),'staged'),COALESCE(max(pub.revision),0),
+            COALESCE(max(cov.digest),'')
             FROM works w LEFT JOIN work_publication pub ON pub.work_id=w.id
+            LEFT JOIN selected_work_covers cov ON cov.work_id=w.id
             JOIN editions ed ON ed.work_id=w.id
             JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets ast ON ast.id=ea.asset_id
             GROUP BY w.id HAVING sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)>0
@@ -68,7 +71,7 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
         for rows.Next() {
             var item serverReviewWork
             var available int
-            if err = rows.Scan(&item.ID, &item.Title, &item.Author, &item.Series, &item.Genre, &item.Space, &item.Format, &item.Files, &item.ReviewFiles, &available,&item.PublicationState,&item.Revision); err != nil {
+            if err = rows.Scan(&item.ID, &item.Title, &item.Author, &item.Series, &item.Genre, &item.Space, &item.Format, &item.Files, &item.ReviewFiles, &available,&item.PublicationState,&item.Revision,&item.CoverHash); err != nil {
                 fail(w, 500, err); return
             }
             item.Available = available > 0

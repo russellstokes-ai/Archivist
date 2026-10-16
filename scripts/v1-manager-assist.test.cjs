@@ -103,7 +103,7 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(elements.get('editor').open,true,'existing metadata editor opens from Assist');
   assert.equal(elements.get('editor-title').textContent,'Edit Part 1');
   const second=elements.get('assist-works').children[1];
-  const publish=second.children[2].children[1];
+  const publish=second.children[2].children.find(button=>button.tagName==='BUTTON'&&button.textContent==='Publish book');
   assert.equal(publish.textContent,'Publish book','reviewed book must expose separate publish action');
   publish.onclick();
   await settle();

@@ -98,3 +98,8 @@ dialog::backdrop{background:#010b12cf}
 .assist-controls .primary{background:#2F8B86;border-color:#2F8B86;color:#fff}
 .assist-controls button:disabled{cursor:not-allowed;opacity:.48}
 @media(max-width:760px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.assist-controls{grid-column:1/-1;justify-self:stretch}}
+
+.assist-cover-picker{display:grid;align-items:center;gap:5px;border:1px solid var(--rule);border-radius:10px;padding:6px 9px;font-size:12px;color:var(--ink);cursor:pointer;min-width:0}
+.assist-cover-picker input{font-size:11px;width:min(235px,100%);min-height:28px;padding:0;color:var(--muted)}
+.assist-cover-picker input::file-selector-button{border:1px solid var(--rule);background:var(--raised);color:var(--ink);border-radius:8px;padding:5px 8px;cursor:pointer}
+@media(max-width:590px){.assist-cover-picker{width:100%}}

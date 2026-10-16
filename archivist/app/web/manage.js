@@ -197,7 +197,7 @@
         const cover=e('div',undefined,'assist-cover');
         cover.append(e('span',(work.title||'Book').slice(0,2).toUpperCase()));
         const artwork=e('img');artwork.loading='lazy';artwork.alt='';
-        artwork.src='./api/works/'+encodeURIComponent(String(work.id))+'/cover';
+        artwork.src='./api/works/'+encodeURIComponent(String(work.id))+'/cover'+(work.coverHash?'?v='+encodeURIComponent(work.coverHash):'');
         artwork.addEventListener('load',()=>cover.classList.add('has-cover'));
         artwork.addEventListener('error',()=>artwork.remove());
         cover.append(artwork);
@@ -244,6 +244,43 @@
           if(opening&&fileOffset===0)void loadFiles(true);
         };
         controls.append(reveal);
+        const uploadLabel=e('label','Choose cover (JPEG or PNG)','assist-cover-picker');
+        const upload=e('input');upload.type='file';upload.accept='image/jpeg,image/png';
+        upload.setAttribute('aria-label','Choose cover for '+work.title);
+        upload.onchange=async()=>{
+          const file=upload.files?.[0];if(!file)return;
+          if(file.size>4*1024*1024){notice('Choose an image no larger than 4 MB.',true);return}
+          upload.disabled=true;
+          try{
+            const response=await fetch('./api/manage/works/'+encodeURIComponent(String(work.id))+'/cover',{
+              method:'POST',credentials:'same-origin',
+              headers:{'X-Archivist-Action':'1','Content-Type':file.type||'application/octet-stream'},
+              body:file
+            });
+            const data=await response.json();
+            if(!response.ok)throw Error(data.error||'Unable to save the cover.');
+            if(!/^[0-9a-f]{64}$/.test(data.sha256))throw Error('Server did not confirm a stored cover.');
+            artwork.src='./api/works/'+encodeURIComponent(String(work.id))+'/cover?v='+encodeURIComponent(data.sha256);
+            cover.append(artwork);
+            await Promise.all([loadAssist(),loadSummary()]);
+            notice('Selected cover saved for '+work.title+'. Publishing is a separate action.');
+          }catch(error){notice(error.message,true)}
+          finally{upload.disabled=false;upload.value=''}
+        };
+        uploadLabel.append(upload);controls.append(uploadLabel);
+        if(work.coverHash&&work.publicationState!=='published'){
+          const reset=e('button','Clear selected cover','quiet');reset.type='button';
+          reset.onclick=async()=>{
+            if(!window.confirm('Clear the selected cover for '+work.title+'? The media files are not changed.'))return;
+            reset.disabled=true;
+            try{
+              await api('./api/manage/works/'+encodeURIComponent(String(work.id))+'/cover','DELETE');
+              await Promise.all([loadAssist(),loadSummary()]);
+              notice('Selected cover cleared; original artwork remains untouched.');
+            }catch(error){notice(error.message,true)}finally{reset.disabled=false}
+          };
+          controls.append(reset);
+        }
         if(work.publicationState!=='published'){
           const publish=e('button',work.reviewFiles?'Finish review before publishing':'Publish book','primary');
           publish.type='button';

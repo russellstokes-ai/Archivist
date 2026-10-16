@@ -490,6 +490,7 @@ func (a *app) routes() http.Handler {
 	a.atlasRoutes(mux)
 	a.serverReviewRoutes(mux)
 	a.publicationRoutes(mux)
+    a.selectedCoverRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
