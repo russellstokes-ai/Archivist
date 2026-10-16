@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "as_of": "2026-10-15",
-  "purpose": "Point-in-time manifest distinguishing canonical source, draft fixes, commercial development work and acceptance; not an automated report of GitHub or installed-device state",
+  "as_of": "2026-10-16",
+  "purpose": "Point-in-time checkpoint tracking canonical source, draft fixes, commercial work and independent Astra audit; PR #52 contains source changes followed by docs commits, so source_checkpoint_sha is not necessarily the live head.",
   "repo": "russellstokes-ai/Archivist",
   "approved_requirements": {
     "master_plan_branch": "plan/archivist-v1-master-2026-10-12",
@@ -26,17 +26,17 @@
   },
   "current_unmerged_stack": {
     "base_branch": "dev/archivist-v1-protected-20261013",
-    "head_branch": "fix/archivist-offline-integrity-fallback-20261015",
-    "head_sha": "ea2222c6ee15272185aae1ca2567e8ae7a87227e",
-    "last_pr": 50,
+    "head_branch": "fix/archivist-cover-candidate-fallback-20261016",
+    "head_sha": "005979d3fdd12a24ad6fc75de871bd9366b4eb2c",
+    "last_pr": 52,
     "pr_range": [
       40,
-      50
+      52
     ],
     "comparison": {
-      "commits_ahead": 122,
+      "commits_ahead": 138,
       "commits_behind": 0,
-      "net_changed_paths": 65,
+      "net_changed_paths": 73,
       "protected_paths_checked": 46,
       "protected_paths_net_changed": 0,
       "scanner_assist_paths_net_changed": 0,
@@ -45,20 +45,33 @@
     },
     "merged": false,
     "deployed": false,
-    "release_built": false
+    "release_built": false,
+    "head_sha_role": "source-and-test checkpoint before subsequent docs-only commits; live GitHub PR head must always be re-queried"
   },
   "ci_latest_head": {
     "mobile": {
       "status": "passed",
-      "run_id": 38655627405,
-      "url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38655627405"
+      "run_id": 38775677171,
+      "source_sha": "70921ca808940f65e6e409fedb74251c194297dd",
+      "url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38775677171"
     },
     "ios": {
       "status": "passed",
-      "run_id": 38655627435,
-      "url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38655627435"
+      "run_id": 38775677362,
+      "source_sha": "70921ca808940f65e6e409fedb74251c194297dd",
+      "url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38775677362"
     },
-    "meaning": "automated source/tests/build gates only; not device or release acceptance"
+    "server": {
+      "status": "passed",
+      "run_id": 38876055497,
+      "source_sha": "005979d3fdd12a24ad6fc75de871bd9366b4eb2c",
+      "url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38876055497",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ]
+    },
+    "meaning": "These latest checks belong to their listed exact SHAs, not to a final accepted APK or full mobile+iOS+server run on one deployed artifact; docs commits may need fresh CI."
   },
   "protect": {
     "frozen": [
@@ -206,6 +219,14 @@
       "prs": [],
       "status": "not_verified",
       "remaining": "Final signed AAB, policies, target API/native compatibility, privacy/disclosures/accessibility/crash/performance and Play review"
+    },
+    {
+      "id": "server_cover_recovery",
+      "prs": [
+        52
+      ],
+      "status": "coded_ci_unmerged",
+      "remaining": "Red/green archive artwork candidate fallback passed server CI on AMD64 and ARM64; still needs real CBR and large archive/Pi media tests. This is not mobile comic issue #16."
     }
   ],
   "draft_pull_requests": [
@@ -307,6 +328,24 @@
       "status": "draft_unmerged",
       "device_accepted": false,
       "url": "https://github.com/russellstokes-ai/Archivist/pull/50"
+    },
+    {
+      "number": 51,
+      "head_sha": "70921ca808940f65e6e409fedb74251c194297dd",
+      "category": "audit/documentation",
+      "change": "Canonical vs bugfix vs commercial Work status ledger, append-only log and 46-file immutability test",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/51"
+    },
+    {
+      "number": 52,
+      "head_sha": "005979d3fdd12a24ad6fc75de871bd9366b4eb2c",
+      "category": "work/server-cover-reliability",
+      "change": "Bounded archive cover fallback retries across ZIP, EPUB, CBT/TAR and RAR; root and packaged server parity; red/green regression",
+      "status": "draft_unmerged",
+      "device_accepted": false,
+      "url": "https://github.com/russellstokes-ai/Archivist/pull/52"
     }
   ],
   "acceptance_contract": {
@@ -320,5 +359,18 @@
     "rule": "No issue may be marked accepted merely because CI passed. State changes require exact issue reproduction, regression and review. A release requires explicit approval.",
     "no_unsanctioned_merges": true
   },
-  "update_instructions": "Update this manifest, docs/v1/DEVELOPMENT_STATUS.md, and append to docs/v1/DEVELOPMENT_LOG.md in every future PR; refresh real SHA/CI from GitHub, preserve historical snapshots, never infer installed APK SHA."
+  "update_instructions": "For each new PR: refresh exact GitHub SHAs and CI, run protected comparison, record which source checkpoint was tested, update DEVELOPMENT_STATUS.json and .md together, append DEVELOPMENT_LOG.md, and keep ASTRA_REVIEW_QUEUE.md open until independent evidence/approval. Never infer source SHA of installed APK or promote draft-only code.",
+  "audit_review_queue": {
+    "file": "docs/v1/ASTRA_REVIEW_QUEUE.md",
+    "recorded_on": "2026-10-16",
+    "count": 13,
+    "classification": "Difficult/architectural/real-device risks. Static findings are not device-confirmed or closed.",
+    "top_priority": [
+      "ASTRA-01 non-destructive offline recovery",
+      "ASTRA-02 comic reader classification",
+      "ASTRA-03 Atlas catalogue feed",
+      "ASTRA-04 snapshot pagination consistency",
+      "ASTRA-07 Android Auto track transition persistence"
+    ]
+  }
 }

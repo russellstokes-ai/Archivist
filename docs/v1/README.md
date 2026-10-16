@@ -1,6 +1,6 @@
 # Archivist v1.0 — Read this first
 
-**Single entrypoint for all future work sessions:** [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md).
+**Updated 16 October 2026 · Single entrypoint for all future work sessions:** [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md).
 
 Use these four records **together**. They separate the approved app from pending code and provide a dated audit trail:
 
@@ -8,6 +8,7 @@ Use these four records **together**. They separate the approved app from pending
 2. **[DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json)** — machine-checkable source SHAs, PR heads, protected-diff audit, current issue and Work statuses, CI run IDs. Updated alongside the human status.
 3. **[DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)** — append-only dated actions, diagnostics, changes, failed/passing CI, safeguards, approval and rollback notes. Never overwrite old entries to hide failed attempts.
 4. **[ORIGINAL_BUG_BACKLOG_2026-10-14.md](./ORIGINAL_BUG_BACKLOG_2026-10-14.md)** — *scope* authority. Only #16, #19, #25, #23, #17, #20, #31, #32 are active user bugs. Scanner #15 excluded.
+5. **[ASTRA_REVIEW_QUEUE.md](./ASTRA_REVIEW_QUEUE.md)** — **13 difficult/high-risk items for independent Astra testing**. Each includes actual code evidence, confidence, reproduction steps and scope boundaries. Commercial server artwork fallback is isolated in draft PR #52, not a mobile comic bug closure.
 
 **Immutable controls:** [PROTECTED_DEVELOPMENT_SCOPE.md](./PROTECTED_DEVELOPMENT_SCOPE.md) and [PROTECTED_BLOB_LOCKS.json](./PROTECTED_BLOB_LOCKS.json). Both scanners, Archivist Assist, canonical mobile layout, Living Book, Comic Focus, Atlas/Rewards and approved assets remain frozen without a specific user-authorised exception.
 
