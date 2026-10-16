@@ -53,6 +53,27 @@ The following rows capture the existing PRs as **unmerged source-level work**, n
 - **Acceptance:** no device-level or release gates advanced; all eight user bugs retain their earlier status.
 - **Next gate:** verify PR #51 mobile/iOS CI; the index and manifest must be updated for future PRs, and the log must only **append** new events, including failures and corrections.
 
+## 2026-10-16 — User-directed full-stack robustness audit; difficult items assigned to Astra
+
+- **Lane:** read-only inspection + bounded commercial server fix, **not** a scanner, Assist, UI or installed-device fix.
+- **Before:** documentation PR #51 `70921ca808940f65e6e409fedb74251c194297dd`; canonical `df4c39b44394d8c512ca0298bffa7f19da356490` and protected baseline `72bbf177aecc92f31724b48c6cf11a7eddd7a216` remain preserved.
+- **Audit scope:** Reviewed draft chain #40–#51 implementation and tests across Go/SQLite server, network/offline media, PDF, progress sync, Android Auto, cover decoding, recovery and historic protected bug workflows. Did **not** claim exhaustive dynamic/real-device test coverage.
+- **Review queue:** New [ASTRA_REVIEW_QUEUE.md](./ASTRA_REVIEW_QUEUE.md) records **13 prioritised** source/evidence findings with file/line links, independent reproductions and protection boundaries. Main difficult issues: stale checkpoint can remove recoverable offline media (#31), unknown comic routing (#16), Atlas published-data discrepancy (#19), nontransactional progress pagination, PDF effect timing, incomplete reachability integration, Android Auto track transition, WebP raster budget, SQLite power-loss restore and missing Pi/media acceptance. Findings labelled code-confirmed vs plausible, never marked device accepted.
+- **Source protections:** No scanner, Archivist Assist, `mobile/App.tsx`, Living Book, Comic Focus, Atlas/Rewards, approved art/fonts/Lotties or extra archive source hashes changed.
+
+## 2026-10-16 — Draft PR #52: archive artwork fallback ROOT CAUSE reproduced RED → GREEN
+
+- **Lane:** isolated **commercial Go server** robustness fix, **not** mobile comic opening #16.
+- **Development source checkpoint:** `005979d3fdd12a24ad6fc75de871bd9366b4eb2c` (code + server regression test; later documentation commits advance the draft PR head and do not alter that checkpoint's test meaning).
+- **Before:** `archiveCover` in `covers.go` and mirror returned `safeImageData` error from the **first corrupt candidate**, even with valid later artwork. The fault occurred in ZIP comics, CBT/TAR and EPUB named cover / illustration fallback. CBR's first-page-only lookup followed the same basic error pattern.
+- **Verified RED:** [GitHub Actions #38875572510](https://github.com/russellstokes-ai/Archivist/actions/runs/38875572510) server-check **failed in the expected test** for corrupt-first comic ZIP, CBT TAR, EPUB and missing fallback; ARM64 smoke passed.
+- **Minimal implemented fix:** bounded maximum of **64 candidate attempts**; continue after invalid/truncated/unsafe image; prefer a **validated dedicated EPUB cover** over earlier fallback illustration; reject all-corrupt archives; enforce 10,000 ZIP/TAR member limit; retry valid CBR candidate names, while retaining existing archive read budgets. Root `covers.go` and `archivist/app/covers.go` blobs verified identical.
+- **Verified GREEN:** [GitHub Actions #38876055497](https://github.com/russellstokes-ai/Archivist/actions/runs/38876055497) completed **AMD64 server-check PASS and ARM64 smoke PASS** on exact code/test checkpoint `005979d3...`.
+- **Actual changed code/tests vs PR #51:** `covers.go`, `archivist/app/covers.go`, `cover_candidate_fallback_test.go`, `archivist/app/cover_candidate_fallback_test.go`. Plus new Astra review queue and current audit docs. **Zero of 46 protected paths** changed; neither scanner nor mobile renderer touched. Compared protected baseline to `005979d3...`: **138 commits ahead, zero behind, 73 net changed paths**, zero protected changed.
+- **Acceptance remaining:** real RAR4/RAR5, corrupt archive variants, large library/Pi memory and actual media cover quality. No APK, no merge, no deployment, no final device acceptance.
+- **Rollback:** unchanged canonical `df4c39b` and protected `72bbf177`; draft PR #52 stacked on documentation draft PR #51.
+- **Decision:** simple, independently tested server fix retained as DRAFT; difficult data-loss/architecture/device issues explicitly deferred to Astra independent review with **no permission to touch protected source**.
+
 ## New event entry template (append on every subsequent change)
 
 ```markdown
