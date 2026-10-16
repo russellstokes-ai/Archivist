@@ -12,10 +12,11 @@
 <a class="skip" href="#content">Skip to main content</a>
 <div class="layout">
 <aside class="sidebar" aria-label="Administration navigation">
- <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">A</span><span>Archivist<small>LIBRARY SERVER</small></span></a>
+ <a class="brand" href="./"><img class="brand-mark" src="./assets/archivist-app-icon.png" alt="" width="40" height="40"><span>Archivist<small>LIBRARY SERVER</small></span></a>
  <nav aria-label="Manager">
   <button class="nav-item is-current" type="button" data-view="library" aria-current="page">◫ <span>Library</span></button>
-  <button class="nav-item" type="button" data-view="review">◉ <span>Needs review</span></button>
+  <button class="nav-item" type="button" data-view="assist">◉ <span>Archivist Assist</span><span id="assist-badge" class="nav-count" aria-label="books requiring review"></span></button>
+  <button class="nav-item" type="button" data-view="review">☷ <span>File review</span></button>
   <button class="nav-item" type="button" data-view="health">◈ <span>Health &amp; scans</span></button>
   <a class="nav-item" href="./">↗ <span>Back to Archivist</span></a>
  </nav>
@@ -27,7 +28,7 @@
 <div id="app" hidden>
  <section class="metrics" aria-label="Library overview">
   <div class="metric"><span>Logical works</span><strong id="metric-works">—</strong></div>
-  <div class="metric"><span>Files needing review</span><strong id="metric-review">—</strong></div>
+  <div class="metric"><span>Books needing review</span><strong id="metric-review">—</strong></div>
   <div class="metric"><span>Library spaces</span><strong id="metric-spaces">—</strong></div>
   <div class="metric"><span>Unavailable works</span><strong id="metric-unavailable">—</strong></div>
  </section>
@@ -44,6 +45,14 @@
   <div class="table-top"><p id="range" role="status">Loading…</p><div><span id="selected-count" class="selected">0 selected</span><button type="button" id="export-selection" class="quiet">Export selected CSV</button><button type="button" id="clear-selection" class="quiet">Clear selection</button></div></div>
   <div class="table-scroll"><table id="catalogue"><thead><tr><th scope="col"><input type="checkbox" id="select-page" aria-label="Select all files on this page"></th><th scope="col">Title / author</th><th scope="col">Series</th><th scope="col">Type</th><th scope="col">Source</th><th scope="col">Status</th><th scope="col">Edit</th></tr></thead><tbody id="records"></tbody></table></div>
   <div class="pager"><button id="previous" type="button" class="quiet">← Previous</button><span id="page-label">Page 1</span><button id="next" type="button" class="quiet">Next →</button></div>
+ </section>
+ <section id="view-assist" hidden aria-labelledby="assist-title">
+  <div class="section-head"><div><p class="eyebrow">ARCHIVIST ASSIST</p><h2 id="assist-title">Books requiring identification</h2>
+   <p class="footnote">A book can contain several files. Review metadata without moving originals. Saving an individual file is not the same as publishing a book.</p></div>
+   <button id="refresh-assist" type="button" class="quiet">Refresh</button></div>
+  <p id="assist-range" role="status" aria-live="polite">Choose Archivist Assist to load books.</p>
+  <div id="assist-works" class="assist-works"></div>
+  <div class="pager"><button id="assist-previous" type="button" class="quiet">← Previous books</button><span id="assist-page">Page 1</span><button id="assist-next" type="button" class="quiet">Next books →</button></div>
  </section>
  <section id="view-health" hidden aria-labelledby="health-title">
   <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2 id="health-title">Source and scanner health</h2></div><button id="refresh-health" type="button">Refresh</button></div>

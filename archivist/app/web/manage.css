@@ -73,3 +73,21 @@ dialog::backdrop{background:#010b12cf}
 .candidate-fields{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .candidate-fields button{font-size:11px;min-height:34px;padding:6px 9px}
 @media(max-width:590px){#candidate-search-form{align-items:stretch;flex-direction:column}}
+
+/* Archivist Assist shares the catalogue's type, artwork and navigation language. */
+.brand-mark{display:block;object-fit:cover;background:#2F8B86;border-radius:10px;padding:0;flex:none}
+.nav-count{margin-left:auto;color:var(--gold);font-variant-numeric:tabular-nums;font-size:12px}
+.assist-works{display:grid;gap:12px;margin:19px 0}
+.assist-work{display:grid;grid-template-columns:70px minmax(0,1fr) auto;align-items:center;gap:18px;padding:17px;border:1px solid var(--rule);border-radius:16px;background:var(--panel);min-width:0}
+.assist-cover{width:60px;aspect-ratio:2/3;position:relative;overflow:hidden;border-radius:3px 7px 7px 3px;border-left:4px solid #030c1590;background:#274450;display:grid;place-items:center;color:var(--gold);font:25px/1 ArchivistEditorial,Georgia,serif;box-shadow:3px 4px 10px #0005}
+.assist-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0}
+.assist-cover.has-cover img{opacity:1}
+.assist-details{min-width:0;display:grid;gap:6px}
+.assist-details>strong{font:23px/1.2 ArchivistEditorial,Georgia,serif;overflow-wrap:anywhere}
+.assist-details>.pill{justify-self:start}
+.assist-files{grid-column:1/-1;border-top:1px solid var(--rule);padding-top:12px;min-width:0}
+.assist-file{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 2px;border-bottom:1px solid var(--rule)}
+.assist-file>div{min-width:0;overflow-wrap:anywhere}
+.assist-file strong{display:block;font-weight:500}
+.assist-controls{justify-self:end}
+@media(max-width:590px){.assist-work{grid-template-columns:52px minmax(0,1fr);gap:11px;padding:12px}.assist-cover{width:49px}.assist-details>strong{font-size:19px}.assist-controls{grid-column:1/-1;justify-self:stretch}.assist-controls button{width:100%}.assist-file{align-items:flex-start}.assist-file .edit-button{flex-shrink:0}}

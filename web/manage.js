@@ -2,6 +2,8 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const pageSize = 80;
+  const assistPageSize = 40;
+  let assistOffset = 0, assistRequest = 0;
   const metadataFields = [
     ['title','Title','text'], ['author','Author / creator','text'],
     ['series','Series','text'], ['seriesNumber','Series / issue number','number'],
@@ -169,7 +171,7 @@
       selected.delete(target.id);selectedDetails.delete(target.id);
       const stillCurrent=editing===target&&editorEpoch===startedEpoch;
       if(stillCurrent)closeEditor();
-      await Promise.all([loadCatalogue(),loadSummary()]);
+      await Promise.all([loadCatalogue(),loadSummary(),...(activeView==='assist'?[loadAssist()]:[])]);
       // Never close or replace the message/fields of a newer editor.
       if(stillCurrent&&!editing)notice('Metadata saved and catalogue refreshed.');
     }catch(err){
@@ -178,10 +180,90 @@
       if(editing===target&&editorEpoch===startedEpoch)button.disabled=false;
     }
   }
+  async function loadAssist(){
+    const generation=++assistRequest,location=assistOffset;
+    const container=$('assist-works');
+    $('assist-range').textContent='Finding books that need review…';
+    try {
+      const result=await api('./api/manage/review-works?'+new URLSearchParams({limit:String(assistPageSize),offset:String(location)}));
+      if(generation!==assistRequest||activeView!=='assist')return;
+      const works=Array.isArray(result.works)?result.works:[];
+      container.replaceChildren();
+      if(!works.length){
+        container.append(e('p',location?'No more books to review.':'All grouped books have completed their identification review.','empty'));
+      }
+      for(const work of works){
+        const article=e('article',undefined,'assist-work');
+        const cover=e('div',undefined,'assist-cover');
+        cover.append(e('span',(work.title||'Book').slice(0,2).toUpperCase()));
+        const artwork=e('img');artwork.loading='lazy';artwork.alt='';
+        artwork.src='./api/works/'+encodeURIComponent(String(work.id))+'/cover';
+        artwork.addEventListener('load',()=>cover.classList.add('has-cover'));
+        artwork.addEventListener('error',()=>artwork.remove());
+        cover.append(artwork);
+        const details=e('div',undefined,'assist-details');
+        details.append(e('strong',work.title||'Untitled'));
+        details.append(e('span',[work.author||'Unknown author',work.series,work.format,work.space].filter(Boolean).join(' · '),'subtext'));
+        details.append(e('span',work.reviewFiles+' of '+work.files+' files need review','pill warn'));
+        const controls=e('div',undefined,'assist-controls');
+        const reveal=e('button','Review book files','quiet');reveal.type='button';reveal.setAttribute('aria-expanded','false');
+        const filePanel=e('div',undefined,'assist-files');filePanel.hidden=true;
+        let fileOffset=0, fileGeneration=0;
+        async function loadFiles(reset=false) {
+          if(reset){fileOffset=0;filePanel.replaceChildren();}
+          const token=++fileGeneration;
+          reveal.disabled=true;
+          try {
+            const data=await api('./api/manage/review-works/'+encodeURIComponent(String(work.id))+'/files?'+new URLSearchParams({limit:'60',offset:String(fileOffset)}));
+            if(token!==fileGeneration||activeView!=='assist'||generation!==assistRequest)return;
+            const files=Array.isArray(data.files)?data.files:[];
+            for(const item of files){
+              const row=e('div',undefined,'assist-file');
+              const summary=e('div');
+              summary.append(e('strong',item.title||'Untitled'));
+              summary.append(e('small',[item.format,item.needsReview?'Needs review':'Reviewed',item.reviewReason].filter(Boolean).join(' · '),'subtext'));
+              const edit=e('button',item.needsReview?'Review metadata':'Edit metadata','edit-button');
+              edit.type='button';edit.onclick=()=>openEditor(item);
+              row.append(summary,edit);filePanel.append(row);
+            }
+            fileOffset+=files.length;
+            filePanel.querySelector('.assist-more')?.remove();
+            if(data.hasMore){
+              const more=e('button','Load more files','quiet assist-more');
+              more.type='button';more.onclick=()=>void loadFiles();
+              filePanel.append(more);
+            }
+            if(!filePanel.children.length)filePanel.append(e('p','No files are linked to this book.'));
+          }catch(error){if(token===fileGeneration&&generation===assistRequest)notice(error.message,true)}
+          finally{if(token===fileGeneration)reveal.disabled=false}
+        }
+        reveal.onclick=()=>{
+          const opening=filePanel.hidden;
+          filePanel.hidden=!opening;reveal.setAttribute('aria-expanded',String(opening));
+          if(opening&&fileOffset===0)void loadFiles(true);
+        };
+        controls.append(reveal);
+        article.append(cover,details,controls,filePanel);
+        container.append(article);
+      }
+      $('assist-range').textContent=result.total+' logical books need review · '+(works.length?location+1:0)+'–'+(location+works.length)+' shown';
+      $('assist-page').textContent='Page '+(Math.floor(location/assistPageSize)+1);
+      $('assist-previous').disabled=location===0;
+      $('assist-next').disabled=location+works.length>=result.total;
+      notice();
+    }catch(error){
+      if(generation===assistRequest){
+        container.replaceChildren();
+        $('assist-range').textContent='Unable to open Archivist Assist';
+        notice(error.message,true);
+      }
+    }
+  }
   async function loadSummary(){
     const [summary,sources]=await Promise.all([api('./api/library-summary'),api('./api/sources')]);
     $('metric-works').textContent=Number(summary.total||0).toLocaleString();
-    $('metric-review').textContent=Number(summary.needsReview||0).toLocaleString();
+    $('metric-review').textContent=Number(summary.reviewWorks??0).toLocaleString();
+    $('assist-badge').textContent=Number(summary.reviewWorks??0).toLocaleString();
     $('metric-spaces').textContent=Array.isArray(summary.spaces)?summary.spaces.length:0;
     const unavailable=(summary.availability||[]).find(x=>x.name==='Unavailable');
     $('metric-unavailable').textContent=Number(unavailable?.count||0).toLocaleString();
@@ -215,7 +297,8 @@
   }
   function showView(view){
     activeView=view;
-    $('view-library').hidden=view==='health';
+    $('view-library').hidden=view==='health'||view==='assist';
+    $('view-assist').hidden=view!=='assist';
     $('view-health').hidden=view!=='health';
     for(const item of document.querySelectorAll('[data-view]')){
       item.classList.toggle('is-current',item.dataset.view===view);
@@ -223,6 +306,8 @@
       else item.removeAttribute('aria-current');
     }
     if(view==='review'){$('sort').value='review';offset=0}
+    if(view==='assist'){++requestId;assistOffset=0;void loadAssist();return}
+    ++assistRequest;
     if(view==='health'){loadHealth().catch(err=>notice(err.message,true));return}
     if(view==='library'){offset=0;$('filters').reset()}
     loadCatalogue();
@@ -260,6 +345,9 @@
   $('saved-views').onchange=applyView;
   updateViews();
   $('refresh-health').onclick=()=>loadHealth().catch(err=>notice(err.message,true));
+  $('refresh-assist').onclick=()=>void loadAssist();
+  $('assist-previous').onclick=()=>{if(assistOffset>0){assistOffset=Math.max(0,assistOffset-assistPageSize);void loadAssist()}};
+  $('assist-next').onclick=()=>{assistOffset+=assistPageSize;void loadAssist()};
   for(const item of document.querySelectorAll('[data-view]'))item.onclick=()=>showView(item.dataset.view);
   boot();
 })();
