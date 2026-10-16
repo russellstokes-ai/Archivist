@@ -5,7 +5,7 @@ const dirs=new Set(['file:///docs/']);
 const files=new Map();
 const downloads=[];
 let resumeCalls=0;
-function bodyFor(url){return url.includes('/cover')?Buffer.alloc(120):Buffer.alloc(url.endsWith('/2')?200:100);}
+function bodyFor(url){return url.includes('/cover')?Buffer.alloc(120):Buffer.alloc(url.endsWith('/77')?0:url.endsWith('/2')?200:100);}
 Module._load=function(request,parent,isMain){
   if(request==='expo-file-system/legacy')return {
     documentDirectory:'file:///docs/',
@@ -287,5 +287,21 @@ const {
   assert.equal(files.get(first.tracks[0].uri),oldTrack,'preflight failure must not erase previous work');
   assert(files.has(first.tracks[1].uri),'second completed track must survive failed replacement');
 
+  // #31: a 200 response containing zero bytes with no trustworthy declared size
+  // must never be committed as a completed offline file. This test is RED
+  // against the prior implementation, which accepted zero-byte downloads.
+  const emptyWork={...work,id:74,title:'Empty response'};
+  const emptyTrack={id:77,title:'Empty chapter',format:'Audio',edition:7,available:true,name:'empty.mp3',size:0};
+  const emptyCheckpoints=[];
+  await assert.rejects(
+    downloadOfflineWork(session,emptyWork,[emptyTrack],undefined,{onCheckpoint:cp=>emptyCheckpoints.push(cp)}),
+    /empty/i,
+    'HTTP 200 with zero bytes must not publish an unusable offline chapter',
+  );
+  assert.equal(emptyCheckpoints.at(-1)?.current?.trackId,77,
+    'failed empty download should retain a recoverable checkpoint');
+  assert(!emptyCheckpoints.includes(null),
+    'invalid zero-byte media must not produce a completed work');
+  
   console.log('PASS: offline downloads recover, retain partial works, protect orphan media, reuse verified downloads and reject destructive redownloads');
 })().catch(e=>{console.error(e);process.exitCode=1;});
