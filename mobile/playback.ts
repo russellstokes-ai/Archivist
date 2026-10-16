@@ -4,7 +4,7 @@ export type Position = {asset: number; seconds: number; revision: number; comple
 export type Chapter = {title: string; start: number; end: number};
 export type PlaybackState = {tracks: Track[]; index: number; seconds: number; duration: number; playing: boolean; loading: boolean; speed: number; sleepAt: number | null; error: string; completed: boolean};
 type API = (path: string, method?: string, data?: unknown) => Promise<any>;
-export type PlaybackSaveReceipt={path:string;sequence:number};
+export type PlaybackSaveReceipt={path:string;sequence:number;scope?:string};
 export type PlaybackProgressJournal={
   record:(path:string,position:{asset:number;seconds:number;complete:boolean},baseRevision:number)=>Promise<PlaybackSaveReceipt>;
   acknowledge:(receipt:PlaybackSaveReceipt)=>Promise<void>;
