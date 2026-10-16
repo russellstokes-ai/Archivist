@@ -781,5 +781,22 @@
       "Google Play production AAB/privacy/license",
       "final new logo splash files"
     ]
+  },
+  "chat_followon_native_auto_and_restore_20261016": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "parent_source_pr": 81,
+    "parent_source_sha": "7a3a69fcb6648af7085aa393b6ebf09f9b6452ec",
+    "restored_source_pr": 82,
+    "reviewed_source_sha": "1c09a46b4b04cd2b48634b2eab1de26ad93340cf",
+    "auto_red_run": 38946476178,
+    "auto_green_mobile": 38946792706,
+    "auto_green_android_native": 38946792697,
+    "auto_ios": 38946792692,
+    "restore_red_run": 38947203459,
+    "restore_green_server": 38947395536,
+    "approval": "draft source only",
+    "real_device_accepted": false,
+    "original_eight_device_accepted": 0,
+    "full_commercial_release": false
   }
 }

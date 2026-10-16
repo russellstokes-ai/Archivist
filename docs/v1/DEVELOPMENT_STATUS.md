@@ -2,7 +2,14 @@
 
 **Single current-status entrypoint · updated 16 October 2026.** This is a **point-in-time snapshot**, not a live dashboard. It differentiates the approved canonical app, protected development baseline, unmerged bug-fix candidates, separate commercial feature work and on-device acceptance. The machine-readable source is [DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json); retain every historical change in the [append-only development log](./DEVELOPMENT_LOG.md).
 
-> **IMPORTANT: No development work in PRs #40–#80 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+> **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+
+## 16 October 2026 — additional chat reliability fixes, native Auto and server restore
+
+- **Candidate:** `integration/archivist-v1-auto-restore-recovery-20261016` based on [PR #81](https://github.com/russellstokes-ai/Archivist/pull/81), importing exact mirrored backup/recovery source and tests from [PR #82](https://github.com/russellstokes-ai/Archivist/pull/82). It is unmerged and unreleased.
+- **Auto P1:** [Mobile RED #38946476178](https://github.com/russellstokes-ai/Archivist/actions/runs/38946476178) proved unreadable pending journal wrongly skipped outgoing chapters. Fail-closed directory/unknown-event checks and strict four-arg native test contract now [Mobile GREEN #38946792706](https://github.com/russellstokes-ai/Archivist/actions/runs/38946792706) and [Android-native GREEN #38946792697](https://github.com/russellstokes-ai/Archivist/actions/runs/38946792697); iOS #38946792692 needs exact completed outcome verification. No car/vehicle acceptance.
+- **Restore P0/P1:** Three source-level crash-state failures genuinely RED at [Server #38947203459](https://github.com/russellstokes-ai/Archivist/actions/runs/38947203459) became GREEN at [Server #38947395536](https://github.com/russellstokes-ai/Archivist/actions/runs/38947395536). Exclusive fsynced transaction marker distinguishes prior backups from interrupted DB/WAL promotion; incomplete install recovers original while pending snapshot remains, completed install validates new database and retains previous recovery snapshot; malformed marker fails closed. Real NAS/Pi power-cut acceptance still missing.
+- **Protected/release boundary:** Existing owner-approved byte-pinned App.tsx logic exception from PR #80 is unchanged; other 45 source locks, scanners, Assist, readers/visuals and assets untouched. Exact integrated four-workflow CI is required. Six original bug fixes still unresolved, #31/#32 native/Fold tests pending, 0/8 physical acceptance. Advanced server metadata, mount loss, car, release AAB, privacy and new logo/splash remain NO-GO.
 
 ## 16 October 2026 — P0/P1/P2 combined draft source candidate #80
 
