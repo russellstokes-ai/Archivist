@@ -54,7 +54,7 @@
     }
     for(const item of rows){
       const tr=e('tr');tr.dataset.id=String(item.id);
-      const choose=e('td'),check=document.createElement('input');check.type='checkbox';check.checked=selected.has(item.id);check.setAttribute('aria-label','Select '+(item.title||'file'));check.onchange=()=>{choose(item,check.checked);updateSelected()};choose.append(check);
+      const selectionCell=e('td'),check=document.createElement('input');check.type='checkbox';check.checked=selected.has(item.id);check.setAttribute('aria-label','Select '+(item.title||'file'));check.onchange=()=>{choose(item,check.checked);updateSelected()};selectionCell.append(check);
       const title=e('td');const titleName=e('strong',item.title||'Untitled');title.append(titleName,e('span',item.author||'Unknown author','subtext'));
       const series=e('td');series.textContent=(item.series||'—')+(item.seriesNumber?' · #'+item.seriesNumber:'');
       const format=e('td',item.format||'Unknown');
@@ -62,7 +62,7 @@
       const status=e('td');const chip=e('span',item.needsReview?'Needs review':item.available?'Ready':'Unavailable','pill '+(item.needsReview?'warn':item.available?'ok':'muted'));status.append(chip);
       if(item.needsReview&&item.reviewReason)status.append(e('small',item.reviewReason,'reason'));
       const edit=e('td'),button=e('button','Edit','edit-button');button.type='button';button.setAttribute('aria-label','Edit metadata for '+(item.title||'file'));button.onclick=()=>openEditor(item);edit.append(button);
-      tr.append(choose,title,series,format,space,status,edit);body.append(tr);
+      tr.append(selectionCell,title,series,format,space,status,edit);body.append(tr);
     }
     $('range').textContent=rows.length?'Showing '+(offset+1)+'–'+(offset+rows.length)+' matching files':'No matching files';
     $('page-label').textContent='Page '+(Math.floor(offset/pageSize)+1);
