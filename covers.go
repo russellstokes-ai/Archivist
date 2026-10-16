@@ -158,54 +158,81 @@ func coverAudioExtension(ext string) bool {
 	}
 }
 
+// Restrict expensive candidate decoding, including corrupt/archive-bomb
+// covers, while permitting a damaged first image to fall back to real artwork.
+const maxCoverCandidateAttempts = 64
+
 func archiveCover(root, rel, format string) ([]byte,string,error) {
-	r, err := os.OpenRoot(root)
-	if err != nil { return nil,"",err }
-	defer r.Close()
-	f, err := r.Open(rel)
-	if err != nil { return nil,"",err }
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil { return nil,"",err }
-	ext := strings.ToLower(filepath.Ext(rel))
-	if format=="Comic" && ext==".cbr" {
-		parts, e := rarComicParts(f)
-		if e != nil { return nil,"",e }
-		data, e := rarComicEntry(f, parts[0], coverReadLimit)
-		if e != nil { return nil,"",e }
-		return safeImageData(data)
-	}
-	if format=="Comic" && ext==".cbt" {
-		tr:=tar.NewReader(f)
-		for {
-			h,e:=tr.Next(); if e==io.EOF{break}; if e!=nil{return nil,"",e}
-			if h.Typeflag!=tar.TypeReg && h.Typeflag!=tar.TypeRegA{continue}
-			switch strings.ToLower(path.Ext(h.Name)){case ".jpg",".jpeg",".png",".webp":
-				if h.Size<=0 || h.Size>coverReadLimit{continue}
-				data,e:=io.ReadAll(io.LimitReader(tr,coverReadLimit+1)); if e!=nil{continue}
-				return safeImageData(data)
-			}
-		}
-		return nil,"",errors.New("cover not found")
-	}
-	z, err := zip.NewReader(f,info.Size())
-	if err != nil { return nil,"",err }
-	var fallback *zip.File
-	for _, zf := range z.File {
-		if zf.FileInfo().IsDir() || zf.UncompressedSize64>coverReadLimit { continue }
-		ext:=strings.ToLower(path.Ext(zf.Name))
-		if ext!=".jpg" && ext!=".jpeg" && ext!=".png" && ext!=".webp" && ext!=".gif"{continue}
-		lower:=strings.ToLower(zf.Name)
-		if fallback==nil { fallback=zf }
-		if format=="Ebook" && !strings.Contains(lower,"cover"){continue}
-		rc,e:=zf.Open(); if e!=nil{continue}
-		data,e:=io.ReadAll(io.LimitReader(rc,coverReadLimit+1));rc.Close();if e!=nil{continue}
-		return safeImageData(data)
-	}
-	if fallback!=nil {
-		rc,e:=fallback.Open();if e==nil{data,e2:=io.ReadAll(io.LimitReader(rc,coverReadLimit+1));rc.Close();if e2==nil{return safeImageData(data)}}
-	}
-	return nil,"",errors.New("cover not found")
+    r, err := os.OpenRoot(root)
+    if err != nil { return nil,"",err }
+    defer r.Close()
+    f, err := r.Open(rel)
+    if err != nil { return nil,"",err }
+    defer f.Close()
+    info, err := f.Stat()
+    if err != nil { return nil,"",err }
+    ext := strings.ToLower(filepath.Ext(rel))
+    if format=="Comic" && ext==".cbr" {
+        parts, e := rarComicParts(f)
+        if e!=nil{return nil,"",e}
+        for i,name:=range parts {
+            if i>=maxCoverCandidateAttempts {break}
+            data,e:=rarComicEntry(f,name,coverReadLimit)
+            if e!=nil{continue}
+            if safe,mime,e:=safeImageData(data);e==nil{return safe,mime,nil}
+        }
+        return nil,"",errors.New("cover not found")
+    }
+    if format=="Comic" && ext==".cbt" {
+        tr:=tar.NewReader(f)
+        attempts:=0
+        entries:=0
+        for {
+            h,e:=tr.Next()
+            if e==io.EOF{break}
+            if e!=nil{return nil,"",e}
+            entries++
+            if entries>maxTarComicEntries{return nil,"",errors.New("comic contains too many entries")}
+            if h.Typeflag!=tar.TypeReg && h.Typeflag!=tar.TypeRegA{continue}
+            switch strings.ToLower(path.Ext(h.Name)){case ".jpg",".jpeg",".png",".webp":
+                if h.Size<=0 || h.Size>coverReadLimit{continue}
+                if attempts>=maxCoverCandidateAttempts{return nil,"",errors.New("cover not found")}
+                attempts++
+                data,e:=io.ReadAll(io.LimitReader(tr,coverReadLimit+1))
+                if e!=nil{continue}
+                if safe,mime,e:=safeImageData(data);e==nil{return safe,mime,nil}
+            }
+        }
+        return nil,"",errors.New("cover not found")
+    }
+    z,err:=zip.NewReader(f,info.Size())
+    if err!=nil{return nil,"",err}
+    if len(z.File)>maxTarComicEntries{return nil,"",errors.New("archive contains too many entries")}
+    var fallbackData []byte
+    var fallbackMIME string
+    attempts:=0
+    for _,zf:=range z.File {
+        if zf.FileInfo().IsDir()||zf.UncompressedSize64>coverReadLimit{continue}
+        suffix:=strings.ToLower(path.Ext(zf.Name))
+        if suffix!=".jpg" && suffix!=".jpeg" && suffix!=".png" && suffix!=".webp" && suffix!=".gif"{continue}
+        isEbookCover:=format!="Ebook"||strings.Contains(strings.ToLower(zf.Name),"cover")
+        if !isEbookCover&&fallbackData!=nil{continue}
+        if attempts>=maxCoverCandidateAttempts{break}
+        attempts++
+        rc,e:=zf.Open()
+        if e!=nil{continue}
+        data,e:=io.ReadAll(io.LimitReader(rc,coverReadLimit+1))
+        if closeErr:=rc.Close();e==nil{e=closeErr}
+        if e!=nil || len(data)>coverReadLimit{continue}
+        safe,mime,e:=safeImageData(data)
+        if e!=nil{continue}
+        if isEbookCover{return safe,mime,nil}
+        // EPUB fallback may be a useful illustration, but a valid dedicated
+        // cover later in the archive always takes priority over it.
+        if fallbackData==nil {fallbackData=safe;fallbackMIME=mime}
+    }
+    if fallbackData!=nil{return fallbackData,fallbackMIME,nil}
+    return nil,"",errors.New("cover not found")
 }
 
 func audioEmbeddedCover(root, rel string) ([]byte,string,error) {
