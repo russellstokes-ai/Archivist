@@ -64,6 +64,10 @@ const {OfflineProgressOutbox,planProgressReplay,fetchCompleteProgressSnapshot}=m
   }),1),/snapshot incomplete/);
 
   const pending=(await a.list());
+  assert.throws(()=>planProgressReplay(pending,[batch[0],{...batch[0],revision:99}],false),
+    /Duplicate remote progress/,
+    'inconsistent remote duplicates must never choose a position silently');
+
   const remote=(revision,seconds)=>[{kind:'edition',id:12,asset:101,seconds,revision,complete:false}];
   assert.equal(planProgressReplay(pending,remote(2,150),false)[0].action,'upload');
   assert.equal(planProgressReplay(pending,remote(3,180),false)[0].action,'conflict',
