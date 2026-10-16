@@ -69,11 +69,11 @@ const sandbox={
   window:{confirm:()=>true},
 };
 vm.runInNewContext(script,sandbox,{filename:'web/manage.js'});
-const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
+const flush=async()=>{for(let i=0;i<6;i++){await new Promise(setImmediate);await Promise.resolve();}};
 
 (async()=>{
   await flush();
-  assert(fetchPaths.some(x=>x.startsWith('./api/books?')),'admin boot must request the live catalogue');
+  assert(fetchPaths.some(x=>x.startsWith('./api/books?')),'admin boot must request the live catalogue; calls='+JSON.stringify(fetchPaths)+'; notice='+elements.get('notice').textContent);
   const records=elements.get('records');
   assert.equal(records.children.length,2,'fixture must render both records');
   const rowCheckbox=index=>records.children[index].children[0].children[0];
