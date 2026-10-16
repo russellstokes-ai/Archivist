@@ -10,7 +10,10 @@ Module._load=function(name,parent,main){
   if(name==='react-native')return {Platform:{OS:'android'}};
   if(name==='expo-file-system/legacy')return {
     documentDirectory:'file:///test/',
-    async getInfoAsync(path){return {exists:files.has(path),size:files.get(path)?.length}},
+    async getInfoAsync(path){
+      if(path===queue)return {exists:[...files.keys()].some(p=>p.startsWith(queue)),isDirectory:true};
+      return {exists:files.has(path),size:files.get(path)?.length};
+    },
     async readAsStringAsync(path){if(!files.has(path))throw Error('ENOENT');return files.get(path)},
     async readDirectoryAsync(uri){
       if(uri!==queue)throw Error('Unexpected folder '+uri);
@@ -87,6 +90,13 @@ const older=event(e1,'first.m4b',215),newer=event(e2,'second.m4b',12);
   assert(!files.has(queue+e2),'Retry must clean the already durably acknowledged event');
   pending=await consumeAndroidAutoProgress();
   assert.equal(pending.trackUri,'file:///media/third.m4b','Latest position follows journalled transitions');
+  // Compatibility: old installs without any pending/ directory can still
+  // retrieve the single latest-position file when listing ENOENTs.
+  failListing=true;
+  const legacy=await consumeAndroidAutoProgress();
+  assert.equal(legacy?.trackUri,'file:///media/third.m4b',
+    'nonexistent pending directory must retain old single-position compatibility');
+  failListing=false;
   assert.equal(pending.eventId,undefined);
   await acknowledgeAndroidAutoProgress(pending,handlers);
   assert(files.has(root+'progress.json'),'Never delete latest canonical AtomicFile');
