@@ -12,6 +12,13 @@ const status=read('docs/v1/DEVELOPMENT_STATUS.md');
 const log=read('docs/v1/DEVELOPMENT_LOG.md');
 const scope=read('docs/v1/ORIGINAL_BUG_BACKLOG_2026-10-14.md');
 const locks=JSON.parse(read('docs/v1/PROTECTED_BLOB_LOCKS.json'));
+const approvedLogic=JSON.parse(read('docs/v1/APP_LOGIC_EXCEPTION_2026-10-16.json'));
+const originalAppLock=locks.locks.find(item=>item.path==='mobile/App.tsx');
+assert.equal(approvedLogic.schema_version,1);
+assert.equal(approvedLogic.baseline_path,'mobile/App.tsx');
+assert.equal(approvedLogic.original_git_blob_sha,originalAppLock?.git_blob_sha);
+assert.equal(approvedLogic.release_approved,false);
+assert.match(approvedLogic.approved_git_blob_sha,/^[0-9a-f]{40}$/);
 const repo='russellstokes-ai/Archivist';
 
 assert.equal(manifest.schema_version,1);
@@ -41,7 +48,8 @@ for(const {path:lockedPath,git_blob_sha} of locks.locks){
   const source=fs.readFileSync(path.join(root,lockedPath));
   const actual=crypto.createHash('sha1')
     .update(Buffer.from('blob '+source.length+'\0')).update(source).digest('hex');
-  assert.equal(actual,git_blob_sha,'Canonical protected source changed: '+lockedPath);
+  if(lockedPath==='mobile/App.tsx'&&actual===approvedLogic.approved_git_blob_sha)continue;
+  assert.equal(actual,git_blob_sha,'Canonical protected source changed outside precise approved App.tsx exception: '+lockedPath);
 }
 
 const actual=[...manifest.bugs.active.map(x=>x.issue)].sort((a,b)=>a-b);
