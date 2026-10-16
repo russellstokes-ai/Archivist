@@ -71,6 +71,7 @@ func TestLegacyGrantRoutesPreserveWholeLibraryUserAccess(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "a.mp3"), []byte("a"), 0600)
 	a.addSource("Family", root)
 	a.scan(1)
+    publishFixtureWorks(t,a)
 	a.db.Exec("INSERT INTO grants VALUES(1,'Family')")
 	token, _ := a.newSession("key")
 	call := func(method, path, body, key string) *httptest.ResponseRecorder {

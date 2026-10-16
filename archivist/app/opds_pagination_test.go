@@ -50,6 +50,7 @@ func TestOPDSMoreThan200WorksCanBeTraversedWithoutOmissions(t *testing.T){
     a:=fixture(t)
     if err:=a.addSource("Main",t.TempDir());err!=nil{t.Fatal(err)}
     for i:=0;i<205;i++{createOPDSWork(t,a,1,"Main",fmt.Sprintf("Book %04d",i),1)}
+    publishFixtureWorks(t,a)
     seen:=map[string]bool{}
     uri:="/api/opds"
     for page:=0;page<10;page++{
@@ -76,6 +77,7 @@ func TestOPDSOneLargeAudiobookDoesNotHideFollowingWorks(t *testing.T){
     if err:=a.addSource("Main",t.TempDir());err!=nil{t.Fatal(err)}
     createOPDSWork(t,a,1,"Main","AAA Audiobook",1501)
     createOPDSWork(t,a,1,"Main","ZZZ Final Book",1)
+    publishFixtureWorks(t,a)
     feed:=readOPDSFeed(t,a,"/api/opds","test-key")
     if len(feed.Entries)!=2{t.Fatalf("large audiobook buried later works: %d found",len(feed.Entries))}
     if len(feed.Entries[0].Links)!=1501{t.Fatalf("multi-track audiobook links truncated: %d",len(feed.Entries[0].Links))}

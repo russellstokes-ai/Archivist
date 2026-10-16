@@ -21,6 +21,7 @@ func TestContinueReturnsRealProfileProgressOnly(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "Novel.epub"), []byte("book"), 0600); err != nil { t.Fatal(err) }
 	if err := a.addSource("Main", root); err != nil { t.Fatal(err) }
 	if err := a.scan(1); err != nil { t.Fatal(err) }
+    publishFixtureWorks(t,a)
 
 	var audioEdition, audioAsset, ebookAsset int64
 	if err := a.db.QueryRow(`SELECT e.id,a.id FROM editions e
@@ -62,6 +63,7 @@ func TestContinueRespectsHouseholdSpaceGrants(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "Book.mp3"), []byte("audio"), 0600); err != nil { t.Fatal(err) }
 	if err := a.addSource("Private", root); err != nil { t.Fatal(err) }
 	if err := a.scan(1); err != nil { t.Fatal(err) }
+    publishFixtureWorks(t,a)
 
 	var edition, asset int64
 	if err := a.db.QueryRow(`SELECT e.id,a.id FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id LIMIT 1`).Scan(&edition,&asset); err != nil { t.Fatal(err) }

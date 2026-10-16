@@ -35,13 +35,13 @@ func TestServerReviewGroupsFilesIntoLogicalBooks(t *testing.T) {
     if response.Code!=200 {t.Fatalf("review request: %d %s",response.Code,response.Body.String())}
     var page struct {Total int `json:"total"`;Works []serverReviewWork `json:"works"`}
     if err:=json.Unmarshal(response.Body.Bytes(),&page);err!=nil{t.Fatal(err)}
-    if page.Total!=2||len(page.Works)!=1||page.Works[0].ID!=1||page.Works[0].ReviewFiles!=2||page.Works[0].Files!=3 {
+    if page.Total!=3||len(page.Works)!=1||page.Works[0].ID!=1||page.Works[0].ReviewFiles!=2||page.Works[0].Files!=3 {
         t.Fatalf("incorrect logical book count: %+v",page)
     }
     response=call("/api/manage/review-works?limit=1&offset=1",true)
     if response.Code!=200 {t.Fatalf("second page: %d %s",response.Code,response.Body.String())}
     if err:=json.Unmarshal(response.Body.Bytes(),&page);err!=nil{t.Fatal(err)}
-    if page.Total!=2||len(page.Works)!=1||page.Works[0].ID!=2 {t.Fatalf("second work: %+v",page)}
+    if page.Total!=3||len(page.Works)!=1||page.Works[0].ID!=2 {t.Fatalf("second work: %+v",page)}
     response=call("/api/manage/review-works/1/files?limit=2",true)
     if response.Code!=200 {t.Fatalf("work files: %d %s",response.Code,response.Body.String())}
     var detail struct {Files []book `json:"files"`;HasMore bool `json:"hasMore"`}

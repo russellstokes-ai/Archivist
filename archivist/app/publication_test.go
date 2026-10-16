@@ -2,8 +2,6 @@ package main
 
 import (
     "bytes"
-    "database/sql"
-    "encoding/json"
     "image"
     "image/color"
     "image/png"
@@ -35,6 +33,9 @@ func publicationSnapshot(t *testing.T,a *app,id int64)workPublication{
 
 func TestPublicationRequiresReviewCoverAndExplicitOwnerAction(t *testing.T){
     a:=fixture(t)
+    for _,init:=range []func()error{a.initPreferences,a.initProgress,a.initReader,a.initCompletions}{
+        if err:=init();err!=nil{t.Fatal(err)}
+    }
     dir:=filepath.Join(t.TempDir(),"My Novel")
     if err:=os.MkdirAll(dir,0700);err!=nil{t.Fatal(err)}
     media:=filepath.Join(dir,"Track 01.mp3")
@@ -196,6 +197,4 @@ func TestLegacyPublicationMigrationRunsExactlyOnce(t *testing.T){
     }
     // The helper intentionally does not materialize an event for a legacy
     // published work: only owner-initiated and invalidated actions are audited.
-    _ = sql.ErrNoRows
-    _ = json.Valid
 }

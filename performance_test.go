@@ -73,6 +73,7 @@ func TestFiveThousandWorkPagingAndPersonalSummary(t *testing.T) {
 	if _,err=tx.Exec("INSERT INTO profile_completions(profile_id,work_id,kind,completed_at) VALUES(0,4999,'Reading',1)");err!=nil{tx.Rollback();t.Fatal(err)}
 	if _,err=tx.Exec("INSERT INTO reading_progress(profile_id,asset_id,part,fraction,revision,complete) VALUES(0,4998,2,.4,1,0)");err!=nil{tx.Rollback();t.Fatal(err)}
 	if err=tx.Commit();err!=nil{t.Fatal(err)}
+    publishFixtureWorks(t,a)
 
 	call:=func(path string)*httptest.ResponseRecorder{
 		req:=httptest.NewRequest("GET",path,nil)
