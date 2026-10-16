@@ -346,6 +346,12 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		series := strings.TrimSpace(r.URL.Query().Get("series"))
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+        yearFilter:=0
+        if year:=strings.TrimSpace(r.URL.Query().Get("year"));year!="" {
+            n,err:=strconv.Atoi(year)
+            if err!=nil || n<1000 || n>3000 { fail(w,400,errors.New("invalid publication year"));return }
+            yearFilter=n
+        }
 		availability := r.URL.Query().Get("availability")
 		if availability != "" && availability != "available" && availability != "unavailable" {
 			fail(w,400,errors.New("invalid availability filter"))
@@ -383,6 +389,10 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			AND (?='' OR w.series=?)
 			AND (?='' OR w.genre=?)
 			AND (?=0 OR trim(w.author)='')
+            AND (?=0 OR (SELECT min(NULLIF(year_asset.published_year,0))
+                FROM editions year_ed JOIN edition_assets year_ea ON year_ea.edition_id=year_ed.id
+                JOIN assets year_asset ON year_asset.id=year_ea.asset_id
+                WHERE year_ed.work_id=w.id)=?)
 			AND (?='' OR `+workStateExpression(who(r).ID)+`=?)
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences fp WHERE fp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND fp.work_id=w.id AND fp.favourite=1))
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences rp WHERE rp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND rp.work_id=w.id AND rp.rating=?))
@@ -390,7 +400,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			GROUP BY w.id
 			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
 			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
-			q,q,q,q,space,space,format,format,author,author,series,series,genre,genre,unknownAuthor,
+			q,q,q,q,space,space,format,format,author,author,series,series,genre,genre,unknownAuthor,yearFilter,yearFilter,
 			reading,reading,favourite,rating,rating,who(r).Owner,who(r).ID,
 			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
@@ -475,7 +485,14 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		genres := []map[string]any{}
 		rows, e = a.db.Query(`SELECT w.genre,count(*) FROM published_works w WHERE trim(w.genre)<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.genre ORDER BY count(*) DESC,w.genre LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{genres=append(genres,map[string]any{"name":name,"count":count})}};rows.Close() }
-		availability := []map[string]any{}
+        years:=[]map[string]any{}
+        rows,e=a.db.Query(`SELECT CAST(p.year AS TEXT),count(*) FROM (
+            SELECT w.id,min(NULLIF(a.published_year,0)) AS year FROM published_works w
+            JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id
+            JOIN assets a ON a.id=ea.asset_id GROUP BY w.id
+        ) p WHERE p.year IS NOT NULL GROUP BY p.year ORDER BY count(*) DESC,p.year DESC LIMIT 24`)
+        if e==nil{for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{years=append(years,map[string]any{"name":name,"count":count})}};rows.Close()}
+		availability := []map[string]any{
 		rows, e = a.db.Query(`
 			SELECT status,count(*) FROM (
 				SELECT w.id,CASE WHEN sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0 THEN 'Available' ELSE 'Unavailable' END AS status
@@ -517,7 +534,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			who(r).ID,who(r).Owner,who(r).ID).Scan(&favouriteCount)
 		if favouriteCount>0 { favourites=append(favourites,map[string]any{"name":"Favourites","count":favouriteCount}) }
 
-		reply(w,map[string]any{"total":total,"cataloguedWorks":cataloguedWorks,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"reviewWorks":reviewWorks,"series":series,"genres":genres,"availability":availability,"reading":readingSummary,"ratings":ratings,"favourites":favourites})
+		reply(w,map[string]any{"total":total,"cataloguedWorks":cataloguedWorks,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"reviewWorks":reviewWorks,"series":series,"genres":genres,"years":years,"availability":availability,"reading":readingSummary,"ratings":ratings,"favourites":favourites})
 	})
 	mux.HandleFunc("GET /api/works/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available,a.relative_path,a.size_bytes FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))

@@ -26,6 +26,9 @@ for (const route of [
 
 console.log('PASS: browser controls are referenced, core routes are wired, and placeholder UI markers are absent');
 
+// Atlas contract executes the ring renderer and checks source parity.
+require('./v1-atlas-parity.test.cjs');
+
 assert.ok(html.includes('id="picker" hidden class="picker-overlay" role="dialog" aria-modal="true"'), 'Folder picker must be a modal dialog');
 assert.ok(html.includes('id="work-detail" hidden class="work-overlay" role="dialog" aria-modal="true"'), 'Work detail must be a modal dialog');
 assert.ok(html.includes('role="tablist" aria-label="Settings sections"'), 'Settings tabs need tablist semantics');
