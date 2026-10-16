@@ -1,6 +1,10 @@
 // PR #55: This is a *source assembly* gate, NOT a device or security acceptance.
 // It makes the otherwise parallel #52/#53/#54 branches auditable together,
-// requiring the exact reviewed server-cover artifacts and the two independent
+// requiring exact reviewed server-cover artifacts and the two independent
+// The initial PR #52 covers.go blob was 9d082c9468b927e58dd8644d8b42aa1ce94d52ce.
+// PR #60 adds only the independently audited WebP header preflight, so the
+// covers.go lock is explicitly advanced to f6381164... on THIS draft.
+// Existing cover_candidate_fallback_test.go remains byte-for-byte PR #52.
 // risk queues. Go unit tests (run by Server CI) are responsible for behavior.
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -15,7 +19,7 @@ function blobHash(file){
     .update(Buffer.from('blob '+data.length+'\0')).update(data).digest('hex');
 }
 for(const [pathA,pathB,expected] of [
-  ['covers.go','archivist/app/covers.go','9d082c9468b927e58dd8644d8b42aa1ce94d52ce'],
+  ['covers.go','archivist/app/covers.go','f6381164fb432eb6e50d53199ea1de141b6e7667'],
   ['cover_candidate_fallback_test.go','archivist/app/cover_candidate_fallback_test.go','43ee302da3ea6893c33260305f879079814172fa'],
 ]){
   assert.equal(blobHash(pathA),expected,'PR #52 reviewed source changed: '+pathA);
