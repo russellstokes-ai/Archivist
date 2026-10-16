@@ -114,7 +114,6 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	if e = rows.Err(); e != nil { rows.Close(); return e }
 	rows.Close()
 
-	keep := map[int64]bool{}
 	for _, key := range order {
 		items := groups[key]
 		sort.SliceStable(items,func(i,j int)bool{return naturalLess(items[i].path,items[j].path)})
@@ -151,23 +150,21 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 			if _, err = tx.Exec("DELETE FROM editions WHERE work_id=? AND id<>?",work,edition); err != nil { return err }
 			if _, err = tx.Exec("DELETE FROM edition_assets WHERE edition_id=?",edition); err != nil { return err }
 		}
-		keep[work]=true
 		for pos,item := range items {
 			if _, err = tx.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?) ON CONFLICT(asset_id) DO UPDATE SET edition_id=excluded.edition_id,position=excluded.position",item.id,edition,pos); err != nil { return err }
 		}
 	}
 
-	staleRows, e := tx.Query(`SELECT DISTINCT w.id FROM works w
-		JOIN editions ed ON ed.work_id=w.id
-		JOIN edition_assets ea ON ea.edition_id=ed.id
-		JOIN assets a ON a.id=ea.asset_id
-		WHERE w.auto=1 AND a.source_id=?`,sourceID)
-	if e != nil { return e }
-	stale := []int64{}
-	for staleRows.Next(){var id int64;if e=staleRows.Scan(&id);e!=nil{staleRows.Close();return e};if !keep[id]{stale=append(stale,id)}}
-	if e=staleRows.Err();e!=nil{staleRows.Close();return e}
-	staleRows.Close()
-	for _, id := range stale { if _,e=tx.Exec("DELETE FROM works WHERE id=?",id);e!=nil{return e} }
+	// Never automatically delete an indexed work simply because its source
+	// was absent during a scan. Unmounted NAS shares may leave an existing
+	// but empty directory; a manual rename also changes a relative-path
+	// identity. Deleting the old work cascades into saved playback/reading
+	// positions and completions. Assets that were not seen remain marked
+	// unavailable by scanWithProgress and can recover on a later scan.
+	//
+	// A new filename remains a separate candidate until an explicit verified
+	// relink is performed: matching name/size is NOT sufficient proof to
+	// transfer a family's bookmark to another book.
 
 	if e = pruneCatalogue(tx); e != nil { return e }
 	return tx.Commit()
