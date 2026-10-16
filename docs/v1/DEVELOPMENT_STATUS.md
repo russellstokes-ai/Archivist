@@ -4,6 +4,14 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 16 October 2026 — FINAL CHAT HANDOFF SOURCE VERIFIED (PR #83, four CI workflows)
+
+- **Current dated implementation source:** [draft PR #83](https://github.com/russellstokes-ai/Archivist/pull/83) at `70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9`. Four exact-head **SUCCESS** results: [Mobile #38948050600](https://github.com/russellstokes-ai/Archivist/actions/runs/38948050600), [iOS #38948050648](https://github.com/russellstokes-ai/Archivist/actions/runs/38948050648), [Android native #38948050610](https://github.com/russellstokes-ai/Archivist/actions/runs/38948050610), [Server #38948050770](https://github.com/russellstokes-ai/Archivist/actions/runs/38948050770). Do not confuse this with actual owner-device/hardware acceptance.
+- **One authoritative Astra execution pointer:** [ASTRA_EXECUTION_START_PR83_2026-10-16.md](./ASTRA_EXECUTION_START_PR83_2026-10-16.md) supersedes older PR #65/70/74/80 implementation-start references; detailed audit history remains retained. This follow-on documentation **does not modify production source**.
+- **Source lock accuracy:** against development baseline, 254 commits ahead/0 behind/137 changed paths, with exactly one formerly locked source path changed: `mobile/App.tsx`, pinned to the exact documented **logic-only** exception in `APP_LOGIC_EXCEPTION_2026-10-16.json`. The other **45** original locks and all scanners, Assist, Living Book, Comic Focus, Atlas/Stats/Rewards presentation, motion/brand assets remain unchanged. Never describe this stack as 46/46 unchanged; exception is deliberate, scoped and not a release approval.
+- **Engineering progress:** draft safe offline copy-on-write/manifest acknowledgement, three-generation stateStore, non-destructive server catalogue, coherent sync/outbox, Android Auto FIFO acknowledgments, staged SQLite restore recovery, server manager race fixes, internal QA APK/16 KB gate. All source/CI evidence only.
+- **Release NO-GO:** original six mobile bugs #16/#19/#25/#23/#17/#20 unresolved; #31/#32 draft fixes unaccepted; **0/8** physical Fold acceptance. Advanced S1–S10 server management, automatic safe rename relink, real Pi/NAS/HA/Auto, actual build APK provenance, new splash/logo production integration, signed Google Play AAB and privacy/licensing remain. No canonical/main merge, APK installation or deployment.
+
 ## 16 October 2026 — additional chat reliability fixes, native Auto and server restore
 
 - **Candidate:** `integration/archivist-v1-auto-restore-recovery-20261016` based on [PR #81](https://github.com/russellstokes-ai/Archivist/pull/81), importing exact mirrored backup/recovery source and tests from [PR #82](https://github.com/russellstokes-ai/Archivist/pull/82). It is unmerged and unreleased.
