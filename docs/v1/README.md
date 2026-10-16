@@ -1,5 +1,7 @@
 # Archivist v1.0 — Read this first
 
+**CURRENT ASTRA START — use this first:** [one-pass execution contract for green draft PR #83](./ASTRA_EXECUTION_START_PR83_2026-10-16.md), source `70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9`. **Exact-head Mobile, iOS, Android native and Server CI all succeeded.** This dated implementation source supersedes older PR #65, #70, #74 and #80 starting points; **not** an approved APK, live-server deployment or commercial release.
+
 **Single entrypoint for all future work sessions:** [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md).
 
 Use these four records **together**. They separate the approved app from pending code and provide a dated audit trail:
@@ -9,7 +11,7 @@ Use these four records **together**. They separate the approved app from pending
 3. **[DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)** — append-only dated actions, diagnostics, changes, failed/passing CI, safeguards, approval and rollback notes. Never overwrite old entries to hide failed attempts.
 4. **[ORIGINAL_BUG_BACKLOG_2026-10-14.md](./ORIGINAL_BUG_BACKLOG_2026-10-14.md)** — *scope* authority. Only #16, #19, #25, #23, #17, #20, #31, #32 are active user bugs. Scanner #15 excluded.
 
-**Latest P0/P1/P2 QA-only combined source (draft PR #80):** reviewed P0 mobile/server durability + P1 playback, Auto and manager Save + P2 manual APK/16 KB checks. [Consolidated acceptance and remaining work](./V1_P0_P1_P2_QA_STATUS_2026-10-16.md). No merge, installed APK, commercial acceptance or final logo/splash integration.
+**Earlier P0/P1/P2 integration milestone (draft PR #80, now superseded by PR #83):** reviewed P0 mobile/server durability + P1 playback, Auto and manager Save + P2 manual APK/16 KB checks. [Consolidated acceptance and remaining work](./V1_P0_P1_P2_QA_STATUS_2026-10-16.md). No merge, installed APK, commercial acceptance or final logo/splash integration.
 
 **Latest P0/P1 source assembly:** `integration/archivist-v1-p0-p1-reviewed-20261016` — pending full integrated CI; imports independently reviewed stateStore P0 (#71), server catalogue P0 (#72), Android Auto chapter transition P1 (#73) on green #70. All 46 locked source files protected, no APK/release approval; see [source-level progress and limitations](./P0_P1_QA_HANDOFF_2026-10-16.md).
 
@@ -19,7 +21,7 @@ Use these four records **together**. They separate the approved app from pending
 
 **Latest unmerged source QA:** `integration/archivist-v1-auto-restore-recovery-20261016` combines PR #81 native Auto queued-progress protection and PR #82 SQLite restore crash recovery with the existing PR #80 QA baseline. See [the follow-on QA contract](./V1_NATIVE_AUTO_RESTORE_QA_2026-10-16.md). Four exact-head CI checks plus Fold/Pi/NAS/car acceptance still required; this is not a commercial release.
 
-**Current Astra engineering start (PR #65):** [Authoritative short source pointer, confirmed regression fixes, priority P0/P1 blockers and exact release acceptance](./ASTRA_START_POINT_AND_ACCEPTANCE_2026-10-16.md). The latest server manager metadata race has RED #38903515420 → GREEN #38903734355; no protected mobile/scanner code was touched. This document supersedes older handoff starting SHAs; never treat documentation as release approval.
+**Historic Astra reference (PR #65, superseded by current PR #83 handoff):** [Authoritative short source pointer, confirmed regression fixes, priority P0/P1 blockers and exact release acceptance](./ASTRA_START_POINT_AND_ACCEPTANCE_2026-10-16.md). The latest server manager metadata race has RED #38903515420 → GREEN #38903734355; no protected mobile/scanner code was touched. This document supersedes older handoff starting SHAs; never treat documentation as release approval.
 
 **Full 16 October mobile/server/Android Auto/Play robustness audit:** [Verified fixes, four proven state/integrity defects, security risks and hardware acceptance](./FINAL_COMMERCIAL_SOURCE_SWEEP_2026-10-16.md). PRs #60–#62 are isolated draft fixes; #63 is expected-RED only. The canonical and scanners/Assist are untouched. Nothing is commercial release approved.
 
