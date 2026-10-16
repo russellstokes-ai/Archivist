@@ -43,7 +43,7 @@ const sandbox={
 sandbox.$=id=>id==='atlas-rings'?rootElement:{value:''};
 const fragment=app.slice(app.indexOf('const atlasRingPalette='));
 assert(fragment.startsWith('const atlasRingPalette='),'ring function must be independently testable');
-vm.runInNewContext(fragment+"\nrenderAtlasRings({genres:[{name:'Adventure',count:3},{name:'Fantasy',count:2}],formats:[{name:'Audio',count:2}],years:[{name:'1994',count:1}]});",sandbox);
+vm.runInNewContext(fragment+"\nthis.testRingRender=renderAtlasRings;renderAtlasRings({genres:[{name:'Adventure',count:3},{name:'Fantasy',count:2}],formats:[{name:'Audio',count:2}],years:[{name:'1994',count:1}]});",sandbox);
 assert.equal(rootElement.children.length,3,'render each of the three canonical Atlas ring families');
 const genreCard=rootElement.children[0];
 const ring=genreCard.children[1].children[0],legend=genreCard.children[1].children[1];
@@ -55,6 +55,6 @@ legend.children[0].onclick();
 assert.equal(sandbox.libraryGenre,'Adventure');
 assert.equal(sandbox.shown,'library','genre must open existing filtered Library');
 rootElement.replaceChildren();
-vm.runInNewContext(fragment+"\nrenderAtlasRings({genres:[],formats:[],years:[]});",sandbox);
+sandbox.testRingRender({genres:[],formats:[],years:[]});
 assert.equal(rootElement.children.length,3,'empty library ring state must stay functional');
 console.log('PASS: published Atlas bounded graph, cover budgets, three SVG rings, genre filter and mirrored UI');
