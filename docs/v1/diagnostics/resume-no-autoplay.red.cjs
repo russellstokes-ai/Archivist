@@ -1,5 +1,5 @@
-// Intentionally RED diagnostic; do not add to the passing mobile suite until
-// the owner approves the narrow App.tsx logic repair. Executes actual functions.
+// Historical RED reproduction, now expected GREEN after the scoped repair.
+// Executes actual production functions with native filesystem/media doubles.
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'../../..');
@@ -18,6 +18,7 @@ let listener,plays=0;
 let serverRequests=0;
 const noop=()=>{};
 const context={console,Promise,Math,Error,setTimeout,clearTimeout,
+  getInfoAsync:async()=>({exists:true,size:100,isDirectory:false}),
   nowResumeGeneration:{current:0},loadCancel:{current:null},localWorkProgress:{},
   localWorkProgressKey:'fixture-progress',localWorks:[work],localBooks:[track],
   orderedLocalWork:w=>w,localSpeed:1,audioStatusError:()=>null,

@@ -1,5 +1,7 @@
 # PR #83 continuation: verified entry point
 
+**Latest:** [Resume/offline repair QA](RESUME_REPAIR_QA_2026-10-16.md) supersedes the RED-only #23/#31 source checkpoint below. The diagnostic commands now expect GREEN. Original Fold symptoms and commercial acceptance remain open. The remaining sections preserve the earlier investigation evidence.
+
 This file was **absent** at the requested starting commit
 `70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9`. Created during this continuation;
 it is not a recovered earlier handoff and does not grant source-lock exceptions.

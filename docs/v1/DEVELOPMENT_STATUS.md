@@ -4,6 +4,12 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 16 October 2026 — Resume/offline source repair continuation
+
+Latest source work is recorded in [Resume repair QA](RESUME_REPAIR_QA_2026-10-16.md) and `resume_repair_20261016` in the JSON manifest. Paused restoration and download-first dispatch now have passing actual-function regressions. Server restoration loads the requested chapter and position together, avoiding a later seek against a switched title. Missing saved tracks cannot silently select another chapter. Five App functions changed logically; canonical JSX/styles/scanner/Assist/renderer/assets remain byte-equivalent through reversible exception verification.
+
+This supersedes the earlier source-failure/approval-pending checkpoint below. It does not close the original physical-device bugs or authorize release. Device acceptance remains 0/8; full server and release work remains open.
+
 ## 16 October 2026 — Work continuation from exact PR #83
 
 **Current continuation:** see [verified start and diagnostic report](ASTRA_EXECUTION_START_PR83_2026-10-16.md) and `work_execution_20261016` in the JSON manifest. Earlier sections are dated history.
