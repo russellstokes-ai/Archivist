@@ -113,6 +113,20 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
             t.Fatalf("snapshot lost latest stored position: %+v",item)
         }
     }
+    // A profile may not use a token belonging to another profile.
+    code,one:=call(alice,"/api/sync/progress?limit=1","GET")
+    if code!=200||len(one.Snapshot)!=48||!one.HasMore{
+        t.Fatalf("initial immutable page invalid: code=%d response=%+v",code,one)
+    }
+    if code,_=call(bob,"/api/sync/progress?limit=1&offset=1&snapshot="+one.Snapshot,"GET");code!=409{
+        t.Fatalf("profile boundary crossed via progress cursor: %d",code)
+    }
+    // Changing grants invalidates a formerly permitted snapshot rather than
+    // leaking entries that are no longer accessible to this user.
+    if _,err:=a.db.Exec("DELETE FROM grants WHERE profile_id=1 AND space='Open'");err!=nil{t.Fatal(err)}
+    if code,_=call(alice,"/api/sync/progress?limit=1&offset=1&snapshot="+one.Snapshot,"GET");code!=409{
+        t.Fatalf("grant-revoked user continued stale snapshot: %d",code)
+    }
 }
 
 func TestSyncSnapshotRejectsMalformattedQueryNotFound(t *testing.T) {
