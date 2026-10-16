@@ -9,6 +9,8 @@ Use these four records **together**. They separate the approved app from pending
 3. **[DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)** — append-only dated actions, diagnostics, changes, failed/passing CI, safeguards, approval and rollback notes. Never overwrite old entries to hide failed attempts.
 4. **[ORIGINAL_BUG_BACKLOG_2026-10-14.md](./ORIGINAL_BUG_BACKLOG_2026-10-14.md)** — *scope* authority. Only #16, #19, #25, #23, #17, #20, #31, #32 are active user bugs. Scanner #15 excluded.
 
+**Astra final commercial delivery handoff:** [Risk-ordered remaining implementation, RED tests, protected boundaries and hardware release gates](./ASTRA_FINAL_COMMERCIAL_DELIVERY_HANDOFF_2026-10-16.md). Server GIF page support PR #57 has green CI, manager selection PR #58 has a green code checkpoint, and test-only PR #59 is quarantined. No original eight issues are accepted on the Fold.
+
 **16 October test gate:** [Safety, six bug diagnoses, server QA and release GO/NO-GO](./V1_SAFETY_BUGS_AND_TEST_GATE_2026-10-16.md) describes [draft integrated PR #55](https://github.com/russellstokes-ai/Archivist/pull/55) and quarantined [expected RED PR #56](https://github.com/russellstokes-ai/Archivist/pull/56). CI on PR #56 confirmed both data-loss and concurrent-progress omissions; those are not fixed or device accepted. No canonical merger or release approval.
 
 **High-risk P0 reproducibility:** `mobile/offline-checkpoint-data-loss.repro.cjs` asserts existing bytes survive a failed replacement; deliberately not a release gate until its RED failure and safe GREEN remediation have been independently exercised.
