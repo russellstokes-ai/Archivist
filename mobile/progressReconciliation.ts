@@ -84,14 +84,27 @@ export async function fetchCompleteProgressSnapshot(
   const all:RemoteProgress[]=[];
   const seen=new Set<string>();
   let offset=0;
+  let snapshotToken:string|undefined;
   for(let page=0;page<maxPages;page++){
-    const raw=await read('/api/sync/progress?limit='+limit+'&offset='+offset);
-    const response=raw as {items?:unknown;hasMore?:unknown;nextOffset?:unknown}|null;
+    const path='/api/sync/progress?limit='+limit+'&offset='+offset+
+      (snapshotToken?'&snapshot='+encodeURIComponent(snapshotToken):'');
+    const raw=await read(path);
+    const response=raw as {items?:unknown;hasMore?:unknown;nextOffset?:unknown;snapshot?:unknown}|null;
     if(!response||!Array.isArray(response.items)||typeof response.hasMore!=='boolean'
        ||!Number.isSafeInteger(response.nextOffset)
        ||response.items.length>limit || response.nextOffset!==offset+response.items.length
        ||(response.hasMore && response.items.length!==limit)){
       throw Error('Progress snapshot incomplete or malformed; preserve all offline bookmarks');
+    }
+    if(page===0){
+      // A legacy server is safe only if the entire authorised view fits into
+      // one SQL response. Multipage reads require a consistent server token.
+      if(response.hasMore &&
+         (typeof response.snapshot!=='string'||!/^[a-f0-9]{48}$/.test(response.snapshot)))
+        throw Error('Progress snapshot missing consistent cursor; preserve all offline bookmarks');
+      snapshotToken=typeof response.snapshot==='string'?response.snapshot:undefined;
+    }else if(!snapshotToken || response.snapshot!==snapshotToken){
+      throw Error('Progress snapshot changed during paging; preserve all offline bookmarks');
     }
     for(const entry of response.items){
       if(!entry||typeof entry!=='object')throw Error('Invalid server progress snapshot entry');
