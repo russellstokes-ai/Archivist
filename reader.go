@@ -60,7 +60,7 @@ func tarComicParts(f *os.File) ([]string, error) {
 		if count > maxTarComicEntries { return nil, errors.New("comic contains too many entries") }
 		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA { continue }
 		switch strings.ToLower(path.Ext(h.Name)) {
-		case ".jpg", ".jpeg", ".png", ".webp":
+		case ".jpg", ".jpeg", ".png", ".webp", ".gif":
 			parts = append(parts, h.Name)
 		}
 	}
@@ -118,7 +118,7 @@ func readerParts(z *zip.Reader, format string) ([]string, error) {
 		parts := []string{}
 		for _, f := range z.File {
 			switch strings.ToLower(path.Ext(f.Name)) {
-			case ".jpg", ".jpeg", ".png", ".webp":
+			case ".jpg", ".jpeg", ".png", ".webp", ".gif":
 				if !f.FileInfo().IsDir() {
 					parts = append(parts, f.Name)
 				}
@@ -258,7 +258,16 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 		}
 		if format == "Comic" {
 			mime := http.DetectContentType(data)
-			if mime != "image/jpeg" && mime != "image/png" && mime != "image/webp" {
+			// GIF is supported by the existing cover decoder but was absent from
+			// both ZIP and TAR page enumeration. Preflight the logical canvas
+			// before forwarding GIF bytes to memory-constrained mobile readers.
+			if mime == "image/gif" {
+				if _, _, e := safeImageData(data); e != nil {
+					fail(w, 400, errors.New("invalid comic GIF image"))
+					return
+				}
+			}
+			if mime != "image/jpeg" && mime != "image/png" && mime != "image/webp" && mime != "image/gif" {
 				fail(w, 400, errors.New("invalid comic image"))
 				return
 			}
