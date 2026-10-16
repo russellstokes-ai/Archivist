@@ -10,7 +10,7 @@
     ['isbn','ISBN','text'], ['asin','ASIN','text'],
     ['language','Language','text'], ['description','Description','textarea']
   ];
-  let activeView='library', offset=0, rows=[], selected=new Set(), requestId=0, timer=0, editing=null, candidateGeneration=0;
+  let activeView='library', offset=0, rows=[], selected=new Set(), requestId=0, timer=0, editing=null, candidateGeneration=0, editorEpoch=0;
   const selectedDetails=new Map();
   const savedViewsKey='archivist-manager-v1-views';
   const e=(tag,text,className)=>{
@@ -125,7 +125,11 @@
     $('candidate-search-button').disabled=false;
   }
   function openEditor(item){
+    // Opening a new editor invalidates even a save request for the same
+    // record from an earlier dialog lifetime.
+    editorEpoch++;
     invalidateCandidateLookup();
+    $('save-editor').disabled=false;
     editing=item;
     $('candidate-query').value=[item.title,item.author].filter(Boolean).join(' ');
     $('candidate-results').replaceChildren();
@@ -144,6 +148,7 @@
   async function saveEditor(event){
     event.preventDefault();
     if(!editing)return;
+    const target=editing,startedEpoch=editorEpoch;
     const button=$('save-editor'),changes={};
     for(const input of $('editor-fields').querySelectorAll('input,textarea')){
       if(input.value===input.dataset.initial)continue;
@@ -154,15 +159,24 @@
         changes[key]=number;
       }else{changes[key]=input.value.trim()}
     }
-    if(!Object.keys(changes).length){$('editor').close();return}
+    if(!Object.keys(changes).length){closeEditor();return}
     if(!window.confirm('Save these metadata changes? The current server marks the entire file as manually reviewed.'))return;
     button.disabled=true;notice('Saving metadata…');
     try{
-      await api('./api/assets/'+encodeURIComponent(String(editing.id))+'/metadata','PATCH',changes);
-      $('editor').close();selected.delete(editing.id);selectedDetails.delete(editing.id);editing=null;
+      await api('./api/assets/'+encodeURIComponent(String(target.id))+'/metadata','PATCH',changes);
+      // PATCH always belongs to the originally edited work, even if the user
+      // has since closed its dialog or opened a different title.
+      selected.delete(target.id);selectedDetails.delete(target.id);
+      const stillCurrent=editing===target&&editorEpoch===startedEpoch;
+      if(stillCurrent)closeEditor();
       await Promise.all([loadCatalogue(),loadSummary()]);
-      notice('Metadata saved and catalogue refreshed.');
-    }catch(err){notice(err.message,true)}finally{button.disabled=false}
+      // Never close or replace the message/fields of a newer editor.
+      if(stillCurrent&&!editing)notice('Metadata saved and catalogue refreshed.');
+    }catch(err){
+      if(editing===target&&editorEpoch===startedEpoch)notice(err.message,true);
+    }finally{
+      if(editing===target&&editorEpoch===startedEpoch)button.disabled=false;
+    }
   }
   async function loadSummary(){
     const [summary,sources]=await Promise.all([api('./api/library-summary'),api('./api/sources')]);
@@ -226,12 +240,12 @@
   $('candidate-search-button').onclick=findCandidates;
   $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};
   $('editor-form').addEventListener('submit',saveEditor);
-  function closeEditor(){invalidateCandidateLookup();$('editor').close();editing=null}
+  function closeEditor(){editorEpoch++;invalidateCandidateLookup();$('editor').close();editing=null}
   $('close-editor').onclick=closeEditor;
   $('cancel-editor').onclick=closeEditor;
   // Escape/native dialog close does not use either explicit close button.
   $('editor').addEventListener('close',()=>{
-    if(!$('editor').open){invalidateCandidateLookup();editing=null}
+    if(!$('editor').open){editorEpoch++;invalidateCandidateLookup();editing=null}
   });
   $('filters').onsubmit=event=>{event.preventDefault();offset=0;loadCatalogue()};
   $('search').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>{offset=0;loadCatalogue()},260)});
