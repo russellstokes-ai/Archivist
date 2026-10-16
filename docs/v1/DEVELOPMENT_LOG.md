@@ -95,3 +95,8 @@ Never use a blank/placeholder pass, guessed APK SHA, hypothetical merge or stale
 - **CI:** PR #54 final-head Mobile/iOS pending at this entry; the old RED commit's Mobile check was cancelled, not passed/failed. No device test or APK was produced.
 - **Decision:** draft only. Checkpoint data-loss remediation and consistent progress snapshot require independent Astra contract and rollback testing; #16/#19/#17/#20/#23/#25 remain protected/diagnostic as recorded. No canonical merge, releases or installed APK source claims.
 
+## 2026-10-16 — PR #54 P0 offline checkpoint RED reproducer staged, not fixed
+
+- **Lane:** reliability audit. Added standalone `mobile/offline-checkpoint-data-loss.repro.cjs` at commit `a33c88e869761b12cbc9c21e53391085dc83a110` to model original media sentinel, compatible stale checkpoint with mismatching server length, and a network failure before replacement. Assertion requires byte-perfect original preservation and checkpoint retention; current code has a source-confirmed destructive deletion before network failure.
+- **Evidence:** static path verified; standalone manual script **not yet executed**. File is named `.repro.cjs`, not `.test.cjs`, specifically so known unsafe behavior is not mistaken for an accepted test gate. Astra should obtain a failing reproduction, design transactional staging and verify safe green with failure/restart and real device testing. No premature deleteAsync edit.
+- **Protected scope:** reproduction uses a mocked isolated filesystem; no installed media, scanner, Assist, UI, archive renderer, Lottie, canonical source or user data touched. PR #54 still draft and unmerged.
