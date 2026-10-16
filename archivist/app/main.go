@@ -488,6 +488,7 @@ func (a *app) routes() http.Handler {
 	a.opdsRoutes(mux)
 	a.backupRoutes(mux)
 	a.atlasRoutes(mux)
+	a.serverReviewRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
