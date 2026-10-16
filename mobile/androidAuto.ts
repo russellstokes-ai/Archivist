@@ -1,5 +1,5 @@
 import {Platform} from 'react-native';
-import {deleteAsync, documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
+import {documentDirectory, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
 import type {LocalWork} from './localWorks';
 
 export type AndroidAutoProgressPoint={uri?:string;seconds?:number;complete?:boolean};
@@ -78,26 +78,50 @@ export async function persistAndroidAutoLibrary(
   await writeAsStringAsync(root+'library.json',JSON.stringify(buildAndroidAutoLibrary(works,progress,resume)));
 }
 
+// Never delete the native AtomicFile when reading it. A native writer can
+// publish a newer chapter while JS is awaiting React state persistence, and a
+// read+delete sequence would erase that newer progress as well. The phone
+// records a durable receipt in stateStore *after* all state updates complete.
 export async function consumeAndroidAutoProgress():Promise<AndroidAutoProgress|null>{
   if(Platform.OS!=='android'||!documentDirectory)return null;
   const uri=documentDirectory+'android-auto/progress.json';
-  const info=await getInfoAsync(uri).catch(()=>null);
-  if(!info?.exists)return null;
   try{
-    const value=JSON.parse(await readAsStringAsync(uri));
-    const parsed:AndroidAutoProgress={
-      version:1,
-      workKey:clean(value?.workKey),
-      trackUri:clean(value?.trackUri),
-      seconds:Math.max(0,Number(value?.seconds)||0),
-      complete:!!value?.complete,
-      updatedAt:Math.max(0,Number(value?.updatedAt)||0),
-    };
-    if(value?.version!==1||!parsed.workKey||!parsed.trackUri)return null;
-    return parsed;
+    const info=await getInfoAsync(uri);
+    if(!info.exists||('size' in info&&typeof info.size==='number'&&info.size>16384))return null;
+    const raw=await readAsStringAsync(uri);
+    if(raw.length>16384)return null;
+    const value=JSON.parse(raw);
+    if(value?.version!==1||typeof value.workKey!=='string'||typeof value.trackUri!=='string'
+       ||typeof value.seconds!=='number'||!Number.isFinite(value.seconds)
+       ||value.seconds<0||value.seconds>31536000
+       ||typeof value.complete!=='boolean'
+       ||!Number.isSafeInteger(value.updatedAt)||value.updatedAt<1)return null;
+    const workKey=clean(value.workKey),trackUri=clean(value.trackUri);
+    if(!workKey||workKey.length>512||!trackUri||trackUri.length>8192)return null;
+    return {version:1,workKey,trackUri,seconds:value.seconds,
+      complete:value.complete,updatedAt:value.updatedAt};
   }catch{
+    // A torn/busy native write is never an instruction to delete the original.
     return null;
-  }finally{
-    await deleteAsync(uri,{idempotent:true}).catch(()=>undefined);
   }
+}
+export function sameAndroidAutoProgress(a:AndroidAutoProgress|null|undefined,b:AndroidAutoProgress|null|undefined){
+  return !!a&&!!b&&a.version===b.version&&a.workKey===b.workKey&&a.trackUri===b.trackUri
+    &&a.seconds===b.seconds&&a.complete===b.complete&&a.updatedAt===b.updatedAt;
+}
+export async function acknowledgeAndroidAutoProgress(
+  progress:AndroidAutoProgress,
+  handlers:{
+    readReceipt:()=>Promise<AndroidAutoProgress|null>;
+    persistReceipt:(progress:AndroidAutoProgress)=>Promise<void>;
+    apply:(progress:AndroidAutoProgress)=>Promise<void>;
+  },
+):Promise<boolean>{
+  const receipt=await handlers.readReceipt();
+  if(sameAndroidAutoProgress(progress,receipt))return false;
+  // Strict at-least-once ordering. Any failure, including a failed receipt
+  // write, retains the native event for idempotent replay on restart.
+  await handlers.apply(progress);
+  await handlers.persistReceipt(progress);
+  return true;
 }
