@@ -193,3 +193,7 @@ Commercial NO-GO; no original bug closed. Ten-screen server, workbench, relink, 
 ## 2026-10-16 — Resume/offline restoration source repair after PR #83 draft push
 
 Continued from remote `0e5f078` (tree-identical local `9354f05`) in an isolated worktree. Reviewed retained uncommitted repair and fixed requested-chapter restoration, post-open seek race and wrong-track fallback. Both base actual-function RED diagnostics now GREEN; 130/130 mobile suites, TypeScript, 45 original source locks and reversible App UI/scanner byte restoration pass. See `RESUME_REPAIR_QA_2026-10-16.md` for exact evidence and limitations. Scoped App logic only; no renderer/layout/scanner/Assist/art changes. Physical acceptance remains 0/8, commercial NO-GO. No merge/build/install/release.
+
+## 2026-10-16 — Wider mobile source audit
+
+At owner request audited additional playback, reader, catalogue, persistence, offline and session boundaries at remote `0abf80f`. Confirmed six finding groups A1–A6 with actual-function/structural diagnostics: stale track duration, restore overriding newer Play, EPUB spine/truncation, incomplete EPUB sanitization, PDF Reduced Motion and stale catalogue pagination. See `APP_WIDE_AUDIT_2026-10-16.md`. No product source changed; not physical or exploit acceptance. Canonical protection gate passes; commercial NO-GO retained.
