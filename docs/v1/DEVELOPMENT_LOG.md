@@ -61,7 +61,7 @@ The following rows capture the existing PRs as **unmerged source-level work**, n
 - **Review queue:** New [ASTRA_REVIEW_QUEUE.md](./ASTRA_REVIEW_QUEUE.md) records **13 prioritised** source/evidence findings with file/line links, independent reproductions and protection boundaries. Main difficult issues: stale checkpoint can remove recoverable offline media (#31), unknown comic routing (#16), Atlas published-data discrepancy (#19), nontransactional progress pagination, PDF effect timing, incomplete reachability integration, Android Auto track transition, WebP raster budget, SQLite power-loss restore and missing Pi/media acceptance. Findings labelled code-confirmed vs plausible, never marked device accepted.
 - **Source protections:** No scanner, Archivist Assist, `mobile/App.tsx`, Living Book, Comic Focus, Atlas/Rewards, approved art/fonts/Lotties or extra archive source hashes changed.
 
-## 2026-10-16 — Draft PR #52: archive artwork fallback ROOT CAUSE reproduced RED → GREEN
+## 2026-10-16 — [Draft PR #52](https://github.com/russellstokes-ai/Archivist/pull/52): archive artwork fallback ROOT CAUSE reproduced RED → GREEN
 
 - **Lane:** isolated **commercial Go server** robustness fix, **not** mobile comic opening #16.
 - **Development source checkpoint:** `005979d3fdd12a24ad6fc75de871bd9366b4eb2c` (code + server regression test; later documentation commits advance the draft PR head and do not alter that checkpoint's test meaning).
