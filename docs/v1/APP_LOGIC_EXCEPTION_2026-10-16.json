@@ -1,16 +1,17 @@
 {
   "schema_version": 1,
-  "scope": "One explicitly approved logic-only replacement of mobile/App.tsx; no changes to layout, typography, scanner, Assist, Living Book, Comic Focus, Atlas/Stats/Rewards or media assets.",
+  "scope": "Exact, owner-approved logic-only App.tsx changes for offline manifest durability and Android Auto non-destructive durable acknowledgment. Player outbox integration remains separately scoped.",
   "owner_approval": "The user explicitly approved narrow logic-only App.tsx changes for durable offline manifest commits, playback-progress syncing, and Android Auto acknowledgement on 2026-10-16.",
   "baseline_path": "mobile/App.tsx",
   "original_git_blob_sha": "aacfe887ae535242a22bac414eb7cf823f190563",
-  "approved_git_blob_sha": "9a1d89b4594773e775d2ea0bac635ca823e06a51",
+  "approved_git_blob_sha": "673268014a89624e938f0ad670cf6bf7654d5f42",
   "baseline_commit": "72bbf177aecc92f31724b48c6cf11a7eddd7a216",
-  "reason": "Durable offline manifest publication before recovery checkpoint clearing; changing this monolithic file is unavoidable without changing approved UI.",
+  "reason": "User-approved offline manifest and Android Auto acknowledgment logic, with no modification to canonical presentation/scanner/Assist/renderer.",
   "allowed_behaviour": [
     "Await checkpoint persistence before acknowledging/clearing",
     "Commit completed offline-work manifest durably prior to checkpoint clearing",
-    "Never change user-facing visual or scanner/Assist code"
+    "Never change user-facing visual or scanner/Assist code",
+    "Read native Android Auto progress without deleting its AtomicFile; persist phone work/completion/Now state before a durable receipt and replay after failure"
   ],
   "release_approved": false,
   "installed_apk_approved": false,
