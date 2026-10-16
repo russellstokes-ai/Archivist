@@ -55,6 +55,7 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
         Items []syncProgressEntry `json:"items"`
         HasMore bool `json:"hasMore"`
         NextOffset int `json:"nextOffset"`
+        Snapshot string `json:"snapshot"`
     }
     call:=func(token,path,method string)(int,response){
         t.Helper()
@@ -80,7 +81,11 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
     if code!=200||len(page.Items)!=2||!page.HasMore||page.NextOffset!=2{
         t.Fatalf("first page: %d %+v",code,page)
     }
-    code,last:=call(alice,"/api/sync/progress?limit=2&offset=2","GET")
+    if len(page.Snapshot)!=48 {t.Fatalf("first page lacks immutable token: %+v",page)}
+    if invalid,_:=call(alice,"/api/sync/progress?limit=2&offset=2","GET");invalid!=409 {
+        t.Fatalf("unsafe legacy OFFSET without snapshot token accepted: %d",invalid)
+    }
+    code,last:=call(alice,"/api/sync/progress?limit=2&offset=2&snapshot="+page.Snapshot,"GET")
     if code!=200||len(last.Items)!=1||last.HasMore||last.NextOffset!=3{
         t.Fatalf("last page: %d %+v",code,last)
     }
