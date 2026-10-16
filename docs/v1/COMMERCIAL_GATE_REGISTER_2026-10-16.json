@@ -81,9 +81,17 @@
     },
     "reachable_empty_nas_mount_work_and_bookmark_loss": {
       "pr": 66,
-      "run": 38908960336,
+      "run": 38910250772,
       "state": "UNFIXED",
-      "requires": "non-destructive availability states and explicit removal/restore semantics"
+      "requires": "non-destructive availability states and explicit removal/restore semantics",
+      "note": "Both mount loss and rename failure on same newer CI, see PR #66"
+    },
+    "rename_audiobook_file_work_identity_and_bookmark_loss": {
+      "pr": 66,
+      "run": 38910250772,
+      "state": "UNFIXED",
+      "observation": "same media renamed -> old work identity absent, 222s bookmark gone",
+      "requires": "stable rename-safe logical work/edition/asset mapping without false book merges"
     }
   },
   "requirements": [
@@ -191,9 +199,10 @@
     },
     {
       "id": "SRV-04",
-      "status": "partial_ci",
+      "status": "p0_red_identity_rename",
       "gate": "Logical identities, issue order and multipart chapters",
-      "owner": "Astra"
+      "owner": "Astra",
+      "red_pr": 66
     },
     {
       "id": "SRV-05",
@@ -278,5 +287,5 @@
   "merged": false,
   "hardware_accepted": false,
   "commercial_go": false,
-  "note": "Source statuses are point-in-time, not background monitoring; RED tests use disposable fixtures, never original user data."
+  "note": "Latest PR66 RED 38910250772 proves both mount-loss and simple rename state loss using synthetic data. No production scanner changes. This is point-in-time, not a live dashboard."
 }
