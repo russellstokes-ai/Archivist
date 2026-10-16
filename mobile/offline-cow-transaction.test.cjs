@@ -9,7 +9,7 @@ const Module=require('node:module');
 const originalLoad=Module._load;
 const files=new Map(),dirs=new Set(['file:///docs/']);
 const downloads=[];
-let offlineMode=false,failMove=false,gatedDownload=null,moveCalls=0;
+let offlineMode=false,failMove=false,gatedDownload=null,moveCalls=0,denyFinalStatFor=null;
 let resumeCalls=0;
 const mediaFor=url=>url.includes('/cover')?Buffer.from('cover'):Buffer.from('THIS IS VERIFIED REPLACEMENT MEDIA').subarray(0,29);
 Module._load=function(request,parent,isMain){
@@ -17,6 +17,8 @@ Module._load=function(request,parent,isMain){
     documentDirectory:'file:///docs/',
     async makeDirectoryAsync(uri){dirs.add(uri)},
     async getInfoAsync(uri){
+      if(denyFinalStatFor && uri.startsWith(denyFinalStatFor) && !uri.includes('.archivist-partial-'))
+        throw Error('simulated filesystem permission failure while statting final media');
       const data=files.get(uri);
       return data===undefined?{exists:dirs.has(uri),isDirectory:dirs.has(uri)}
         :{exists:true,isDirectory:false,size:data.length};
@@ -47,7 +49,16 @@ Module._load=function(request,parent,isMain){
         downloads.push({url,uri,opts,wasResume:resumed});
         if(resumed)resumeCalls++;
         assert(uri.includes('.archivist-partial-'),'media bytes must only be written to a staging URI');
-        if(gatedDownload)await gatedDownload.promise;
+        if(gatedDownload){
+          const gate=gatedDownload;
+          if(gate.pauseScenario){
+            files.set(uri,mediaFor(url).subarray(0,7));
+            progress?.({totalBytesWritten:7,totalBytesExpectedToWrite:mediaFor(url).length});
+            await gate.promise;
+            return null;
+          }
+          await gate.promise;
+        }
         if(offlineMode)throw Error('simulated network failure before destination receives media');
         const bytes=mediaFor(url);
         files.set(uri,bytes);
@@ -62,7 +73,7 @@ Module._load=function(request,parent,isMain){
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true},
 }).outputText,file);
-const {downloadOfflineWork,offlineKey,offlineDirectory,removeOfflineCheckpoint}=require('./offlineLibrary.ts');
+const {downloadOfflineWork,offlineKey,offlineDirectory,removeOfflineCheckpoint,pauseActiveOfflineDownload}=require('./offlineLibrary.ts');
 const server='https://private-test.local',session={server,token:'dummy-no-real-credentials'};
 const work=id=>({id,title:'Durable audiobook',author:'Archivist QA',series:'',genre:'',space:'Test',format:'Audio'});
 const media=mediaFor('https://test/api/assets/1');
@@ -138,5 +149,46 @@ async function rejected(promise,pattern){await assert.rejects(promise,pattern)}
   const finished=await active;
   assert.equal(finished.tracks.length,1);
   assert(moveCalls>=4,'staging must publish verified chapters');
-  console.log('PASS: offline media COW immutability, failed-network recovery, failed move retention, checkpoint isolation and same-work concurrency');
+
+  // Native resumable pause must retain the private stage and its own resume
+  // token; resuming may never overwrite the original final destination.
+  const pauseWork=757;
+  let releasePause;
+  gatedDownload={pauseScenario:true,promise:new Promise(resolve=>{releasePause=resolve})};
+  const partials=[];
+  const pending=downloadOfflineWork(session,work(pauseWork),[track],undefined,{
+    onCheckpoint:cp=>partials.push(cp),
+  });
+  for(let i=0;i<15&&!downloads.some(d=>d.uri.includes('-757/'));i++)
+    await new Promise(setImmediate);
+  assert.equal(await pauseActiveOfflineDownload(),true,'active task must expose a safe pause');
+  gatedDownload=null;releasePause();
+  await assert.rejects(pending,error=>error?.name==='OfflineDownloadPausedError');
+  const partial=partials.at(-1);
+  assert.equal(partial.current.resumeData,'mock-resume');
+  assert.equal(files.get(partial.current.uri).length,7);
+  const resumedBefore=resumeCalls;
+  const resumed=await downloadOfflineWork(session,work(pauseWork),[track],undefined,{checkpoint:partial});
+  assert.equal(resumeCalls,resumedBefore+1,'matching private stage may safely use native resume token');
+  assert.equal(files.get(resumed.tracks[0].uri).toString(),media.toString());
+
+  // Filesystem errors must never be interpreted as proof that a destination
+  // is absent; the helper must preserve the checkpoint and stage, not move.
+  const uncertain=758, uncertainCheckpoints=[];
+  denyFinalStatFor=offlineDirectory(server,uncertain);
+  await assert.rejects(
+    downloadOfflineWork(session,work(uncertain),[track],undefined,{
+      onCheckpoint:cp=>uncertainCheckpoints.push(cp),
+    }),
+    /simulated filesystem permission failure/,
+  );
+  assert(uncertainCheckpoints.at(-1)?.current?.uri.includes('.archivist-partial-'));
+  assert.equal(files.has(byId(uncertain)),false);
+  denyFinalStatFor=null;
+  const recoveredAfterStat=await downloadOfflineWork(session,work(uncertain),[track],undefined,{
+    checkpoint:uncertainCheckpoints.at(-1),
+  });
+  assert.equal(files.get(recoveredAfterStat.tracks[0].uri).toString(),media.toString());
+
+  console.log('PASS: offline media copy-on-write, failed-network/move/stat recovery, native pause/resume, hostile checkpoint isolation and concurrency');
 })().catch(error=>{console.error(error);process.exitCode=1});
