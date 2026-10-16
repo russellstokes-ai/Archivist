@@ -22,7 +22,7 @@
       "package": "app.archivist.reader",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#072632"
       },
       "versionCode": 102,
@@ -53,11 +53,11 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#FBFAF7",
-          "image": "./assets/icon.png",
+          "image": "./assets/splash-icon.png",
           "imageWidth": 180,
           "resizeMode": "contain",
           "dark": {
-            "image": "./assets/icon.png",
+            "image": "./assets/splash-icon.png",
             "backgroundColor": "#07151C"
           }
         }
