@@ -142,5 +142,35 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   assert(elements.get('editor').open,'saving previous work must never close another active editor');
   assert.equal(titleField().value,'Book Beta','completed save must not erase next editor fields');
 
-  console.log('PASS: stale search and stale metadata-save completions cannot cross editor boundaries');
+  // A late failed PATCH must not flash A's error over the new B editor.
+  close();
+  open(0);
+  titleField().value='Edited Again Alpha';
+  const failedSave=saveForm.listeners.submit({preventDefault(){}});
+  assert.equal(metadataSaves.length,2);
+  close();
+  open(1);
+  const currentNotice=elements.get('notice').textContent;
+  metadataSaves[1].reject(Error('Previous work failed to save'));
+  await failedSave;await settle();
+  assert(elements.get('editor').open,'stale failed save must keep later editor open');
+  assert.equal(titleField().value,'Book Beta');
+  assert.equal(elements.get('notice').textContent,currentNotice,'late failure must not replace later editor status');
+  assert.equal(elements.get('save-editor').disabled,false);
+
+  // If there is no newer editor, the current one must display the actual
+  // failure and re-enable retry; never silently discard unsaved user fields.
+  close();
+  open(0);
+  titleField().value='Retry This Metadata';
+  const retryable=saveForm.listeners.submit({preventDefault(){}});
+  assert.equal(metadataSaves.length,3);
+  metadataSaves[2].reject(Error('Simulated provider/storage failure'));
+  await retryable;await settle();
+  assert(elements.get('editor').open,'failed save must retain unsaved current editor');
+  assert.equal(titleField().value,'Retry This Metadata');
+  assert.equal(elements.get('save-editor').disabled,false,'failed save must allow retry');
+  assert.match(elements.get('notice').textContent,/Simulated provider\/storage failure/);
+
+  console.log('PASS: stale candidate and metadata-save completions cannot cross editors; current failures are retryable');
 })().catch(error=>{console.error(error);process.exitCode=1});
