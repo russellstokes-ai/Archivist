@@ -489,10 +489,15 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
         rows,e=a.db.Query(`SELECT CAST(p.year AS TEXT),count(*) FROM (
             SELECT w.id,min(NULLIF(a.published_year,0)) AS year FROM published_works w
             JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id
-            JOIN assets a ON a.id=ea.asset_id GROUP BY w.id
-        ) p WHERE p.year IS NOT NULL GROUP BY p.year ORDER BY count(*) DESC,p.year DESC LIMIT 24`)
-        if e==nil{for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{years=append(years,map[string]any{"name":name,"count":count})}};rows.Close()}
-		availability := []map[string]any{
+            JOIN assets a ON a.id=ea.asset_id
+            WHERE (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+            GROUP BY w.id
+        ) p WHERE p.year IS NOT NULL GROUP BY p.year ORDER BY count(*) DESC,p.year DESC LIMIT 24`,who(r).Owner,who(r).ID)
+        if e!=nil {fail(w,500,e);return}
+        for rows.Next(){var name string;var count int;if e=rows.Scan(&name,&count);e!=nil{rows.Close();fail(w,500,e);return};years=append(years,map[string]any{"name":name,"count":count})}
+        if e=rows.Err();e!=nil{rows.Close();fail(w,500,e);return}
+        rows.Close()
+		availability := []map[string]any{}
 		rows, e = a.db.Query(`
 			SELECT status,count(*) FROM (
 				SELECT w.id,CASE WHEN sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0 THEN 'Available' ELSE 'Unavailable' END AS status
