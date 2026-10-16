@@ -25,3 +25,6 @@ console.log('PASS: standalone manager structural, access-control and mirrored-fi
 
 // Also execute real selection event handlers against a minimal DOM.
 require('./v1-manager-selection.test.cjs');
+
+// Delayed-provider responses must never contaminate a different open editor.
+require('./v1-manager-candidate-race.test.cjs');
