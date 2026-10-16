@@ -261,9 +261,9 @@ func (a *app) readerRoutes(mux *http.ServeMux) {
 			// GIF is supported by the existing cover decoder but was absent from
 			// both ZIP and TAR page enumeration. Preflight the logical canvas
 			// before forwarding GIF bytes to memory-constrained mobile readers.
-			if mime == "image/gif" {
+			if mime == "image/gif" || mime == "image/webp" {
 				if _, _, e := safeImageData(data); e != nil {
-					fail(w, 400, errors.New("invalid comic GIF image"))
+					fail(w, 400, errors.New("invalid comic image dimensions"))
 					return
 				}
 			}
