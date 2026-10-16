@@ -110,7 +110,9 @@ func TestPublicationRequiresReviewCoverAndExplicitOwnerAction(t *testing.T){
     if res:=publicationCall(t,a,"POST",requestPath,publish(0),"test-key",true);res.Code!=409{
         t.Fatalf("stale publish revision accepted: %d",res.Code)
     }
-    if res:=publicationCall(t,a,"GET","/api/works","","family-session",false);res.Code!=200||!strings.Contains(res.Body.String(),"A Novel"){
+    // Folder-based audio grouping keeps the logical book title from the folder,
+    // while a per-track correction preserves the edited file title separately.
+    if res:=publicationCall(t,a,"GET","/api/works","","family-session",false);res.Code!=200||!strings.Contains(res.Body.String(),"My Novel"){
         t.Fatalf("published work not shown: %d %s",res.Code,res.Body.String())
     }
     if res:=publicationCall(t,a,"GET",assetPath,"","family-session",false);res.Code!=200{
@@ -131,7 +133,7 @@ func TestPublicationRequiresReviewCoverAndExplicitOwnerAction(t *testing.T){
     if reopened.State!="staged"||reopened.Revision!=2||reopened.Files!=2||reopened.NeedsReview<1{
         t.Fatalf("new unresolved track did not reopen review: %+v",reopened)
     }
-    if res:=publicationCall(t,a,"GET","/api/works","","family-session",false);res.Code!=200||strings.Contains(res.Body.String(),"A Novel"){
+    if res:=publicationCall(t,a,"GET","/api/works","","family-session",false);res.Code!=200||strings.Contains(res.Body.String(),"My Novel"){
         t.Fatalf("unreviewed added track leaked: %d %s",res.Code,res.Body.String())
     }
     var secondID int64
