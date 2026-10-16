@@ -41,3 +41,16 @@ assert(fs.existsSync(path.join(root,'mobile/offline-library.test.cjs')),
 assert(fs.existsSync(path.join(root,'mobile/progress-reconciliation.test.cjs')),
   'Progress duplicate-identity regression is required for the integrated candidate');
 console.log('PASS: reviewed sibling server fixes and both Astra risk queues are assembled verbatim; no device acceptance claimed');
+const finalAudit=bytes('docs/v1/FINAL_COMMERCIAL_SOURCE_SWEEP_2026-10-16.md').toString('utf8');
+for(const required of ['PR #60','PR #61','PR #62','PR #63','RED #38899466348','df4c39b44394d8c512ca0298bffa7f19da356490']){
+  assert(finalAudit.includes(required),'commercial sweep must document '+required);
+}
+const manifest=JSON.parse(bytes('docs/v1/DEVELOPMENT_STATUS.json').toString('utf8'));
+const sweep=manifest.full_commercial_source_sweep_20261016;
+assert(sweep?.new_red_only_integrity_audit?.merge_allowed===false,
+  'unsafe shared state-store regression must remain quarantined');
+assert.equal(sweep?.source_lock_audit?.locked_changed,0,
+  'commercial sweep must preserve all 46 protected source locks');
+assert.equal(sweep?.mobile_original_bugs_device_accepted,0,
+  'CI cannot imply original eight issues have been device accepted');
+console.log('PASS: source-level commercial sweep and quarantined-state evidence are complete; device acceptance remains outstanding');
