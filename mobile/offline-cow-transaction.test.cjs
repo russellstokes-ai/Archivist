@@ -190,5 +190,57 @@ async function rejected(promise,pattern){await assert.rejects(promise,pattern)}
   });
   assert.equal(files.get(recoveredAfterStat.tracks[0].uri).toString(),media.toString());
 
+  // Manifest is the publication record; only a successfully awaited, durable
+  // onPublished callback may authorise deleting the recovery checkpoint.
+  const manifestSequence=[],publishedMap=new Map(),cpMap=new Map();
+  const publishId=760;
+  let injectManifestFullDisk=true;
+  const durableCheckpoint=async cp=>{
+    manifestSequence.push(cp===null?'checkpoint-cleared':'checkpoint-saved');
+    if(cp)cpMap.set(cp.key,cp);else cpMap.delete(offlineKey(server,publishId));
+  };
+  const durableManifest=async completedWork=>{
+    manifestSequence.push('manifest-write-start');
+    if(injectManifestFullDisk)throw Error('ENOSPC while committing manifest');
+    publishedMap.set(completedWork.key,completedWork);
+    manifestSequence.push('manifest-write-committed');
+  };
+  await rejected(downloadOfflineWork(session,work(publishId),[track],undefined,{
+    onCheckpoint:durableCheckpoint,onPublished:durableManifest,
+  }),/ENOSPC while committing manifest/);
+  assert.equal(manifestSequence.includes('checkpoint-cleared'),false,
+    'manifest write failure must not clear recoverable checkpoint');
+  assert(!publishedMap.has(offlineKey(server,publishId)));
+  const incomplete=cpMap.get(offlineKey(server,publishId));
+  assert(incomplete?.completedTrackIds.includes(track.id),
+    'completed file reference must remain in durable retry checkpoint');
+  assert.equal(files.get(incomplete.completedFiles[String(track.id)]).toString(),media.toString());
+  injectManifestFullDisk=false;
+  const recoveredCommit=await downloadOfflineWork(session,work(publishId),[track],undefined,{
+    checkpoint:incomplete,onCheckpoint:durableCheckpoint,onPublished:durableManifest,
+  });
+  assert.deepEqual(publishedMap.get(recoveredCommit.key),recoveredCommit,
+    'completed published manifest must be durably saved before checkpoint is forgotten');
+  assert.equal(manifestSequence.at(-2),'manifest-write-committed');
+  assert.equal(manifestSequence.at(-1),'checkpoint-cleared');
+  assert.equal(cpMap.has(recoveredCommit.key),false);
+
+  // Rejected checkpoint deletion after manifest commit is safe: the caller can
+  // retry the unchanged files, without pretending that data was lost.
+  const checkpointId=761,checkpointLog=[];
+  await rejected(downloadOfflineWork(session,work(checkpointId),[track],undefined,{
+    onPublished:async complete=>{
+      publishedMap.set(complete.key,complete);
+      checkpointLog.push('manifest-written');
+    },
+    onCheckpoint:async cp=>{
+      if(cp===null)throw Error('checkpoint disk write denied');
+      checkpointLog.push('checkpoint-retained');
+    },
+  }),/checkpoint disk write denied/);
+  assert(checkpointLog.includes('manifest-written'));
+  assert.equal(checkpointLog.includes('checkpoint-cleared'),false);
+  assert(publishedMap.has(offlineKey(server,checkpointId)));
+
   console.log('PASS: offline media copy-on-write, failed-network/move/stat recovery, native pause/resume, hostile checkpoint isolation and concurrency');
 })().catch(error=>{console.error(error);process.exitCode=1});
