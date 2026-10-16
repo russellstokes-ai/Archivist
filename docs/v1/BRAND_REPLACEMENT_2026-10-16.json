@@ -1,41 +1,41 @@
 {
-  "authorization": "Russell, 2026-10-16: This for both the app and server the old icon is retired in all places",
+  "authorization": "Russell, 2026-10-16: This for both the app and server the old icon is retired in all places; latest 37867.png with our teal palette background, 16 October 2026",
   "source": "branding/archivist-emblem-master.png",
   "locks": [
     {
       "path": "archivist/app/web/assets/archivist-app-icon.png",
       "original_git_blob_sha": "f1c18bc119a98b6101fb9614c962a0cb21713b6c",
-      "approved_git_blob_sha": "38cb0c4841e109b325fea6e991b2e90c47d1a58c"
+      "approved_git_blob_sha": "d127caee603eba9d97362a13e55c20cafde11d36"
     },
     {
       "path": "archivist/app/web/assets/archivist-primary-logo.png",
       "original_git_blob_sha": "3dd724c49b34ae1495b2bbaa6465b5931b885424",
-      "approved_git_blob_sha": "38cb0c4841e109b325fea6e991b2e90c47d1a58c"
+      "approved_git_blob_sha": "88ba222df5662b041ff697601171bf0ada20ff38"
     },
     {
       "path": "archivist/icon.png",
       "original_git_blob_sha": "bd26f992468e4b4a8fe831cd9ce253c447faa810",
-      "approved_git_blob_sha": "759334a761e7b759e53e7d6a93636310027c1dee"
+      "approved_git_blob_sha": "7fc1da446c020b438152493d20f2a0420f1a68a0"
     },
     {
       "path": "archivist/logo.png",
       "original_git_blob_sha": "3dd724c49b34ae1495b2bbaa6465b5931b885424",
-      "approved_git_blob_sha": "38cb0c4841e109b325fea6e991b2e90c47d1a58c"
+      "approved_git_blob_sha": "88ba222df5662b041ff697601171bf0ada20ff38"
     },
     {
       "path": "mobile/assets/icon.png",
       "original_git_blob_sha": "f1c18bc119a98b6101fb9614c962a0cb21713b6c",
-      "approved_git_blob_sha": "e51b9f8334424934c159df232546f0c453bc68c4"
+      "approved_git_blob_sha": "c8ff2f418851f88a00cf0f94f30474afb5d64beb"
     },
     {
       "path": "web/assets/archivist-app-icon.png",
       "original_git_blob_sha": "f1c18bc119a98b6101fb9614c962a0cb21713b6c",
-      "approved_git_blob_sha": "38cb0c4841e109b325fea6e991b2e90c47d1a58c"
+      "approved_git_blob_sha": "d127caee603eba9d97362a13e55c20cafde11d36"
     },
     {
       "path": "web/assets/archivist-primary-logo.png",
       "original_git_blob_sha": "3dd724c49b34ae1495b2bbaa6465b5931b885424",
-      "approved_git_blob_sha": "38cb0c4841e109b325fea6e991b2e90c47d1a58c"
+      "approved_git_blob_sha": "88ba222df5662b041ff697601171bf0ada20ff38"
     }
   ]
 }
