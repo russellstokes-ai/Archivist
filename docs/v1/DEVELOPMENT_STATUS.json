@@ -902,5 +902,49 @@
       19,
       17
     ]
+  },
+  "server_parity_pr83_chat_20261016": {
+    "scope": "PR #83 server parity incremental source delivery, subordinate to existing master development plan",
+    "initial_verified_sha": "99e97c7715b3502bda0c750926e9c4e44dacf722",
+    "source_and_ci_checkpoint": "d778e88f6f2485b9f4b0fdfbe32dafd23a565311",
+    "later_independent_mobile_splash_sha": "a9984f3f758c07a63b9d37d935fe9b0ac47879e5",
+    "work_commits": [
+      "8ba223d185e85de84e7e86119727e5e0d55e1baf",
+      "3c6b6f646769fbd326c648aa580f7420c49ab643",
+      "1d2653467a1d73bba2c638b04a9b0d3d819c4560",
+      "8fd51ee5651490d7b156f753711aa20e75a10925",
+      "d778e88f6f2485b9f4b0fdfbe32dafd23a565311"
+    ],
+    "validation": {
+      "server_check": "success",
+      "server_check_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38973855856/job/117218430783",
+      "arm64_smoke": "success",
+      "arm64_smoke_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38973855856/job/117218430351",
+      "pi_install": "not_tested",
+      "owner_device": "not_tested"
+    },
+    "completed": [
+      "owner-only paginated logical work review API",
+      "work-level review count alongside existing file-level count",
+      "Assist book-first screen linked to existing candidate/metadata editor",
+      "canonical web dark palette and approved teal-background emblem",
+      "root-packaged Go/web source parity",
+      "synthetic grouped Assist browser and Go regressions"
+    ],
+    "remaining": [
+      "explicit work publish state and published-only Library/Atlas",
+      "Atlas full cover graph and ring chart parity with performance limit",
+      "field-level provenance and locks",
+      "cover selection and persistent cover cache",
+      "bulk metadata operations and approved file move/relink/undo",
+      "resumable job pause/cancel/resume",
+      "real Pi ingress/Docker/NAS and power-cut acceptance",
+      "mobile/Android Auto owner acceptance"
+    ],
+    "commercially_complete": false,
+    "published": false,
+    "merged": false,
+    "apk_built": false,
+    "mobile_scanner_assist_changed_by_this_work": false
   }
 }
