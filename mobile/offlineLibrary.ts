@@ -1,4 +1,5 @@
 import {
+  copyAsync,
   createDownloadResumable,
   deleteAsync,
   documentDirectory,
@@ -7,6 +8,7 @@ import {
   getInfoAsync,
   getTotalDiskCapacityAsync,
   makeDirectoryAsync,
+  moveAsync,
   readDirectoryAsync,
 } from 'expo-file-system/legacy';
 import {Session} from './connection';
@@ -50,10 +52,17 @@ export type OfflineDownloadCheckpoint={
   title?:string;
   directory:string;
   completedTrackIds:number[];
+  // New copy-on-write downloads may publish to an alternate immutable media URI.
+  // These are verified file pointers, never permission to remove another file.
+  completedFiles?:Record<string,string>;
   completedBytes?:number;
   current?:{
     trackId:number;
     uri:string;
+    // New-format current.uri always identifies a uniquely owned staging file.
+    // Legacy version-one direct-media checkpoints are migrated by copying only.
+    targetUri?:string;
+    expectedSize?:number;
     resumeData?:string;
     bytesWritten:number;
   };
@@ -87,6 +96,8 @@ let activeDownload:{
   checkpoint:OfflineDownloadCheckpoint;
   onCheckpoint?:(checkpoint:OfflineDownloadCheckpoint|null)=>Promise<void>|void;
 }|null=null;
+// There must never be two writers to the same offline work within a process.
+const activeWorkDownloads=new Set<string>();
 
 export class OfflineDownloadPausedError extends Error {
   constructor(){
@@ -150,6 +161,36 @@ async function existingSize(uri:string){
   return info.exists && 'size' in info && typeof info.size==='number' ? info.size : -1;
 }
 
+// A media file already visible in an offline manifest is immutable. Replacement
+// bytes are downloaded beside it and receive a different final name. No code in
+// the download path invokes deleteAsync on a published media URI.
+function attemptToken(){
+  return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);
+}
+function isOwnedVersionUri(candidate:string,standard:string,ext:string){
+  const stem=standard.slice(0,-ext.length)+'-v';
+  if(!candidate.startsWith(stem)||!candidate.endsWith(ext))return false;
+  return /^[a-z0-9-]{8,64}$/.test(candidate.slice(stem.length,-ext.length));
+}
+function isOwnedStageUri(candidate:string,target:string){
+  const prefix=target+'.archivist-partial-';
+  return candidate.startsWith(prefix)&&/^[a-z0-9-]{8,64}$/.test(candidate.slice(prefix.length));
+}
+async function newStagedUri(target:string){
+  for(let i=0;i<8;i++){
+    const uri=target+'.archivist-partial-'+attemptToken();
+    if(await existingSize(uri)<0)return uri;
+  }
+  throw Error('Could not allocate a distinct offline staging file. Existing files have not been changed.');
+}
+async function newVersionUri(standard:string,ext:string){
+  for(let i=0;i<8;i++){
+    const uri=standard.slice(0,-ext.length)+'-v'+attemptToken()+ext;
+    if(await existingSize(uri)<0)return uri;
+  }
+  throw Error('Could not allocate a distinct offline replacement file. Existing files have not been changed.');
+}
+
 async function persistCheckpoint(
   checkpoint:OfflineDownloadCheckpoint,
   callback?:(checkpoint:OfflineDownloadCheckpoint|null)=>Promise<void>|void,
@@ -174,15 +215,16 @@ export async function pauseActiveOfflineDownload(){
 }
 
 export async function removeOfflineCheckpoint(checkpoint:OfflineDownloadCheckpoint){
-  // Discard only the unfinished direct-child track; previously completed
-  // chapters may also be referenced by an already published offline work.
-  // Never interpret a persisted directory or arbitrary URI as deletion authority.
-  const dir=offlineDirectory(checkpoint.server,checkpoint.workId);
+  // Version-one direct-file checkpoints cannot prove a file belongs to an
+  // unfinished operation. Never delete those files, even on Discard partial.
+  // Only new, internally named staging files are safe to discard.
   const current=checkpoint.current;
   if(!current || checkpoint.completedTrackIds.includes(current.trackId))return;
-  if(!current.uri.startsWith(dir))return;
-  const filename=current.uri.slice(dir.length);
-  if(!/^\d{3}-[a-z0-9._-]+\.[a-z0-9]{1,8}$/i.test(filename))return;
+  const dir=offlineDirectory(checkpoint.server,checkpoint.workId);
+  const target=current.targetUri;
+  if(!target || !target.startsWith(dir) || directoryOf(target)!==dir)return;
+  if(!/^\d{3}-[a-z0-9._-]+\.[a-z0-9]{1,8}$/i.test(target.slice(dir.length)))return;
+  if(!isOwnedStageUri(current.uri,target))return;
   await deleteAsync(current.uri,{idempotent:true});
 }
 
@@ -211,16 +253,24 @@ export async function downloadOfflineWork(
 
   const key=offlineKey(session.server,work.id);
   const dir=offlineDirectory(session.server,work.id);
+  if(activeWorkDownloads.has(key))
+    throw Error('This offline work is already downloading. Pause or complete that download before retrying.');
+  activeWorkDownloads.add(key);
+  try{
   const compatibleCheckpoint=options?.checkpoint?.version===1 &&
     options.checkpoint.key===key &&
     options.checkpoint.server===session.server &&
     options.checkpoint.workId===work.id;
   const checkpoint:OfflineDownloadCheckpoint=compatibleCheckpoint
-    ? {...options!.checkpoint!,completedTrackIds:[...options!.checkpoint!.completedTrackIds],current:options!.checkpoint!.current?{...options!.checkpoint!.current}:undefined}
-    : {version:1,key,server:session.server,workId:work.id,title:work.title,directory:dir,completedTrackIds:[],updatedAt:new Date().toISOString()};
+    ? {...options!.checkpoint!,completedTrackIds:[...options!.checkpoint!.completedTrackIds],
+      completedFiles:{...(options!.checkpoint!.completedFiles||{})},
+      current:options!.checkpoint!.current?{...options!.checkpoint!.current}:undefined}
+    : {version:1,key,server:session.server,workId:work.id,title:work.title,directory:dir,
+      completedTrackIds:[],completedFiles:{},updatedAt:new Date().toISOString()};
 
-  // Never erase a complete download just because a fresh request has no
-  // checkpoint. Check every pre-existing track before touching anything.
+  // Never let an old complete file disappear because a new server advertises
+  // another length. Without a checkpoint, require explicit user removal for
+  // ambiguous files. A compatible checkpoint may stage an alternate version.
   if(!compatibleCheckpoint){
     for(let index=0;index<available.length;index++){
       const track=available[index];
@@ -244,19 +294,23 @@ export async function downloadOfflineWork(
     const track=available[index];
     const ext=extensionFor(track);
     const base=safePart((track.name||track.title||('track-'+(index+1))).replace(/\.[^.]+$/,''));
-    const uri=dir+String(index+1).padStart(3,'0')+'-'+base+ext;
+    const standard=dir+String(index+1).padStart(3,'0')+'-'+base+ext;
+    const recorded=checkpoint.completedFiles?.[String(track.id)];
+    // Checkpoint-provided URI is read-only and only trusted inside the derived
+    // work directory with the exact generated filename convention.
+    const candidate=recorded && (recorded===standard||isOwnedVersionUri(recorded,standard,ext))
+      ? recorded : standard;
+    const size=await existingSize(candidate);
     const expected=Math.max(0,Number(track.size)||0);
-    const size=await existingSize(uri);
-    const reusable=size>=0 && ((expected>0 && size===expected) || (expected===0 && completed.has(track.id)));
+    const reusable=size>0 && ((expected>0&&size===expected) || (expected===0&&completed.has(track.id)));
     if(reusable){
       completed.add(track.id);
-      written+=Math.max(0,size);
-      resultTracks.push({...track,uri,localFormat:localFormat(track)});
+      written+=size;
+      checkpoint.completedFiles![String(track.id)]=candidate;
+      resultTracks.push({...track,uri:candidate,localFormat:localFormat(track)});
     }else{
       completed.delete(track.id);
-      if(size>=0 && (!checkpoint.current || checkpoint.current.trackId!==track.id || !checkpoint.current.resumeData)){
-        await deleteAsync(uri,{idempotent:true}).catch(()=>undefined);
-      }
+      delete checkpoint.completedFiles![String(track.id)];
     }
   }
   checkpoint.title=work.title;
@@ -282,57 +336,102 @@ export async function downloadOfflineWork(
       if(completed.has(track.id))continue;
       const ext=extensionFor(track);
       const base=safePart((track.name||track.title||('track-'+(index+1))).replace(/\.[^.]+$/,''));
-      const uri=dir+String(index+1).padStart(3,'0')+'-'+base+ext;
-      const partialSize=await existingSize(uri);
-      let resumeData=checkpoint.current?.trackId===track.id && checkpoint.current.uri===uri
-        ? checkpoint.current.resumeData
-        : undefined;
-      if(resumeData && partialSize<0)resumeData=undefined;
-      if(!resumeData)await deleteAsync(uri,{idempotent:true}).catch(()=>undefined);
-      checkpoint.current={
-        trackId:track.id,
-        uri,
-        resumeData,
-        bytesWritten:resumeData && checkpoint.current?.trackId===track.id ? Math.max(0,checkpoint.current.bytesWritten||0) : 0,
-      };
+      const standard=dir+String(index+1).padStart(3,'0')+'-'+base+ext;
+      const expected=Math.max(0,Number(track.size)||0);
+      const prior=checkpoint.current?.trackId===track.id?checkpoint.current:undefined;
+      const standardSize=await existingSize(standard);
+      let target=standard;
+      if(prior?.targetUri && (prior.targetUri===standard||isOwnedVersionUri(prior.targetUri,standard,ext))){
+        target=prior.targetUri;
+      }else if(standardSize>=0){
+        // Legacy partials or old media already occupy the original filename.
+        // Publish into a unique versioned URI; never overwrite prior bytes.
+        target=await newVersionUri(standard,ext);
+      }
+
+      let stage:string;
+      let resumeData:string|undefined;
+      let bytesWritten=0;
+      const staged=prior?.targetUri===target && prior.uri!==target
+        && isOwnedStageUri(prior.uri,target) && (prior.expectedSize===undefined||prior.expectedSize===expected)
+        && await existingSize(prior.uri)>=0;
+      if(staged){
+        stage=prior!.uri;
+        const stageSize=await existingSize(stage);
+        // Never replay a resume token with a different stage/file position.
+        if(prior!.resumeData && prior!.bytesWritten===stageSize && (expected===0||stageSize<=expected)){
+          resumeData=prior!.resumeData;bytesWritten=stageSize;
+        }else{
+          stage=await newStagedUri(target);
+        }
+      }else{
+        stage=await newStagedUri(target);
+        // Legacy v1 checkpoints wrote a partial directly to its final media
+        // name. Copy it into private staging; never mutate the original URI.
+        if(prior?.uri===standard && prior.resumeData && standardSize>0 &&
+          prior.bytesWritten===standardSize && (expected===0||standardSize<expected)){
+          await copyAsync({from:standard,to:stage});
+          if(await existingSize(stage)!==standardSize)
+            throw Error('Failed to copy legacy offline checkpoint into safe staging.');
+          resumeData=prior.resumeData;bytesWritten=standardSize;
+        }
+      }
+      checkpoint.current={trackId:track.id,uri:stage,targetUri:target,expectedSize:expected,
+        resumeData,bytesWritten};
       await persistCheckpoint(checkpoint,options?.onCheckpoint);
 
       const baseWritten=written;
       const task=createDownloadResumable(
         session.server+'/api/assets/'+track.id,
-        uri,
+        stage,
         {headers:{Authorization:'Bearer '+session.token}},
         progress=>{
           if(checkpoint.current?.trackId!==track.id)return;
           checkpoint.current.bytesWritten=Math.max(0,progress.totalBytesWritten||0);
-          const total=knownTotal || baseWritten + Math.max(progress.totalBytesExpectedToWrite||0,progress.totalBytesWritten||0);
+          const total=knownTotal || baseWritten+Math.max(progress.totalBytesExpectedToWrite||0,progress.totalBytesWritten||0);
           onProgress?.(baseWritten+checkpoint.current.bytesWritten,total);
         },
         resumeData,
       );
       activeDownload={task,checkpoint,onCheckpoint:options?.onCheckpoint};
-      const result=resumeData ? await task.resumeAsync() : await task.downloadAsync();
+      const result=resumeData?await task.resumeAsync():await task.downloadAsync();
       if(activeDownload?.task===task)activeDownload=null;
       if(!result)throw new OfflineDownloadPausedError();
       if(result.status<200||result.status>=300)throw Error('Download failed with HTTP '+result.status+'.');
-      const size=await existingSize(uri);
-      if(size<0)throw Error('Download completed but the local file is missing.');
-      // A server may report no Content-Length. HTTP 200 alone must never
-      // publish an empty local file as a completed playable chapter.
-      // Leave any partial bytes/checkpoint in place for safe recovery.
-      if(size===0)throw Error('Downloaded file is empty. Tap Resume download to retry this file.');
-      const expected=Math.max(0,Number(track.size)||0);
-      if(expected>0 && size!==expected){
-        await deleteAsync(uri,{idempotent:true}).catch(()=>undefined);
+      const size=await existingSize(stage);
+      if(size<=0)throw Error(size===0?'Downloaded file is empty. Tap Resume download to retry this file.':
+        'Download completed but the staged local file is missing.');
+      if(expected>0 && size!==expected)
         throw Error('Downloaded file size did not match the server copy. Tap Resume download to retry this file.');
+      if(size>maxOfflineWorkBytes || written+size>maxOfflineWorkBytes)
+        throw Error('Offline download exceeded the 8 GB safety limit.');
+      if((track.format==='Comic'||track.format==='Ebook') && size>maxArchiveReaderBytes)
+        throw Error('Downloaded ebook/comic exceeded the 256 MB offline reader safety limit.');
+      if(track.format==='PDF' && size>maxPdfBytes)
+        throw Error('Downloaded PDF exceeded the 4 GB offline safety limit.');
+
+      // An old published file, a legacy partial and another concurrent writer
+      // must never be overwritten, even if promotion is interrupted.
+      const targetSize=await existingSize(target);
+      if(targetSize>=0){
+        if(expected>0 && targetSize===expected && prior?.targetUri===target){
+          // Crash after a successful stage->target rename, before checkpoint save.
+          // Do not overwrite the already-published file on recovery.
+        }else{
+          throw Error('Offline destination already exists. Existing media was kept intact; retry after reviewing storage.');
+        }
+      }else{
+        await moveAsync({from:stage,to:target});
+        if(await existingSize(target)!==size)
+          throw Error('Offline staging promotion could not be verified. The previous media remains intact.');
       }
       written+=size;
-      if(written>maxOfflineWorkBytes)throw Error('Offline download exceeded the 8 GB safety limit.');
       completed.add(track.id);
+      checkpoint.completedFiles![String(track.id)]=target;
       checkpoint.completedTrackIds=[...completed];
       checkpoint.completedBytes=written;
       checkpoint.current=undefined;
-      resultTracks.push({...track,uri,localFormat:localFormat(track)});
+      resultTracks.push({...track,uri:target,localFormat:localFormat(track)});
       await persistCheckpoint(checkpoint,options?.onCheckpoint);
       onProgress?.(written,knownTotal||written);
     }
@@ -378,6 +477,9 @@ export async function downloadOfflineWork(
     activeDownload=null;
     await persistCheckpoint(checkpoint,options?.onCheckpoint).catch(()=>undefined);
     throw error;
+  }
+  }finally{
+    activeWorkDownloads.delete(key);
   }
 }
 
