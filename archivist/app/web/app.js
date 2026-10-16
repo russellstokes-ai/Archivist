@@ -251,6 +251,7 @@ async function start(){
   await loadSources();await loadLibrarySummary();await loadBooks(false);
   $('setup').hidden=true;$('unlock').hidden=true;$('nav').hidden=false;
   document.querySelector('[data-page="settings"]').hidden=!currentProfile.owner;
+  $('assist-link').hidden=!currentProfile.owner;
   show('library');window.dispatchEvent(new Event('archivist-ready'))
 }
 async function boot(){try{await start()}catch(e){try{const setup=await api('./setup/status');$('setup').hidden=setup.configured;$('unlock').hidden=!setup.configured}catch(err){message(err.message)}}}
@@ -294,7 +295,7 @@ $('work-detail').addEventListener('click',e=>{if(e.target===$('work-detail'))hid
 $('close-player').onclick=()=>{$('audio').pause();$('audio').removeAttribute('src');$('audio').load();$('player').hidden=true};
 $('audio').onerror=()=>message('Unable to play this file. Check availability and browser codec support.');
 
-$('theme').value=localStorage.getItem('archivist-theme')||'system';
+$('theme').value=localStorage.getItem('archivist-theme')||'dark';
 function theme(){document.documentElement.style.colorScheme=$('theme').value==='system'?'light dark':$('theme').value;localStorage.setItem('archivist-theme',$('theme').value)}
 $('theme').onchange=theme;theme();
 
