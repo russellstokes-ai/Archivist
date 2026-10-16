@@ -71,9 +71,9 @@ assert(/Archivist Assist/i.test(status)&&/canonical/i.test(status));
 // Independently trace the draft chain and ensure the current head is the
 // exact final development PR, not a markdown-only/docs branch.
 const prs=manifest.draft_pull_requests;
-assert.deepEqual(prs.map(x=>x.number),[40,41,42,43,44,45,46,47,48,49,50]);
+assert.deepEqual(prs.map(x=>x.number),[40,41,42,43,44,45,46,47,48,49,50,51,52]);
 assert.equal(prs.at(-1).head_sha,manifest.current_unmerged_stack.head_sha);
-assert.equal(manifest.current_unmerged_stack.last_pr,50);
+assert.equal(manifest.current_unmerged_stack.last_pr,52);
 for(const item of prs){
   assert.equal(item.status,'draft_unmerged','Do not record an unapproved merge: '+item.number);
   assert.equal(item.device_accepted,false);
@@ -88,6 +88,17 @@ assert(log.includes(manifest.source_references.original_canonical.sha));
 assert(status.includes(manifest.source_references.protected_development.sha));
 assert(status.includes('DEVELOPMENT_LOG.md'));
 assert(status.includes('DEVELOPMENT_STATUS.json'));
+const astra=read('docs/v1/ASTRA_REVIEW_QUEUE.md');
+assert.equal(manifest.audit_review_queue.count,13);
+assert.equal(manifest.audit_review_queue.file,'docs/v1/ASTRA_REVIEW_QUEUE.md');
+assert(status.includes('ASTRA_REVIEW_QUEUE.md'));
+assert(log.includes('ASTRA_REVIEW_QUEUE.md'));
+for(let i=1;i<=13;i++)assert(astra.includes('ASTRA-'+String(i).padStart(2,'0')),
+  'Astra item not documented: '+i);
+assert(/\b[Aa]ssist\b/.test(astra)&&/scanner/i.test(astra),
+  'Astra review must preserve scanners and Assist');
+assert(manifest.commercial_work.some(x=>x.id==='server_cover_recovery'&&x.prs.includes(52)));
+assert.strictEqual(manifest.current_unmerged_stack.comparison.protected_paths_net_changed,0);
 for(const run of Object.values(manifest.ci_latest_head)){
   if(typeof run!=='object'||!run||!('run_id'in run))continue;
   assert.equal(run.status,'passed');
