@@ -39,23 +39,36 @@ const {OfflineProgressOutbox,planProgressReplay,fetchCompleteProgressSnapshot}=m
     {kind:'reading',id:88,part:2,fraction:0.1,revision:1,complete:false},
   ];
   const history=[];
+  const snapshotToken='a'.repeat(48);
   const loaded=await fetchCompleteProgressSnapshot(async path=>{
     history.push(path);
     const offset=Number(new URL('https://local.test'+path).searchParams.get('offset'));
     return {items:batch.slice(offset,offset+2),hasMore:offset+2<batch.length,
-      nextOffset:Math.min(offset+2,batch.length)};
+      nextOffset:Math.min(offset+2,batch.length),snapshot:snapshotToken};
   },2);
   assert.equal(loaded.length,3,'complete paginated snapshot should contain all progress types');
   assert.equal(history.length,2);
+  assert(!new URL('https://local.test'+history[0]).searchParams.has('snapshot'),'first page must create snapshot');
+  assert.equal(new URL('https://local.test'+history[1]).searchParams.get('snapshot'),snapshotToken,
+    'second page must retain exact initial immutable snapshot token');
   assert.equal(planProgressReplay(await a.list(),loaded,false)[0].action,'upload');
   await assert.rejects(fetchCompleteProgressSnapshot(async()=>({
     items:[batch[0]],hasMore:true,nextOffset:1,
   }),2),/snapshot incomplete/);
   await assert.rejects(fetchCompleteProgressSnapshot(async path=>{
     const offset=Number(new URL('https://local.test'+path).searchParams.get('offset'));
-    return offset===0?{items:[batch[0]],hasMore:true,nextOffset:1}
-      :{items:[batch[0]],hasMore:false,nextOffset:2};
+    return offset===0?{items:[batch[0]],hasMore:true,nextOffset:1,snapshot:snapshotToken}
+      :{items:[batch[0]],hasMore:false,nextOffset:2,snapshot:snapshotToken};
   },1),/Duplicate server progress/);
+  await assert.rejects(fetchCompleteProgressSnapshot(async path=>{
+    const offset=Number(new URL('https://local.test'+path).searchParams.get('offset'));
+    return offset===0?{items:[batch[0]],hasMore:true,nextOffset:1,snapshot:snapshotToken}
+      :{items:[batch[1]],hasMore:false,nextOffset:2,snapshot:'b'.repeat(48)};
+  },1),/snapshot changed/,'switching snapshot token mid-pagination must fail closed');
+  await assert.rejects(fetchCompleteProgressSnapshot(async()=>({
+    items:[batch[0]],hasMore:true,nextOffset:1,
+  }),1),/snapshot missing/,'legacy offset-only paging cannot be trusted as complete');
+
   await assert.rejects(fetchCompleteProgressSnapshot(async()=>({
     items:[],hasMore:true,nextOffset:0,
   }),1),/snapshot incomplete/);

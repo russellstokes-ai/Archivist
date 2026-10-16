@@ -8,6 +8,7 @@ import (
     "path/filepath"
     "strings"
     "testing"
+    "time"
 )
 
 func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
@@ -55,6 +56,7 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
         Items []syncProgressEntry `json:"items"`
         HasMore bool `json:"hasMore"`
         NextOffset int `json:"nextOffset"`
+        Snapshot string `json:"snapshot"`
     }
     call:=func(token,path,method string)(int,response){
         t.Helper()
@@ -80,11 +82,24 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
     if code!=200||len(page.Items)!=2||!page.HasMore||page.NextOffset!=2{
         t.Fatalf("first page: %d %+v",code,page)
     }
-    code,last:=call(alice,"/api/sync/progress?limit=2&offset=2","GET")
+    if len(page.Snapshot)!=48 {t.Fatalf("first page lacks immutable token: %+v",page)}
+    if invalid,_:=call(alice,"/api/sync/progress?limit=2&offset=2","GET");invalid!=409 {
+        t.Fatalf("unsafe legacy OFFSET without snapshot token accepted: %d",invalid)
+    }
+    code,last:=call(alice,"/api/sync/progress?limit=2&offset=2&snapshot="+page.Snapshot,"GET")
     if code!=200||len(last.Items)!=1||last.HasMore||last.NextOffset!=3{
         t.Fatalf("last page: %d %+v",code,last)
     }
     all:=append(page.Items,last.Items...)
+    // An expired cursor cannot silently produce an independent later page.
+    a.syncMu.Lock()
+    cached:=a.syncSnapshots[page.Snapshot]
+    if cached!=nil{cached.expires=time.Now().Add(-time.Second)}
+    a.syncMu.Unlock()
+    if cached==nil{t.Fatal("multipage view was not cached")}
+    if expired,_:=call(alice,"/api/sync/progress?limit=2&offset=2&snapshot="+page.Snapshot,"GET");expired!=409{
+        t.Fatalf("expired progress snapshot continued: %d",expired)
+    }
     kinds:=map[string]bool{}
     for _,item:=range all{
         kinds[item.Kind]=true
@@ -107,6 +122,20 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
            item.Kind=="listening" && item.Seconds!=15{
             t.Fatalf("snapshot lost latest stored position: %+v",item)
         }
+    }
+    // A profile may not use a token belonging to another profile.
+    code,one:=call(alice,"/api/sync/progress?limit=1","GET")
+    if code!=200||len(one.Snapshot)!=48||!one.HasMore{
+        t.Fatalf("initial immutable page invalid: code=%d response=%+v",code,one)
+    }
+    if code,_=call(bob,"/api/sync/progress?limit=1&offset=1&snapshot="+one.Snapshot,"GET");code!=409{
+        t.Fatalf("profile boundary crossed via progress cursor: %d",code)
+    }
+    // Changing grants invalidates a formerly permitted snapshot rather than
+    // leaking entries that are no longer accessible to this user.
+    if _,err:=a.db.Exec("DELETE FROM grants WHERE profile_id=1 AND space='Open'");err!=nil{t.Fatal(err)}
+    if code,_=call(alice,"/api/sync/progress?limit=1&offset=1&snapshot="+one.Snapshot,"GET");code!=409{
+        t.Fatalf("grant-revoked user continued stale snapshot: %d",code)
     }
 }
 
