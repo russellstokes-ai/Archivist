@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-16",
+  "document": "docs/v1/PLAN_BUG_COMPLETENESS_AUDIT_2026-10-16.md",
+  "repo": "russellstokes-ai/Archivist",
+  "verified_code_parent": {
+    "pr": 65,
+    "commit": "2808a4c8a004b6fd9d2b55c07de535b9eb19b4c2",
+    "canonical": "df4c39b44394d8c512ca0298bffa7f19da356490",
+    "protected_parent": "72bbf177aecc92f31724b48c6cf11a7eddd7a216",
+    "protected_sha_locks": 46
+  },
+  "issue_scope": {
+    "approved_eight": [
+      16,
+      19,
+      25,
+      23,
+      17,
+      20,
+      31,
+      32
+    ],
+    "excluded_scanner": [
+      15
+    ],
+    "legacy_scope_requires_separate_approval": [
+      18,
+      21,
+      22,
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ],
+    "commercial_feature_streams": [
+      33,
+      35,
+      36
+    ],
+    "phase2_optional": [
+      34,
+      37,
+      38,
+      39
+    ],
+    "historical_references": [
+      6,
+      11,
+      12
+    ],
+    "open_issue_count_as_observed": 28,
+    "owner_device_accepted": 0
+  },
+  "red_proven": {
+    "offline_chapter_deletion": {
+      "pr": 56,
+      "run": 38892078091,
+      "state": "UNFIXED",
+      "requires": "immutable staged download with verified commit"
+    },
+    "progress_pagination_omission": {
+      "pr": 56,
+      "run": 38892078164,
+      "state": "UNFIXED",
+      "requires": "coherent profile-scoped snapshot or invalidation"
+    },
+    "state_last_good_backup": {
+      "pr": 63,
+      "run": 38899466348,
+      "state": "UNFIXED",
+      "requires": "transactional crash-safe state writes"
+    },
+    "state_key_collision": {
+      "pr": 63,
+      "run": 38899466348,
+      "state": "UNFIXED",
+      "requires": "collision-free versioned legacy migration"
+    },
+    "reachable_empty_nas_mount_work_and_bookmark_loss": {
+      "pr": 66,
+      "run": 38910250772,
+      "state": "UNFIXED",
+      "requires": "non-destructive availability states and explicit removal/restore semantics",
+      "note": "Both mount loss and rename failure on same newer CI, see PR #66"
+    },
+    "rename_audiobook_file_work_identity_and_bookmark_loss": {
+      "pr": 66,
+      "run": 38910250772,
+      "state": "UNFIXED",
+      "observation": "same media renamed -> old work identity absent, 222s bookmark gone",
+      "requires": "stable rename-safe logical work/edition/asset mapping without false book merges"
+    }
+  },
+  "requirements": [
+    {
+      "id": "MOB-01",
+      "status": "device_pending",
+      "gate": "Real phone/Fold media, reading and browsing",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-02",
+      "status": "protected_hardware_pending",
+      "gate": "Scanner/Assist metadata and logical-work integrity without changes",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-03",
+      "status": "open_original_bug",
+      "issue": 16,
+      "gate": "2000AD + CBZ/CBR/CBT/comic PDFs",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-04",
+      "status": "open_original_bug",
+      "issue": 19,
+      "gate": "Atlas published works/count reconciliation",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-05",
+      "status": "open_original_bug",
+      "issue": 25,
+      "gate": "Living Book first-render stability",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-06",
+      "status": "open_original_bug",
+      "issue": 23,
+      "gate": "Promptless position resume without autoplay",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-07",
+      "status": "open_original_bug",
+      "issue": 17,
+      "gate": "Five-control optical centering",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-08",
+      "status": "open_original_bug",
+      "issue": 20,
+      "gate": "One-shot rewards Lottie stability",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-09",
+      "status": "draft_ci_plus_p0_red",
+      "issue": 31,
+      "gate": "Local-first intact media and crash-safe download",
+      "owner": "Astra",
+      "red_pr": 56
+    },
+    {
+      "id": "MOB-10",
+      "status": "draft_ci_device_pending",
+      "issue": 32,
+      "gate": "PDF A-B-A page and document isolation",
+      "owner": "Astra"
+    },
+    {
+      "id": "MOB-11",
+      "status": "p0_red",
+      "gate": "State last-good backup and distinct key namespace",
+      "owner": "Astra",
+      "red_pr": 63
+    },
+    {
+      "id": "MOB-12",
+      "status": "p1_red",
+      "gate": "Cross-device state journal and snapshot consistency",
+      "owner": "Astra",
+      "red_pr": 56
+    },
+    {
+      "id": "SRV-01",
+      "status": "ci_smoke_hardware_pending",
+      "gate": "Same-core Docker+HA+NAS+Pi",
+      "owner": "Astra"
+    },
+    {
+      "id": "SRV-02",
+      "status": "p0_red",
+      "gate": "Empty-mount and partial NAS loss preserves works/progress",
+      "owner": "Astra",
+      "red_pr": 66
+    },
+    {
+      "id": "SRV-03",
+      "status": "implementation_gap",
+      "gate": "Truthy scan cancellation and safe retry",
+      "owner": "Astra"
+    },
+    {
+      "id": "SRV-04",
+      "status": "p0_red_identity_rename",
+      "gate": "Logical identities, issue order and multipart chapters",
+      "owner": "Astra",
+      "red_pr": 66
+    },
+    {
+      "id": "SRV-05",
+      "status": "implementation_gap",
+      "gate": "S1-S10 advanced admin metadata/grid/bulk/undo",
+      "owner": "Astra"
+    },
+    {
+      "id": "SRV-06",
+      "status": "policy_decision_needed",
+      "gate": "Per-profile space grant vs global all-library User",
+      "owner": "Owner+Astra"
+    },
+    {
+      "id": "SRV-07",
+      "status": "security_acceptance_needed",
+      "gate": "Admin credential throttling, LAN/HTTPS and sessions",
+      "owner": "Astra"
+    },
+    {
+      "id": "SRV-08",
+      "status": "ci_pass_real_media_pending",
+      "gate": "RAR/CBT/EPUB/WebP real media and OPDS interoperability",
+      "owner": "Astra"
+    },
+    {
+      "id": "SRV-09",
+      "status": "durability_not_verified",
+      "gate": "SQLite WAL/fsync/migration and restore fault injection",
+      "owner": "Astra"
+    },
+    {
+      "id": "SRV-10",
+      "status": "partial_ci",
+      "gate": "Move preview/hash/undo cross-volume safety",
+      "owner": "Astra"
+    },
+    {
+      "id": "SRV-11",
+      "status": "partial_implementation",
+      "gate": "Full screen S1–S10 accessible server management",
+      "owner": "Astra"
+    },
+    {
+      "id": "AUTO-01",
+      "status": "service_ci_missing_categories",
+      "gate": "Media3 browse, Recent/Downloads policy",
+      "owner": "Owner+Astra"
+    },
+    {
+      "id": "AUTO-02",
+      "status": "source_risk",
+      "gate": "Durable handoff acknowledgement, no lost progress",
+      "owner": "Astra"
+    },
+    {
+      "id": "AUTO-03",
+      "status": "real_vehicle_pending",
+      "gate": "Voice, audio focus, transitions, offline car",
+      "owner": "Astra"
+    },
+    {
+      "id": "PLAY-01",
+      "status": "not_delivered",
+      "gate": "Production signed AAB, target API, 16KB ELF and update testing",
+      "owner": "Astra+Owner"
+    },
+    {
+      "id": "PLAY-02",
+      "status": "not_delivered",
+      "gate": "Privacy, Data Safety, permissions, licensing, app review",
+      "owner": "Astra+Owner"
+    },
+    {
+      "id": "PLAY-03",
+      "status": "not_delivered",
+      "gate": "Exact SHA provenance and Fold/Pi/car release acceptance",
+      "owner": "Astra+Owner"
+    }
+  ],
+  "protected_change_approval_required": true,
+  "merged": false,
+  "hardware_accepted": false,
+  "commercial_go": false,
+  "note": "Latest PR66 RED 38910250772 proves both mount-loss and simple rename state loss using synthetic data. No production scanner changes. This is point-in-time, not a live dashboard."
+}
