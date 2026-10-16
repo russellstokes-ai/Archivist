@@ -483,5 +483,80 @@
     "current_project_status": "draft_development_not_commercial_release",
     "release_permitted": false,
     "server_workflow_path_triggers_fixed": true
+  },
+  "full_commercial_source_sweep_20261016": {
+    "code_head_before_docs": "6c18f71d66f965caeb3f9368f0168e99671b745d",
+    "branch": "fix/archivist-mobile-request-origin-guard-20261016",
+    "scope_file": "docs/v1/FINAL_COMMERCIAL_SOURCE_SWEEP_2026-10-16.md",
+    "source_lock_audit": {
+      "base": "72bbf177aecc92f31724b48c6cf11a7eddd7a216",
+      "ahead": 196,
+      "behind": 0,
+      "changed_files": 91,
+      "canonical_locked_count": 46,
+      "locked_changed": 0
+    },
+    "completed_draft_fixes": [
+      {
+        "pr": 60,
+        "name": "Safe WebP canvas preflight for server covers + comic pages",
+        "red_server": 38897554558,
+        "green_server": 38897898492,
+        "green_mobile": 38897898493,
+        "green_ios": 38897898486,
+        "code_sha": "4ad02f79b658952a024a965861d67d8b33641166",
+        "real_device_accepted": false
+      },
+      {
+        "pr": 61,
+        "name": "Authorised work-based OPDS pagination no 200-work/1500-row truncation",
+        "red_server": 38898474617,
+        "green_server": 38898678752,
+        "code_sha": "554ee0727d8d9029b947baebd0599a6a8efe40c0",
+        "real_device_accepted": false
+      },
+      {
+        "pr": 62,
+        "name": "Validate rehydrated server origin and canonical route before bearer fetch",
+        "red_mobile": 38898995633,
+        "green_mobile": 38899288967,
+        "ios_run": 38899288994,
+        "ios_conclusion": "in_progress_at_last_checked",
+        "code_sha": "6c18f71d66f965caeb3f9368f0168e99671b745d",
+        "real_device_accepted": false
+      }
+    ],
+    "reviewed_cover_blob_change": {
+      "pr52": "9d082c9468b927e58dd8644d8b42aa1ce94d52ce",
+      "pr60": "f6381164fb432eb6e50d53199ea1de141b6e7667",
+      "pr52_fallback_test_unchanged": "43ee302da3ea6893c33260305f879079814172fa",
+      "integration_guard_updated": true,
+      "canonical_locks_unchanged": true
+    },
+    "new_red_only_integrity_audit": {
+      "pr": 63,
+      "test": "mobile/state-store-integrity-red.test.cjs",
+      "mobile_red_run": 38899466348,
+      "findings": [
+        "Valid .bak overwritten with corrupted primary before failed ENOSPC write",
+        "Distinct persistence keys map to same filename"
+      ],
+      "actual_owner_data_incident": false,
+      "production_source_changed": false,
+      "protected_scanner_assist_dependency": true,
+      "merge_allowed": false
+    },
+    "prior_unfixed_integrity": {
+      "pr": 56,
+      "offline_red_run": 38892078091,
+      "paged_progress_red_run": 38892078164
+    },
+    "mobile_original_bugs_device_accepted": 0,
+    "server_production_accepted": false,
+    "pi_nas_accepted": false,
+    "android_auto_vehicle_accepted": false,
+    "google_play_approved": false,
+    "status": "late_stage_draft_only_not_commercial_quality",
+    "release_allowed": false
   }
 }

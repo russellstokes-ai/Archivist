@@ -1,6 +1,19 @@
 # ARCHIVIST v1.0 — ASTRA FINAL COMMERCIAL DELIVERY HANDOFF
 **16 October 2026 · Working plan, not release approval**
 
+## Late 16 October: mandatory final safety sweep before Astra changes source
+
+Read [FINAL_COMMERCIAL_SOURCE_SWEEP_2026-10-16.md](./FINAL_COMMERCIAL_SOURCE_SWEEP_2026-10-16.md) **after** the earlier 15/16 Oct ledgers; it is the latest detailed source review. In addition to existing #56 P0 offline deletion / P1 silent progress loss:
+
+- **PR #60 (integrated-safe draft)** fixed WebP RIFF/VP8/VP8L/VP8X decoded-canvas bombs in Go covers and comic image responses. RED [#38897554558](https://github.com/russellstokes-ai/Archivist/actions/runs/38897554558), GREEN [Server #38897898492](https://github.com/russellstokes-ai/Archivist/actions/runs/38897898492), [Mobile #38897898493](https://github.com/russellstokes-ai/Archivist/actions/runs/38897898493), [iOS #38897898486](https://github.com/russellstokes-ai/Archivist/actions/runs/38897898486). Deliberately advanced reviewed root/packaged `covers.go` blob to `f6381164fb432eb6e50d53199ea1de141b6e7667` and re-locked integrated candidate test; #52 fallback test unchanged. Never restore old unbounded WebP code.
+- **PR #61 (integrated-safe draft)** fixed OPDS silent 200-work and 1500-chapter truncations with stable work cursor and per-page DB consistency, RED [#38898474617](https://github.com/russellstokes-ai/Archivist/actions/runs/38898474617), GREEN [#38898678752](https://github.com/russellstokes-ai/Archivist/actions/runs/38898678752).
+- **PR #62 (integrated-safe draft)** fixed session-origin rehydration and URL-path normalization before adding bearer Authorization, RED [#38898995633](https://github.com/russellstokes-ai/Archivist/actions/runs/38898995633), GREEN Mobile [#38899288967](https://github.com/russellstokes-ai/Archivist/actions/runs/38899288967); iOS #38899288994 was still running when logged.
+- **PR #63 (quarantined expected-RED, never merge unfixed)**: general stateStore protects scanner/metadata/reader state and therefore requires extraordinary migration care. Mobile CI [#38899466348](https://github.com/russellstokes-ai/Archivist/actions/runs/38899466348) **reproduced two new source defects**: a corrupt current JSON overwrites its only good .bak before ENOSPC, and key names `archivist/a:b` vs `archivist:a/b` map to the same persisted filename. Build verified staged/crash-safe copies and a versioned collision-free key mapping with lossless old data migration, before proposing any shared helper edit; explicitly preserve the frozen scanner and Assist state.
+- **Additional Astra focus:** `ArchivistAutoService.kt` transition callback saves `player.currentMediaItem/currentPosition` after the new track becomes active; verify old chapter position misattribution and shutdown executor durability on native Media3; don't speculatively rewrite.
+- Official 16 Oct Play policy verified: new apps target API 36, native 16 KB compatibility, driver distraction/car audio guidance, conditional closed testing for eligible new personal accounts. Reconfirm submission gates at release. All six protected original mobile bugs remain open without physical Fold acceptance, and #31/#32 remain draft-only.
+
+**Source integration priority:** latest safe development draft chain goes from #55 → #57 → #58 → #60 → #61 → #62. #56, #59 and #63 are separate RED-only audit branches. **Do not merge source blindly**; retain new #60 validated `covers.go` and all 46 unchanged canonical locks. Test on expendable data only.
+
 ## 0. Mandate and verified starting position
 
 Finish Archivist to an actually demonstrable commercial standard for **Android phones and Fold closed/open, optional Home Assistant / Raspberry Pi 4 4 GB SSD server, standalone Docker/NAS, audiobook Android Auto, and Google Play**. Use current source and tests; avoid rewrites and token-wasting recapitulation. Keep the app locally useful without any server. Never claim a feature accepted from CI alone.

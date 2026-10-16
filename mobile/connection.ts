@@ -43,12 +43,20 @@ export function validateServer(raw: string, development = false): string {
 }
 export async function request(session: Session, path: string, method = 'GET', data?: unknown, timeoutMs = 15000) {
   if (!path.startsWith('/api/') && !['/session', '/logout', '/setup/status', '/healthz'].includes(path)) throw Error('Invalid API path');
+  // A session may have been restored from disk rather than created by the
+  // add-server screen. Revalidate its origin BEFORE adding bearer credentials.
+  // Also reject dot-segment or encoded path normalization which could bypass
+  // the API-only route restriction.
+  const origin=validateServer(session.server);
+  const url=new URL(path,origin);
+  const originalPath=path.split(/[?#]/,1)[0];
+  if(url.origin!==origin || url.pathname!==originalPath || url.hash)throw Error('Invalid API path');
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), Math.max(1000, Math.min(timeoutMs, 300000)));
   try {
     let response: Response;
     try {
-      response = await fetch(session.server + path, {
+      response = await fetch(url.href, {
       method, redirect: 'error', signal: abort.signal,
       headers: {Authorization: 'Bearer ' + session.token, 'Content-Type': 'application/json', 'X-Archivist-Action': '1'},
       body: data === undefined ? undefined : JSON.stringify(data),
