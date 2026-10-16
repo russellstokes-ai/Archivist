@@ -368,7 +368,8 @@
     "review_plan": "docs/v1/PR52_PR53_RECONCILIATION_2026-10-16.md",
     "open_high_risks": [
       "P0 checkpoint can delete existing offline media before replacement",
-      "P1 LIMIT/OFFSET progress snapshot can silently omit records under concurrent mutation"
+      "P1 LIMIT/OFFSET progress snapshot can silently omit records under concurrent mutation",
+      "P0 executable, standalone failed-network preservation assertion prepared but not yet run: mobile/offline-checkpoint-data-loss.repro.cjs"
     ],
     "isolated_guard": {
       "pr": 54,
@@ -384,7 +385,9 @@
       "red_ci": "superseded_test_commit_cancelled_not_verified",
       "final_ci": "pending",
       "state": "draft_unmerged",
-      "device_accepted": false
+      "device_accepted": false,
+      "repro_file": "mobile/offline-checkpoint-data-loss.repro.cjs",
+      "repro_status": "source_based_expected_red_manual_execution_pending"
     }
   }
 }
