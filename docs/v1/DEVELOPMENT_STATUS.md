@@ -4,6 +4,13 @@
 
 > **IMPORTANT: No development work in PRs #40–#59 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 16 October 2026 — final RED/GREEN server audit evidence
+
+- [PR #59 pre-fix RED Server #38896163057](https://github.com/russellstokes-ai/Archivist/actions/runs/38896163057) failed at the intended handler assertion: actual TypeError 'choose is not a function' on a server manager row checkbox. This was a real runtime defect in the old web/manage.js, not a fake-DOM boot error. The isolated PR remains quarantined and must not merge.
+- [PR #58 corrected Server #38896160314](https://github.com/russellstokes-ai/Archivist/actions/runs/38896160314) **passed** at production-code/test/workflow commit 61576ec4d58dd37a400512fa21e08200bfd55336, including native ARM64, Go AMD64 server, exact mirrored web scripts, the live JavaScript selection/deselection regression, Docker persistence and Home Assistant smoke. The workflow was updated to run when either manager contract test file changes. The only later changes are documentation until the final exact-head source/CI check.
+- [PR #57 Server #38894595898](https://github.com/russellstokes-ai/Archivist/actions/runs/38894595898) **passed** following the actual CBZ/CBT GIF reader RED test [#38894498595](https://github.com/russellstokes-ai/Archivist/actions/runs/38894498595).
+- **Still outstanding:** PR #56 proofs of destructive offline checkpoint handling and inconsistent paginated server progress remain unsolved; six protected mobile bugs remain unaccepted; commercial server manager/Auto/Play readiness is not established by these server regressions. No branch merged or deployed.
+
 ## 16 October 2026 — Commercial server finishing and Astra handoff
 
 - **[PR #57](https://github.com/russellstokes-ai/Archivist/pull/57), server GIF comics:** before correction ZIP/CBZ and TAR/CBT readers excluded GIF pages even though valid GIF covers were supported. Authenticated read regressions first failed HTTP 400 on [Server #38894498595](https://github.com/russellstokes-ai/Archivist/actions/runs/38894498595). Mirrored server readers now admit GIF pages with bounded declared raster preflight; [Server #38894595898](https://github.com/russellstokes-ai/Archivist/actions/runs/38894595898) passed. Does not resolve mobile issue #16.
