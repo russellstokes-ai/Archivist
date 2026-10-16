@@ -10,6 +10,11 @@ on:
       - 'mobile/package.json'
       - 'mobile/app.json'
       - 'mobile/native-patch.test.cjs'
+      - 'mobile/qa-signing-contract.test.cjs'
+      - 'scripts/check-16kb-native-libs.cjs'
+      - 'scripts/test-check-16kb-native-libs.cjs'
+      - '.github/workflows/android-apk.yml'
+      - '.github/scripts/android-emulator-smoke.sh'
       - 'mobile/sprint10-android-auto.test.cjs'
       - 'mobile/sprint10-final-release-gate.test.cjs'
       - '.github/workflows/android-check.yml'
@@ -19,6 +24,11 @@ on:
       - 'mobile/package.json'
       - 'mobile/app.json'
       - 'mobile/native-patch.test.cjs'
+      - 'mobile/qa-signing-contract.test.cjs'
+      - 'scripts/check-16kb-native-libs.cjs'
+      - 'scripts/test-check-16kb-native-libs.cjs'
+      - '.github/workflows/android-apk.yml'
+      - '.github/scripts/android-emulator-smoke.sh'
       - 'mobile/sprint10-android-auto.test.cjs'
       - 'mobile/sprint10-final-release-gate.test.cjs'
       - '.github/workflows/android-check.yml'
@@ -69,9 +79,12 @@ jobs:
           npm install --no-audit --no-fund
           node harden-forge.cjs
 
-      - name: Native contract tests
+      - name: Native and QA-signing contract tests
         working-directory: mobile
-        run: node native-patch.test.cjs
+        run: |
+          node native-patch.test.cjs
+          node qa-signing-contract.test.cjs
+          node ../scripts/test-check-16kb-native-libs.cjs
 
       - name: Compile Android Kotlin
         working-directory: mobile/android
