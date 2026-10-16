@@ -102,8 +102,21 @@ paint();requestAnimationFrame(tick);
 }
 
 export function LivingBookCanvas(props:LivingBookCanvasProps){
+  return <LivingBookInstance key={JSON.stringify([props.title,props.author,props.coverUri])} {...props}/>;
+}
+
+function LivingBookInstance(props:LivingBookCanvasProps){
   const ref=useRef<WebView>(null);
   const [ready,setReady]=useState(false);
+  const [reloadKey,setReloadKey]=useState(0);
+  const attempts=useRef(0);
+  const failed=useRef(false);
+  const recover=()=>{
+    if(failed.current)return;
+    failed.current=true;setReady(false);
+    if(attempts.current>=2)return;
+    attempts.current++;setReloadKey(key=>key+1);
+  };
   const initialHtml=useMemo(()=>rendererHtml({
     title:props.title,author:props.author,chapter:props.chapter||'',number:props.number||1,
     phase:props.phase,direction:props.direction,skipping:props.skipping,reduceMotion:props.reduceMotion,
@@ -127,9 +140,10 @@ export function LivingBookCanvas(props:LivingBookCanvasProps){
   },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);
 
   return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none">
-    <WebView ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
+    <WebView key={reloadKey} ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
       bounces={false} overScrollMode="never" androidLayerType="hardware" style={styles.web} containerStyle={styles.container}
-      onLoadEnd={()=>setReady(true)} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+      onLoadStart={()=>{failed.current=false;setReady(false)}} onLoadEnd={()=>{if(!failed.current)setReady(true)}}
+      onError={recover} onRenderProcessGone={recover} onContentProcessDidTerminate={recover} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
       setSupportMultipleWindows={false} accessible={false} importantForAccessibility="no-hide-descendants"/>
   </View>;
 }

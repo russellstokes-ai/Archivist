@@ -26,6 +26,8 @@ const {buildLocalReaderDocument} = require('./localReader.ts');
 
 (async () => {
   let zip = new JSZip();
+  zip.file('META-INF/container.xml','<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>');
+  zip.file('OPS/book.opf','<package><manifest><item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>');
   zip.file('OPS/chapter1.xhtml', '<html><body><h1>Dune</h1><p onclick="bad()">Arrakis</p><script>bad()</script></body></html>');
   files.set('book.epub', await zip.generateAsync({type: 'base64'}));
   const epub = await buildLocalReaderDocument('book.epub', 'EPUB', 'Dune');

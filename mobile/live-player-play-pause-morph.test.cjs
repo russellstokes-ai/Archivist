@@ -54,7 +54,7 @@ assert.match(app,/reducedMotion=\{reduceMotion\}/);
 assert.match(app,/!transportReady \? <ArchivistBookLoader/,'Keep existing loading behavior');
 assert.match(app,/style=\{\(\{pressed\}\)=>\[styles.playButton/,'Preserve exact button geometry');
 assert.equal((app.match(/<LivePlayerPlayPauseMorph/g)||[]).length,1,'Exactly one glyph instance in existing play button');
-const book=p('LivingBookCanvas.tsx');
+const book=require('../scripts/repair-original-source.cjs')('mobile/LivingBookCanvas.tsx');
 const blob=crypto.createHash('sha1').update('blob '+Buffer.byteLength(book)+'\0').update(book).digest('hex');
 assert.equal(blob,'3f2b6f2b91dbe77e71f65c02a8696b372d2126fd','Original inherited Living Book untouched');
 console.log('PASS: approved source checksum, two colour variants, no second ring, bidirectional nonlooping morph, one button, book unchanged');

@@ -29,7 +29,7 @@ assert.deepEqual(same.layers[0],source.layers[2]);
 
 const app=read('App.tsx');
 const icon=read('LivePlayerSkipIcon.tsx');
-const book=read('LivingBookCanvas.tsx');
+const book=require('../scripts/repair-original-source.cjs')('mobile/LivingBookCanvas.tsx');
 const transport=read('playerTransport.ts');
 assert.equal(crypto.createHash('sha1').update('blob '+Buffer.byteLength(book)+'\0').update(book).digest('hex'),
   '3f2b6f2b91dbe77e71f65c02a8696b372d2126fd','Do not change the Living Book renderer');

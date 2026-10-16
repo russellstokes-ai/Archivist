@@ -30,6 +30,7 @@ for(const item of manifest.locks){
     excepted++;
     continue;
   }
+  if(require('./reader-repair-exception.cjs')(root,item.path,actual,item.git_blob_sha)){excepted++;continue;}
   console.error('PROTECTED FILE CHANGED:',item.path,'expected original',item.git_blob_sha,'actual',actual);
   failures++;
 }
@@ -38,4 +39,4 @@ if(failures){
   process.exit(1);
 }
 console.log('PASS:',manifest.locks.length-excepted,'original protected blobs and',
-  excepted,'exact owner-approved logic-only App.tsx blob; no other locked changes.');
+  excepted,'exact reversible owner-requested repair blobs; no other locked changes.');

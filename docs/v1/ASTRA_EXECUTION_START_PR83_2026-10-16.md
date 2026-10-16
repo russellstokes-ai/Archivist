@@ -1,5 +1,7 @@
 # PR #83 continuation: verified entry point
 
+**Newest checkpoint:** [Consolidated repair/test-build report](CONSOLIDATED_REPAIR_QA_2026-10-16.md). A1–A6 repaired; lifecycle candidates included; server test builds produced; APK manual trigger pending. Earlier RED-only entries below are historical.
+
 **Latest:** [Resume/offline repair QA](RESUME_REPAIR_QA_2026-10-16.md) supersedes the RED-only #23/#31 source checkpoint below. The diagnostic commands now expect GREEN. Original Fold symptoms and commercial acceptance remain open. The remaining sections preserve the earlier investigation evidence.
 
 This file was **absent** at the requested starting commit

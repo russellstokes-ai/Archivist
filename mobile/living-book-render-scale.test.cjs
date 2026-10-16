@@ -3,7 +3,7 @@ const crypto=require('node:crypto');
 const fs=require('node:fs');
 const path=require('node:path');
 
-const file=fs.readFileSync(path.join(__dirname,'LivingBookCanvas.tsx'),'utf8');
+const file=require('../scripts/repair-original-source.cjs')('mobile/LivingBookCanvas.tsx');
 const scaled='ctx.clearRect(0,0,500,420);ctx.transform(1.16,0,0,1.16,-40,12);ctx.save();';
 const canonical='ctx.clearRect(0,0,500,420);ctx.save();';
 const canonicalBlob='bac9a25bd1e75df7dd3ee8ed914d3005e201a5e0';

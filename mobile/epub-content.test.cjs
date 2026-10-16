@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('fs'),ts=require('typescript'),Module=require('module');
+require.extensions['.ts']=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
+const {buildEpubContent}=require('./epubContent.ts');
+function fixture(){const files={};const put=(name,text)=>files[name]={name,dir:false,async:async()=>text};put('META-INF/container.xml','<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>');const ids=Array.from({length:85},(_,i)=>i).reverse();put('OPS/book.opf','<package><manifest>'+ids.map(i=>`<item id="c${i}" href="text/c${i}.xhtml" media-type="application/xhtml+xml"/>`).join('')+'</manifest><spine>'+ids.map(i=>`<itemref idref="c${i}"/>`).join('')+'</spine></package>');for(const i of ids)put(`OPS/text/c${i}.xhtml`,`<html><body><p>CHAPTER_${i}_END</p></body></html>`);return {files,put};}
+(async()=>{
+ const f=fixture();f.put('OPS/text/c84.xhtml','<html><body><p>CHAPTER_84_END</p><img src="../images/p.png" onerror=alert(1)><iframe src="https://evil.invalid"/><a href="javascript:alert(1)">safe text</a><img src="https://evil.invalid/x"/></body></html>');f.put('OPS/images/p.png','iVBORw0KGgoAAAANSUhEUg==');
+ const html=await buildEpubContent(f);assert(html.indexOf('CHAPTER_84_END')<html.indexOf('CHAPTER_0_END'));assert(html.includes('CHAPTER_0_END'));assert(html.includes('data:image/png;base64,'));assert(!/onerror|onload|iframe|<svg|javascript:|https:/.test(html));assert(html.includes('safe text'));
+ const missing=fixture();delete missing.files['OPS/text/c10.xhtml'];await assert.rejects(()=>buildEpubContent(missing),/missing/i);
+ const bad=fixture();bad.put('OPS/book.opf','<!DOCTYPE x [<!ENTITY x SYSTEM "file:///etc/passwd">]><package/>');await assert.rejects(()=>buildEpubContent(bad),/DOCTYPE|entity/i);
+ const traversal=fixture();traversal.put('META-INF/container.xml','<container><rootfiles><rootfile full-path="../../outside.opf"/></rootfiles></container>');await assert.rejects(()=>buildEpubContent(traversal),/path/i);
+ const math=fixture();math.put('OPS/text/c84.xhtml','<html><body><math><mi>E</mi><mo>=</mo><mi>mc</mi><mn>2</mn></math></body></html>');await assert.rejects(()=>buildEpubContent(math),/MathML|unsupported/i);
+ const svg=fixture();svg.put('OPS/text/c84.xhtml','<html><body><svg><path d="M0 0"/></svg></body></html>');await assert.rejects(()=>buildEpubContent(svg),/SVG|unsupported/i);
+ const resource=fixture();const opf=await resource.files['OPS/book.opf'].async('text');resource.put('OPS/book.opf',opf.replace('</manifest>','<item id="pic" href="images/cover" media-type="image/png"/></manifest>'));resource.put('OPS/images/cover','iVBORw0KGgoAAAANSUhEUg==');resource.put('OPS/text/c84.xhtml','<html><body><img src="../images/cover"/></body></html>');assert((await buildEpubContent(resource)).includes('data:image/png;base64,'));
+ console.log('PASS: 85 spine sections, safe raster resource resolution, active-content removal, missing/unsafe content refusal');
+})().catch(e=>{console.error(e);process.exitCode=1});

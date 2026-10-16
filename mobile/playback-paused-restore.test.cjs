@@ -42,3 +42,14 @@ const {Playback}=require('./playback.ts');
  assert.equal(c.state.seconds,8);assert.equal(plays,0);
  console.log('PASS: rapid restore switch rejects stale load completion');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+(async()=>{
+ let response;const pending=new Promise(r=>response=r);let loads=0,plays=0;
+ const api=async p=>p.endsWith('/listening')?pending:{asset:1,seconds:4,revision:1,complete:false};
+ const c=new Playback(api,{load:async()=>loads++,play:()=>plays++,pause(){},seek:async()=>{},speed(){}},()=>{});
+ const opening=c.open(1);await Promise.resolve();await Promise.resolve();
+ assert.equal(typeof c.cancelPending,'function','reader selection must invalidate pending controller work');c.cancelPending();
+ response({progressURL:'/api/editions/1/progress',tracks:[{id:1,title:'Old',available:true}]});await opening;
+ assert.equal(loads,0);assert.equal(plays,0);
+ console.log('PASS: reader selection cancels pending server playback');
+})().catch(e=>{console.error(e);process.exitCode=1});

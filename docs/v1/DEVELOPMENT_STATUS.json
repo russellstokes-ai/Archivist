@@ -864,5 +864,43 @@
     "product_changes": false,
     "physical_acceptance": false,
     "decision": "NO-GO"
+  },
+  "consolidated_repair_20261016": {
+    "base_sha": "a48d3470ca0c1692e422e6ed757679be6865277b",
+    "report": "docs/v1/CONSOLIDATED_REPAIR_QA_2026-10-16.md",
+    "audit_source_fixes": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "A5",
+      "A6"
+    ],
+    "lifecycle_source_candidates": [
+      20,
+      25
+    ],
+    "original_device_acceptance": 0,
+    "mobile_tests": "134/134 passed",
+    "typecheck": "passed",
+    "root_go": "passed",
+    "packaged_go": "passed",
+    "server_builds": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "server_runtime_smoke": "amd64 disposable DB health passed",
+    "apk": "manual workflow dispatch required; not built",
+    "unchanged_original_locks": 44,
+    "reversible_exceptions": [
+      "mobile/App.tsx",
+      "mobile/localReader.ts"
+    ],
+    "decision": "NO-GO",
+    "remaining_original_diagnostics": [
+      16,
+      19,
+      17
+    ]
   }
 }

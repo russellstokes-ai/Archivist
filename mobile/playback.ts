@@ -65,7 +65,7 @@ export class Playback {
   private async load(index: number, seconds = 0, generation = this.generation, autoplay = true) {
     const track = this.state.tracks[index];
     if (!track?.available) throw Error('Track unavailable. Your saved position has been retained.');
-    this.state.loading = true; this.state.playing = false; this.emit();
+    this.state.loading = true; this.state.playing = false; this.state.duration = 0; this.emit();
     await this.audio.load(track, Math.max(0, seconds));
     if (generation !== this.generation) return;
     this.state.index = index; this.state.seconds = Math.max(0, seconds); this.complete = false;
@@ -178,6 +178,10 @@ export class Playback {
     if (this.state.sleepAt!==null && Date.now()>=this.state.sleepAt) {
       this.sleepExpired=true;this.state.sleepAt=null;this.audio.sleep?.(0);this.audio.pause();this.state.playing=false;void this.save();this.emit();
     }
+  }
+  cancelPending() {
+    ++this.generation;
+    if(this.state.loading){this.audio.pause();this.state.loading=false;this.state.playing=false;this.emit();}
   }
   async stop() { ++this.generation;this.audio.sleep?.(0);this.audio.pause();await this.save();this.state.tracks=[];this.progressURL='';this.state.playing=false;this.state.sleepAt=null;this.emit(); }
 }

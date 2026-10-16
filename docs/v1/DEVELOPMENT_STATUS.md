@@ -4,6 +4,10 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 16 October 2026 — Consolidated repairs and test builds
+
+[Consolidated QA report](CONSOLIDATED_REPAIR_QA_2026-10-16.md): A1–A6 source repairs and #20/#25 lifecycle candidates implemented; 134/134 mobile suites and TypeScript pass. Root/packaged Go pass; amd64/arm64 server binaries built, amd64 health smoke verified. HA/Docker test sources packaged. APK still requires the existing manual workflow trigger. Original #16/#19/#17 need source/device evidence; no original issue is device-accepted. Advanced server features remain incomplete. No release/merge/install.
+
 ## 16 October 2026 — Wider mobile audit
 
 [Six additional source finding groups](APP_WIDE_AUDIT_2026-10-16.md) are confirmed and prioritized. Reproductions cover stale restore/pagination, old duration, EPUB ordering/truncation/sanitization, and the PDF Reduced Motion gap. No app behavior changed during this audit; these findings remain open alongside the original bugs and commercial scope.

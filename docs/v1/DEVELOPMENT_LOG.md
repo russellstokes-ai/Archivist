@@ -197,3 +197,7 @@ Continued from remote `0e5f078` (tree-identical local `9354f05`) in an isolated 
 ## 2026-10-16 — Wider mobile source audit
 
 At owner request audited additional playback, reader, catalogue, persistence, offline and session boundaries at remote `0abf80f`. Confirmed six finding groups A1–A6 with actual-function/structural diagnostics: stale track duration, restore overriding newer Play, EPUB spine/truncation, incomplete EPUB sanitization, PDF Reduced Motion and stale catalogue pagination. See `APP_WIDE_AUDIT_2026-10-16.md`. No product source changed; not physical or exploit acceptance. Canonical protection gate passes; commercial NO-GO retained.
+
+## 2026-10-16 — Consolidated audit repair and server QA delivery
+
+A1–A6 source corrections and #20/#25 lifecycle candidates implemented under explicit “all fixes” instruction. Canonical renderer/styles/scanner/Assist preserved through exact reversible exceptions. Independent reviewer found three further boundaries, all repaired with regressions. 134/134 mobile suites, TypeScript, root/packaged Go pass. Linux amd64/arm64 server builds and HA/Docker source packages produced; amd64 disposable DB health smoke passed. APK blocked on existing manual dispatch capability; no bypass added. #16/#19/#17 remain diagnostic-evidence-dependent; no device acceptance or commercial release claimed. Details: CONSOLIDATED_REPAIR_QA_2026-10-16.md.

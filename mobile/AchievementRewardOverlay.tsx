@@ -35,7 +35,12 @@ type Props={
   muted:string;
 };
 
-export const AchievementRewardOverlay=memo(function AchievementRewardOverlay({
+export const AchievementRewardOverlay=memo(function AchievementRewardOverlay(props:Props){
+  const {eventKey}=props;
+  return <RewardInstance key={eventKey||'none'} {...props}/>;
+});
+
+function RewardInstance({
   event,eventKey,folded,reducedMotion,paper,ink,muted,
 }:Props){
   const opacity=useRef(new Animated.Value(0)).current;
@@ -107,4 +112,4 @@ export const AchievementRewardOverlay=memo(function AchievementRewardOverlay({
       </Text>
     </Animated.View>
   </View>;
-});
+}
