@@ -45,6 +45,8 @@ import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audi
 import {WebView} from 'react-native-webview';
 import {request, validateServer as checkServer, readerNavigationAllowed, setupStatus, RequestError, Session} from './connection';
 import {Playback, PlaybackState, Chapter} from './playback';
+import {OfflineProgressOutbox, type ProgressStorage} from './progressReconciliation';
+import {createProgressStorage,progressIdentityFromPath,replayDurableProgress} from './progressSyncClient';
 import {reorder} from './queue';
 import {LocalBook, LocalFolder, LocalMetadataOverride, LocalScanProgress, LocalScanResult, LocalSortHistory, LocalSortMode, LocalSortPreview, applyCoverEnrichment, applyOnlineMetadataEnrichment, applyLocalSort, enrichLocalBookCovers, enrichLocalBookMetadataOnline, enrichLocalComicMetadataOnline, enrichLocalEmbeddedMetadata, countLocalBookOnlineLookupUnits, pickLocalFolder, previewLocalSortSafely, recoverLocalSortOperation, removeLocalFolderSource} from './localLibrary';
 import type {OnlineBookCache} from './onlineBookMetadata';
@@ -322,6 +324,7 @@ const metronTokenKey = 'archivist.metadata.metron.token.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
 const androidAutoAckKey = 'archivist.androidAutoAck.v1';
+const progressOutboxStoreKey = 'archivist.progressOutboxes.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const librarySetupPreparedKey = 'archivist.librarySetupPrepared.v1';
@@ -1228,6 +1231,44 @@ function Client() {
   const [metadataSettingsNotice,setMetadataSettingsNotice]=useState('');
   useEffect(()=>{let live=true;getPersistedJSON<Record<string,string>>(shelfFormatChoiceKey).then(value=>{if(live&&value&&typeof value==='object')setShelfFormatChoice(value)}).catch(()=>undefined);return()=>{live=false;};},[]);
   const loadCancel = useRef<(() => void) | null>(null);
+  const progressStorageRef=useRef<ProgressStorage|null>(null);
+  if(!progressStorageRef.current){
+    // One bounded, durable installation-wide state key; each outbox envelope
+    // is separately scoped to the authenticated server origin and profile.
+    // No bearer token is written into the persisted progress journal.
+    progressStorageRef.current=createProgressStorage(
+      ()=>getPersistedJSON<Record<string,string>>(progressOutboxStoreKey),
+      value=>setPersistedJSON(progressOutboxStoreKey,value),
+    );
+  }
+  const progressScopeRef=useRef<{
+    server:string;token:string;outbox:OfflineProgressOutbox;
+  }|null>(null);
+  const progressScopePending=useRef<{
+    server:string;token:string;promise:Promise<OfflineProgressOutbox>;
+  }|null>(null);
+  async function progressOutboxFor(current:Session){
+    const cached=progressScopeRef.current;
+    if(cached?.server===current.server&&cached.token===current.token)return cached.outbox;
+    const loading=progressScopePending.current;
+    if(loading?.server===current.server&&loading.token===current.token)return loading.promise;
+    const pending=(async()=>{
+      const profile=await request(current,'/api/me') as {id?:number};
+      if(!Number.isSafeInteger(profile?.id)||Number(profile.id)<0)
+        throw Error('Cannot identify the current Archivist profile for safe progress journalling');
+      const active=sessionRef.current;
+      if(active?.server!==current.server||active.token!==current.token)
+        throw Error('Server profile changed while preparing progress storage');
+      const outbox=new OfflineProgressOutbox(progressStorageRef.current!,current.server,Number(profile.id));
+      progressScopeRef.current={server:current.server,token:current.token,outbox};
+      return outbox;
+    })();
+    progressScopePending.current={server:current.server,token:current.token,promise:pending};
+    try{return await pending;}
+    finally{
+      if(progressScopePending.current?.promise===pending)progressScopePending.current=null;
+    }
+  }
   const controller = useMemo(() => new Playback(
     (path, method, data) => {
       const current = sessionRef.current;
@@ -1269,9 +1310,55 @@ function Client() {
         }
         native.setSleepTimer(seconds);
       },
-    }, setPlayback,
+    }, setPlayback,{
+      record:async(path,position,revision)=>{
+        const current=sessionRef.current;
+        if(!current)throw Error('Sign in again to preserve playback history.');
+        const outbox=await progressOutboxFor(current);
+        const record=progressIdentityFromPath(path);
+        const pending=await outbox.record(record.kind,record.id,position,revision);
+        return {path,sequence:pending.sequence,scope:outbox.key};
+      },
+      acknowledge:async receipt=>{
+        // An in-flight save from a former account must never clear a
+        // different profile's outbox. Older receipts will be reconciled on
+        // that account's next authenticated session.
+        const outbox=progressScopeRef.current?.outbox;
+        if(!outbox||outbox.key!==receipt.scope)return;
+        const record=progressIdentityFromPath(receipt.path);
+        await outbox.acknowledge(record.kind,record.id,receipt.sequence);
+      },
+    },
   ), [player]);
   const audioProgress = playback?.duration ? Math.min(1, playback.seconds / playback.duration) : 0;
+  useEffect(()=>{
+    if(!session||!appActive)return;
+    let cancelled=false,busy=false,conflictNotified=false;
+    const current=session;
+    async function replaySavedProgress(){
+      if(cancelled||busy)return;
+      busy=true;
+      try{
+        const outbox=await progressOutboxFor(current);
+        if(cancelled||sessionRef.current?.server!==current.server||
+            sessionRef.current?.token!==current.token)return;
+        const status=await replayDurableProgress(outbox,
+          (path,method,data)=>request(current,path,method,data));
+        // Never select a winner on a reading/listening rewind automatically.
+        // Keep all disputed local positions and use the existing error region.
+        if(!cancelled&&status.conflicts&&!conflictNotified){
+          conflictNotified=true;
+          setError('Some reading positions differ between devices. Your local bookmarks were retained for review.');
+        }
+      }catch{
+        // No online access is a normal offline condition. The write-ahead
+        // outbox remains in durable V2 stateStore for the next reconnection.
+      }finally{busy=false;}
+    }
+    void replaySavedProgress();
+    const interval=setInterval(()=>void replaySavedProgress(),30000);
+    return()=>{cancelled=true;clearInterval(interval);};
+  },[session,appActive]);
   const serverPlaybackActive = playing?.source==='server';
   const localAudioProgress = !serverPlaybackActive && audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
   const displayedProgress = serverPlaybackActive ? audioProgress : localAudioProgress;
