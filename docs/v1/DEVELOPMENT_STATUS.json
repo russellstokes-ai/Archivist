@@ -336,5 +336,58 @@
     "ci_status": "pending on current audit branch",
     "device_accepted": false,
     "notes": "The current_unmerged_stack entry is the prior tested implementation snapshot (#50), not the live audit PR head. Refresh after independent QA."
+  },
+  "continuation_20261016": {
+    "scope": "Read-only reconciliation of independent #52/#53 and isolated #31 zero-byte completed-download correction in new draft #54",
+    "base_pr": 53,
+    "owner_device_accepted": false,
+    "installed_apk_source": "unverified",
+    "sibling_prs": [
+      {
+        "pr": 52,
+        "head_sha": "998278e86907df68b97d40d7caa3b9b3ca0794cd",
+        "base_pr": 51,
+        "state": "draft_unmerged",
+        "mobile_run": 38876993016,
+        "server_run": 38876992988,
+        "ios_run": 38876992947,
+        "ci": "all_three_success"
+      },
+      {
+        "pr": 53,
+        "head_sha": "b7234e3f9c884aff83bcf3e29bb690c865303979",
+        "base_pr": 51,
+        "state": "draft_unmerged",
+        "mobile_run": 38885442466,
+        "ios_run": 38885442378,
+        "ci": "mobile_ios_success"
+      }
+    ],
+    "combined_branch_created": false,
+    "integration_approved": false,
+    "review_plan": "docs/v1/PR52_PR53_RECONCILIATION_2026-10-16.md",
+    "open_high_risks": [
+      "P0 checkpoint can delete existing offline media before replacement",
+      "P1 LIMIT/OFFSET progress snapshot can silently omit records under concurrent mutation",
+      "P0 executable, standalone failed-network preservation assertion prepared but not yet run: mobile/offline-checkpoint-data-loss.repro.cjs"
+    ],
+    "isolated_guard": {
+      "pr": 54,
+      "branch": "fix/archivist-offline-zero-byte-guard-20261016",
+      "base_pr": 53,
+      "code_checkpoint_sha": "3c66fc824e9bca0eee39374ddffddc8ce119fb03",
+      "source_files": [
+        "mobile/offlineLibrary.ts",
+        "mobile/offline-library.test.cjs"
+      ],
+      "scope_issue": 31,
+      "meaning": "Reject zero-byte HTTP 200 media when server length unknown; do not publish unusable local chapter",
+      "red_ci": "superseded_test_commit_cancelled_not_verified",
+      "final_ci": "pending",
+      "state": "draft_unmerged",
+      "device_accepted": false,
+      "repro_file": "mobile/offline-checkpoint-data-loss.repro.cjs",
+      "repro_status": "source_based_expected_red_manual_execution_pending"
+    }
   }
 }
