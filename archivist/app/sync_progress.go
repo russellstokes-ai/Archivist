@@ -132,6 +132,9 @@ func (a *app) storeProgressSnapshot(ctx context.Context,p identity,limit int)(st
     now:=time.Now()
     snapshot:=&progressSnapshot{profileID:p.ID,owner:p.Owner,grants:grants,
         entries:entries,pageLimit:limit,expires:now.Add(progressSnapshotTTL)}
+    // Fully represented single-page views never need a follow-up token in
+    // memory. Avoid exhausting the bounded cache on ordinary small libraries.
+    if len(entries)<=limit{return token,snapshot,nil}
     a.syncMu.Lock()
     defer a.syncMu.Unlock()
     if a.syncSnapshots==nil{a.syncSnapshots=make(map[string]*progressSnapshot)}
