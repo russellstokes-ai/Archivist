@@ -5,15 +5,18 @@ const Module=require('node:module');
 const native=fs.readFileSync(__dirname+'/android/app/src/main/java/app/archivist/reader/ArchivistAutoService.kt','utf8');
 const original=Module._load,files=new Map(),deleted=[];
 const root='file:///test/android-auto/',queue=root+'pending/';
-let failDelete=false;
+let failDelete=false,failListing=false;
 Module._load=function(name,parent,main){
   if(name==='react-native')return {Platform:{OS:'android'}};
   if(name==='expo-file-system/legacy')return {
     documentDirectory:'file:///test/',
     async getInfoAsync(path){return {exists:files.has(path),size:files.get(path)?.length}},
     async readAsStringAsync(path){if(!files.has(path))throw Error('ENOENT');return files.get(path)},
-    async readDirectoryAsync(uri){if(uri!==queue)throw Error('Unexpected folder '+uri);
-      return [...files.keys()].filter(p=>p.startsWith(uri)).map(p=>p.slice(uri.length));},
+    async readDirectoryAsync(uri){
+      if(uri!==queue)throw Error('Unexpected folder '+uri);
+      if(failListing)throw Error('EACCES: queue is temporarily unreadable');
+      return [...files.keys()].filter(p=>p.startsWith(uri)).map(p=>p.slice(uri.length));
+    },
     async deleteAsync(uri){if(failDelete)throw Error('simulated deletion failure');
       deleted.push(uri);files.delete(uri);},
     async makeDirectoryAsync(){},
@@ -40,6 +43,21 @@ const older=event(e1,'first.m4b',215),newer=event(e2,'second.m4b',12);
   files.set(queue+e2,JSON.stringify(newer));
   files.set(queue+e1,JSON.stringify(older)); // intentionally out-of-order disk listing
   files.set(root+'progress.json',JSON.stringify({...newer,trackUri:'file:///media/third.m4b',seconds:19,updatedAt:1760640000030,eventId:undefined}));
+
+  // A transient inaccessible queue cannot be considered empty. Otherwise a
+  // newer latest-progress slot overtakes unacknowledged outgoing chapters.
+  failListing=true;
+  assert.equal(await consumeAndroidAutoProgress(),null,
+    'Unreadable pending directory must fail closed, not skip queued chapters');
+  assert(files.has(queue+e1)&&files.has(queue+e2),
+    'Directory-read failure cannot discard durable transition records');
+  failListing=false;
+  const unknown=queue+'event-corrupted.json';
+  files.set(unknown,'{broken');
+  assert.equal(await consumeAndroidAutoProgress(),null,
+    'Unknown journal event filenames must not be silently skipped in favour of later progress');
+  files.delete(unknown);
+
   let pending=await consumeAndroidAutoProgress();
   assert.deepEqual(pending,older,'Oldest journalled chapter must be applied first');
   let receipt=null,applies=[],failPersist=true;
