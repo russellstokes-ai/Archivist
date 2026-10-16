@@ -179,14 +179,16 @@ function isOwnedStageUri(candidate:string,target:string){
 async function newStagedUri(target:string){
   for(let i=0;i<8;i++){
     const uri=target+'.archivist-partial-'+attemptToken();
-    if(await existingSize(uri)<0)return uri;
+    // Propagate unreadable/permission errors: an unknown result is NOT proof
+    // that a potentially valuable stage path can safely be reused.
+    if(!(await getInfoAsync(uri)).exists)return uri;
   }
   throw Error('Could not allocate a distinct offline staging file. Existing files have not been changed.');
 }
 async function newVersionUri(standard:string,ext:string){
   for(let i=0;i<8;i++){
     const uri=standard.slice(0,-ext.length)+'-v'+attemptToken()+ext;
-    if(await existingSize(uri)<0)return uri;
+    if(!(await getInfoAsync(uri)).exists)return uri;
   }
   throw Error('Could not allocate a distinct offline replacement file. Existing files have not been changed.');
 }
@@ -414,8 +416,13 @@ export async function downloadOfflineWork(
 
       // An old published file, a legacy partial and another concurrent writer
       // must never be overwritten, even if promotion is interrupted.
-      const targetSize=await existingSize(target);
-      if(targetSize>=0){
+      // Do not collapse an unreadable/failed stat into "file absent". An
+      // uncertain destination must never be passed into a possibly replacing
+      // native move operation.
+      const targetInfo=await getInfoAsync(target);
+      const targetSize=targetInfo.exists
+        ? (typeof targetInfo.size==='number'?targetInfo.size:-1) : -1;
+      if(targetInfo.exists){
         if(expected>0 && targetSize===expected && prior?.targetUri===target){
           // Crash after a successful stage->target rename, before checkpoint save.
           // Do not overwrite the already-published file on recovery.
