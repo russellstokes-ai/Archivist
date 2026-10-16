@@ -9,10 +9,12 @@ assert.match(service,/override fun onPositionDiscontinuity\(\s*oldPosition:\s*Pl
   'Android Auto must capture old position from Media3 discontinuity');
 assert.match(service,/oldPosition\.mediaItem\?\.mediaId/,
   'The outgoing media ID must come from oldPosition, not player.currentMediaItem');
-assert.match(service,/persistProgressFor\(oldMediaId,\s*oldPosition\.positionMs,\s*false\)/,
+assert.match(service,/persistProgressFor\(oldMediaId,\s*oldPosition\.positionMs,\s*false,\s*true\)/,
   'Persist the outgoing chapter/position, never the new chapter identity');
-assert.match(service,/private fun persistProgressFor\(mediaId:\s*String,\s*positionMs:\s*Long,\s*complete:\s*Boolean\)/,
-  'Progress writer must accept an explicit track identity and timestamp');
+assert.match(service,/private fun persistProgressFor\(mediaId:\s*String,\s*positionMs:\s*Long,\s*complete:\s*Boolean,\s*journalTransition:\s*Boolean\s*=\s*false\)/,
+  'Progress writer must accept an explicit track identity, position, completion and opt-in transition journaling');
+assert.match(service,/if\s*\(eventId\s*!=\s*null\)\s*\{/,
+  'Outgoing chapter must be separately journalled rather than overwriting one latest-position slot');
 assert(!/override fun onMediaItemTransition\([\s\S]{0,140}?persistProgress\(false\)/.test(service),
   'Do not persist newly active chapter position in onMediaItemTransition');
 assert.match(service,/AtomicFile\(File\(dir, "progress.json"\)\)/,

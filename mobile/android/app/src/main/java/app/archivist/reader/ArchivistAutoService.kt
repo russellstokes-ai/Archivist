@@ -25,6 +25,7 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
@@ -38,6 +39,7 @@ class ArchivistAutoService : MediaLibraryService() {
   private var snapshotCache: AutoSnapshot? = null
   private var snapshotModified: Long = -1L
   private var snapshotSize: Long = -1L
+  private var transitionSequence: Long = 0L
 
   private val progressTicker = object : Runnable {
     override fun run() {
@@ -76,7 +78,7 @@ class ArchivistAutoService : MediaLibraryService() {
         val incomingId = newPosition.mediaItem?.mediaId
         if (incomingId != oldMediaId && oldPosition.positionMs != C.TIME_UNSET &&
             oldPosition.positionMs >= 0) {
-          persistProgressFor(oldMediaId, oldPosition.positionMs, false)
+          persistProgressFor(oldMediaId, oldPosition.positionMs, false, true)
         }
       }
       override fun onPlaybackStateChanged(playbackState: Int) {
@@ -466,7 +468,7 @@ class ArchivistAutoService : MediaLibraryService() {
     persistProgressFor(item.mediaId, player.currentPosition, complete)
   }
 
-  private fun persistProgressFor(mediaId: String, positionMs: Long, complete: Boolean) {
+  private fun persistProgressFor(mediaId: String, positionMs: Long, complete: Boolean, journalTransition: Boolean = false) {
     val snapshot = loadSnapshot()
     val pair = resolveTrack(snapshot, mediaId) ?: return
     val work = pair.first
@@ -481,11 +483,43 @@ class ArchivistAutoService : MediaLibraryService() {
       .put("complete", complete && finalTrack)
       .put("updatedAt", System.currentTimeMillis())
       .toString()
+    // Only outgoing-chapter transitions need distinct durable FIFO events.
+    // The normal 5-second ticker still updates a single latest-position file
+    // without producing thousands of unnecessary event files.
+    val eventId = if (journalTransition) {
+      val stamp = System.currentTimeMillis().toString().padStart(13, '0')
+      val serial = (++transitionSequence % 1000000).toString().padStart(6, '0')
+      "event-" + stamp + "-" + serial + "-" +
+        UUID.randomUUID().toString().replace("-", "") + ".json"
+    } else null
     ioExecutor.execute {
       val dir = File(filesDir, "android-auto")
       if (!dir.exists() && !dir.mkdirs()) {
         Log.w("ArchivistAuto", "Unable to create private playback state directory")
         return@execute
+      }
+      if (eventId != null) {
+        val pendingDir = File(dir, "pending")
+        if (!pendingDir.exists() && !pendingDir.mkdirs()) {
+          Log.w("ArchivistAuto", "Unable to open the private chapter-event journal")
+          return@execute
+        }
+        val eventPayload = JSONObject(payload).put("eventId", eventId).toString()
+        // Each chapter transition owns one unique AtomicFile, so a later
+        // transition cannot overwrite an event the phone has not acknowledged.
+        val eventAtomic = AtomicFile(File(pendingDir, eventId))
+        var eventOutput: FileOutputStream? = null
+        try {
+          eventOutput = eventAtomic.startWrite()
+          eventOutput.write(eventPayload.toByteArray(Charsets.UTF_8))
+          eventAtomic.finishWrite(eventOutput)
+        } catch (error: Exception) {
+          eventOutput?.let { eventAtomic.failWrite(it) }
+          Log.w("ArchivistAuto", "Unable to journal outgoing audiobook chapter", error)
+          // Do not overwrite the latest checkpoint as if the outgoing chapter
+          // had been committed: leave older records for later recovery.
+          return@execute
+        }
       }
       // AtomicFile never removes the last valid position before the new
       // payload is durable, even if Android kills playback during the write.

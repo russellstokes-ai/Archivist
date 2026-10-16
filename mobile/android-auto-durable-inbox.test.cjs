@@ -11,6 +11,7 @@ Module._load=function(name,parent,main){
     documentDirectory:'file:///test/',
     async getInfoAsync(path){return {exists:nativeFiles.has(path),size:nativeFiles.get(path)?.length}},
     async readAsStringAsync(path){if(!nativeFiles.has(path))throw Error('ENOENT');return nativeFiles.get(path)},
+    async readDirectoryAsync(){return []},
     async deleteAsync(path){deleted.push(path);nativeFiles.delete(path)},
     async writeAsStringAsync(path,value){nativeFiles.set(path,value)},
     async makeDirectoryAsync(){},
