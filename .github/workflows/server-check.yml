@@ -96,6 +96,9 @@ jobs:
       - name: Home Assistant package contract
         run: node scripts/package-ha.test.cjs
 
+      - name: Reproducible Home Assistant package
+        run: node scripts/package-ha-reproducible.test.cjs
+
       - name: Add-on launcher syntax
         run: |
           sh -n archivist/run.sh

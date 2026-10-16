@@ -798,5 +798,41 @@
     "real_device_accepted": false,
     "original_eight_device_accepted": 0,
     "full_commercial_release": false
+  },
+  "work_execution_20261016": {
+    "authoritative_for_this_continuation": true,
+    "base_pr": 83,
+    "base_sha": "70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9",
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "decision": "NO-GO",
+    "original_bugs_fixed_this_session": 0,
+    "device_accepted": 0,
+    "app_source_changed": false,
+    "protected_original_blobs": 45,
+    "approved_app_blob_unchanged": true,
+    "local_verification": {
+      "mobile_suites": "128/128 passed with JDK 17",
+      "typecheck": "passed",
+      "root_go": "passed",
+      "packaged_go": "passed",
+      "ha_contract": "passed",
+      "ha_reproducibility": "RED then GREEN"
+    },
+    "baseline_ci": {
+      "mobile": 38948050600,
+      "server": 38948050770,
+      "android": 38948050610,
+      "ios": 38948050648,
+      "all_completed_success": true
+    },
+    "confirmed_source_failures": {
+      "23": "Actual resumeNowSession + loadLocalWorkTrack call player.play() for paused restoration",
+      "31": "Actual resumeNowSession requests server before available downloaded copy"
+    },
+    "diagnostic": "docs/v1/diagnostics/resume-no-autoplay.red.cjs",
+    "ha_package": "qa/pr83/Archivist-HA-70ddc922.zip",
+    "apk": "not built: manual workflow dispatch unavailable in connector; browser signed out; no Android SDK installed",
+    "remaining": "Six original bugs; native #31/#32; ten-screen server, workbench, safe relink and scan controls; complete Auto/cross-device; performance/accessibility and Play preparation",
+    "approval_required": "Narrow App.tsx logic exception for paused restoration and verified download-first resume; existing exception is exact-blob and does not authorize these changes"
   }
 }

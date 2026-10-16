@@ -4,6 +4,17 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 16 October 2026 — Work continuation from exact PR #83
+
+**Current continuation:** see [verified start and diagnostic report](ASTRA_EXECUTION_START_PR83_2026-10-16.md) and `work_execution_20261016` in the JSON manifest. Earlier sections are dated history.
+
+- Started at `70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9`; named start file was missing and is now supplied as a new entrypoint, not represented as an original handoff.
+- Confirmed all four starting-commit CI results, including iOS [38948050648](https://github.com/russellstokes-ai/Archivist/actions/runs/38948050648), completed success. Local 128/128 mobile suites, TypeScript and root/packaged Go pass; initial two Java test failures were missing javac and passed after JDK setup.
+- **New actual-function RED diagnostics:** #23 paused Now restoration starts audio; #31 Now resume requests server ahead of its available downloaded copy. Existing helper CI remains valid but does not establish end-to-end fixes. No App.tsx or other protected experience changed. Narrow logic repair proposal is in the report; exact existing App.tsx byte lock requires owner approval before implementation.
+- **HA package ready for disposable-data testing:** `qa/pr83/Archivist-HA-70ddc922.zip`, checksum and provenance in the same directory. Existing package script now produces deterministic ZIP bytes with SOURCE_DATE_EPOCH; genuine RED→GREEN regression and original package contract pass. Requires Python 3. Server runtime is unchanged from PR #83.
+- **APK not built:** manual-only workflow dispatch unavailable through connector; browser is signed out, local Android SDK absent. Build recipe remains in repo. No automatic upload workaround added.
+- **NO-GO:** 0/8 owner-device acceptance; six original bugs unresolved; advanced ten-screen server/workbench/relink/scan controls and Auto/cross-device/performance/accessibility/Play work remain. No canonical/main merge, scanner/Assist change, installation, personal-media migration or release.
+
 ## 16 October 2026 — additional chat reliability fixes, native Auto and server restore
 
 - **Candidate:** `integration/archivist-v1-auto-restore-recovery-20261016` based on [PR #81](https://github.com/russellstokes-ai/Archivist/pull/81), importing exact mirrored backup/recovery source and tests from [PR #82](https://github.com/russellstokes-ai/Archivist/pull/82). It is unmerged and unreleased.
