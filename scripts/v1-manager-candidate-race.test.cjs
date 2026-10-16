@@ -42,9 +42,12 @@ const works=[
   {id:10,title:'Book Alpha',author:'Author Alpha',format:'Ebook',space:'Books',available:true,needsReview:true},
   {id:11,title:'Book Beta',author:'Author Beta',format:'Ebook',space:'Books',available:true,needsReview:true},
 ];
-const requests=[];
+const requests=[],metadataSaves=[];
 const reply=body=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>body});
 const fetchStub=async url=>{
+  if(url.startsWith('./api/assets/')&&url.endsWith('/metadata')){
+    return new Promise((resolve,reject)=>metadataSaves.push({url,resolve,reject}));
+  }
   if(url.startsWith('./api/manage/metadata-candidates?')){
     return new Promise((resolve,reject)=>requests.push({url,resolve,reject}));
   }
@@ -121,5 +124,23 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   assert.equal(elements.get('notice').textContent,previousNotice,'stale search must not overwrite the new editor status');
   assert.equal(elements.get('candidate-search-button').disabled,false);
 
-  console.log('PASS: outdated server metadata searches and errors cannot contaminate a later editor; fresh field selection still works');
+  // A network-delayed metadata PATCH for work A must never close or clear the
+  // currently active editor for work B, nor use work B's id to edit state.
+  close();
+  open(0);
+  titleField().value='Edited Alpha';
+  const saveForm=elements.get('editor-form');
+  const pendingSave=saveForm.listeners.submit({preventDefault(){}});
+  assert.equal(metadataSaves.length,1);
+  assert.equal(metadataSaves[0].url,'./api/assets/10/metadata');
+  close();
+  open(1);
+  assert(elements.get('editor').open,'second editor must open while previous save is in flight');
+  assert.equal(titleField().value,'Book Beta');
+  metadataSaves[0].resolve(reply({ok:true}));
+  await pendingSave;await settle();
+  assert(elements.get('editor').open,'saving previous work must never close another active editor');
+  assert.equal(titleField().value,'Book Beta','completed save must not erase next editor fields');
+
+  console.log('PASS: stale search and stale metadata-save completions cannot cross editor boundaries');
 })().catch(error=>{console.error(error);process.exitCode=1});
