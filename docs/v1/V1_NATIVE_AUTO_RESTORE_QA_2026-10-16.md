@@ -1,5 +1,7 @@
 # Archivist v1 — Native Android Auto FIFO and Interrupted SQLite Restore QA
 
+**Final exact PR #83 head now checked:** `70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9`; Mobile #38948050600, iOS #38948050648, Android native #38948050610, Server #38948050770 **all succeeded**. This supersedes the earlier text below saying iOS required checking. Full hardware and commercial release still **NO-GO**. See [current Astra execution starting point](./ASTRA_EXECUTION_START_PR83_2026-10-16.md).
+
 **16 October 2026. Unmerged draft only.** Start from `integration/archivist-v1-auto-restore-recovery-20261016`; review current exact SHA and CI before claiming acceptance.
 
 **Native Auto:** PR #81 uses per-transition AtomicFile journals and acknowledged phone receipt. Mobile RED #38946476178 showed an unreadable but present pending event folder falling through to newer progress. Corrected helper returns no event until readable, validates names and incomplete files, preserves older installs with no queued directory. Mobile GREEN #38946792706; Android native GREEN #38946792697. iOS #38946792692 check before claiming. Still requires real head-unit, calls/navigation, app force-kill, event cleanup/ordering and native storage fault tests.
