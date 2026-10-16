@@ -43,3 +43,31 @@ func TestPreviouslyIndexedMountBecomingEmptyMustNotEraseWorkOrBookmark(t *testin
         t.Fatalf("EMPTY MOUNT DATA LOSS: scanErr=%v, works=%d, former work present=%d, saved playback bookmark=%d; empty but reachable source silently destroyed catalogue identity/progress",scanErr,indexedWorks,originalWork,bookmarks)
     }
 }
+
+
+func TestFileRenameCannotSilentlyDestroyAutoWorkBookmark(t *testing.T) {
+    a:=fixture(t)
+    if err:=a.initProgress();err!=nil{t.Fatal(err)}
+    root:=t.TempDir()
+    oldPath:=filepath.Join(root,"Original Title.m4b")
+    newPath:=filepath.Join(root,"Renamed Title.m4b")
+    if err:=os.WriteFile(oldPath,[]byte("same audiobook bytes"),0600);err!=nil{t.Fatal(err)}
+    if err:=a.addSource("Audiobooks",root);err!=nil{t.Fatal(err)}
+    if err:=a.scan(1);err!=nil{t.Fatal(err)}
+    var oldWork,oldEdition,oldAsset int64
+    if err:=a.db.QueryRow(`SELECT w.id,e.id,ea.asset_id FROM works w
+        JOIN editions e ON e.work_id=w.id
+        JOIN edition_assets ea ON ea.edition_id=e.id LIMIT 1`).
+        Scan(&oldWork,&oldEdition,&oldAsset);err!=nil{t.Fatal(err)}
+    if _,err:=a.saveProgress(oldEdition,progress{Asset:oldAsset,Seconds:222,Revision:0});err!=nil{t.Fatal(err)}
+    if err:=os.Rename(oldPath,newPath);err!=nil{t.Fatal(err)}
+    // No media bytes have changed; only a filename has been updated by the user.
+    scanErr:=a.scan(1)
+
+    var retainedWork,retainedProgress int
+    if err:=a.db.QueryRow("SELECT count(*) FROM works WHERE id=?",oldWork).Scan(&retainedWork);err!=nil{t.Fatal(err)}
+    if err:=a.db.QueryRow("SELECT count(*) FROM profile_progress WHERE profile_id=0 AND edition_id=? AND seconds=222",oldEdition).Scan(&retainedProgress);err!=nil{t.Fatal(err)}
+    if retainedWork!=1||retainedProgress!=1 {
+        t.Fatalf("RENAME STATE LOSS: scanErr=%v, previous work id=%d retained=%d, saved bookmark retained=%d; non-destructive filename change erased logical work/progress",scanErr,oldWork,retainedWork,retainedProgress)
+    }
+}
