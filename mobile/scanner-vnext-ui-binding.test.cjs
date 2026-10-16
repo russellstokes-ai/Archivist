@@ -4,6 +4,17 @@ let app=fs.readFileSync(path.join(mobile,'App.tsx'),'utf8').replaceAll('\r\n','\
 assert.ok(!/\bscanLocalFolders\(/.test(app),'Fresh app paths must not call historical scanner');
 assert.ok(!/await enrichPublishedLocalLibrary\(/.test(app),'Discovery must not start a deep metadata sweep');
 assert.ok(app.includes('projectScannerWorks(local,groupLocalWorks)'));assert.ok(app.includes('scannerPublished'));assert.ok(app.includes('runtime.assist.accept'));
+// Reverse ONLY the exactly pinned user-approved logic changes, then execute
+// the old scanner-binding byte-for-byte restoration check unchanged. A new
+// scanner/Assist/UI edit cannot hide behind this narrow App exception.
+const approvedLogic=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/APP_LOGIC_EXCEPTION_2026-10-16.json'),'utf8'));
+assert.equal(approvedLogic.original_git_blob_sha,'aacfe887ae535242a22bac414eb7cf823f190563');
+assert(Array.isArray(approvedLogic.approved_logic_changes)&&approvedLogic.approved_logic_changes.length>=1);
+for(const change of [...approvedLogic.approved_logic_changes].reverse()){
+  const next=change.new.replaceAll('\r\n','\n'),prior=change.old.replaceAll('\r\n','\n');
+  assert.equal(app.split(next).length-1,1,'Approved App logic hunk differs or is duplicated');
+  app=app.replace(next,prior);
+}
 for(const change of [...manifest.changes].reverse()){const value=change.new.replaceAll('\r\n','\n');assert.equal(app.split(value).length-1,1,'Explicit binding differs');app=app.replace(value,change.old.replaceAll('\r\n','\n'));}
 assert.equal(crypto.createHash('sha256').update(app.replaceAll('\n','\r\n')).digest('hex'),manifest.baseSha256,'Changes beyond explicitly targeted scanner bindings');
 console.log('PASS: byte-equivalent canonical App restored after explicit scanner controller/Assist exceptions; historical scan routes disconnected');
