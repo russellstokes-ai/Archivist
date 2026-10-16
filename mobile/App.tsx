@@ -59,7 +59,7 @@ import type {AssistState} from './scannerVNext/assist';
 import {normalizeGenre} from './scannerVNext/genre';
 import {GENRE_CHOICES,genreChoiceLabel} from './scannerVNext/genreChoices';
 import {assistFeedback} from './scannerVNext/assistFeedback';
-import {consumeAndroidAutoProgress, persistAndroidAutoLibrary} from './androidAuto';
+import {acknowledgeAndroidAutoProgress, consumeAndroidAutoProgress, persistAndroidAutoLibrary, type AndroidAutoProgress} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
 import {AchievementRewardOverlay} from './AchievementRewardOverlay';
@@ -321,6 +321,7 @@ const googleBooksApiKeyKey = 'archivist.metadata.googleBooks.apiKey.v1';
 const metronTokenKey = 'archivist.metadata.metron.token.v1';
 const offlineWorksKey = 'archivist.offlineWorks.v1';
 const offlineCheckpointsKey = 'archivist.offlineCheckpoints.v1';
+const androidAutoAckKey = 'archivist.androidAutoAck.v1';
 const localPreferencesKey = 'archivist.localPreferences.v1';
 const onboardingDoneKey = 'archivist.onboardingDone.v2';
 const librarySetupPreparedKey = 'archivist.librarySetupPrepared.v1';
@@ -1462,6 +1463,7 @@ function Client() {
     const timer=setTimeout(()=>void persistAndroidAutoLibrary(localPersonalWorks,localWorkProgress,resume).catch(()=>undefined),900);
     return()=>clearTimeout(timer);
   },[localPersonalWorks,localWorkProgress,nowSession?.updatedAt]);
+  const androidAutoAckTail=useRef<Promise<void>>(Promise.resolve());
   useEffect(()=>{
     if(!appActive||!localCatalogReady||!localPersonalWorks.length)return;
     let cancelled=false,busy=false;
@@ -1469,30 +1471,48 @@ function Client() {
       if(cancelled||busy)return;
       busy=true;
       try{
+        // Reading the native AtomicFile must NEVER consume/delete it. It is
+        // at-least-once input until a separate verified receipt commits.
         const progress=await consumeAndroidAutoProgress();
         if(cancelled||!progress)return;
-        const currentNow=nowSessionRef.current;
-        if((currentNow?.updatedAt||0)>progress.updatedAt)return;
-        setLocalWorkProgress(current=>{
-          const next={...current,[progress.workKey]:{uri:progress.trackUri,seconds:progress.complete?0:progress.seconds,complete:progress.complete}};
-          setPersistedJSON(localWorkProgressKey,next).catch(()=>undefined);
-          return next;
-        });
         const work=localPersonalWorks.find(item=>item.key===progress.workKey);
         const track=work?.tracks.find(item=>item.uri===progress.trackUri);
-        if(work&&track){
-          const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
-          await persistNowSession('audio',display,progress.complete?0:progress.seconds,{trackUri:progress.trackUri,wasPlaying:false});
-        }
-        if(progress.complete){
-          setLocalAudioCompleted(current=>{
-            if(current[progress.workKey])return current;
-            const next={...current,[progress.workKey]:true};
-            setPersistedJSON(localAudioCompletedKey,next).catch(()=>undefined);
-            return next;
+        if(!work||!track)return;
+        const prior=androidAutoAckTail.current;
+        const receipt=prior.catch(()=>undefined).then(async()=>{
+          await acknowledgeAndroidAutoProgress(progress,{
+            readReceipt:()=>getPersistedJSON<AndroidAutoProgress>(androidAutoAckKey),
+            persistReceipt:value=>setPersistedJSON(androidAutoAckKey,value),
+            apply:async()=>{
+              const currentNow=nowSessionRef.current;
+              // A more recent phone session must not be replaced by older car
+              // progress; still durably acknowledge this stale event below.
+              if((currentNow?.updatedAt||0)>progress.updatedAt)return;
+              const stored=await getPersistedJSON<Record<string,LocalWorkProgress>>(localWorkProgressKey);
+              const next={...(stored||{}),[progress.workKey]:{
+                uri:progress.trackUri,seconds:progress.complete?0:progress.seconds,complete:progress.complete
+              }};
+              await setPersistedJSON(localWorkProgressKey,next);
+              if(!cancelled)setLocalWorkProgress(next);
+              const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
+              await persistNowSession('audio',display,progress.complete?0:progress.seconds,{trackUri:progress.trackUri,wasPlaying:false});
+              if(progress.complete){
+                const completed=await getPersistedJSON<Record<string,boolean>>(localAudioCompletedKey);
+                if(!completed?.[progress.workKey]){
+                  const updated={...(completed||{}),[progress.workKey]:true};
+                  await setPersistedJSON(localAudioCompletedKey,updated);
+                  if(!cancelled)setLocalAudioCompleted(updated);
+                }
+              }
+            },
           });
-        }
-      }catch{}finally{busy=false;}
+        });
+        androidAutoAckTail.current=receipt;
+        await receipt;
+      }catch{
+        // No receipt is written after any failed step. The unchanged native
+        // progress remains available for retry on restart or reconnect.
+      }finally{busy=false;}
     };
     void syncAndroidAutoProgress();
     const timer=setInterval(()=>void syncAndroidAutoProgress(),4000);
