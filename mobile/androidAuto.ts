@@ -112,11 +112,26 @@ export async function consumeAndroidAutoProgress():Promise<AndroidAutoProgress|n
   const dir=documentDirectory+'android-auto/';
   const pendingDir=dir+'pending/';
   try{
-    const names=(await readDirectoryAsync(pendingDir).catch(()=>[] as string[]))
-      .filter(item=>pendingEventPattern.test(item)).sort();
+    let entries:string[];
+    try{
+      entries=await readDirectoryAsync(pendingDir);
+    }catch{
+      // No pending/ directory exists on older installations, which is fine.
+      // An *existing but unreadable* queue is different: treating it as empty
+      // could skip outgoing chapters and incorrectly replay a newer position.
+      const info=await getInfoAsync(pendingDir);
+      if(info.exists)return null;
+      entries=[];
+    }
+    // AtomicFile can leave an event-*.new/.bak after interrupted writing.
+    // Never skip an unknown or partly published event and then consume a newer
+    // checkpoint. Preserve the queue for later read/repair instead.
+    if(entries.some(name=>name.startsWith('event-')&&!pendingEventPattern.test(name)))
+      return null;
+    const names=entries.filter(name=>pendingEventPattern.test(name)).sort();
     if(names.length){
-      // Fail closed on a corrupt/unreadable oldest event rather than silently
-      // skip a saved chapter or advance the receipt to a newer one.
+      // A malformed/unreadable oldest event stays on disk. The phone must
+      // retry it before moving to a subsequent chapter or latest position.
       return await verifiedProgress(pendingDir+names[0],names[0]);
     }
     return await verifiedProgress(dir+'progress.json');
