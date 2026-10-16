@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "as_of": "2026-10-15",
+  "as_of": "2026-10-16",
   "purpose": "Point-in-time manifest distinguishing canonical source, draft fixes, commercial development work and acceptance; not an automated report of GitHub or installed-device state",
   "repo": "russellstokes-ai/Archivist",
   "approved_requirements": {
@@ -320,5 +320,21 @@
     "rule": "No issue may be marked accepted merely because CI passed. State changes require exact issue reproduction, regression and review. A release requires explicit approval.",
     "no_unsanctioned_merges": true
   },
-  "update_instructions": "Update this manifest, docs/v1/DEVELOPMENT_STATUS.md, and append to docs/v1/DEVELOPMENT_LOG.md in every future PR; refresh real SHA/CI from GitHub, preserve historical snapshots, never infer installed APK SHA."
+  "update_instructions": "Update this manifest, docs/v1/DEVELOPMENT_STATUS.md, and append to docs/v1/DEVELOPMENT_LOG.md in every future PR; refresh real SHA/CI from GitHub, preserve historical snapshots, never infer installed APK SHA.",
+  "audit_update": {
+    "pr": 53,
+    "branch": "audit/archivist-robustness-astra-review-20261016",
+    "base_pr": 51,
+    "status": "draft_unmerged",
+    "review_file": "docs/v1/ASTRA_ROBUSTNESS_REVIEW_QUEUE.md",
+    "source_files_changed": [
+      "mobile/progressReconciliation.ts",
+      "mobile/progress-reconciliation.test.cjs"
+    ],
+    "confirmed_easy_fix": "Duplicate remote progress entries rejected before planning replay",
+    "hard_problems": "Ten prioritised Astra review items; no difficult source rewrites undertaken",
+    "ci_status": "pending on current audit branch",
+    "device_accepted": false,
+    "notes": "The current_unmerged_stack entry is the prior tested implementation snapshot (#50), not the live audit PR head. Refresh after independent QA."
+  }
 }
