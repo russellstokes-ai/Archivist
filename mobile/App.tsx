@@ -1494,8 +1494,6 @@ function Client() {
               }};
               await setPersistedJSON(localWorkProgressKey,next);
               if(!cancelled)setLocalWorkProgress(next);
-              const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
-              await persistNowSession('audio',display,progress.complete?0:progress.seconds,{trackUri:progress.trackUri,wasPlaying:false});
               if(progress.complete){
                 const completed=await getPersistedJSON<Record<string,boolean>>(localAudioCompletedKey);
                 if(!completed?.[progress.workKey]){
@@ -1504,6 +1502,11 @@ function Client() {
                   if(!cancelled)setLocalAudioCompleted(updated);
                 }
               }
+              // Persist Now LAST: if saving this session succeeds but the
+              // later receipt fails, all work/completion fields are already
+              // durable and the next replay is safe to acknowledge.
+              const display:Book={...track,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,coverShape:'square',localWorkKey:work.key,source:work.originServer?'downloaded':'local',originServer:work.originServer,serverWorkId:work.originWorkId};
+              await persistNowSession('audio',display,progress.complete?0:progress.seconds,{trackUri:progress.trackUri,wasPlaying:false});
             },
           });
         });
