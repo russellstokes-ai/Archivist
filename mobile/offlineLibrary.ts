@@ -196,7 +196,9 @@ async function persistCheckpoint(
   callback?:(checkpoint:OfflineDownloadCheckpoint|null)=>Promise<void>|void,
 ){
   checkpoint.updatedAt=new Date().toISOString();
-  await callback?.({...checkpoint,completedTrackIds:[...checkpoint.completedTrackIds],current:checkpoint.current?{...checkpoint.current}:undefined});
+  await callback?.({...checkpoint,completedTrackIds:[...checkpoint.completedTrackIds],
+    completedFiles:checkpoint.completedFiles?{...checkpoint.completedFiles}:undefined,
+    current:checkpoint.current?{...checkpoint.current}:undefined});
 }
 
 export async function pauseActiveOfflineDownload(){
@@ -253,8 +255,8 @@ export async function downloadOfflineWork(
 
   const key=offlineKey(session.server,work.id);
   const dir=offlineDirectory(session.server,work.id);
-  if(activeWorkDownloads.has(key))
-    throw Error('This offline work is already downloading. Pause or complete that download before retrying.');
+  if(activeWorkDownloads.size>0)
+    throw Error('An offline work is already downloading. Pause or complete that download before retrying.');
   activeWorkDownloads.add(key);
   try{
   const compatibleCheckpoint=options?.checkpoint?.version===1 &&
