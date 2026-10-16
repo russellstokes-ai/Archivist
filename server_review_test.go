@@ -51,6 +51,9 @@ func TestServerReviewGroupsFilesIntoLogicalBooks(t *testing.T) {
     }
     response=call("/api/manage/review-works/1/files?limit=2&offset=2",true)
     if response.Code!=200 {t.Fatalf("last file page: %d %s",response.Code,response.Body.String())}
+    // Decode into a fresh struct: omitted JSON fields must not retain values
+    // from the previous page's reused Go test object.
+    detail = struct {Files []book `json:"files"`;HasMore bool `json:"hasMore"`}{}
     if err:=json.Unmarshal(response.Body.Bytes(),&detail);err!=nil{t.Fatal(err)}
     if len(detail.Files)!=1||detail.HasMore||detail.Files[0].NeedsReview {t.Fatalf("last file page: %+v",detail)}
     if response=call("/api/manage/review-works?limit=101",true);response.Code!=400 {
