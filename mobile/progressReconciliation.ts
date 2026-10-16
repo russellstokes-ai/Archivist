@@ -117,7 +117,9 @@ export function planProgressReplay(
   const remoteMap=new Map<string,RemoteProgress>();
   for(const item of remote){
     if(!validRecord(item.kind,item.id,item,item.revision))throw Error('Invalid remote progress entry');
-    remoteMap.set(item.kind+':'+item.id,item);
+    const key=item.kind+':'+item.id;
+    if(remoteMap.has(key))throw Error('Duplicate remote progress entry; preserve offline bookmarks');
+    remoteMap.set(key,item);
   }
   return pending.map(item=>{
     if(!validRecord(item.kind,item.id,item.position,item.baseRevision))throw Error('Invalid offline progress entry');
