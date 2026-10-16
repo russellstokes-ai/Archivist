@@ -13,9 +13,12 @@ import (
 )
 
 func validArchiveCoverFixture(t *testing.T) []byte {
+    return validArchiveCoverFixtureWithSize(t,24,36)
+}
+func validArchiveCoverFixtureWithSize(t *testing.T,w,h int) []byte {
     t.Helper()
-    img := image.NewRGBA(image.Rect(0, 0, 24, 36))
-    for y:=0; y<36; y++ {for x:=0; x<24; x++ {img.Set(x,y,color.RGBA{R:95,G:125,B:140,A:255})}}
+    img := image.NewRGBA(image.Rect(0, 0, w, h))
+    for y:=0; y<h; y++ {for x:=0; x<w; x++ {img.Set(x,y,color.RGBA{R:95,G:125,B:140,A:255})}}
     var out bytes.Buffer
     if err:=jpeg.Encode(&out,img,&jpeg.Options{Quality:80}); err!=nil {t.Fatal(err)}
     return out.Bytes()
@@ -45,6 +48,7 @@ func writeCoverTarFixture(t *testing.T,full string,entries []archiveImageFixture
 }
 func TestArchiveCoverSkipsCorruptCandidatesAndPreservesPriority(t *testing.T){
     good:=validArchiveCoverFixture(t)
+    other:=validArchiveCoverFixtureWithSize(t,12,19)
     bad:=[]byte("bad image bytes that are not actually jpeg")
     cases:=[]struct{
         name,filename,format string
@@ -56,7 +60,7 @@ func TestArchiveCoverSkipsCorruptCandidatesAndPreservesPriority(t *testing.T){
         {"comic tar corrupt first","comic.cbt","Comic",[]archiveImageFixture{{"001.jpg",bad},{"002.jpg",good}},true,true},
         {"ebook first cover corrupt","novel.epub","Ebook",[]archiveImageFixture{{"cover-001.jpg",bad},{"cover-002.jpg",good}},false,true},
         {"ebook bad cover then fallback","chapter.epub","Ebook",[]archiveImageFixture{{"cover.jpg",bad},{"images/plate.jpg",good}},false,true},
-        {"ebook noncover then valid preferred cover","priority.epub","Ebook",[]archiveImageFixture{{"images/plate.jpg",good},{"cover.jpg",good}},false,true},
+        {"ebook noncover then valid preferred cover","priority.epub","Ebook",[]archiveImageFixture{{"images/plate.jpg",other},{"cover.jpg",good}},false,true},
         {"comic all malformed","bad.cbz","Comic",[]archiveImageFixture{{"001.jpg",bad},{"002.jpg",bad}},false,false},
         {"tar all malformed","bad.cbt","Comic",[]archiveImageFixture{{"001.jpg",bad},{"002.jpg",bad}},true,false},
     }
