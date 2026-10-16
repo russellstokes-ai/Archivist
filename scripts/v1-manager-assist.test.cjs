@@ -43,16 +43,26 @@ const nav=['library','assist','review','health'].map(view=>{const item=new Eleme
 const calls=[];
 const reply=value=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>value});
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
-const fetchFake=async url=>{
+const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url.endsWith('/api/manage/works/2/publication')){
+    if(options.method==='POST'){
+      const body=JSON.parse(options.body);
+      assert.equal(body.action,'publish');
+      assert.equal(body.expectedRevision,0);
+      assert.equal(body.confirm,true);
+      return reply({state:'published',revision:1});
+    }
+    return reply({state:'staged',revision:0});
+  }
   if(url==='./api/library-summary')return reply({total:3,needsReview:3,reviewWorks:2,spaces:[{name:'Books',count:3}],availability:[]});
   if(url==='./api/sources')return reply([{space:'Books'}]);
   if(url.startsWith('./api/books?'))return reply([]);
   if(url.startsWith('./api/manage/review-works/1/files?'))return reply({files:[file,{...file,id:12,title:'Part 2'}],hasMore:false});
   if(url.startsWith('./api/manage/review-works?'))return reply({total:2,works:[
     {id:1,title:'Grouped audiobook',author:'Test Author',format:'Audio',space:'Books',files:3,reviewFiles:2},
-    {id:2,title:'Comic issue',format:'Comic',space:'Books',files:1,reviewFiles:1}
+    {id:2,title:'Comic issue',format:'Comic',space:'Books',files:1,reviewFiles:0,publicationState:'staged',revision:0}
   ]});
   throw Error('Unexpected endpoint '+url);
 };
@@ -80,7 +90,7 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(elements.get('view-assist').hidden,false);
   assert.equal(elements.get('view-library').hidden,true);
   assert.equal(elements.get('assist-works').children.length,2,'Assist shows logical books rather than three files');
-  assert.match(elements.get('assist-range').textContent,/2 logical books need review/);
+  assert.match(elements.get('assist-range').textContent,/2 books require review or publication/);
   const first=elements.get('assist-works').children[0];
   const expand=first.children[2].children[0];
   expand.onclick();
@@ -92,6 +102,13 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   files.children[0].children[1].onclick();
   assert.equal(elements.get('editor').open,true,'existing metadata editor opens from Assist');
   assert.equal(elements.get('editor-title').textContent,'Edit Part 1');
+  const second=elements.get('assist-works').children[1];
+  const publish=second.children[2].children[1];
+  assert.equal(publish.textContent,'Publish book','reviewed book must expose separate publish action');
+  publish.onclick();
+  await settle();
+  assert(calls.some(url=>url.endsWith('/api/manage/works/2/publication')),'Publish requires owner route rather than metadata save');
+
   const field=elements.get('editor-fields').querySelector('input');
   assert(field&&field.name==='title'&&field.value==='Part 1','existing metadata fields remain editable');
   console.log('PASS: Assist book count, bounded grouped file fetch, navigation and real metadata editor linkage');
