@@ -240,6 +240,9 @@ export async function downloadOfflineWork(
   options?:{
     checkpoint?:OfflineDownloadCheckpoint;
     onCheckpoint?:(checkpoint:OfflineDownloadCheckpoint|null)=>Promise<void>|void;
+    // Called exactly once after files are verified and before the recovery
+    // checkpoint may be cleared. Failure leaves the full checkpoint intact.
+    onPublished?:(completedWork:OfflineServerWork)=>Promise<void>;
     chaptersByTrackId?:Record<string,Chapter[]>;
   },
 ):Promise<OfflineServerWork>{
@@ -465,8 +468,7 @@ export async function downloadOfflineWork(
       // Offline artwork is best-effort; leave any previously cached cover intact.
     }
 
-    await options?.onCheckpoint?.(null);
-    return {
+    const published:OfflineServerWork={
       key,
       server:session.server,
       workId:work.id,
@@ -482,6 +484,12 @@ export async function downloadOfflineWork(
       coverUri,
       chaptersByTrackId:options?.chaptersByTrackId,
     };
+    // A crash, storage exhaustion or denied persistent write must not clear
+    // the only recovery information. The caller must durably commit the
+    // offline manifest BEFORE the checkpoint is allowed to disappear.
+    await options?.onPublished?.(published);
+    await options?.onCheckpoint?.(null);
+    return published;
   }catch(error){
     activeDownload=null;
     await persistCheckpoint(checkpoint,options?.onCheckpoint).catch(()=>undefined);
