@@ -389,5 +389,44 @@
       "repro_file": "mobile/offline-checkpoint-data-loss.repro.cjs",
       "repro_status": "source_based_expected_red_manual_execution_pending"
     }
+  },
+  "integrated_candidate_20261016": {
+    "pr": 55,
+    "branch": "integration/archivist-v1-protected-test-candidate-20261016",
+    "base_pr": 54,
+    "includes_pr53_source": true,
+    "copies_exact_pr52_reviewed_files": [
+      "covers.go",
+      "archivist/app/covers.go",
+      "cover_candidate_fallback_test.go",
+      "archivist/app/cover_candidate_fallback_test.go",
+      "docs/v1/ASTRA_REVIEW_QUEUE.md"
+    ],
+    "server_cover_sha": "9d082c9468b927e58dd8644d8b42aa1ce94d52ce",
+    "server_cover_test_sha": "43ee302da3ea6893c33260305f879079814172fa",
+    "preserves_both_astra_queues": true,
+    "status": "draft_unmerged_unreleased",
+    "protected_sources_modified": false,
+    "ci": "pending_exact_final_head",
+    "real_hardware_accepted": false,
+    "signed_apk": false,
+    "server_readiness": "disposable_Docker_smoke_only_after_full_CI; not Pi/NAS or production certified",
+    "qa_file": "docs/v1/V1_SAFETY_BUGS_AND_TEST_GATE_2026-10-16.md",
+    "separate_red_only_pr": 56,
+    "red_evidence": {
+      "offline_checkpoint": {
+        "run": 38892078091,
+        "conclusion": "failure_expected",
+        "failing_test": "mobile/offline-checkpoint-data-loss.test.cjs",
+        "observed": "Original sentinel Buffer(81) became undefined before failed replacement network request"
+      },
+      "pagination": {
+        "run": 38892078164,
+        "conclusion": "failure_expected",
+        "failing_test": "sync_progress_concurrent_pages_test.go",
+        "observed": "HTTP 200, page2 empty, untouched third listening progress omitted after deleting earlier row"
+      },
+      "meaning": "CI-deterministic source-level repro; no physical data loss on owner device established, no fix applied"
+    }
   }
 }
