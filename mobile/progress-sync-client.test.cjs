@@ -83,7 +83,10 @@ const snapshot=items=>({items,hasMore:false,nextOffset:items.length,snapshot:'b'
 
   // No snapshot / wrong remote version must fail without any acknowledgment.
   await assert.rejects(replayDurableProgress(alice,async(path)=>{
-    if(path.includes('offset=0'))return {items:[edition(13,21,20,3)],hasMore:true,nextOffset:1};
+    if(path.includes('offset=0'))return {
+      items:Array.from({length:100},(_,i)=>listening(i+100,0,1)),
+      hasMore:true,nextOffset:100
+    };
     throw Error('must fail on missing immutable cursor before second page');
   }),/missing consistent cursor/);
   assert.equal((await alice.list()).length,1);
