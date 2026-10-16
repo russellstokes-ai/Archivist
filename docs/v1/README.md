@@ -9,6 +9,8 @@ Use these four records **together**. They separate the approved app from pending
 3. **[DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)** — append-only dated actions, diagnostics, changes, failed/passing CI, safeguards, approval and rollback notes. Never overwrite old entries to hide failed attempts.
 4. **[ORIGINAL_BUG_BACKLOG_2026-10-14.md](./ORIGINAL_BUG_BACKLOG_2026-10-14.md)** — *scope* authority. Only #16, #19, #25, #23, #17, #20, #31, #32 are active user bugs. Scanner #15 excluded.
 
+**Latest P0/P1/P2 QA-only combined source (draft PR #80):** reviewed P0 mobile/server durability + P1 playback, Auto and manager Save + P2 manual APK/16 KB checks. [Consolidated acceptance and remaining work](./V1_P0_P1_P2_QA_STATUS_2026-10-16.md). No merge, installed APK, commercial acceptance or final logo/splash integration.
+
 **Latest P0/P1 source assembly:** `integration/archivist-v1-p0-p1-reviewed-20261016` — pending full integrated CI; imports independently reviewed stateStore P0 (#71), server catalogue P0 (#72), Android Auto chapter transition P1 (#73) on green #70. All 46 locked source files protected, no APK/release approval; see [source-level progress and limitations](./P0_P1_QA_HANDOFF_2026-10-16.md).
 
 **Current combined integrity-source development candidate:** `integration/archivist-v1-offline-sync-reviewed-20261016` contains green draft offline copy-on-write (#68) and consistent server/client progress snapshots (#69), plus the existing plan audit. [Integration limitations and acceptance](./V1_INTEGRATED_COW_SYNC_LIMITS_2026-10-16.md). Neither App.tsx manifest durability nor stateStore/empty-NAS/rename P0 is fixed, and 0/8 original bugs are device accepted.

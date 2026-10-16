@@ -749,5 +749,37 @@
     "signed_apk": false,
     "all_original_8_on_device_accepted": 0,
     "commercial_go": false
+  },
+  "p0_p1_p2_candidate_20261016": {
+    "branch": "integration/archivist-v1-p0-p1-p2-reviewed-20261016",
+    "pr": 80,
+    "base_pr": 78,
+    "base_sha": "c74464e8311ae9e78ec910fe08779f5a3a04fee0",
+    "siblings": [
+      {
+        "pr": 75,
+        "sha": "7db4e701e15a54c2e1b71c5246e2b71075b13f1f"
+      },
+      {
+        "pr": 79,
+        "sha": "087e89cea2c5d1d5baf359d1ff7afb3092df1ce2"
+      }
+    ],
+    "exact_ci_head": "pending",
+    "release": false,
+    "device_accepted": false,
+    "protected_orig_locked_files": 46,
+    "other_45_changed": 0,
+    "app_exception_exact_approved": true,
+    "original_eight_device_accepted": 0,
+    "remaining": [
+      "original 6 bugs",
+      "Fold verification for 31/32",
+      "native car multi-event journal",
+      "Pi/NAS and verified rename relinking",
+      "full server manager",
+      "Google Play production AAB/privacy/license",
+      "final new logo splash files"
+    ]
   }
 }

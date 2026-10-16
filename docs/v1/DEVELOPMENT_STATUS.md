@@ -2,7 +2,16 @@
 
 **Single current-status entrypoint · updated 16 October 2026.** This is a **point-in-time snapshot**, not a live dashboard. It differentiates the approved canonical app, protected development baseline, unmerged bug-fix candidates, separate commercial feature work and on-device acceptance. The machine-readable source is [DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json); retain every historical change in the [append-only development log](./DEVELOPMENT_LOG.md).
 
-> **IMPORTANT: No development work in PRs #40–#73 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+> **IMPORTANT: No development work in PRs #40–#80 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+
+## 16 October 2026 — P0/P1/P2 combined draft source candidate #80
+
+- New unmerged integration/archivist-v1-p0-p1-p2-reviewed-20261016 based on reviewed playback journal PR #78 at c74464e8311ae9e78ec910fe08779f5a3a04fee0. Added exact file blobs from server-manager Save race PR #75 (7db4e701e15a54c2e1b71c5246e2b71075b13f1f) and P2 Android release-guard PR #79 (087e89cea2c5d1d5baf359d1ff7afb3092df1ce2). No production merge/QA APK build or install; full same-head CI required.
+- Included P0 media copy-on-write, durable offline manifest, collision-free 3-generation mobile stateStore, server non-destructive catalogue preservation. P1 authenticated SQLite progress snapshots and playback outbox, Android Auto previous-track position and phone-state receipt, web manager candidate and Save response isolation.
+- Source-verified branch ancestry: PR #78 Mobile/iOS successful; PR #75 Server successful; PR #79 Mobile/iOS/Android-native successful. Separate ancestors are not same-source integration acceptance.
+- P2 internal QA APK is manual-only and uses independent QA identifier/debug signing, with production signing fail-closed; native ELF 16 KB validation added. No production AAB or Play submission created.
+- 46 original source locks preserved except one exact already owner-approved byte-pinned/reversible App.tsx logic variant; 45 other locks must remain identical. Neither scanner, Assist, Living Book, Comic Focus, Atlas, Stats, Rewards nor art has been redesigned.
+- Release NO-GO until six unresolved original mobile issues, #31/#32 Fold acceptance, real Pi/NAS/Auto, verified renamed-work relink, rapid Android Auto native multi-event queue, safe migrations, advanced ten-screen server and Google Play/privacy/branding work are complete. New logo and splash animations remain pending final approved assets.
 
 ## 16 October 2026 — P0/P1 source corrections, integrated draft under full acceptance
 
