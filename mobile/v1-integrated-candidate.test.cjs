@@ -42,7 +42,7 @@ assert(fs.existsSync(path.join(root,'mobile/progress-reconciliation.test.cjs')),
   'Progress duplicate-identity regression is required for the integrated candidate');
 console.log('PASS: reviewed sibling server fixes and both Astra risk queues are assembled verbatim; no device acceptance claimed');
 const finalAudit=bytes('docs/v1/FINAL_COMMERCIAL_SOURCE_SWEEP_2026-10-16.md').toString('utf8');
-for(const required of ['PR #60','PR #61','PR #62','PR #63','RED #38899466348','df4c39b44394d8c512ca0298bffa7f19da356490']){
+for(const required of ['(#60)','(#61)','(#62)','PR #63','RED #38899466348','df4c39b44394d8c512ca0298bffa7f19da356490']){
   assert(finalAudit.includes(required),'commercial sweep must document '+required);
 }
 const manifest=JSON.parse(bytes('docs/v1/DEVELOPMENT_STATUS.json').toString('utf8'));
