@@ -201,8 +201,11 @@ func (a *app) syncProgressRoutes(mux *http.ServeMux) {
             var err error
             token,snapshot,err=a.storeProgressSnapshot(r.Context(),profile,limit)
             if err!=nil{
-                if errors.Is(err,errProgressSnapshotTooLarge){fail(w,http.StatusRequestEntityTooLarge,err)}
-                else{fail(w,http.StatusServiceUnavailable,err)}
+                if errors.Is(err,errProgressSnapshotTooLarge){
+                    fail(w,http.StatusRequestEntityTooLarge,err)
+                }else{
+                    fail(w,http.StatusServiceUnavailable,err)
+                }
                 return
             }
         }else{
