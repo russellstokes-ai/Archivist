@@ -12,6 +12,10 @@ const status=read('docs/v1/DEVELOPMENT_STATUS.md');
 const log=read('docs/v1/DEVELOPMENT_LOG.md');
 const scope=read('docs/v1/ORIGINAL_BUG_BACKLOG_2026-10-14.md');
 const locks=JSON.parse(read('docs/v1/PROTECTED_BLOB_LOCKS.json'));
+const approvedBrand=JSON.parse(read('docs/v1/BRAND_REPLACEMENT_2026-10-16.json'));
+// The owner explicitly retired the old artwork. The gate validates the exact
+// seven-path exception; retain original immutable locks for every other path.
+require('node:child_process').execFileSync(process.execPath,[path.join(root,'scripts/v1-protection-gate.cjs')]);
 const approvedLogic=JSON.parse(read('docs/v1/APP_LOGIC_EXCEPTION_2026-10-16.json'));
 const originalAppLock=locks.locks.find(item=>item.path==='mobile/App.tsx');
 assert.equal(approvedLogic.schema_version,1);
@@ -49,6 +53,7 @@ for(const {path:lockedPath,git_blob_sha} of locks.locks){
   const actual=crypto.createHash('sha1')
     .update(Buffer.from('blob '+source.length+'\0')).update(source).digest('hex');
   if(lockedPath==='mobile/App.tsx'&&actual===approvedLogic.approved_git_blob_sha)continue;
+  if(approvedBrand.locks.some(item=>item.path===lockedPath&&item.original_git_blob_sha===git_blob_sha&&item.approved_git_blob_sha===actual))continue;
   if(require('../scripts/reader-repair-exception.cjs')(root,lockedPath,actual,git_blob_sha))continue;
   assert.equal(actual,git_blob_sha,'Canonical protected source changed outside precise approved App.tsx exception: '+lockedPath);
 }
