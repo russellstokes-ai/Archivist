@@ -74,7 +74,8 @@ const {buildAndroidAutoLibrary,persistAndroidAutoLibrary,consumeAndroidAutoProgr
   const progress=await consumeAndroidAutoProgress();
   assert.equal(progress.workKey,'audio-dir:Books:Dune');
   assert.equal(progress.seconds,499.5);
-  assert.equal(deleted.includes(progressUri),true);
+  assert.equal(deleted.includes(progressUri),false,'reading native progress must never delete the unacknowledged event');
+  assert(reads.has(progressUri),'native AtomicFile must remain for retry if phone storage fails');
 
   console.log('PASS: Android Auto library exposes playable audiobooks, resume/favourites state and safe progress handoff');
 })().catch(error=>{console.error(error);process.exitCode=1;});
