@@ -317,6 +317,10 @@ export async function downloadOfflineWork(
       if(result.status<200||result.status>=300)throw Error('Download failed with HTTP '+result.status+'.');
       const size=await existingSize(uri);
       if(size<0)throw Error('Download completed but the local file is missing.');
+      // A server may report no Content-Length. HTTP 200 alone must never
+      // publish an empty local file as a completed playable chapter.
+      // Leave any partial bytes/checkpoint in place for safe recovery.
+      if(size===0)throw Error('Downloaded file is empty. Tap Resume download to retry this file.');
       const expected=Math.max(0,Number(track.size)||0);
       if(expected>0 && size!==expected){
         await deleteAsync(uri,{idempotent:true}).catch(()=>undefined);
