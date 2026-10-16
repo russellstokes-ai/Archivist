@@ -4,6 +4,12 @@
 
 > **IMPORTANT: No development work in PRs #40–#59 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 16 October 2026 — final whole-product commercial robustness sweep
+
+- Entire product read-only source review across protected Android/Fold, scanner/Assist boundaries, comic reader, offline/media progress, server/SQLite, Docker/HA/NAS, server administration, Android Auto, native Android/Play publication and source security: [WHOLE_PRODUCT_COMMERCIAL_ROBUSTNESS_SWEEP_2026-10-16.md](./WHOLE_PRODUCT_COMMERCIAL_ROBUSTNESS_SWEEP_2026-10-16.md).
+- Newly highlighted release gates: `covers.go:safeImageData` does not preflight WebP decoded dimensions as it does JPEG/PNG/GIF; `backup.go` WAL/SHM restore path lacks crash-injection/durability proof; `AndroidManifest.xml` deliberately allows cleartext traffic requiring explicit LAN-vs-HTTPS policy; the existing Android APK action is debug-signed testing distribution, **not** a production signed Play AAB. These are source-level or acceptance risks, not claims of observed exploit/device failure.
+- No additional user mobile bug closed. No protected code touched by this audit, no production code fixes claimed, no branch merged or released. All eight owner bugs still unaccepted on hardware.
+
 ## 16 October 2026 — final RED/GREEN server audit evidence
 
 - [PR #59 pre-fix RED Server #38896163057](https://github.com/russellstokes-ai/Archivist/actions/runs/38896163057) failed at the intended handler assertion: actual TypeError 'choose is not a function' on a server manager row checkbox. This was a real runtime defect in the old web/manage.js, not a fake-DOM boot error. The isolated PR remains quarantined and must not merge.

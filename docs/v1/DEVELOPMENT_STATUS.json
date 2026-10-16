@@ -483,5 +483,44 @@
     "current_project_status": "draft_development_not_commercial_release",
     "release_permitted": false,
     "server_workflow_path_triggers_fixed": true
+  },
+  "final_whole_product_sweep_20261016": {
+    "file": "docs/v1/WHOLE_PRODUCT_COMMERCIAL_ROBUSTNESS_SWEEP_2026-10-16.md",
+    "review_scope": [
+      "Android and Fold native / readers / playback / offline",
+      "both frozen scanners and Archivist Assist",
+      "Go and SQLite server media API",
+      "advanced server web manager",
+      "Docker/Home Assistant/ARM64/NAS",
+      "Android Auto Media3",
+      "Google Play and signing",
+      "privacy/authentication/storage risk"
+    ],
+    "confirmed_source_defects": [
+      {
+        "description": "P0 offline checkpoint pre-download media deletion",
+        "red_ci": 38892078091,
+        "pr": 56
+      },
+      {
+        "description": "P1 inconsistent LIMIT/OFFSET progress paging",
+        "red_ci": 38892078164,
+        "pr": 56
+      }
+    ],
+    "additional_source_level_risks": [
+      "WebP compressed header lacks same decoded-size preflight as GIF/JPEG/PNG",
+      "restore WAL/SHM crash durability unverified",
+      "cleartext traffic enabled intentionally for local LAN; secure remote policy review",
+      "Android release workflow builds debug-signed test APK, not signed AAB"
+    ],
+    "verified_server_corrected_drafts": [
+      57,
+      58
+    ],
+    "user_device_bug_acceptance": 0,
+    "original_eight_scope_unchanged": true,
+    "production_release_go": false,
+    "safety": "documentation only; no protected file modified and no user media used"
   }
 }
