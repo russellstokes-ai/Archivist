@@ -428,5 +428,60 @@
       },
       "meaning": "CI-deterministic source-level repro; no physical data loss on owner device established, no fix applied"
     }
+  },
+  "commercial_finish_continuation_20261016": {
+    "canonical_sha": "df4c39b44394d8c512ca0298bffa7f19da356490",
+    "protected_sha": "72bbf177aecc92f31724b48c6cf11a7eddd7a216",
+    "green_combined_parent": {
+      "pr": 55,
+      "sha": "037e3df4d715341bc92c2610f13765672778868a",
+      "server": 38892377241,
+      "mobile": 38892377438,
+      "ios": 38892377340
+    },
+    "new_drafts": [
+      {
+        "pr": 57,
+        "scope": "Server GIF comic pages with header bound",
+        "base_pr": 55,
+        "red_server_run": 38894498595,
+        "green_server_run": 38894595898,
+        "status": "draft_ci_verified",
+        "device_accepted": false
+      },
+      {
+        "pr": 58,
+        "scope": "Server manager individual row selection and export controls",
+        "base_pr": 57,
+        "first_mock_harness_failed_run": 38895000598,
+        "green_code_checkpoint_run": 38895229439,
+        "green_code_checkpoint_sha": "16e4d1d203e5d39735d204d4a0eca9e94fa6e4da",
+        "status": "draft_ci_verified_source_checkpoint",
+        "device_accepted": false,
+        "verified_server_run": 38896160314,
+        "verified_server_source_sha": "61576ec4d58dd37a400512fa21e08200bfd55336"
+      },
+      {
+        "pr": 59,
+        "scope": "Quarantined pre-fix manager selection RED-only",
+        "base_pr": 57,
+        "status": "red_reproduced_expected_do_not_merge",
+        "merge_allowed": false,
+        "red_server_run": 38896163057,
+        "observed_error": "TypeError: choose is not a function in web/manage.js row onchange"
+      }
+    ],
+    "astra_handoff": "docs/v1/ASTRA_FINAL_COMMERCIAL_DELIVERY_HANDOFF_2026-10-16.md",
+    "critical_red_proofs": {
+      "pr": 56,
+      "offline_ci": 38892078091,
+      "snapshot_ci": 38892078164,
+      "status": "reproduced_unfixed"
+    },
+    "protected_source_changes_approved": false,
+    "existing_eight_user_bugs_device_accepted": 0,
+    "current_project_status": "draft_development_not_commercial_release",
+    "release_permitted": false,
+    "server_workflow_path_triggers_fixed": true
   }
 }

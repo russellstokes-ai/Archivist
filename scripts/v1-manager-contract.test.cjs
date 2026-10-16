@@ -22,3 +22,6 @@ assert(js.includes("candidate[key]"),'metadata candidates need per-field selecti
 assert(css.includes('prefers-reduced-motion'),'manager must respect reduced motion');
 assert(css.includes('max-width:590px'),'manager must have phone layout');
 console.log('PASS: standalone manager structural, access-control and mirrored-file contracts');
+
+// Also execute real selection event handlers against a minimal DOM.
+require('./v1-manager-selection.test.cjs');
