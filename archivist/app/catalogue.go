@@ -31,7 +31,8 @@ func (a *app) initCatalogue() error {
 		}
 	}
 	if err:=a.initPublication();err!=nil{return err}
-    return a.initMetadataControls()
+    if err:=a.initMetadataControls();err!=nil{return err}
+    return a.initRelink()
 }
 
 // Natural ordering makes Track 2 precede Track 10 without modifying filenames.
