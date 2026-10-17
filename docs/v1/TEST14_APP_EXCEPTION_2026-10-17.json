@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "path": "mobile/App.tsx",
+  "scope": "User-directed Test 14: Atlas must populate published/complete legacy logical works and all three chart data views without scanner publication bypass; completed Rewards medallion is brand gold. No scanner, Assist, Comic Focus, Living Book renderer, layout geometry or immutable Lottie edited.",
+  "owner_approval": "User on 2026-10-17 directed robust mobile repairs and Atlas specification compliance, and previously requested the medallion be gold.",
+  "previous_approved_git_blob_sha": "d3f9b89f0c2cda360e21eace25460505eb2857a7",
+  "approved_git_blob_sha": "1a643c3a5e6c1cc9c824ad61dd413ae9804b0a29",
+  "release_approved": false,
+  "installed_apk_approved": false,
+  "changes": [
+    {
+      "old": "import {AtlasKind, buildAtlasRelationship} from './atlas';\n",
+      "new": "import {AtlasKind, buildAtlasRelationship} from './atlas';\nimport {atlasSelectPublished,atlasSourceAudit} from './atlasSourceSelection';\n"
+    },
+    {
+      "old": "  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>{\n    const eligible=sourceWorks.filter(work=>work.source!=='local'||work.localWork?.tracks.some(track=>(track as ScannerBook).scannerPublished));\n    const selected=sourceFilter==='all'?dedupeForAll(eligible):eligible.filter(work=>matchesSource(work.source,sourceFilter));\n    const unique=new Map<string,UnifiedWork>();for(const work of selected)unique.set(work.source==='local'?(work.logicalWorkKey||work.canonicalKey):work.canonicalKey,work);\n    return [...unique.values()];\n  },[sourceFilter,sourceWorks]);",
+      "new": "  // One publication-aware boundary, shared by Atlas Universe, rings and relationships.\n  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,sourceFilter),[sourceFilter,sourceWorks]);\n  useEffect(()=>{\n    if(activeTab!=='atlas'||!localCatalogReady)return;\n    // Counts only: never log media titles, paths, cover URLs or profile data.\n    console.info('ArchivistAtlasSourceCounts',JSON.stringify(atlasSourceAudit(sourceWorks,sourceFilter)));\n  },[activeTab,localCatalogReady,sourceFilter,sourceWorks]);"
+    },
+    {
+      "old": "            <View style={[styles.rewardMedal,{borderColor:item.unlocked?tone:p.line,backgroundColor:item.unlocked?(darkMode?'#151412':'#FFF9EC'):p.card}]}>\n              <UiIcon name={icon} color={item.unlocked?tone:p.muted} size={22}/>",
+      "new": "            <View style={[styles.rewardMedal,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.gold:p.card}]}>\n              <UiIcon name={icon} color={item.unlocked?'#182C29':p.muted} size={22}/>"
+    }
+  ]
+}
