@@ -14,9 +14,25 @@ module.exports=function test14AppException(root,actual){
  // in reverse, then enforce the original 14-patch baseline as before.
  const follow=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_TRANSPORT_APP_EXCEPTION_2026-10-17.json'),'utf8'));
  const saf=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_SAF_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+ const media=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_MEDIA_APP_EXCEPTION_2026-10-17.json'),'utf8'));
  if(actual!==next.approved_git_blob_sha){
-   let transportBlob=actual;
-   if(actual===saf.approved_git_blob_sha){
+   let activeBlob=actual;
+   if(activeBlob===media.approved_git_blob_sha){
+     if(media.schema_version!==1||media.path!=='mobile/App.tsx'||
+        media.previous_approved_git_blob_sha!==saf.approved_git_blob_sha||
+        media.release_approved!==false||media.installed_apk_approved!==false||
+        media.changes.length!==2)return false;
+     for(const {old,new:replacement} of [...media.changes].reverse()){
+       if(typeof old!=='string'||typeof replacement!=='string'||
+          !old.length||!replacement.length||source.split(replacement).length!==2)return false;
+       source=source.replace(replacement,old);
+     }
+     const bytes=Buffer.from(source,'utf8');
+     activeBlob=crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
+     if(activeBlob!==saf.approved_git_blob_sha)return false;
+   }
+   let transportBlob=activeBlob;
+   if(activeBlob===saf.approved_git_blob_sha){
      if(saf.schema_version!==1||saf.path!=='mobile/App.tsx'||
         saf.previous_approved_git_blob_sha!==follow.approved_git_blob_sha||
         saf.release_approved!==false||saf.installed_apk_approved!==false||

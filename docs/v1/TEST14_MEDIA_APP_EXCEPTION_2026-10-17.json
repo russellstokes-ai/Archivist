@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "path": "mobile/App.tsx",
+  "scope": "Downloaded manifest availability reflects verified local tracks; fully-missing copies remain visible but unavailable. Native PDF opens on the exact saved Now page and remounts on each explicit document-open generation. No scanner/Assist, canonical PDF reader art/layout or Living Book changes.",
+  "owner_approval": "Robust source repair for original mobile offline #31 and PDF #32, owner directed October 17",
+  "previous_approved_git_blob_sha": "92854a84dd35229eea120798ff2a36159ee46a7e",
+  "approved_git_blob_sha": "a52f9684a696a5bcbe1cad0c780e1bb192fc4ed7",
+  "release_approved": false,
+  "installed_apk_approved": false,
+  "changes": [
+    {
+      "old": "available:true,files:work.files,editions:1,readingState:work.readingState",
+      "new": "available:work.available,files:work.files,editions:1,readingState:work.readingState"
+    },
+    {
+      "old": "<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0}",
+      "new": "<LocalPdfReader key={reading.uri+'|'+readerOpenGeneration.current} uri={reading.uri!} title={reading.title} initialPage={readerPage}"
+    }
+  ]
+}
