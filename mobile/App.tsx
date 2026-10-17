@@ -7588,6 +7588,7 @@ function Client() {
       {level:60,title:'Master',icon:'insights' as UiIconName},
     ];
     const nextMilestoneIndex=Math.max(0,milestones.findIndex(item=>overall.level<item.level));
+    // Minted reward tiers replace repeated generic per-award icons in this gallery.
     const rewardTone=(item:Achievement)=>{
       const category=item.category||'Other';
       if(category==='Reading')return p.sage;
