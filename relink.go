@@ -216,6 +216,38 @@ func (a *app) relinkCheck(ctx context.Context,q bulkQuerier,old,candidate relink
         if err!=nil{return err}
         if n!=0{return fmt.Errorf("candidate has saved data in %s; refusing to discard it",entry.table)}
     }
+    // Playback queues are JSON arrays of ASSET IDs rather than foreign-key
+    // rows. Losing an independently queued candidate would silently remove
+    // somebody's upcoming audiobook; refuse the merge instead.
+    var queueTable int
+    if err:=q.QueryRowContext(ctx,"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='playback_queue'").Scan(&queueTable);err!=nil{return err}
+    if queueTable!=0{
+        queueRows,err:=q.QueryContext(ctx,"SELECT ids FROM playback_queue")
+        if err!=nil{return err}
+        for queueRows.Next(){
+            var encoded string
+            if err=queueRows.Scan(&encoded);err!=nil{queueRows.Close();return err}
+            if len(encoded)>16384{queueRows.Close();return errors.New("saved playback queue is unusually large; review before relinking")}
+            var ids []int64
+            if err=json.Unmarshal([]byte(encoded),&ids);err!=nil{queueRows.Close();return errors.New("saved playback queue is invalid; review before relinking")}
+            for _,id:=range ids{
+                if id==candidate.AssetID{
+                    queueRows.Close()
+                    return errors.New("candidate belongs to a saved listening queue; remove it before relinking")
+                }
+            }
+        }
+        if err=queueRows.Err();err!=nil{queueRows.Close();return err}
+        queueRows.Close()
+    }
+    var movesTable int
+    if err:=q.QueryRowContext(ctx,"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='file_moves'").Scan(&movesTable);err!=nil{return err}
+    if movesTable!=0{
+        var pending int
+        if err:=q.QueryRowContext(ctx,`SELECT count(*) FROM file_moves
+            WHERE asset=? AND state IN ('preview','applying','linked')`,old.AssetID).Scan(&pending);err!=nil{return err}
+        if pending!=0{return errors.New("original file has a pending organisation preview; cancel or complete it first")}
+    }
     var collisions int
     err:=q.QueryRowContext(ctx,`SELECT count(*) FROM works WHERE auto=1
         AND group_key=? AND id NOT IN (?,?)`,candidate.GroupKey,old.WorkID,candidate.WorkID).Scan(&collisions)
@@ -290,6 +322,11 @@ func (a *app) applyRelink(ctx context.Context,p relinkPreview)error{
     digest,err:=fullRelinkFileHash(ctx,root,target.Path,target.Size)
     if err!=nil{return err}
     if digest!=p.SHA256{return errors.New("candidate bytes changed after preview; do not relink")}
+    if _,err=root.Lstat(old.Path);err==nil{
+        return errors.New("original media returned during hash verification; rescan instead")
+    }else if !errors.Is(err,os.ErrNotExist){
+        return errors.New("original media path could not be verified absent after hashing")
+    }
     // No user media is renamed/deleted/copied. A single SQL transaction
     // retires ONLY the untouched staged candidate and repoints the old asset,
     // retaining original asset/edition/work IDs and all reading positions.

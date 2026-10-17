@@ -168,6 +168,18 @@ func TestOwnerRelinkPreservesIdentityPublicationAndHouseholdProgress(t *testing.
     if err!=nil||got.Asset!=s.oldAsset||got.Seconds!=304{
         t.Fatalf("next rescan corrupted household bookmark: %+v %v",got,err)
     }
+    // Reopen a second connection to simulate the durable DB state surviving a
+    // server restart: neither the audit trail nor household progress is ephemeral.
+    reopened,err:=openDB(s.a.dbPath)
+    if err!=nil{t.Fatal(err)}
+    defer reopened.Close()
+    var savedSeconds float64
+    if err=reopened.QueryRow("SELECT seconds FROM profile_progress WHERE profile_id=7 AND edition_id=?",s.oldEdition).Scan(&savedSeconds);err!=nil||savedSeconds!=304{
+        t.Fatalf("restart lost household bookmark: seconds=%v err=%v",savedSeconds,err)
+    }
+    if err=reopened.QueryRow("SELECT count(*) FROM asset_relink_events WHERE asset_id=?",s.oldAsset).Scan(&n);err!=nil||n!=1{
+        t.Fatalf("relink audit absent after restart: count=%d err=%v",n,err)
+    }
 }
 
 func TestRelinkRejectsChangedTargetAndIndependentState(t *testing.T){
@@ -222,6 +234,25 @@ func TestRelinkRejectsChangedTargetAndIndependentState(t *testing.T){
         if err:=os.Symlink(other,filepath.Join(s.root,s.newPath));err!=nil{t.Skipf("symlinks unsupported: %v",err)}
         got:=s.apply(t,preview,true,"same-file-verified-by-owner")
         if got.Code!=409{t.Fatalf("symlink was followed during relink: %d %s",got.Code,got.Body.String())}
+    })
+    t.Run("candidate present in family playback queue",func(t *testing.T){
+        s:=setupRelinkScenario(t)
+        if err:=s.a.initPlayerFeatures();err!=nil{t.Fatal(err)}
+        ids:="["+strconv.FormatInt(s.newAsset,10)+"]"
+        if _,err:=s.a.db.Exec("INSERT INTO playback_queue(profile_id,ids,revision) VALUES(7,?,1)",ids);err!=nil{t.Fatal(err)}
+        req,_:=json.Marshal(relinkRequest{OldAssetID:s.oldAsset,CandidateAssetID:s.newAsset})
+        got:=relinkCall(s.a,"POST","/api/manage/relink/preview",string(req),"test-key",true)
+        if got.Code!=409{t.Fatalf("candidate queued on another profile was lost: %d %s",got.Code,got.Body.String())}
+    })
+    t.Run("pending organisation preview on original",func(t *testing.T){
+        s:=setupRelinkScenario(t)
+        if err:=s.a.initMoves();err!=nil{t.Fatal(err)}
+        if _,err:=s.a.db.Exec(`INSERT INTO file_moves(id,asset,root,old_path,new_path,hash,state)
+          VALUES('pending-original',?,?,?,?,?,'preview')`,
+          s.oldAsset,s.root,s.oldPath,"Sorted/Original Title.m4b","synthetic");err!=nil{t.Fatal(err)}
+        req,_:=json.Marshal(relinkRequest{OldAssetID:s.oldAsset,CandidateAssetID:s.newAsset})
+        got:=relinkCall(s.a,"POST","/api/manage/relink/preview",string(req),"test-key",true)
+        if got.Code!=409{t.Fatalf("original path with pending move preview relinked: %d %s",got.Code,got.Body.String())}
     })
     t.Run("candidate already has manual metadata",func(t *testing.T){
         s:=setupRelinkScenario(t)
