@@ -585,7 +585,10 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
     'edition-level preview must hit the dedicated signed endpoint');
   assert.equal(elements.get('comic-profile-apply').disabled,false,'valid signed plan enables manual confirmation');
   assert.equal(elements.get('comic-profile-diff').children.length,2,'only two edited labels should be previewed');
+  const auditCallsBeforeEditionSave=calls.filter(url=>url==='./api/manage/works/2/comic-audit').length;
   elements.get('comic-profile-apply').onclick();await settle();
+  assert(calls.filter(url=>url==='./api/manage/works/2/comic-audit').length>auditCallsBeforeEditionSave,
+    'saving a run or volume must refresh the indexed issue-gap audit');
   assert.equal(editionRev,1,'confirmed Save should advance the per-edition revision');
   assert.equal(editionFields.run,'1971 volume run');
   assert.equal(editionFields.volume,'2');
@@ -596,7 +599,10 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(elements.get('comic-profile-undo-preview').disabled,false);
   elements.get('comic-profile-undo-preview').onclick();await settle();
   assert.equal(elements.get('comic-profile-undo').disabled,false,'last Save undo requires preview');
+  const auditCallsBeforeEditionUndo=calls.filter(url=>url==='./api/manage/works/2/comic-audit').length;
   elements.get('comic-profile-undo').onclick();await settle();
+  assert(calls.filter(url=>url==='./api/manage/works/2/comic-audit').length>auditCallsBeforeEditionUndo,
+    'undo must refresh volume-aware issue-gap analysis');
   assert.equal(editionRev,2,'undo creates a new monotonic edition revision');
   assert.equal(editionFields.run,'');
   assert.equal(editionFields.volume,'');

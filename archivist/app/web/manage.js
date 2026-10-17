@@ -785,7 +785,11 @@
         throw Error('Server did not confirm the next edition revision.');
       }
       committed=true;
-      await workLoadComicProfiles(epoch);
+      // The comic audit now knows which volume/run was owner-verified. Refresh
+      // it immediately; never leave old cross-volume gap suggestions visible.
+      ++workCandidateEpoch;
+      $('work-candidates').replaceChildren(e('p','Edition identity changed. Search providers again before selecting book metadata.','subtext'));
+      await Promise.all([workLoadComicProfiles(epoch),workLoadComicAudit(epoch)]);
       if(epoch===workEpoch)comicProfileMessage((undo?'Previous saved edition labels restored.':'Edition labels saved.')+
         ' No original files, covers, publication or bookmarks were changed.');
     }catch(error){
