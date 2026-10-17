@@ -101,7 +101,7 @@ func (a *app) libraryHealthRoutes(mux *http.ServeMux) {
         reply(w,map[string]any{
             "summary":summary,
             "sources":sources,
-            "note":"File-level metadata gaps and confidence reflect the last indexed state; root availability is checked separately. This read-only report does not inspect or change physical media."
+            "note":"File-level metadata gaps and confidence reflect the last indexed state; root availability is checked separately. This read-only report does not inspect or change physical media.",
         })
     })
 }
