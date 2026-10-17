@@ -1,5 +1,6 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
-import {StyleSheet,View} from 'react-native';
+import {AppState,StyleSheet,View} from 'react-native';
+import {livingBookProbeScript,parseLivingBookProbe} from './livingBookReadiness';
 
 export function AmbientGlow({color='#47736F',size=520,strength=1}:{color?:string;size?:number;strength?:number}){
   return <View pointerEvents="none" accessibilityElementsHidden style={{position:'absolute',width:size,height:size,left:'50%',top:0,marginLeft:-size/2}}>{Array.from({length:24},(_,i)=>{const inset=i*size/64;return <View key={i} style={{position:'absolute',left:inset,top:inset,right:inset,bottom:inset,borderRadius:size,backgroundColor:color,opacity:.009*strength}}/>})}</View>;
@@ -109,20 +110,65 @@ function LivingBookInstance(props:LivingBookCanvasProps){
   const ref=useRef<WebView>(null);
   const [ready,setReady]=useState(false);
   const [reloadKey,setReloadKey]=useState(0);
+  const generation=useRef(0);
+  generation.current=reloadKey;
   const attempts=useRef(0);
   const failed=useRef(false);
-  const recover=()=>{
+  const deadline=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const clearDeadline=()=>{
+    if(deadline.current!==null){clearTimeout(deadline.current);deadline.current=null;}
+  };
+  const recover=(reason='native-load')=>{
     if(failed.current)return;
-    failed.current=true;setReady(false);
-    if(attempts.current>=2)return;
-    attempts.current++;setReloadKey(key=>key+1);
+    failed.current=true;
+    setReady(false);
+    clearDeadline();
+    if(attempts.current>=2){
+      console.warn('Archivist Living Book: bounded recovery exhausted:',reason);
+      return;
+    }
+    attempts.current++;
+    console.warn('Archivist Living Book: native canvas retry',attempts.current,reason);
+    setReloadKey(key=>key+1);
+  };
+  const probe=(key:number)=>{
+    if(failed.current||generation.current!==key)return;
+    clearDeadline();
+    deadline.current=setTimeout(()=>{
+      if(generation.current===key)recover('canvas-first-frame-timeout');
+    },5500);
+    try{ref.current?.injectJavaScript(livingBookProbeScript(key));}
+    catch{recover('native-injection-error');}
   };
   const initialHtml=useMemo(()=>rendererHtml({
     title:props.title,author:props.author,chapter:props.chapter||'',number:props.number||1,
     phase:props.phase,direction:props.direction,skipping:props.skipping,reduceMotion:props.reduceMotion,
     coverMode:props.coverMode||'fallback',
   }),[]);
-  const inject=(code:string)=>{if(ready)ref.current?.injectJavaScript('try{'+code+'}catch(e){};true;');};
+  const inject=(code:string)=>{
+    if(ready)ref.current?.injectJavaScript('try{'+code+'}catch(e){};true;');
+  };
+
+  useEffect(()=>{
+    // Android may retain an apparently loaded WebView across app backgrounding
+    // while its hardware Canvas goes blank. Recheck actual painted pixels on
+    // foreground return; only rebuild if the read-only handshake fails.
+    let suspended=false,returnTimer:ReturnType<typeof setTimeout>|null=null;
+    const subscription=AppState.addEventListener('change',state=>{
+      if(state==='background'||state==='inactive'){
+        suspended=true;clearDeadline();
+      }else if(state==='active'&&suspended){
+        suspended=false;
+        setReady(false);
+        returnTimer=setTimeout(()=>probe(generation.current),250);
+      }
+    });
+    return()=>{
+      subscription.remove();
+      if(returnTimer!==null)clearTimeout(returnTimer);
+      clearDeadline();
+    };
+  },[reloadKey]);
 
   useEffect(()=>{
     inject('window.ArchivistLivingBook&&window.ArchivistLivingBook.setState('+js({
@@ -142,8 +188,20 @@ function LivingBookInstance(props:LivingBookCanvasProps){
   return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none">
     <WebView key={reloadKey} ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
       bounces={false} overScrollMode="never" androidLayerType="hardware" style={styles.web} containerStyle={styles.container}
-      onLoadStart={()=>{failed.current=false;setReady(false)}} onLoadEnd={()=>{if(!failed.current)setReady(true)}}
-      onError={recover} onRenderProcessGone={recover} onContentProcessDidTerminate={recover} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+      onLoadStart={()=>{failed.current=false;setReady(false);clearDeadline();}}
+      onLoadEnd={()=>{if(!failed.current)probe(reloadKey);}}
+      onMessage={event=>{
+        const result=parseLivingBookProbe(event.nativeEvent.data);
+        if(!result||result.generation!==generation.current||failed.current)return;
+        if(result.status==='ready'||result.status==='tainted'){
+          clearDeadline();setReady(true);
+          if(result.status==='tainted')console.warn('Archivist Living Book: cover readback protected');
+        }else recover('canvas-'+result.status);
+      }}
+      onError={()=>recover('webview-error')}
+      onRenderProcessGone={()=>recover('renderer-process-gone')}
+      onContentProcessDidTerminate={()=>recover('renderer-terminated')}
+      showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
       setSupportMultipleWindows={false} accessible={false} importantForAccessibility="no-hide-descendants"/>
   </View>;
 }
