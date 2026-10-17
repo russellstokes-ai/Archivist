@@ -284,7 +284,7 @@ func (a *app)serveMultiSourceCandidates(w http.ResponseWriter,r *http.Request,se
  }
  ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
  client:=&http.Client{Timeout:6*time.Second,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}
- candidates,down,succeeded:=lookupMultiMetadata(ctx,client,endpoints,q)
+ candidates,down,succeeded:=a.metadataCache.lookup(ctx,client,endpoints,q)
  if succeeded==0{fail(w,502,errors.New("public metadata providers are unavailable; nothing saved"));return}
  warnings=append(warnings,down...)
  reply(w,map[string]any{"provider":"Open Library + Google Books","candidates":candidates,"warnings":warnings,

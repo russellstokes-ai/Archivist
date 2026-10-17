@@ -1,0 +1,47 @@
+name: Archivist server QA artifacts (manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      qa_version:
+        description: 'QA-only build label, never a public release'
+        type: string
+        required: false
+        default: '0.9.3-qa'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify protected source and server code
+        run: |
+          node scripts/v1-protection-gate.cjs
+          gofmt -l *.go | tee /tmp/archivist-gofmt-report.txt
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+      - name: Verify root and packaged server tests
+        run: |
+          go test ./...
+          (cd archivist/app && go test ./...)
+          for file in *.go go.mod go.sum; do cmp "$file" "archivist/app/$file"; done
+      - name: Package versioned QA binaries and reproducible HA repository
+        env:
+          ARCHIVIST_QA_VERSION: ${{ inputs.qa_version }}
+        run: |
+          sh scripts/build-server-qa-artifacts.sh "$RUNNER_TEMP/archivist-server-qa"
+          (cd "$RUNNER_TEMP/archivist-server-qa" && sha256sum -c SHA256SUMS)
+          unzip -tq "$RUNNER_TEMP/archivist-server-qa/Archivist-HA-QA-Repository.zip"
+      - name: Upload QA-only build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: archivist-server-qa-${{ github.sha }}
+          path: ${{ runner.temp }}/archivist-server-qa/
+          retention-days: 7
+          if-no-files-found: error

@@ -37,6 +37,8 @@ type app struct {
 	scanMu sync.Mutex
 	syncMu sync.Mutex
 	syncSnapshots map[string]*progressSnapshot
+	metadataCache multiMetadataCache
+	authLimiter authFailureLimiter
 }
 type source struct {
 	ID           int64  `json:"id"`
@@ -860,7 +862,10 @@ func (a *app) routes() http.Handler {
 					key = strings.TrimPrefix(bearer, "Bearer ")
 				}
 				if _, password, basic := r.BasicAuth(); basic {
+					if !a.credentialPeerPermitted(w,r){return}
 					profile, valid = a.identify(password)
+					if valid{a.authLimiter.succeeded(authPeerKey(r.RemoteAddr))
+					}else{a.authLimiter.failed(authPeerKey(r.RemoteAddr),time.Now())}
 				} else {
 					profile, valid = a.sessionIdentity(key)
 				}
@@ -884,11 +889,13 @@ func (a *app) routes() http.Handler {
 				fail(w, 403, errors.New("invalid request"))
 				return
 			}
+			if !a.credentialPeerPermitted(w,r){return}
 			var body struct {
 				Token string `json:"token"`
 			}
 			json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body)
 			if _, valid := a.identify(body.Token); !valid {
+				a.authLimiter.failed(authPeerKey(r.RemoteAddr),time.Now())
 				fail(w, 401, errors.New("incorrect access key"))
 				return
 			}
@@ -897,6 +904,7 @@ func (a *app) routes() http.Handler {
 				fail(w, 500, e)
 				return
 			}
+			a.authLimiter.succeeded(authPeerKey(r.RemoteAddr))
 			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, Secure: requestIsSecure(r), SameSite: http.SameSiteStrictMode, Path: base})
 			if r.URL.Path == "/session" {
 				reply(w, map[string]string{"token": session})
