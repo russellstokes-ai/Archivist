@@ -50,7 +50,7 @@ const fetchFake=async (url,options={})=>{
   if(url.startsWith('./api/manage/assets/')&&url.endsWith('/fields')){
     const id=Number(url.split('/')[4]);
     const row=id===11?file:{...file,id,title:'Part 2'};
-    return reply({assetId:id,revision:0,fields:fieldNames.map(name=>({
+    return reply({assetId:id,revision:0,fingerprint:'b'.repeat(64),fields:fieldNames.map(name=>({
       name,value:row[name]===undefined?(name==='seriesNumber'||name==='publishedYear'?'0':''):String(row[name]),
       source:'embedded',locked:false,updatedAt:0
     }))});

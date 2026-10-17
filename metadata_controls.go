@@ -1,6 +1,7 @@
 package main
 
 import (
+    "context"
     "crypto/sha256"
     "database/sql"
     "encoding/hex"
@@ -39,14 +40,28 @@ func (m metadataScalars) values() map[string]string {
         "isbn":m.ISBN,"asin":m.ASIN,"language":m.Language,"description":m.Description,
     }
 }
-func assetMetadataScalars(db *sql.DB,id int64)(metadataScalars,string,error) {
+func assetMetadataScalars(tx *sql.Tx,id int64)(metadataScalars,string,int64,string,error) {
     var v metadataScalars
-    var source string
-    err:=db.QueryRow(`SELECT title,author,series,series_number,genre,published_year,
-      narrator,publisher,isbn,asin,language,description,metadata_source FROM assets WHERE id=?`,id).Scan(
+    var source,signature string
+    var sourceID int64
+    err:=tx.QueryRow(`SELECT title,author,series,series_number,genre,published_year,
+      narrator,publisher,isbn,asin,language,description,metadata_source,source_id,scan_signature
+      FROM assets WHERE id=?`,id).Scan(
       &v.Title,&v.Author,&v.Series,&v.SeriesNumber,&v.Genre,&v.PublishedYear,
-      &v.Narrator,&v.Publisher,&v.ISBN,&v.ASIN,&v.Language,&v.Description,&source)
-    return v,source,err
+      &v.Narrator,&v.Publisher,&v.ISBN,&v.ASIN,&v.Language,&v.Description,&source,&sourceID,&signature)
+    return v,source,sourceID,signature,err
+}
+func metadataEditorFingerprint(assetID,sourceID int64,signature,source string,values metadataScalars)string{
+    // Source signature changes on a rescan even when no manual revision exists.
+    // This fingerprint prevents an old editor from overwriting a newer scan.
+    body,_:=json.Marshal(struct{
+        AssetID int64 `json:"assetId"`
+        SourceID int64 `json:"sourceId"`
+        Signature string `json:"signature"`
+        Source string `json:"source"`
+        Values metadataScalars `json:"values"`
+    }{assetID,sourceID,signature,source,values})
+    return metadataDigest(string(body))
 }
 
 func (a *app) initMetadataControls() error {
@@ -146,16 +161,21 @@ type metadataFieldDetail struct {
 type metadataControlState struct {
     AssetID int64 `json:"assetId"`
     Revision int64 `json:"revision"`
+    Fingerprint string `json:"fingerprint"`
     Fields []metadataFieldDetail `json:"fields"`
 }
 func (a *app) metadataControlState(id int64)(metadataControlState,error) {
     result:=metadataControlState{AssetID:id,Fields:[]metadataFieldDetail{}}
-    current,source,err:=assetMetadataScalars(a.db,id)
+    tx,err:=a.db.BeginTx(context.Background(),&sql.TxOptions{ReadOnly:true})
     if err!=nil{return result,err}
-    err=a.db.QueryRow(`SELECT revision FROM asset_metadata_revisions WHERE asset_id=?`,id).Scan(&result.Revision)
+    defer tx.Rollback()
+    current,source,sourceID,signature,err:=assetMetadataScalars(tx,id)
+    if err!=nil{return result,err}
+    result.Fingerprint=metadataEditorFingerprint(id,sourceID,signature,source,current)
+    err=tx.QueryRow(`SELECT revision FROM asset_metadata_revisions WHERE asset_id=?`,id).Scan(&result.Revision)
     if err!=nil&&!errors.Is(err,sql.ErrNoRows){return result,err}
     values:=current.values()
-    rows,err:=a.db.Query(`SELECT field,source,locked,updated_at FROM asset_field_controls
+    rows,err:=tx.Query(`SELECT field,source,locked,updated_at FROM asset_field_controls
       WHERE asset_id=?`,id)
     if err!=nil{return result,err}
     controls:=map[string]metadataFieldDetail{}
@@ -168,11 +188,18 @@ func (a *app) metadataControlState(id int64)(metadataControlState,error) {
     rows.Close()
     for _,name:=range managedMetadataFields {
         detail,ok:=controls[name]
-        if !ok{detail=metadataFieldDetail{Name:name,Source:source}}
+        if !ok{
+            // Older 'manual' sources only recorded file-level provenance.
+            // Do not falsely claim every unchanged field was manually verified.
+            inherited:=source
+            if source=="manual"{inherited="manual file · field origin unrecorded"}
+            if source=="legacy"{inherited="legacy metadata · field origin unrecorded"}
+            detail=metadataFieldDetail{Name:name,Source:inherited}
+        }
         detail.Value=values[name]
         result.Fields=append(result.Fields,detail)
     }
-    return result,nil
+    return result,tx.Commit()
 }
 
 func (a *app) metadataControlRoutes(mux *http.ServeMux) {

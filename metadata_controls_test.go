@@ -14,6 +14,7 @@ import (
 type fieldStateResponse struct {
   AssetID int64 `json:"assetId"`
   Revision int64 `json:"revision"`
+  Fingerprint string `json:"fingerprint"`
   Fields []metadataFieldDetail `json:"fields"`
 }
 func TestMetadataFieldProvenanceLocksVersionAndRestart(t *testing.T){
@@ -95,6 +96,8 @@ func TestMetadataFieldProvenanceLocksVersionAndRestart(t *testing.T){
   if state.Revision!=3||field(state,"author").Value!="Verified author"||field(state,"genre").Value!="Historical Fiction"{
     t.Fatalf("locked field was corrupted or genre absent: %+v",state)
   }
+  oldFingerprint:=state.Fingerprint
+  if len(oldFingerprint)!=64{t.Fatalf("missing optimistic snapshot fingerprint: %+v",state)}
   // A changed source fingerprint causes scan extraction. Manual edits AND the
   // explicit per-field lock remain durable without changing mobile scanners.
   if err:=os.WriteFile(filepath.Join(root,"Book.epub"),[]byte("synthetic replacement with different size"),0600);err!=nil{t.Fatal(err)}
@@ -102,6 +105,11 @@ func TestMetadataFieldProvenanceLocksVersionAndRestart(t *testing.T){
   state=read()
   if state.Revision!=3||!field(state,"author").Locked||field(state,"author").Value!="Verified author"||field(state,"genre").Value!="Historical Fiction"{
     t.Fatalf("rescan lost manual correction or lock: %+v",state)
+  }
+  if state.Fingerprint==oldFingerprint{t.Fatal("source signature change was omitted from editor fingerprint")}
+  staleSource:=`{"genre":"Overwrite stale scan","expectedRevision":3,"expectedFingerprint":"`+oldFingerprint+`"}`
+  if res:=call("PATCH","/api/assets/"+id+"/metadata",staleSource,"test-key",true);res.Code!=409{
+    t.Fatalf("stale pre-scan editor unexpectedly saved: %d %s",res.Code,res.Body.String())
   }
   if res:=call("PUT",route+"/author",`{"locked":false,"expectedRevision":3}`,"test-key",true);res.Code!=200{
     t.Fatalf("unlock rejected: %d %s",res.Code,res.Body.String())

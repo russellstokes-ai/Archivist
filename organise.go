@@ -23,6 +23,7 @@ type metadataPatch struct {
 	Language      *string  `json:"language"`
 	Description   *string  `json:"description"`
     ExpectedRevision *int64 `json:"expectedRevision,omitempty"`
+    ExpectedFingerprint *string `json:"expectedFingerprint,omitempty"`
 }
 
 // hasFields prevents empty or null-only PATCH requests from silently
@@ -62,6 +63,9 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
         if in.ExpectedRevision!=nil&&*in.ExpectedRevision<0{
             fail(w,400,errors.New("invalid metadata revision"));return
         }
+        if in.ExpectedFingerprint!=nil&&len(*in.ExpectedFingerprint)!=64{
+            fail(w,400,errors.New("invalid metadata fingerprint"));return
+        }
 
 		a.scanMu.Lock()
 		defer a.scanMu.Unlock()
@@ -69,13 +73,14 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
         id,err:=strconv.ParseInt(r.PathValue("id"),10,64)
         if err!=nil||id<1{fail(w,400,errors.New("invalid file ID"));return}
 		var sourceID int64
+        var metadataSource,scanSignature string
 		var title, author, series, genre, narrator, publisher, isbn, asin, language, description string
 		var seriesNumber float64
 		var publishedYear int
-		if err := a.db.QueryRow(`SELECT source_id,title,author,series,series_number,genre,published_year,narrator,publisher,isbn,asin,language,description
+		if err := a.db.QueryRow(`SELECT source_id,title,author,series,series_number,genre,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,scan_signature
 			FROM assets WHERE id=?`, r.PathValue("id")).Scan(
 			&sourceID, &title, &author, &series, &seriesNumber, &genre, &publishedYear,
-			&narrator, &publisher, &isbn, &asin, &language, &description,
+			&narrator, &publisher, &isbn, &asin, &language, &description,&metadataSource,&scanSignature,
 		); err != nil {
 			fail(w, 404, errors.New("asset missing"))
 			return
@@ -84,6 +89,9 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
           Title:title,Author:author,Series:series,SeriesNumber:seriesNumber,Genre:genre,
           PublishedYear:publishedYear,Narrator:narrator,Publisher:publisher,ISBN:isbn,
           ASIN:asin,Language:language,Description:description,
+        }
+        if in.ExpectedFingerprint!=nil&&*in.ExpectedFingerprint!=metadataEditorFingerprint(id,sourceID,scanSignature,metadataSource,original){
+            fail(w,409,errors.New("metadata or source changed; reopen the editor"));return
         }
 
 		title = cleanMetadataValue(in.Title, title)

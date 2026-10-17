@@ -56,7 +56,7 @@ const fetchStub=async (url,options={})=>{
   if(url.startsWith('./api/manage/assets/')&&url.endsWith('/fields')){
     const id=Number(url.split('/')[4]),work=works.find(item=>item.id===id);
     assert(work,'field controls for unrecognised file '+url);
-    return reply({assetId:id,revision:fieldVersions.get(id)||0,fields:fieldNames.map(name=>({
+    return reply({assetId:id,revision:fieldVersions.get(id)||0,fingerprint:'a'.repeat(64),fields:fieldNames.map(name=>({
       name,value:work[name]===undefined?(name==='publishedYear'||name==='seriesNumber'?'0':''):String(work[name]),
       source:'path',locked:lockedFieldNames.get(id)?.has(name)||false,updatedAt:0
     }))});

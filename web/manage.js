@@ -13,7 +13,7 @@
     ['language','Language','text'], ['description','Description','textarea']
   ];
   let activeView='library', offset=0, rows=[], selected=new Set(), requestId=0, timer=0, editing=null, candidateGeneration=0, editorEpoch=0;
-  let editingRevision=null,editingFieldReady=false,editingFieldConflict=false,editingFieldBusy=false;
+  let editingRevision=null,editingFingerprint=null,editingFieldReady=false,editingFieldConflict=false,editingFieldBusy=false;
   const editorDecorations=new Map();
   const selectedDetails=new Map();
   const savedViewsKey='archivist-manager-v1-views';
@@ -244,14 +244,15 @@
   }
   async function loadEditorFieldControls(target,epoch){
     if(editing!==target||editorEpoch!==epoch)return;
-    editingFieldReady=false;editingFieldConflict=false;editingRevision=null;
+    editingFieldReady=false;editingFieldConflict=false;editingRevision=null;editingFingerprint=null;
     $('save-editor').disabled=true;
     $('retry-field-status').hidden=true;
     $('editor-lock-status').textContent='Checking field provenance and revision…';
     try{
       const response=await api('./api/manage/assets/'+encodeURIComponent(String(target.id))+'/fields');
       if(editing!==target||editorEpoch!==epoch)return;
-      if(!Number.isSafeInteger(response.revision)||response.revision<0||!Array.isArray(response.fields)){
+      if(!Number.isSafeInteger(response.revision)||response.revision<0||
+        !/^[0-9a-f]{64}$/.test(response.fingerprint||'')||!Array.isArray(response.fields)){
         throw Error('Invalid metadata state returned by the server.');
       }
       const values=new Map(response.fields.map(item=>[item.name,item]));
@@ -270,6 +271,7 @@
         controls.lock.disabled=false;
       }
       editingRevision=response.revision;
+      editingFingerprint=response.fingerprint;
       for(const row of response.fields){
         const control=editorDecorations.get(row.name);
         if(control)control.provenance.dataset.source=row.source||'Unverified source';
@@ -321,7 +323,7 @@
     // record from an earlier dialog lifetime.
     editorEpoch++;
     invalidateCandidateLookup();
-    editingFieldReady=false;editingFieldConflict=false;editingFieldBusy=false;editingRevision=null;
+    editingFieldReady=false;editingFieldConflict=false;editingFieldBusy=false;editingRevision=null;editingFingerprint=null;
     editorDecorations.clear();
     $('save-editor').disabled=true;
     editing=item;
@@ -351,7 +353,7 @@
   async function saveEditor(event){
     event.preventDefault();
     if(!editing)return;
-    if(!editingFieldReady||editingFieldConflict||editingFieldBusy||editingRevision===null){
+    if(!editingFieldReady||editingFieldConflict||editingFieldBusy||editingRevision===null||!editingFingerprint){
       notice('Load and verify the current field metadata before saving.',true);return;
     }
     const target=editing,startedEpoch=editorEpoch;
@@ -367,6 +369,7 @@
     }
     if(!Object.keys(changes).length){closeEditor();return}
     changes.expectedRevision=editingRevision;
+    changes.expectedFingerprint=editingFingerprint;
     if(!window.confirm('Save the reviewed metadata changes? This saves the file, not the book publication state.'))return;
     button.disabled=true;notice('Saving metadata…');
     try{
@@ -612,12 +615,12 @@
   $('candidate-search-button').onclick=findCandidates;
   $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};
   $('editor-form').addEventListener('submit',saveEditor);
-  function closeEditor(){editorEpoch++;invalidateCandidateLookup();$('editor').close();editing=null;editingFieldReady=false;editingRevision=null;editorDecorations.clear()}
+  function closeEditor(){editorEpoch++;invalidateCandidateLookup();$('editor').close();editing=null;editingFieldReady=false;editingRevision=null;editingFingerprint=null;editorDecorations.clear()}
   $('close-editor').onclick=closeEditor;
   $('cancel-editor').onclick=closeEditor;
   // Escape/native dialog close does not use either explicit close button.
   $('editor').addEventListener('close',()=>{
-    if(!$('editor').open){editorEpoch++;invalidateCandidateLookup();editing=null;editingFieldReady=false;editingRevision=null;editorDecorations.clear()}
+    if(!$('editor').open){editorEpoch++;invalidateCandidateLookup();editing=null;editingFieldReady=false;editingRevision=null;editingFingerprint=null;editorDecorations.clear()}
   });
   $('filters').onsubmit=event=>{event.preventDefault();offset=0;loadCatalogue()};
   $('search').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>{offset=0;loadCatalogue()},260)});
