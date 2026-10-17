@@ -161,7 +161,7 @@ func (a *app) publicationRoutes(mux *http.ServeMux) {
             }
             // Only an explicit owner operation pays the bounded cover probe cost.
             // Existing imported published works remain grandfathered for continuity.
-            if _,_,coverErr:=a.workCover(strconv.FormatInt(id,10));coverErr!=nil {
+            if _,_,coverErr:=a.effectiveWorkCover(strconv.FormatInt(id,10));coverErr!=nil {
                 fail(w,409,errors.New("a usable cover is required before publishing"));return
             }
         }

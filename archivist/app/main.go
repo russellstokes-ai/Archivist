@@ -477,7 +477,7 @@ func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.backgroundRoutes(mux)
 	a.catalogueRoutes(mux)
-	a.coverRoutes(mux)
+	a.serverCoverRoutes(mux)
 	a.progressRoutes(mux)
 	a.syncProgressRoutes(mux)
 	a.listeningRoutes(mux)
