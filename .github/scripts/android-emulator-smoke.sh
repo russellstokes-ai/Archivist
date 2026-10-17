@@ -90,6 +90,19 @@ if ! adb shell am start -W -n "$ACTIVITY" >"$START_LOG" 2>&1; then
 fi
 cat "$START_LOG"
 
+# Test 14 preserves the original 15s crash smoke AND adds actual screen-frame
+# evidence. Unlike the old smoke test, a static splash must not pass silently.
+if [ "${ARCHIVIST_QA_VISUAL_CAPTURE:-}" = "1" ] && [ "$PACKAGE" = "app.archivist.reader.qa" ]; then
+  SHOTS="${RUNNER_TEMP:-/tmp}/test14-android-splash"
+  mkdir -p "$SHOTS"
+  for index in 0 1 2 3 4 5 6 7; do
+    sleep 1
+    adb exec-out screencap -p > "$SHOTS/frame-$index.png"
+    test -s "$SHOTS/frame-$index.png"
+  done
+  node scripts/test14-splash-frame-analysis.cjs "$SHOTS"/frame-*.png
+fi
+
 sleep 15
 
 if ! PID="$(adb shell pidof "$PACKAGE" 2>/dev/null | tr -d '\r')"; then
