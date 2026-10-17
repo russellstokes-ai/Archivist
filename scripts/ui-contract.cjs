@@ -49,3 +49,9 @@ assert.ok(source.includes('selectedIds=new Set'), 'Organisation preview must mai
 const css=fs.readFileSync('web/style.css','utf8');
 assert.ok(css.includes('focus-visible'), 'Browser controls need visible keyboard focus');
 assert.ok(css.includes('prefers-reduced-motion'), 'Browser UI must respect reduced-motion preference');
+
+const managerHtml=fs.readFileSync('web/manage.html','utf8');
+assert.ok(managerHtml.includes('href="./#settings/organisation"'),'Manager must open working organisation tools inside ingress');
+assert.ok(managerHtml.includes('href="./#settings/server"'),'Manager must link to actual backup/recovery controls');
+assert.ok(source.includes('function navigateServerHash()')&&source.includes('navigateServerHash();'),'Ingress-relative manager deep links must resolve after authentication');
+assert.ok(source.includes("['library','organisation','household','server'].includes(section)"),'Deep-link sections must be allowlisted');

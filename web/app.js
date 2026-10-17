@@ -252,13 +252,27 @@ function show(next){
   message('');if(next==='atlas'){loadLibrarySummary().catch(e=>message(e.message));loadAtlasUniverse().catch(e=>{$('atlas-map-status').textContent=e.message;});}if(next==='settings')showSettings('library');
 }
 
+// Hash-only deep links remain inside the current HA ingress base; no absolute
+// URLs, admin elevation or duplicate file-management implementation is needed.
+function navigateServerHash(){
+  if(!currentProfile)return;
+  const target=window.location.hash.slice(1);
+  if(target==='atlas'){show('atlas');return}
+  if(target==='library'){show('library');return}
+  if(!currentProfile.owner||!target.startsWith('settings/'))return;
+  const section=target.slice('settings/'.length);
+  if(!['library','organisation','household','server'].includes(section))return;
+  show('settings');showSettings(section);
+}
+window.addEventListener('hashchange',navigateServerHash);
+
 async function start(){
   currentProfile=await api('./api/me');
   await loadSources();await loadLibrarySummary();await loadBooks(false);
   $('setup').hidden=true;$('unlock').hidden=true;$('nav').hidden=false;
   document.querySelector('[data-page="settings"]').hidden=!currentProfile.owner;
   $('assist-link').hidden=!currentProfile.owner;
-  show('library');window.dispatchEvent(new Event('archivist-ready'))
+  show('library');navigateServerHash();window.dispatchEvent(new Event('archivist-ready'))
 }
 async function boot(){try{await start()}catch(e){try{const setup=await api('./setup/status');$('setup').hidden=setup.configured;$('unlock').hidden=!setup.configured}catch(err){message(err.message)}}}
 
