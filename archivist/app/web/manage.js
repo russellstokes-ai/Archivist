@@ -675,24 +675,26 @@
       row.append(e('strong','Source '+job.source_id+' · '+job.state),e('span',job.message||'','subtext'));
       const done=Number(job.progress||0),total=Number(job.total||0);
       if(total>0){const bar=e('progress');bar.max=total;bar.value=Math.min(total,done);row.append(bar)}
-      // No mid-scan cancellation: the current scanner must finish its atomic
-      // scan transaction so the existing catalogue stays intact.
-      if(job.state==='queued'||job.state==='failed'||job.state==='cancelled'){
-        const action=job.state==='queued'?'cancel':'retry';
-        const button=e('button',action==='cancel'?'Cancel queued scan':'Retry scan','quiet edit-button');
+      // Only staging is cancellable. COMMITTING is an atomic stop barrier.
+      if(((job.state==='queued'||job.state==='running')&&job.canCancel)||
+          job.state==='failed'||job.state==='cancelled'){
+        const action=(job.state==='queued'||job.state==='running')?'cancel':'retry';
+        const button=e('button',action==='cancel'?(job.state==='running'?'Request safe stop':'Cancel queued scan'):'Retry scan','quiet edit-button');
         button.type='button';
         button.onclick=async()=>{
-          if(action==='cancel'&&!window.confirm('Cancel this queued scan before it starts? No library files will change.'))return;
+          if(action==='cancel'&&!window.confirm(job.state==='running'?
+             'Request a safe stop before the catalogue commit? Already staged files will be discarded.':
+             'Cancel this queued scan before it starts? No library files will change.'))return;
           button.disabled=true;
           try{
             const response=await api('./api/jobs/'+encodeURIComponent(String(job.id))+'/'+action,'POST');
-            notice(action==='cancel'?'Queued scan cancelled.':'Scan queued as job '+response.job_id+'.');
+            notice(action==='cancel'?(response.state==='cancelling'?'Safe stop requested; scanner will acknowledge before catalogue commit.':'Queued scan cancelled.'):'Scan queued as job '+response.job_id+'.');
             await Promise.all([loadHealth(),loadSummary()]);
           }catch(err){notice(err.message,true);button.disabled=false}
         };
         row.append(button);
-      }else if(job.state==='running'){
-        row.append(e('small','Running scans must finish safely before they can be stopped.','subtext'));
+      }else if(job.state==='committing'){
+        row.append(e('small','Committing verified catalogue; safe cancellation no longer possible.','subtext'));
       }
       tasks.append(row);
     }

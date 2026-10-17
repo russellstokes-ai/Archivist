@@ -195,18 +195,136 @@ func TestWatchedSourcesDoNotConsumeIntervalOnFailedQueueInsert(t *testing.T){
     }
 }
 
-func TestRunningScanCannotBeCancelledUnsafely(t *testing.T){
+func TestRunningScanCancellationRequestIsNotPrematureAcknowledgement(t *testing.T){
     a:=fixture(t)
     if err:=a.initJobs();err!=nil{t.Fatal(err)}
     if err:=a.addSource("Main",t.TempDir());err!=nil{t.Fatal(err)}
     id,err:=a.enqueue(1);if err!=nil{t.Fatal(err)}
     if _,err:=a.db.Exec("UPDATE jobs SET state='running' WHERE id=?",id);err!=nil{t.Fatal(err)}
-    res:=scanJobRequest(a,"POST","/api/jobs/"+strconv.FormatInt(id,10)+"/cancel","test-key",true)
-    if res.Code!=409||!strings.Contains(res.Body.String(),"cannot be cancelled safely"){
-        t.Fatalf("unsafe cancel allowed or wrongly messaged: %d %s",res.Code,res.Body.String())
+    path:="/api/jobs/"+strconv.FormatInt(id,10)+"/cancel"
+    res:=scanJobRequest(a,"POST",path,"test-key",true)
+    if res.Code!=http.StatusAccepted||!strings.Contains(res.Body.String(),"cancelling"){
+        t.Fatalf("running stop request must be pending, not completed: %d %s",res.Code,res.Body.String())
     }
+    res=scanJobRequest(a,"POST",path,"test-key",true)
+    if res.Code!=http.StatusAccepted{t.Fatalf("repeated stop request not idempotent: %d",res.Code)}
     var state string
-    if err:=a.db.QueryRow("SELECT state FROM jobs WHERE id=?",id).Scan(&state);err!=nil||state!="running"{
-        t.Fatalf("running job mutated: %s %v",state,err)
+    var requested bool
+    if err:=a.db.QueryRow("SELECT state,cancel_requested FROM jobs WHERE id=?",id).
+      Scan(&state,&requested);err!=nil||state!="running"||!requested{
+        t.Fatalf("stop was falsely completed or request lost: %s requested=%v %v",state,requested,err)
+    }
+    jobs:=scanJobRequest(a,"GET","/api/jobs","test-key",false)
+    if jobs.Code!=200||!strings.Contains(jobs.Body.String(),`"state":"cancelling"`)||
+      !strings.Contains(jobs.Body.String(),`"canCancel":false`){
+        t.Fatalf("GET jobs must show truthful in-flight cancellation: %d %s",jobs.Code,jobs.Body.String())
+    }
+    if err:=a.scanWithProgressJob(context.Background(),1,id,nil);err!=errScanCancelled{
+        t.Fatalf("staged worker should acknowledge stop: %v",err)
+    }
+    var n int
+    if err:=a.db.QueryRow("SELECT count(*) FROM assets").Scan(&n);err!=nil||n!=0{
+        t.Fatalf("cancelled scan touched catalogue: %d %v",n,err)
+    }
+}
+
+func TestRunningScanCancellationLeavesExistingCatalogueUntouched(t *testing.T){
+    a:=fixture(t)
+    if err:=a.initJobs();err!=nil{t.Fatal(err)}
+    root:=t.TempDir()
+    original:=filepath.Join(root,"Original.epub")
+    if err:=os.WriteFile(original,[]byte("original epub"),0600);err!=nil{t.Fatal(err)}
+    if err:=a.addSource("Books",root);err!=nil{t.Fatal(err)}
+    if err:=a.scan(1);err!=nil{t.Fatal(err)}
+    var originalID int64
+    if err:=a.db.QueryRow("SELECT id FROM assets WHERE relative_path='Original.epub'").Scan(&originalID);err!=nil{t.Fatal(err)}
+    for i:=0;i<60;i++{
+        path:=filepath.Join(root,"Addition-"+strconv.Itoa(i)+".epub")
+        if err:=os.WriteFile(path,[]byte("new epub metadata"),0600);err!=nil{t.Fatal(err)}
+    }
+    jobID,err:=a.enqueue(1)
+    if err!=nil{t.Fatal(err)}
+    if _,err:=a.db.Exec("UPDATE jobs SET state='running' WHERE id=?",jobID);err!=nil{t.Fatal(err)}
+    requested:=false
+    got:=a.scanWithProgressJob(context.Background(),1,jobID,func(done,total int){
+        if !requested && done>=10 && total>=60{
+            res:=scanJobRequest(a,"POST","/api/jobs/"+strconv.FormatInt(jobID,10)+"/cancel","test-key",true)
+            if res.Code!=202{t.Errorf("midstage stop was refused: %d %s",res.Code,res.Body.String())}
+            requested=true
+        }
+    })
+    if got!=errScanCancelled||!requested{t.Fatalf("running scan cancellation failed to halt staged catalogue: %v requested=%v",got,requested)}
+    var count int
+    if err:=a.db.QueryRow("SELECT count(*) FROM assets").Scan(&count);err!=nil||count!=1{
+        t.Fatalf("mid-scan stop partially installed catalogue: %d %v",count,err)
+    }
+    var afterID int64
+    if err:=a.db.QueryRow("SELECT id FROM assets WHERE relative_path='Original.epub'").Scan(&afterID);err!=nil||afterID!=originalID{
+        t.Fatalf("original identity changed after stop: original=%d after=%d err=%v",originalID,afterID,err)
+    }
+    if _,err:=os.Stat(original);err!=nil{t.Fatalf("cancellation changed original media: %v",err)}
+}
+
+func TestLateRunningScanCancellationAtLastProgressBoundaryStillSafe(t *testing.T){
+    a:=fixture(t)
+    if err:=a.initJobs();err!=nil{t.Fatal(err)}
+    root:=t.TempDir()
+    if err:=os.WriteFile(filepath.Join(root,"Final.epub"),[]byte("single media"),0600);err!=nil{t.Fatal(err)}
+    if err:=a.addSource("Books",root);err!=nil{t.Fatal(err)}
+    id,err:=a.enqueue(1);if err!=nil{t.Fatal(err)}
+    if _,err:=a.db.Exec("UPDATE jobs SET state='running' WHERE id=?",id);err!=nil{t.Fatal(err)}
+    requested:=false
+    got:=a.scanWithProgressJob(context.Background(),1,id,func(done,total int){
+        if total>0&&done==total&&!requested{
+            res:=scanJobRequest(a,"POST","/api/jobs/"+strconv.FormatInt(id,10)+"/cancel","test-key",true)
+            if res.Code!=202{t.Errorf("last staging checkpoint refused stop: %d %s",res.Code,res.Body.String())}
+            requested=true
+        }
+    })
+    if !requested||got!=errScanCancelled{t.Fatalf("last stop checkpoint falsely committed: %v requested=%v",got,requested)}
+    var count int
+    if err:=a.db.QueryRow("SELECT count(*) FROM assets").Scan(&count);err!=nil||count!=0{
+        t.Fatalf("last-moment stop partially committed: count=%d err=%v",count,err)
+    }
+}
+
+func TestCommittingScanRejectsCancellationAndDuplicateWork(t *testing.T){
+    a:=fixture(t)
+    if err:=a.initJobs();err!=nil{t.Fatal(err)}
+    if err:=a.addSource("Main",t.TempDir());err!=nil{t.Fatal(err)}
+    id,err:=a.enqueue(1);if err!=nil{t.Fatal(err)}
+    if _,err:=a.db.Exec("UPDATE jobs SET state='running' WHERE id=?",id);err!=nil{t.Fatal(err)}
+    if err:=a.enterScanCommit(context.Background(),id);err!=nil{t.Fatal(err)}
+    res:=scanJobRequest(a,"POST","/api/jobs/"+strconv.FormatInt(id,10)+"/cancel","test-key",true)
+    if res.Code!=409||!strings.Contains(res.Body.String(),"too late to cancel safely"){
+        t.Fatalf("unsafe late cancel was accepted: %d %s",res.Code,res.Body.String())
+    }
+    other,err:=a.enqueue(1)
+    if err!=nil||other!=id{t.Fatalf("new scan queued during committing: old=%d new=%d err=%v",id,other,err)}
+    var requested bool
+    if err:=a.db.QueryRow("SELECT cancel_requested FROM jobs WHERE id=?",id).Scan(&requested);err!=nil||requested{
+        t.Fatalf("committing state received impossible cancellation: %v %v",requested,err)
+    }
+}
+
+func TestRestartHandlesRequestedStopAndUnfinishedCommit(t *testing.T){
+    a:=fixture(t)
+    if err:=a.initJobs();err!=nil{t.Fatal(err)}
+    if err:=a.addSource("First",t.TempDir());err!=nil{t.Fatal(err)}
+    if err:=a.addSource("Second",t.TempDir());err!=nil{t.Fatal(err)}
+    job1,err:=a.enqueue(1);if err!=nil{t.Fatal(err)}
+    job2,err:=a.enqueue(2);if err!=nil{t.Fatal(err)}
+    if _,err:=a.db.Exec("UPDATE jobs SET state='running',cancel_requested=1 WHERE id=?",job1);err!=nil{t.Fatal(err)}
+    if _,err:=a.db.Exec("UPDATE jobs SET state='committing' WHERE id=?",job2);err!=nil{t.Fatal(err)}
+    if err:=a.initJobs();err!=nil{t.Fatal(err)}
+    for _,entry:=range []struct{id int64;state string}{{job1,"cancelled"},{job2,"queued"}}{
+        var state string
+        if err:=a.db.QueryRow("SELECT state FROM jobs WHERE id=?",entry.id).Scan(&state);err!=nil||state!=entry.state{
+            t.Fatalf("unexpected recovered job %d: %q %v",entry.id,state,err)
+        }
+    }
+    if err:=a.initJobs();err!=nil{t.Fatalf("second idempotent restore failed: %v",err)}
+    if current,err:=a.enqueue(2);err!=nil||current!=job2{
+        t.Fatalf("recovered queued job did not deduplicate: %d %v",current,err)
     }
 }

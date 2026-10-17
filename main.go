@@ -230,8 +230,22 @@ func kind(path string) string {
 	return ""
 }
 func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
+    return a.scanWithProgressJob(context.Background(),id,0,progress)
+}
+// Jobs use the same scanner as the standalone/manual caller. Cancellation is
+// checked while collecting a *staged* catalogue, never inside its commit.
+func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress func(int,int)) error {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
+    lastCheck:=time.Time{}
+    checkpoint:=func(force bool)error{
+        if err:=ctx.Err();err!=nil{return err}
+        if jobID==0{return nil}
+        if !force&&!lastCheck.IsZero()&&time.Since(lastCheck)<150*time.Millisecond{return nil}
+        lastCheck=time.Now()
+        return a.scanJobCheckpoint(ctx,jobID)
+    }
+    if err:=checkpoint(true);err!=nil{return err}
 	if a.movesPending() {
 		return errors.New("finish or recover pending file moves before scanning")
 	}
@@ -245,14 +259,17 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		return errors.New("source unavailable; previous catalogue retained")
 	}
 	total := 0
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+    countErr:=filepath.WalkDir(root,func(path string,d fs.DirEntry,walkErr error)error{
+        if err:=checkpoint(false);err!=nil{return err}
 		if walkErr != nil || d.IsDir() || d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
 			return nil
 		}
 		if kind(path) != "" { total++ }
 		return nil
 	})
+    if countErr!=nil{return countErr}
 	if progress != nil { progress(0, total) }
+    if err:=checkpoint(true);err!=nil{return err}
 	stage, e := os.CreateTemp("", "archivist-scan-*.jsonl")
 	if e != nil {
 		return e
@@ -305,6 +322,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	reviewCount := 0
 	sidecars := newSidecarScanCache()
 	e = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+        if err:=checkpoint(false);err!=nil{return err}
 		if walkErr != nil {
 			return walkErr
 		}
@@ -382,9 +400,15 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		return encoder.Encode(item)
 	})
 	if e != nil {
+        if errors.Is(e,errScanCancelled)||errors.Is(e,context.Canceled){return e}
 		a.db.Exec("UPDATE sources SET status='Scan failed; catalogue retained' WHERE id=?", id)
 		return errors.New("scan could not read every folder; previous catalogue retained")
 	}
+    if err:=checkpoint(true);err!=nil{return err}
+    // Owner stop and this transition are competing conditional SQLite
+    // updates: only the winner may change the state. After this transition,
+    // the validated staging file must commit or fail/retry on restart.
+    if err:=a.enterScanCommit(ctx,jobID);err!=nil{return err}
 	if _, e = stage.Seek(0, 0); e != nil {
 		return e
 	}
