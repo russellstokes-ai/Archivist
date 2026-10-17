@@ -27,7 +27,7 @@ module.exports=function test14AppException(root,actual){
      source=source.replace(replacement,old);
    }
    const bytes=Buffer.from(source,'utf8');
-   actual=crypto.createHash('sha1').update('blob '+bytes.length+'\\0').update(bytes).digest('hex');
+   actual=crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
    if(actual!==media.approved_git_blob_sha)return false;
  }
  if(actual!==next.approved_git_blob_sha){
