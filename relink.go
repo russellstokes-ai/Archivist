@@ -171,8 +171,9 @@ func (a *app) relinkCheck(ctx context.Context,q bulkQuerier,old,candidate relink
     if old.Size<1||old.Size!=candidate.Size {
         return errors.New("old and new indexed file lengths differ; cannot relink safely")
     }
-    if !candidate.Auto||candidate.Publication=="published"||candidate.MetadataSource=="manual"||
-        candidate.MetadataSource=="legacy"||candidate.FieldRevision!=0{
+    if !candidate.Auto||candidate.Publication!="staged"||candidate.PublicationRevision!=0||
+        candidate.MetadataSource=="manual"||candidate.MetadataSource=="legacy"||
+        candidate.FieldRevision!=0{
         return errors.New("candidate has independent edits or publication; do not merge it")
     }
     if candidate.WorkID<=0||old.WorkID<=0||candidate.GroupKey==""{
@@ -196,6 +197,7 @@ func (a *app) relinkCheck(ctx context.Context,q bulkQuerier,old,candidate relink
     // though most rows are absent in a newly staged candidate.
     checks:=[]struct{table,column string;id int64}{
         {"progress","edition_id",candidate.EditionID},
+        {"progress","asset_id",candidate.AssetID},
         {"profile_progress","edition_id",candidate.EditionID},
         {"profile_progress","asset_id",candidate.AssetID},
         {"asset_progress","asset_id",candidate.AssetID},
@@ -210,6 +212,7 @@ func (a *app) relinkCheck(ctx context.Context,q bulkQuerier,old,candidate relink
         {"selected_work_covers","work_id",candidate.WorkID},
         {"work_publication_events","work_id",candidate.WorkID},
         {"asset_relink_events","asset_id",candidate.AssetID},
+        {"asset_relink_events","work_id",candidate.WorkID},
     }
     for _,entry:=range checks {
         n,err:=relinkRefCount(ctx,q,entry.table,entry.column,entry.id)

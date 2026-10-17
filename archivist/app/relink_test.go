@@ -254,6 +254,33 @@ func TestRelinkRejectsChangedTargetAndIndependentState(t *testing.T){
         got:=relinkCall(s.a,"POST","/api/manage/relink/preview",string(req),"test-key",true)
         if got.Code!=409{t.Fatalf("original path with pending move preview relinked: %d %s",got.Code,got.Body.String())}
     })
+    t.Run("legacy edition progress references candidate asset",func(t *testing.T){
+        s:=setupRelinkScenario(t)
+        if _,err:=s.a.db.Exec("INSERT INTO progress(edition_id,asset_id,seconds,revision,complete) VALUES(?,?,45,1,0)",
+            s.oldEdition,s.newAsset);err!=nil{t.Fatal(err)}
+        req,_:=json.Marshal(relinkRequest{OldAssetID:s.oldAsset,CandidateAssetID:s.newAsset})
+        res:=relinkCall(s.a,"POST","/api/manage/relink/preview",string(req),"test-key",true)
+        if res.Code!=409{t.Fatalf("candidate referenced in legacy progress would be deleted: %d %s",res.Code,res.Body.String())}
+    })
+    t.Run("candidate has an independently revised staged publication",func(t *testing.T){
+        s:=setupRelinkScenario(t)
+        if _,err:=s.a.db.Exec("INSERT INTO work_publication(work_id,state,revision,published_at) VALUES(?,'staged',3,0)",
+            s.newWork);err!=nil{t.Fatal(err)}
+        req,_:=json.Marshal(relinkRequest{OldAssetID:s.oldAsset,CandidateAssetID:s.newAsset})
+        res:=relinkCall(s.a,"POST","/api/manage/relink/preview",string(req),"test-key",true)
+        if res.Code!=409{t.Fatalf("candidate publication revision lost: %d %s",res.Code,res.Body.String())}
+    })
+    t.Run("candidate has historical relink work events",func(t *testing.T){
+        s:=setupRelinkScenario(t)
+        if _,err:=s.a.db.Exec(`INSERT INTO asset_relink_events(
+            asset_id,work_id,retired_candidate_asset,retired_candidate_work,source_id,
+            from_path,to_path,destination_sha256,verification,recorded_at)
+            VALUES(?,?,100,101,1,'original','renamed','digest','owner-attested;destination-sha256',1)`,
+            s.oldAsset,s.newWork);err!=nil{t.Fatal(err)}
+        req,_:=json.Marshal(relinkRequest{OldAssetID:s.oldAsset,CandidateAssetID:s.newAsset})
+        res:=relinkCall(s.a,"POST","/api/manage/relink/preview",string(req),"test-key",true)
+        if res.Code!=409{t.Fatalf("candidate work audit history deleted: %d %s",res.Code,res.Body.String())}
+    })
     t.Run("candidate already has manual metadata",func(t *testing.T){
         s:=setupRelinkScenario(t)
         res:=relinkCall(s.a,"PATCH","/api/assets/"+strconv.FormatInt(s.newAsset,10)+"/metadata",
