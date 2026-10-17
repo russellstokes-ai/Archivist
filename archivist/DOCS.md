@@ -116,6 +116,14 @@ This operation is intentionally restricted to a single-file/edition work, unchan
 
 The action writes a durable audit event and is all-or-nothing in SQLite. Back up the server before significant organisation or recovery operations. Real NAS and Raspberry Pi installations remain subject to separate acceptance tests.
 
+## Stop or retry an active server scan safely
+
+Library Manager → **Health & scans** and Settings → **Library** show queued, running, cancelling, committing, complete, failed and cancelled scan jobs. Queued scans can be cancelled immediately; failed or cancelled jobs can be retried as a fresh durable job. A scan that has already started may be given a **Request safe stop** command: Archivist returns `cancelling` until the scanner reaches its next safe stage checkpoint, then records `cancelled` while preserving the old catalogue. Do not interpret the HTTP 202 response as a completed stop.
+
+The scanner checks during staging and just before entering its atomic commit barrier. Once a job shows `committing`, cancellation is deliberately refused: it must complete or be recovered after a server restart. If the process crashes while staging, it resumes on startup; a received stop request is honoured. This avoids partial catalogue publication.
+
+On slow or unresponsive NAS shares, a read/metadata operation may not reach the next checkpoint immediately. Archivist does **not** kill arbitrary SMB/NFS system reads or revert an active SQLite transaction. Do not assume physical files are changed by scans, and do not forcibly power off a NAS to speed up stop. See `docs/v1/SERVER_SCANNER_CANCEL_QA_2026-10-17.md` in the repository for synthetic regression coverage and remaining hardware acceptance.
+
 ## Sorting and file safety
 
 Archivist organisation workflows are preview-first.

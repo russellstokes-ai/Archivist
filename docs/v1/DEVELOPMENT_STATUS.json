@@ -1039,5 +1039,43 @@
     "canonical_mobile_touched_by_server_work": false,
     "merged": false,
     "commercial_release_ready": false
+  },
+  "server_scanner_cancel_pr83_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent": "7733c75f198cdde164f544a9fec226fe812b5e52",
+    "code_head": "cad76e8db1c0d10954e4d84e07e232cd9d727435",
+    "code_commits": [
+      "49cf1e3cf718d77f78b7c1c2be4436f51fda83e7",
+      "cad76e8db1c0d10954e4d84e07e232cd9d727435"
+    ],
+    "qa_report": "docs/v1/SERVER_SCANNER_CANCEL_QA_2026-10-17.md",
+    "verified_ci": {
+      "server": "success",
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39031960719/job/117394060348",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39031960719/job/117394060052"
+    },
+    "achieved": [
+      "running-scan safe stop request (202 pending)",
+      "atomic committing boundary with 409 too-late cancellation",
+      "durable cancel_requested database migration",
+      "idempotent restart recovery of unfinished committing scans",
+      "rejected duplicate queue jobs",
+      "source staging stops before catalogue transaction",
+      "real owner web controls with legacy queued-action compatibility",
+      "Go integration and ARM64 source gates"
+    ],
+    "limitations": [
+      "blocked NAS I/O stops only at next callback",
+      "a scan that entered committing cannot be cancelled",
+      "Go synthetic fixtures and CI do not replace hardware testing",
+      "no real Pi4 NAS SMB NFS HA ingress benchmarks",
+      "no cross-volume or multi-track relink",
+      "no completed/released commercial package"
+    ],
+    "protected_mobile_unchanged": true,
+    "merged": false,
+    "commercial_release_ready": false
   }
 }
