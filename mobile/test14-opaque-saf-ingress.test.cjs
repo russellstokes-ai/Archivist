@@ -6,7 +6,7 @@ assert(source.includes('openBook({...candidate,format:resolved},resumePage,selec
 assert(source.includes('if(checkOpaque&&opaque&&'));
 assert(source.includes('return; // never send an unidentified archive URI to a raw WebView'));
 assert(source.includes("if(['Comic','PDF','EPUB'].includes(resolved))"));
-assert(source.includes('const format=effectiveLocalReaderFormat(book.format,book.uri)'));
+assert(source.includes('const localUri=book.uri;')&&source.includes('const format=effectiveLocalReaderFormat(book.format,localUri)'));
 const root=path.resolve(__dirname,'..'),b=Buffer.from(source);
 const sha=crypto.createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');
 assert(require('../scripts/test14-app-exception.cjs')(root,sha),'Exact App exception must reverse through transport, Test14 and canonical baseline');
