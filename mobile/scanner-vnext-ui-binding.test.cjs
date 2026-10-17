@@ -10,6 +10,18 @@ const test14=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_APP_EXCEP
 const current=Buffer.from(app,'utf8');
 const currentBlob=crypto.createHash('sha1').update('blob '+current.length+'\0').update(current).digest('hex');
 assert(require('../scripts/test14-app-exception.cjs')(repo,currentBlob),'Test 14 App patch must be exact and reversible');
+// Reverse the separately pinned minimum-width transport exception FIRST,
+// otherwise scanner binding restoration sees unrelated layout-only changes.
+// Scanner/Assist source and every prior canonical assertion remain unchanged.
+const transport=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_TRANSPORT_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+assert.equal(transport.path,'mobile/App.tsx');
+assert.equal(transport.previous_approved_git_blob_sha,test14.approved_git_blob_sha);
+assert.equal(transport.changes.length,8);
+for(const change of [...transport.changes].reverse()){
+  const next=change.new.replaceAll('\r\n','\n'),prior=change.old.replaceAll('\r\n','\n');
+  assert.equal(app.split(next).length-1,1,'Responsive transport hunk differs or is duplicated');
+  app=app.replace(next,prior);
+}
 for(const change of [...test14.changes].reverse()){
   const next=change.new.replaceAll('\r\n','\n'),prior=change.old.replaceAll('\r\n','\n');
   assert.equal(app.split(next).length-1,1,'Test 14 scoped patch differs or is duplicated');
