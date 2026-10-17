@@ -19,7 +19,7 @@ require.extensions['.ts']=(mod,path)=>mod._compile(ts.transpileModule(fs.readFil
  compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}
 }).outputText,path);
 (async()=>{
- const {openCbtPages}=require('./archiveReader.ts');
+ const {openCbtPages}=require('./nativeCbtPages.ts');
  const book=await openCbtPages('content://provider/document/123');
  assert.equal(book.pageCount,2);
  assert.equal((await book.loadPage(0)).name,'002.png');

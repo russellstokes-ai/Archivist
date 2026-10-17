@@ -4,13 +4,13 @@
   "owner_approval": "17 October requested robust comics in Android Test14, original reader shell/Comic Focus protected",
   "scope": "Only CBT dispatch and lazy native reader adapter; original existing Comic HTML, speech bubble zoom, page turn, CBR/CBZ and original scanner preserved. Android TAR page reads are bounded and token-cleaned, iOS original full-TAR path kept.",
   "previous_approved_git_blob_sha": "18efb5c27d5ceab1c2aead347b421b49ece106f4",
-  "approved_git_blob_sha": "5c275f9f7a925a71864661467d5a109955d1821e",
+  "approved_git_blob_sha": "e33107fe04ab3c4a8bb09e851551a3d1081dc87a",
   "release_approved": false,
   "installed_apk_approved": false,
   "changes": [
     {
       "old": "import {openCbrPages, readCbtImages, ArchiveImage} from './archiveReader';",
-      "new": "import {openCbrPages, openCbtPages, ArchiveImage} from './archiveReader';"
+      "new": "import {openCbrPages, ArchiveImage} from './archiveReader';\nimport {openCbtPages} from './nativeCbtPages';"
     },
     {
       "old": "export async function buildLocalReaderDocument(uri: string, format: string, title: string, initialPage = 0): Promise<LocalReaderDocument> {",

@@ -3,7 +3,8 @@ import {buildEpubContent} from './epubContent';
 import JSZip from 'jszip';
 import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
 import {speechFocusBrowserSource} from './speechFocus';
-import {openCbrPages, openCbtPages, ArchiveImage} from './archiveReader';
+import {openCbrPages, ArchiveImage} from './archiveReader';
+import {openCbtPages} from './nativeCbtPages';
 import {comicContainerFromUri} from './comicSourceFormat';
 
 export type LocalReaderPage = {mime:string;base64:string};
