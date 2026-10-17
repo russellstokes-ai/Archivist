@@ -63,7 +63,7 @@ func TestMetadataFieldProvenanceLocksVersionAndRestart(t *testing.T){
       t.Fatalf("invalid lock body accepted: %q -> %d %s",bad,res.Code,res.Body.String())
     }
   }
-  if res:=call("PUT",route+"/author;DROP TABLE assets",`{"locked":true,"expectedRevision":0}`,"test-key",true);res.Code!=400{
+  if res:=call("PUT",route+"/author%3BDROP%20TABLE%20assets",`{"locked":true,"expectedRevision":0}`,"test-key",true);res.Code!=400{
     t.Fatalf("field path injection accepted: %d",res.Code)
   }
   first:=call("PATCH","/api/assets/"+id+"/metadata",`{"title":"Verified title","author":"Verified author","genre":"Science Fiction","expectedRevision":0}`,"test-key",true)
