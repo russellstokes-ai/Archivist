@@ -72,18 +72,22 @@ function centreDifference(a,b){
 function analyze(paths){
  if(paths.length<7)throw Error('Need at least seven native startup frames');
  const frames=paths.map(p=>decodePNG(fs.readFileSync(p)));
- const teal=frames.filter(brandTeal).length;
+ const tealFlags=frames.map(brandTeal);
+ const teal=tealFlags.filter(Boolean).length;
  const deltas=frames.slice(1).map((frame,i)=>centreDifference(frames[i],frame));
  const moving=deltas.filter(v=>v>=.015).length;
- return {frames:frames.length,brandTealFrames:teal,movingTransitions:moving,deltas};
+ // Native OS splash => Shelf transitions are NOT proof of an animated logo.
+ // Require two distinct progressing frames with the same approved teal backdrop.
+ const movingTealTransitions=deltas.filter((value,i)=>tealFlags[i]&&tealFlags[i+1]&&value>=.015).length;
+ return {frames:frames.length,brandTealFrames:teal,movingTransitions:moving,movingTealTransitions,deltas};
 }
 if(require.main===module){
  try{
    const result=analyze(process.argv.slice(2));
    console.log('Test14 native splash pixel evidence:',JSON.stringify(result));
    assert(result.brandTealFrames>=3,'Approved teal background not visible across native launch');
-   assert(result.movingTransitions>=2,
-     'App launched but animated book did NOT visibly advance through at least two distinct native frames');
+   assert(result.movingTealTransitions>=2,
+     'Approved teal is visible but the book did NOT visibly animate through at least two teal-backed native transitions');
    console.log('PASS: real Android screen capture shows approved teal plus moving centre-stage animation');
  }catch(e){console.error('FAILED Test14 Android animation:',String(e));process.exitCode=1;}
 }

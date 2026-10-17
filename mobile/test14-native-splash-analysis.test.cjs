@@ -33,7 +33,9 @@ try{
  const good=analyze(files);
  assert.equal(good.brandTealFrames,8);
  assert(good.movingTransitions>=2,'Moving native captures must show changing centre pixels');
+ assert(good.movingTealTransitions>=2,'Animation must move on teal, not merely switch from splash to Shelf');
  const frozen=analyze(Array.from({length:8},()=>files[0]));
  assert.equal(frozen.movingTransitions,0,'Static icon must be rejected even though brand teal exists');
+ assert.equal(frozen.movingTealTransitions,0,'Static teal must never pass the new native animation gate');
  console.log('PASS: native screenshot decoder distinguishes real moving splash from static branded icon');
 }finally{fs.rmSync(folder,{recursive:true,force:true})}
