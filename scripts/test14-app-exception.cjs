@@ -8,7 +8,7 @@ module.exports=function test14AppException(root,actual){
     next.release_approved!==false || next.installed_apk_approved!==false ||
     next.previous_approved_git_blob_sha!==previous.approved_git_blob_sha ||
     next.approved_git_blob_sha!==actual || !Array.isArray(next.changes) ||
-    next.changes.length!==10) return false;
+    next.changes.length!==14) return false;
  let source=fs.readFileSync(path.join(root,'mobile/App.tsx'),'utf8');
  for(const {old,new:replacement} of [...next.changes].reverse()){
    if(typeof old!=='string'||typeof replacement!=='string'||
