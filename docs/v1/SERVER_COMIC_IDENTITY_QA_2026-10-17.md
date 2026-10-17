@@ -1,5 +1,7 @@
 # Archivist Server — Indexed comic identity and issue audit (item 2, milestone B)
 
+> **Later draft milestone:** Verified existing-edition run/volume/variant labels and a fail-closed volume-aware gap guard were implemented after this report. See [Comic edition and volume identity QA](SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md). This historical report describes the earlier source state, not the latest release acceptance.
+
 **Date:** 17 October 2026  
 **Repository:** [Archivist PR #83](https://github.com/russellstokes-ai/Archivist/pull/83), draft, unmerged  
 **Starting parent:** `ef46420ce38d3975248c4d76a828b381367057ae`  

@@ -4,6 +4,14 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Server comic edition/volume identity, item 3 partial
+
+**Exact source `07776dca`, draft [PR #83](https://github.com/russellstokes-ai/Archivist/pull/83), commercial NO-GO.** A separately revisioned owner-verified comic edition identity ledger now supports run, volume, issue, imprint, variant, edition year and notes without regrouping, rewriting media, overwriting book metadata or touching family bookmarks. Owner-only signed preview/confirmed Save, bounded history and signed last-Save undo; published, offline, multi-part or cross-work-conflicted editions fail closed. Book workbench controls reuse the existing approved 16:9 presentation.
+
+[Root/packaged Go + web manager + Docker/HA server CI **SUCCESS**](https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291766), [native ARM64 smoke **SUCCESS**](https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291948), [mobile source-lock regressions **SUCCESS**](https://github.com/russellstokes-ai/Archivist/actions/runs/39049590947). This slice also found and repaired a real startup `metadata_source` legacy-migration bug: valid embedded scanner provenance and a saved work fingerprint now survive an actual staged SQLite backup/restore, tested in root+packaged source. Comic gap detection refuses mixed/unverified volume-run cohorts and refreshes after identity Save/undo. A temporary false browser fixture and diagnostic CI failures were fixed, not waived. [Full source QA and remaining gates](SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md).
+
+**Incomplete:** true edition reassign/merge, duplicate volume/variant authority, full ten-screen server and physical 1920×1080/HA ingress/Pi4/NAS/SMB/NFS/power-loss acceptance. No new APK, release, install or merge; protected canonical mobile code and scanner unchanged.
+
 ## 17 October 2026 — Indexed comic series/issue audit (item 2, milestone B)
 
 **Additional real-archive acceptance:** [`865fab6`](https://github.com/russellstokes-ai/Archivist/commit/865fab602a0b5b568a0611533b5dfa0997816a4d) tests CBZ archives with genuine ComicInfo.xml and GIF pages through the server scanner, work indexing, owner audit, unchanged rescan and byte-for-byte unchanged files. [Server/HA/Docker CI GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987007) and [Linux ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987170). Production Pi, HA ingress and NAS hardware remain unaccepted.

@@ -1292,5 +1292,56 @@
     "merged": false,
     "commercial_server_release_ready": false,
     "real_cbz_archive_e2e_source_test": true
+  },
+  "server_comic_edition_profiles_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "draft_pr": 83,
+    "parent_sha": "ccbbfcf58bbbfb1b15f0674a39ffaa69928d4e8d",
+    "source_head": "07776dca312ff238ae235d0a1d1380f9d93af5cb",
+    "qa": "docs/v1/SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md",
+    "implementation_commits": [
+      "3fc9f4156ce7dc6e634be64cdc59c3dbb2d67b36",
+      "8059fde2e6804712f3125e446fe846ac17f65977",
+      "ae80ec6283dd6c0f045315e4b7ba59f01e323440",
+      "a8979a520a0826e1c996b29182c2c7e75814b983",
+      "6f242e2602a84e5c8f1d73a782c9493ad98db6c6",
+      "2894f89fd92289bf1fcf84212e4b6e0d764017fa",
+      "e6a8ebacf7de641677fba53e7cc0a83dffec6430",
+      "07776dca312ff238ae235d0a1d1380f9d93af5cb"
+    ],
+    "milestone": "item 3 partial, source-complete/CI-tested existing comic edition identity labels only",
+    "source_ci": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "success",
+      "android_native": "not yet confirmed",
+      "ios": "not yet confirmed",
+      "server_job_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291766",
+      "arm64_job_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291948",
+      "mobile_run_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39049590947"
+    },
+    "delivered": [
+      "owner-verifiable separate SQLite comic edition run, volume, issue, imprint, variant, year and notes keyed to immutable edition ID",
+      "owner-only revisioned signed 10 minute preview/save and last Save undo; 25 entry ledger",
+      "staged-only available single-file Comic identity writes, no media move or file/meta regroup",
+      "stale/tamper/replay/member drift, cross-work identity, CSRF and DB fault rollback checks",
+      "original edition and household progress untouched with multiple-edition safeguards",
+      "actual SQLite backup/staged restore retains new identity, undo journal, and work fingerprint",
+      "startup legacy-metadata migration no longer overwrites embedded/path/manual provenance",
+      "same-series gap analysis refuses cross-run/volume/incomplete edition cohorts",
+      "existing book workbench UI auto-refreshes audit and invalidates stale public suggestions"
+    ],
+    "limitations": [
+      "no edition regroup/move/new edition creation or consolidation; independent high-risk work",
+      "no specialist comic provider verification of volume/imprint/variant authority",
+      "no real 1920x1080 or HA ingress browser approval",
+      "no Pi4 4GB SSD/NAS SMB NFS power-loss or family playback acceptance",
+      "full server ten-screen commercial parity and mobile/Play gates remain open"
+    ],
+    "original_mobile_locked": true,
+    "root_packaged_source_mirrored": true,
+    "draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
   }
 }
