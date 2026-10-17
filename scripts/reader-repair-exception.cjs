@@ -13,7 +13,7 @@ module.exports=function(root,file,actual,original){
    content=content.replace(change.new,change.old);
  }
  const previousBytes=Buffer.from(content);
- if(crypto.createHash('sha1').update('blob '+previousBytes.length+'\\0').update(previousBytes).digest('hex')!==e.approved_git_blob_sha)return false;
+ if(crypto.createHash('sha1').update('blob '+previousBytes.length+'\0').update(previousBytes).digest('hex')!==e.approved_git_blob_sha)return false;
  for(const change of [...e.changes].reverse()){if(content.split(change.new).length!==2)return false;content=content.replace(change.new,change.old);}
  const bytes=Buffer.from(content);return crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex')===original;
 };
