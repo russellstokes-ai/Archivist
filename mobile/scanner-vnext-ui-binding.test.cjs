@@ -4,6 +4,17 @@ let app=fs.readFileSync(path.join(mobile,'App.tsx'),'utf8').replaceAll('\r\n','\
 assert.ok(!/\bscanLocalFolders\(/.test(app),'Fresh app paths must not call historical scanner');
 assert.ok(!/await enrichPublishedLocalLibrary\(/.test(app),'Discovery must not start a deep metadata sweep');
 assert.ok(app.includes('projectScannerWorks(local,groupLocalWorks)'));assert.ok(app.includes('scannerPublished'));assert.ok(app.includes('runtime.assist.accept'));
+// First reverse only the exact, separate Test 14 Atlas and medal change;
+// retain the entire original scanner approval and byte restoration below.
+const test14=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+const current=Buffer.from(app,'utf8');
+const currentBlob=crypto.createHash('sha1').update('blob '+current.length+'\0').update(current).digest('hex');
+assert(require('../scripts/test14-app-exception.cjs')(repo,currentBlob),'Test 14 App patch must be exact and reversible');
+for(const change of [...test14.changes].reverse()){
+  const next=change.new.replaceAll('\r\n','\n'),prior=change.old.replaceAll('\r\n','\n');
+  assert.equal(app.split(next).length-1,1,'Test 14 scoped patch differs or is duplicated');
+  app=app.replace(next,prior);
+}
 // Reverse ONLY the exactly pinned user-approved logic changes, then execute
 // the old scanner-binding byte-for-byte restoration check unchanged. A new
 // scanner/Assist/UI edit cannot hide behind this narrow App exception.
