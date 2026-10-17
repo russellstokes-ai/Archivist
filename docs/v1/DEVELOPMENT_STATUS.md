@@ -4,6 +4,12 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Server Assist multisource matching (item 2, milestone A)
+
+**Draft only; commercial NO-GO.** Source `93b9c40` extends the approved book-level workbench with explicit owner-initiated Open Library plus Google Books comparisons. Rank explanations, ISBN-10/13 checksum/equivalence, provider-outage limits, edition-vs-work publication-year controls, provider provenance and 13-file root/package + UI test parity are implemented. No unreviewed metadata automatically changes a book, and the old per-file editor stays Open Library-only.
+
+At exact `93b9c40`, [server/HA/Docker checks GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918769) and [native Linux ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918998). The preceding compile failure at `cda736a` was corrected, not waived. Specialist comics, ASIN/edition authority, provider policies and actual NAS/Pi HA browser acceptance remain open. [QA and limitations](SERVER_ASSIST_MULTISOURCE_MATCH_QA_2026-10-17.md). No canonical mobile edits, merge, install or released package.
+
 ## 17 October 2026 — PR #83 server parity continuation
 
 **Draft only; NO-GO for commercial release.** Branch head at source checkpoint: `9f600338a39aabd3284458102f11744e041ed47c`. This work extends the existing v1 master plan/acceptance register and does not replace them.

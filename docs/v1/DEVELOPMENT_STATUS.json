@@ -1208,5 +1208,42 @@
     "pr_draft": true,
     "merged": false,
     "commercial_server_release_ready": false
+  },
+  "server_assist_multisource_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "source_parent": "ecdffde67a97db1920c57b6ed0786e4199a92f29",
+    "code_commits": [
+      "cda736a4e12dd0348b9b2eb0e144b2826aae1975",
+      "93b9c40758ec2d9d2f953ac844aa187abdf651c3"
+    ],
+    "source_head": "93b9c40758ec2d9d2f953ac844aa187abdf651c3",
+    "qa_report": "docs/v1/SERVER_ASSIST_MULTISOURCE_MATCH_QA_2026-10-17.md",
+    "phase": "item 2 / milestone A",
+    "source_test_status": "green",
+    "source_tests": {
+      "server": "success",
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918769",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918998"
+    },
+    "verified_features": [
+      "optional owner-triggered Open Library and Google Books comparison; legacy file editor retained",
+      "bounded provider requests and deterministic candidate evidence ranking",
+      "ISBN-10/13 checksum validation and equivalent edition matching; no false edition ISBN inference",
+      "first-publication vs edition-year controls; comic issue uncertainty disclosed",
+      "provider-origin-aware signed work preview, Save, history and undo",
+      "root/packaged source parity plus synthetic Go and fake-browser regression checks"
+    ],
+    "limitations": [
+      "external provider availability/accuracy and real-fixture matching unverified",
+      "specialist comics, ASIN authority and multi-edition merge/creation not completed",
+      "provider cache, throttle, 16:9 browser and Pi HA ingress acceptance pending",
+      "mobile original bugs and commercial release unaccepted"
+    ],
+    "canonical_mobile_modified": false,
+    "draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
   }
 }
