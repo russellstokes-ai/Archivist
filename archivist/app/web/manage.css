@@ -239,3 +239,15 @@ dialog::backdrop{background:#010b12cf}
 #comic-profile-diff{max-height:230px;overflow:auto;display:grid;gap:6px}
 #comic-profile-status{overflow-wrap:anywhere;margin:0!important}
 @media(max-width:600px){.comic-profile-fields{grid-template-columns:1fr}.comic-profile-fields label:last-child{grid-column:auto}}
+
+/* Read-only transfer inspector, without an Apply control. */
+.comic-transfer-review{margin-top:18px;padding-top:16px;border-top:1px solid var(--rule);display:grid;gap:9px;min-width:0}
+.comic-transfer-review h4{font:19px/1.2 ArchivistEditorial,Georgia,serif;color:var(--gold);margin:0}
+.comic-transfer-review>.footnote{margin:0!important}
+.comic-transfer-search{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+.comic-transfer-findings{display:grid;gap:7px;max-height:300px;overflow-y:auto}
+.comic-transfer-finding{border-left:2px solid var(--rule);padding:8px 10px;background:var(--raised);font-size:12px;overflow-wrap:anywhere}
+.comic-transfer-finding.is-blocked{border-left-color:var(--danger)}
+.comic-transfer-finding strong{display:block;font-size:12px;color:var(--gold)}
+.comic-transfer-finding p{margin:3px 0 0;color:var(--muted)}
+@media(max-width:580px){.comic-transfer-search{grid-template-columns:1fr}}

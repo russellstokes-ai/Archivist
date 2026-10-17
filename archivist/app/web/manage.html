@@ -175,6 +175,18 @@
       <button id="comic-profile-undo" type="button" class="quiet" disabled>Confirm undo</button>
      </div>
     </div>
+    <section class="comic-transfer-review" aria-label="Read-only edition reassignment safety">
+     <h4>Inspect edition reassignment</h4>
+     <p class="footnote">Checks publication, edition membership, bookmarks, source integrity and issue/year conflicts. No files or catalogue entries are changed.</p>
+     <div class="comic-transfer-search">
+      <label>Destination book ID
+       <input id="comic-transfer-target" type="number" min="1" step="1" placeholder="Existing book ID" />
+      </label>
+      <button id="comic-transfer-inspect" type="button" class="quiet">Inspect transfer safety</button>
+     </div>
+     <p id="comic-transfer-status" role="status" aria-live="polite" class="footnote">Enter an existing book ID. Reassignment is disabled in this build.</p>
+     <div id="comic-transfer-findings" class="comic-transfer-findings" aria-label="Edition transfer blockers"></div>
+    </section>
    </section>
    <section class="work-meta-panel">
     <h3>Editions &amp; chapter files</h3>

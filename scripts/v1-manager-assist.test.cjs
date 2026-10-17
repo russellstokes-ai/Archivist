@@ -52,6 +52,7 @@ const fieldNames=['title','author','series','seriesNumber','genre','publishedYea
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
 const workCalls=[];
 const editionCalls=[];
+const transferCalls=[];
 let editionRev=0,editionSaved=false;
 let editionFields={run:'',volume:'',issue:'',imprint:'',variant:'',year:'',notes:''};
 let pauseWorkPreview=false,releaseWorkPreview=null,failNextWorkReload=false;
@@ -91,6 +92,21 @@ const makeComicWorkState=()=>({
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url==='./api/manage/comic-edition-transfer/inspect'){
+    const body=JSON.parse(options.body);
+    transferCalls.push(body);
+    assert.equal(body.sourceWorkId,2);
+    assert.equal(body.targetWorkId,1);
+    assert.equal(body.editionId,20);
+    assert.equal(body.expectedSourceFingerprint,'f'.repeat(64));
+    return reply({readOnly:true,preflightClear:false,
+      editionId:20,member:{assetId:21,title:'The Flash #12',issue:12},
+      source:{workId:2,title:'The Flash #12',fingerprint:'f'.repeat(64)},
+      target:{workId:1,title:'Grouped audiobook'},
+      blockers:[{code:'source-empty',explanation:'Source must retain at least one edition.'}],
+      warnings:[{code:'apply-not-enabled',explanation:'No transfer Apply endpoint exists.'}]
+    });
+  }
   if(url==='./api/manage/works/2/comic-editions'){
     editionCalls.push({url,method:'GET'});
     return reply({workId:2,workFingerprint:'f'.repeat(64),publicationState:'staged',editions:[
@@ -570,6 +586,17 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   // owner preview; no regrouping, file rename or automatic publishing.
   assert(editionCalls.some(x=>x.url==='./api/manage/works/2/comic-editions'),
     'the existing comic edition labels must be read from the server');
+  assert.equal(transferCalls.length,0,'opening a comic must never inspect or transfer it automatically');
+  elements.get('comic-transfer-target').value='1';
+  elements.get('comic-transfer-target').listeners.input();
+  elements.get('comic-transfer-inspect').onclick();await settle();
+  assert.equal(transferCalls.length,1,'owner clicking Inspect must invoke the read-only preflight');
+  assert.match(elements.get('comic-transfer-status').textContent,/1 blockers found/);
+  assert(elements.get('comic-transfer-findings').children.some(row=>
+    String(row.children[0]?.textContent||'').includes('source-empty')),
+    'preflight must show the specific blocking identity problem');
+  assert.equal(elements.has('comic-transfer-apply'),false,
+    'no editable/apply control should be invented before a proven safe transaction');
   assert.equal(elements.get('comic-profile-edition').value,'20');
   const editionInputs=elements.get('comic-profile-fields').children;
   assert.equal(editionInputs.length,7,'comic edition run/volume/issue/variant/imprint/year/notes are editable');

@@ -627,6 +627,76 @@
   // Work-wide metadata is deliberately separate from physical-file editing.
   // Every mutation is previewed against a signed, versioned server snapshot.
   let workEpoch=0,workCandidateEpoch=0,workState=null,workPlan=null,workUndoPlan=null;
+  // Read-only safety review: an Apply endpoint is deliberately absent.
+  let comicTransferVersion=0,comicTransferBusy=false;
+  function clearComicTransfer(message){
+    ++comicTransferVersion;
+    comicTransferBusy=false;
+    $('comic-transfer-inspect').disabled=false;
+    $('comic-transfer-findings').replaceChildren();
+    $('comic-transfer-status').textContent=message||
+      'Select an existing destination book. No reassignment action is enabled.';
+  }
+  async function inspectComicTransfer(){
+    if(comicTransferBusy||!workState||!comicProfileActive)return;
+    if(workBusy||comicProfileBusy||comicProfileDirty()||comicProfileBookDirty()){
+      clearComicTransfer('Save or discard unsaved book/edition changes before inspection.');
+      return;
+    }
+    const target=Number($('comic-transfer-target').value),edition=Number(comicProfileActive);
+    const source=workState,epoch=workEpoch,inputVersion=workEditEpoch;
+    if(!Number.isSafeInteger(target)||target<1||target===source.workId){
+      clearComicTransfer('Enter a different existing destination book ID.');
+      return;
+    }
+    clearComicTransfer('Checking current edition membership, identity and household references…');
+    const version=comicTransferVersion;
+    comicTransferBusy=true;$('comic-transfer-inspect').disabled=true;
+    try{
+      const report=await api('./api/manage/comic-edition-transfer/inspect','POST',{
+        sourceWorkId:source.workId,targetWorkId:target,editionId:edition,
+        expectedSourceFingerprint:source.fingerprint
+      });
+      if(epoch!==workEpoch||source!==workState||version!==comicTransferVersion||
+         inputVersion!==workEditEpoch||edition!==comicProfileActive||
+         target!==Number($('comic-transfer-target').value))return;
+      if(report.readOnly!==true||report.source?.workId!==source.workId||
+         report.source?.fingerprint!==source.fingerprint||
+         report.target?.workId!==target||report.editionId!==edition||
+         !Array.isArray(report.blockers)||!Array.isArray(report.warnings)){
+        throw Error('Server returned an unsafe or stale inspection.');
+      }
+      const area=$('comic-transfer-findings');area.replaceChildren();
+      const summary=e('article',undefined,'comic-transfer-finding');
+      summary.append(e('strong',String(report.source.title||'Source')+' → '+String(report.target.title||'Destination')),
+        e('p','Book #'+report.source.workId+' → #'+report.target.workId+
+          ' · edition #'+report.editionId+' · asset #'+report.member.assetId+
+          '. Read-only assessment; no files or bookmarks were changed.'));
+      area.append(summary);
+      for(const [list,blocked] of [[report.blockers,true],[report.warnings,false]]){
+        for(const finding of list.slice(0,60)){
+          const node=e('article',undefined,'comic-transfer-finding'+(blocked?' is-blocked':''));
+          node.append(e('strong',(blocked?'Blocker: ':'Note: ')+String(finding.code||'Unclassified')),
+            e('p',String(finding.explanation||'')));
+          area.append(node);
+        }
+      }
+      $('comic-transfer-status').textContent=report.blockers.length?
+        report.blockers.length+' blockers found. No reassignment attempted.':
+        'No preflight blockers found. Reassignment still disabled pending separate move/undo acceptance.';
+    }catch(error){
+      if(epoch===workEpoch&&version===comicTransferVersion){
+        $('comic-transfer-findings').replaceChildren();
+        $('comic-transfer-status').textContent='Safety inspection unavailable: '+error.message;
+      }
+    }finally{
+      if(epoch===workEpoch&&version===comicTransferVersion){
+        comicTransferBusy=false;
+        $('comic-transfer-inspect').disabled=false;
+      }
+    }
+  }
+
   // A separate, owner-confirmed identity ledger is keyed to EXISTING comic
   // edition IDs. It never changes catalogue grouping or original media.
   const comicProfileNames=[
@@ -652,6 +722,7 @@
     $('comic-profile-undo').disabled=true;
   }
   function comicProfileReset(){
+    clearComicTransfer();
     ++comicProfileRequest;comicProfileState=null;comicProfileActive=null;
     comicProfileBusy=false;comicProfileFields.clear();comicProfileResetPlans();
     $('comic-profile-edition').replaceChildren();
@@ -679,6 +750,7 @@
     if(busy){$('comic-profile-apply').disabled=true;$('comic-profile-undo').disabled=true}
   }
   function comicProfileRenderEdition(id){
+    clearComicTransfer('Edition selected. Inspect a destination before reassignment.');
     const item=comicProfileState?.editions?.find(ed=>ed.editionId===id);
     comicProfileActive=item?.editionId||null;comicProfileFields.clear();comicProfileResetPlans();
     const holder=$('comic-profile-fields');holder.replaceChildren();
@@ -1649,6 +1721,8 @@
   $('work-more-media').onclick=()=>void workLoadMedia(workEpoch);
   $('candidate-search-button').onclick=findCandidates;
   $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};
+  $('comic-transfer-target').addEventListener('input',()=>clearComicTransfer('Destination changed. Inspect again.'));
+  $('comic-transfer-inspect').onclick=()=>void inspectComicTransfer();
   $('comic-profile-edition').onchange=()=>{
     const previous=comicProfileActive,chosen=Number($('comic-profile-edition').value);
     if(comicProfileDirty()&&!window.confirm('Discard unsaved edition identity labels before changing editions?')){

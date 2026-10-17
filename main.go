@@ -535,6 +535,7 @@ func (a *app) routes() http.Handler {
 	a.manageCandidateRoutes(mux)
     a.comicAuditRoutes(mux)
     a.comicEditionRoutes(mux)
+    a.comicTransferRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
 	a.libraryHealthRoutes(mux)
