@@ -14,13 +14,17 @@
 <aside class="sidebar" aria-label="Administration navigation">
  <a class="brand" href="./"><img class="brand-mark" src="./assets/archivist-app-icon.png" alt="" width="40" height="40"><span>Archivist<small>LIBRARY SERVER</small></span></a>
  <nav aria-label="Manager">
-  <button class="nav-item is-current" type="button" data-view="library" aria-current="page">◫ <span>Library</span></button>
-  <button class="nav-item" type="button" data-view="assist">◉ <span>Archivist Assist</span><span id="assist-badge" class="nav-count" aria-label="books requiring review"></span></button>
+  <button class="nav-item" type="button" data-view="overview">⌂ <span>Overview</span></button>
+  <button class="nav-item is-current" type="button" data-view="library" aria-current="page">◫ <span>Library Manager</span></button>
+  <button class="nav-item" type="button" data-view="assist">◉ <span>Work &amp; metadata</span><span id="assist-badge" class="nav-count" aria-label="books requiring review"></span></button>
   <button class="nav-item" type="button" data-view="review">☷ <span>File review</span></button>
-  <button class="nav-item" type="button" data-view="health">◈ <span>Health &amp; scans</span></button>
+  <button class="nav-item" type="button" data-view="health">◈ <span>Scanner &amp; sources</span></button>
   <a class="nav-item" href="./#settings/organisation">↗ <span>Organise &amp; relink</span></a>
-  <a class="nav-item" href="./#settings/server">↗ <span>Backup &amp; recovery</span></a>
-  <a class="nav-item" href="./">↗ <span>Back to Archivist</span></a>
+  <a class="nav-item" href="./#settings/household">↗ <span>Family</span></a>
+  <button class="nav-item" type="button" data-view="recovery">⊞ <span>Health &amp; recovery</span></button>
+  <a class="nav-item" href="./#settings/server">↗ <span>Server settings</span></a>
+  <a class="nav-item" href="./#atlas">↗ <span>Atlas &amp; Stats</span></a>
+  <a class="nav-item" href="./">↗ <span>Shelf &amp; reading</span></a>
  </nav>
  <div class="sidebar-foot">A private, local-first collection.</div>
 </aside>
@@ -34,6 +38,24 @@
   <div class="metric"><span>Review / publish queue</span><strong id="metric-review">—</strong></div>
   <div class="metric"><span>Library spaces</span><strong id="metric-spaces">—</strong></div>
   <div class="metric"><span>Unavailable works</span><strong id="metric-unavailable">—</strong></div>
+ </section>
+ <section id="view-overview" hidden aria-labelledby="overview-title">
+  <div class="section-head"><div><p class="eyebrow">SERVER WORKSPACE</p><h2 id="overview-title">Overview</h2>
+   <p class="footnote">Actual indexed catalogue and SQLite job state. Storage mounts are not freshly verified here.</p></div>
+   <button id="overview-refresh" type="button" class="quiet">Refresh overview</button>
+  </div>
+  <div class="operations-grid">
+   <article class="panel"><h3>Indexed collection</h3><div id="overview-collection" class="operations-list"><p class="subtext">Open Overview to load current counts.</p></div></article>
+   <article class="panel"><h3>Scan queue</h3><div id="overview-jobs" class="operations-list"><p class="subtext">Read-only job snapshot.</p></div></article>
+  </div>
+  <section class="panel operations-shortcuts"><h3>Continue work</h3>
+   <div class="operations-actions"><button id="overview-assist" type="button" class="quiet">Review &amp; publish books</button>
+    <button id="overview-scanner" type="button" class="quiet">Scanner &amp; sources</button>
+    <button id="overview-recovery" type="button" class="quiet">Check server recovery</button>
+    <a href="./#atlas" class="operations-link">Open Atlas universe ↗</a>
+   </div>
+  </section>
+  <p id="overview-note" class="footnote" role="status" aria-live="polite">Counts describe the indexed database, not a new media scan.</p>
  </section>
  <section id="view-library" aria-labelledby="library-title">
   <div class="section-head"><div><p class="eyebrow">CATALOGUE</p><h2 id="library-title">Manage books &amp; media</h2></div><a class="quiet-link" href="./#settings/organisation">Manage files &amp; safe moves ↗</a></div>
@@ -61,6 +83,29 @@
   <p id="assist-range" role="status" aria-live="polite">Choose Archivist Assist to load books.</p>
   <div id="assist-works" class="assist-works"></div>
   <div class="pager"><button id="assist-previous" type="button" class="quiet">← Previous books</button><span id="assist-page">Page 1</span><button id="assist-next" type="button" class="quiet">Next books →</button></div>
+ </section>
+ <section id="view-recovery" hidden aria-labelledby="recovery-title">
+  <div class="section-head"><div><p class="eyebrow">SERVER · OPERATIONS</p><h2 id="recovery-title">Health &amp; recovery</h2>
+   <p class="footnote">Read the saved database state first. SQLite integrity checking is explicit, and does not verify NAS availability or recoverability.</p></div>
+   <button id="recovery-refresh" type="button" class="quiet">Refresh status</button>
+  </div>
+  <div class="operations-grid">
+   <article class="panel"><h3>Local SQLite &amp; recovery state</h3>
+    <div id="recovery-backup" class="operations-list"><p class="subtext">Waiting for an owner-only status read.</p></div>
+    <div class="operations-actions"><a href="./api/backup" download="archivist-backup.db" class="operations-link">Download a new SQLite backup ↗</a>
+     <a href="./#settings/server" class="operations-link">Stage verified restore in Settings ↗</a></div>
+    <p class="footnote">A downloaded backup is not independently verified until copied safely and restored on a disposable installation.</p>
+   </article>
+   <article class="panel"><h3>Explicit integrity check</h3>
+    <p>Check the local SQLite database without reading original book files. Only run when necessary on a low-power device.</p>
+    <button id="recovery-integrity" type="button">Run SQLite quick check</button>
+    <p id="recovery-integrity-result" class="footnote" role="status" aria-live="polite">Not checked in this session.</p>
+    <p class="footnote">This verifies SQLite structures only; it cannot prove that books, a NAS, or a recovery snapshot are accessible.</p>
+   </article>
+  </div>
+  <section class="panel"><h3>Operational caveats</h3><div id="recovery-warnings" class="operations-list"></div>
+   <p class="footnote">For individual source/scan faults, use <button id="recovery-scanner" type="button" class="quiet">Scanner &amp; source diagnostics</button>.</p>
+  </section>
  </section>
  <section id="view-health" hidden aria-labelledby="health-title">
   <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2 id="health-title">Source and scanner health</h2></div><button id="refresh-health" type="button">Refresh</button></div>

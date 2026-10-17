@@ -1608,6 +1608,27 @@
       card.append(e('strong',item.space||'Unnamed source'),e('span',mount+' · '+(item.status||'Not scanned'),'subtext'));
       card.append(e('small',(live?.indexedWorks??item.works??0)+' works · '+(live?.indexedFiles??item.files??0)+' indexed files · '+(live?.needsReview??0)+' need review','subtext'));
       if(live)card.append(e('small',Number(live.missingGenre||0)+' missing genres · '+Number(live.missingYear||0)+' missing years · '+Number(live.offlineFiles||0)+' unavailable flags','subtext'));
+      // A scanner action lives next to its real source and is disabled for
+      // known disconnected roots or already-active source jobs. Rechecking
+      // online state at the server remains the source of truth.
+      const busy=jobs.some(job=>Number(job.source_id)===Number(item.id)&&
+        ['queued','running','committing','cancelling'].includes(job.state));
+      const scan=e('button','Scan / refresh source','quiet edit-button');
+      scan.type='button';
+      scan.disabled=live?.online!==true||busy;
+      scan.title=live?.online!==true?'Source is not confirmed connected':
+        busy?'A scan is already queued or running':'Queue a safe scan; never automatically publish';
+      scan.onclick=async()=>{
+        if(scan.disabled)return;
+        if(!window.confirm('Queue a metadata scan for '+(item.space||'this library')+'? Existing book edits, progress and published state remain protected.'))return;
+        scan.disabled=true;
+        try{
+          const result=await api('./api/sources/'+encodeURIComponent(String(item.id))+'/scan','POST');
+          notice('Source scan queued as job '+result.job_id+'.');
+          await Promise.all([loadHealth(),loadSummary()]);
+        }catch(error){notice('Scan could not be queued: '+error.message,true);scan.disabled=false}
+      };
+      card.append(scan);
       list.append(card);
     }
     const coverage=$('scanner-coverage');coverage.replaceChildren();
@@ -1666,11 +1687,126 @@
       tasks.append(row);
     }
   }
+  // Operational views are intentionally lazy: opening Library or reading
+  // a book must not trigger NAS probes or database integrity checks.
+  let operationsEpoch=0,integrityEpoch=0,integrityBusy=false;
+  function operationsCount(value){
+    const n=Number(value);
+    return Number.isSafeInteger(n)&&n>=0?n.toLocaleString():'Unknown';
+  }
+  function operationsLine(id,label,value){
+    const row=e('div',undefined,'operations-line');
+    row.append(e('span',label),e('strong',String(value)));
+    $(id).append(row);
+  }
+  function operationsSize(value){
+    const n=Number(value);
+    if(!Number.isFinite(n)||n<0)return 'Unknown';
+    if(n<1024)return Math.floor(n)+' bytes';
+    const unit=n<1048576?'KiB':n<1073741824?'MiB':'GiB';
+    const factor=unit==='KiB'?1024:unit==='MiB'?1048576:1073741824;
+    return (n/factor).toFixed(1)+' '+unit;
+  }
+  function renderOperations(view,data){
+    const jobs=data.jobs||{},backup=data.backup||{};
+    if(view==='overview'){
+      $('overview-collection').replaceChildren();$('overview-jobs').replaceChildren();
+      for(const [name,value] of [
+        ['Indexed sources',data.indexedSources],
+        ['Watched folders',data.watchedSources],
+        ['Logical works',data.indexedWorks],
+        ['Indexed media files',data.indexedFiles],
+        ['Published books',data.publishedWorks],
+        ['Staged works',data.stagedWorks],
+        ['Files needing review',data.reviewFiles],
+        ['Unavailable file flags',data.unavailableFileFlags]
+      ])operationsLine('overview-collection',name,operationsCount(value));
+      for(const [name,value] of [
+        ['Waiting',jobs.queued],['Scanning',jobs.running],
+        ['Committing',jobs.committing],['Cancelling',jobs.cancelling],
+        ['Failed (historical)',jobs.failed],['Cancelled (historical)',jobs.cancelled]
+      ])operationsLine('overview-jobs',name,operationsCount(value));
+      $('overview-note').textContent='Read-only indexed snapshot. '+String((data.caveats||[])[0]||
+        'Source mounts and physical media were not verified.');
+    }
+    if(view==='recovery'){
+      $('recovery-backup').replaceChildren();$('recovery-warnings').replaceChildren();
+      operationsLine('recovery-backup','Database file',
+        backup.databasePresent===true?operationsSize(backup.databaseBytes):'Unverified');
+      operationsLine('recovery-backup','Verified restore upload pending',
+        backup.stagedRestore?'Marker present · confirm before restart':'No pending marker found');
+      operationsLine('recovery-backup','Restore transaction marker',
+        backup.restoreInFlight?'Present · investigate before restart':'None detected');
+      operationsLine('recovery-backup','Local pre-restore snapshot',
+        backup.recoverySnapshot?'Local marker present':'None detected');
+      for(const line of data.caveats||[]){
+        $('recovery-warnings').append(e('p',String(line),'subtext'));
+      }
+      if(Number(data.unavailableFileFlags||0)>0){
+        $('recovery-warnings').append(e('p',
+          operationsCount(data.unavailableFileFlags)+' indexed files are marked unavailable. Do not purge or rescan a disconnected mount.',
+          'work-flag'));
+      }
+      if(Number(jobs.failed||0)>0){
+        $('recovery-warnings').append(e('p',
+          operationsCount(jobs.failed)+' failed scan jobs are recorded. Review their source states before retrying.',
+          'work-flag'));
+      }
+    }
+  }
+  async function loadOperations(view){
+    const generation=++operationsEpoch;
+    const button=$(view==='overview'?'overview-refresh':'recovery-refresh');
+    button.disabled=true;
+    if(view==='overview')$('overview-note').textContent='Reading indexed catalogue and job counts…';
+    try{
+      const data=await api('./api/manage/operations');
+      if(generation!==operationsEpoch||activeView!==view)return;
+      if(!data||typeof data.indexedWorks!=='number'||!data.backup||
+        !Array.isArray(data.caveats))throw Error('Invalid server operations report.');
+      renderOperations(view,data);
+    }catch(error){
+      if(generation===operationsEpoch&&activeView===view){
+        const status=view==='overview'?'overview-note':'recovery-integrity-result';
+        $(status).textContent='Unable to read server status: '+error.message;
+      }
+    }finally{
+      if(generation===operationsEpoch)button.disabled=false;
+    }
+  }
+  async function checkSQLiteIntegrity(){
+    if(integrityBusy||activeView!=='recovery')return;
+    integrityBusy=true;$('recovery-integrity').disabled=true;
+    const generation=++integrityEpoch,currentOperationsEpoch=operationsEpoch;
+    $('recovery-integrity-result').textContent='Checking local SQLite structures (never media files)…';
+    try{
+      const data=await api('./api/manage/operations/integrity','POST');
+      if(generation!==integrityEpoch||currentOperationsEpoch!==operationsEpoch||
+        activeView!=='recovery')return;
+      const duration=Number(data.durationMillis);
+      if(!['ok','problems reported'].includes(data.result)||!Number.isFinite(duration)){
+        throw Error('Unrecognised server integrity response.');
+      }
+      $('recovery-integrity-result').textContent=data.result==='ok'?
+        'SQLite quick check: OK · '+Math.max(0,Math.floor(duration))+' ms. NAS and recovery remain unverified.':
+        'SQLite quick check reported problems. Stop write operations and investigate using a verified backup.';
+    }catch(error){
+      if(generation===integrityEpoch&&currentOperationsEpoch===operationsEpoch&&
+        activeView==='recovery'){
+        $('recovery-integrity-result').textContent='Integrity unverified: '+error.message;
+      }
+    }finally{
+      integrityBusy=false;
+      if(generation===integrityEpoch)$('recovery-integrity').disabled=false;
+    }
+  }
   function showView(view){
-    activeView=view;
-    $('view-library').hidden=view==='health'||view==='assist';
+    activeView=view;++operationsEpoch;++integrityEpoch;
+    $('view-library').hidden=view!=='library'&&view!=='review';
     $('view-assist').hidden=view!=='assist';
     $('view-health').hidden=view!=='health';
+    $('view-overview').hidden=view!=='overview';
+    $('view-recovery').hidden=view!=='recovery';
     for(const item of document.querySelectorAll('[data-view]')){
       item.classList.toggle('is-current',item.dataset.view===view);
       if(item.dataset.view===view)item.setAttribute('aria-current','page');
@@ -1679,7 +1815,12 @@
     if(view==='review'){$('sort').value='review';offset=0}
     if(view==='assist'){++requestId;assistOffset=0;void loadAssist();return}
     ++assistRequest;
-    if(view==='health'){loadHealth().catch(err=>notice(err.message,true));return}
+    if(view==='health'){++requestId;loadHealth().catch(err=>notice(err.message,true));return}
+    if(view==='overview'||view==='recovery'){
+      ++requestId;
+      void loadOperations(view);
+      return;
+    }
     if(view==='library'){offset=0;$('filters').reset()}
     loadCatalogue();
   }
@@ -1792,6 +1933,13 @@
   $('saved-views').onchange=applyView;
   updateViews();
   $('refresh-health').onclick=()=>loadHealth().catch(err=>notice(err.message,true));
+  $('overview-refresh').onclick=()=>void loadOperations('overview');
+  $('overview-assist').onclick=()=>showView('assist');
+  $('overview-scanner').onclick=()=>showView('health');
+  $('overview-recovery').onclick=()=>showView('recovery');
+  $('recovery-refresh').onclick=()=>void loadOperations('recovery');
+  $('recovery-integrity').onclick=()=>void checkSQLiteIntegrity();
+  $('recovery-scanner').onclick=()=>showView('health');
   $('refresh-assist').onclick=()=>void loadAssist();
   for(const [id,state] of [['assist-staged','staged'],['assist-published','published']]){
     $(''+id).onclick=()=>{

@@ -161,3 +161,9 @@ Multi-file, unavailable, published and cross-work-inconsistent editions are read
 ## QA: comic edition transfer safety inspection
 
 In the owner-only Archivist Assist workbench, choose a comic edition, enter an existing destination book ID, and select **Inspect transfer safety**. This reads metadata conflicts, household progress, publication and scan state, and lists blockers without changing SQLite or media files. **There is no Apply route or button in this source milestone.** Refer to `docs/v1/SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md`. Do not manually reparent editions or use real household databases for experimental changes.
+
+## Owner Operations overview and SQLite checks (QA branch)
+
+The owner-only **Library Manager → Overview** now reports indexed catalogue and job counts, while **Health & recovery** shows only local SQLite/restore markers and explicit caveats. The `GET /api/manage/operations` response is read-only, does not walk a NAS, and cannot confirm whether media bytes remain readable. The `POST /api/manage/operations/integrity` operation runs SQLite `quick_check(1)` **only when an owner clicks the button**; it is bounded to eight seconds, cannot run concurrently with itself, and does not verify external backup restoration. Never interpret local `.before-restore` existence as an independently tested backup.
+
+The desktop manager includes source-specific **Scan / refresh source** controls guarded by last-known connectivity and active scan jobs; the server performs its own source validation. The separate original **Settings → Server** continues handling the existing verified backup download/staged restore, while **Organise** and **Family** remain on the functional shared Archivist browser app. This v1 source-QA batch does not install or update a live Pi/NAS, merge the draft PR or authorise migration of a family media library. Full scope: `docs/v1/SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md`.

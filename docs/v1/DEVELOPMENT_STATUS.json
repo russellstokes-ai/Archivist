@@ -1388,5 +1388,32 @@
     "draft": true,
     "merged": false,
     "commercial_server_release_ready": false
+  },
+  "server_accelerated_workspace_20261017": {
+    "pr": 83,
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "source_parent": "830001c91d61ac77392750f058d8c6dd3a6b3a84",
+    "qa": "docs/v1/SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md",
+    "status": "submitted as one integrated code+test+docs batch; exact-head CI is required and must be checked independently",
+    "delivered": [
+      "owner-only read-only SQLite operations summary with separate physical-file and logical-work counts and per-state jobs",
+      "local restore pending/inflight/recovery artifact status with explicit unknown/untrusted warnings; no remote backup success claim",
+      "explicit time-limited process-single-flight owner-only SQLite quick_check(1), not an automatic mount/media probe",
+      "desktop Overview and Health & Recovery in the existing Archivist owner manager",
+      "S1–S10 workflow navigation using existing implemented book editors, Assist, Scanner, Organise, Family and main-app Settings deep links",
+      "guarded source scan control tied to current source connectivity and persisted job states",
+      "root+packaged code mirror and actual Go/API/fake DOM regression coverage"
+    ],
+    "intentionally_deferred": [
+      "comic edition transfer Apply and undo (preflight remains read-only)",
+      "independent redesign of ten server screens (existing shared app workflows reused)",
+      "family space-grant policy change without owner decision",
+      "physical Pi4/HA ingress/NAS and real-size/real-media performance acceptance"
+    ],
+    "canonical_mobile_modified": false,
+    "existing_scanner_rewritten": false,
+    "draft_pr_unmerged": true,
+    "commercial_go": false,
+    "ci": "PR #83 exact commit server and ARM64 checks are the gate; no CI result is claimed at source-authoring time"
   }
 }

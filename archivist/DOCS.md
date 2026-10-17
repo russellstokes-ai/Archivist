@@ -219,3 +219,7 @@ Check that `remote_https` is enabled and the configured certificate/key files ex
 
 Archivist application source is proprietary. Third-party components retain their own licences. See the repository `LICENSE.md` and `THIRD-PARTY-NOTICES.md`.
 
+
+## Owner diagnostics and recovery (QA)
+
+Open **Library Manager → Overview** for indexed logical book, source and scanner counts, or **Health & recovery** to inspect the local database/restore state. A manually requested SQLite quick check inspects database structures only and is time-bounded; it does not test NAS mounts, original media or backup restoration. Existing recovery actions remain in **Settings → Server**. Source Scan controls refuse already active scans and a root that was not confirmed accessible in the latest source health report. All source-QA limitations are in `docs/v1/SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md`; physical HAOS ingress and Pi4/SSD acceptance remains outstanding.

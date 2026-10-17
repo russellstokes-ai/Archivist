@@ -4,6 +4,14 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Accelerated server owner workspace and operations batch
+
+**Draft PR #83, commercial NO-GO.** To reduce repeated milestone/CI cycles, this batch consolidates the S1 Overview and S9 Health & Recovery owner screens, a read-only server operations snapshot, an explicit SQLite integrity check, guarded per-source Scan control and working navigation across the existing S1–S10 workflows. The underlying Library, Assist, Work/Edition, Metadata, Review, Scanner, Organise, Family, Atlas/Shelf and Settings code is **reused**, not rewritten. Actual ten-screen visual acceptance and independent S7/S8/S10 panels remain open; the high-risk comic reassignment Apply remains disabled.
+
+The Go operations API distinguishes indexed files from logical works and local restore markers from verified backups; no NAS/media probes or integrity checks run automatically. SQLite quick check is owner-only, CSRF/action-bound, eight-second context-limited and single-flight. The original scanner, asset grouping, protection locks, mobile UI/renderer and personal media are untouched.
+
+**Verification:** [exact-code PR checks](https://github.com/russellstokes-ai/Archivist/pull/83/checks), including root and packaged Go, JS/manager browser contracts, Docker/HA, native ARM64 and mobile source-lock gates. **Do not mark a green release without checking the latest code SHA and real hardware.** [Consolidated batch QA](SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md).
+
 ## 17 October 2026 — Comic edition transfer safety preflight (read-only)
 
 **Draft PR #83 · source `2914747` · Commercial NO-GO.** Archivist Assist now includes owner-only **Inspect edition reassignment**, which compares the selected comic edition with an existing destination book. It checks work fingerprints, series/issue/year and library space, automatic grouping, publication, orphan risk, owner-verified edition identities, manual metadata, covers, household progress/completion/activity, historical file moves/relinks and active scanner jobs. The signed report explains blockers and is explicitly **read-only**: there is **no Apply endpoint or button** and no media/SQLite mutation.

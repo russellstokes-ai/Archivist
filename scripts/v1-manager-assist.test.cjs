@@ -40,7 +40,7 @@ class Element {
 }
 const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new Element()]));
 elements.get('sort').value='review';
-const nav=['library','assist','review','health'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
+const nav=['library','assist','review','health','overview','recovery'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
 const calls=[];
 const scanJobs=[
   {id:2,source_id:1,state:'failed',message:'Storage offline',progress:0,total:1},
@@ -93,6 +93,24 @@ const makeComicWorkState=()=>({
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url==='./api/manage/operations'){
+    return reply({
+      indexedSources:2,watchedSources:1,indexedFiles:227,indexedWorks:85,
+      publishedWorks:17,stagedWorks:68,reviewFiles:19,unavailableFileFlags:2,
+      jobs:{queued:1,running:0,committing:0,cancelling:0,failed:2,cancelled:1},
+      backup:{databasePresent:true,databaseBytes:1572864,stagedRestore:true,restoreInFlight:false,
+        recoverySnapshot:true,localOnly:true},
+      caveats:['Indexed availability is not a physical NAS probe.',
+        'Database snapshot is not independently verified recovery.',
+        'A staged restore may be applied on restart.']
+    });
+  }
+  if(url==='./api/manage/operations/integrity'){
+    assert.equal(options.method,'POST','SQLite quick check must be a deliberate owner action');
+    assert.equal(options.headers['X-Archivist-Action'],'1','SQLite check must send CSRF marker');
+    return reply({result:'ok',performedAt:1790000000,durationMillis:61,
+      scope:'SQLite quick_check(1) only; no media bytes, NAS mounts or restore test'});
+  }
   if(url==='./api/manage/comic-edition-transfer/inspect'){
     const body=JSON.parse(options.body);
     transferCalls.push(body);
@@ -374,6 +392,14 @@ vm.runInNewContext(source,sandbox,{filename:'web/manage.js'});
 const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);await Promise.resolve()}};
 (async()=>{
   await settle();
+  for(const view of ['overview','library','assist','review','health','recovery']){
+    assert(html.includes('data-view="'+view+'"'),'server owner workspace missing '+view+' navigation');
+  }
+  for(const destination of ['./#settings/organisation','./#settings/household',
+    './#settings/server','./#atlas']){
+    assert(html.includes('href="'+destination+'"'),
+      'unified workspace must connect to existing functional route '+destination);
+  }
   assert.equal(elements.get('metric-review').textContent,'2','sidebar metric must count logical books, not files');
   const assist=nav.find(item=>item.dataset.view==='assist');
   assert.equal(typeof assist.onclick,'function','Assist navigation must be connected');
@@ -654,6 +680,11 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   await settle();
   const list=elements.get('jobs-health');
   assert.equal(list.children.length,3,'server manager must show the three persisted scan states');
+  const sourceCards=elements.get('source-health').children;
+  const scanAction=sourceCards.flatMap(node=>node.children||[]).find(node=>node.tagName==='BUTTON'&&
+    node.textContent==='Scan / refresh source');
+  assert(scanAction,'scanner view must expose a real source-level scan action');
+  assert.equal(scanAction.disabled,true,'a source with queued/running jobs must not permit a duplicate scan');
   const buttons=(row)=>row.children.filter(x=>x.tagName==='BUTTON');
   const failed=list.children[0];
   const queued=list.children[1];
@@ -684,5 +715,43 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert(calls.some(url=>url.startsWith('./api/books?')&&url.includes('metadataGap=genre')),
     'genre coverage must request real server-side filtered catalogue rows');
   assert.equal(elements.get('scanner-coverage-note').textContent,'Read-only scanner metadata coverage');
-  console.log('PASS: Assist, safe scan job controls and actionable scanner/Atlas metadata coverage');
+
+  // The server operations pages must use real admin APIs, never static mock
+  // "all green" badges. Nothing triggers a SQLite quick check on navigation.
+  const overview=nav.find(item=>item.dataset.view==='overview');
+  const recovery=nav.find(item=>item.dataset.view==='recovery');
+  assert(overview&&recovery,'Overview and Recovery must be reachable in admin navigation');
+  assert.equal(calls.filter(url=>url==='./api/manage/operations/integrity').length,0,
+    'integrity checking must never run on page load');
+  overview.onclick();await settle();
+  assert.equal(elements.get('view-overview').hidden,false);
+  assert.equal(elements.get('view-library').hidden,true);
+  assert.equal(elements.get('view-health').hidden,true);
+  assert(calls.includes('./api/manage/operations'),'Overview must load an owner-only operations snapshot');
+  assert(elements.get('overview-collection').children.some(item=>item.children[0].textContent==='Logical works'&&
+    item.children[1].textContent==='85'),'Overview counts actual logical books');
+  assert.match(elements.get('overview-note').textContent,/not a physical NAS probe/);
+  assert.equal(calls.filter(url=>url==='./api/manage/operations/integrity').length,0,
+    'overview navigation must not trigger an integrity check');
+
+  elements.get('overview-recovery').onclick();await settle();
+  assert.equal(elements.get('view-recovery').hidden,false);
+  assert(elements.get('recovery-backup').children.some(item=>
+    item.children[0].textContent==='Verified restore upload pending'&&
+    item.children[1].textContent.includes('Marker present')),
+    'pending restore marker must be surfaced without claiming a successful recovery');
+  assert.match(elements.get('recovery-integrity-result').textContent,/Not checked/);
+  elements.get('recovery-integrity').onclick();await settle();
+  assert(calls.includes('./api/manage/operations/integrity'),
+    'only an explicit action may execute SQLite quick_check');
+  assert.match(elements.get('recovery-integrity-result').textContent,/SQLite quick check: OK/);
+  assert.match(elements.get('recovery-integrity-result').textContent,/NAS and recovery remain unverified/);
+  assert(elements.get('recovery-warnings').children.some(item=>
+    String(item.textContent||'').includes('staged restore')),
+    'recovery panel must show specific risk flags');
+
+  elements.get('recovery-scanner').onclick();await settle();
+  assert.equal(elements.get('view-health').hidden,false,
+    'recovery page must link back to actionable scanner/source diagnostics');
+  console.log('PASS: Assist, scanner, source diagnostics and owner-only Overview/Recovery');
 })().catch(error=>{console.error(error);process.exitCode=1});
