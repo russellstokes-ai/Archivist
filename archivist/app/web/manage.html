@@ -45,7 +45,7 @@
    <label>Sort<select id="sort"><option value="review">Review first</option><option value="title">Title</option><option value="author">Author</option><option value="series">Series</option><option value="year">Publication year</option><option value="format">Format</option></select></label>
    <button type="button" id="reset" class="quiet">Clear filters</button><label>Saved filters<select id="saved-views"><option value="">Choose saved view…</option></select></label><label>Save filter as<input id="view-name" maxlength="60" placeholder="e.g. Comics to review"></label><button type="button" id="save-view" class="quiet">Save view</button>
   </form>
-  <div class="table-top"><p id="range" role="status">Loading…</p><div><span id="selected-count" class="selected">0 selected</span><button type="button" id="export-selection" class="quiet">Export selected CSV</button><button type="button" id="clear-selection" class="quiet">Clear selection</button></div></div>
+  <div class="table-top"><p id="range" role="status">Loading…</p><div><span id="selected-count" class="selected">0 selected</span><button type="button" id="bulk-open" class="primary">Bulk edit selected</button><button type="button" id="export-selection" class="quiet">Export selected CSV</button><button type="button" id="clear-selection" class="quiet">Clear selection</button></div></div>
   <div class="table-scroll"><table id="catalogue"><thead><tr><th scope="col"><input type="checkbox" id="select-page" aria-label="Select all files on this page"></th><th scope="col">Title / author</th><th scope="col">Series</th><th scope="col">Type</th><th scope="col">Source</th><th scope="col">Status</th><th scope="col">Edit</th></tr></thead><tbody id="records"></tbody></table></div>
   <div class="pager"><button id="previous" type="button" class="quiet">← Previous</button><span id="page-label">Page 1</span><button id="next" type="button" class="quiet">Next →</button></div>
  </section>
@@ -69,4 +69,22 @@
 </div>
 </main></div>
 <dialog id="editor" aria-labelledby="editor-title"><form id="editor-form" method="dialog"><div class="dialog-head"><div><p class="eyebrow">METADATA WORKBENCH</p><h2 id="editor-title">Edit metadata</h2></div><button type="button" id="close-editor" class="quiet" aria-label="Close editor">✕</button></div><p id="editor-context" class="footnote"></p><section class="candidate-workbench" aria-label="Optional public metadata search"><p class="eyebrow">OPTIONAL SECOND OPINION</p><div id="candidate-search-form" role="search"><label>Search public book metadata<input id="candidate-query" type="search" autocomplete="off" placeholder="Title and author, or ISBN"></label><button id="candidate-search-button" type="submit">Find candidates</button></div><p class="footnote">Searches are sent to Open Library only when requested. Suggestions never save themselves; choose individual fields below.</p><div id="candidate-results" aria-live="polite"></div></section><div id="editor-lock-status" class="footnote" role="status" aria-live="polite">Checking metadata field provenance…</div><button id="retry-field-status" type="button" class="quiet" hidden>Retry field status</button><div id="editor-fields" class="field-grid"></div><p class="footnote">Manually corrected values are preserved on later scans. Lock verified fields to prevent accidental edits; unlock explicitly before changing them. Saving metadata never publishes a book.</p><div class="dialog-actions"><button type="button" class="quiet" id="cancel-editor">Cancel</button><button type="submit" class="primary" id="save-editor" value="save">Save metadata</button></div></form></dialog>
+<dialog id="bulk-dialog" aria-labelledby="bulk-title">
+  <form id="bulk-form">
+    <div class="dialog-head"><div><p class="eyebrow">METADATA WORKBENCH</p><h2 id="bulk-title">Bulk edit reviewed files</h2></div><button type="button" id="bulk-close" class="quiet" aria-label="Close bulk editor">✕</button></div>
+    <p id="bulk-context" class="footnote">Selected files are checked individually. No changes occur until you approve the complete preview.</p>
+    <p class="footnote">This initial safe bulk workflow edits narrator, publisher, publication year, ISBN, ASIN and language. Select only the fields you want to replace. Title, author, series and genre remain individual edits to protect work grouping.</p>
+    <div class="bulk-fields" role="group" aria-label="Fields to change">
+      <label><span class="bulk-enable"><input id="bulk-use-narrator" type="checkbox"> Replace narrator</span><input id="bulk-narrator" maxlength="1000" placeholder="Narrator"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-publisher" type="checkbox"> Replace publisher</span><input id="bulk-publisher" maxlength="1000" placeholder="Publisher"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-publishedYear" type="checkbox"> Replace publication year</span><input id="bulk-publishedYear" type="number" min="1000" max="3000" step="1" placeholder="Year; leave blank to clear"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-isbn" type="checkbox"> Replace ISBN</span><input id="bulk-isbn" maxlength="100" placeholder="ISBN"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-asin" type="checkbox"> Replace ASIN</span><input id="bulk-asin" maxlength="100" placeholder="ASIN"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-language" type="checkbox"> Replace language</span><input id="bulk-language" maxlength="100" placeholder="Language"></label>
+    </div>
+    <p id="bulk-status" class="footnote" role="status" aria-live="polite">No preview generated.</p>
+    <div id="bulk-preview" class="bulk-preview" aria-live="polite"></div>
+    <div class="dialog-actions"><button id="bulk-preview-button" type="submit" class="quiet">Preview edits</button><button id="bulk-apply" type="button" class="primary" disabled>Apply approved changes</button></div>
+  </form>
+</dialog>
 </body></html>

@@ -28,6 +28,10 @@ class FakeElement{
   addEventListener(name,listener){(this.listeners??={})[name]=listener}
   querySelector(){return null}
   querySelectorAll(){return []}
+  reset(){}
+  showModal(){this.open=true}
+  close(){this.open=false;this.listeners?.close?.() }
+  focus(){}
 }
 const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new FakeElement()]));
 elements.get('sort').value='review';
@@ -36,7 +40,7 @@ const data=[
   {id:11,title:'Illustrated Atlas',author:'Author A',format:'Comic',space:'Comics',available:true,needsReview:false},
   {id:12,title:'Another Comic',author:'Author B',format:'Comic',space:'Comics',available:true,needsReview:true},
 ];
-const fetchPaths=[];
+const fetchPaths=[],bulkCalls=[];
 const document={
   getElementById:id=>elements.get(id),
   createElement:tag=>new FakeElement(tag),
@@ -48,8 +52,24 @@ const responses={
   './api/library-summary':{total:2,needsReview:1,spaces:['Comics'],availability:[]},
   './api/sources':[{space:'Comics'}],
 };
-async function fetchFake(url){
+async function fetchFake(url,options={}){
   fetchPaths.push(url);
+  if(url==='./api/manage/bulk-metadata/preview'){
+    const request=JSON.parse(options.body);bulkCalls.push({phase:'preview',request});
+    assert.equal(request.ids.length,2);
+    assert.equal(request.changes.publisher,'Test Publisher');
+    return {ok:true,status:200,headers:{get:()=> 'application/json'},
+      json:async()=>({items:request.ids.map(id=>({
+        id,title:'Synthetic '+id,revision:1,digest:'f'.repeat(64),status:'ready',
+        diff:[{name:'publisher',from:'Old publisher',to:'Test Publisher'}]
+      })),changes:request.changes,receipt:'synthetic-receipt',ready:2,blocked:0})};
+  }
+  if(url==='./api/manage/bulk-metadata/apply'){
+    const request=JSON.parse(options.body);bulkCalls.push({phase:'apply',request});
+    assert.equal(request.confirm,true);assert.equal(request.receipt,'synthetic-receipt');
+    assert.equal(request.items.length,2);
+    return {ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>({ok:true,updated:2,unchanged:0})};
+  }
   const body=url.startsWith('./api/books?')?data:responses[url];
   if(!body)throw Error('Unexpected manager API request: '+url);
   return {
@@ -109,5 +129,23 @@ const flush=async()=>{for(let i=0;i<6;i++){await new Promise(setImmediate);await
   assert.equal(rowCheckbox(0).checked,true);
   assert.equal(rowCheckbox(1).checked,true);
 
-  console.log('PASS: admin manager individual/bulk selection, deselection, selection counters and export controls');
+  const openBulk=elements.get('bulk-open');
+  assert.equal(openBulk.disabled,false,'selected items must unlock the bulk metadata editor');
+  openBulk.onclick();
+  assert.equal(elements.get('bulk-dialog').open,true,'bulk manager must actually open');
+  elements.get('bulk-use-publisher').checked=true;
+  elements.get('bulk-publisher').value='Test Publisher';
+  const preview=elements.get('bulk-form').listeners.submit({preventDefault(){}});
+  await preview;await flush();
+  assert.equal(bulkCalls.length,1,'preview must call a server API rather than simulate changes');
+  assert.equal(bulkCalls[0].phase,'preview');
+  assert.equal(elements.get('bulk-apply').disabled,false,'approved preview enables a separate apply');
+  assert.equal(elements.get('bulk-preview').children.length,2,'preview displays affected files');
+  await elements.get('bulk-apply').onclick();
+  await flush();
+  assert.equal(bulkCalls.length,2,'apply must execute the confirmed server transaction');
+  assert.equal(bulkCalls[1].phase,'apply');
+  assert.equal(elements.get('bulk-dialog').open,false,'successful batch should close the dialog');
+  assert.equal(elements.get('selected-count').textContent,'0 selected','completed batch must clear stale row selection');
+  console.log('PASS: manager selection, server preview, explicit atomic apply, and selection cleanup');
 })().catch(error=>{console.error(error);process.exitCode=1});

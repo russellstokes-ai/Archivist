@@ -118,3 +118,16 @@ dialog::backdrop{background:#010b12cf}
 .field-grid input[readonly],.field-grid textarea[readonly]{border-color:var(--gold);background:var(--raised);color:var(--muted);cursor:not-allowed}
 #editor-lock-status{font-size:12px;margin:14px 0}
 #retry-field-status{margin:0 0 12px}
+
+/* Preview-first bulk metadata panel: small, deliberate, fully explicit fields. */
+.bulk-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:20px 0}
+.bulk-fields label{display:grid;gap:7px;min-width:0}
+.bulk-enable{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--gold)}
+.bulk-enable input{width:17px;height:17px;accent-color:var(--teal)}
+.bulk-preview{display:grid;gap:8px;max-height:275px;overflow:auto}
+.bulk-preview-item{background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:10px 13px}
+.bulk-preview-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.bulk-diff{display:flex;gap:14px;justify-content:space-between;font-size:12px;border-top:1px solid var(--rule);padding:6px 0;overflow-wrap:anywhere}
+.bulk-diff strong{color:var(--gold);font-weight:500}
+.bulk-diff span{max-width:75%;text-align:right}
+@media(max-width:590px){.bulk-fields{grid-template-columns:1fr}.bulk-diff{flex-direction:column;gap:2px}.bulk-diff span{text-align:left;max-width:100%}}

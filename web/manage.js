@@ -17,6 +17,8 @@
   const editorDecorations=new Map();
   const selectedDetails=new Map();
   const savedViewsKey='archivist-manager-v1-views';
+  const bulkFields=['narrator','publisher','publishedYear','isbn','asin','language'];
+  let bulkGeneration=0,bulkPlan=null,bulkSelectedIds=[],bulkBusy=false;
   const e=(tag,text,className)=>{
     const node=document.createElement(tag);
     if(text!==undefined)node.textContent=String(text);
@@ -47,6 +49,7 @@
     $('selected-count').textContent=selected.size+' selected';
     $('clear-selection').disabled=selected.size===0;
     $('export-selection').disabled=selected.size===0;
+    $('bulk-open').disabled=selected.size===0;
     $('select-page').checked=rows.length>0&&rows.every(item=>selected.has(item.id));
     $('select-page').indeterminate=rows.some(item=>selected.has(item.id))&&!$('select-page').checked;
   }
@@ -123,6 +126,105 @@
   function updateViews(){const picker=$('saved-views');const views=readSavedViews();picker.replaceChildren(new Option('Choose saved view…',''));views.forEach((v,i)=>picker.add(new Option(v.name,String(i))))}
   function saveView(){const name=$('view-name').value.trim();if(!name){notice('Name the filter before saving.',true);$('view-name').focus();return}const filters={q:s('search'),space:s('space'),format:s('format'),availability:s('availability'),sort:s('sort'),review:activeView==='review'};const views=readSavedViews().filter(v=>v.name.toLowerCase()!==name.toLowerCase());views.unshift({name,filters});try{localStorage.setItem(savedViewsKey,JSON.stringify(views.slice(0,20)));$('view-name').value='';updateViews();notice('Saved filter: '+name)}catch{notice('This browser does not permit saving views.',true)}}
   function applyView(){const i=Number(s('saved-views'));const view=readSavedViews()[i];if(s('saved-views')===''||!view)return;const v=view.filters;activeView=v.review?'review':'library';$('view-library').hidden=false;$('view-health').hidden=true;for(const item of document.querySelectorAll('[data-view]')){item.classList.toggle('is-current',item.dataset.view===activeView);if(item.dataset.view===activeView)item.setAttribute('aria-current','page');else item.removeAttribute('aria-current')}for(const [id,key] of [['search','q'],['space','space'],['format','format'],['availability','availability'],['sort','sort']])$(id).value=v[key]||'';offset=0;loadCatalogue()}
+
+  function resetBulkPlan(){
+    ++bulkGeneration;
+    bulkPlan=null;
+    $('bulk-apply').disabled=true;
+    $('bulk-preview').replaceChildren();
+    $('bulk-status').textContent='No preview generated.';
+  }
+  function openBulkEditor(){
+    if(selected.size===0){notice('Select files to edit first.',true);return}
+    if(selected.size>40){notice('Bulk edits are limited to 40 files at a time. Reduce the selection.',true);return}
+    bulkSelectedIds=[...selected].map(Number).sort((a,b)=>a-b);
+    resetBulkPlan();
+    bulkBusy=false;
+    $('bulk-form').reset();
+    $('bulk-context').textContent=bulkSelectedIds.length+' selected files. Review each change before applying. Unreviewed or locked fields will block the entire operation.';
+    $('bulk-dialog').showModal();
+    $('bulk-use-narrator').focus();
+  }
+  function closeBulkEditor(){
+    resetBulkPlan();
+    bulkSelectedIds=[];
+    $('bulk-dialog').close();
+  }
+  function bulkEditedFields(){
+    const changes={};
+    for(const name of bulkFields){
+      if(!$('bulk-use-'+name).checked)continue;
+      const raw=$('bulk-'+name).value.trim();
+      if(name==='publishedYear'){
+        if(raw&&!/^\d{4}$/.test(raw))throw Error('Use a four-digit publication year or leave it blank to clear.');
+        changes.publishedYear=raw?Number(raw):0;
+      }else changes[name]=raw;
+    }
+    if(Object.keys(changes).length<1||Object.keys(changes).length>4)throw Error('Choose 1–4 fields to edit in a single preview.');
+    return changes;
+  }
+  function displayBulkPreview(result){
+    const host=$('bulk-preview');host.replaceChildren();
+    for(const item of result.items||[]){
+      const card=e('article',undefined,'bulk-preview-item');
+      const top=e('div',undefined,'bulk-preview-top');
+      top.append(e('strong',item.title||'Untitled'),e('span',item.status||'Unknown','pill '+(item.status==='ready'?'ok':item.status==='blocked'?'warn':'muted')));
+      card.append(top);
+      if(item.reason)card.append(e('p',item.reason,'reason'));
+      if(Array.isArray(item.diff)){
+        for(const diff of item.diff){
+          const row=e('div',undefined,'bulk-diff');
+          row.append(e('strong',diff.name),e('span',String(diff.from||'—')+' → '+String(diff.to||'—')));
+          card.append(row);
+        }
+      }
+      host.append(card);
+    }
+  }
+  async function previewBulk(event){
+    event.preventDefault();
+    if(bulkBusy||!bulkSelectedIds.length)return;
+    resetBulkPlan();
+    let changes;
+    try{changes=bulkEditedFields()}catch(error){$('bulk-status').textContent=error.message;return}
+    const generation=bulkGeneration;
+    bulkBusy=true;$('bulk-preview-button').disabled=true;
+    $('bulk-status').textContent='Checking current file values, manual locks and revisions…';
+    try{
+      const result=await api('./api/manage/bulk-metadata/preview','POST',{ids:bulkSelectedIds,changes});
+      if(generation!==bulkGeneration||!$('bulk-dialog').open)return;
+      if(!Array.isArray(result.items)||result.items.length!==bulkSelectedIds.length)throw Error('Invalid server preview.');
+      displayBulkPreview(result);
+      bulkPlan=result;
+      const ready=Number(result.ready||0),blocked=Number(result.blocked||0);
+      $('bulk-status').textContent=ready+' files ready · '+blocked+' blocked · '+(result.items.length-ready-blocked)+' already unchanged. '+(blocked?'Resolve blocking files and preview again.':'No changes have been written.');
+      $('bulk-apply').disabled=blocked>0||ready===0||!result.receipt;
+    }catch(error){if(generation===bulkGeneration)$('bulk-status').textContent=error.message}
+    finally{bulkBusy=false;$('bulk-preview-button').disabled=false}
+  }
+  async function applyBulk(){
+    if(bulkBusy||!bulkPlan||!bulkPlan.receipt)return;
+    if(!window.confirm('Apply the previewed metadata changes to '+bulkPlan.ready+' reviewed files? This does not move media or publish books.'))return;
+    const generation=bulkGeneration;
+    bulkBusy=true;$('bulk-apply').disabled=true;$('bulk-preview-button').disabled=true;
+    $('bulk-status').textContent='Applying the approved batch transaction…';
+    try{
+      const result=await api('./api/manage/bulk-metadata/apply','POST',{
+        items:bulkPlan.items,changes:bulkPlan.changes,receipt:bulkPlan.receipt,confirm:true
+      });
+      if(generation!==bulkGeneration||!$('bulk-dialog').open)return;
+      if(!result.ok||!Number.isInteger(result.updated))throw Error('Server did not confirm the batch.');
+      const updated=result.updated;
+      selected.clear();selectedDetails.clear();
+      closeBulkEditor();
+      await Promise.all([loadCatalogue(),loadSummary()]);
+      notice('Bulk metadata saved to '+updated+' reviewed files. Originals, identities and progress were retained.');
+    }catch(error){
+      if(generation===bulkGeneration){$('bulk-status').textContent='Bulk apply failed: '+error.message+' No further action can use this preview; preview again.';bulkPlan=null}
+    }finally{
+      bulkBusy=false;$('bulk-preview-button').disabled=false;
+    }
+  }
   function exportSelected(){const items=[...selectedDetails.values()];if(!items.length)return;const columns=[['id','ID'],['title','Title'],['author','Author'],['series','Series'],['seriesNumber','Number'],['format','Format'],['space','Space'],['publishedYear','Year'],['genre','Genre'],['isbn','ISBN'],['metadataSource','Metadata source']];const cell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text.trimStart()))text="'"+text;return '"'+text.replaceAll('"','""')+'"'};const lines=[columns.map(x=>cell(x[1])).join(','),...items.map(row=>columns.map(x=>cell(row[x[0]])).join(','))];const url=URL.createObjectURL(new Blob([lines.join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'}));const anchor=e('a');anchor.href=url;anchor.download='archivist-selected-metadata.csv';document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Exported '+items.length+' selected metadata records.')}
   function invalidateCandidateLookup(){
     ++candidateGeneration;
@@ -526,6 +628,17 @@
   $('select-page').onchange=event=>{for(const item of rows)choose(item,event.target.checked);renderRows()};
   $('clear-selection').onclick=()=>{selected.clear();selectedDetails.clear();renderRows()};
   $('export-selection').onclick=exportSelected;
+  $('bulk-open').onclick=openBulkEditor;
+  $('bulk-close').onclick=closeBulkEditor;
+  $('bulk-form').addEventListener('submit',previewBulk);
+  $('bulk-apply').onclick=()=>void applyBulk();
+  for(const name of bulkFields){
+    $('bulk-'+name).addEventListener('input',resetBulkPlan);
+    $('bulk-use-'+name).addEventListener('change',resetBulkPlan);
+  }
+  $('bulk-dialog').addEventListener('close',()=>{
+    resetBulkPlan();bulkSelectedIds=[];
+  });
   $('save-view').onclick=saveView;
   $('saved-views').onchange=applyView;
   updateViews();
