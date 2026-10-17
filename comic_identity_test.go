@@ -28,8 +28,10 @@ func TestComicIssueExtractionRejectsYearsVolumesAndAmbiguity(t *testing.T){
    t.Fatalf("%q: number=%g status=%s, want %g %s",tc.Title,actual,kind,tc.Number,tc.Status)
   }
  }
- if stem:=comicSeriesTitle("The Flash #12");stem!="The Flash"{
-  t.Fatalf("comic series title falsely includes issue: %s",stem)
+ for _,label:=range []string{"The Flash #12","The Flash Issue #12","The Flash No. 12"}{
+  if stem:=comicSeriesTitle(label);stem!="The Flash"{
+   t.Fatalf("comic title %q incorrectly produced series %q",label,stem)
+  }
  }
 }
 
@@ -105,6 +107,18 @@ func TestComicAuditEvidenceAndPossibleGapNeverModifyCatalogue(t *testing.T){
  if err:=json.Unmarshal(res.Body.Bytes(),&audit);err!=nil{t.Fatal(err)}
  if len(audit.PossibleGaps)>0{t.Fatalf("different years produced a supposed same-run gap: %+v",audit)}
  if _,err:=a.db.Exec("UPDATE assets SET published_year=2024 WHERE id=3");err!=nil{t.Fatal(err)}
+ for _,field:=range []string{"seriesNumber","publishedYear"}{
+  if _,err:=a.db.Exec(`INSERT INTO work_field_controls(work_id,field,value,source,locked,updated_at)
+   VALUES(2,?,'','owner edit',0,123)`,field);err!=nil{t.Fatal(err)}
+  res=comicAuditGet(a,"1",true)
+  if res.Code!=200{t.Fatalf("clear %s audit %d %s",field,res.Code,res.Body.String())}
+  audit=comicAuditResult{}
+  if err:=json.Unmarshal(res.Body.Bytes(),&audit);err!=nil{t.Fatal(err)}
+  if len(audit.PossibleGaps)>0{
+   t.Fatalf("explicitly cleared %s was overwritten by derived metadata: %+v",field,audit)
+  }
+  if _,err:=a.db.Exec("DELETE FROM work_field_controls WHERE work_id=2 AND field=?",field);err!=nil{t.Fatal(err)}
+ }
  if _,err:=a.db.Exec("INSERT INTO works(id,title,space,series) VALUES(4,'The Flash reprint','Comics','The Flash')");err!=nil{t.Fatal(err)}
  if _,err:=a.db.Exec("INSERT INTO editions(id,work_id,format) VALUES(4,4,'Comic')");err!=nil{t.Fatal(err)}
  if _,err:=a.db.Exec(`INSERT INTO assets(id,source_id,relative_path,title,series,series_number,

@@ -696,6 +696,8 @@
       workInputs.set(field.name,{input,lock,definition:field,source});
       input.addEventListener('input',()=>{
         input.dataset.origin='manual';
+        ++workCandidateEpoch;
+        $('work-candidates').replaceChildren(e('p','Book details changed. Search again to compare current metadata.','subtext'));
         workClearPlans();
       });
     }
@@ -850,6 +852,7 @@
       throw Error('Server returned an invalid book metadata snapshot.');
     }
     ++workCandidateEpoch; // invalidate searches ranked against an older book revision
+    $('work-candidates').replaceChildren();
     workState=data;workClearPlans();workRenderSummary(data);workRenderFields(data);
     workResetMedia();
     await Promise.all([workLoadMedia(epoch),workLoadHistory(epoch),workLoadComicAudit(epoch)]);

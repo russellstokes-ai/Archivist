@@ -35,8 +35,8 @@ func comicTitleIssue(title string)(float64,string){
  return values[0],"match"
 }
 func comicSeriesTitle(title string)string{
- removed:=comicHashToken.ReplaceAllString(title," ")
- removed=comicNamedToken.ReplaceAllString(removed," ")
+ removed:=comicNamedToken.ReplaceAllString(title," ")
+ removed=comicHashToken.ReplaceAllString(removed," ")
  return strings.TrimSpace(strings.Trim(removed,"() []:;-,"))
 }
 func comicEnrichCandidate(c *multiMetadataCandidate,q multiMetadataQuery){
@@ -178,12 +178,16 @@ func (a *app)readComicAudit(ctx context.Context,tx *sql.Tx,state workMetaState)(
  // Same library space, Comic format, and exact series label. Read-only SQLite
  // snapshot: no disk walk, network access, sorting, regrouping or publication.
  peers,err:=tx.QueryContext(ctx,`SELECT w.id,w.title,
- COALESCE((SELECT CAST(NULLIF(wc.value,'') AS REAL) FROM work_field_controls wc
-           WHERE wc.work_id=w.id AND wc.field='seriesNumber'),
-          CASE WHEN COUNT(DISTINCT NULLIF(a.series_number,0))=1 THEN MIN(NULLIF(a.series_number,0)) ELSE 0 END,0),
- COALESCE((SELECT CAST(NULLIF(wy.value,'') AS INTEGER) FROM work_field_controls wy
-           WHERE wy.work_id=w.id AND wy.field='publishedYear'),
-          CASE WHEN COUNT(DISTINCT NULLIF(a.published_year,0))=1 THEN MIN(NULLIF(a.published_year,0)) ELSE 0 END,0)
+ CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='seriesNumber')
+   THEN COALESCE((SELECT CAST(NULLIF(wc.value,'') AS REAL) FROM work_field_controls wc
+                  WHERE wc.work_id=w.id AND wc.field='seriesNumber'),0)
+   ELSE COALESCE(CASE WHEN COUNT(DISTINCT NULLIF(a.series_number,0))=1
+                      THEN MIN(NULLIF(a.series_number,0)) ELSE 0 END,0) END,
+ CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wy WHERE wy.work_id=w.id AND wy.field='publishedYear')
+   THEN COALESCE((SELECT CAST(NULLIF(wy.value,'') AS INTEGER) FROM work_field_controls wy
+                  WHERE wy.work_id=w.id AND wy.field='publishedYear'),0)
+   ELSE COALESCE(CASE WHEN COUNT(DISTINCT NULLIF(a.published_year,0))=1
+                      THEN MIN(NULLIF(a.published_year,0)) ELSE 0 END,0) END
  FROM works w JOIN editions ed ON ed.work_id=w.id AND ed.format='Comic'
  JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id
  WHERE w.space=? AND TRIM(w.series)=? COLLATE NOCASE
