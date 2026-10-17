@@ -32,6 +32,17 @@ const missingCover=legacy('missing-art',false,false);
 const brokenFlag=staged('unknown','EPUB',false);
 brokenFlag.localWork.needsReview=false;
 const all=[published,reviewed,migrated,needsReview,missingCover,brokenFlag];
+// Malformed/stale published flags must not leak unreviewed or incomplete works.
+const publishedButReview={...staged('stale'),localWork:{...staged('stale').localWork,needsReview:true}};
+const publishedNoCover={...staged('no-cover'),localWork:{...staged('no-cover').localWork,coverUri:''},coverUri:''};
+const partiallyPublished={...staged('partial'),localWork:{...staged('partial').localWork,tracks:[
+ {scannerWorkId:'scanner-partial',scannerPublished:true,format:'Audio'},
+ {scannerWorkId:'scanner-partial',scannerPublished:false,format:'Audio'},
+]}};
+assert.equal(atlasEligible(publishedButReview),false,'Stale publication must not bypass Needs Review');
+assert.equal(atlasEligible(publishedNoCover),false,'Atlas cannot expose published work before cover completes');
+assert.equal(atlasEligible(partiallyPublished),false,'A single accepted chapter cannot publish all chapters');
+assert.equal(atlasSelectPublished([publishedButReview,publishedNoCover,partiallyPublished]).length,0);
 assert.deepEqual(atlasSelectPublished(all).map(x=>x.title),['Work published','Legacy migrated']);
 assert.equal(atlasEligible(reviewed),false,'unpublished scanner work cannot enter Atlas');
 assert.equal(atlasEligible(brokenFlag),false,'missing scanner flag must not be treated as legacy');

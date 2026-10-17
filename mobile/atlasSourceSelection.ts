@@ -38,18 +38,24 @@ export function atlasEligible<T extends AtlasCandidate>(work:T):boolean {
   const local=work.localWork;
   if(!local || !local.tracks?.length)return false;
   const staged=local.tracks.some(track=>typeof track.scannerWorkId==='string'&&!!track.scannerWorkId.trim());
-  if(staged){
-    // Published scanner work is a real, explicit database state; incomplete or
-    // unreviewed works must never be inferred from presence in Library alone.
-    return local.tracks.some(track=>track.scannerPublished===true);
-  }
-  // Historic approved libraries had no publication field. Do not erase their
-  // legitimate works from Atlas, but refuse genuinely incomplete legacy rows.
-  return local.needsReview===false &&
+  // A published flag alone can be stale after a metadata edit, or only one
+  // chapter of a multi-file work may have been accepted. Both cases must
+  // remain in Needs Review, never appear prematurely in Atlas.
+  const complete=local.needsReview===false &&
     !!String(local.title||work.title).trim() &&
     !!String(local.author||work.author).trim() &&
     !!String(local.coverUri||work.coverUri||'').trim() &&
     recognisedFormats.has(local.format||work.format);
+  if(!complete)return false;
+  if(staged){
+    // Work-level publication is all-or-nothing: every scanner chapter must
+    // have explicit current publication, not a single old accepted member.
+    return local.tracks.every(track=>typeof track.scannerWorkId==='string' &&
+      !!track.scannerWorkId.trim() && track.scannerPublished===true);
+  }
+  // Historic approved libraries had no publication flag; retain complete
+  // reviewed legacy works without modifying the canonical scanner.
+  return true;
 }
 
 export function atlasSelectPublished<T extends AtlasCandidate>(
