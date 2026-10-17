@@ -23,7 +23,7 @@ assert.equal(effectiveLocalReaderFormat('Unsupported','content://provider/docume
  'Opaque unrecognised types must not be silently published/claimed supported');
 const original=fs.readFileSync(__dirname+'/localReader.ts','utf8');
 const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
-assert(original.includes('comicContainerFromUri(uri)')&&original.includes('readCbtImages(uri)'),
+assert(original.includes('comicContainerFromUri(uri)')&&original.includes('tarComicDocument(uri,title,initialPage)'),
  'Native comic archive routing must use decoded SAF identity');
 assert(app.includes('effectiveLocalReaderFormat('),
  'User selected reader must route declared Unsupported comic file to actual decoder');
