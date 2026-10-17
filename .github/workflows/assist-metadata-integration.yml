@@ -1,0 +1,43 @@
+name: Assist metadata scoped integration
+on:
+  push:
+    branches: [fix/assist-metadata-durable-20261017]
+    paths: [scripts/assist-metadata-integrate.cjs]
+permissions:
+  contents: write
+concurrency:
+  group: assist-metadata-integration
+  cancel-in-progress: false
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Validate and apply explicit source hunks in the isolated feature branch
+        run: node scripts/assist-metadata-integrate.cjs --apply
+      - name: Install and test mobile source
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          node harden-forge.cjs
+          npm run typecheck
+          npm test
+      - name: Verify original protected features
+        run: node scripts/v1-protection-gate.cjs
+      - name: Record tested integration only if branch has not moved
+        env:
+          BRANCH: fix/assist-metadata-durable-20261017
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/$BRANCH | cut -f1)" = "$EXPECTED"
+          node scripts/assist-metadata-integrate.cjs --stage
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name='Archivist integration' -c user.email='archivist-integration@users.noreply.github.com' commit -m 'feat(assist): apply verified metadata integration; preserve Test14 baseline'
+          git push origin HEAD:"$BRANCH"
