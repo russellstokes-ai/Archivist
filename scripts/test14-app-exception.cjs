@@ -10,6 +10,23 @@ module.exports=function test14AppException(root,actual){
     next.approved_git_blob_sha!==actual || !Array.isArray(next.changes) ||
     next.changes.length!==14) return false;
  let source=fs.readFileSync(path.join(root,'mobile/App.tsx'),'utf8');
+ // Apply any owner-directed follow-on responsive layout exception strictly
+ // in reverse, then enforce the original 14-patch baseline as before.
+ const follow=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_TRANSPORT_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+ if(actual!==next.approved_git_blob_sha){
+   if(follow.schema_version!==1||follow.path!=='mobile/App.tsx'||
+      follow.previous_approved_git_blob_sha!==next.approved_git_blob_sha||
+      follow.release_approved!==false||follow.installed_apk_approved!==false||
+      follow.approved_git_blob_sha!==actual||follow.changes.length!==8)return false;
+   for(const {old,new:replacement} of [...follow.changes].reverse()){
+     if(typeof old!=='string'||typeof replacement!=='string'||
+        !old.length||!replacement.length||source.split(replacement).length!==2)return false;
+     source=source.replace(replacement,old);
+   }
+   const previousBytes=Buffer.from(source,'utf8');
+   const previousSha=crypto.createHash('sha1').update('blob '+previousBytes.length+'\\0').update(previousBytes).digest('hex');
+   if(previousSha!==next.approved_git_blob_sha)return false;
+ }
  for(const {old,new:replacement} of [...next.changes].reverse()){
    if(typeof old!=='string'||typeof replacement!=='string'||
       !old.length||!replacement.length || source.split(replacement).length!==2) return false;

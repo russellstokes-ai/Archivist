@@ -30,10 +30,14 @@ assert(!JSON.stringify(fallback).includes('content://'));
 assert(!JSON.stringify(fallback).includes('file://'));
 assert(!JSON.stringify(primary).includes('file://'));
 
-assert.equal(morph.includes('PLAY_PAUSE_VISIBLE_OFFSET_X=10'),true);
-assert.equal(morph.includes('PLAY_PAUSE_VISIBLE_OFFSET_Y=3'),true);
-assert.equal(morph.includes('translateX:PLAY_PAUSE_VISIBLE_OFFSET_X'),true);
-assert.equal(morph.includes('translateY:PLAY_PAUSE_VISIBLE_OFFSET_Y'),true);
+// The old guessed +10dp art offset made BOTH original vector hold frames
+// off-centre. Independent geometry regression tests measure the exact source.
+assert(!morph.includes('PLAY_PAUSE_VISIBLE_OFFSET_X=10'),
+  'Do not reintroduce the old, visually inaccurate 10dp registration');
+assert(morph.includes('const artOffsetX=progress.interpolate('));
+assert(morph.includes('outputRange:[PLAY_PAUSE_VISIBLE_OFFSET_X_PLAY,PLAY_PAUSE_VISIBLE_OFFSET_X_PAUSE]'));
+assert(morph.includes('translateX:artOffsetX'));
+assert(morph.includes('translateY:PLAY_PAUSE_VISIBLE_OFFSET_Y'));
 assert(app.includes('playButton: {width:80,height:80,borderRadius:40'),
   'The original 80dp play button geometry may not move or shrink');
 assert(app.includes('playing={playerMotionPlaying} active={appActive}'));

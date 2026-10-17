@@ -6175,13 +6175,13 @@ function Client() {
               <Text style={[styles.playerTime,{color:p.muted}]}>−{formatTime(remaining)}</Text>
             </View>
 
-            <View style={[styles.transport,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}>
+            <View style={[styles.transport,width<356&&styles.transportNarrow,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,width<356&&styles.transportEdgeButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
                 <View pointerEvents="none" style={{height:31,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back30} size={44} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>30s</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}>
-                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back15} size={52} reduceMotion={reduceMotion}/></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,width<356&&styles.skipButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back15} size={width<356?46:52} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>15s</Text>
               </Pressable>
               <Pressable
@@ -6192,11 +6192,11 @@ function Client() {
                 onPress={()=>void togglePlayback()}>
                 {!transportReady ? <ArchivistBookLoader label="Loading audio playback" size="inline" reduceMotion={reduceMotion}/> : <LivePlayerPlayPauseMorph playing={playerMotionPlaying} active={appActive} reducedMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} fallback={<UiIcon name={playerMotionPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}/>}
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}>
-                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward15} size={52} reduceMotion={reduceMotion}/></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,width<356&&styles.skipButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward15} size={width<356?46:52} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>15s</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,width<356&&styles.transportEdgeButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
                 <View pointerEvents="none" style={{height:31,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward30} size={44} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>30s</Text>
               </Pressable>
@@ -8758,6 +8758,11 @@ const styles = StyleSheet.create({
   timeRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:-6},
   playerTime: {fontSize:12,fontVariant:['tabular-nums'],fontWeight:'500'},
   transport: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginVertical:8,maxWidth:560,width:'100%',alignSelf:'center'},
+  // For devices narrower than 356dp, the five approved control targets must
+  // fit without collision; 48dp touch targets and the 80dp play circle stay.
+  transportNarrow: {gap:2},
+  transportEdgeButtonNarrow: {width:48,height:48,borderRadius:24},
+  skipButtonNarrow: {width:48,height:48,borderRadius:24},
   transportEdgeButton: {width:50,height:50,borderRadius:25,borderWidth:0,alignItems:'center',justifyContent:'center'},
   skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center',position:'relative'},
   skipNumber: {position:'absolute',fontSize:9,lineHeight:11,fontWeight:'700',fontVariant:['tabular-nums']},
