@@ -15,6 +15,21 @@ module.exports=function test14AppException(root,actual){
  const follow=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_TRANSPORT_APP_EXCEPTION_2026-10-17.json'),'utf8'));
  const saf=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_SAF_APP_EXCEPTION_2026-10-17.json'),'utf8'));
  const media=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_MEDIA_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+ const gallery=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_ATLAS_REWARDS_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+ if(actual===gallery.approved_git_blob_sha){
+   if(gallery.schema_version!==1||gallery.path!=='mobile/App.tsx'||
+      gallery.previous_approved_git_blob_sha!==media.approved_git_blob_sha||
+      gallery.release_approved!==false||gallery.installed_apk_approved!==false||
+      !Array.isArray(gallery.changes)||gallery.changes.length!==18)return false;
+   for(const {old,new:replacement} of [...gallery.changes].reverse()){
+     if(typeof old!=='string'||typeof replacement!=='string'||!old.length||
+        source.split(replacement).length!==2)return false;
+     source=source.replace(replacement,old);
+   }
+   const bytes=Buffer.from(source,'utf8');
+   actual=crypto.createHash('sha1').update('blob '+bytes.length+'\\0').update(bytes).digest('hex');
+   if(actual!==media.approved_git_blob_sha)return false;
+ }
  if(actual!==next.approved_git_blob_sha){
    let activeBlob=actual;
    if(activeBlob===media.approved_git_blob_sha){

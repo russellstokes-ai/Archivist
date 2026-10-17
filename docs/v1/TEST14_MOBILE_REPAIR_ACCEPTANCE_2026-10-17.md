@@ -34,3 +34,9 @@ Do not merge, deploy, publish or label the mobile app commercially ready based o
 5. APK filename/commit/hash unique to Test14; deliver **direct .apk**, no ZIP and not older Test13. Keep PRs draft and unmerged until owner accepts.
 
 **Historical evidence:** [Test 13 failed Fold audit](TEST13_FOLD_FAILURE_FULL_MOBILE_AUDIT_2026-10-17.md), [consolidated QA](CONSOLIDATED_REPAIR_QA_2026-10-16.md), [master plan](https://github.com/russellstokes-ai/Archivist/blob/plan/archivist-v1-master-2026-10-12/docs/ARCHIVIST_V1_MASTER_DEVELOPMENT_PLAN_2026-10-12.md). Historical completed CI is not evidence of owner acceptance.
+
+## Atlas, EPUB and Rewards acceptance additions
+- Atlas detects when a non-default Library source/space filter hides published works. A visible clear action and a differentiated no-complete-books state guide users, never promote Needs Review or missing-cover content into charts.
+- Rewards uses tier-family compacting, numbered gold/silver-grey minted medallions and no repetitive trophy card boxes. Underlying earned tiers, XP, category filtering and all approved unlock Lotties are unchanged; closed/open Fold appearance is pending device acceptance.
+- Reflowable EPUB reader gets a real OPF/XHTML fixture test alongside source-contract checks for native route, page position and document appearance. Kindle, SVG/MathML EPUB, DRM, large books and Fold rotation remain explicitly unaccepted or unsupported as indicated in existing renderer.
+- IMPORTANT: test14 Android QA build run 39049374073 FAILED native splash capture: 8 frames, 0 matching teal, 3 changes; do not classify APK as accepted or rebuild until cause addressed.

@@ -64,6 +64,7 @@ import {GENRE_CHOICES,genreChoiceLabel} from './scannerVNext/genreChoices';
 import {assistFeedback} from './scannerVNext/assistFeedback';
 import {acknowledgeAndroidAutoProgress, consumeAndroidAutoProgress, persistAndroidAutoLibrary, type AndroidAutoProgress} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
+import {rewardCabinetEntries,type RewardCabinetItem} from './rewardGallery';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
 import {AchievementRewardOverlay} from './AchievementRewardOverlay';
 import {motionForAchievement,motionForLevelUp,rewardPresentationMs} from './rewardMotion';
@@ -1641,6 +1642,7 @@ function Client() {
 
 
   // One publication-aware boundary, shared by Atlas Universe, rings and relationships.
+  const atlasAllPublishedWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,'all'),[sourceWorks]);
   const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,sourceFilter),[sourceFilter,sourceWorks]);
   useEffect(()=>{
     if(activeTab!=='atlas'||!localCatalogReady)return;
@@ -1649,6 +1651,7 @@ function Client() {
   },[activeTab,localCatalogReady,sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
   const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
+  const atlasHiddenByLibraryFilter=atlasAllPublishedWorks.length>0&&atlasUniverseWorks.length===0;
   const atlasGenreColors=useMemo(()=>atlasGenrePalette(atlasUniverseWorks.map(work=>work.genre),genreColour),[atlasUniverseWorks]);
   const atlasGenreColor=(name:string)=>atlasGenreColors.get(name.trim()||'Unclassified')||genreColour(name);
   const atlasRingSize=Math.min(width-(width>=940?56:width>=600?48:width<360?28:32),width>=940?720:width>=600?620:520);
@@ -6781,6 +6784,18 @@ function Client() {
 
         {atlasListMode?<SourceSwitcher/>:null}
         {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
+        {!atlasListMode&&(sourceFilter!=='all'||!!space)&&atlasUniverseWorks.length>0?
+          <Pressable accessibilityRole="button" accessibilityLabel="Clear Atlas source and space filters" onPress={()=>{setSourceFilter('all');setSpace('');}} style={{minHeight:44,justifyContent:'center',alignSelf:'flex-start'}}>
+            <Text style={{color:p.sage,fontSize:12,fontWeight:'700'}}>Filtered Atlas · Show all published works</Text>
+          </Pressable>:null}
+        {atlasUniverseWorks.length===0&&localCatalogReady?
+          <View style={{borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:p.line,paddingVertical:18,gap:9}}>
+            <Text style={{color:p.ink,fontSize:14,fontWeight:'700'}}>{atlasHiddenByLibraryFilter?'Published titles are hidden by Library filters':'No completed titles are ready for Atlas yet'}</Text>
+            <Text style={{color:p.muted,fontSize:12,lineHeight:18}}>{atlasHiddenByLibraryFilter?'Your catalogue contains published works, but the current source or space selection hides them. Nothing has been deleted.':'Atlas only includes fully reviewed, published works with title, author and cover artwork. Needs Review items are not shown.'}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={atlasHiddenByLibraryFilter?'Show all published Atlas works':'Review unpublished library titles'} onPress={()=>{if(atlasHiddenByLibraryFilter){setSourceFilter('all');setSpace('');}else{setSourceFilter('local');setReviewOnly(true);setActiveTab('library');}}} style={{minHeight:44,alignSelf:'flex-start',justifyContent:'center'}}>
+              <Text style={{color:p.sage,fontSize:13,fontWeight:'700'}}>{atlasHiddenByLibraryFilter?'Show all published works':'Open Needs Review'}</Text>
+            </Pressable>
+          </View>:null}
 
         {atlasListMode?<View style={styles.atlasListAlternative}>
           <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
@@ -7548,10 +7563,11 @@ function Client() {
 
   function Rewards() {
     const categories=['All',...Array.from(new Set(profileAchievements.map(item=>item.category||'Other')))];
-    const visible=profileAchievements
+    const cabinet=rewardCabinetEntries(profileAchievements);
+    const visible=cabinet
       .filter(item=>awardCategory==='All'||(item.category||'Other')===awardCategory)
-      .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
-    const locked=profileAchievements.filter(item=>!item.unlocked).sort((a,b)=>clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
+      .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress((b.nextTier||b).progress,(b.nextTier||b).target)-clampProgress((a.nextTier||a).progress,(a.nextTier||a).target));
+    const locked=cabinet.flatMap(item=>item.nextTier?[item.nextTier]:item.unlocked?[]:[item]).sort((a,b)=>clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
     const nextUp=locked.slice(0,3);
     const recent=recentAchievementId?profileAchievements.find(item=>item.id===recentAchievementId):null;
     const overall=profileProgression?.overall||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:'Reader'};
@@ -7572,20 +7588,6 @@ function Client() {
       {level:60,title:'Master',icon:'insights' as UiIconName},
     ];
     const nextMilestoneIndex=Math.max(0,milestones.findIndex(item=>overall.level<item.level));
-    const rewardIcon=(item:Achievement):UiIconName=>{
-      const id=item.id;
-      if(id.includes('streak')||id.includes('daily-spark'))return 'flame';
-      if(id.includes('days'))return 'calendar';
-      if(id.includes('listener')||id.includes('audio'))return 'play';
-      if(id.includes('reader')||id.includes('reading')||id.includes('finish'))return 'bookOpen';
-      if(id.includes('series'))return 'layers';
-      if(id.includes('format')||id.includes('balance'))return 'atlas';
-      if(id.includes('rating'))return 'insights';
-      if(id.includes('favourite'))return 'bookmark';
-      if(id.includes('collection')||id.includes('shelf')||id.includes('archive')||id.includes('curator'))return 'shelf';
-      if(id.includes('active-stack')||id.includes('starter'))return 'library';
-      return 'target';
-    };
     const rewardTone=(item:Achievement)=>{
       const category=item.category||'Other';
       if(category==='Reading')return p.sage;
@@ -7594,29 +7596,29 @@ function Client() {
       if(category==='Library')return p.gold;
       return darkMode?'#A78BC7':'#806B9A';
     };
-    const renderTrophy=(item:Achievement)=>{
-      const progress=Math.round(clampProgress(item.progress,item.target)*100);
+    const renderTrophy=(item:RewardCabinetItem|Achievement)=>{
+      const nextTier='nextTier' in item?item.nextTier:undefined;
+      const progressSource=nextTier||item;
+      const progress=Math.round(clampProgress(progressSource.progress,progressSource.target)*100);
       const recentItem=recentAchievementId===item.id;
       const tone=rewardTone(item);
-      const icon=rewardIcon(item);
-      return <View key={item.id} style={[styles.rewardTrophyCard,width>=760&&styles.rewardTrophyCardWide,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}>
+      const number=String(item.target.toLocaleString());
+      const earnedTiers='earnedTiers' in item?item.earnedTiers:0;
+      return <View key={item.id} style={[styles.rewardTrophyCard,width>=760&&styles.rewardTrophyCardWide,{backgroundColor:'transparent'}]}>
         <View style={styles.rewardTrophyTop}>
           <View style={styles.rewardMedalWrap}>
             {recentItem?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:darkMode?tone:p.gold,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.42:.30,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.52]})}]}]}/>:null}
-            <View style={[styles.rewardRibbon,styles.rewardRibbonLeft,{backgroundColor:item.unlocked?tone:p.line}]}/>
-            <View style={[styles.rewardRibbon,styles.rewardRibbonRight,{backgroundColor:item.unlocked?tone:p.line}]}/>
             <View style={[styles.rewardMedal,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.gold:p.card}]}>
-              <UiIcon name={icon} color={item.unlocked?'#182C29':p.muted} size={22}/>
+              <View style={{width:62,height:62,borderRadius:31,borderWidth:1,borderColor:item.unlocked?'rgba(24,44,41,.44)':p.line,alignItems:'center',justifyContent:'center'}}>
+                <Text adjustsFontSizeToFit numberOfLines={1} style={{color:item.unlocked?'#182C29':p.muted,fontFamily:'ArchivistEditorial',fontSize:number.length>4?18:number.length>3?20:27,fontWeight:'500',maxWidth:56}}>{number}</Text>
+              </View>
             </View>
           </View>
-          <View style={{alignItems:'flex-end',gap:3}}>
-            {recentItem?<Text style={[styles.rewardRecent,{color:p.gold}]}>RECENT</Text>:null}
-            <Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'UNLOCKED':progress+'%'}</Text>
-          </View>
+          <Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{recentItem?'RECENT · ':''}{item.unlocked?'EARNED':progress+'%'}{earnedTiers>1?' · '+earnedTiers+' TIERS':''}</Text>
         </View>
         <Text numberOfLines={2} style={[styles.rewardTrophyTitle,{color:p.ink}]}>{item.title}</Text>
-        <Text numberOfLines={2} style={[styles.rewardTrophyCopy,{color:p.muted}]}>{item.description}</Text>
-        <View style={[styles.rewardTrophyTrack,{backgroundColor:p.line}]}><View style={[styles.rewardTrophyFill,{backgroundColor:item.unlocked?tone:p.muted,width:(progress+'%') as any}]}/></View>
+        <Text numberOfLines={2} style={[styles.rewardTrophyCopy,{color:p.muted}]}>{nextTier?'Next '+nextTier.target.toLocaleString()+' · '+progress+'% complete':item.description}</Text>
+        {nextTier||!item.unlocked?<View style={[styles.rewardTrophyTrack,{backgroundColor:p.line}]}><View style={[styles.rewardTrophyFill,{backgroundColor:item.unlocked?tone:p.muted,width:(progress+'%') as any}]}/></View>:null}
       </View>;
     };
     const overallRing:ChartItem[]=[
@@ -7672,7 +7674,7 @@ function Client() {
             return <View key={milestone.level} style={styles.rewardsMilestoneItem}>
               {index>0?<View pointerEvents="none" style={[styles.rewardsMilestoneLine,{backgroundColor:complete?p.gold:p.line}]}/>:null}
               <View style={[styles.rewardsMilestoneMedal,{borderColor:complete||current?p.gold:p.line,backgroundColor:complete?p.card:'transparent'},current&&styles.rewardsMilestoneCurrent]}>
-                <UiIcon name={milestone.icon} color={complete||current?p.gold:p.muted} size={19}/>
+                <Text style={{color:complete||current?p.gold:p.muted,fontFamily:'ArchivistEditorial',fontSize:19,fontWeight:'500'}}>{milestone.level}</Text>
               </View>
               <Text style={[styles.rewardsMilestoneLevel,{color:complete?p.gold:p.ink}]}>Level {milestone.level}</Text>
               <Text numberOfLines={1} style={[styles.rewardsMilestoneTitle,{color:p.muted}]}>{milestone.title}</Text>
@@ -7687,7 +7689,7 @@ function Client() {
           {nextUp.map(item=>{
             const progress=Math.round(clampProgress(item.progress,item.target)*100),tone=rewardTone(item);
             return <View key={item.id} style={[styles.rewardsNextCard,{borderColor:p.line}]}>
-              <View style={[styles.rewardsNextIcon,{backgroundColor:p.card}]}><UiIcon name={rewardIcon(item)} color={tone} size={20}/></View>
+              <View style={[styles.rewardsNextIcon,{backgroundColor:p.card}]}><Text style={{color:tone,fontFamily:'ArchivistEditorial',fontSize:String(item.target).length>3?13:18,fontWeight:'500'}}>{item.target}</Text></View>
               <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{progress}% complete</Text></View>
               <Text style={[styles.rewardsNextPercent,{color:tone}]}>{progress}%</Text>
             </View>;
@@ -7701,7 +7703,7 @@ function Client() {
       </View>:null}
 
       <View style={styles.rewardsSection}>
-        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Trophy cabinet</Text><Text style={[styles.meta,{color:p.muted}]}>Every milestone has its own mark.</Text></View></View>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Trophy cabinet</Text><Text style={[styles.meta,{color:p.muted}]}>A gallery of {visible.length} achievement families · all earned tiers retained.</Text></View></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
           {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card,borderColor:p.gold}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
         </ScrollView>
@@ -9236,7 +9238,7 @@ const styles = StyleSheet.create({
   rewardsSectionHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12},
   rewardsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.12},
   rewardsPathGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
-  rewardsPathCard: {width:'48%',minWidth:150,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:12,gap:10},
+  rewardsPathCard: {width:'48%',minWidth:150,flexGrow:1,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,padding:12,gap:10},
   rewardsPathTop: {flexDirection:'row',alignItems:'center',gap:9},
   rewardsPathRing: {width:52,height:52,alignItems:'center',justifyContent:'center',position:'relative',flexShrink:0},
   rewardsPathIcon: {position:'absolute',left:0,right:0,top:0,bottom:0,alignItems:'center',justifyContent:'center'},
@@ -9260,20 +9262,20 @@ const styles = StyleSheet.create({
   rewardsCategories: {gap:6,paddingRight:12},
   rewardsCategory: {minHeight:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',paddingHorizontal:13,alignItems:'center',justifyContent:'center'},
   rewardTrophyGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
-  rewardTrophyCard: {width:'48%',minWidth:148,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:18,padding:13,gap:7,minHeight:188},
+  rewardTrophyCard: {width:'48%',minWidth:148,flexGrow:1,borderWidth:0,borderRadius:0,paddingHorizontal:8,paddingVertical:16,gap:8,minHeight:185,alignItems:'center',justifyContent:'flex-start'},
   rewardTrophyCardWide: {width:'31%',minWidth:190},
-  rewardTrophyTop: {flexDirection:'row',alignItems:'flex-start',justifyContent:'space-between',gap:10},
-  rewardMedalWrap: {width:58,height:60,alignItems:'center',justifyContent:'flex-start',position:'relative'},
+  rewardTrophyTop: {flexDirection:'column',alignItems:'center',justifyContent:'center',gap:5},
+  rewardMedalWrap: {width:80,height:80,alignItems:'center',justifyContent:'center',position:'relative'},
   rewardPulseHalo: {position:'absolute',top:0,width:48,height:48,borderRadius:24},
   rewardRibbon: {position:'absolute',top:38,width:13,height:20,borderBottomLeftRadius:2,borderBottomRightRadius:2},
   rewardRibbonLeft: {left:14,transform:[{rotate:'8deg'}]},
   rewardRibbonRight: {right:14,transform:[{rotate:'-8deg'}]},
-  rewardMedal: {width:48,height:48,borderRadius:24,borderWidth:1.5,alignItems:'center',justifyContent:'center',zIndex:2},
+  rewardMedal: {width:76,height:76,borderRadius:38,borderWidth:2,alignItems:'center',justifyContent:'center',zIndex:2,shadowColor:'#B99A68',shadowOpacity:.14,shadowRadius:8,elevation:2},
   rewardRecent: {fontSize:8.5,lineHeight:11,fontWeight:'800',letterSpacing:1.1},
   rewardProgressLabel: {fontSize:9,lineHeight:12,fontWeight:'800',fontVariant:['tabular-nums']},
-  rewardTrophyTitle: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:20,fontWeight:'500'},
-  rewardTrophyCopy: {fontSize:9.5,lineHeight:14,flexGrow:1},
-  rewardTrophyTrack: {height:4,borderRadius:2,overflow:'hidden',marginTop:2},
+  rewardTrophyTitle: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:20,fontWeight:'500',textAlign:'center'},
+  rewardTrophyCopy: {fontSize:10,lineHeight:15,minHeight:30,textAlign:'center'},
+  rewardTrophyTrack: {width:'84%',height:3,borderRadius:2,overflow:'hidden',marginTop:2},
   rewardTrophyFill: {height:'100%',borderRadius:2},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},

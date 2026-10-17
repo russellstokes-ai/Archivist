@@ -10,6 +10,14 @@ const test14=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_APP_EXCEP
 const current=Buffer.from(app,'utf8');
 const currentBlob=crypto.createHash('sha1').update('blob '+current.length+'\0').update(current).digest('hex');
 assert(require('../scripts/test14-app-exception.cjs')(repo,currentBlob),'Test 14 App patch must be exact and reversible');
+// Reverse gallery and Atlas improvements before the previous approved App chain.
+const gallery=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_ATLAS_REWARDS_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+assert.equal(gallery.path,'mobile/App.tsx');assert.equal(gallery.changes.length,18);
+for(const change of [...gallery.changes].reverse()){
+ const next=change.new.replaceAll('\\r\\n','\\n'),prior=change.old.replaceAll('\\r\\n','\\n');
+ assert.equal(app.split(next).length-1,1,'Atlas/Rewards exception is not unique');
+ app=app.replace(next,prior);
+}
 // Reverse media-only fixes before the SAF, transport and scanner locks.
 const media=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_MEDIA_APP_EXCEPTION_2026-10-17.json'),'utf8'));
 assert.equal(media.path,'mobile/App.tsx');assert.equal(media.changes.length,2);
