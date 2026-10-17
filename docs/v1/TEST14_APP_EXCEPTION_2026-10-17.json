@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "path": "mobile/App.tsx",
-  "scope": "User-directed Test 14: Atlas must populate published/complete legacy logical works and all three chart data views without scanner publication bypass; completed Rewards medallion is brand gold. No scanner, Assist, Comic Focus, Living Book renderer, layout geometry or immutable Lottie edited. Atlas List and ring/graph data now share this same publication boundary, rather than List counting unreviewed raw Library rows.",
+  "scope": "User-directed Test 14: Atlas must populate published/complete legacy logical works and all three chart data views without scanner publication bypass; completed Rewards medallion is brand gold. No scanner, Assist, Comic Focus, Living Book renderer, layout geometry or immutable Lottie edited. Atlas List and ring/graph data now share this same publication boundary, rather than List counting unreviewed raw Library rows. Atlas folder/source filters, list and visual palette are scoped to the same eligible published catalogue.",
   "owner_approval": "User on 2026-10-17 directed robust mobile repairs and Atlas specification compliance, and previously requested the medallion be gold.",
   "previous_approved_git_blob_sha": "d3f9b89f0c2cda360e21eace25460505eb2857a7",
-  "approved_git_blob_sha": "57a792899dc53d8d1fd4f429401a0f585126b418",
+  "approved_git_blob_sha": "b248281c7110beace2779a811068a52fef35b5b5",
   "release_approved": false,
   "installed_apk_approved": false,
   "changes": [
@@ -27,6 +27,18 @@
     {
       "old": "  },[allUnifiedWorks,sourceFilter,sourceWorks]);",
       "new": "  },[atlasRelationshipWorks]);"
+    },
+    {
+      "old": "  const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>work.genre),genreColour),[sourceWorks]);",
+      "new": "  const atlasGenreColors=useMemo(()=>atlasGenrePalette(atlasUniverseWorks.map(work=>work.genre),genreColour),[atlasUniverseWorks]);"
+    },
+    {
+      "old": "    const items:UnifiedWork[]=atlasRelationshipWorks;",
+      "new": "    const items:UnifiedWork[]=atlasUniverseWorks;"
+    },
+    {
+      "old": "  },[atlasRelationshipWorks]);\n\n\n  useEffect(() => {\n    const subscription = player.addListener('playbackStatusUpdate'",
+      "new": "  },[atlasUniverseWorks]);\n\n\n  useEffect(() => {\n    const subscription = player.addListener('playbackStatusUpdate'"
     }
   ]
 }
