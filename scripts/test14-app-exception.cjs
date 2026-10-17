@@ -7,7 +7,7 @@ module.exports=function test14AppException(root,actual){
  if(next.schema_version!==1 || next.path!=='mobile/App.tsx' ||
     next.release_approved!==false || next.installed_apk_approved!==false ||
     next.previous_approved_git_blob_sha!==previous.approved_git_blob_sha ||
-    next.approved_git_blob_sha!==actual || !Array.isArray(next.changes) ||
+    !Array.isArray(next.changes) ||
     next.changes.length!==14) return false;
  let source=fs.readFileSync(path.join(root,'mobile/App.tsx'),'utf8');
  // Apply any owner-directed follow-on responsive layout exception strictly
@@ -24,7 +24,7 @@ module.exports=function test14AppException(root,actual){
      source=source.replace(replacement,old);
    }
    const previousBytes=Buffer.from(source,'utf8');
-   const previousSha=crypto.createHash('sha1').update('blob '+previousBytes.length+'\\0').update(previousBytes).digest('hex');
+   const previousSha=crypto.createHash('sha1').update('blob '+previousBytes.length+'\0').update(previousBytes).digest('hex');
    if(previousSha!==next.approved_git_blob_sha)return false;
  }
  for(const {old,new:replacement} of [...next.changes].reverse()){

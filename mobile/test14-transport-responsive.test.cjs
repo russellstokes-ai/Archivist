@@ -38,6 +38,6 @@ assert(!css.includes('transportNarrow: {flexWrap'), 'Do not reflow the approved 
 const previous=require('../scripts/test14-app-exception.cjs');
 const crypto=require('node:crypto'),path=require('node:path');
 const root=path.resolve(__dirname,'..'),bytes=Buffer.from(css);
-const sha=crypto.createHash('sha1').update('blob '+bytes.length+'\\0').update(bytes).digest('hex');
+const sha=crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
 assert(previous(root,sha),'Both reversible App exceptions must restore the exact original protected blob');
 console.log('PASS: 320/356/360dp safe transport, 48dp hit targets, immutable 80dp circle, vector artwork and chained source locks');
