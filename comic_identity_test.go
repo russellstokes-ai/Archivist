@@ -150,3 +150,53 @@ func TestComicAuditIsTypeSafeAndHandlesManualIdentityConflict(t *testing.T){
  if other.Code!=409{t.Fatalf("non-comic book received comic report: %d %s",other.Code,other.Body.String())}
  if missing:=comicAuditGet(a,"999",true);missing.Code!=404{t.Fatalf("absent book returned %d",missing.Code)}
 }
+
+func TestComicAuditVolumeAndRunLabelsPreventCrossVolumeFalseGaps(t *testing.T){
+ a:=comicAuditFixture(t)
+ read:=func()comicAuditResult{
+  t.Helper()
+  response:=comicAuditGet(a,"1",true)
+  if response.Code!=200{t.Fatalf("comic audit HTTP %d: %s",response.Code,response.Body.String())}
+  var report comicAuditResult
+  if err:=json.Unmarshal(response.Body.Bytes(),&report);err!=nil{t.Fatal(err)}
+  return report
+ }
+ if gaps:=read().PossibleGaps;len(gaps)!=1||gaps[0]!=2{
+  t.Fatalf("initial conservative unlabelled same-year gap changed: %v",gaps)
+ }
+ for _,item:=range []struct{id int64;issue string}{{1,"1"},{2,"3"},{3,"4"}}{
+  if _,err:=a.db.Exec(`INSERT INTO comic_edition_profiles(
+    edition_id,work_id,revision,run,volume,issue,year,updated_at)
+    VALUES(?,?,1,'Original run','1',?,'2024',123)`,
+    item.id,item.id,item.issue);err!=nil{t.Fatal(err)}
+  report:=read()
+  if item.id!=3&&len(report.PossibleGaps)!=0{
+   t.Fatalf("unlabelled sibling was included in a labelled volume: %+v",report)
+  }
+ }
+ result:=read()
+ if len(result.PossibleGaps)!=1||result.PossibleGaps[0]!=2||
+  result.Peers[0].Run!="Original run"||result.Peers[0].Volume!="1"{
+  t.Fatalf("complete same-volume evidence not recognised: %+v",result)
+ }
+ for _,tc:=range []struct{field,value string}{
+  {"volume","2"},{"run","Rebooted series"},{"issue","99"},{"year","2023"},
+ }{
+  if _,err:=a.db.Exec("UPDATE comic_edition_profiles SET "+tc.field+"=? WHERE edition_id=2",tc.value);err!=nil{t.Fatal(err)}
+  report:=read()
+  if len(report.PossibleGaps)>0||!strings.Contains(strings.Join(report.Warnings," "),"withheld"){
+   t.Fatalf("conflicting %s must block gap inference: %+v",tc.field,report)
+  }
+  original:="1"
+  switch tc.field{case "run":original="Original run";case "issue":original="3";case "year":original="2024"}
+  if _,err:=a.db.Exec("UPDATE comic_edition_profiles SET "+tc.field+"=? WHERE edition_id=2",original);err!=nil{t.Fatal(err)}
+ }
+ result=read()
+ if len(result.PossibleGaps)!=1||result.PossibleGaps[0]!=2{
+  t.Fatalf("independently verified same-run labels should restore conservative possible-gap display %+v",result)
+ }
+ // A second comic edition belonging to the same work is a different identity
+ // unless separately verified; do not infer a single issue from multiple editions.
+ if _,err:=a.db.Exec("UPDATE editions SET work_id=1 WHERE id=2");err!=nil{t.Fatal(err)}
+ if len(read().PossibleGaps)>0{t.Fatal("multi-edition work incorrectly inferred a single-series gap")}
+}

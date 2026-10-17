@@ -108,6 +108,10 @@ type comicAuditPeer struct{
  Title string `json:"title"`
  IssueNumber float64 `json:"issueNumber"`
  Year int `json:"year"`
+ Run string `json:"run,omitempty"`
+ Volume string `json:"volume,omitempty"`
+ profiled bool
+ profileComplete bool
 }
 type comicAuditResult struct{
  WorkID int64 `json:"workId"`
@@ -187,15 +191,36 @@ func (a *app)readComicAudit(ctx context.Context,tx *sql.Tx,state workMetaState)(
    THEN COALESCE((SELECT CAST(NULLIF(wy.value,'') AS INTEGER) FROM work_field_controls wy
                   WHERE wy.work_id=w.id AND wy.field='publishedYear'),0)
    ELSE COALESCE(CASE WHEN COUNT(DISTINCT NULLIF(a.published_year,0))=1
-                      THEN MIN(NULLIF(a.published_year,0)) ELSE 0 END,0) END
+                      THEN MIN(NULLIF(a.published_year,0)) ELSE 0 END,0) END,
+ COALESCE(MIN(cp.run),''), COALESCE(MAX(cp.run),''),
+ COALESCE(MIN(cp.volume),''), COALESCE(MAX(cp.volume),''),
+ COALESCE(MIN(cp.issue),''), COALESCE(MAX(cp.issue),''),
+ COALESCE(MIN(cp.year),''), COALESCE(MAX(cp.year),''),
+ COUNT(DISTINCT ed.id), COUNT(DISTINCT cp.edition_id),
+ SUM(CASE WHEN cp.edition_id IS NOT NULL AND cp.work_id<>w.id THEN 1 ELSE 0 END)
  FROM works w JOIN editions ed ON ed.work_id=w.id AND ed.format='Comic'
  JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id
+ LEFT JOIN comic_edition_profiles cp ON cp.edition_id=ed.id
  WHERE w.space=? AND TRIM(w.series)=? COLLATE NOCASE
  GROUP BY w.id ORDER BY w.id LIMIT ?`,state.Space,out.Series,comicAuditPeerCap+1)
  if err!=nil{return out,err}
  for peers.Next(){
   var p comicAuditPeer
-  if err=peers.Scan(&p.WorkID,&p.Title,&p.IssueNumber,&p.Year);err!=nil{peers.Close();return out,err}
+  var runMin,runMax,volumeMin,volumeMax,issueMin,issueMax,yearMin,yearMax string
+  var editions,profiles,foreignBindings int
+  if err=peers.Scan(&p.WorkID,&p.Title,&p.IssueNumber,&p.Year,
+    &runMin,&runMax,&volumeMin,&volumeMax,&issueMin,&issueMax,&yearMin,&yearMax,
+    &editions,&profiles,&foreignBindings);err!=nil{peers.Close();return out,err}
+  p.Run,p.Volume=runMin,volumeMin
+  p.profiled=profiles>0
+  // The scanner's work-level issue and publication year remain independent
+  // of owner edition labels. Disagreement blocks run-level gap conclusions.
+  issueExact:=issueMin==strconv.FormatFloat(p.IssueNumber,'f',-1,64)
+  yearExact:=yearMin==strconv.Itoa(p.Year)
+  p.profileComplete=editions==1&&profiles==1&&foreignBindings==0&&
+    runMin!=""&&runMin==runMax&&volumeMin!=""&&volumeMin==volumeMax&&
+    issueMin!=""&&issueMin==issueMax&&issueExact&&yearMin!=""&&
+    yearMin==yearMax&&yearExact
   out.Peers=append(out.Peers,p)
  }
  if err=peers.Err();err!=nil{peers.Close();return out,err};peers.Close()
@@ -203,6 +228,25 @@ func (a *app)readComicAudit(ctx context.Context,tx *sql.Tx,state workMetaState)(
   out.Peers=out.Peers[:comicAuditPeerCap];out.PeersTruncated=true
   out.Warnings=append(out.Warnings,"Over 100 same-series records; no gap inference on a partial result")
   return out,nil
+ }
+ // If ANY peer has an explicit edition/run identity, all peers must be
+ // independently labelled with the SAME complete run and volume before
+ // inferring possible gaps. Mixed runs, incomplete labels, moved identities
+ // or a conflict with stored work-level issue/year always fail closed.
+ profiled:=false
+ for _,p:=range out.Peers{if p.profiled{profiled=true;break}}
+ if profiled{
+  run,volume:="",""
+  for _,p:=range out.Peers{
+   if !p.profileComplete||(run!=""&&run!=p.Run)||(volume!=""&&volume!=p.Volume){
+    out.Warnings=append(out.Warnings,
+      "Volume/run or edition identity differs across this series; possible gap inference is withheld")
+    return out,nil
+   }
+   run,volume=p.Run,p.Volume
+  }
+  out.Warnings=append(out.Warnings,
+    "Possible gaps are limited to one owner-labelled series run and volume; print variants still need review")
  }
  // Potential gap detection is intentionally conservative. A missing issue
  // number is not evidence of a missing purchased file or absent publication.
