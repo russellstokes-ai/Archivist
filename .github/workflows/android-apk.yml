@@ -16,6 +16,7 @@ permissions:
 
 env:
   TEST_BUILD: '14'
+  ARCHIVIST_QA_VISUAL_CAPTURE: '1'
 
 concurrency:
   group: android-apk-${{ github.ref }}
@@ -195,6 +196,15 @@ jobs:
             adb start-server
             adb devices
           script: bash .github/scripts/android-emulator-smoke.sh "${{ github.workspace }}/${{ steps.release_apk.outputs.path }}" app.archivist.reader.qa
+
+      - name: Upload Android startup frame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test14-Android-Splash-Emulator-Frames
+          path: ${{ runner.temp }}/test14-android-splash/frame-*.png
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Confirm no public release
         run: echo "Private QA artifact uploaded only to this workflow run; Google Play/release publication is disabled."
