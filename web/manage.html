@@ -52,7 +52,7 @@
  <section id="view-assist" hidden aria-labelledby="assist-title">
   <div class="section-head"><div><p class="eyebrow">ARCHIVIST ASSIST</p><h2 id="assist-title">Review &amp; publish your books</h2>
    <p class="footnote">Review grouped files and covers, save any metadata corrections, then publish explicitly. Scanning and saving never publish a new book automatically.</p></div>
-   <button id="refresh-assist" type="button" class="quiet">Refresh</button></div>
+   <div class="assist-controls"><button id="group-relink-open" type="button" class="quiet">Reconnect audiobook folder</button><button id="refresh-assist" type="button" class="quiet">Refresh</button></div></div>
   <div class="assist-mode-tabs" role="group" aria-label="Book publication status">
     <button id="assist-staged" type="button" aria-pressed="true">Needs review &amp; publishing</button>
     <button id="assist-published" type="button" aria-pressed="false">Published library</button>
@@ -95,5 +95,20 @@
  <div id="relink-details" class="relink-details"></div>
  <label class="relink-ack"><input type="checkbox" id="relink-attest"><span>I independently confirmed these are the same book and file. I understand that the missing original cannot be compared with the new bytes, and that the action preserves the old book's progress.</span></label>
  <div class="dialog-actions"><button id="relink-refresh" type="button" class="quiet">Refresh preview</button><button id="relink-apply" type="button" class="primary" disabled>Confirm relink</button></div>
+</dialog>
+
+<dialog id="group-relink-dialog" aria-labelledby="group-relink-title">
+ <div class="dialog-head"><div><p class="eyebrow">AUDIOBOOK RECOVERY</p><h2 id="group-relink-title">Reconnect an entire audiobook</h2></div><button type="button" id="group-relink-close" class="quiet" aria-label="Close audiobook relink">✕</button></div>
+ <p class="footnote">Use the original unavailable book ID and newly discovered replacement book ID from Archivist Assist. Only complete 2–32-track single-edition audiobooks in the same library source are supported. Nothing here moves or deletes media.</p>
+ <div class="group-relink-picker">
+  <label>Unavailable original book ID<input id="group-relink-old" type="number" inputmode="numeric" min="1" step="1" required placeholder="Original book ID"></label>
+  <label>Available replacement book ID<input id="group-relink-new" type="number" inputmode="numeric" min="1" step="1" required placeholder="Newly scanned book ID"></label>
+  <button id="group-relink-load" type="button" class="quiet">Inspect chapters</button>
+ </div>
+ <p id="group-relink-status" class="footnote" role="status" aria-live="polite">Choose both complete audiobooks before reviewing their chapters.</p>
+ <div id="group-relink-pairs" class="group-relink-pairs"></div>
+ <div id="group-relink-hashes" class="group-relink-hashes"></div>
+ <label class="relink-ack"><input id="group-relink-attest" type="checkbox" disabled><span>I independently verified that every original track matches the displayed replacement track in the same playback order. I understand that the missing originals cannot be compared with the new file bytes.</span></label>
+ <div class="dialog-actions"><button id="group-relink-preview" type="button" class="quiet" disabled>Verify full files</button><button id="group-relink-apply" type="button" class="primary" disabled>Confirm group relink</button></div>
 </dialog>
 </body></html>

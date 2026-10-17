@@ -52,6 +52,38 @@ const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url.startsWith('./api/manage/relink-groups/works/')){
+    const id=Number(url.split('/').pop());
+    const original=id===1;
+    assert([1,4].includes(id),'unexpected group work identity');
+    return reply({workId:id,sourceId:1,format:'Audio',title:original?'Original audiobook':'Renamed audiobook',
+      tracks:[0,1,2].map(i=>({position:i,identity:{
+        assetId:(original?11:41)+i,format:'Audio',available:!original,
+        sizeBytes:512+i,path:(original?'Old/':'New/')+'Chapter '+(i+1)+'.mp3'
+      }}))
+    });
+  }
+  if(url==='./api/manage/relink-groups/preview'){
+    const request=JSON.parse(options.body);
+    assert.equal(request.pairs.length,3,'owner must submit every chapter');
+    for(let i=0;i<3;i++){
+      assert.equal(request.pairs[i].oldAssetId,11+i);
+      assert.equal(request.pairs[i].candidateAssetId,41+i);
+    }
+    return reply({receipt:'server-signed-preview',requiresAttestation:true,oldWorkId:1,candidateWorkId:4,
+      important:'Verify each chapter independently',pairs:request.pairs.map((item,i)=>({
+        old:{position:i,identity:{assetId:item.oldAssetId}},
+        candidate:{position:i,identity:{assetId:item.candidateAssetId}},
+        sha256:'a'.repeat(64)
+      }))});
+  }
+  if(url==='./api/manage/relink-groups/apply'){
+    const request=JSON.parse(options.body);
+    assert.equal(request.confirm,true);
+    assert.equal(request.attestation,'all-chapter-mappings-verified-by-owner');
+    assert.equal(request.preview.receipt,'server-signed-preview');
+    return reply({ok:true,workId:1,editionId:100,tracks:3});
+  }
   if(url==='./api/library-health')return reply({summary:{offlineSources:0},sources:[{id:1,online:true,indexedFiles:4,needsReview:2}]});
   if(url==='./api/jobs')return reply(scanJobs.map(job=>({...job})));
   if(url==='./api/jobs/1/cancel'&&options.method==='POST'){
@@ -170,6 +202,39 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   await settle();
   assert.equal(elements.get('assist-staged').attributes['aria-pressed'],'true');
   assert.equal(elements.get('assist-works').children.length,2);
+
+  // A real grouped relink is reachable from a logical audiobook card. Three
+  // individual chapter attestations are mandatory before the server preview.
+  const audioCard=elements.get('assist-works').children[0];
+  const repair=audioCard.children[2].children.find(button=>
+    button.tagName==='BUTTON'&&button.textContent==='Reconnect audiobook');
+  assert(repair,'grouped audiobook must link to actual recovery');
+  repair.onclick();await settle();
+  assert.equal(elements.get('group-relink-dialog').open,true,'grouped recovery modal did not open');
+  assert.equal(elements.get('group-relink-old').value,'1');
+  elements.get('group-relink-new').value='4';
+  elements.get('group-relink-load').onclick();
+  await settle();
+  assert(calls.includes('./api/manage/relink-groups/works/1'),'old grouped work was not inspected');
+  assert(calls.includes('./api/manage/relink-groups/works/4'),'replacement grouped work was not inspected');
+  assert.equal(elements.get('group-relink-pairs').children.length,4,'three mapped chapters must be individually visible');
+  assert.equal(elements.get('group-relink-preview').disabled,true,'preview must require each chapter confirmation');
+  for(let i=0;i<3;i++){
+    const check=elements.get('group-relink-pairs').children[i+1].children[0];
+    check.checked=true;check.onchange();
+  }
+  assert.equal(elements.get('group-relink-preview').disabled,false);
+  elements.get('group-relink-preview').onclick();
+  await settle();
+  assert(calls.includes('./api/manage/relink-groups/preview'),'group preview must hash via server');
+  assert.equal(elements.get('group-relink-apply').disabled,true,'hash preview cannot substitute for final attestation');
+  elements.get('group-relink-attest').checked=true;
+  elements.get('group-relink-attest').onchange();
+  assert.equal(elements.get('group-relink-apply').disabled,false);
+  elements.get('group-relink-apply').onclick();
+  await settle();
+  assert(calls.includes('./api/manage/relink-groups/apply'),'confirmed group action must call server');
+  assert.equal(elements.get('group-relink-dialog').open,false,'success should close the recovery dialog');
 
   const health=nav.find(item=>item.dataset.view==='health');
   health.onclick();

@@ -20,6 +20,7 @@
   const bulkFields=['narrator','publisher','publishedYear','isbn','asin','language'];
   let bulkGeneration=0,bulkPlan=null,bulkSelectedIds=[],bulkBusy=false;
   let relinkGeneration=0,relinkSelection=null,relinkPlan=null,relinkBusy=false;
+  let groupEpoch=0,groupPlan=null,groupCandidates=null,groupPairs=[],groupChecks=[],groupBusy=false;
   const e=(tag,text,className)=>{
     const node=document.createElement(tag);
     if(text!==undefined)node.textContent=String(text);
@@ -318,6 +319,148 @@
       relinkUpdateAction();
     }
   }
+
+  function resetGroupPreview(){
+    ++groupEpoch;groupPlan=null;
+    $('group-relink-hashes').replaceChildren();
+    $('group-relink-attest').checked=false;$('group-relink-attest').disabled=true;
+    $('group-relink-apply').disabled=true;
+  }
+  function groupReady(){
+    const all=groupCandidates&&groupPairs.length>=2&&groupChecks.length===groupPairs.length&&
+      groupChecks.every(box=>box.checked);
+    $('group-relink-preview').disabled=!all||groupBusy;
+    $('group-relink-apply').disabled=!all||!groupPlan||!groupPlan.receipt||
+      !$('group-relink-attest').checked||groupBusy;
+  }
+  function openGroupedRelink(originalId){
+    groupCandidates=null;groupPairs=[];groupChecks=[];groupBusy=false;
+    resetGroupPreview();
+    $('group-relink-pairs').replaceChildren();
+    $('group-relink-old').value=originalId?String(originalId):'';
+    $('group-relink-new').value='';
+    $('group-relink-status').textContent='Enter both book IDs and inspect every chapter.';
+    $('group-relink-dialog').showModal();
+    $('group-relink-new').focus();
+    groupReady();
+  }
+  function closeGroupedRelink(){
+    resetGroupPreview();groupCandidates=null;groupPairs=[];groupChecks=[];
+    $('group-relink-dialog').close();
+  }
+  function groupIDs(){
+    const original=Number($('group-relink-old').value);
+    const replacement=Number($('group-relink-new').value);
+    if(!Number.isSafeInteger(original)||!Number.isSafeInteger(replacement)||
+       original<1||replacement<1||original===replacement){
+      throw Error('Enter two distinct positive book IDs.');
+    }
+    return [original,replacement];
+  }
+  async function loadGroupedTracks(){
+    if(groupBusy)return;
+    resetGroupPreview();groupCandidates=null;groupPairs=[];groupChecks=[];
+    $('group-relink-pairs').replaceChildren();
+    let ids;
+    try{ids=groupIDs()}catch(error){$('group-relink-status').textContent=error.message;groupReady();return}
+    const epoch=groupEpoch;
+    groupBusy=true;$('group-relink-load').disabled=true;groupReady();
+    $('group-relink-status').textContent='Inspecting both audiobook identities and playback order…';
+    try{
+      const [original,replacement]=await Promise.all(ids.map(id=>
+        api('./api/manage/relink-groups/works/'+encodeURIComponent(String(id)))));
+      if(epoch!==groupEpoch||!$('group-relink-dialog').open)return;
+      const oldTracks=original.tracks||[],newTracks=replacement.tracks||[];
+      if(original.format!=='Audio'||replacement.format!=='Audio'||oldTracks.length<2||
+        oldTracks.length!==newTracks.length||oldTracks.length>32||
+        original.sourceId!==replacement.sourceId){
+        throw Error('Choose two complete 2–32-track audiobook groups from the same source.');
+      }
+      groupCandidates={original,replacement};
+      const summary=e('p',(original.title||'Original')+' → '+(replacement.title||'Replacement')+
+        ' · '+oldTracks.length+' chapters','group-relink-summary');
+      const area=$('group-relink-pairs');area.append(summary);
+      let incompatible=0;
+      for(let i=0;i<oldTracks.length;i++){
+        const from=oldTracks[i],to=newTracks[i];
+        if(from.position!==i||to.position!==i||from.identity?.format!==to.identity?.format||
+            from.identity?.sizeBytes!==to.identity?.sizeBytes||
+            from.identity?.available!==false||to.identity?.available!==true){incompatible++}
+        const pair={oldAssetId:from.identity.assetId,candidateAssetId:to.identity.assetId};
+        groupPairs.push(pair);
+        const row=e('label',undefined,'group-relink-pair');
+        const check=e('input');check.type='checkbox';check.checked=false;
+        check.setAttribute('aria-label','Independently verify audiobook chapter '+(i+1));
+        const textBlock=e('div');
+        textBlock.append(e('strong','Chapter '+(i+1)),e('span',from.identity.path+' → '+to.identity.path,'subtext'));
+        textBlock.append(e('small',Number(to.identity.sizeBytes).toLocaleString()+' bytes · '+(from.identity.sizeBytes===to.identity.sizeBytes?'same indexed length':'length mismatch'),'subtext'));
+        row.append(check,textBlock);area.append(row);groupChecks.push(check);
+        check.onchange=()=>{resetGroupPreview();groupReady()};
+      }
+      if(incompatible)throw Error(incompatible+' chapters have mismatched positions, sizes or availability. No relink can be previewed.');
+      $('group-relink-status').textContent='Review every pair above individually, then select all confirmation boxes to verify file hashes.';
+    }catch(error){
+      if(epoch===groupEpoch){groupCandidates=null;groupPairs=[];groupChecks=[];
+        $('group-relink-status').textContent='Chapter inspection failed: '+error.message;
+      }
+    }finally{
+      if(epoch===groupEpoch){groupBusy=false;$('group-relink-load').disabled=false;groupReady()}
+    }
+  }
+  async function previewGroupedRelink(){
+    if(!groupCandidates||groupBusy||groupChecks.some(box=>!box.checked))return;
+    resetGroupPreview();
+    const epoch=groupEpoch;
+    groupBusy=true;groupReady();
+    $('group-relink-status').textContent='Hashing the complete replacement chapters in playback order…';
+    try{
+      const result=await api('./api/manage/relink-groups/preview','POST',{pairs:groupPairs});
+      if(epoch!==groupEpoch||!$('group-relink-dialog').open)return;
+      if(!result.requiresAttestation||!result.receipt||!Array.isArray(result.pairs)||
+        result.pairs.length!==groupPairs.length)throw Error('Invalid server-side group preview.');
+      for(let i=0;i<result.pairs.length;i++){
+        if(result.pairs[i].old.identity.assetId!==groupPairs[i].oldAssetId||
+            result.pairs[i].candidate.identity.assetId!==groupPairs[i].candidateAssetId||
+            !/^[0-9a-f]{64}$/.test(result.pairs[i].sha256)){
+          throw Error('Server track mapping or hash differs from the reviewed pairing.');
+        }
+      }
+      groupPlan=result;
+      const area=$('group-relink-hashes');area.replaceChildren();
+      area.append(e('p',result.important||'Original media is unavailable; owner identity verification is required.','relink-warning'));
+      for(let i=0;i<result.pairs.length;i++)area.append(e('small','Chapter '+(i+1)+' SHA-256: '+result.pairs[i].sha256,'relink-sha'));
+      $('group-relink-attest').disabled=false;
+      $('group-relink-status').textContent='All replacement tracks hashed. Review the hashes and the final owner attestation.';
+    }catch(error){
+      if(epoch===groupEpoch)$('group-relink-status').textContent='Full-file preview rejected: '+error.message;
+    }finally{if(epoch===groupEpoch){groupBusy=false;groupReady()}}
+  }
+  async function applyGroupedRelink(){
+    if(groupBusy||!groupPlan||groupChecks.some(box=>!box.checked)||
+      !$('group-relink-attest').checked)return;
+    if(!window.confirm('Confirm all chapter mappings? The original audiobook, tracks and household bookmarks will be preserved. No media files will be changed.'))return;
+    const epoch=groupEpoch,plan=groupPlan;
+    groupBusy=true;groupReady();
+    $('group-relink-status').textContent='Rechecking complete media hashes and applying atomic audiobook relink…';
+    try{
+      const result=await api('./api/manage/relink-groups/apply','POST',{
+        preview:plan,confirm:true,attestation:'all-chapter-mappings-verified-by-owner'
+      });
+      if(epoch!==groupEpoch||!$('group-relink-dialog').open)return;
+      if(!result.ok||result.workId!==plan.oldWorkId||result.tracks!==groupPairs.length){
+        throw Error('Server did not confirm preservation of all old chapter identities.');
+      }
+      closeGroupedRelink();
+      selected.clear();selectedDetails.clear();
+      await Promise.all([loadAssist(),loadSummary(),loadCatalogue()]);
+      notice('Audiobook reconnected: all '+result.tracks+' original chapters and household positions retained.');
+    }catch(error){
+      if(epoch===groupEpoch){
+        groupPlan=null;$('group-relink-attest').disabled=true;
+        $('group-relink-status').textContent='Group relink not accepted: '+error.message+'. Inspect and preview again.';
+      }
+    }finally{groupBusy=false;groupReady()}
+  }
   function exportSelected(){const items=[...selectedDetails.values()];if(!items.length)return;const columns=[['id','ID'],['title','Title'],['author','Author'],['series','Series'],['seriesNumber','Number'],['format','Format'],['space','Space'],['publishedYear','Year'],['genre','Genre'],['isbn','ISBN'],['metadataSource','Metadata source']];const cell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text.trimStart()))text="'"+text;return '"'+text.replaceAll('"','""')+'"'};const lines=[columns.map(x=>cell(x[1])).join(','),...items.map(row=>columns.map(x=>cell(row[x[0]])).join(','))];const url=URL.createObjectURL(new Blob([lines.join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'}));const anchor=e('a');anchor.href=url;anchor.download='archivist-selected-metadata.csv';document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Exported '+items.length+' selected metadata records.')}
   function invalidateCandidateLookup(){
     ++candidateGeneration;
@@ -508,6 +651,7 @@
         const details=e('div',undefined,'assist-details');
         details.append(e('strong',work.title||'Untitled'));
         details.append(e('span',[work.author||'Unknown author',work.series,work.format,work.space].filter(Boolean).join(' · '),'subtext'));
+        details.append(e('small','Book ID '+work.id+' · '+work.files+' indexed media files','subtext'));
         details.append(e('span',Number(work.reviewFiles)+' of '+work.files+' files need review','pill '+(work.reviewFiles?'warn':'ok')));
         details.append(e('span',work.publicationState==='published'?'Published – review reopened':'Awaiting explicit publication','subtext'));
         const controls=e('div',undefined,'assist-controls');
@@ -548,6 +692,11 @@
           if(opening&&fileOffset===0)void loadFiles(true);
         };
         controls.append(reveal);
+        if(work.format==='Audio'&&Number(work.files)>1){
+          const repair=e('button','Reconnect audiobook','quiet');repair.type='button';
+          repair.onclick=()=>openGroupedRelink(work.id);
+          controls.append(repair);
+        }
         const uploadLabel=e('label','Choose cover (JPEG or PNG)','assist-cover-picker');
         const upload=e('input');upload.type='file';upload.accept='image/jpeg,image/png';
         upload.setAttribute('aria-label','Choose cover for '+work.title);
@@ -753,6 +902,23 @@
   $('relink-attest').onchange=relinkUpdateAction;
   $('relink-dialog').addEventListener('close',()=>{
     resetRelinkPreview();relinkSelection=null;
+  });
+  $('group-relink-open').onclick=()=>openGroupedRelink(null);
+  $('group-relink-close').onclick=closeGroupedRelink;
+  $('group-relink-load').onclick=()=>void loadGroupedTracks();
+  $('group-relink-preview').onclick=()=>void previewGroupedRelink();
+  $('group-relink-apply').onclick=()=>void applyGroupedRelink();
+  $('group-relink-attest').onchange=groupReady;
+  for(const id of ['group-relink-old','group-relink-new']){
+    $(id).addEventListener('input',()=>{
+      groupCandidates=null;groupPairs=[];groupChecks=[];resetGroupPreview();
+      $('group-relink-pairs').replaceChildren();
+      $('group-relink-status').textContent='Work IDs changed; inspect both audiobook groups again.';
+      groupReady();
+    });
+  }
+  $('group-relink-dialog').addEventListener('close',()=>{
+    resetGroupPreview();groupCandidates=null;groupPairs=[];groupChecks=[];
   });
   $('bulk-close').onclick=closeBulkEditor;
   $('bulk-form').addEventListener('submit',previewBulk);

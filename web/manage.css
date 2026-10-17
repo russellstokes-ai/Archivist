@@ -143,3 +143,17 @@ dialog::backdrop{background:#010b12cf}
 .relink-ack{display:flex;align-items:flex-start;gap:11px;font-size:13px;margin:18px 0;padding:12px;border:1px solid var(--rule);border-radius:12px}
 .relink-ack input{width:18px;height:18px;flex:none;accent-color:var(--teal);margin-top:2px}
 @media(max-width:590px){.relink-identity strong{font-size:19px}.relink-ack{font-size:12px}}
+
+/* Multi-track relink is explicit chapter-by-chapter, not a loose folder merge. */
+.group-relink-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;gap:12px;align-items:end;margin:18px 0}
+.group-relink-picker label{min-width:0;display:grid;gap:6px;font-size:12px}
+.group-relink-picker input{min-height:44px;max-width:100%}
+.group-relink-pairs{display:grid;gap:8px;max-height:330px;overflow-y:auto;margin:16px 0}
+.group-relink-summary{font:21px/1.3 ArchivistEditorial,Georgia,serif;color:var(--gold)}
+.group-relink-pair{display:flex;gap:11px;align-items:start;padding:12px 13px;background:var(--panel);border:1px solid var(--rule);border-radius:12px;cursor:pointer}
+.group-relink-pair input{width:19px;height:19px;flex:none;accent-color:var(--teal);margin-top:3px}
+.group-relink-pair div{min-width:0;overflow-wrap:anywhere}
+.group-relink-pair strong{display:block;font-size:13px}
+.group-relink-pair .subtext{display:block;font-size:12px}
+.group-relink-hashes{display:grid;gap:4px;max-height:240px;overflow:auto}
+@media(max-width:590px){.group-relink-picker{grid-template-columns:1fr}.group-relink-pair{padding:10px}.group-relink-summary{font-size:18px}}
