@@ -113,7 +113,7 @@ android {
         if (findProperty('rewardPreview') == 'true') applicationIdSuffix '.rewardsqa'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 102
+        versionCode 103
         versionName "0.9.4"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""

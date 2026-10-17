@@ -4,5 +4,11 @@ const pdf=fs.readFileSync(__dirname+'/LocalPdfReader.tsx','utf8');const move=pdf
 let animations=0,pageSet;const c={count:10,active:{uri:'a',generation:2},uri:'a',page:2,reduceMotion:true,turn:{},latest:{current:{uri:'a',page:2}},setSession:fn=>pageSet=fn({}),pdfSessionReducer:(_s,a)=>a.page,Animated:{sequence:()=>{animations++;return {start(){}}},timing(){}}};vm.createContext(c);vm.runInContext(ts.transpileModule(move+'\nmove(1)',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,c);assert.equal(pageSet,3);assert.equal(animations,0);
 // Each reward event must receive a fresh React instance (therefore fresh native Lottie state).
 const reward=fs.readFileSync(__dirname+'/AchievementRewardOverlay.tsx','utf8');assert.match(reward,/<RewardInstance key=\{eventKey\|\|'none'\}/);
-const living=fs.readFileSync(__dirname+'/LivingBookCanvas.tsx','utf8');assert.match(living,/onRenderProcessGone=\{recover\}/);assert.match(living,/onContentProcessDidTerminate=\{recover\}/);assert.match(living,/attempts.current>=2/);
+const living=fs.readFileSync(__dirname+'/LivingBookCanvas.tsx','utf8');
+assert(living.includes("onRenderProcessGone={()=>recover('renderer-process-gone',reloadKey)}"));
+assert(living.includes("onContentProcessDidTerminate={()=>recover('renderer-terminated',reloadKey)}"));
+assert(living.includes('attempts.current>=2'));
+assert(living.includes('onLoadEnd={()=>')&&living.includes('livingBookCallbackAllowed(reloadKey,generation.current'));
+assert(living.includes('result.generation,probeSequence.current'));
+
 console.log('PASS: Reduced Motion immediate page change; keyed reward instance and bounded native WebView recovery');

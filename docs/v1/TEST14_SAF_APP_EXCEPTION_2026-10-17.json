@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "path": "mobile/App.tsx",
+  "previous_approved_git_blob_sha": "674bac48bbaa46e736342ae5e83ba8e821023df6",
+  "approved_git_blob_sha": "92854a84dd35229eea120798ff2a36159ee46a7e",
+  "changes": [
+    {
+      "old": "import {effectiveLocalReaderFormat} from './comicSourceFormat';",
+      "new": "import {comicContainerFromDocument,comicContainerFromUri,effectiveLocalReaderFormat,readerFormatFromContainer} from './comicSourceFormat';"
+    },
+    {
+      "old": "  function openBook(book: Book, resumePage?:number, selection = ++nowResumeGeneration.current) {",
+      "new": "  function openBook(book: Book, resumePage?:number, selection = ++nowResumeGeneration.current, checkOpaque=true) {"
+    },
+    {
+      "old": "    // Reader-only SAF identity resolution; never rewrite scanner metadata.\n    if(book.source!=='server'&&book.uri){\n      const format=effectiveLocalReaderFormat(book.format,book.uri);\n      if(format!==book.format)book={...book,format};\n    }\n    const generation=++readerOpenGeneration.current;",
+      "new": "    // Reader-only SAF identity resolution; never rewrite scanner metadata.\n    if(book.source!=='server'&&book.uri){\n      const localUri=book.uri; // preserve TS narrowing across Book reassignment\n      const format=effectiveLocalReaderFormat(book.format,localUri);\n      if(format!==book.format)book={...book,format};\n      const opaque=Platform.OS==='android'&&localUri.startsWith('content://')\n        &&comicContainerFromUri(localUri)==='unknown';\n      // Android providers can expose a comic or PDF under a numeric document\n      // ID. Query the read-only native MIME/display-name enum once per open.\n      if(checkOpaque&&opaque&&(book.format==='Comic'||!['Audio','PDF','EPUB'].includes(book.format))){\n        const pending=++readerOpenGeneration.current;\n        const candidate=book;\n        setError('');\n        void comicContainerFromDocument(localUri).then(kind=>{\n          if(readerOpenGeneration.current!==pending||selection!==nowResumeGeneration.current)return;\n          const resolved=readerFormatFromContainer(candidate.format,kind);\n          if(['Comic','PDF','EPUB'].includes(resolved))\n            openBook({...candidate,format:resolved},resumePage,selection,false);\n          else setError('Unable to identify this document. Reconnect its library folder or choose a PDF, EPUB, CBZ, CBR or CBT file.');\n        }).catch(()=>{\n          if(readerOpenGeneration.current===pending&&selection===nowResumeGeneration.current)\n            setError('Unable to access this document. Reconnect its library folder.');\n        });\n        return;\n      }\n      if(!['Audio','Comic','PDF','EPUB'].includes(book.format)){\n        setError('Unsupported document format. Choose a PDF, EPUB, CBZ, CBR or CBT file.');\n        return; // never send an unidentified archive URI to a raw WebView\n      }\n    }\n    const generation=++readerOpenGeneration.current;"
+    }
+  ],
+  "scope": "Reader-only asynchronous opaque Android SAF document name/MIME enum and generation fences; source scanner, catalogue publication, UI geometry, Comic Focus and renderer unchanged.",
+  "owner_approval": "User requested complete robust mobile bug corrections on 17 October 2026",
+  "release_approved": false,
+  "installed_apk_approved": false
+}

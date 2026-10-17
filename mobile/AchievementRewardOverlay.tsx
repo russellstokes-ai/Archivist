@@ -8,7 +8,7 @@ const SOURCES={
   headphones:require('./assets/motion/rewards/headphones-original.json'),
   trophy:require('./assets/motion/rewards/trophy-original.json'),
   crown:require('./assets/motion/rewards/crown-original.json'),
-  badge:require('./assets/motion/rewards/badge-original.json'),
+  badge:require('./assets/motion/rewards/badge-gold-variant.json'),
   'level-confetti':require('./assets/motion/rewards/level-confetti-original.json'),
 } as const;
 const CONFETTI=require('./assets/motion/rewards/level-confetti-original.json');

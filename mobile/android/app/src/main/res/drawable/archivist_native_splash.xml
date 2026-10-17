@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Native OS cold-start window only; never stretches the approved A. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splashscreen_background"/>
+    <item android:width="112dp" android:height="112dp" android:gravity="center">
+        <bitmap android:src="@drawable/splashscreen_logo" android:gravity="fill"/>
+    </item>
+</layer-list>

@@ -1,90 +1,141 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {AccessibilityInfo, AppState, Image, Platform, StyleSheet, View} from 'react-native';
-import {Asset} from 'expo-asset';
-import {readAsStringAsync} from 'expo-file-system/legacy';
-import {WebView} from 'react-native-webview';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
+import {AccessibilityInfo,AppState,Image,Platform,StyleSheet,View} from 'react-native';
+import {useVideoPlayer,VideoView} from 'expo-video';
 
-const TEAL = '#2F8B86';
-// Keep the supplied 6s motion and its final 1.3s shine intact. Completion
-// originates in the page, with a hard native deadline if WebGL cannot finish.
-export const startScript = (reduce: boolean) => `
-(() => {
- window.__archivistReduce = ${reduce};
- const send = value => window.ReactNativeWebView.postMessage(value);
- const motion = window.ARCHIVIST_MOTION;
- if (!motion) { send('failed'); return; }
- let done = false;
- const finish = () => { if (!done) { done = true; send('complete'); } };
- const settle = () => setTimeout(finish, ${reduce ? 250 : 1450});
- document.getElementById('art').addEventListener('archivist:splash-complete', settle, {once:true});
- if (${reduce} || motion.duration === 0) {
-   const ready = () => {
-     if (motion.assetsReady) { motion.finish(); settle(); }
-     else setTimeout(ready, 40);
-   };
-   ready();
- } else motion.play();
-})(); true;`;
+const TEAL='#2F8B86';
+const VIDEO=require('./assets/splash/archivist-premium-shine.mp4');
+export const PREMIUM_SPLASH_SECONDS=179/24; // 144 3D frames + 35 exact-source shine frames
+export const PREMIUM_SPLASH_DEADLINE_MS=13000;
 
-export default function PremiumLaunch({children}: {children: React.ReactNode}) {
-  const [visible, setVisible] = useState(Platform.OS !== 'web');
-  const [html, setHtml] = useState<string>();
-  const [reduce, setReduce] = useState<boolean>();
-  const web = useRef<WebView>(null);
-  const complete = useCallback(() => setVisible(false), []);
-  useEffect(() => {
-    if (!visible) return;
-    let alive = true;
-    const timeout = setTimeout(complete, 12000);
-    const subscription = AppState.addEventListener('change', state => {
-      if (state === 'background') complete();
+// A React route may mount repeatedly during the *same* Android process.
+// Claim custom splash only once, not on app/tab navigation or warm foreground.
+let processColdLaunchClaimed=false;
+export function claimPremiumColdLaunch(platform:string){
+  if(platform==='web'||processColdLaunchClaimed)return false;
+  processColdLaunchClaimed=true;
+  return true;
+}
+export function premiumSplashShouldPlay(platform:string,alreadyClaimed:boolean,reduced:boolean){
+  return platform!=='web'&&!alreadyClaimed&&!reduced;
+}
+
+/** A self-contained, silent, local video; no WebGL, network or WebView required.
+ * This is a frame-faithful rendering of the separately preserved approved HTML
+ * animation, produced by test14-splash-video-build.yml and SHA-verified there.
+ */
+function PremiumVideo({onComplete}:{onComplete:()=>void}){
+  const started=useRef(false);
+  const lastProgress=useRef({seconds:0,at:Date.now()});
+  const finished=useRef(false);
+  const done=useCallback((reason:string)=>{
+    if(finished.current)return;
+    finished.current=true;
+    if(reason!=='end')console.warn('Archivist premium startup:',reason);
+    onComplete();
+  },[onComplete]);
+  const player=useVideoPlayer(VIDEO,p=>{
+    p.loop=false;
+    p.muted=true;
+    p.volume=0;
+    p.staysActiveInBackground=false;
+    p.timeUpdateEventInterval=0.5;
+  });
+
+  useEffect(()=>{
+    const start=()=>{
+      if(started.current||finished.current)return;
+      started.current=true;
+      lastProgress.current={seconds:0,at:Date.now()};
+      try{player.play();}catch{done('native-play-error');}
+    };
+    // Register completion before starting; never treat merely loading the media
+    // as successful playback (Test 13's static first-frame failure).
+    const end=player.addListener('playToEnd',()=>done('end'));
+    const status=player.addListener('statusChange',({status,error})=>{
+      if(status==='readyToPlay')start();
+      if(status==='error')done('native-decode-error:'+String(error?.message||'unknown').slice(0,80));
     });
-    const motion = AccessibilityInfo.addEventListener('reduceMotionChanged', enabled => {
-      if (enabled) complete();
+    const progress=player.addListener('timeUpdate',({currentTime})=>{
+      if(Number.isFinite(currentTime)&&currentTime>lastProgress.current.seconds+0.02)
+        lastProgress.current={seconds:currentTime,at:Date.now()};
     });
-    void Promise.all([
-      AccessibilityInfo.isReduceMotionEnabled(),
-      Asset.fromModule(require('./assets/splash/archivist-premium-shine.html')).downloadAsync(),
-    ]).then(async ([reduced, asset]) => {
-      const uri = asset.localUri;
-      if (!uri) throw new Error('Splash asset unavailable');
-      const content = await readAsStringAsync(uri);
-      if (alive) { setReduce(reduced); setHtml(content); }
-    }).catch(complete);
-    return () => { alive = false; clearTimeout(timeout); subscription.remove(); motion.remove(); };
-  }, [complete, visible]);
+    if(player.status==='readyToPlay')start();
+
+    const timeout=setTimeout(()=>done('native-startup-deadline'),PREMIUM_SPLASH_DEADLINE_MS);
+    const stall=setInterval(()=>{
+      if(started.current&&!finished.current&&Date.now()-lastProgress.current.at>4500)
+        done('native-video-stalled');
+    },1000);
+    return ()=>{
+      clearTimeout(timeout);clearInterval(stall);
+      end.remove();status.remove();progress.remove();
+      try{player.pause();}catch{}
+    };
+  },[done,player]);
+
+  return <VideoView
+    testID="archivist-premium-video"
+    player={player}
+    nativeControls={false}
+    contentFit="contain"
+    surfaceType="textureView"
+    useExoShutter={false}
+    allowsPictureInPicture={false}
+    style={styles.video}
+    accessible={false}
+  />;
+}
+
+export default function PremiumLaunch({children}:{children:React.ReactNode}){
+  const [visible,setVisible]=useState(()=>claimPremiumColdLaunch(Platform.OS));
+  const [reduced,setReduced]=useState<boolean|null>(null);
+  const completed=useRef(false);
+  const complete=useCallback(()=>{
+    if(completed.current)return;
+    completed.current=true;
+    setVisible(false);
+  },[]);
+  useEffect(()=>{
+    if(!visible)return;
+    let active=true;
+    const check=setTimeout(complete,PREMIUM_SPLASH_DEADLINE_MS+700);
+    const background=AppState.addEventListener('change',state=>{
+      if(state==='background'||state==='inactive')complete();
+    });
+    const motion=AccessibilityInfo.addEventListener('reduceMotionChanged',enabled=>{
+      if(enabled)complete();
+    });
+    void AccessibilityInfo.isReduceMotionEnabled()
+      .then(value=>{if(active)setReduced(value);})
+      .catch(()=>{if(active)setReduced(false);});
+    return ()=>{
+      active=false;clearTimeout(check);background.remove();motion.remove();
+    };
+  },[complete,visible]);
+
+  useEffect(()=>{
+    if(!visible||reduced!==true)return;
+    // Reduced Motion intentionally presents a quiet branded endpoint briefly,
+    // never holding a static icon for the full animated duration.
+    const end=setTimeout(complete,650);
+    return()=>clearTimeout(end);
+  },[complete,reduced,visible]);
 
   return <View style={styles.root}>
     {children}
-    {visible ? <View style={styles.overlay} accessibilityLabel="Opening Archivist" accessibilityViewIsModal>
-      <Image source={require('./assets/splash-icon.png')} resizeMode="contain" style={styles.fallback}/>
-      {html && reduce !== undefined ? <WebView
-        ref={web}
-        style={styles.web}
-        source={{html}}
-        originWhitelist={['*']}
-        onShouldStartLoadWithRequest={request => request.url === 'about:blank' || request.url.startsWith('data:text/html')}
-        onLoad={() => web.current?.injectJavaScript(startScript(reduce))}
-        onMessage={event => { if (event.nativeEvent.data === 'complete' || event.nativeEvent.data === 'failed') complete(); }}
-        onError={complete}
-        onHttpError={complete}
-        onRenderProcessGone={complete}
-        onContentProcessDidTerminate={complete}
-        javaScriptEnabled
-        scrollEnabled={false}
-        bounces={false}
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-        allowFileAccess={false}
-        allowUniversalAccessFromFileURLs={false}
-        mixedContentMode="never"
-      /> : null}
-    </View> : null}
+    {visible?<View style={styles.overlay}
+      accessibilityLabel="Opening Archivist" accessibilityViewIsModal>
+      {reduced===false?<PremiumVideo onComplete={complete}/>:null}
+      {reduced===true?
+        <Image source={require('./assets/splash-icon.png')}
+          resizeMode="contain" style={styles.reducedIcon}/>:null}
+    </View>:null}
   </View>;
 }
-const styles = StyleSheet.create({
-  root: {flex:1, backgroundColor:TEAL},
-  overlay: {...StyleSheet.absoluteFillObject, backgroundColor:TEAL, alignItems:'center', justifyContent:'center', zIndex:2000},
-  fallback: {width:'72%', height:'50%'},
-  web: {...StyleSheet.absoluteFillObject, backgroundColor:TEAL},
+const styles=StyleSheet.create({
+  root:{flex:1,backgroundColor:TEAL},
+  overlay:{...StyleSheet.absoluteFillObject,backgroundColor:TEAL,
+    alignItems:'center',justifyContent:'center',zIndex:2000},
+  video:{...StyleSheet.absoluteFillObject,backgroundColor:TEAL},
+  reducedIcon:{width:112,height:112,maxWidth:'30%',maxHeight:'20%'},
 });

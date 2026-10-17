@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "path": "mobile/localReader.ts",
+  "owner_approval": "17 October requested robust comics in Android Test14, original reader shell/Comic Focus protected",
+  "scope": "Only CBT dispatch and lazy native reader adapter; original existing Comic HTML, speech bubble zoom, page turn, CBR/CBZ and original scanner preserved. Android TAR page reads are bounded and token-cleaned, iOS original full-TAR path kept.",
+  "previous_approved_git_blob_sha": "18efb5c27d5ceab1c2aead347b421b49ece106f4",
+  "approved_git_blob_sha": "e33107fe04ab3c4a8bb09e851551a3d1081dc87a",
+  "release_approved": false,
+  "installed_apk_approved": false,
+  "changes": [
+    {
+      "old": "import {openCbrPages, readCbtImages, ArchiveImage} from './archiveReader';",
+      "new": "import {openCbrPages, ArchiveImage} from './archiveReader';\nimport {openCbtPages} from './nativeCbtPages';"
+    },
+    {
+      "old": "export async function buildLocalReaderDocument(uri: string, format: string, title: string, initialPage = 0): Promise<LocalReaderDocument> {",
+      "new": "async function tarComicDocument(uri:string,title:string,initialPage:number):Promise<LocalReaderDocument>{\n  const pages=await openCbtPages(uri);\n  if(!pages.pageCount){await pages.dispose?.();throw Error('No readable comic pages found.');}\n  return {...pages,html:shell(title,'<img id=\"comicPage\" class=\"comic-page active\" alt=\"Loading comic page\">','comic',initialPage,pages.pageCount)};\n}\n\nexport async function buildLocalReaderDocument(uri: string, format: string, title: string, initialPage = 0): Promise<LocalReaderDocument> {"
+    },
+    {
+      "old": "    if(ext==='cbt')return comicArchiveDocument(await readCbtImages(uri),title,initialPage);",
+      "new": "    if(ext==='cbt')return tarComicDocument(uri,title,initialPage);"
+    },
+    {
+      "old": "    try{\n      const tar=await readCbtImages(uri);\n      if(tar.length)return comicArchiveDocument(tar,title,initialPage);\n    }catch{}",
+      "new": "    try{return await tarComicDocument(uri,title,initialPage);}catch{}"
+    }
+  ]
+}

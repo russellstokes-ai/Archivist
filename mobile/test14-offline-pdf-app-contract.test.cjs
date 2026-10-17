@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
+const source=app.slice(app.indexOf('  const sourceWorks = useMemo'),app.indexOf('  const sourceCounts = useMemo'));
+assert(source.includes('available:work.available,files:work.files,editions:1'),'Offline catalogue availability must reflect the actual verified local manifest');
+assert(!source.includes('available:true,files:work.files,editions:1'),'Missing downloads must never masquerade as playable');
+const pdf=app.slice(app.indexOf('    const localReaderMode=reading.source'),app.indexOf('    if(!session||(reading.originServer',app.indexOf('    const localReaderMode=reading.source')));
+assert(pdf.includes("key={reading.uri+'|'+readerOpenGeneration.current}"),'A newly opened PDF must not reuse prior component native document state');
+assert(pdf.includes('initialPage={readerPage}'),'Durable Now session resume page wins over an older local checkpoint');
+assert(!pdf.includes('initialPage={localReadingProgress[reading.uri!]||0}'),'Do not regress PDF page restoration');
+const root=path.resolve(__dirname,'..'),bytes=Buffer.from(app);
+const hash=crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
+assert(require('../scripts/test14-app-exception.cjs')(root,hash),'All four scoped App source exceptions must exactly restore the protected ancestor');
+console.log('PASS: missing offline tracks cannot report playable, PDF exact restore and reopened reader state remain isolated');

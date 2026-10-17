@@ -74,13 +74,19 @@ adb shell am force-stop "$PACKAGE" >/dev/null 2>&1 || true
 
 START_LOG="$(mktemp)"
 trap 'rm -f "$INSTALL_LOG" "$START_LOG"' EXIT
-if ! adb shell am start -W -n "$ACTIVITY" >"$START_LOG" 2>&1; then
+# Do not wait for Android's window-drawn response before collecting animated
+# evidence: on the last emulator it took 11s, beyond a 7.46s custom splash.
+START_ARGS=(-W -n "$ACTIVITY")
+if [ "${ARCHIVIST_QA_VISUAL_CAPTURE:-}" = "1" ] && [ "$PACKAGE" = "app.archivist.reader.qa" ]; then
+  START_ARGS=(-n "$ACTIVITY")
+fi
+if ! adb shell am start "${START_ARGS[@]}" >"$START_LOG" 2>&1; then
   cat "$START_LOG"
   if grep -Eiq 'Broken pipe|device offline|no devices|closed|cannot connect' "$START_LOG"; then
     if ! recover_adb; then
       exit "$INFRA_EXIT"
     fi
-    if ! adb shell am start -W -n "$ACTIVITY" >"$START_LOG" 2>&1; then
+    if ! adb shell am start "${START_ARGS[@]}" >"$START_LOG" 2>&1; then
       cat "$START_LOG"
       exit "$INFRA_EXIT"
     fi
@@ -89,6 +95,35 @@ if ! adb shell am start -W -n "$ACTIVITY" >"$START_LOG" 2>&1; then
   fi
 fi
 cat "$START_LOG"
+
+# Test 14 preserves the original 15s crash smoke AND adds actual screen-frame
+# evidence. Unlike the old smoke test, a static splash must not pass silently.
+if [ "${ARCHIVIST_QA_VISUAL_CAPTURE:-}" = "1" ] && [ "$PACKAGE" = "app.archivist.reader.qa" ]; then
+  SHOTS="${RUNNER_TEMP:-/tmp}/test14-android-splash"
+  mkdir -p "$SHOTS"
+  # Zero-padded names sort chronologically; cover slow native startup plus
+  # the complete 179-frame animation instead of just post-start Shelf frames.
+  for index in $(seq -w 0 25); do
+    sleep 0.65
+    if ! timeout 9s adb exec-out screencap -p > "$SHOTS/frame-$index.png"; then
+      echo "Emulator screenshot transport stalled (OS infrastructure), not app acceptance."
+      exit "$INFRA_EXIT"
+    fi
+    test -s "$SHOTS/frame-$index.png" || exit "$INFRA_EXIT"
+  done
+  if ! node scripts/test14-splash-frame-analysis.cjs "$SHOTS"/frame-*.png; then
+    # The previous emulator displayed 'System UI isn't responding' over every
+    # screenshot. Classify that Android framework failure separately when a
+    # bounded native hierarchy probe confirms it; never turn it into a pass.
+    timeout 6s adb shell uiautomator dump /sdcard/archivist-ui.xml >/dev/null 2>&1 || true
+    WINDOW_XML="$(timeout 4s adb shell cat /sdcard/archivist-ui.xml 2>/dev/null || true)"
+    if printf '%s' "$WINDOW_XML" | grep -Eiq 'System UI.*(isn.t responding|not responding)|Application Not Responding'; then
+      echo "Emulator System UI ANR obscured real splash; infrastructure failure, not a successful app test."
+      exit "$INFRA_EXIT"
+    fi
+    exit 1
+  fi
+fi
 
 sleep 15
 

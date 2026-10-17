@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.provider.OpenableColumns
+import java.util.Locale
 import android.os.ParcelFileDescriptor
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
@@ -15,6 +17,7 @@ import com.github.junrar.Archive
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.RandomAccessFile
 import java.io.InputStream
 import kotlin.concurrent.thread
 import kotlin.math.max
@@ -31,6 +34,7 @@ import android.view.View
 class ArchivistArchiveModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   override fun getName() = "ArchivistArchive"
   private val zipFiles = ConcurrentHashMap<String, File>()
+  private val tarFiles = ConcurrentHashMap<String, File>()
 
   @ReactMethod
   fun setReaderFullscreen(enabled: Boolean) {
@@ -48,6 +52,44 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
         val flags = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = if (enabled) window.decorView.systemUiVisibility or flags else window.decorView.systemUiVisibility and flags.inv()
+      }
+    }
+  }
+
+  // Only a container enum crosses the bridge; do not return private names,
+  // document IDs, media content or permissions to JavaScript.
+  @ReactMethod
+  fun readerContainer(uri: String, promise: Promise) {
+    thread(name = "archivist-reader-descriptor") {
+      try {
+        val parsed = Uri.parse(uri)
+        if (parsed.scheme != "content") { promise.resolve("unknown"); return@thread }
+        val resolver = context.contentResolver
+        var name = ""
+        resolver.query(parsed, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+          if (cursor.moveToFirst()) {
+            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && !cursor.isNull(column)) name = cursor.getString(column) ?: ""
+          }
+        }
+        val ext = name.lowercase(Locale.ROOT).substringAfterLast('.', "")
+        val mime = resolver.getType(parsed)?.lowercase(Locale.ROOT)?.substringBefore(';')?.trim()
+        val kind = when (ext) {
+          "cbr", "cbz", "cbt", "pdf", "epub" -> ext
+          else -> when (mime) {
+            "application/pdf" -> "pdf"
+            "application/epub+zip" -> "epub"
+            "application/vnd.comicbook-rar", "application/x-cbr" -> "cbr"
+            "application/vnd.comicbook+zip", "application/x-cbz" -> "cbz"
+            "application/x-cbt" -> "cbt"
+            else -> "unknown" // generic ZIP/RAR and octet-stream remain ambiguous
+          }
+        }
+        promise.resolve(kind)
+      } catch (denied: SecurityException) {
+        promise.reject("DOCUMENT_PERMISSION", "Reconnect the source library folder.", denied)
+      } catch (_: Throwable) {
+        promise.resolve("unknown") // provider may not implement metadata query
       }
     }
   }
@@ -157,9 +199,106 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
     promise.resolve(null)
   }
 
+
+  // Stream a SAF CBT/TAR into bounded private cache, then read only one page
+  // per JS request. ZIP/RAR and scanner implementations remain unchanged.
+  private fun tarText(bytes: ByteArray, start: Int, length: Int): String {
+    var end = start
+    while (end < start + length && bytes[end].toInt() != 0) end++
+    return String(bytes, start, end - start, Charsets.UTF_8).trim()
+  }
+  private fun tarLength(bytes: ByteArray): Long {
+    val raw = tarText(bytes, 124, 12).trim()
+    require(raw.matches(Regex("[0-7]{1,12}"))) { "Unsupported or invalid TAR entry length." }
+    return raw.toLong(8)
+  }
+  @ReactMethod
+  fun openTar(uri: String, promise: Promise) {
+    thread(name = "archivist-tar-index") {
+      val token = UUID.randomUUID().toString()
+      val file = File(context.cacheDir, "archivist-tar-$token.cbt")
+      try {
+        if (tarFiles.size >= 8) throw IllegalArgumentException("Too many TAR readers are open.")
+        openInput(uri).use { input -> file.outputStream().use { output ->
+          val buffer=ByteArray(65536); var total=0L
+          while(true){
+            val count=input.read(buffer)
+            if(count<0)break
+            if(count==0)throw IllegalArgumentException("TAR source stopped making progress.")
+            total+=count
+            if(total>256L*1024*1024)throw IllegalArgumentException("CBT exceeds 256 MB reader safety limit.")
+            output.write(buffer,0,count)
+          }
+        } }
+        val results=Arguments.createArray()
+        RandomAccessFile(file,"r").use { raf ->
+          val length=raf.length();var position=0L;var pages=0;var totalPagesBytes=0L
+          while(position+512L<=length){
+            raf.seek(position)
+            val header=ByteArray(512);raf.readFully(header)
+            if(header.all { it.toInt()==0 })break
+            val entrySize=tarLength(header)
+            val payload=position+512L
+            val padded=((entrySize+511L)/512L)*512L
+            if(entrySize<0L||padded<entrySize||padded>length-payload)
+              throw IllegalArgumentException("CBT TAR entry exceeds archive boundary.")
+            val name=tarText(header,0,100)
+            val prefix=tarText(header,345,155)
+            val fullName=if(prefix.isNotBlank()) "$prefix/$name" else name
+            val type=header[156].toInt()
+            if((type==0||type==48)&&imageName(fullName)){
+              if(entrySize>16L*1024*1024)throw IllegalArgumentException("CBT page exceeds 16 MB safety limit.")
+              totalPagesBytes+=entrySize
+              if(totalPagesBytes>256L*1024*1024||++pages>500)
+                throw IllegalArgumentException("CBT reader page budget exceeded.")
+              val entry=Arguments.createMap()
+              entry.putString("name",fullName)
+              entry.putDouble("offset",payload.toDouble())
+              entry.putDouble("size",entrySize.toDouble())
+              results.pushMap(entry)
+            }
+            position=payload+padded
+          }
+        }
+        if(results.size()==0)throw IllegalArgumentException("No readable comic pages found.")
+        tarFiles[token]=file
+        val response=Arguments.createMap()
+        response.putString("token",token);response.putArray("entries",results)
+        promise.resolve(response)
+      }catch(error:Throwable){
+        file.delete()
+        promise.reject("CBT_INDEX_FAILED",error.message ?: "Unable to read CBT archive.",error)
+      }
+    }
+  }
+  @ReactMethod
+  fun readTarEntry(token:String,offset:Double,size:Double,promise:Promise){
+    thread(name = "archivist-tar-page") {
+      try {
+        val file=tarFiles[token] ?: throw IllegalArgumentException("CBT reader is closed.")
+        require(offset.isFinite()&&size.isFinite()&&offset>=512.0&&size>0.0&&size<=16*1024*1024)
+        val position=offset.toLong();val length=size.toLong()
+        require(position.toDouble()==offset&&length.toDouble()==size&&
+          position<=file.length()-length) { "CBT page range invalid." }
+        val bytes=ByteArray(length.toInt())
+        RandomAccessFile(file,"r").use{raf->raf.seek(position);raf.readFully(bytes)}
+        promise.resolve(Base64.encodeToString(bytes,Base64.NO_WRAP))
+      }catch(error:Throwable){
+        promise.reject("CBT_PAGE_FAILED",error.message ?: "Unable to read CBT page.",error)
+      }
+    }
+  }
+  @ReactMethod
+  fun closeTar(token:String,promise:Promise){
+    tarFiles.remove(token)?.delete()
+    promise.resolve(null)
+  }
+
   override fun invalidate() {
     zipFiles.values.forEach { it.delete() }
     zipFiles.clear()
+    tarFiles.values.forEach { it.delete() }
+    tarFiles.clear()
     super.invalidate()
   }
 

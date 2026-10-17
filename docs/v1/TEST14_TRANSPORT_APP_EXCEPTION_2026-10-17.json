@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "path": "mobile/App.tsx",
+  "scope": "Only minimum-width (<356dp) five-button player transport packing; 48dp skip/edge targets, 80dp primary untouched. Original >=356dp transport unchanged; original Lottie/reader/scanner/Assist unchanged. Exact reversible source exception layered above the previous Test14 14-patch App source.",
+  "owner_approval": "User requested #17 Play/Pause alignment and robust phone/Fold layout while preserving the approved UI; mobile QA only",
+  "previous_approved_git_blob_sha": "bec74d33baec0fd824cdd855557de5ace8f7ff33",
+  "approved_git_blob_sha": "674bac48bbaa46e736342ae5e83ba8e821023df6",
+  "release_approved": false,
+  "installed_apk_approved": false,
+  "changes": [
+    {
+      "old": "            <View style={[styles.transport,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>",
+      "new": "            <View style={[styles.transport,width<356&&styles.transportNarrow,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>"
+    },
+    {
+      "old": "accessibilityLabel=\"Rewind 30 seconds\" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}",
+      "new": "accessibilityLabel=\"Rewind 30 seconds\" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,width<356&&styles.transportEdgeButtonNarrow,{backgroundColor:'#F1EEE4'}]}"
+    },
+    {
+      "old": "accessibilityLabel=\"Rewind 15 seconds\" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}",
+      "new": "accessibilityLabel=\"Rewind 15 seconds\" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,width<356&&styles.skipButtonNarrow,{backgroundColor:'#F1EEE4'}]}"
+    },
+    {
+      "old": "accessibilityLabel=\"Fast forward 15 seconds\" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}",
+      "new": "accessibilityLabel=\"Fast forward 15 seconds\" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,width<356&&styles.skipButtonNarrow,{backgroundColor:'#F1EEE4'}]}"
+    },
+    {
+      "old": "accessibilityLabel=\"Fast forward 30 seconds\" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}",
+      "new": "accessibilityLabel=\"Fast forward 30 seconds\" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,width<356&&styles.transportEdgeButtonNarrow,{backgroundColor:'#F1EEE4'}]}"
+    },
+    {
+      "old": "<LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back15} size={52} reduceMotion={reduceMotion}/>",
+      "new": "<LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back15} size={width<356?46:52} reduceMotion={reduceMotion}/>"
+    },
+    {
+      "old": "<LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward15} size={52} reduceMotion={reduceMotion}/>",
+      "new": "<LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward15} size={width<356?46:52} reduceMotion={reduceMotion}/>"
+    },
+    {
+      "old": "  transport: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginVertical:8,maxWidth:560,width:'100%',alignSelf:'center'},",
+      "new": "  transport: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginVertical:8,maxWidth:560,width:'100%',alignSelf:'center'},\n  // For devices narrower than 356dp, the five approved control targets must\n  // fit without collision; 48dp touch targets and the 80dp play circle stay.\n  transportNarrow: {gap:2},\n  transportEdgeButtonNarrow: {width:48,height:48,borderRadius:24},\n  skipButtonNarrow: {width:48,height:48,borderRadius:24},"
+    }
+  ]
+}
