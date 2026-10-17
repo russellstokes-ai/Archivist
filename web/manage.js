@@ -676,7 +676,7 @@
       const done=Number(job.progress||0),total=Number(job.total||0);
       if(total>0){const bar=e('progress');bar.max=total;bar.value=Math.min(total,done);row.append(bar)}
       // Only staging is cancellable. COMMITTING is an atomic stop barrier.
-      if(((job.state==='queued'||job.state==='running')&&job.canCancel)||
+      if((job.state==='queued'||(job.state==='running'&&job.canCancel))||
           job.state==='failed'||job.state==='cancelled'){
         const action=(job.state==='queued'||job.state==='running')?'cancel':'retry';
         const button=e('button',action==='cancel'?(job.state==='running'?'Request safe stop':'Cancel queued scan'):'Retry scan','quiet edit-button');
