@@ -591,8 +591,8 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(editionFields.volume,'2');
   assert.equal(elements.get('work-dialog').open,true,'saving edition identity must leave book editor open');
   assert.equal(elements.get('comic-profile-fields').children[0].children[0].value,'1971 volume run');
-  assert.equal(elements.get('work-fields').children[2].children[0].value,'',
-    'edition labels must not overwrite work-level series');
+  assert.equal(elements.get('work-fields').children[2].children[0].value,'The Flash',
+    'edition labels must not overwrite the existing comic work-level series');
   assert.equal(elements.get('comic-profile-undo-preview').disabled,false);
   elements.get('comic-profile-undo-preview').onclick();await settle();
   assert.equal(elements.get('comic-profile-undo').disabled,false,'last Save undo requires preview');
