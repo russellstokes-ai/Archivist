@@ -7,7 +7,8 @@ const p=path.join(__dirname,'..','docs/v1/APP_LOGIC_EXCEPTION_2026-10-16.json');
 const exception=JSON.parse(fs.readFileSync(p,'utf8'));
 const b=Buffer.from(app);
 const actual=crypto.createHash('sha1').update(Buffer.from('blob '+b.length+'\0')).update(b).digest('hex');
-assert.equal(actual,exception.approved_git_blob_sha,'App visual/layout/scanner changes outside approved exact logic blob are prohibited');
+assert.ok(require('../scripts/test14-app-exception.cjs')(path.resolve(__dirname,'..'),actual),
+  'Test 14 must reverse exactly to the previously approved App playback/scanner byte lock');
 assert(app.includes('const progressOutboxStoreKey'), 'outbox must persist under a stable, short state-store key');
 assert(app.includes('progressOutboxFor(current)'), 'journal must be scoped to an authenticated server and profile');
 assert(app.includes("request(current,'/api/me')"),'a server profile id must be verified before journaling');
