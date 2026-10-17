@@ -19,6 +19,7 @@
   const savedViewsKey='archivist-manager-v1-views';
   const bulkFields=['narrator','publisher','publishedYear','isbn','asin','language'];
   let bulkGeneration=0,bulkPlan=null,bulkSelectedIds=[],bulkBusy=false;
+  let relinkGeneration=0,relinkSelection=null,relinkPlan=null,relinkBusy=false;
   const e=(tag,text,className)=>{
     const node=document.createElement(tag);
     if(text!==undefined)node.textContent=String(text);
@@ -50,6 +51,7 @@
     $('clear-selection').disabled=selected.size===0;
     $('export-selection').disabled=selected.size===0;
     $('bulk-open').disabled=selected.size===0;
+    $('relink-open').disabled=selected.size!==2;
     $('select-page').checked=rows.length>0&&rows.every(item=>selected.has(item.id));
     $('select-page').indeterminate=rows.some(item=>selected.has(item.id))&&!$('select-page').checked;
   }
@@ -223,6 +225,97 @@
       if(generation===bulkGeneration){$('bulk-status').textContent='Bulk apply failed: '+error.message+' No further action can use this preview; preview again.';bulkPlan=null}
     }finally{
       bulkBusy=false;$('bulk-preview-button').disabled=false;
+    }
+  }
+
+  function relinkUpdateAction(){
+    $('relink-apply').disabled=!relinkPlan||!relinkPlan.receipt||!$('relink-attest').checked||relinkBusy;
+  }
+  function relinkRender(result){
+    const content=$('relink-details');content.replaceChildren();
+    const pair=[
+      ['Missing original',result.old],['Available replacement',result.candidate]
+    ];
+    for(const [label,item] of pair){
+      const node=e('section',undefined,'relink-identity');
+      node.append(e('small',label,'eyebrow'),e('strong',item.workTitle||item.title||'Untitled'));
+      node.append(e('p',(item.path||'')+' · '+(item.format||'')+' · '+Number(item.sizeBytes||0).toLocaleString()+' bytes','subtext'));
+      content.append(node);
+    }
+    const hash=e('p','SHA-256 of available replacement: '+String(result.sha256||''),'relink-sha');
+    const warning=e('p',result.important||'The old file cannot be verified against the replacement.','relink-warning');
+    content.append(hash,warning);
+  }
+  function resetRelinkPreview(){
+    ++relinkGeneration;relinkPlan=null;
+    $('relink-attest').checked=false;
+    $('relink-apply').disabled=true;
+    $('relink-details').replaceChildren();
+  }
+  function closeRelink(){
+    resetRelinkPreview();relinkSelection=null;
+    $('relink-dialog').close();
+  }
+  async function getRelinkPreview(){
+    if(!relinkSelection||relinkBusy)return;
+    resetRelinkPreview();
+    const request=relinkSelection,generation=relinkGeneration;
+    relinkBusy=true;$('relink-refresh').disabled=true;
+    $('relink-status').textContent='Inspecting catalogues and hashing the complete replacement file…';
+    try{
+      const result=await api('./api/manage/relink/preview','POST',request);
+      if(generation!==relinkGeneration||!$('relink-dialog').open)return;
+      if(!result.requiresAttestation||!result.receipt||result.old?.assetId!==request.oldAssetId||
+        result.candidate?.assetId!==request.candidateAssetId){
+        throw Error('Unexpected relink preview returned by the server.');
+      }
+      relinkPlan=result;relinkRender(result);
+      $('relink-status').textContent='Review the exact identities below before attesting. No catalogue changes have been made.';
+    }catch(error){
+      if(generation===relinkGeneration)$('relink-status').textContent='Relink unavailable: '+error.message;
+    }finally{
+      if(generation===relinkGeneration){relinkBusy=false;$('relink-refresh').disabled=false;relinkUpdateAction()}
+    }
+  }
+  function openRelink(){
+    const options=[...selectedDetails.values()];
+    if(options.length!==2){notice('Select the missing original and exactly one available replacement.',true);return}
+    const missing=options.filter(item=>!item.available),available=options.filter(item=>item.available);
+    if(missing.length!==1||available.length!==1){
+      notice('Relinking requires one unavailable original and one available replacement.',true);return
+    }
+    if(missing[0].space!==available[0].space||missing[0].format!==available[0].format){
+      notice('Select files with the same library and media format.',true);return
+    }
+    relinkSelection={oldAssetId:Number(missing[0].id),candidateAssetId:Number(available[0].id)};
+    resetRelinkPreview();$('relink-dialog').showModal();
+    void getRelinkPreview();
+  }
+  async function applyRelink(){
+    if(relinkBusy||!relinkPlan||!$('relink-attest').checked)return;
+    if(!window.confirm('Permanently reconnect the unavailable book identity to this new file? The existing bookmarks and work metadata will be retained.'))return;
+    const generation=relinkGeneration,plan=relinkPlan;
+    relinkBusy=true;$('relink-refresh').disabled=true;$('relink-apply').disabled=true;
+    $('relink-status').textContent='Checking the file again and applying the confirmed database transaction…';
+    try{
+      const result=await api('./api/manage/relink/apply','POST',{
+        preview:plan,confirm:true,attestation:'same-file-verified-by-owner'
+      });
+      if(generation!==relinkGeneration||!$('relink-dialog').open)return;
+      if(!result.ok||result.assetId!==plan.old.assetId||result.workId!==plan.old.workId){
+        throw Error('Server did not confirm the original book identity.');
+      }
+      selected.clear();selectedDetails.clear();closeRelink();
+      await Promise.all([loadCatalogue(),loadSummary()]);
+      notice('Book reconnected. Original work, edition, metadata and household bookmarks have been retained.');
+    }catch(error){
+      if(generation===relinkGeneration){
+        relinkPlan=null;$('relink-apply').disabled=true;
+        $('relink-status').textContent='Relink was not applied: '+error.message+' Refresh the preview before trying again.';
+      }
+    }finally{
+      relinkBusy=false;$('relink-refresh').disabled=false;
+      relinkUpdateAction();
     }
   }
   function exportSelected(){const items=[...selectedDetails.values()];if(!items.length)return;const columns=[['id','ID'],['title','Title'],['author','Author'],['series','Series'],['seriesNumber','Number'],['format','Format'],['space','Space'],['publishedYear','Year'],['genre','Genre'],['isbn','ISBN'],['metadataSource','Metadata source']];const cell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text.trimStart()))text="'"+text;return '"'+text.replaceAll('"','""')+'"'};const lines=[columns.map(x=>cell(x[1])).join(','),...items.map(row=>columns.map(x=>cell(row[x[0]])).join(','))];const url=URL.createObjectURL(new Blob([lines.join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'}));const anchor=e('a');anchor.href=url;anchor.download='archivist-selected-metadata.csv';document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Exported '+items.length+' selected metadata records.')}
@@ -651,6 +744,14 @@
   $('clear-selection').onclick=()=>{selected.clear();selectedDetails.clear();renderRows()};
   $('export-selection').onclick=exportSelected;
   $('bulk-open').onclick=openBulkEditor;
+  $('relink-open').onclick=openRelink;
+  $('relink-close').onclick=closeRelink;
+  $('relink-refresh').onclick=()=>void getRelinkPreview();
+  $('relink-apply').onclick=()=>void applyRelink();
+  $('relink-attest').onchange=relinkUpdateAction;
+  $('relink-dialog').addEventListener('close',()=>{
+    resetRelinkPreview();relinkSelection=null;
+  });
   $('bulk-close').onclick=closeBulkEditor;
   $('bulk-form').addEventListener('submit',previewBulk);
   $('bulk-apply').onclick=()=>void applyBulk();

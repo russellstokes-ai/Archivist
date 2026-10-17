@@ -131,3 +131,15 @@ dialog::backdrop{background:#010b12cf}
 .bulk-diff strong{color:var(--gold);font-weight:500}
 .bulk-diff span{max-width:75%;text-align:right}
 @media(max-width:590px){.bulk-fields{grid-template-columns:1fr}.bulk-diff{flex-direction:column;gap:2px}.bulk-diff span{text-align:left;max-width:100%}}
+
+/* Owner-attested file recovery. Present both real identities and full
+   destination hash; never equate a matching filename/size to verified bytes. */
+.relink-details{display:grid;gap:11px;margin:17px 0}
+.relink-identity{border:1px solid var(--rule);background:var(--panel);border-radius:12px;padding:13px 16px;min-width:0}
+.relink-identity strong{display:block;font:22px/1.35 ArchivistEditorial,Georgia,serif;overflow-wrap:anywhere}
+.relink-identity p{margin:4px 0 0;overflow-wrap:anywhere}
+.relink-sha{font-size:11px;overflow-wrap:anywhere;color:var(--muted)}
+.relink-warning{font-size:13px;color:var(--gold);border-left:3px solid var(--gold);padding:10px 13px;background:var(--panel)}
+.relink-ack{display:flex;align-items:flex-start;gap:11px;font-size:13px;margin:18px 0;padding:12px;border:1px solid var(--rule);border-radius:12px}
+.relink-ack input{width:18px;height:18px;flex:none;accent-color:var(--teal);margin-top:2px}
+@media(max-width:590px){.relink-identity strong{font-size:19px}.relink-ack{font-size:12px}}

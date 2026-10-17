@@ -45,7 +45,7 @@
    <label>Sort<select id="sort"><option value="review">Review first</option><option value="title">Title</option><option value="author">Author</option><option value="series">Series</option><option value="year">Publication year</option><option value="format">Format</option></select></label>
    <button type="button" id="reset" class="quiet">Clear filters</button><label>Saved filters<select id="saved-views"><option value="">Choose saved view…</option></select></label><label>Save filter as<input id="view-name" maxlength="60" placeholder="e.g. Comics to review"></label><button type="button" id="save-view" class="quiet">Save view</button>
   </form>
-  <div class="table-top"><p id="range" role="status">Loading…</p><div><span id="selected-count" class="selected">0 selected</span><button type="button" id="bulk-open" class="primary">Bulk edit selected</button><button type="button" id="export-selection" class="quiet">Export selected CSV</button><button type="button" id="clear-selection" class="quiet">Clear selection</button></div></div>
+  <div class="table-top"><p id="range" role="status">Loading…</p><div><span id="selected-count" class="selected">0 selected</span><button type="button" id="bulk-open" class="primary">Bulk edit selected</button><button type="button" id="relink-open" class="quiet" disabled>Relink renamed file</button><button type="button" id="export-selection" class="quiet">Export selected CSV</button><button type="button" id="clear-selection" class="quiet">Clear selection</button></div></div>
   <div class="table-scroll"><table id="catalogue"><thead><tr><th scope="col"><input type="checkbox" id="select-page" aria-label="Select all files on this page"></th><th scope="col">Title / author</th><th scope="col">Series</th><th scope="col">Type</th><th scope="col">Source</th><th scope="col">Status</th><th scope="col">Edit</th></tr></thead><tbody id="records"></tbody></table></div>
   <div class="pager"><button id="previous" type="button" class="quiet">← Previous</button><span id="page-label">Page 1</span><button id="next" type="button" class="quiet">Next →</button></div>
  </section>
@@ -86,5 +86,14 @@
     <div id="bulk-preview" class="bulk-preview" aria-live="polite"></div>
     <div class="dialog-actions"><button id="bulk-preview-button" type="submit" class="quiet">Preview edits</button><button id="bulk-apply" type="button" class="primary" disabled>Apply approved changes</button></div>
   </form>
+</dialog>
+
+<dialog id="relink-dialog" aria-labelledby="relink-title">
+ <div class="dialog-head"><div><p class="eyebrow">SAFE FILE RECOVERY</p><h2 id="relink-title">Reconnect renamed book</h2></div><button id="relink-close" type="button" class="quiet" aria-label="Close relink preview">✕</button></div>
+ <p class="footnote">Select exactly two indexed files: the unavailable original and the newly discovered replacement, in the same source and format. This does not move, rename or alter the actual media file.</p>
+ <p id="relink-status" role="status" aria-live="polite" class="footnote">Checking file identity…</p>
+ <div id="relink-details" class="relink-details"></div>
+ <label class="relink-ack"><input type="checkbox" id="relink-attest"><span>I independently confirmed these are the same book and file. I understand that the missing original cannot be compared with the new bytes, and that the action preserves the old book's progress.</span></label>
+ <div class="dialog-actions"><button id="relink-refresh" type="button" class="quiet">Refresh preview</button><button id="relink-apply" type="button" class="primary" disabled>Confirm relink</button></div>
 </dialog>
 </body></html>
