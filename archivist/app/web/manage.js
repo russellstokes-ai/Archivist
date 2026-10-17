@@ -908,6 +908,7 @@
   ];
   function workMessage(value){$('work-status').textContent=value}
   function workClearPlans(){
+    clearComicTransfer('Book metadata changed. Inspect any edition transfer again.');
     workEditEpoch++;
     workPlan=null;workUndoPlan=null;
     comicProfileResetPlans();

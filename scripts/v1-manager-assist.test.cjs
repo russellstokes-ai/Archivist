@@ -53,6 +53,7 @@ const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'
 const workCalls=[];
 const editionCalls=[];
 const transferCalls=[];
+let pauseTransfer=false,releaseTransfer=null;
 let editionRev=0,editionSaved=false;
 let editionFields={run:'',volume:'',issue:'',imprint:'',variant:'',year:'',notes:''};
 let pauseWorkPreview=false,releaseWorkPreview=null,failNextWorkReload=false;
@@ -99,13 +100,15 @@ const fetchFake=async (url,options={})=>{
     assert.equal(body.targetWorkId,1);
     assert.equal(body.editionId,20);
     assert.equal(body.expectedSourceFingerprint,'f'.repeat(64));
-    return reply({readOnly:true,preflightClear:false,
+    const response=reply({readOnly:true,preflightClear:false,
       editionId:20,member:{assetId:21,title:'The Flash #12',issue:12},
       source:{workId:2,title:'The Flash #12',fingerprint:'f'.repeat(64)},
       target:{workId:1,title:'Grouped audiobook'},
       blockers:[{code:'source-empty',explanation:'Source must retain at least one edition.'}],
       warnings:[{code:'apply-not-enabled',explanation:'No transfer Apply endpoint exists.'}]
     });
+    if(pauseTransfer)return await new Promise(resolve=>{releaseTransfer=()=>resolve(response)});
+    return response;
   }
   if(url==='./api/manage/works/2/comic-editions'){
     editionCalls.push({url,method:'GET'});
@@ -597,6 +600,15 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
     'preflight must show the specific blocking identity problem');
   assert.equal(elements.has('comic-transfer-apply'),false,
     'no editable/apply control should be invented before a proven safe transaction');
+  pauseTransfer=true;
+  elements.get('comic-transfer-inspect').onclick();await settle();
+  assert.equal(typeof releaseTransfer,'function','preflight must support an in-flight request');
+  elements.get('comic-transfer-target').value='3';
+  elements.get('comic-transfer-target').listeners.input();
+  releaseTransfer();await settle();pauseTransfer=false;releaseTransfer=null;
+  assert.equal(elements.get('comic-transfer-findings').children.length,0,
+    'late transfer inspection cannot overwrite a newer destination');
+  assert.match(elements.get('comic-transfer-status').textContent,/Destination changed/);
   assert.equal(elements.get('comic-profile-edition').value,'20');
   const editionInputs=elements.get('comic-profile-fields').children;
   assert.equal(editionInputs.length,7,'comic edition run/volume/issue/variant/imprint/year/notes are editable');

@@ -171,3 +171,50 @@ func TestComicEditionTransferPreflightBlocksEmptySourceAndUnreviewedMedia(t *tes
   t.Fatalf("unreviewed original allowed: %+v",p)
  }
 }
+
+func TestComicEditionTransferPreflightBlocksActiveScanAndOwnerEdits(t *testing.T){
+ a,source,target,edition:=comicTransferFixture(t)
+ if _,err:=a.db.Exec(`CREATE TABLE IF NOT EXISTS jobs(source_id INTEGER NOT NULL,state TEXT NOT NULL)`);err!=nil{t.Fatal(err)}
+ if _,err:=a.db.Exec("INSERT INTO jobs(source_id,state) VALUES(1,'running')");err!=nil{t.Fatal(err)}
+ if p:=transferReport(t,a,source,target,edition);!containsTransferBlock(p,"active-scan"){
+  t.Fatalf("active scan was ignored: %+v",p)
+ }
+ if _,err:=a.db.Exec("UPDATE jobs SET state='complete' WHERE source_id=1");err!=nil{t.Fatal(err)}
+ if p:=transferReport(t,a,source,target,edition);containsTransferBlock(p,"active-scan"){
+  t.Fatalf("completed scan remained a blocker: %+v",p)
+ }
+ if _,err:=a.db.Exec(`INSERT INTO work_field_controls(work_id,field,value,source,locked,updated_at)
+ VALUES(?, 'series','The Flash','owner edit',1,0)`,source);err!=nil{t.Fatal(err)}
+ if p:=transferReport(t,a,source,target,edition);!containsTransferBlock(p,"manual-fields"){
+  t.Fatalf("owner locked series metadata was ignored: %+v",p)
+ }
+ if _,err:=a.db.Exec("DELETE FROM work_field_controls WHERE work_id=?",source);err!=nil{t.Fatal(err)}
+ if _,err:=a.db.Exec(`INSERT INTO asset_metadata_revisions(asset_id,revision) VALUES(3,1)`);err!=nil{t.Fatal(err)}
+ if p:=transferReport(t,a,source,target,edition);!containsTransferBlock(p,"asset-field-revision"){
+  t.Fatalf("saved media metadata revision was ignored: %+v",p)
+ }
+}
+func TestComicEditionTransferPreflightRespectsCoverAndExactReceiptBinding(t *testing.T){
+ a,source,target,edition:=comicTransferFixture(t)
+ initial:=transferReport(t,a,source,target,edition)
+ changed:=initial
+ changed.EditionID=1
+ if changed.Receipt==comicTransferReceipt(a.token,changed){
+  t.Fatal("reassignment receipt can be changed to another edition")
+ }
+ changed=initial
+ changed.Target.WorkID=3
+ if changed.Receipt==comicTransferReceipt(a.token,changed){
+  t.Fatal("receipt can be changed to a different destination")
+ }
+ if _,err:=a.db.Exec(`INSERT INTO selected_work_covers(
+   work_id,image,mime,digest,updated_at) VALUES(?,?,'image/jpeg',?,1)`,
+   target,[]byte("synthetic-jpeg"),strings.Repeat("d",64));err!=nil{t.Fatal(err)}
+ withCover:=transferReport(t,a,source,target,edition)
+ if !containsTransferBlock(withCover,"selected-cover")||withCover.PreflightClear{
+  t.Fatalf("target manually selected cover was at risk: %+v",withCover)
+ }
+ if withCover.Target.Fingerprint==initial.Target.Fingerprint{
+  t.Fatal("selected-cover mutation did not change the target revision fingerprint")
+ }
+}
