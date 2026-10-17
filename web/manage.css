@@ -103,3 +103,9 @@ dialog::backdrop{background:#010b12cf}
 .assist-cover-picker input{font-size:11px;width:min(235px,100%);min-height:28px;padding:0;color:var(--muted)}
 .assist-cover-picker input::file-selector-button{border:1px solid var(--rule);background:var(--raised);color:var(--ink);border-radius:8px;padding:5px 8px;cursor:pointer}
 @media(max-width:590px){.assist-cover-picker{width:100%}}
+
+/* Book lifecycle is two independently navigable lists, not a hidden
+   unpublish action in a review-only queue. */
+.assist-mode-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 20px}
+.assist-mode-tabs button{min-height:44px;background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:8px 15px;color:var(--muted)}
+.assist-mode-tabs button[aria-pressed=true]{background:var(--raised);color:var(--gold);border-color:var(--teal)}

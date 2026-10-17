@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const pageSize = 80;
   const assistPageSize = 40;
-  let assistOffset = 0, assistRequest = 0;
+  let assistOffset = 0, assistRequest = 0, assistMode='staged';
   const metadataFields = [
     ['title','Title','text'], ['author','Author / creator','text'],
     ['series','Series','text'], ['seriesNumber','Series / issue number','number'],
@@ -181,16 +181,19 @@
     }
   }
   async function loadAssist(){
-    const generation=++assistRequest,location=assistOffset;
+    const generation=++assistRequest,location=assistOffset,mode=assistMode;
     const container=$('assist-works');
-    $('assist-range').textContent='Finding books that need review…';
+    for(const [id,state] of [['assist-staged','staged'],['assist-published','published']]){
+      $(''+id).setAttribute('aria-pressed',String(mode===state));
+    }
+    $('assist-range').textContent=mode==='published'?'Loading your published books…':'Finding books awaiting publication…';
     try {
-      const result=await api('./api/manage/review-works?'+new URLSearchParams({limit:String(assistPageSize),offset:String(location)}));
-      if(generation!==assistRequest||activeView!=='assist')return;
+      const result=await api('./api/manage/review-works?'+new URLSearchParams({limit:String(assistPageSize),offset:String(location),state:mode}));
+      if(generation!==assistRequest||activeView!=='assist'||mode!==assistMode)return;
       const works=Array.isArray(result.works)?result.works:[];
       container.replaceChildren();
       if(!works.length){
-        container.append(e('p',location?'No more books to review.':'All grouped books have completed their identification review.','empty'));
+        container.append(e('p',location?'No more books on this page.':mode==='published'?'Nothing published yet. Publish reviewed books to make them visible to readers.':'No books require publication or review.','empty'));
       }
       for(const work of works){
         const article=e('article',undefined,'assist-work');
@@ -324,7 +327,7 @@
         article.append(cover,details,controls,filePanel);
         container.append(article);
       }
-      $('assist-range').textContent=result.total+' books require review or publication · '+(works.length?location+1:0)+'–'+(location+works.length)+' shown';
+      $('assist-range').textContent=result.total+(mode==='published'?' published books':' books require review or publication')+' · '+(works.length?location+1:0)+'–'+(location+works.length)+' shown';
       $('assist-page').textContent='Page '+(Math.floor(location/assistPageSize)+1);
       $('assist-previous').disabled=location===0;
       $('assist-next').disabled=location+works.length>=result.total;
@@ -425,6 +428,13 @@
   updateViews();
   $('refresh-health').onclick=()=>loadHealth().catch(err=>notice(err.message,true));
   $('refresh-assist').onclick=()=>void loadAssist();
+  for(const [id,state] of [['assist-staged','staged'],['assist-published','published']]){
+    $(''+id).onclick=()=>{
+      if(assistMode===state)return;
+      assistMode=state;assistOffset=0;
+      void loadAssist();
+    };
+  }
   $('assist-previous').onclick=()=>{if(assistOffset>0){assistOffset=Math.max(0,assistOffset-assistPageSize);void loadAssist()}};
   $('assist-next').onclick=()=>{assistOffset+=assistPageSize;void loadAssist()};
   for(const item of document.querySelectorAll('[data-view]'))item.onclick=()=>showView(item.dataset.view);

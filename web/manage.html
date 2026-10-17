@@ -51,6 +51,10 @@
   <div class="section-head"><div><p class="eyebrow">ARCHIVIST ASSIST</p><h2 id="assist-title">Review &amp; publish your books</h2>
    <p class="footnote">Review grouped files and covers, save any metadata corrections, then publish explicitly. Scanning and saving never publish a new book automatically.</p></div>
    <button id="refresh-assist" type="button" class="quiet">Refresh</button></div>
+  <div class="assist-mode-tabs" role="group" aria-label="Book publication status">
+    <button id="assist-staged" type="button" aria-pressed="true">Needs review &amp; publishing</button>
+    <button id="assist-published" type="button" aria-pressed="false">Published library</button>
+  </div>
   <p id="assist-range" role="status" aria-live="polite">Choose Archivist Assist to load books.</p>
   <div id="assist-works" class="assist-works"></div>
   <div class="pager"><button id="assist-previous" type="button" class="quiet">← Previous books</button><span id="assist-page">Page 1</span><button id="assist-next" type="button" class="quiet">Next books →</button></div>

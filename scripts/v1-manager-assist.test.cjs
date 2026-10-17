@@ -56,14 +56,29 @@ const fetchFake=async (url,options={})=>{
     }
     return reply({state:'staged',revision:0});
   }
+  if(url.endsWith('/api/manage/works/3/publication')){
+    if(options.method==='POST'){
+      const body=JSON.parse(options.body);
+      assert.equal(body.action,'unpublish');
+      assert.equal(body.expectedRevision,1);
+      assert.equal(body.confirm,true);
+      return reply({state:'staged',revision:2});
+    }
+    return reply({state:'published',revision:1});
+  }
   if(url==='./api/library-summary')return reply({total:3,needsReview:3,reviewWorks:2,spaces:[{name:'Books',count:3}],availability:[]});
   if(url==='./api/sources')return reply([{space:'Books'}]);
   if(url.startsWith('./api/books?'))return reply([]);
   if(url.startsWith('./api/manage/review-works/1/files?'))return reply({files:[file,{...file,id:12,title:'Part 2'}],hasMore:false});
-  if(url.startsWith('./api/manage/review-works?'))return reply({total:2,works:[
-    {id:1,title:'Grouped audiobook',author:'Test Author',format:'Audio',space:'Books',files:3,reviewFiles:2},
-    {id:2,title:'Comic issue',format:'Comic',space:'Books',files:1,reviewFiles:0,publicationState:'staged',revision:0}
-  ]});
+  if(url.startsWith('./api/manage/review-works?')){
+    if(url.includes('state=published'))return reply({total:1,state:'published',works:[
+      {id:3,title:'Completed classic',author:'Test Author',format:'Ebook',space:'Books',files:1,reviewFiles:0,publicationState:'published',revision:1}
+    ]});
+    return reply({total:2,state:'staged',works:[
+      {id:1,title:'Grouped audiobook',author:'Test Author',format:'Audio',space:'Books',files:3,reviewFiles:2,publicationState:'staged',revision:0},
+      {id:2,title:'Comic issue',format:'Comic',space:'Books',files:1,reviewFiles:0,publicationState:'staged',revision:0}
+    ]});
+  }
   throw Error('Unexpected endpoint '+url);
 };
 const document={
@@ -111,5 +126,24 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
 
   const field=elements.get('editor-fields').querySelector('input');
   assert(field&&field.name==='title'&&field.value==='Part 1','existing metadata fields remain editable');
-  console.log('PASS: Assist book count, bounded grouped file fetch, navigation and real metadata editor linkage');
+  elements.get('close-editor').onclick();
+  assert.equal(typeof elements.get('assist-published').onclick,'function','published queue navigation must work');
+  elements.get('assist-published').onclick();
+  await settle();
+  assert.equal(elements.get('assist-published').attributes['aria-pressed'],'true');
+  assert.match(elements.get('assist-range').textContent,/1 published books/);
+  assert.equal(elements.get('assist-works').children.length,1);
+  assert.equal(elements.get('assist-works').children[0].children[1].children[0].textContent,'Completed classic');
+  const publishedCard=elements.get('assist-works').children[0];
+  const unpublish=publishedCard.children[2].children.find(button=>button.tagName==='BUTTON'&&button.textContent==='Unpublish book');
+  assert(unpublish,'owner needs a reachable Unpublish action for a reviewed published work');
+  unpublish.onclick();
+  await settle();
+  assert(calls.some(url=>url.endsWith('/api/manage/works/3/publication')),'Unpublish must call owner action endpoint');
+  assert.equal(elements.get('assist-published').attributes['aria-pressed'],'true','published view must remain selected after action');
+  elements.get('assist-staged').onclick();
+  await settle();
+  assert.equal(elements.get('assist-staged').attributes['aria-pressed'],'true');
+  assert.equal(elements.get('assist-works').children.length,2);
+  console.log('PASS: Assist stages, publishes, browses published work, unpublishes, preserves real metadata editor');
 })().catch(error=>{console.error(error);process.exitCode=1});

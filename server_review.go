@@ -44,12 +44,28 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
         if !who(r).Owner { fail(w, http.StatusForbidden, errors.New("administrator access required")); return }
         limit, offset, err := reviewPage(r, 40)
         if err != nil { fail(w, 400, err); return }
+        state:=r.URL.Query().Get("state")
+        if state==""{state="staged"}
+        if state!="staged"&&state!="published"{
+            fail(w,400,errors.New("state must be staged or published"));return
+        }
+        // These predicates are fixed server constants, never raw user query
+        // fragments. The published view also excludes any reopened review.
+        filter:="ast.needs_review=1 OR COALESCE(pub.state,'staged')='staged'"
+        groupedFilter:="sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)>0 OR COALESCE(max(pub.state),'staged')='staged'"
+        sorting:="sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END) DESC,w.title COLLATE NOCASE,w.id"
+        if state=="published"{
+            filter="w.id IN (SELECT id FROM published_works)"
+            groupedFilter="COALESCE(max(pub.state),'staged')='published' AND sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)=0"
+            sorting="w.title COLLATE NOCASE,w.id"
+        }
         var total int
-        err = a.db.QueryRowContext(r.Context(), `SELECT count(DISTINCT w.id) FROM works w
+        countSQL:=`SELECT count(DISTINCT w.id) FROM works w
             JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id
             JOIN assets ast ON ast.id=ea.asset_id
             LEFT JOIN work_publication pub ON pub.work_id=w.id
-            WHERE ast.needs_review=1 OR COALESCE(pub.state,'staged')='staged'`).Scan(&total)
+            WHERE `+filter
+        err = a.db.QueryRowContext(r.Context(),countSQL).Scan(&total)
         if err != nil { fail(w, 500, err); return }
         rows, err := a.db.QueryContext(r.Context(), `SELECT w.id,w.title,w.author,w.series,w.genre,w.space,
             CASE WHEN count(DISTINCT ed.format)=1 THEN min(ed.format) ELSE 'Mixed' END,
@@ -61,9 +77,8 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
             LEFT JOIN selected_work_covers cov ON cov.work_id=w.id
             JOIN editions ed ON ed.work_id=w.id
             JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets ast ON ast.id=ea.asset_id
-            GROUP BY w.id HAVING sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)>0
-            OR COALESCE(max(pub.state),'staged')='staged'
-            ORDER BY sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END) DESC,w.title COLLATE NOCASE,w.id
+            GROUP BY w.id HAVING `+groupedFilter+`
+            ORDER BY `+sorting+`
             LIMIT ? OFFSET ?`, limit, offset)
         if err != nil { fail(w, 500, err); return }
         defer rows.Close()
@@ -78,7 +93,7 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
             works = append(works, item)
         }
         if err = rows.Err(); err != nil { fail(w, 500, err); return }
-        reply(w, map[string]any{"total":total,"works":works,"limit":limit,"offset":offset})
+        reply(w, map[string]any{"total":total,"works":works,"limit":limit,"offset":offset,"state":state})
     })
     mux.HandleFunc("GET /api/manage/review-works/{id}/files", func(w http.ResponseWriter, r *http.Request) {
         if !who(r).Owner { fail(w, http.StatusForbidden, errors.New("administrator access required")); return }

@@ -21,6 +21,9 @@ func TestServerReviewGroupsFilesIntoLogicalBooks(t *testing.T) {
             VALUES(?,1,?,'Book','A. Author','Audio',1,?,'Verify identity')`,item.id,"asset-"+strconv.Itoa(item.id),item.review);err!=nil{t.Fatal(err)}
         if _,err:=a.db.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?)",item.id,item.edition,item.id);err!=nil{t.Fatal(err)}
     }
+    // Existing published books belong to the separate Published view, not the
+    // review queue. They must also remain owner-only in manager endpoints.
+    if _,err:=a.db.Exec("INSERT INTO work_publication(work_id,state,revision,published_at) VALUES(3,'published',1,0)");err!=nil{t.Fatal(err)}
     call:=func(path string,owner bool)*httptest.ResponseRecorder {
         request:=httptest.NewRequest("GET",path,nil)
         if owner { request.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"}) }
@@ -35,13 +38,28 @@ func TestServerReviewGroupsFilesIntoLogicalBooks(t *testing.T) {
     if response.Code!=200 {t.Fatalf("review request: %d %s",response.Code,response.Body.String())}
     var page struct {Total int `json:"total"`;Works []serverReviewWork `json:"works"`}
     if err:=json.Unmarshal(response.Body.Bytes(),&page);err!=nil{t.Fatal(err)}
-    if page.Total!=3||len(page.Works)!=1||page.Works[0].ID!=1||page.Works[0].ReviewFiles!=2||page.Works[0].Files!=3 {
+    if page.Total!=2||len(page.Works)!=1||page.Works[0].ID!=1||page.Works[0].ReviewFiles!=2||page.Works[0].Files!=3 {
         t.Fatalf("incorrect logical book count: %+v",page)
     }
     response=call("/api/manage/review-works?limit=1&offset=1",true)
     if response.Code!=200 {t.Fatalf("second page: %d %s",response.Code,response.Body.String())}
     if err:=json.Unmarshal(response.Body.Bytes(),&page);err!=nil{t.Fatal(err)}
-    if page.Total!=3||len(page.Works)!=1||page.Works[0].ID!=2 {t.Fatalf("second work: %+v",page)}
+    if page.Total!=2||len(page.Works)!=1||page.Works[0].ID!=2 {t.Fatalf("second work: %+v",page)}
+    published:=call("/api/manage/review-works?state=published&limit=1",true)
+    if published.Code!=200{t.Fatalf("published view: %d %s",published.Code,published.Body.String())}
+    var visible struct { Total int `json:"total"`; State string `json:"state"`; Works []serverReviewWork `json:"works"` }
+    if err:=json.Unmarshal(published.Body.Bytes(),&visible);err!=nil{t.Fatal(err)}
+    if visible.State!="published"||visible.Total!=1||len(visible.Works)!=1||visible.Works[0].ID!=3||
+       visible.Works[0].PublicationState!="published"||visible.Works[0].ReviewFiles!=0 {
+        t.Fatalf("cannot manage published book: %+v",visible)
+    }
+    if denied:=call("/api/manage/review-works?state=published",false);denied.Code!=http.StatusUnauthorized{
+        t.Fatalf("published management permitted anonymous: %d",denied.Code)
+    }
+    if bad:=call("/api/manage/review-works?state=unknown",true);bad.Code!=http.StatusBadRequest{
+        t.Fatalf("invalid state accepted: %d",bad.Code)
+    }
+
     response=call("/api/manage/review-works/1/files?limit=2",true)
     if response.Code!=200 {t.Fatalf("work files: %d %s",response.Code,response.Body.String())}
     var detail struct {Files []book `json:"files"`;HasMore bool `json:"hasMore"`}
