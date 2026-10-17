@@ -1,0 +1,30 @@
+name: Owner-requested Android QA dispatch (one-shot)
+# Owner-requested one-off bridge to the existing manual-only APK workflow.
+# Does not build, bypass checks, or change the protected Android QA workflow.
+on:
+  push:
+    branches:
+      - integration/archivist-v1-auto-restore-recovery-20261016
+    paths:
+      - .github/workflows/owner-request-android-qa-20261017.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-approved-qa-build:
+    name: Dispatch gated Android QA workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Request approved QA build on current PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$TARGET_BRANCH" = "integration/archivist-v1-auto-restore-recovery-20261016"
+          gh workflow run android-apk.yml --repo "$GH_REPO" --ref "$TARGET_BRANCH" --field qa_confirmation=true
+          echo "Requested owner-authorised Android QA APK build with qa_confirmation=true."
