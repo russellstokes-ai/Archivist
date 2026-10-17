@@ -51,6 +51,7 @@ const reply=value=>({ok:true,status:200,headers:{get:()=> 'application/json'},js
 const fieldNames=['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'];
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
 const workCalls=[];
+let pauseWorkPreview=false,releaseWorkPreview=null,failNextWorkReload=false;
 let workRevision=0,workFingerprint='a'.repeat(64),workTitle='Grouped audiobook',workYear='';
 const originalWorkTitle=workTitle;
 const makeWorkState=()=>({
@@ -76,6 +77,11 @@ const fetchFake=async (url,options={})=>{
   if(url.startsWith('./api/manage/works/1/metadata')){
     workCalls.push({url,method:options.method||'GET',body:options.body?JSON.parse(options.body):undefined});
     if(url==='./api/manage/works/1/metadata'&&(!options.method||options.method==='GET')){
+      if(failNextWorkReload){
+        failNextWorkReload=false;
+        return {ok:false,status:503,headers:{get:()=> 'application/json'},
+          json:async()=>({error:'Simulated transient refresh outage'})};
+      }
       return reply(makeWorkState());
     }
     if(url==='./api/manage/works/1/metadata/history'){
@@ -88,18 +94,24 @@ const fetchFake=async (url,options={})=>{
       assert.equal(input.expectedFingerprint,workFingerprint);
       assert.equal(input.changes.length,1);
       assert.equal(input.changes[0].name,'publishedYear');
-      assert.equal(input.changes[0].value,'2021');
-      assert.equal(input.changes[0].origin,'open-library');
-      return reply({workId:1,expectedRevision:workRevision,
+      const year=pauseWorkPreview?'2023':'2021';
+      assert.equal(input.changes[0].value,year);
+      assert.equal(input.changes[0].origin,pauseWorkPreview?'manual':'open-library');
+      const result=reply({workId:1,expectedRevision:workRevision,
         expectedFingerprint:workFingerprint,changes:input.changes,
-        diff:[{name:'publishedYear',from:workYear,to:'2021',source:'operator-selected suggestion'}],
+        diff:[{name:'publishedYear',from:workYear,to:year,source:'owner-selected value'}],
         expiresAt:1790000000,receipt:'signed-work-preview'});
+      if(pauseWorkPreview){
+        return await new Promise(resolve=>{releaseWorkPreview=()=>resolve(result)});
+      }
+      return result;
     }
     if(url==='./api/manage/works/1/metadata/apply'){
       const input=JSON.parse(options.body);
       assert.equal(input.confirm,true);
       assert.equal(input.preview.receipt,'signed-work-preview');
-      workYear='2021';workRevision=1;workFingerprint='b'.repeat(64);
+      workYear='2021';workRevision++;
+      workFingerprint=['a','b','c','d','e'][workRevision].repeat(64);
       return reply(makeWorkState());
     }
     if(url==='./api/manage/works/1/metadata/undo-preview'){
@@ -362,6 +374,35 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(workRevision,2);
   assert.equal(workYear,'','undo must recover the original derived edition year');
   assert.equal(elements.get('work-dialog').open,true,'undo must not close book editor');
+  // A late preview cannot reactivate Apply after the owner has changed the
+  // proposed value in the same modal.
+  const draft=elements.get('work-fields').children[5].children[0];
+  draft.value='2023';draft.listeners.input();
+  pauseWorkPreview=true;
+  elements.get('work-preview-button').onclick();await settle();
+  assert.equal(typeof releaseWorkPreview,'function','test must intercept an in-flight preview response');
+  draft.value='2024';draft.listeners.input();
+  releaseWorkPreview();pauseWorkPreview=false;await settle();
+  assert.equal(elements.get('work-apply-button').disabled,true,
+    'stale preview must never enable a signed Apply after user changes the value');
+
+  // When a confirmed write succeeds but reloading fails, the message must
+  // reflect durable server success, not falsely claim that nothing was saved.
+  elements.get('work-refresh').onclick();await settle();
+  assert.equal(elements.get('work-fields').children[5].children[0].value,'');
+  elements.get('work-candidate-query').value='Aerial Archive';
+  elements.get('work-candidate-search').onclick();await settle();
+  const nextSuggestion=elements.get('work-candidates').children[0];
+  nextSuggestion.children[2].children.find(button=>button.textContent==='Use Year').onclick();
+  elements.get('work-preview-button').onclick();await settle();
+  failNextWorkReload=true;
+  elements.get('work-apply-button').onclick();await settle();
+  assert.equal(workRevision,3,'server-side success must be durable despite failed refresh');
+  assert.match(elements.get('work-status').textContent,/Save confirmed by server; refresh failed/,
+    'UI must not label a committed mutation as rejected');
+  elements.get('work-refresh').onclick();await settle();
+  assert.equal(elements.get('work-fields').children[5].children[0].value,'2021',
+    'owner must be able to recover a book editor after a refresh outage');
   elements.get('work-close').onclick();
   assert.equal(elements.get('work-dialog').open,false);
   assert.equal(workTitle,originalWorkTitle);

@@ -627,7 +627,7 @@
   // Work-wide metadata is deliberately separate from physical-file editing.
   // Every mutation is previewed against a signed, versioned server snapshot.
   let workEpoch=0,workCandidateEpoch=0,workState=null,workPlan=null,workUndoPlan=null;
-  let workInputs=new Map(),workBusy=false,workMediaOffset=0;
+  let workInputs=new Map(),workBusy=false,workMediaOffset=0,workEditEpoch=0;
   const workFieldLabels=[
     ['title','Book title'],['author','Author / creator'],['series','Series'],
     ['seriesNumber','Series / issue number'],['genre','Genre / Atlas category'],['publishedYear','First publication year'],
@@ -636,6 +636,7 @@
   ];
   function workMessage(value){$('work-status').textContent=value}
   function workClearPlans(){
+    workEditEpoch++;
     workPlan=null;workUndoPlan=null;
     $('work-apply-button').disabled=true;$('work-undo-apply').disabled=true;
     $('work-preview-diff').replaceChildren();$('work-undo-diff').replaceChildren();
@@ -647,6 +648,15 @@
       if(item.input.value!==item.input.dataset.initial)return true;
     }
     return false;
+  }
+  function workSetInputBusy(busy){
+    for(const item of workInputs.values()){
+      item.input.readOnly=busy||workState?.publicationState!=='staged'||Boolean(item.definition.locked);
+      item.lock.disabled=busy||workState?.publicationState!=='staged';
+    }
+    $('work-preview-button').disabled=busy||workState?.publicationState!=='staged';
+    $('work-candidate-search').disabled=busy||workState?.publicationState!=='staged';
+    $('work-candidate-query').disabled=busy||workState?.publicationState!=='staged';
   }
   function workRenderDiff(target,details){
     const host=$(target);host.replaceChildren();
@@ -671,7 +681,7 @@
         else{input.min=-10000;input.max=100000;input.step='any'}
       }}
       input.value=field.value??'';input.dataset.initial=input.value;input.dataset.origin='manual';
-      input.readOnly=!editable||Boolean(field.locked);
+      input.readOnly=!editable||Boolean(field.locked)||workBusy;
       const line=e('div',undefined,'work-field-line');
       const source=e('small',(field.source||'Unverified')+(field.conflicting?' · Conflicting chapter values':''));
       const lock=e('button',field.locked?'Unlock':'Lock','quiet');
@@ -888,6 +898,7 @@
     if(!workState||workBusy)return;
     const state=workState,epoch=workEpoch;
     workClearPlans();
+    const inputVersion=workEditEpoch;
     let changes;
     try{changes=workChanges()}catch(error){workMessage(error.message);return}
     workBusy=true;$('work-preview-button').disabled=true;
@@ -896,7 +907,7 @@
       const preview=await api('./api/manage/works/'+state.workId+'/metadata/preview','POST',{
         expectedRevision:state.revision,expectedFingerprint:state.fingerprint,changes
       });
-      if(epoch!==workEpoch||workState!==state)return;
+      if(epoch!==workEpoch||workState!==state||inputVersion!==workEditEpoch)return;
       if(preview.workId!==state.workId||preview.expectedFingerprint!==state.fingerprint||
          !preview.receipt||!Array.isArray(preview.diff)||!preview.diff.length){
         throw Error('Server did not return a valid signed preview.');
@@ -912,26 +923,24 @@
     if(!workState||!workPlan||workBusy)return;
     const state=workState,plan=workPlan,epoch=workEpoch;
     if(!window.confirm('Apply exactly '+plan.diff.length+' previewed field changes to book #'+state.workId+'? Media and household progress will remain untouched.'))return;
-    workBusy=true;$('work-apply-button').disabled=true;
+    workBusy=true;workSetInputBusy(true);$('work-apply-button').disabled=true;
+    let committed=false;
     workMessage('Applying the signed, revision-checked book transaction…');
     try{
       const result=await api('./api/manage/works/'+state.workId+'/metadata/apply','POST',{preview:plan,confirm:true});
       if(epoch!==workEpoch)return;
       if(result.workId!==state.workId||result.revision!==state.revision+1)throw Error('Server did not confirm updated book revision.');
+      committed=true;
       await workReload(epoch);
       await Promise.all([loadAssist(),loadSummary()]);
       if(epoch===workEpoch)workMessage('Saved book metadata. Files and progress retained; publication remains explicit.');
-    }catch(error){if(epoch===workEpoch){workPlan=null;$('work-apply-button').disabled=true;workMessage('No confirmed save: '+error.message+'. Reload and preview before retrying.')}}
+    }catch(error){if(epoch===workEpoch){
+      workPlan=null;$('work-apply-button').disabled=true;
+      workMessage((committed?'Save confirmed by server; refresh failed: ':'Save was not confirmed: ')+error.message+'. Reload before trying again.');
+    }}
     finally{
       workBusy=false;
-      if(epoch===workEpoch&&workState){
-        $('work-preview-button').disabled=workState.publicationState!=='staged';
-        // A rejected network/SQL operation must NOT discard the user's draft.
-        // Only workReload() after a confirmed save replaces editor values.
-        for(const item of workInputs.values()){
-          item.lock.disabled=workState.publicationState!=='staged';
-        }
-      }
+      if(epoch===workEpoch)workSetInputBusy(false);
     }
   }
   async function workUndoPreview(){
@@ -939,10 +948,11 @@
     const state=workState,epoch=workEpoch;
     if(workDirty()){workMessage('Discard or save unsaved edits before reviewing undo.');return}
     workUndoPlan=null;$('work-undo-apply').disabled=true;$('work-undo-diff').replaceChildren();
+    const inputVersion=workEditEpoch;
     workBusy=true;
     try{
       const preview=await api('./api/manage/works/'+state.workId+'/metadata/undo-preview','POST');
-      if(epoch!==workEpoch||workState!==state)return;
+      if(epoch!==workEpoch||workState!==state||inputVersion!==workEditEpoch)return;
       if(!preview.receipt||preview.expectedFingerprint!==state.fingerprint||!Array.isArray(preview.diff)){
         throw Error('Invalid signed undo preview.');
       }
@@ -956,23 +966,29 @@
     if(!workState||!workUndoPlan||workBusy)return;
     const state=workState,preview=workUndoPlan,epoch=workEpoch;
     if(!window.confirm('Restore the book fields from before the last confirmed save? No media or progress changes.'))return;
-    workBusy=true;$('work-undo-apply').disabled=true;
+    workBusy=true;workSetInputBusy(true);$('work-undo-apply').disabled=true;
+    let committed=false;
     try{
       const result=await api('./api/manage/works/'+state.workId+'/metadata/undo','POST',{preview,confirm:true});
       if(epoch!==workEpoch)return;
       if(result.workId!==state.workId||result.revision!==state.revision+1)throw Error('Server did not confirm a new undo revision.');
+      committed=true;
       await workReload(epoch);
       await Promise.all([loadAssist(),loadSummary()]);
       if(epoch===workEpoch)workMessage('Previous book metadata values restored. All files and bookmarks retained.');
-    }catch(error){if(epoch===workEpoch){workUndoPlan=null;workMessage('Undo rejected: '+error.message)}}
-    finally{workBusy=false;if(epoch===workEpoch&&workState)workRenderFields(workState)}
+    }catch(error){if(epoch===workEpoch){
+      workUndoPlan=null;$('work-undo-apply').disabled=true;
+      workMessage((committed?'Undo confirmed by server; refresh failed: ':'Undo was not confirmed: ')+error.message)
+    }}
+    finally{workBusy=false;if(epoch===workEpoch)workSetInputBusy(false)}
   }
   async function workTogglePublication(){
     if(!workState||workBusy)return;
     if(workDirty()){workMessage('Save or discard unsaved book edits before changing publication.');return}
     const state=workState,epoch=workEpoch,action=state.publicationState==='published'?'unpublish':'publish';
     if(!window.confirm((action==='publish'?'Publish book to the household after verifying all files and cover?':'Unpublish book from household Library and Atlas?')+' Originals and progress remain unchanged.'))return;
-    workBusy=true;$('work-publish-toggle').disabled=true;
+    workBusy=true;workSetInputBusy(true);$('work-publish-toggle').disabled=true;
+    let committed=false;
     try{
       const current=await api('./api/manage/works/'+state.workId+'/publication');
       if(epoch!==workEpoch||current.state!==state.publicationState)throw Error('Publication state changed; reopen the book.');
@@ -981,11 +997,12 @@
       });
       if(epoch!==workEpoch)return;
       if(next.state!==(action==='publish'?'published':'staged'))throw Error('Server did not confirm publication change.');
+      committed=true;
       await workReload(epoch);
       await Promise.all([loadAssist(),loadSummary()]);
       if(epoch===workEpoch)workMessage('Book '+(action==='publish'?'published.':'unpublished.')+' Metadata and progress retained.');
-    }catch(error){if(epoch===workEpoch)workMessage('Publication rejected: '+error.message)}
-    finally{workBusy=false;if(epoch===workEpoch&&workState)workRenderSummary(workState)}
+    }catch(error){if(epoch===workEpoch)workMessage((committed?'Publication changed; refresh failed: ':'Publication was not confirmed: ')+error.message)}
+    finally{workBusy=false;if(epoch===workEpoch){workSetInputBusy(false);if(workState)workRenderSummary(workState)}}
   }
   async function workUploadCover(){
     if(!workState||workBusy)return;
@@ -993,7 +1010,8 @@
     if(workDirty()){workMessage('Save or discard book edits before changing its cover.');input.value='';return}
     if(workState.publicationState==='published'){workMessage('Unpublish before replacing selected cover.');input.value='';return}
     if(file.size>4*1024*1024){workMessage('Cover must be smaller than 4 MB.');input.value='';return}
-    const state=workState,epoch=workEpoch;workBusy=true;input.disabled=true;
+    const state=workState,epoch=workEpoch;workBusy=true;workSetInputBusy(true);input.disabled=true;
+    let committed=false;
     try{
       const answer=await fetch('./api/manage/works/'+encodeURIComponent(String(state.workId))+'/cover',{
         method:'POST',credentials:'same-origin',headers:{'X-Archivist-Action':'1',
@@ -1003,11 +1021,14 @@
       if(!answer.ok)throw Error(body.error||'Cover upload was rejected.');
       if(epoch!==workEpoch)return;
       if(!/^[0-9a-f]{64}$/.test(body.sha256))throw Error('The server did not verify the saved cover.');
+      committed=true;
       await workReload(epoch);
       await Promise.all([loadAssist(),loadSummary()]);
       if(epoch===workEpoch)workMessage('Cover stored with the book and its database backup. Publication remains separate.');
-    }catch(error){if(epoch===workEpoch)workMessage('Cover not saved: '+error.message)}
-    finally{workBusy=false;input.value='';if(epoch===workEpoch)input.disabled=workState?.publicationState!=='staged'}
+    }catch(error){if(epoch===workEpoch)workMessage((committed?'Cover stored; refresh failed: ':'Cover was not confirmed: ')+error.message)}
+    finally{workBusy=false;input.value='';if(epoch===workEpoch){
+      workSetInputBusy(false);input.disabled=workState?.publicationState!=='staged'
+    }}
   }
   async function loadAssist(){
     const generation=++assistRequest,location=assistOffset,mode=assistMode;
@@ -1292,6 +1313,17 @@
     }catch(err){notice(err.message,true)}
   }
   $('work-close').onclick=closeWorkEditor;
+  $('work-refresh').onclick=()=>{
+    if(workBusy||!workState)return;
+    if(workDirty()&&!window.confirm('Discard your unsaved book changes and reload server metadata?'))return;
+    const epoch=workEpoch;
+    workMessage('Reloading the latest book revision…');
+    void workReload(epoch).then(()=>{
+      if(epoch===workEpoch)workMessage('Current book details and history reloaded.');
+    }).catch(error=>{
+      if(epoch===workEpoch)workMessage('Book reload failed: '+error.message);
+    });
+  };
   $('work-dialog').addEventListener('close',()=>{
     workEpoch++;workCandidateEpoch++;workState=null;workInputs.clear();workClearPlans();
   });
