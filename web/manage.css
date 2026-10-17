@@ -272,3 +272,25 @@ dialog::backdrop{background:#010b12cf}
 #recovery-integrity-result{min-height:22px;overflow-wrap:anywhere}
 @media(max-width:850px){.operations-grid{grid-template-columns:1fr}}
 @media(max-width:580px){.sidebar nav{gap:5px}.operations-line{align-items:flex-start;flex-wrap:wrap}}
+
+/* Integrated owner S8 Family and S10 Settings; all actions reuse existing
+   authenticated server routes, with no extra credential storage. */
+.family-create{display:grid;gap:14px;max-width:440px}
+.family-profiles,.server-session-list{display:grid;gap:10px}
+.family-user,.server-session{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border-radius:12px;border:1px solid var(--rule);background:var(--raised);min-width:0}
+.family-user>div,.server-session>div{display:grid;gap:3px;min-width:0;overflow-wrap:anywhere}
+.family-user strong,.server-session strong{color:var(--gold);font-weight:600}
+.family-user small,.server-session small{color:var(--muted)}
+.family-user .operations-actions,.server-session .operations-actions{margin:0;flex:0 0 auto;justify-content:end}
+.family-user .operations-actions button{flex:0 0 auto}
+#family-key-result[hidden]{display:none!important}
+#family-key{font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all;resize:none;min-height:84px}
+#family-status,#settings-status{overflow-wrap:anywhere}
+@media(max-width:650px){.family-user,.server-session{align-items:stretch;flex-direction:column}.family-user .operations-actions{justify-content:start}}
+
+/* Work-level Assist filters. Counts and paging come from one SQLite snapshot,
+   not from filtering a single already-paginated 40-book browser page. */
+.assist-review-filters{display:grid;grid-template-columns:minmax(210px,2.1fr) repeat(3,minmax(140px,1fr)) auto auto;gap:10px;align-items:end;margin:16px 0 14px}
+.assist-review-filters button{white-space:nowrap}
+@media(max-width:1250px){.assist-review-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.assist-review-filters .search-field{grid-column:span 2}}
+@media(max-width:600px){.assist-review-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.assist-review-filters .search-field{grid-column:1/-1}}

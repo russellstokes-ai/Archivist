@@ -4,6 +4,14 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Batch 2: native Family/Settings and scalable Archivist Assist
+
+**Draft PR #83, source-QA candidate, commercial NO-GO.** Family (S8) and Server settings (S10) now render natively in the owner manager instead of requiring the shared reader browser for routine work. Family uses existing backend user/session APIs, with explicit create/rotate/revoke confirmation, memory-only once-displayed access keys and a visible all-library User access notice. Settings reuses actual current server and owner-session APIs; advanced connectivity/backup and Organise stay accessible via existing working deep links. Permission semantics are unchanged.
+
+**Archivist Assist:** Added *book-level*, server-side title/author/series search and library/format/review-reason filters. The page and total are computed from the same consistent SQLite snapshot and grouped by logical work; no file-level counter is mislabeled as a book. Filter values are bounded/whitelisted. Published and staged visibility are unchanged, and nothing automatically publishes or modifies source media.
+
+**Verification:** exact source [PR #83 checks](https://github.com/russellstokes-ai/Archivist/pull/83/checks) must pass mirrored root/package Go, manager DOM, Docker/HA, native ARM64 and protected mobile source checks before source-accepted. This plan's documentation does not claim hardware, visual 16:9 or release readiness. [Full batch QA](SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md).
+
 ## 17 October 2026 — Accelerated server owner workspace and operations batch
 
 **Draft PR #83, commercial NO-GO.** To reduce repeated milestone/CI cycles, this batch consolidates the S1 Overview and S9 Health & Recovery owner screens, a read-only server operations snapshot, an explicit SQLite integrity check, guarded per-source Scan control and working navigation across the existing S1–S10 workflows. The underlying Library, Assist, Work/Edition, Metadata, Review, Scanner, Organise, Family, Atlas/Shelf and Settings code is **reused**, not rewritten. Actual ten-screen visual acceptance and independent S7/S8/S10 panels remain open; the high-risk comic reassignment Apply remains disabled.

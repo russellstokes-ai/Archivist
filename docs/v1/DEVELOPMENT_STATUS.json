@@ -1415,5 +1415,39 @@
     "draft_pr_unmerged": true,
     "commercial_go": false,
     "ci": "PR #83 exact commit server and ARM64 checks are the gate; no CI result is claimed at source-authoring time"
+  },
+  "server_batch2_family_settings_assist_20261017": {
+    "parent_sha": "edcfcc02524f9d78bb2a1f48350bcf0b3c893b4e",
+    "pr": 83,
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "release_gate": "NO-GO; exact-code full CI and physical acceptance pending",
+    "report": "docs/v1/SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md",
+    "delivered": [
+      "native 16:9 owner Family and Settings views over existing authenticated server APIs",
+      "new user/rotated access keys shown once, memory-only, explicit dismissal and key persistence within current session until copied",
+      "owner-confirmed family user revocation and active session management; no backend permission policy changes",
+      "real server-info and session status, existing advanced Settings/Organise deep links retained",
+      "work-level Assist filterable by title, series or author, space, format, review reason",
+      "Assist count and page use one read-only SQLite transaction, grouped by logical work rather than media files",
+      "server strict bounded parameter validation and tests for revoked owner/anonymous, review reasons and page totals",
+      "Go root/package and browser regressions added; canonical mobile/scanner/reader untouched"
+    ],
+    "intentionally_open": [
+      "S7 file organiser continues to reuse existing working shared browser controls",
+      "per-user library-space grants remain global by current product policy and require owner decision",
+      "real device, Pi4/HA ingress/NAS/1000+ metadata/performance/accessibility acceptance not complete",
+      "no comic transfer Apply enabled; draft PR unmerged"
+    ],
+    "source_files": [
+      "server_review.go",
+      "server_review_filter_test.go",
+      "web/manage.html",
+      "web/manage.css",
+      "web/manage.js",
+      "scripts/v1-manager-assist.test.cjs"
+    ],
+    "implementation_pending_ci": true,
+    "merged": false,
+    "commercial_go": false
   }
 }

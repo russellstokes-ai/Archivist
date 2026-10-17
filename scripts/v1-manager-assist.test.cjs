@@ -40,7 +40,7 @@ class Element {
 }
 const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new Element()]));
 elements.get('sort').value='review';
-const nav=['library','assist','review','health','overview','recovery'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
+const nav=['library','assist','review','health','overview','recovery','family','settings'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
 const calls=[];
 const scanJobs=[
   {id:2,source_id:1,state:'failed',message:'Storage offline',progress:0,total:1},
@@ -53,6 +53,12 @@ const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'
 const workCalls=[];
 const editionCalls=[];
 const transferCalls=[];
+const familyCalls=[];
+const localStorageWrites=[];
+const familyProfiles=[{id:5,name:'Existing user',revoked:false,spaces:['Books']}];
+let familyNextId=6;
+let ownerSessions=[{id:10,created:1760000000,expires:1793000000},{id:11,created:1761000000,expires:1794000000}];
+
 let pauseTransfer=false,releaseTransfer=null;
 let editionRev=0,editionSaved=false;
 let editionFields={run:'',volume:'',issue:'',imprint:'',variant:'',year:'',notes:''};
@@ -93,6 +99,40 @@ const makeComicWorkState=()=>({
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url==='./api/profiles'&&(!options.method||options.method==='GET')){
+    familyCalls.push({type:'list'});
+    return reply(familyProfiles.map(x=>({...x,spaces:[...x.spaces]})));
+  }
+  if(url==='./api/profiles'&&options.method==='POST'){
+    const input=JSON.parse(options.body);
+    assert.equal(input.name,'New family user');
+    assert.equal(options.headers['X-Archivist-Action'],'1');
+    familyCalls.push({type:'create',name:input.name});
+    const created={id:familyNextId++,name:input.name,revoked:false,spaces:['Books']};
+    familyProfiles.push(created);
+    return reply({id:created.id,name:created.name,key:'a'.repeat(64),role:'user'});
+  }
+  if(url==='./api/profiles/5/rotate-key'){
+    assert.equal(options.method,'POST');
+    familyCalls.push({type:'rotate',id:5});
+    return reply({key:'b'.repeat(64)});
+  }
+  if(url==='./api/profiles/5'&&options.method==='DELETE'){
+    familyCalls.push({type:'revoke',id:5});
+    familyProfiles[0].revoked=true;
+    return reply({ok:true});
+  }
+  if(url==='./api/server-info'){
+    return reply({address:'http://localhost:5056',configured:true,sources:2,watchedSources:1,
+      activeJobs:0,sessions:2,databaseBytes:1048576,mediaProbe:false});
+  }
+  if(url==='./api/sessions'){
+    return reply(ownerSessions.map(x=>({...x})));
+  }
+  if(url==='./api/sessions/10'&&options.method==='DELETE'){
+    ownerSessions=ownerSessions.filter(x=>x.id!==10);
+    return reply({ok:true});
+  }
   if(url==='./api/manage/operations'){
     return reply({
       indexedSources:2,watchedSources:1,indexedFiles:227,indexedWorks:85,
@@ -384,7 +424,7 @@ const document={
 };
 const sandbox={
   document,fetch:fetchFake,Option:class extends Element{constructor(label,value){super('option');this.label=label;this.value=value}},
-  localStorage:{getItem:()=>null,setItem:()=>undefined},
+  localStorage:{getItem:()=>null,setItem:(k,v)=>localStorageWrites.push([String(k),String(v)])},
   URLSearchParams,URL,Blob,Promise,Map,Set,Number,String,Array,JSON,Math,setTimeout,clearTimeout,
   window:{confirm:()=>true}
 };
@@ -392,7 +432,7 @@ vm.runInNewContext(source,sandbox,{filename:'web/manage.js'});
 const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);await Promise.resolve()}};
 (async()=>{
   await settle();
-  for(const view of ['overview','library','assist','review','health','recovery']){
+  for(const view of ['overview','library','assist','review','health','recovery','family','settings']){
     assert(html.includes('data-view="'+view+'"'),'server owner workspace missing '+view+' navigation');
   }
   for(const destination of ['./#settings/organisation','./#settings/household',
@@ -675,6 +715,25 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
     'editor must refresh after confirmed undo');
   elements.get('work-close').onclick();
 
+  // Server-side work/edition review filters operate before pagination.
+  assert.equal(elements.get('assist-space').options.length,2,
+    'Assist filters must load the same live library spaces as the manager');
+  elements.get('assist-query').value='The Flash';
+  elements.get('assist-space').value='Books';
+  elements.get('assist-format').value='Comic';
+  elements.get('assist-reason').value='unreviewed';
+  elements.get('assist-filters').onsubmit({preventDefault(){}});
+  await settle();
+  const filteredAssistCall=calls.filter(u=>u.startsWith('./api/manage/review-works?')).at(-1);
+  assert(filteredAssistCall.includes('q=The+Flash')&&filteredAssistCall.includes('space=Books')&&
+     filteredAssistCall.includes('format=Comic')&&filteredAssistCall.includes('reason=unreviewed'),
+     'Assist must send work-centric filters to backend, not filter one page in the browser');
+  elements.get('assist-filter-clear').onclick();await settle();
+  assert.equal(elements.get('assist-reason').value,'');
+  assert.equal(elements.get('assist-query').value,'');
+  assert(!calls.filter(u=>u.startsWith('./api/manage/review-works?')).at(-1).includes('reason='),
+    'clearing filters must reload full logical work review queue');
+ 
   const health=nav.find(item=>item.dataset.view==='health');
   health.onclick();
   await settle();
@@ -754,5 +813,61 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   elements.get('recovery-scanner').onclick();await settle();
   assert.equal(elements.get('view-health').hidden,false,
     'recovery page must link back to actionable scanner/source diagnostics');
-  console.log('PASS: Assist, scanner, source diagnostics and owner-only Overview/Recovery');
+  // S8 Family is functional inside the manager, without ever storing
+  // sensitive keys in localStorage or including them in public status text.
+  const family=nav.find(item=>item.dataset.view==='family');
+  const settings=nav.find(item=>item.dataset.view==='settings');
+  assert(family&&settings,'Family and Settings must be native owner views');
+  family.onclick();await settle();
+  assert.equal(elements.get('view-family').hidden,false);
+  assert(familyCalls.some(x=>x.type==='list'),'Family must query the real profile endpoint');
+  assert.equal(elements.get('family-profiles').children.length,1);
+  elements.get('family-name').value='New family user';
+  elements.get('family-create').onsubmit({preventDefault(){}});
+  await settle();
+  assert(familyCalls.some(x=>x.type==='create'),'new User must be created by existing owner-only backend');
+  assert.equal(elements.get('family-key').value,'a'.repeat(64),
+    'new server-issued access key must be shown once');
+  assert.equal(elements.get('family-create-button').disabled,true,
+    'creating another User before copying the first key risks credential loss');
+  settings.onclick();await settle();
+  family.onclick();await settle();
+  assert.equal(elements.get('family-key').value,'a'.repeat(64),
+    'an in-flight owner who navigates between views must not silently lose an undisclosed key');
+  assert(!String(elements.get('family-status').textContent||'').includes('a'.repeat(64)),
+    'keys must never leak into status messages');
+  elements.get('family-key-dismiss').onclick();await settle();
+  assert.equal(elements.get('family-key').value,'','dismissing must wipe key from textarea');
+  assert.equal(elements.get('family-create-button').disabled,false);
+  let existing=elements.get('family-profiles').children.find(x=>x.children[0].children[0].textContent==='Existing user');
+  assert(existing,'original active User must remain visible');
+  existing.children[1].children[0].onclick();await settle();
+  assert(familyCalls.some(x=>x.type==='rotate'),'rotation must use existing endpoint');
+  assert.equal(elements.get('family-key').value,'b'.repeat(64),
+    'rotated access key must be displayed once without showing old key');
+  elements.get('family-key-dismiss').onclick();await settle();
+  existing=elements.get('family-profiles').children.find(x=>x.children[0].children[0].textContent==='Existing user');
+  existing.children[1].children[1].onclick();await settle();
+  assert(familyCalls.some(x=>x.type==='revoke'),'revoke must call server');
+  existing=elements.get('family-profiles').children.find(x=>x.children[0].children[0].textContent==='Existing user');
+  assert(existing.children[0].children[1].textContent==='Access revoked',
+    'revocation must be reflected by a fresh owner profile read');
+  assert.equal(existing.children.length,1,'revoked profiles must not offer active rotate/revoke buttons');
+  settings.onclick();await settle();
+  assert.equal(elements.get('view-settings').hidden,false);
+  assert(calls.includes('./api/server-info')&&calls.includes('./api/sessions'),
+    'native Settings must use existing server and session endpoints');
+  assert(elements.get('settings-info').children.some(x=>x.children[0].textContent==='Current connection'&&
+    x.children[1].textContent==='http://localhost:5056'),'Settings must display actual server address');
+  assert.equal(elements.get('settings-sessions').children.length,2,'existing owner sessions should be visible');
+  elements.get('settings-sessions').children[0].children[1].onclick();await settle();
+  assert(calls.includes('./api/sessions/10'),'end session must reuse authorised API');
+  assert.equal(elements.get('settings-sessions').children.length,1,'session list must refresh after revocation');
+  assert(!String(elements.get('settings-status').textContent||'').includes('a'.repeat(64)),
+    'private access keys must never enter settings status');
+  assert(!localStorageWrites.some(([key,value])=>key.includes('family')||value.includes('a'.repeat(64))||
+    value.includes('b'.repeat(64))),
+    'one-time family keys must not persist in browser storage');
+
+  console.log('PASS: Server Assist work-level filters, native Family/Settings, real scanner, Atlas and recovery navigation');
 })().catch(error=>{console.error(error);process.exitCode=1});

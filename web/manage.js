@@ -1419,7 +1419,13 @@
     }
     $('assist-range').textContent=mode==='published'?'Loading your published books…':'Finding books awaiting publication…';
     try {
-      const result=await api('./api/manage/review-works?'+new URLSearchParams({limit:String(assistPageSize),offset:String(location),state:mode}));
+      const query=new URLSearchParams({limit:String(assistPageSize),offset:String(location),state:mode});
+      for(const [param,id] of [['q','assist-query'],['space','assist-space'],
+        ['format','assist-format'],['reason','assist-reason']]){
+        const value=String($(id).value||'').trim();
+        if(value)query.set(param,value);
+      }
+      const result=await api('./api/manage/review-works?'+query);
       if(generation!==assistRequest||activeView!=='assist'||mode!==assistMode)return;
       const works=Array.isArray(result.works)?result.works:[];
       container.replaceChildren();
@@ -1440,7 +1446,8 @@
         details.append(e('span',[work.author||'Unknown author',work.series,work.format,work.space].filter(Boolean).join(' · '),'subtext'));
         details.append(e('small','Book ID '+work.id+' · '+work.files+' indexed media files','subtext'));
         details.append(e('span',Number(work.reviewFiles)+' of '+work.files+' files need review','pill '+(work.reviewFiles?'warn':'ok')));
-        details.append(e('span',work.publicationState==='published'?'Published – review reopened':'Awaiting explicit publication','subtext'));
+        details.append(e('span',work.publicationState==='published'?
+          'Published to family':'Awaiting explicit publication or review','subtext'));
         const controls=e('div',undefined,'assist-controls');
         const reveal=e('button','Review book files','quiet');reveal.type='button';reveal.setAttribute('aria-expanded','false');
         const filePanel=e('div',undefined,'assist-files');filePanel.hidden=true;
@@ -1594,6 +1601,14 @@
     picker.replaceChildren(new Option('All spaces',''));
     for(const item of sources){if(item.space&&!Array.from(picker.options).some(o=>o.value===item.space))picker.add(new Option(item.space,item.space))}
     picker.value=Array.from(picker.options).some(o=>o.value===before)?before:'';
+    const reviewPicker=$('assist-space'),previous=reviewPicker.value;
+    reviewPicker.replaceChildren(new Option('All spaces',''));
+    for(const item of sources){
+      if(item.space&&!Array.from(reviewPicker.options).some(x=>x.value===item.space)){
+        reviewPicker.add(new Option(item.space,item.space));
+      }
+    }
+    reviewPicker.value=Array.from(reviewPicker.options).some(x=>x.value===previous)?previous:'';
   }
   async function loadHealth(){
     const [sources,health,jobs]=await Promise.all([api('./api/sources'),api('./api/library-health'),api('./api/jobs')]);
@@ -1686,6 +1701,200 @@
       }
       tasks.append(row);
     }
+  }
+  // Family and Settings are native admin views over the existing protected
+  // server endpoints. Keys remain memory-only, visible exactly once, and are
+  // never written to localStorage, URLs, logs or regular catalogue metadata.
+  let familyEpoch=0,familyBusy=false,familySecret=null;
+  let settingsEpoch=0,settingsBusy=false;
+  function familyStatus(message){$('family-status').textContent=String(message)}
+  function renderFamilySecret(){
+    const present=Boolean(familySecret);
+    $('family-key-result').hidden=!present;
+    $('family-no-key').hidden=present;
+    $('family-key').value=present?familySecret.key:'';
+    $('family-key-context').textContent=present?
+      'Access key for '+familySecret.name+' · user #'+familySecret.id+
+        '. Copy it now. It cannot be retrieved after dismissal or refresh.':'';
+    $('family-create-button').disabled=familyBusy||present;
+  }
+  function familyKeyValid(answer){
+    return Boolean(answer&&Number.isSafeInteger(Number(answer.id))&&
+      Number(answer.id)>0&&typeof answer.name==='string'&&
+      typeof answer.key==='string'&&/^[a-f0-9]{64}$/i.test(answer.key));
+  }
+  async function loadFamily(){
+    const epoch=++familyEpoch;
+    $('family-refresh').disabled=true;
+    if(activeView==='family')familyStatus('Loading household accounts…');
+    try{
+      const result=await api('./api/profiles');
+      if(epoch!==familyEpoch||activeView!=='family')return;
+      if(!Array.isArray(result))throw Error('Invalid household response.');
+      const host=$('family-profiles');host.replaceChildren();
+      if(!result.length)host.append(e('p','No family users configured. Add one to create a private access key.','subtext'));
+      for(const profile of result){
+        const id=Number(profile.id);
+        if(!Number.isSafeInteger(id)||id<1||typeof profile.name!=='string'){
+          throw Error('Invalid household user identity.');
+        }
+        const card=e('article',undefined,'family-user'),content=e('div');
+        const spaces=Array.isArray(profile.spaces)?profile.spaces.length:0;
+        content.append(e('strong',profile.name),
+          e('small',profile.revoked?'Access revoked':
+            'User #'+id+' · all-library access · '+spaces+' indexed library space(s)'));
+        card.append(content);
+        if(!profile.revoked){
+          const actions=e('div',undefined,'operations-actions');
+          const rotate=e('button','Replace key','quiet');
+          rotate.type='button';rotate.disabled=familyBusy||Boolean(familySecret);
+          rotate.onclick=()=>void rotateFamilyKey(id,profile.name);
+          const revoke=e('button','Revoke access','quiet');
+          revoke.type='button';revoke.disabled=familyBusy||Boolean(familySecret);
+          revoke.onclick=()=>void revokeFamilyUser(id,profile.name);
+          actions.append(rotate,revoke);card.append(actions);
+        }
+        host.append(card);
+      }
+      familyStatus(result.filter(p=>!p.revoked).length+
+        ' active users. Every active User currently has access to all library spaces.');
+      renderFamilySecret();
+    }catch(error){
+      if(epoch===familyEpoch&&activeView==='family')
+        familyStatus('Unable to read household accounts: '+error.message);
+    }finally{
+      if(epoch===familyEpoch)$('family-refresh').disabled=false;
+    }
+  }
+  function presentFamilyKey(answer){
+    familySecret={id:Number(answer.id),name:answer.name,key:answer.key};
+    renderFamilySecret();
+    familyStatus('Access changed. Save the one-time access key before doing anything else.');
+  }
+  async function createFamilyUser(event){
+    event.preventDefault();
+    if(familyBusy||familySecret)return;
+    const name=String($('family-name').value||'').trim();
+    if(!name||name.length>100){familyStatus('Enter a display name of 1–100 characters.');return}
+    if(!window.confirm('Create '+name+' with access to every library space? The key will be shown only once.'))return;
+    familyBusy=true;renderFamilySecret();familyStatus('Creating user…');
+    let committed=false;
+    try{
+      const answer=await api('./api/profiles','POST',{name});
+      committed=true;
+      if(!familyKeyValid(answer)||answer.name!==name)
+        throw Error('Account may be created, but its one-time key was not returned safely. Inspect and rotate the user key.');
+      presentFamilyKey(answer);
+      $('family-name').value='';
+      await loadFamily();
+      familyStatus('User '+name+' created. Save the displayed one-time key securely.');
+    }catch(error){
+      familyStatus((committed?'Server change may be committed: ':'User not created: ')+error.message);
+    }finally{
+      familyBusy=false;renderFamilySecret();
+    }
+  }
+  async function rotateFamilyKey(id,name){
+    if(familyBusy||familySecret){familyStatus('Dismiss the previous one-time key before changing another account.');return}
+    if(!window.confirm('Replace '+name+' access key? Existing sessions will be revoked immediately.'))return;
+    familyBusy=true;renderFamilySecret();familyStatus('Replacing access key…');
+    let committed=false;
+    try{
+      const answer=await api('./api/profiles/'+encodeURIComponent(String(id))+'/rotate-key','POST');
+      committed=true;
+      if(typeof answer.key!=='string'||!/^[a-f0-9]{64}$/i.test(answer.key))
+        throw Error('Key may be rotated but was not returned safely. Reopen the user and rotate again.');
+      presentFamilyKey({id,name,key:answer.key});
+      await loadFamily();
+      familyStatus('Access key rotated. All earlier user sessions are revoked. Save the new key.');
+    }catch(error){
+      familyStatus((committed?'Rotation may be committed: ':'Rotation failed: ')+error.message);
+    }finally{
+      familyBusy=false;renderFamilySecret();
+    }
+  }
+  async function revokeFamilyUser(id,name){
+    if(familyBusy||familySecret){familyStatus('Dismiss the displayed one-time key before changing accounts.');return}
+    if(!window.confirm('Revoke '+name+' immediately? Existing sessions will stop, but the user’s private progress is retained.'))return;
+    familyBusy=true;renderFamilySecret();familyStatus('Revoking user access…');
+    let committed=false;
+    try{
+      const answer=await api('./api/profiles/'+encodeURIComponent(String(id)),'DELETE');
+      if(answer?.ok!==true)throw Error('Server did not confirm revocation.');
+      committed=true;
+      await loadFamily();
+      familyStatus('Access revoked for '+name+'. Personal progress was not deleted.');
+    }catch(error){
+      familyStatus((committed?'Access revoked, but refreshing users failed: ':'Access was not confirmed revoked: ')+error.message);
+    }finally{familyBusy=false;renderFamilySecret()}
+  }
+  function dismissFamilyKey(){
+    if(familyBusy||!familySecret)return;
+    if(!window.confirm('Clear this one-time access key now? You cannot retrieve it later.'))return;
+    $('family-key').value='';
+    familySecret=null;
+    renderFamilySecret();
+    familyStatus('One-time key cleared from this browser session.');
+    if(activeView==='family')void loadFamily();
+  }
+  function serverStatus(message){$('settings-status').textContent=String(message)}
+  async function loadServerSettings(){
+    const epoch=++settingsEpoch;
+    $('settings-refresh').disabled=true;
+    serverStatus('Loading connection state and owner sessions…');
+    try{
+      const [info,sessions]=await Promise.all([
+        api('./api/server-info'),api('./api/sessions')
+      ]);
+      if(epoch!==settingsEpoch||activeView!=='settings')return;
+      if(!info||typeof info!=='object'||!Array.isArray(sessions))
+        throw Error('Invalid server or session response.');
+      const host=$('settings-info');host.replaceChildren();
+      const data=[
+        ['Current connection',String(info.address||'Unknown')],
+        ['Owner access configured',info.configured?'Yes':'No'],
+        ['Source folders',operationsCount(info.sources)],
+        ['Watched folders',operationsCount(info.watchedSources)],
+        ['Active scan jobs',operationsCount(info.activeJobs)],
+        ['Active server sessions',operationsCount(info.sessions)],
+        ['Local DB size',operationsSize(info.databaseBytes)]
+      ];
+      for(const [name,value] of data)operationsLine('settings-info',name,value);
+      const list=$('settings-sessions');list.replaceChildren();
+      if(!sessions.length)list.append(e('p','No active administrator sessions returned.','subtext'));
+      for(const sess of sessions.slice(0,100)){
+        const id=Number(sess.id),created=Number(sess.created),expires=Number(sess.expires);
+        if(!Number.isSafeInteger(id)||id<1||!Number.isFinite(expires))
+          throw Error('Invalid session record.');
+        const card=e('article',undefined,'server-session'),details=e('div');
+        details.append(e('strong','Session #'+id),
+          e('small','Started '+new Date(created*1000).toLocaleString()+
+            ' · expires '+new Date(expires*1000).toLocaleString()));
+        const action=e('button','End session','quiet');
+        action.type='button';action.disabled=settingsBusy;
+        action.onclick=()=>void endServerSession(id);
+        card.append(details,action);list.append(card);
+      }
+      serverStatus('Current admin connection and '+sessions.length+' active owner session(s) loaded.');
+    }catch(error){
+      if(epoch===settingsEpoch&&activeView==='settings')
+        serverStatus('Unable to load server settings: '+error.message);
+    }finally{
+      if(epoch===settingsEpoch)$('settings-refresh').disabled=false;
+    }
+  }
+  async function endServerSession(id){
+    if(settingsBusy)return;
+    if(!window.confirm('End session #'+id+'? This may end your current administrator session and require signing in again.'))return;
+    settingsBusy=true;serverStatus('Revoking selected session…');
+    try{
+      const result=await api('./api/sessions/'+encodeURIComponent(String(id)),'DELETE');
+      if(result?.ok!==true)throw Error('Server did not confirm session termination.');
+      await loadServerSettings();
+      if(activeView==='settings')serverStatus('Session ended. If this was your current login, sign in again.');
+    }catch(error){
+      serverStatus('Session change uncertain: '+error.message+'. Refresh or sign in again.');
+    }finally{settingsBusy=false}
   }
   // Operational views are intentionally lazy: opening Library or reading
   // a book must not trigger NAS probes or database integrity checks.
@@ -1807,6 +2016,8 @@
     $('view-health').hidden=view!=='health';
     $('view-overview').hidden=view!=='overview';
     $('view-recovery').hidden=view!=='recovery';
+    $('view-family').hidden=view!=='family';
+    $('view-settings').hidden=view!=='settings';
     for(const item of document.querySelectorAll('[data-view]')){
       item.classList.toggle('is-current',item.dataset.view===view);
       if(item.dataset.view===view)item.setAttribute('aria-current','page');
@@ -1816,6 +2027,9 @@
     if(view==='assist'){++requestId;assistOffset=0;void loadAssist();return}
     ++assistRequest;
     if(view==='health'){++requestId;loadHealth().catch(err=>notice(err.message,true));return}
+    if(view==='family'){++requestId;++settingsEpoch;void loadFamily();return}
+    if(view==='settings'){++requestId;++familyEpoch;void loadServerSettings();return}
+    ++familyEpoch;++settingsEpoch;
     if(view==='overview'||view==='recovery'){
       ++requestId;
       void loadOperations(view);
@@ -1933,6 +2147,12 @@
   $('saved-views').onchange=applyView;
   updateViews();
   $('refresh-health').onclick=()=>loadHealth().catch(err=>notice(err.message,true));
+  $('family-create').onsubmit=event=>void createFamilyUser(event);
+  $('family-refresh').onclick=()=>void loadFamily();
+  $('family-key-dismiss').onclick=dismissFamilyKey;
+  $('settings-refresh').onclick=()=>void loadServerSettings();
+  $('settings-scanner').onclick=()=>showView('health');
+  $('settings-family').onclick=()=>showView('family');
   $('overview-refresh').onclick=()=>void loadOperations('overview');
   $('overview-assist').onclick=()=>showView('assist');
   $('overview-scanner').onclick=()=>showView('health');
@@ -1941,6 +2161,13 @@
   $('recovery-integrity').onclick=()=>void checkSQLiteIntegrity();
   $('recovery-scanner').onclick=()=>showView('health');
   $('refresh-assist').onclick=()=>void loadAssist();
+  $('assist-filters').onsubmit=event=>{
+    event.preventDefault();assistOffset=0;void loadAssist();
+  };
+  $('assist-filter-clear').onclick=()=>{
+    for(const id of ['assist-query','assist-space','assist-format','assist-reason'])$(id).value='';
+    assistOffset=0;void loadAssist();
+  };
   for(const [id,state] of [['assist-staged','staged'],['assist-published','published']]){
     $(''+id).onclick=()=>{
       if(assistMode===state)return;
