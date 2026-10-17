@@ -118,4 +118,56 @@
  <label class="relink-ack"><input id="group-relink-attest" type="checkbox" disabled><span>I independently verified that every original track matches the displayed replacement track in the same playback order. I understand that the missing originals cannot be compared with the new file bytes.</span></label>
  <div class="dialog-actions"><button id="group-relink-preview" type="button" class="quiet" disabled>Verify full files</button><button id="group-relink-apply" type="button" class="primary" disabled>Confirm group relink</button></div>
 </dialog>
+
+<dialog id="work-dialog" class="work-dialog" aria-labelledby="work-dialog-title">
+ <div class="dialog-head">
+  <div><p class="eyebrow">ARCHIVIST ASSIST · BOOK WORKBENCH</p><h2 id="work-dialog-title">Book metadata</h2><p id="work-context" class="footnote"></p></div>
+  <button id="work-close" type="button" class="quiet" aria-label="Close book workbench">✕</button>
+ </div>
+ <p id="work-status" class="footnote" role="status" aria-live="polite">Loading book identity…</p>
+ <div class="work-editor-layout">
+  <section class="work-edit-primary">
+   <section class="work-meta-panel">
+    <h3>Verified book details</h3>
+    <p class="footnote">These are <strong>book-level</strong> values; individual edition and chapter metadata is retained. The scanner cannot overwrite approved book corrections.</p>
+    <div id="work-fields" class="work-field-grid" aria-label="Book metadata fields"></div>
+   </section>
+   <section class="work-meta-panel">
+    <div class="section-head"><div><h3>Compare public metadata</h3><p class="footnote">Optional lookup. Candidate information remains unverified until you inspect and explicitly select individual fields.</p></div></div>
+    <div class="work-search-row"><label>Title, author or ISBN<input id="work-candidate-query" type="search" autocomplete="off" placeholder="Search Open Library suggestions"></label><button id="work-candidate-search" type="button" class="quiet">Find candidates</button></div>
+    <div id="work-candidates" aria-live="polite"></div>
+   </section>
+   <section class="work-meta-panel">
+    <div class="section-head"><h3>Preview before saving</h3></div>
+    <p id="work-preview-status" class="footnote" role="status" aria-live="polite">No changes selected.</p>
+    <div id="work-preview-diff" class="work-preview-diff" aria-label="Proposed book metadata changes"></div>
+    <div class="dialog-actions"><button type="button" id="work-preview-button" class="quiet">Preview book changes</button><button type="button" id="work-apply-button" class="primary" disabled>Apply reviewed changes</button></div>
+    <p class="footnote">Saving updates metadata only. It never publishes the book, changes original media files, resets reading progress or merges editions.</p>
+   </section>
+  </section>
+  <aside class="work-edit-secondary">
+   <section class="work-meta-panel">
+    <h3>Cover &amp; publication</h3>
+    <div id="work-cover" class="work-cover" aria-label="Current book cover"></div>
+    <label class="assist-cover-picker">Choose cover (JPEG or PNG)<input id="work-cover-upload" type="file" accept="image/jpeg,image/png"></label>
+    <p id="work-publication" class="footnote">Checking publication status…</p>
+    <button id="work-publish-toggle" type="button" class="quiet">Loading publication…</button>
+   </section>
+   <section class="work-meta-panel">
+    <h3>Editions &amp; chapter files</h3>
+    <div id="work-editions" class="work-editions"></div>
+    <div id="work-media" class="work-media"></div>
+    <div class="dialog-actions"><button id="work-more-media" type="button" class="quiet" hidden>More files</button></div>
+    <p class="footnote">Formats, file paths and sequence are shown without changing media. Use each file's editor for track- or edition-specific corrections.</p>
+   </section>
+   <section class="work-meta-panel">
+    <h3>Change history &amp; undo</h3>
+    <div id="work-history" class="work-history"></div>
+    <p id="work-undo-status" class="footnote" role="status">Last saved edit can be undone only when no newer change has occurred.</p>
+    <div id="work-undo-diff" class="work-preview-diff"></div>
+    <div class="dialog-actions"><button id="work-undo-preview" type="button" class="quiet">Preview undo</button><button id="work-undo-apply" type="button" class="primary" disabled>Confirm undo</button></div>
+   </section>
+  </aside>
+ </div>
+</dialog>
 </body></html>

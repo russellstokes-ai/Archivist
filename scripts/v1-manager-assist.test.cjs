@@ -50,9 +50,87 @@ const scanJobs=[
 const reply=value=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>value});
 const fieldNames=['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'];
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
+const workCalls=[];
+let workRevision=0,workFingerprint='a'.repeat(64),workTitle='Grouped audiobook',workYear='';
+const originalWorkTitle=workTitle;
+const makeWorkState=()=>({
+  workId:1,title:workTitle,space:'Books',automatic:true,
+  revision:workRevision,fingerprint:workFingerprint,memberDigest:'d'.repeat(64),
+  publicationState:'staged',publicationRevision:0,coverHash:'',files:3,
+  editions:[{id:10,format:'Audio',files:3,available:3,reviewFiles:2}],
+  fields:[
+    {name:'title',value:workTitle,source:'catalogue',locked:false},
+    {name:'author',value:'Test Author',source:'derived from files',locked:false},
+    {name:'series',value:'',source:'missing',locked:false},
+    {name:'genre',value:'Adventure',source:'derived from files',locked:false},
+    {name:'publishedYear',value:workYear,source:workYear?'owner-selected Open Library suggestion (unverified)':'missing from files',locked:false},
+    ...['narrator','publisher','isbn','asin','language','description'].map(name=>({
+      name,value:'',source:'missing from files',locked:false
+    }))
+  ]
+});
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url.startsWith('./api/manage/works/1/metadata')){
+    workCalls.push({url,method:options.method||'GET',body:options.body?JSON.parse(options.body):undefined});
+    if(url==='./api/manage/works/1/metadata'&&(!options.method||options.method==='GET')){
+      return reply(makeWorkState());
+    }
+    if(url==='./api/manage/works/1/metadata/history'){
+      return reply({workId:1,events:workRevision?[{id:1,action:'edit',revisionAfter:workRevision,
+        recordedAt:1700000000,changes:[{name:'publishedYear',from:'',to:workYear,source:'owner-selected candidate'}]}]:[]});
+    }
+    if(url==='./api/manage/works/1/metadata/preview'){
+      const input=JSON.parse(options.body);
+      assert.equal(input.expectedRevision,workRevision);
+      assert.equal(input.expectedFingerprint,workFingerprint);
+      assert.equal(input.changes.length,1);
+      assert.equal(input.changes[0].name,'publishedYear');
+      assert.equal(input.changes[0].value,'2021');
+      assert.equal(input.changes[0].origin,'open-library');
+      return reply({workId:1,expectedRevision:workRevision,
+        expectedFingerprint:workFingerprint,changes:input.changes,
+        diff:[{name:'publishedYear',from:workYear,to:'2021',source:'operator-selected suggestion'}],
+        expiresAt:1790000000,receipt:'signed-work-preview'});
+    }
+    if(url==='./api/manage/works/1/metadata/apply'){
+      const input=JSON.parse(options.body);
+      assert.equal(input.confirm,true);
+      assert.equal(input.preview.receipt,'signed-work-preview');
+      workYear='2021';workRevision=1;workFingerprint='b'.repeat(64);
+      return reply(makeWorkState());
+    }
+    if(url==='./api/manage/works/1/metadata/undo-preview'){
+      assert.equal(workRevision,1);
+      return reply({workId:1,expectedRevision:1,expectedFingerprint:workFingerprint,
+        historyId:1,expiresAt:1790000000,receipt:'signed-undo-preview',
+        diff:[{name:'publishedYear',from:'2021',to:'',source:'restore saved prior value'}]});
+    }
+    if(url==='./api/manage/works/1/metadata/undo'){
+      const input=JSON.parse(options.body);
+      assert.equal(input.confirm,true);
+      assert.equal(input.preview.receipt,'signed-undo-preview');
+      workYear='';workRevision=2;workFingerprint='c'.repeat(64);
+      return reply(makeWorkState());
+    }
+    throw Error('Unhandled workbench endpoint: '+url);
+  }
+  if(url.startsWith('./api/manage/works/1/media?')){
+    return reply({workId:1,fingerprint:workFingerprint,hasMore:false,files:[
+      {id:11,title:'Part 1',author:'Test Author',position:0,editionId:10,format:'Audio',
+        available:true,relativePath:'Aerial/Part 1.mp3',metadataSource:'embedded'},
+      {id:12,title:'Part 2',author:'Test Author',position:1,editionId:10,format:'Audio',
+        available:true,relativePath:'Aerial/Part 2.mp3',metadataSource:'embedded'}
+    ]});
+  }
+  if(url.startsWith('./api/manage/metadata-candidates?q=')){
+    return reply({provider:'Open Library',candidates:[
+      {workId:'/works/test',title:'Aerial Archive',author:'Test Author',publishedYear:2021,
+       isbn:'1234567890',publisher:'Example Press',source:'Open Library'}
+    ]});
+  }
+
   if(url.startsWith('./api/manage/relink-groups/works/')){
     const id=Number(url.split('/').pop());
     const original=id===1;
@@ -242,6 +320,50 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   await settle();
   assert(calls.includes('./api/manage/relink-groups/apply'),'confirmed group action must call server');
   assert.equal(elements.get('group-relink-dialog').open,false,'success should close the recovery dialog');
+
+  // Assist 2.0 book editor: real book-level metadata load, edition details,
+  // optional owner-selected candidate, HMAC-backed preview, explicit save
+  // and signed undo. No publish or physical file operation is implied.
+  const bookEdit=audioCard.children[2].children.find(button=>
+    button.tagName==='BUTTON'&&button.textContent==='Edit book');
+  assert(bookEdit,'every logical work needs a book-level metadata action');
+  bookEdit.onclick();await settle();
+  assert.equal(elements.get('work-dialog').open,true,'book workbench modal should be accessible');
+  assert.equal(elements.get('work-dialog-title').textContent,'Grouped audiobook');
+  assert.equal(elements.get('work-editions').children.length,1,'real audio edition summary required');
+  assert.equal(elements.get('work-media').children.length,2,'book must display individual chapter records');
+  const bookFields=elements.get('work-fields');
+  assert.equal(bookFields.children.length,11,'work-level fields must cover extended bibliographic metadata');
+  elements.get('work-candidate-query').value='Aerial Archive';
+  elements.get('work-candidate-search').onclick();await settle();
+  assert(calls.some(x=>x.startsWith('./api/manage/metadata-candidates?q=')),'provider search should be explicit');
+  const suggestion=elements.get('work-candidates').children[0];
+  assert(suggestion,'provider candidates must render without changing saved metadata');
+  const useYear=suggestion.children[2].children.find(button=>button.textContent==='Use Year');
+  assert(useYear,'candidate fields need deliberate acceptance controls');
+  useYear.onclick();
+  assert.equal(bookFields.children[4].children[0].value,'2021');
+  assert.equal(bookFields.children[4].children[0].dataset.origin,'open-library');
+  assert.equal(elements.get('work-apply-button').disabled,true,'unreviewed suggestion must not save');
+  elements.get('work-preview-button').onclick();await settle();
+  assert(workCalls.some(x=>x.url.endsWith('/metadata/preview')),'work-level preview must reach versioned backend');
+  assert.equal(elements.get('work-preview-diff').children.length,1,'show old and new field values');
+  assert.equal(elements.get('work-apply-button').disabled,false,'signed confirmed preview enables Apply');
+  elements.get('work-apply-button').onclick();await settle();
+  assert(workCalls.some(x=>x.url.endsWith('/metadata/apply')),'confirmed work edit must use dedicated atomic API');
+  assert.equal(elements.get('work-dialog').open,true,'successful metadata Save must not close book editor');
+  assert.equal(workRevision,1);
+  assert.equal(elements.get('work-fields').children[4].children[0].value,'2021');
+  elements.get('work-undo-preview').onclick();await settle();
+  assert.equal(elements.get('work-undo-apply').disabled,false,'signed undo preview enables explicit Apply');
+  elements.get('work-undo-apply').onclick();await settle();
+  assert(workCalls.some(x=>x.url.endsWith('/metadata/undo')),'undo must call durable history API');
+  assert.equal(workRevision,2);
+  assert.equal(workYear,'','undo must recover the original derived edition year');
+  assert.equal(elements.get('work-dialog').open,true,'undo must not close book editor');
+  elements.get('work-close').onclick();
+  assert.equal(elements.get('work-dialog').open,false);
+  assert.equal(workTitle,originalWorkTitle);
 
   const health=nav.find(item=>item.dataset.view==='health');
   health.onclick();
