@@ -57,3 +57,14 @@ Library Manager / Archivist Assist displays work IDs, a **Reconnect audiobook** 
 6. Security/backup: role grants, HTTPS outside trusted LAN, actual interrupted restore, DB corruption migration and account revocation tests.
 
 **No release or merge approval implied.** Keep PR #83 draft and protect canonical mobile source. Commercial status **NO-GO**.
+
+## D. Bounded large signed confirmation (follow-on)
+
+**Commit:** `c676349dd96074db44b7d7b720feb0bfb5575fa7`.
+
+A complete preview repeats two rich metadata snapshots per chapter, so 32 legitimate chapter mappings with long source paths can exceed the generic `decodeBulkJSON` 32 KiB body cap. Group **apply** now has a separate 512 KiB hard body limit, `DisallowUnknownFields`, a one-JSON-object requirement, and unmodified signed receipt, track-count, memory and hash budget validation. The route remains owner-only and CSRF-gated.
+
+- `TestLargeSignedMultiTrackConfirmationUnderExplicitRequestCap`: accepts an otherwise valid owner/HMAC-signed >32 KiB and <512 KiB confirmation, and leaves exactly one original work.
+- `TestOversizedGroupedConfirmationDoesNotTouchCataloguedMedia`: returns 400 on a >512 KiB proof; verifies both old and candidate works are unchanged and a fresh legitimate signed confirmation still succeeds.
+
+No unbounded upload was introduced, and physical ingress/NAS/Pi adoption remains pending.

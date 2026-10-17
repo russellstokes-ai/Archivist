@@ -237,3 +237,10 @@ A1–A6 source corrections and #20/#25 lifecycle candidates implemented under ex
 - **Multi-file audio relink:** Added `relink_group.go` and `relink_group_test.go` in both server sources, extended only server `relink.go` cardinality check, registered routes in mirrored `main.go`. Explicit owner review per original chapter/target chapter in positional order, complete SHA256 hashes pre/post confirmation, signed expiring receipt and atomic retirement of untouched replacement group while preserving original IDs and progress. Tests cover spoofed/partial mappings, pending queues, candidate progress, modified media, replay and forced late SQLite failure rollback.
 - **Owner UX:** Added responsive Assist chapter-pair review and attestation dialog; interactive server manager regression covers real endpoint routing and required all-track checkboxes. Unrelated UI and original mobile code remain unchanged.
 - Hardware Pi 4, Home Assistant ingress, NAS/SMB/NFS failures, >4GiB audiobooks, cross-volume moves and final commercial release still **NO-GO**. Acceptance detail: `docs/v1/SERVER_ATOMIC_CATALOGUE_GROUP_RELINK_QA_2026-10-17.md`.
+
+## 2026-10-17 — Fixed grouped audiobook confirmation size without unbounded uploads
+
+- **Commit:** `c676349dd96074db44b7d7b720feb0bfb5575fa7` on active unmerged PR #83.
+- **Finding:** a valid complete multi-track signed preview can exceed 32 KiB because the original and candidate metadata/path snapshots repeat for all 32 chapters. Sharing the generic metadata PATCH size limit would reject legitimate groups despite successful preview.
+- **Correction:** group apply alone now accepts a **strictly capped 512 KiB** confirmation, requires a single well-formed known-fields-only JSON object, still verifies HMAC, expiry, every track and actual 4 GiB content hash budget. Added Go tests for accepting a valid >32 KiB signed confirmation, rejecting >512 KiB without side effects and successful retry. Root and packaged Go mirrored. No changes to any mobile or protected UI asset.
+- Commercial package remains **NO-GO** pending Pi/NAS/HA and full release acceptance.

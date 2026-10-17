@@ -1107,6 +1107,20 @@
     ],
     "mobile_source_modified_by_this_work": false,
     "PR_draft": true,
-    "commercial_go": false
+    "commercial_go": false,
+    "followup_large_apply": {
+      "commit": "c676349dd96074db44b7d7b720feb0bfb5575fa7",
+      "signed_apply_max_bytes": 524288,
+      "unknown_fields_rejected": true,
+      "single_json_object": true,
+      "prior_generic_limit_bytes": 32768,
+      "regression_cases": [
+        "valid signed body >32KiB",
+        "oversized body >512KiB fails without touching catalogue",
+        "valid retry after rejection"
+      ],
+      "scope": "grouped-relLink/apply only; unrelated routes unchanged",
+      "commercial_go": false
+    }
   }
 }
