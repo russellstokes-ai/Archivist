@@ -127,3 +127,11 @@ The ARM64 gate checks:
 - The published HTTP port remains bound to localhost in the test.
 
 **Important:** these are representative host bind mounts on GitHub's runner, **not real SMB/NFS mounts** and **not a Synology/QNAP/TrueNAS/Unraid certification test**. Real host filesystems, NAS firmware, drive disconnect/reconnect, write-authorised organiser actions, and Android remote access require separate acceptance on actual target installations. This test uses disposable synthetic content and must never mount or modify a user's media.
+
+## Scanner health for NAS-mounted libraries
+
+The desktop **Library Manager → Health & scans** now offers read-only identification and Atlas metadata coverage per indexed file, plus immediate owner-only filters for missing author/genre/year, low confidence, review-needed and unavailable records. These are SQLite diagnostics; they never silently launch scans, fetch metadata, alter mounted media or publish books. They remain available when the media share is offline, although the availability flags reflect the last completed scan.
+
+If a mounted share briefly hides one or more tracks from an already-indexed audiobook, the server retains those offline tracks' original edition mappings and bookmarks while marking their database file-availability flags accurately on a completed scan. Restoring the path and scanning again keeps work, edition and asset IDs. Do not treat an entirely new file as the missing original without owner verification. Complete album/cross-volume relinking is a separate explicit and constrained workflow.
+
+Exact synthetic acceptance and remaining physical-NAS caveats are recorded under `docs/v1/SERVER_SCANNER_PARTIAL_NAS_AND_COVERAGE_QA_2026-10-17.md`. This draft remains QA software, not a verified production NAS package.

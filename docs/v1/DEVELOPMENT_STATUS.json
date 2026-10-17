@@ -1122,5 +1122,43 @@
       "scope": "grouped-relLink/apply only; unrelated routes unchanged",
       "commercial_go": false
     }
+  },
+  "server_scanner_partial_nas_and_coverage_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent_sha": "70dc1a6f30714ec704c7d771c6b794e16ceec4ef",
+    "code_head": "bfcfea4ee0207ffbed045563b9170fd40fcfe8aa",
+    "commits": [
+      "af2ec765df2b20450836eb41f944e9a4f44e595a",
+      "2db4cd4b70c3e6c98cfa88a831597cfabe946506",
+      "bfcfea4ee0207ffbed045563b9170fd40fcfe8aa"
+    ],
+    "QA": "docs/v1/SERVER_SCANNER_PARTIAL_NAS_AND_COVERAGE_QA_2026-10-17.md",
+    "completed": [
+      "automatic audio editions preserve unavailable chapter links and positions",
+      "partial NAS disconnect/reconnect keeps multi-profile bookmarks and reviewed metadata",
+      "ambiguous unexpected extra edition fails safe",
+      "owner-only read-only file-level metadata gap counts per source and globally",
+      "six actionable genre/year/author/confidence/review/availability filters in server Library Manager",
+      "saved coverage filters and actual browser interaction tests"
+    ],
+    "ci": {
+      "server": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39037438153/job/117410001891",
+      "arm64": "success",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39037438153/job/117410001608"
+    },
+    "limits": [
+      "root availability not per-file verification",
+      "indexed-file metadata coverage is not a work-level Atlas audit",
+      "existing scanner identification algorithm unchanged",
+      "real Pi4/NAS SMB/NFS and large library performance unverified",
+      "cross-source/multi-edition manual relinks not finished",
+      "production release artifacts absent"
+    ],
+    "canonical_mobile_untouched": true,
+    "draft": true,
+    "merged": false,
+    "commercial_go": false
   }
 }

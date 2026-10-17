@@ -144,6 +144,16 @@ Before applying a move, Archivist checks the proposed destination and conflicts.
 
 As with any software that can organise files, keep a backup of irreplaceable media.
 
+## Scanner metadata health and partial NAS outages
+
+**Temporary chapter disappearance:** If part of a multi-file audiobook vanishes from a NAS share, the existing indexed audiobook keeps its unavailable track linked to the original edition, in chapter order, with household listening progress and manual metadata intact. Rescanning when the track reappears restores its availability without creating a duplicate. A newly added different track is not assumed to be the missing one. A work with an unexpected ambiguous second edition blocks automated reconciliation rather than deleting that edition.
+
+**Coverage dashboard:** In **Library Manager → Health & scans → Identification & Atlas readiness**, see read-only file-level counts for missing authors, genres and publication years, low identification confidence, files awaiting review and unavailable media. Select a card to open the matching filtered file table and use Archivist Assist/Metadata Workbench to review the values. Saved filters include metadata categories. Saving does not automatically publish a book; the review/publish lifecycle remains explicit.
+
+These values reflect **stored indexed physical files**, not counts of logical books or fresh filesystem content. Genre/year gaps highlight Atlas-readiness questions, not necessarily an Atlas defect: a multi-file work can have different metadata coverage per chapter. Root online status only checks the source folder, not every media file. Reports do not read file bytes, rescan, fetch metadata or overwrite anything.
+
+On actual SMB/NFS failures, blocked reads and a delayed stop request can still wait on the operating system; do not treat unit tests or ARM64 CI as real Raspberry Pi/NAS acceptance.
+
 ## Health monitoring
 
 The package exposes:
