@@ -1648,7 +1648,7 @@ function Client() {
   },[activeTab,localCatalogReady,sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
   const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
-  const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>work.genre),genreColour),[sourceWorks]);
+  const atlasGenreColors=useMemo(()=>atlasGenrePalette(atlasUniverseWorks.map(work=>work.genre),genreColour),[atlasUniverseWorks]);
   const atlasGenreColor=(name:string)=>atlasGenreColors.get(name.trim()||'Unclassified')||genreColour(name);
   const atlasRingSize=Math.min(width-(width>=940?56:width>=600?48:width<360?28:32),width>=940?720:width>=600?620:520);
   const atlasDiameter=Math.max(1,atlasRingSize-64);
@@ -1962,7 +1962,7 @@ function Client() {
 
   const atlas = useMemo(() => {
     const count=(values:string[])=>{const totals=new Map<string,number>();for(const value of values.map(v=>v.trim()).filter(Boolean))totals.set(value,(totals.get(value)||0)+1);return [...totals.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,16);};
-    const items:UnifiedWork[]=atlasRelationshipWorks;
+    const items:UnifiedWork[]=atlasUniverseWorks;
     return {
       formats:count(items.map(item=>item.format)),authors:count(items.map(item=>item.author||'Unknown author')),
       series:count(items.map(item=>item.series).filter(Boolean)),genres:count(items.map(item=>item.genre).filter(Boolean)),
@@ -1972,7 +1972,7 @@ function Client() {
       ratings:count(items.map(item=>ratingLabel(item.rating||0))),
       favourites:items.some(item=>item.favourite)?[['Favourites',items.filter(item=>item.favourite).length] as [string,number]]:[],
     };
-  },[atlasRelationshipWorks]);
+  },[atlasUniverseWorks]);
 
 
   useEffect(() => {
