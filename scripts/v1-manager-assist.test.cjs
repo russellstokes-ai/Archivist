@@ -740,7 +740,8 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
     item.children[0].textContent==='Verified restore upload pending'&&
     item.children[1].textContent.includes('Marker present')),
     'pending restore marker must be surfaced without claiming a successful recovery');
-  assert.match(elements.get('recovery-integrity-result').textContent,/Not checked/);
+  assert.equal(calls.filter(url=>url==='./api/manage/operations/integrity').length,0,
+    'navigating to Recovery must never execute an implicit SQLite integrity check');
   elements.get('recovery-integrity').onclick();await settle();
   assert(calls.includes('./api/manage/operations/integrity'),
     'only an explicit action may execute SQLite quick_check');
