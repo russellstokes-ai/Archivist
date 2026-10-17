@@ -135,3 +135,9 @@ The desktop **Library Manager → Health & scans** now offers read-only identifi
 If a mounted share briefly hides one or more tracks from an already-indexed audiobook, the server retains those offline tracks' original edition mappings and bookmarks while marking their database file-availability flags accurately on a completed scan. Restoring the path and scanning again keeps work, edition and asset IDs. Do not treat an entirely new file as the missing original without owner verification. Complete album/cross-volume relinking is a separate explicit and constrained workflow.
 
 Exact synthetic acceptance and remaining physical-NAS caveats are recorded under `docs/v1/SERVER_SCANNER_PARTIAL_NAS_AND_COVERAGE_QA_2026-10-17.md`. This draft remains QA software, not a verified production NAS package.
+
+## Using the book-level metadata workbench
+
+The server includes **Archivist Assist 2.0** in `/manage.html` (open Archivist Assist, choose **Edit book**). Its logical-book fields, per-field origins/locks, revisioned confirm/undo, edition membership and selected cover live in the persistent SQLite catalogue under `/data`. Backups must retain all SQLite database tables, including `work_field_controls`, `work_metadata_revisions` and `work_metadata_history`. Do not delete or reset those tables during upgrades or package changes. The scanner preserves manual work-level title/author/series/genre overrides without changing original mounted media.
+
+The UI supports 16:9 desktop browsers and narrower layouts in source; no real Home Assistant ingress, Pi4 or commercial NAS device acceptance is implied by green CI. Consult `docs/v1/SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md` before a production upgrade.

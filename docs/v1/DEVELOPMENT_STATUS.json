@@ -1160,5 +1160,53 @@
     "draft": true,
     "merged": false,
     "commercial_go": false
+  },
+  "server_assist_book_workbench_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent": "9d2d932e8d7287849ea1a2e59a7444440d5bfcd4",
+    "source_head": "a0ef0747569a52e2647bfc76ffef4c34bbd21b15",
+    "code_commits": [
+      "818b1f9304e905e17880bb2d03571ef717222b95",
+      "503dbe93f4fb038b5854f7088c057e636e35d24f",
+      "9a4c78425bd70eec3bab3a344548759562ce2b1d",
+      "9663d00b82cd1cf3232fa661f142bfa8672f76d6",
+      "3a5ab6409f67d1ea92486cdc5e032c755b252b51",
+      "c4555d9837420823a954468abe4d2e889828f95d",
+      "a0ef0747569a52e2647bfc76ffef4c34bbd21b15"
+    ],
+    "qa_report": "docs/v1/SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md",
+    "source_item_1_implemented": true,
+    "source_item_1_ci_ready_for_next_step": true,
+    "source_qa": {
+      "server": "success",
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39043520648/job/117427584869",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39043520648/job/117427584714"
+    },
+    "server_only_features": [
+      "12 reversible and rev-locked book-level metadata fields",
+      "up to 100 edition and 5000 media member fingerprint snapshots",
+      "manual work metadata persisted through rescans independent of source chapters",
+      "field-level source provenance and owner lock/unlock",
+      "owner-initiated Open Library candidate selection with unverified provenance",
+      "strict 10 minute signed preview/apply, 256 KiB JSON bound",
+      "latest confirmed edit undo and 25 entry change history",
+      "1920x1080-oriented 2 pane Archivist Assist UI with responsive CSS",
+      "selected cover upload/clear, publication controls, edition/chapter drilldown",
+      "published Library/Atlas uses approved book-level year and fractional series position",
+      "real code manager interaction tests and Go rollback/conflict/access regressions"
+    ],
+    "limitations": [
+      "advanced provider matching, scored per-field confidence, comics matching are item 2",
+      "full manual multi-edition creation/reorder/migration remains item 3",
+      "real browser 16:9 accessibility/focus/ingress not device accepted",
+      "real Pi4 HAOS NAS SMB/NFS and multi-profile hardware acceptance pending",
+      "no production server release/package and no draft PR merge"
+    ],
+    "canonical_mobile_modified": false,
+    "pr_draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
   }
 }

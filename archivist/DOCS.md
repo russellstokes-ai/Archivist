@@ -33,6 +33,21 @@ After opening Archivist:
 
 Direct network access uses Archivist authentication rather than the Home Assistant ingress session. Set the owner access key from the ingress UI before connecting the mobile app or using the direct server address.
 
+
+## Archivist Assist 2.0 — book-wide metadata and editions
+
+Open **Library Manager → Archivist Assist → Edit book** on a book card to use the server-side book workbench. This is a widescreen, responsive two-pane screen. The main panel edits logical-book fields; the right panel shows the book's selected cover, publication state, formats/edition IDs, ordered chapter/media records and work-level change history.
+
+You can edit title, author, series, fractional series/issue number, genre, *work publication year*, narrator, publisher, ISBN, ASIN, language and description. Original chapter/file metadata remains separate and is available from **Edit file**. Existing source scanner identification and chapter grouping are not replaced.
+
+Each editable field displays its saved provenance and lock. Conflicting chapter-derived bibliographic values remain visibly unresolved instead of picking an arbitrary value. Optional **Find candidates** searches Open Library on demand, and **Use** on an individual suggested field is *unverified until you review and save*. Saving requires **Preview book changes**, inspection of the exact old/new differences, then **Apply reviewed changes**. The server signs the preview, expires it and rechecks its work/edition/cover/publication/file snapshot and field locks to prevent stale writes. Locked fields must be explicitly unlocked first. Fields are not automatically published by Save.
+
+Book-wide manually verified title/author/series/genre overrides persist across ordinary scans; explicit published-book metadata changes require separate **Unpublish**, Save and then **Publish**. Publication is never automatic. The work's chosen year is used in Library/Atlas year charts and filters without overwriting edition-specific years. The selected cover can be uploaded or cleared without touching original media files.
+
+**Undo** is intentionally limited to the latest confirmed book-wide save if the work, cover, publication state, locks and member files have not changed since. Inspect the signed undo preview before confirming. All actions remain owner-only, revisioned and history-audited. The editor stays open after saves, with **Reload book** to recover from a stale view or network-refresh error.
+
+For code QA and limits see `docs/v1/SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md`. Individual chapter reassignment, manual edition creation and multi-provider comic intelligence are separate work. Real HA ingress/browser and Pi/NAS acceptance remain outstanding.
+
 ## Library folders
 
 The Home Assistant package maps:
