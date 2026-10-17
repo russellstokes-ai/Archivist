@@ -498,6 +498,7 @@ func (a *app) routes() http.Handler {
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
     a.metadataControlRoutes(mux)
+    a.bulkMetadataRoutes(mux)
 	a.manageCandidateRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
