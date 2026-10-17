@@ -32,7 +32,8 @@ func (a *app) initCatalogue() error {
 	}
 	if err:=a.initPublication();err!=nil{return err}
     if err:=a.initMetadataControls();err!=nil{return err}
-    return a.initRelink()
+    if err:=a.initRelink();err!=nil{return err}
+    return a.initWorkMetadata()
 }
 
 // Natural ordering makes Track 2 precede Track 10 without modifying filenames.
@@ -200,6 +201,10 @@ func (a *app) syncAutoCatalogueTx(tx *sql.Tx,sourceID int64) error {
 		for pos,item := range items {
 			if _, err = tx.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?) ON CONFLICT(asset_id) DO UPDATE SET edition_id=excluded.edition_id,position=excluded.position",item.id,edition,pos); err != nil { return err }
 		}
+        // Reapply explicit work-level corrections while the exact scanner
+        // transaction is still open. Never overwrite protected owner values
+        // with path-derived chapter metadata on a later NAS rescan.
+        if err=applyWorkOverridesTx(tx,work);err!=nil{return err}
         // A new unresolved file can invalidate a previously published group.
         // Once staged, completing Save never silently republishes it.
         result, updateErr := tx.Exec(`UPDATE work_publication
