@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.provider.OpenableColumns
+import java.util.Locale
 import android.os.ParcelFileDescriptor
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
@@ -48,6 +50,44 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
         val flags = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = if (enabled) window.decorView.systemUiVisibility or flags else window.decorView.systemUiVisibility and flags.inv()
+      }
+    }
+  }
+
+  // Only a container enum crosses the bridge; do not return private names,
+  // document IDs, media content or permissions to JavaScript.
+  @ReactMethod
+  fun readerContainer(uri: String, promise: Promise) {
+    thread(name = "archivist-reader-descriptor") {
+      try {
+        val parsed = Uri.parse(uri)
+        if (parsed.scheme != "content") { promise.resolve("unknown"); return@thread }
+        val resolver = context.contentResolver
+        var name = ""
+        resolver.query(parsed, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+          if (cursor.moveToFirst()) {
+            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && !cursor.isNull(column)) name = cursor.getString(column) ?: ""
+          }
+        }
+        val ext = name.lowercase(Locale.ROOT).substringAfterLast('.', "")
+        val mime = resolver.getType(parsed)?.lowercase(Locale.ROOT)?.substringBefore(';')?.trim()
+        val kind = when (ext) {
+          "cbr", "cbz", "cbt", "pdf", "epub" -> ext
+          else -> when (mime) {
+            "application/pdf" -> "pdf"
+            "application/epub+zip" -> "epub"
+            "application/vnd.comicbook-rar", "application/x-cbr" -> "cbr"
+            "application/vnd.comicbook+zip", "application/x-cbz" -> "cbz"
+            "application/x-cbt" -> "cbt"
+            else -> "unknown" // generic ZIP/RAR and octet-stream remain ambiguous
+          }
+        }
+        promise.resolve(kind)
+      } catch (denied: SecurityException) {
+        promise.reject("DOCUMENT_PERMISSION", "Reconnect the source library folder.", denied)
+      } catch (_: Throwable) {
+        promise.resolve("unknown") // provider may not implement metadata query
       }
     }
   }
