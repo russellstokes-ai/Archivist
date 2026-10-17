@@ -18,6 +18,19 @@ module.exports=function(file){
  }
  if(file==='mobile/LivingBookCanvas.tsx'){
   const next=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_LIVING_WRAPPER_EXCEPTION_2026-10-17.json'),'utf8'));
+  const native=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_LIVING_STALE_CALLBACK_EXCEPTION_2026-10-17.json'),'utf8'));
+  if(native.schema_version!==1||native.path!==file||
+     native.previous_approved_git_blob_sha!==next.approved_git_blob_sha||
+     native.release_approved!==false||native.installed_apk_approved!==false||
+     native.changes.length!==6||hash(text)!==native.approved_git_blob_sha)
+    throw Error('Unreviewed Living Book native lifecycle follow-on exception');
+  for(const change of [...native.changes].reverse()){
+    if(typeof change.old!=='string'||typeof change.new!=='string'||
+       !change.new.length||text.split(change.new).length!==2)
+      throw Error('Non-reversible Living Book native lifecycle follow-on');
+    text=text.replace(change.new,change.old);
+  }
+  if(hash(text)!==next.approved_git_blob_sha)throw Error('Prior Living Book wrapper was modified');
   if(next.path!==file || next.previous_approved_git_blob_sha!==e.approved_git_blob_sha ||
      next.release_approved!==false || next.installed_apk_approved!==false ||
      hash(text)!==next.approved_git_blob_sha || next.changes.length!==2)
