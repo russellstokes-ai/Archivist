@@ -104,6 +104,18 @@ Do not expose port 5056 directly to the public internet. For access outside the 
 
 Archivist separates administrator controls from household reading/listening access. Household profiles keep their own progress and library preferences while administrative actions remain restricted.
 
+## Reconnect a media file renamed outside Archivist
+
+If you rename or move a single media file on disk and then scan, Archivist deliberately keeps the old book and its bookmarks, marks the old file unavailable, and discovers the new path as a separate candidate. **It never automatically merges books because filenames, sizes or metadata look similar.**
+
+To reconnect an independently confirmed rename, open **Library Manager**, choose the original unavailable file and the new available file, and select **Relink renamed file**. Review the displayed work identities, paths, source and complete SHA-256 of the replacement, tick the explicit same-file attestation and confirm. The operation does not modify the actual media: it repairs the database link while keeping the original book, edition, asset ID and household progress.
+
+This operation is intentionally restricted to a single-file/edition work, unchanged format and indexed file size, and two paths within the same source. Newly discovered candidates that have been separately published, edited, queued for listening or given reading/listening progress cannot be retired. Resolve that state independently instead. If the old file reappears, rescan instead of relinking.
+
+**Crucial:** the old file no longer exists at its registered path, so the server cannot compare its bytes with the replacement. The destination SHA-256 only verifies that the available replacement stays unchanged between preview and apply. You must independently confirm the identity; do not use this feature to guess. Multi-track audiobook, cross-library and cross-volume relinking is still unsupported.
+
+The action writes a durable audit event and is all-or-nothing in SQLite. Back up the server before significant organisation or recovery operations. Real NAS and Raspberry Pi installations remain subject to separate acceptance tests.
+
 ## Sorting and file safety
 
 Archivist organisation workflows are preview-first.

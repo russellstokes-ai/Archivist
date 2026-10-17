@@ -997,5 +997,47 @@
     "production_server_packaged_for_install": false,
     "new_apk_built": false,
     "changed_protected_mobile_source": false
+  },
+  "server_relink_pr83_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "first_parent": "94f9020780dee26210b2e2abea39a3805459a430",
+    "code_heads": [
+      "e00a881c17e9e8f813889a24f9925545162230c2",
+      "de768fd3377c552eb46bf6d403c6903cf6c257e6",
+      "71b1818304b6ae0a9a7af6f5733f3dbc1a3ddcb3"
+    ],
+    "scoped_files": [
+      "relink.go",
+      "relink_test.go",
+      "catalogue.go",
+      "main.go",
+      "web/manage.js",
+      "web/manage.html",
+      "web/manage.css",
+      "scripts/v1-manager-selection.test.cjs",
+      "archivist/app/* mirrors"
+    ],
+    "verification_report": "docs/v1/SERVER_RELINK_QA_2026-10-17.md",
+    "capabilities": [
+      "explicit owner-attested one-to-one relink",
+      "full streaming target hash at preview and apply",
+      "15-minute HMAC preview",
+      "stable work/edition/asset and bookmarks",
+      "atomic SQLite rollback and append-only relink audit",
+      "independent user state and pending-move protections",
+      "working manager preview+confirmation"
+    ],
+    "limitations": [
+      "no original media digest available, identity owner-attested only",
+      "single-file single-edition within one source and same format/size",
+      "no multi-track or cross-source relinking",
+      "full replacement hash can impose I/O latency on Pi4",
+      "no physical Pi, NAS or HA ingress acceptance"
+    ],
+    "accepted_on_real_hardware": false,
+    "canonical_mobile_touched_by_server_work": false,
+    "merged": false,
+    "commercial_release_ready": false
   }
 }

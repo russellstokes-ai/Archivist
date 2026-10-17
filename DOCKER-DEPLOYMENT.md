@@ -14,6 +14,12 @@ This is the first standalone packaging candidate for Archivist's **existing Go/S
 
 The image builds for the architecture supported by the Docker host. `linux/amd64` and `linux/arm64` are intended deployment targets; both still need platform acceptance before marking this package release-ready.
 
+## Recovery after external renames
+
+For a single-file work renamed within the same mounted library, the server now offers an explicit **Library Manager → Relink renamed file** workflow. Select the old unavailable entry and the newly indexed available entry after scanning, inspect the signed full-hash preview, and attest that you independently verified they are the same file. The server does not move original media; it preserves the old book's internal identity and bookmarks and transactionally retires an unused staged candidate. No automatic filename/size guesses are performed. The absent original cannot be cryptographically compared with the new content. Multi-file and cross-root relinking are not yet supported.
+
+This feature operates on the SQLite catalogue and therefore also works with the default read-only Docker media mount, subject to adequate read permissions for a full destination SHA-256. It is still a QA feature requiring real NAS/Pi verification; back up `/data` and do not treat it as a replacement for proper filesystem backups.
+
 ## Data separation and non-destructive media access
 
 - `archivist-data` is a persistent Docker volume mounted at `/data`, containing the database, user settings and recovery information.
