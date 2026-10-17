@@ -41,7 +41,7 @@
   const s=id=>$(id).value;
   function params(){
     const query=new URLSearchParams({limit:String(pageSize),offset:String(offset),sort:s('sort')});
-    const mappings=[['q',s('search').trim()],['space',s('space')],['format',s('format')],['availability',s('availability')]];
+    const mappings=[['q',s('search').trim()],['space',s('space')],['format',s('format')],['availability',s('availability')],['metadataGap',s('metadata-gap')]];
     for(const [key,value] of mappings){if(value)query.set(key,value)}
     if(activeView==='review')query.set('review','1');
     return query;
@@ -127,8 +127,8 @@
   }
   function readSavedViews(){try{const x=JSON.parse(localStorage.getItem(savedViewsKey)||'[]');return Array.isArray(x)?x.filter(v=>v&&typeof v.name==='string'&&v.filters&&typeof v.filters==='object').slice(0,20):[]}catch{return []}}
   function updateViews(){const picker=$('saved-views');const views=readSavedViews();picker.replaceChildren(new Option('Choose saved view…',''));views.forEach((v,i)=>picker.add(new Option(v.name,String(i))))}
-  function saveView(){const name=$('view-name').value.trim();if(!name){notice('Name the filter before saving.',true);$('view-name').focus();return}const filters={q:s('search'),space:s('space'),format:s('format'),availability:s('availability'),sort:s('sort'),review:activeView==='review'};const views=readSavedViews().filter(v=>v.name.toLowerCase()!==name.toLowerCase());views.unshift({name,filters});try{localStorage.setItem(savedViewsKey,JSON.stringify(views.slice(0,20)));$('view-name').value='';updateViews();notice('Saved filter: '+name)}catch{notice('This browser does not permit saving views.',true)}}
-  function applyView(){const i=Number(s('saved-views'));const view=readSavedViews()[i];if(s('saved-views')===''||!view)return;const v=view.filters;activeView=v.review?'review':'library';$('view-library').hidden=false;$('view-health').hidden=true;for(const item of document.querySelectorAll('[data-view]')){item.classList.toggle('is-current',item.dataset.view===activeView);if(item.dataset.view===activeView)item.setAttribute('aria-current','page');else item.removeAttribute('aria-current')}for(const [id,key] of [['search','q'],['space','space'],['format','format'],['availability','availability'],['sort','sort']])$(id).value=v[key]||'';offset=0;loadCatalogue()}
+  function saveView(){const name=$('view-name').value.trim();if(!name){notice('Name the filter before saving.',true);$('view-name').focus();return}const filters={q:s('search'),space:s('space'),format:s('format'),availability:s('availability'),metadataGap:s('metadata-gap'),sort:s('sort'),review:activeView==='review'};const views=readSavedViews().filter(v=>v.name.toLowerCase()!==name.toLowerCase());views.unshift({name,filters});try{localStorage.setItem(savedViewsKey,JSON.stringify(views.slice(0,20)));$('view-name').value='';updateViews();notice('Saved filter: '+name)}catch{notice('This browser does not permit saving views.',true)}}
+  function applyView(){const i=Number(s('saved-views'));const view=readSavedViews()[i];if(s('saved-views')===''||!view)return;const v=view.filters;activeView=v.review?'review':'library';$('view-library').hidden=false;$('view-health').hidden=true;for(const item of document.querySelectorAll('[data-view]')){item.classList.toggle('is-current',item.dataset.view===activeView);if(item.dataset.view===activeView)item.setAttribute('aria-current','page');else item.removeAttribute('aria-current')}for(const [id,key] of [['search','q'],['space','space'],['format','format'],['availability','availability'],['metadata-gap','metadataGap'],['sort','sort']])$(id).value=v[key]||'';offset=0;loadCatalogue()}
 
   function resetBulkPlan(){
     ++bulkGeneration;
@@ -815,8 +815,35 @@
       const card=e('article',undefined,'health-row');
       const mount=live?.online===false?'Storage unavailable':live?.online===true?'Storage connected':'Storage not checked';
       card.append(e('strong',item.space||'Unnamed source'),e('span',mount+' · '+(item.status||'Not scanned'),'subtext'));
-      card.append(e('small',(item.works||0)+' works · '+(live?.indexedFiles??item.files??0)+' indexed files · '+(live?.needsReview??0)+' need review','subtext'));list.append(card);
+      card.append(e('small',(live?.indexedWorks??item.works??0)+' works · '+(live?.indexedFiles??item.files??0)+' indexed files · '+(live?.needsReview??0)+' need review','subtext'));
+      if(live)card.append(e('small',Number(live.missingGenre||0)+' missing genres · '+Number(live.missingYear||0)+' missing years · '+Number(live.offlineFiles||0)+' unavailable flags','subtext'));
+      list.append(card);
     }
+    const coverage=$('scanner-coverage');coverage.replaceChildren();
+    const summary=health.summary||{};
+    const groups=[
+      ['Missing author','author',summary.missingAuthor],
+      ['Missing genre','genre',summary.missingGenre],
+      ['Missing year','year',summary.missingYear],
+      ['Low confidence','confidence',summary.lowConfidence],
+      ['Needs review','review',summary.needsReview],
+      ['Unavailable files','unavailable',summary.offlineFiles]
+    ];
+    for(const [label,key,amount] of groups){
+      const count=Math.max(0,Number(amount||0));
+      const button=e('button',undefined,'coverage-tile');
+      button.type='button';
+      button.setAttribute('aria-label','Show '+count+' files: '+label);
+      button.append(e('strong',count.toLocaleString()),e('span',label),e('small','Review indexed files →','subtext'));
+      button.onclick=()=>{
+        showView('library');
+        $('metadata-gap').value=key;
+        offset=0;
+        void loadCatalogue();
+      };
+      coverage.append(button);
+    }
+    $('scanner-coverage-note').textContent=health.note||'Read-only indexed-file coverage; root connectivity is checked separately.';
     const tasks=$('jobs-health');tasks.replaceChildren();
     if(!jobs.length)tasks.append(e('p','No recent scan jobs.','subtext'));
     for(const job of jobs.slice(0,15)){
@@ -887,7 +914,7 @@
   });
   $('filters').onsubmit=event=>{event.preventDefault();offset=0;loadCatalogue()};
   $('search').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>{offset=0;loadCatalogue()},260)});
-  for(const key of ['space','format','availability','sort'])$(key).addEventListener('change',()=>{offset=0;loadCatalogue()});
+  for(const key of ['space','format','availability','metadata-gap','sort'])$(key).addEventListener('change',()=>{offset=0;loadCatalogue()});
   $('reset').onclick=()=>{offset=0;$('filters').reset();loadCatalogue()};
   $('previous').onclick=()=>{if(offset){offset=Math.max(0,offset-pageSize);loadCatalogue()}};
   $('next').onclick=()=>{if(rows.length===pageSize){offset+=pageSize;loadCatalogue()}};

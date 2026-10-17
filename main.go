@@ -674,6 +674,17 @@ func (a *app) routes() http.Handler {
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		reviewOnly := r.URL.Query().Get("review") == "1"
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+        metadataGap:=strings.TrimSpace(r.URL.Query().Get("metadataGap"))
+        switch metadataGap{
+        case "","author","genre","year","confidence","review","unavailable":
+        default:
+            fail(w,400,errors.New("invalid metadata coverage filter"));return
+        }
+        // Additional diagnostics intentionally remain owner-only. Readers
+        // continue to use the original published-only library contract.
+        if metadataGap!=""&&!who(r).Owner{
+            fail(w,403,errors.New("scanner coverage is owner-only"));return
+        }
 		availability := r.URL.Query().Get("availability")
 		if availability != "" && availability != "available" && availability != "unavailable" {
 			fail(w,400,errors.New("invalid availability filter"))
@@ -705,6 +716,12 @@ func (a *app) routes() http.Handler {
 			AND (?='' OR a.genre=?)
 			AND (?=0 OR trim(a.author)='')
 			AND (?=0 OR a.needs_review=1)
+            AND (?='' OR (?='author' AND trim(a.author)='')
+                OR (?='genre' AND trim(a.genre)='')
+                OR (?='year' AND (a.published_year<1000 OR a.published_year>3000))
+                OR (?='confidence' AND a.metadata_confidence<60)
+                OR (?='review' AND a.needs_review=1)
+                OR (?='unavailable' AND a.available=0))
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
             AND (? OR EXISTS (
@@ -714,6 +731,7 @@ func (a *app) routes() http.Handler {
             ))
 			ORDER BY `+sortOrder+` LIMIT ? OFFSET ?`,
 			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
+            metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,
 			availability, availability, availability, who(r).Owner, who(r).ID, who(r).Owner, limit, offset)
 		if e != nil {
 			fail(w, 500, e)

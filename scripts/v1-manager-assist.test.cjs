@@ -24,6 +24,7 @@ class Element {
   close(){this.open=false}
   focus(){}
   remove(){}
+  reset(){}
   querySelector(selector){
     const stack=[...this.children];
     while(stack.length){
@@ -84,7 +85,13 @@ const fetchFake=async (url,options={})=>{
     assert.equal(request.preview.receipt,'server-signed-preview');
     return reply({ok:true,workId:1,editionId:100,tracks:3});
   }
-  if(url==='./api/library-health')return reply({summary:{offlineSources:0},sources:[{id:1,online:true,indexedFiles:4,needsReview:2}]});
+  if(url==='./api/library-health')return reply({
+    summary:{offlineSources:0,indexedFiles:4,indexedWorks:3,publishedWorks:1,
+      missingAuthor:1,missingGenre:2,missingYear:3,lowConfidence:2,needsReview:2,offlineFiles:0},
+    sources:[{id:1,online:true,indexedFiles:4,indexedWorks:3,needsReview:2,
+      missingGenre:2,missingYear:3,offlineFiles:0}],
+    note:'Read-only scanner metadata coverage'
+  });
   if(url==='./api/jobs')return reply(scanJobs.map(job=>({...job})));
   if(url==='./api/jobs/1/cancel'&&options.method==='POST'){
     scanJobs.find(x=>x.id===1).state='cancelled';
@@ -259,5 +266,17 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert(calls.includes('./api/jobs/2/retry'),'retry action must reach the server');
   assert(elements.get('jobs-health').children.some(item=>
     item.children[0]?.textContent==='Source 1 · queued'),'new queued retry must be shown on the workbench');
-  console.log('PASS: Assist publication and server health queued-cancel/failed-retry actions; active scans protected');
+  const coverage=elements.get('scanner-coverage');
+  assert.equal(coverage.children.length,6,'scanner health must offer six meaningful coverage categories');
+  const genre=coverage.children.find(item=>item.children[1]?.textContent==='Missing genre');
+  assert(genre,'Atlas genre coverage must be an actionable review category');
+  assert.equal(genre.children[0].textContent,'2','coverage must display actual stored file counts');
+  genre.onclick();
+  await settle();
+  assert.equal(elements.get('metadata-gap').value,'genre','genre gap selection must be preserved in the library filter');
+  assert.equal(elements.get('view-library').hidden,false,'review action must navigate to the actual library table');
+  assert(calls.some(url=>url.startsWith('./api/books?')&&url.includes('metadataGap=genre')),
+    'genre coverage must request real server-side filtered catalogue rows');
+  assert.equal(elements.get('scanner-coverage-note').textContent,'Read-only scanner metadata coverage');
+  console.log('PASS: Assist, safe scan job controls and actionable scanner/Atlas metadata coverage');
 })().catch(error=>{console.error(error);process.exitCode=1});

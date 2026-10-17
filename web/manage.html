@@ -42,6 +42,7 @@
    <label>Library<select id="space"><option value="">All spaces</option></select></label>
    <label>Format<select id="format"><option value="">All formats</option><option value="Ebook">Ebooks</option><option value="Comic">Comics</option><option value="Audio">Audiobooks</option><option value="PDF">PDFs</option></select></label>
    <label>Status<select id="availability"><option value="">Any availability</option><option value="available">Available</option><option value="unavailable">Unavailable</option></select></label>
+   <label>Metadata<select id="metadata-gap"><option value="">All metadata</option><option value="author">Missing author</option><option value="genre">Missing genre</option><option value="year">Missing publication year</option><option value="confidence">Low confidence</option><option value="review">Needs review</option><option value="unavailable">Unavailable files</option></select></label>
    <label>Sort<select id="sort"><option value="review">Review first</option><option value="title">Title</option><option value="author">Author</option><option value="series">Series</option><option value="year">Publication year</option><option value="format">Format</option></select></label>
    <button type="button" id="reset" class="quiet">Clear filters</button><label>Saved filters<select id="saved-views"><option value="">Choose saved view…</option></select></label><label>Save filter as<input id="view-name" maxlength="60" placeholder="e.g. Comics to review"></label><button type="button" id="save-view" class="quiet">Save view</button>
   </form>
@@ -64,6 +65,12 @@
  <section id="view-health" hidden aria-labelledby="health-title">
   <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2 id="health-title">Source and scanner health</h2></div><button id="refresh-health" type="button">Refresh</button></div>
   <div class="two-col"><div class="panel"><h3>Source folders</h3><div id="source-health"></div></div><div class="panel"><h3>Recent scan jobs</h3><div id="jobs-health"></div></div></div>
+  <section class="panel scanner-coverage" aria-labelledby="scanner-coverage-title">
+    <div class="section-head"><div><p class="eyebrow">SCANNER QUALITY</p><h3 id="scanner-coverage-title">Identification &amp; Atlas readiness</h3></div></div>
+    <p class="footnote">Counts are indexed files, not individual books. Open a category to review those files without rescanning or changing original media.</p>
+    <div id="scanner-coverage" class="coverage-grid" role="group" aria-label="Scanner metadata gaps"></div>
+    <p id="scanner-coverage-note" class="footnote">Read-only catalogue report; root connectivity and individual file availability can differ.</p>
+  </section>
   <p class="footnote">Scan control and safe file moves remain available in the original Archivist Settings. This workbench does not modify source files.</p>
  </section>
 </div>
