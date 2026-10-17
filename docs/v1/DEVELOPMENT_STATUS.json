@@ -1245,5 +1245,49 @@
     "draft": true,
     "merged": false,
     "commercial_server_release_ready": false
+  },
+  "server_assist_comic_identity_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "source_parent": "ef46420ce38d3975248c4d76a828b381367057ae",
+    "source_head": "a4194150afddd1bdaaaeca08051a185a6700100b",
+    "source_commits": [
+      "dea5afd738f4ed4ad245b10edb8746e5e00f5530",
+      "585ecb926b8fb922e09bd816fe1dd198bf705813",
+      "fe6f33996f1c95e371c61871ec7a286ad5808462",
+      "a4194150afddd1bdaaaeca08051a185a6700100b"
+    ],
+    "qa": "docs/v1/SERVER_COMIC_IDENTITY_QA_2026-10-17.md",
+    "scope": "item 2, milestone B: indexed comic issue evidence and safe opt-in comparison",
+    "completed": [
+      "owner-only read-only revision/fingerprint-bound comic identity and series-peers audit",
+      "bounded 40 file/100 peer evidence, missing source/reprint/manual-conflict warnings",
+      "same-year numeric conservative possible-gap review with volume caveats",
+      "explicit issue marker/range disambiguation; bare years and volumes never treated as issue numbers",
+      "Open Library and Google Books suggestions selectable only when both comic series and issue match",
+      "workbench comic-only evidence panel, no automatic scanning or publication",
+      "stale public comparison cards rejected when work metadata input or snapshot changes",
+      "synthetic Go/SQLite and real manager fake-DOM regression coverage"
+    ],
+    "source_checkpoints": {
+      "server_run_id": 39046705057,
+      "server_job_id": 117436829829,
+      "arm64_job_id": 117436830030,
+      "arm64": "success",
+      "server": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436829829",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436830030"
+    },
+    "limitations": [
+      "comic volume, imprint, reprint and issue variant not reliably identified or linked",
+      "generic providers are not specialist authority for every comic issue",
+      "bounded gap evidence is advisory, not confirmed missing media",
+      "real Raspberry Pi, HA ingress, NAS, 16:9 browser and provider reliability unaccepted",
+      "no package released or main/canonical merge"
+    ],
+    "canonical_mobile_modified": false,
+    "pr_draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
   }
 }

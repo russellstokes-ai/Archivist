@@ -4,6 +4,12 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Indexed comic series/issue audit (item 2, milestone B)
+
+**PR #83 draft only.** Code source `a419415` introduces an owner-only indexed comic evidence API and workbench panel; explicit `#issue`/fractional recognition, issue-range ambiguity rejection, bounded same-series peer review and cautiously labelled possible gaps. Comic public candidates cannot offer field changes unless both explicit issue and series match; first publication/edition safeguards and signed Save stay unchanged. Stale search responses and deliberately cleared work-level metadata are protected.
+
+Tests cover the actual API against SQLite fixtures, signed workbench gating and JavaScript interactions. The first two checkpoints detected a fixture-type error then a genuine ambiguous-range parser error, both repaired without removing tests. [Detailed QA](SERVER_COMIC_IDENTITY_QA_2026-10-17.md). No scanner/mobile changes, physical Pi/NAS acceptance, release or merge. Remaining volume/edition identity, full admin parity and real-device work keep the commercial server **NO-GO**.
+
 ## 17 October 2026 — Server Assist multisource matching (item 2, milestone A)
 
 **Draft only; commercial NO-GO.** Source `93b9c40` extends the approved book-level workbench with explicit owner-initiated Open Library plus Google Books comparisons. Rank explanations, ISBN-10/13 checksum/equivalence, provider-outage limits, edition-vs-work publication-year controls, provider provenance and 13-file root/package + UI test parity are implemented. No unreviewed metadata automatically changes a book, and the old per-file editor stays Open Library-only.
