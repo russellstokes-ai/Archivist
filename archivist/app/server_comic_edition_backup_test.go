@@ -53,8 +53,18 @@ func TestComicEditionLedgerSurvivesRealSQLiteBackupAndStagedRestore(t *testing.T
   sourceWork,readErr:=original.readWorkMeta(ctx,sourceTx,workID)
   sourceTx.Rollback()
   if readErr!=nil{t.Fatal(readErr)}
-  t.Fatalf("SQLite restore changed work snapshot: source=%+v restored=%+v originalEdition=%+v restoredEdition=%+v",
-   sourceWork,work,confirmed,edition)
+  const snapshotSQL=`SELECT json_array(ed.id,ed.format,ea.position,a.id,a.relative_path,
+    a.available,a.needs_review,a.scan_signature,a.metadata_source,
+    a.title,a.author,a.series,a.genre,a.series_number,a.published_year,
+    a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,
+    COALESCE((SELECT revision FROM asset_metadata_revisions m WHERE m.asset_id=a.id),0))
+    FROM editions ed JOIN edition_assets ea ON ea.edition_id=ed.id
+    JOIN assets a ON a.id=ea.asset_id WHERE ed.work_id=? ORDER BY ed.id,ea.position,a.id LIMIT 1`
+  var beforeMember,afterMember string
+  _=original.db.QueryRow(snapshotSQL,workID).Scan(&beforeMember)
+  _=restoredDB.QueryRow(snapshotSQL,workID).Scan(&afterMember)
+  t.Fatalf("SQLite restore changed work snapshot: source=%+v restored=%+v sourceMember=%s restoredMember=%s originalEdition=%+v restoredEdition=%+v",
+   sourceWork,work,beforeMember,afterMember,confirmed,edition)
  }
  var edits int
  if err=tx.QueryRowContext(ctx,"SELECT count(*) FROM comic_edition_profile_history WHERE edition_id=?",editionID).
