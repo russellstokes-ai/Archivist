@@ -1,0 +1,24 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,p);
+const lib=require('./assistMetadata/service.ts');
+(async()=>{
+ const records=new Map(),cache={load:async k=>records.get(k)||null,save:async(k,v)=>{records.set(k,v)}};
+ const w={workId:'one',revision:1,fields:{title:'Test Book',author:'Writer'},manual:{},partIds:['a'],identityConfirmed:true};
+ let calls=0;const seen=[];
+ const hit={id:'edition1',provider:'books',identifiers:['9780306406157'],fields:{title:'Test Book',author:'Writer',genre:'Fantasy'}};
+ const provider={id:'books',search:async(q)=>{calls++;seen.push(q);return {candidates:[hit],nextPage:2}},details:async c=>({...c,fields:{...c.fields,description:'Details from provider'}})};
+ const s=lib.createAssistSearchService([provider],cache);
+ const r=await s.search(w,{online:true,automatic:true});
+ assert.equal(r.state,'review');assert.equal(r.candidates[0].candidate.fields.description,'Details from provider');
+ assert.equal(calls,1,'No query expansion after decisive evidence');
+ const other=await s.search({...w,workId:'another-file',revision:8},{online:true,automatic:true});
+ assert.equal(other.cacheHit,true);assert.equal(calls,1);
+ await s.search(w,{online:true,automatic:false,explicit:true,clues:'A new typed title',retry:true});
+ assert.equal(seen[1].title,'A new typed title');assert.equal(w.fields.title,'Test Book');
+ assert.equal((await s.search(w,{online:false,automatic:true})).state,'offline');
+ const bad={id:'unavailable',available:false,search:async()=>{throw Error('not configured')}};
+ const s2=lib.createAssistSearchService([bad,provider],cache);assert.equal((await s2.search(w,{online:true,automatic:true})).candidates.length,1);
+ const aborted=new AbortController();aborted.abort();await assert.rejects(s.search(w,{online:true,automatic:true,signal:aborted.signal}),/cancel/i);
+ console.log('PASS: Assist searches the actual clue draft, reuses provider metadata across records, hydrates detail, preserves saved fields and handles cancellation');
+})().catch(e=>{console.error(e);process.exitCode=1});
