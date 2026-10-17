@@ -1485,5 +1485,34 @@
     "commercial_go": false,
     "draft_pr_unmerged": true,
     "protected_mobile_unchanged": true
+  },
+  "server_release_blocker_journal_scale_20261017": {
+    "pr": 83,
+    "parent_sha": "a56a7b1c547a5c8c2c9219d6c4662b329a4303c5",
+    "report": "docs/v1/SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md",
+    "status": "source candidate; full CI and hardware acceptance not yet independently verified",
+    "fixed": [
+      "SQLite preview replacement now transactionally cancels prior preview and inserts next preview, rolling both back on late DB failure",
+      "batch template no longer preemptively cancels older preview when new candidate is invalid or requires review",
+      "legacy Settings organiser detects >500 indexed assets and disables its incomplete all-files preview; failures are fail-closed",
+      "small legacy libraries paginate in bounded 200-file reads and 100-file preview batches",
+      "journal collision query gains partial active-destination and asset-state indexes without deleting history"
+    ],
+    "proof": [
+      "injected SQLite journal insert failure preserves old move preview and leaves original bytes intact",
+      "4,000 completed-move journal fixtures and EXPLAIN QUERY PLAN verify index usage and retained history",
+      "actual legacy browser JS exercised against 503, 300 and 0 synthetic indexed files under CI"
+    ],
+    "source_pair_mirrored": true,
+    "mobile_scanner_protected": true,
+    "draft": true,
+    "merged": false,
+    "commercial_release_go": false,
+    "missing_acceptance": [
+      "final exact-code CI results",
+      "physical Pi4 4GB SSD",
+      "NAS SMB/NFS disconnects and power interruption",
+      "real large media import, owner 16:9 UI and disaster restore"
+    ]
   }
 }

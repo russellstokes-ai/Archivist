@@ -4,6 +4,14 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Release-blocker fixes: move journal and large-library completeness
+
+**Draft PR #83; commercial NO-GO.** Replaced a non-atomic preview-replacement sequence with one SQLite transaction: a failed new journal insert no longer invalidates the last valid file-move preview. Template batches no longer eagerly cancel earlier previews for unreviewed/conflicting records. Restored operations remain preview/explicit-Apply only.
+
+**Safety/scale:** The original browser organiser previously used unpaged `/api/books`, silently restricting “All loaded files” to 500. It now proves list completeness with bounded pagination and **disables legacy all-files preview when the 501st file exists or pagination fails**, directing the owner to native S7’s 100-file paged batches. New idempotent SQLite indexes avoid a full move-journal scan in preview collision checks after thousands of historical moves. Tests exercise late SQLite write failure, 4,000 history entries, and real legacy browser logic at 503/300/0 files.
+
+**Evidence:** [Dedicated release-blocker source QA](SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md). Exact-head Go/root+packaged, Node legacy/browser, Docker/HA and ARM64 jobs must be checked separately before accepting this source candidate; no real Pi/NAS/HA ingress/media/power-loss acceptance or mobile changes.
+
 ## 17 October 2026 — Accelerated server Batch 3: S7 safe organiser and large-library bounds
 
 **Draft PR #83, source CI pending, commercial NO-GO.** The owner manager now implements routine S7 file organisation directly in the same 16:9 workspace, retaining existing signed/hash-verified file-move and undo endpoints rather than building a second engine. Indexed files are paginated 40 at a time, filtered and explicitly selected up to 100 per batch; exact from/to paths and conflicts appear before any optional Apply. No move is auto-approved. Recent moves, pending previews and interrupted states remain visible through the real journal with cancellation and owner-confirmed verified inverse preview.

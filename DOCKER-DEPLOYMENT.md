@@ -179,3 +179,9 @@ This is a draft source-QA feature set, not approval to update a live Home Assist
 ## Organise in the unified owner manager (draft S7 QA)
 
 Use **Library Manager → Organise & relink** to page through indexed files, select specific available assets (up to 100 per preview), inspect relative source/destination paths, then tick only the Ready journalled moves you want applied. No preview implicitly selects files for Apply. Recent and interrupted journal states, preview cancellation and explicit hash-verified reverse undo are shown on the same page. The Go API now rejects empty/duplicate/oversized batches instead of silently queuing up to 500 first-library files. Manual file preview still requires an exact relative destination under the existing source root. This is not a reason to scan, rename or reorganise real NAS libraries before physical staging tests. See `docs/v1/SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md`.
+
+## Safe move preview recovery and large-library compatibility (QA draft)
+
+A failed replacement file-move preview should **not** invalidate its existing verified journal record. The newer server performs preview replacement in one SQLite transaction and preserves older previews when a new template candidate is invalid/unreviewed. Long history collision checks are indexed; completed journal entries remain retained.
+
+The legacy browser Settings organiser now checks for the 501st indexed asset. If more than 500 files exist, it **refuses legacy all-files preview** instead of silently omitting later albums/books and links to **Library Manager → Organise & relink** for paged 100-file batches. Paginated source-list failures likewise disable mass operations. See `docs/v1/SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md`. This source candidate must not be installed against a live library until Pi/NAS/power-loss recovery acceptance is complete.

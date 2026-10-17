@@ -12,6 +12,7 @@ on:
       - 'scripts/v1-manager-contract.test.cjs'
       - 'scripts/v1-manager-selection.test.cjs'
       - 'scripts/v1-manager-candidate-race.test.cjs'
+      - 'scripts/v1-legacy-organise-coverage.test.cjs'
       - 'scripts/package-ha*'
       - 'repository.yaml'
       - 'archivist/**'
@@ -33,6 +34,7 @@ on:
       - 'scripts/v1-manager-contract.test.cjs'
       - 'scripts/v1-manager-selection.test.cjs'
       - 'scripts/v1-manager-candidate-race.test.cjs'
+      - 'scripts/v1-legacy-organise-coverage.test.cjs'
       - 'scripts/package-ha*'
       - 'repository.yaml'
       - 'archivist/**'
@@ -92,6 +94,9 @@ jobs:
 
       - name: Advanced manager contract
         run: node scripts/v1-manager-contract.test.cjs
+
+      - name: Legacy large-library organiser fail-closed contract
+        run: node scripts/v1-legacy-organise-coverage.test.cjs
 
       - name: Home Assistant package contract
         run: node scripts/package-ha.test.cjs

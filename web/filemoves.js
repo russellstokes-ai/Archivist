@@ -41,10 +41,17 @@
   const manualPreview=element('button','Preview this move');manualPreview.type='submit';
   manualForm.append(asset,target,manualPreview);advanced.append(advSummary,manualForm);
 
-  panel.append(heading,controls,readiness,previewSummary,previewList,actions,advanced);
+  const completeness=element('p');completeness.className='note';
+  completeness.textContent='Checking indexed files before enabling a complete selection…';
+  const managerLink=element('a','Open paginated Library Manager → Organise & relink');
+  managerLink.href='./manage.html';
+  panel.append(heading,controls,completeness,readiness,previewSummary,previewList,actions,advanced,managerLink);
   $('organisation-settings').append(panel);
 
+  const legacyMaxVisible=500,legacyPageSize=200;
   let items=[],previewItems=[],previewReadyIds=[],selectedIds=new Set();
+  let legacyListComplete=false,legacyListEpoch=0;
+  previewAll.disabled=true;
 
   function rebuildScope(){
     const current=scope.value;
@@ -123,8 +130,48 @@
   }
 
   async function refreshItems(){
-    items=await api('./api/books');asset.replaceChildren(...items.map(b=>new Option([b.title,b.author,b.series,b.space].filter(Boolean).join(' · '),String(b.id))));
-    rebuildScope();updateReadiness();
+    const epoch=++legacyListEpoch;
+    legacyListComplete=false;previewAll.disabled=true;
+    completeness.textContent='Checking how much of this indexed library can be safely selected…';
+    try{
+      const result=[];
+      // The old /api/books default silently returned only 500 assets. Read
+      // exactly one extra row to *prove* whether this list is complete.
+      // Never let the legacy "All loaded files" action hash just a hidden
+      // prefix of a larger NAS library. The new manager has paged selection.
+      while(result.length<=legacyMaxVisible){
+        const limit=Math.min(legacyPageSize,legacyMaxVisible+1-result.length);
+        const page=await api('./api/books?'+new URLSearchParams({
+          limit:String(limit),offset:String(result.length),sort:'title'
+        }));
+        if(epoch!==legacyListEpoch)return;
+        if(!Array.isArray(page)||page.length>limit)throw Error('Indexed library page was invalid.');
+        result.push(...page);
+        if(page.length<limit)break;
+      }
+      if(epoch!==legacyListEpoch)return;
+      legacyListComplete=result.length<=legacyMaxVisible;
+      items=legacyListComplete?result:[];
+      asset.replaceChildren(...items.map(b=>new Option(
+        [b.title,b.author,b.series,b.space].filter(Boolean).join(' · '),String(b.id))));
+      rebuildScope();updateReadiness();
+      if(legacyListComplete){
+        previewAll.disabled=items.length===0;
+        completeness.textContent='Indexed selection complete: '+items.length+
+          ' available file records loaded for this legacy organiser. Apply remains owner-confirmed.';
+      }else{
+        previewAll.disabled=true;
+        completeness.textContent='Large library: more than 500 indexed files. Legacy bulk preview is disabled to prevent silently omitting books. Use Library Manager → Organise & relink for paginated 100-file batches.';
+      }
+    }catch(error){
+      if(epoch!==legacyListEpoch)return;
+      items=[];legacyListComplete=false;asset.replaceChildren();
+      previewAll.disabled=true;
+      rebuildScope();updateReadiness();
+      completeness.textContent='File listing could not be completed: '+error.message+
+        '. Bulk preview is disabled, not silently partial.';
+      throw error;
+    }
   }
   async function refreshMoves(){
     const moves=await api('./api/file-moves?state=pending&limit=500');
@@ -132,6 +179,10 @@
   }
   scope.onchange=updateReadiness;template.onchange=updateReadiness;
   previewAll.onclick=async()=>{
+    if(!legacyListComplete){
+      message('Legacy organiser has not proved a complete library selection. Use Library Manager → Organise & relink for safe paged batches.');
+      return;
+    }
     const selected=selectedItems();
     if(!selected.length){message('No files in this scope.');return}
     previewAll.disabled=true;previewAll.textContent='Building preview…';

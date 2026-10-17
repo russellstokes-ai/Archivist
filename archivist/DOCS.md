@@ -231,3 +231,7 @@ From the owner-only **Library Manager**, **Family** manages User profiles and on
 ## Safe file organisation in Library Manager — source QA
 
 Owner **Library Manager → Organise & relink** now supports paginated indexed-file selection, preview-only path templates, optional explicitly selected Apply, a durable move journal and independently confirmed reverse move. The existing server file-move engine still does all hash/collision/source-file checks; the new UI does not bypass the backend. Empty batches may no longer implicitly preview the first 500 files, and the maximum single batch is 100. Test against **disposable** media only until NAS/USB/HA ingress and power-failure tests have been accepted. Details: `docs/v1/SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md`.
+
+## Organiser integrity and legacy library limits (QA draft)
+
+The server file-move journal now preserves an existing valid preview if a replacement preview fails to write. The older Settings organiser no longer pretends its default 500-file list represents an entire large library: when file count exceeds 500 it disables its bulk Preview and directs owners to the paginated Library Manager Organise workflow. Operations remain explicitly owner-approved; a preview never moves media. Details: `docs/v1/SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md`. No production HA ingress/Pi4/NAS deployment approval.
