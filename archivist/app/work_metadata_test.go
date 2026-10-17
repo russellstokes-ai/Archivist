@@ -379,3 +379,42 @@ func TestBookWorkMetaRejectsBadFractionalNumberAndDuplicateFields(t *testing.T){
     response:=workMetaRequest(f.a,"POST",f.path("/preview"),"test-key",string(raw),true)
     if response.Code!=409{t.Fatalf("duplicate work field previewed: %d %s",response.Code,response.Body.String())}
 }
+
+func TestLargeSignedBookWorkPreviewAndBoundedApply(t *testing.T){
+ f:=setupWorkFixture(t)
+ original:=strings.Repeat("Original description. ",1000)
+ // Keep source and replacement within the public 20 KiB field limit.
+ original=original[:19500]
+ replacement:=strings.Repeat("New edition synopsis. ",1000)[:19500]
+ if _,err:=f.a.db.Exec("UPDATE assets SET description=? WHERE source_id=1",original);err!=nil{t.Fatal(err)}
+ state:=f.get(t)
+ if fieldValue(state,"description").Value!=original{t.Fatal("test requires a long current book synopsis")}
+ plan:=f.preview(t,state,[]workMetaChange{
+   {Name:"description",Value:replacement,Origin:"manual"},
+   {Name:"title",Value:strings.Repeat("T",1000),Origin:"manual"},
+   {Name:"author",Value:strings.Repeat("A",1000),Origin:"manual"},
+   {Name:"genre",Value:strings.Repeat("G",1000),Origin:"manual"},
+   {Name:"narrator",Value:strings.Repeat("N",1000),Origin:"manual"},
+   {Name:"publisher",Value:strings.Repeat("P",1000),Origin:"manual"},
+ })
+ raw,_:=json.Marshal(workMetaApplyRequest{Preview:plan,Confirm:true})
+ if len(raw)<=65536||len(raw)>=256<<10{
+    t.Fatalf("signed 20KiB description edits must exercise a bounded >64KiB apply, got %d",len(raw))
+ }
+ approved:=workMetaRequest(f.a,"POST",f.path("/apply"),"test-key",string(raw),true)
+ if approved.Code!=200{t.Fatalf("legitimate large signed description change rejected %d %s",approved.Code,approved.Body.String())}
+ after:=f.get(t)
+ if after.Revision!=1||fieldValue(after,"description").Value!=replacement||len(after.Title)!=1000{
+    t.Fatalf("large metadata transaction incomplete; rev=%d titleLen=%d descLen=%d",
+      after.Revision,len(after.Title),len(fieldValue(after,"description").Value))
+ }
+ // Over-budget bodies are rejected before they can touch the DB, even if they
+ // contain a valid signed preview plus junk appended after the JSON object.
+ huge:=string(raw)+strings.Repeat(" ",(256<<10)+1)
+ overflow:=workMetaRequest(f.a,"POST",f.path("/apply"),"test-key",huge,true)
+ if overflow.Code!=400{t.Fatalf("oversized apply not bounded: %d %s",overflow.Code,overflow.Body.String())}
+ unchanged:=f.get(t)
+ if unchanged.Revision!=after.Revision||unchanged.Fingerprint!=after.Fingerprint{
+   t.Fatal("oversized untrusted apply unexpectedly modified book catalogue")
+ }
+}

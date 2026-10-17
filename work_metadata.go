@@ -443,7 +443,10 @@ func (a *app)workMetaLock(ctx context.Context,id int64,name string,locked bool,r
 }
 
 func workMetadataJSON(w http.ResponseWriter,r *http.Request,dst any)error{
- d:=json.NewDecoder(http.MaxBytesReader(w,r.Body,65536))
+ // A signed preview repeats original and replacement descriptions. A fixed
+ // 256 KiB limit permits valid 20 KiB descriptions plus bounded multi-field
+ // diffs without allowing arbitrarily large owner requests on a Pi 4.
+ d:=json.NewDecoder(http.MaxBytesReader(w,r.Body,256<<10))
  d.DisallowUnknownFields()
  if err:=d.Decode(dst);err!=nil{return errors.New("invalid book workbench request")}
  var extra any
