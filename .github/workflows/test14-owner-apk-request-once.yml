@@ -26,3 +26,4 @@ jobs:
           test "$TARGET_BRANCH" = "fix/test14-mobile-acceptance-20261017"
           gh workflow run android-apk.yml --repo "$GH_REPO" --ref "$TARGET_BRANCH" --field qa_confirmation=true
           echo "Requested owner-authorised gated QA-only test14 build; no merge or release."
+# Test14 QA authorization: all three automated source checks passed on a128f212; build remains test-only, not a release.
