@@ -13,6 +13,7 @@ on:
       - 'scripts/v1-manager-selection.test.cjs'
       - 'scripts/v1-manager-candidate-race.test.cjs'
       - 'scripts/v1-legacy-organise-coverage.test.cjs'
+      - 'scripts/server-release-readonly-smoke.sh'
       - 'scripts/package-ha*'
       - 'repository.yaml'
       - 'archivist/**'
@@ -35,6 +36,7 @@ on:
       - 'scripts/v1-manager-selection.test.cjs'
       - 'scripts/v1-manager-candidate-race.test.cjs'
       - 'scripts/v1-legacy-organise-coverage.test.cjs'
+      - 'scripts/server-release-readonly-smoke.sh'
       - 'scripts/package-ha*'
       - 'repository.yaml'
       - 'archivist/**'
@@ -168,6 +170,7 @@ jobs:
             sleep 2
           done
           test "$healthy" = 1
+          sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:15057
           python3 scripts/mobile-server-protocol-smoke.py --origin http://127.0.0.1:15057 --source /media --state-out "$RUNNER_TEMP/archivist-amd64-state.json"
           docker compose -f compose.yaml exec -T server sh -ec 'touch /data/archivist-ci-persistence-marker'
           if docker compose -f compose.yaml exec -T server sh -c 'touch /media/archivist-ci-forbidden-write >/dev/null 2>&1'; then
@@ -222,6 +225,7 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:15056/healthz
+          sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:15056
           curl -kfsS https://127.0.0.1:15443/healthz
 
 
@@ -302,6 +306,7 @@ jobs:
             sleep 2
           done
           test "$ready" = 1
+          sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:15058
           compose exec -T server test -r '/media/Fiction collection/sample.txt'
           compose exec -T server test -r /media-external/sample.txt
           python3 scripts/mobile-server-protocol-smoke.py --origin http://127.0.0.1:15058 --source /media --state-out "$RUNNER_TEMP/archivist-arm64-state.json"
