@@ -148,16 +148,54 @@ func (a *app) syncAutoCatalogueTx(tx *sql.Tx,sourceID int64) error {
 		} else if err != nil {
 			return err
 		} else {
-			if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,genre=? WHERE id=?",title,first.space,author,series,genre,work); err != nil { return err }
-			err = tx.QueryRow("SELECT id FROM editions WHERE work_id=? ORDER BY id LIMIT 1",work).Scan(&edition)
-			if err == sql.ErrNoRows {
-				res, insertErr := tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
-				if insertErr != nil { return insertErr }
-				edition, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
-			} else if err != nil { return err }
-			if _, err = tx.Exec("UPDATE editions SET format=? WHERE id=?",first.format,edition); err != nil { return err }
-			if _, err = tx.Exec("DELETE FROM editions WHERE work_id=? AND id<>?",work,edition); err != nil { return err }
-			if _, err = tx.Exec("DELETE FROM edition_assets WHERE edition_id=?",edition); err != nil { return err }
+            // Automatic works have a single edition. Never delete a second
+            // edition if older data or manual actions made this ambiguous:
+            // that could cascade into profile progress and completion state.
+            var editionCount int
+            if err=tx.QueryRow("SELECT count(*) FROM editions WHERE work_id=?",work).Scan(&editionCount);err!=nil{return err}
+            if editionCount!=1{return errors.New("automatic work has unexpected edition structure; review before scanning")}
+            if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,genre=? WHERE id=?",title,first.space,author,series,genre,work); err != nil { return err }
+            err = tx.QueryRow("SELECT id FROM editions WHERE work_id=?",work).Scan(&edition)
+            if err != nil { return err }
+            if _, err = tx.Exec("UPDATE editions SET format=? WHERE id=?",first.format,edition); err != nil { return err }
+
+            // Retain the original asset-to-edition relationship for offline
+            // chapters. Previously rebuilding only available tracks detached
+            // missing parts of an audiobook. The book ID survived, but its
+            // per-profile progress could reference a track no longer in the
+            // edition. This is especially likely during partial NAS outages.
+            offlineRows, queryErr := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,
+                a.genre,a.format,s.space,a.source_id
+                FROM edition_assets ea JOIN assets a ON a.id=ea.asset_id
+                JOIN sources s ON s.id=a.source_id
+                WHERE ea.edition_id=? AND a.available=0
+                ORDER BY ea.position,a.id`,edition)
+            if queryErr!=nil{return queryErr}
+            offline:=[]catalogueAsset{}
+            for offlineRows.Next(){
+                var saved catalogueAsset
+                var source int64
+                if queryErr=offlineRows.Scan(&saved.id,&saved.path,&saved.title,&saved.author,
+                    &saved.series,&saved.genre,&saved.format,&saved.space,&source);queryErr!=nil{
+                    offlineRows.Close();return queryErr
+                }
+                if source!=sourceID||saved.format!=first.format||saved.space!=first.space{
+                    offlineRows.Close()
+                    return errors.New("automatic work includes an offline track from another source or format; review before scanning")
+                }
+                offline=append(offline,saved)
+            }
+            if queryErr=offlineRows.Err();queryErr!=nil{offlineRows.Close();return queryErr}
+            offlineRows.Close()
+
+            // Remove links only for *currently available* paths; all unavailable
+            // original tracks stay attached and retain their exact asset IDs.
+            // Positions are then rebuilt in natural chapter order including
+            // both offline and online entries, within the same scan transaction.
+            if _,err=tx.Exec(`DELETE FROM edition_assets WHERE edition_id=?
+                AND asset_id IN (SELECT id FROM assets WHERE available=1)`,edition);err!=nil{return err}
+            items=append(items,offline...)
+            sort.SliceStable(items,func(i,j int)bool{return naturalLess(items[i].path,items[j].path)})
 		}
 		for pos,item := range items {
 			if _, err = tx.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?) ON CONFLICT(asset_id) DO UPDATE SET edition_id=excluded.edition_id,position=excluded.position",item.id,edition,pos); err != nil { return err }
