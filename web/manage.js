@@ -627,6 +627,202 @@
   // Work-wide metadata is deliberately separate from physical-file editing.
   // Every mutation is previewed against a signed, versioned server snapshot.
   let workEpoch=0,workCandidateEpoch=0,workState=null,workPlan=null,workUndoPlan=null;
+  // A separate, owner-confirmed identity ledger is keyed to EXISTING comic
+  // edition IDs. It never changes catalogue grouping or original media.
+  const comicProfileNames=[
+    ['run','Series run / publication era','text'],
+    ['volume','Volume number','text'],['issue','Issue number','text'],
+    ['imprint','Publisher / imprint','text'],['variant','Printing / cover variant','text'],
+    ['year','Edition year','text'],['notes','Edition notes','textarea']
+  ];
+  let comicProfileState=null,comicProfileActive=null,comicProfileFields=new Map();
+  let comicProfilePlan=null,comicProfileUndoPlan=null,comicProfileBusy=false;
+  let comicProfileVersion=0,comicProfileRequest=0;
+  function comicProfileDirty(){
+    for(const item of comicProfileFields.values()){
+      if(String(item.value)!==String(item.dataset.initial))return true;
+    }
+    return false;
+  }
+  function comicProfileResetPlans(){
+    ++comicProfileVersion;
+    comicProfilePlan=null;comicProfileUndoPlan=null;
+    $('comic-profile-diff').replaceChildren();
+    $('comic-profile-apply').disabled=true;
+    $('comic-profile-undo').disabled=true;
+  }
+  function comicProfileReset(){
+    ++comicProfileRequest;comicProfileState=null;comicProfileActive=null;
+    comicProfileBusy=false;comicProfileFields.clear();comicProfileResetPlans();
+    $('comic-profile-edition').replaceChildren();
+    $('comic-profile-fields').replaceChildren();
+    $('comic-profile-preview').disabled=true;
+    $('comic-profile-undo-preview').disabled=true;
+    $('comic-profile-status').textContent='No edition identity selected.';
+  }
+  function comicProfileBookDirty(){
+    for(const item of workInputs.values()){
+      if(String(item.input.value)!==String(item.input.dataset.initial))return true;
+    }
+    return false;
+  }
+  function comicProfileMessage(value){$('comic-profile-status').textContent=String(value)}
+  function comicProfileSelected(){
+    return comicProfileState?.editions?.find(item=>
+      item.editionId===comicProfileActive)||null;
+  }
+  function comicProfileBusyControls(busy){
+    for(const field of comicProfileFields.values()){field.readOnly=busy||!comicProfileSelected()?.editable}
+    $('comic-profile-edition').disabled=busy;
+    $('comic-profile-preview').disabled=busy||!comicProfileSelected()?.editable;
+    $('comic-profile-undo-preview').disabled=busy||!comicProfileSelected()?.editable;
+    if(busy){$('comic-profile-apply').disabled=true;$('comic-profile-undo').disabled=true}
+  }
+  function comicProfileRenderEdition(id){
+    const item=comicProfileState?.editions?.find(ed=>ed.editionId===id);
+    comicProfileActive=item?.editionId||null;comicProfileFields.clear();comicProfileResetPlans();
+    const holder=$('comic-profile-fields');holder.replaceChildren();
+    if(!item){comicProfileMessage('No comic edition found.');return}
+    $('comic-profile-edition').value=String(item.editionId);
+    for(const [name,label,type] of comicProfileNames){
+      const node=e('label',label);
+      const input=e(type==='textarea'?'textarea':'input');
+      if(type!=='textarea')input.type='text';else input.rows=3;
+      input.value=String(item.fields?.[name]??'');
+      input.dataset.initial=input.value;
+      input.readOnly=!item.editable;
+      input.addEventListener('input',()=>{
+        comicProfileResetPlans();
+        workClearPlans();
+        comicProfileMessage('Unsaved edition labels. Preview changes before any Save.');
+      });
+      node.append(input);holder.append(node);comicProfileFields.set(name,input);
+    }
+    $('comic-profile-preview').disabled=!item.editable;
+    $('comic-profile-undo-preview').disabled=!item.editable||item.revision===0;
+    const warnings=(item.warnings||[]).join(' · ');
+    comicProfileMessage('Edition #'+item.editionId+' · revision '+item.revision+
+      ' · '+item.available+'/'+item.files+' files available. '+
+      (item.stored?'Owner labels saved. ':'No saved owner labels. ')+
+      (warnings?warnings:'Identity edits remain separate from work metadata.'));
+  }
+  async function workLoadComicProfiles(epoch){
+    const state=workState,request=++comicProfileRequest;
+    comicProfileReset();
+    // comicProfileReset invalidates previous requests; the new token belongs
+    // exclusively to this particular book snapshot.
+    const token=comicProfileRequest;
+    const panel=$('work-comic-panel');
+    if(!state||epoch!==workEpoch||panel.hidden)return;
+    comicProfileMessage('Loading edition labels and source revision…');
+    try{
+      const data=await api('./api/manage/works/'+encodeURIComponent(String(state.workId))+'/comic-editions');
+      if(epoch!==workEpoch||token!==comicProfileRequest||workState!==state)return;
+      if(data.workId!==state.workId||data.workFingerprint!==state.fingerprint||
+        !Array.isArray(data.editions)||!data.editions.length){
+        throw Error('Server returned an outdated or invalid comic edition snapshot.');
+      }
+      comicProfileState=data;
+      const picker=$('comic-profile-edition');picker.replaceChildren();
+      for(const item of data.editions){
+        picker.add(new Option('Edition #'+item.editionId+' · '+item.files+' indexed file(s)',String(item.editionId)));
+      }
+      comicProfileRenderEdition(data.editions[0].editionId);
+    }catch(error){
+      if(epoch===workEpoch&&token===comicProfileRequest&&workState===state){
+        comicProfileMessage('Edition registry unavailable: '+error.message);
+      }
+    }
+  }
+  function comicProfileValues(){
+    const out={};
+    for(const [name,node] of comicProfileFields){out[name]=String(node.value).trim()}
+    return out;
+  }
+  function comicProfilePath(item){
+    return './api/manage/works/'+encodeURIComponent(String(item.workId))+
+      '/comic-editions/'+encodeURIComponent(String(item.editionId));
+  }
+  async function comicProfilePreviewEdit(){
+    const item=comicProfileSelected();
+    if(!item||comicProfileBusy||workBusy)return;
+    if(comicProfileBookDirty()){comicProfileMessage('Preview or discard book-level edits before editing its edition.');return}
+    comicProfileResetPlans();
+    const epoch=workEpoch,version=comicProfileVersion,active=comicProfileActive;
+    comicProfileBusy=true;comicProfileBusyControls(true);
+    try{
+      const preview=await api(comicProfilePath(item)+'/preview','POST',{
+        expectedRevision:item.revision,expectedWorkFingerprint:item.workFingerprint,
+        fields:comicProfileValues()
+      });
+      if(epoch!==workEpoch||version!==comicProfileVersion||active!==comicProfileActive)return;
+      if(preview.action!=='save'||preview.editionId!==item.editionId||
+        preview.expectedRevision!==item.revision||
+        preview.expectedWorkFingerprint!==item.workFingerprint||
+        !preview.receipt||!preview.diff?.length)throw Error('Invalid signed edition preview.');
+      comicProfilePlan=preview;
+      workRenderDiff('comic-profile-diff',preview.diff);
+      $('comic-profile-apply').disabled=false;
+      comicProfileMessage('Review '+preview.diff.length+' edition label change(s). No files, work IDs or bookmarks have changed.');
+    }catch(error){
+      if(epoch===workEpoch&&version===comicProfileVersion)comicProfileMessage('Preview unavailable: '+error.message);
+    }finally{
+      comicProfileBusy=false;if(epoch===workEpoch)comicProfileBusyControls(false);
+    }
+  }
+  async function comicProfileApply(undo=false){
+    const item=comicProfileSelected(),plan=undo?comicProfileUndoPlan:comicProfilePlan;
+    if(!item||!plan||comicProfileBusy||workBusy)return;
+    if(comicProfileBookDirty()){comicProfileMessage('Save or discard book-level edits before confirming edition labels.');return}
+    if(!window.confirm(undo?'Undo the last saved identity labels for this existing edition?':'Save the previewed identity labels on this edition ID? Original files, grouping and reading progress will not change.'))return;
+    const epoch=workEpoch,version=comicProfileVersion,active=comicProfileActive;
+    comicProfileBusy=true;comicProfileBusyControls(true);
+    let committed=false;
+    try{
+      const result=await api(comicProfilePath(item)+(undo?'/undo':'/apply'),'POST',{preview:plan,confirm:true});
+      if(epoch!==workEpoch||version!==comicProfileVersion||active!==comicProfileActive)return;
+      if(result.editionId!==item.editionId||result.revision!==item.revision+1){
+        throw Error('Server did not confirm the next edition revision.');
+      }
+      committed=true;
+      await workLoadComicProfiles(epoch);
+      if(epoch===workEpoch)comicProfileMessage((undo?'Previous saved edition labels restored.':'Edition labels saved.')+
+        ' No original files, covers, publication or bookmarks were changed.');
+    }catch(error){
+      if(epoch===workEpoch){
+        comicProfileResetPlans();
+        comicProfileMessage((committed?'Save confirmed by server; refresh failed: ':'Save not confirmed: ')+error.message+
+          '. Reload this book before trying again.');
+      }
+    }finally{
+      comicProfileBusy=false;
+      if(epoch===workEpoch)comicProfileBusyControls(false);
+    }
+  }
+  async function comicProfilePreviewUndo(){
+    const item=comicProfileSelected();
+    if(!item||comicProfileBusy||workBusy)return;
+    if(comicProfileDirty()||comicProfileBookDirty()){
+      comicProfileMessage('Discard or save unsaved edits before previewing edition undo.');return;
+    }
+    comicProfileResetPlans();
+    const epoch=workEpoch,version=comicProfileVersion,active=comicProfileActive;
+    comicProfileBusy=true;comicProfileBusyControls(true);
+    try{
+      const preview=await api(comicProfilePath(item)+'/undo-preview','POST');
+      if(epoch!==workEpoch||version!==comicProfileVersion||active!==comicProfileActive)return;
+      if(preview.action!=='undo'||preview.editionId!==item.editionId||
+        preview.expectedRevision!==item.revision||!preview.receipt||!preview.diff?.length){
+        throw Error('Invalid signed edition undo preview.');
+      }
+      comicProfileUndoPlan=preview;workRenderDiff('comic-profile-diff',preview.diff);
+      $('comic-profile-undo').disabled=false;
+      comicProfileMessage('Review the exact earlier edition labels before confirming undo.');
+    }catch(error){
+      if(epoch===workEpoch&&version===comicProfileVersion)comicProfileMessage('Undo unavailable: '+error.message);
+    }finally{comicProfileBusy=false;if(epoch===workEpoch)comicProfileBusyControls(false)}
+  }
+
   let workInputs=new Map(),workBusy=false,workMediaOffset=0,workEditEpoch=0;
   const workFieldLabels=[
     ['title','Book title'],['author','Author / creator'],['series','Series'],
@@ -638,6 +834,7 @@
   function workClearPlans(){
     workEditEpoch++;
     workPlan=null;workUndoPlan=null;
+    comicProfileResetPlans();
     $('work-apply-button').disabled=true;$('work-undo-apply').disabled=true;
     $('work-preview-diff').replaceChildren();$('work-undo-diff').replaceChildren();
     $('work-preview-status').textContent='Preview required before any changes are applied.';
@@ -647,7 +844,7 @@
     for(const item of workInputs.values()){
       if(item.input.value!==item.input.dataset.initial)return true;
     }
-    return false;
+    return comicProfileDirty();
   }
   function workSetInputBusy(busy){
     for(const item of workInputs.values()){
@@ -735,7 +932,7 @@
   }
   function closeWorkEditor(){
     workEpoch++;workCandidateEpoch++;workState=null;
-    workInputs.clear();workClearPlans();
+    comicProfileReset();workInputs.clear();workClearPlans();
     $('work-dialog').close();
   }
   function workResetMedia(){
@@ -855,14 +1052,14 @@
     $('work-candidates').replaceChildren();
     workState=data;workClearPlans();workRenderSummary(data);workRenderFields(data);
     workResetMedia();
-    await Promise.all([workLoadMedia(epoch),workLoadHistory(epoch),workLoadComicAudit(epoch)]);
+    await Promise.all([workLoadMedia(epoch),workLoadHistory(epoch),workLoadComicAudit(epoch),workLoadComicProfiles(epoch)]);
   }
   function openWorkEditor(id){
     const parsed=Number(id);
     if(!Number.isSafeInteger(parsed)||parsed<=0){notice('Choose a real book identity.',true);return}
     ++workEpoch;++workCandidateEpoch;
     const epoch=workEpoch;
-    workInputs.clear();workState={workId:parsed};workBusy=false;workClearPlans();workResetMedia();
+    comicProfileReset();workInputs.clear();workState={workId:parsed};workBusy=false;workClearPlans();workResetMedia();
     $('work-candidates').replaceChildren();
     $('work-candidate-query').value='';
     $('work-dialog-title').textContent='Book #'+parsed;
@@ -981,6 +1178,7 @@
   }
   async function workPreview(){
     if(!workState||workBusy)return;
+    if(comicProfileDirty()){workMessage('Save or discard unsaved edition labels before editing the book.');return}
     const state=workState,epoch=workEpoch;
     workClearPlans();
     const inputVersion=workEditEpoch;
@@ -1431,7 +1629,7 @@
     });
   };
   $('work-dialog').addEventListener('close',()=>{
-    workEpoch++;workCandidateEpoch++;workState=null;workInputs.clear();workClearPlans();
+    workEpoch++;workCandidateEpoch++;workState=null;comicProfileReset();workInputs.clear();workClearPlans();
   });
   $('work-preview-button').onclick=()=>void workPreview();
   $('work-apply-button').onclick=()=>void workApply();
@@ -1447,6 +1645,17 @@
   $('work-more-media').onclick=()=>void workLoadMedia(workEpoch);
   $('candidate-search-button').onclick=findCandidates;
   $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};
+  $('comic-profile-edition').onchange=()=>{
+    const previous=comicProfileActive,chosen=Number($('comic-profile-edition').value);
+    if(comicProfileDirty()&&!window.confirm('Discard unsaved edition identity labels before changing editions?')){
+      $('comic-profile-edition').value=String(previous);return;
+    }
+    comicProfileRenderEdition(chosen);
+  };
+  $('comic-profile-preview').onclick=()=>void comicProfilePreviewEdit();
+  $('comic-profile-apply').onclick=()=>void comicProfileApply(false);
+  $('comic-profile-undo-preview').onclick=()=>void comicProfilePreviewUndo();
+  $('comic-profile-undo').onclick=()=>void comicProfileApply(true);
   $('editor-form').addEventListener('submit',saveEditor);
   function closeEditor(){editorEpoch++;invalidateCandidateLookup();$('editor').close();editing=null;editingFieldReady=false;editingRevision=null;editingFingerprint=null;editorDecorations.clear()}
   $('close-editor').onclick=closeEditor;

@@ -224,3 +224,18 @@ dialog::backdrop{background:#010b12cf}
 .comic-gap-note{font-size:12px;color:var(--gold);border-left:2px solid var(--teal);padding-left:10px;margin:6px 0}
 .comic-evidence-list{display:grid;gap:5px;max-height:190px;overflow:auto}
 .comic-evidence-list p{margin:0;overflow-wrap:anywhere}
+
+/* Edition labels belong to an existing immutable comic edition ID, not a scan
+   or file move. Keep all controls within the approved 16:9 book workbench. */
+.comic-profile-workbench{border-top:1px solid var(--rule);margin-top:20px;padding-top:18px;display:grid;gap:12px}
+.comic-profile-workbench h4{font:20px/1.25 ArchivistEditorial,Georgia,serif;color:var(--gold);margin:0}
+.comic-profile-workbench>.footnote{margin:0!important}
+.comic-profile-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.comic-profile-fields label{min-width:0}
+.comic-profile-fields label:last-child{grid-column:1/-1}
+.comic-profile-fields textarea{min-height:90px}
+.comic-profile-actions{display:flex;flex-wrap:wrap;gap:8px}
+.comic-profile-actions button{flex:1 1 155px}
+#comic-profile-diff{max-height:230px;overflow:auto;display:grid;gap:6px}
+#comic-profile-status{overflow-wrap:anywhere;margin:0!important}
+@media(max-width:600px){.comic-profile-fields{grid-template-columns:1fr}.comic-profile-fields label:last-child{grid-column:auto}}

@@ -159,6 +159,22 @@
     <h3>Comic series &amp; issue evidence</h3>
     <p class="footnote">Indexed ComicInfo and saved metadata only. Possible gaps are not proof of missing editions; volume identity is not yet independently verified.</p>
     <div id="work-comic-audit" aria-live="polite"></div>
+    <div class="comic-profile-workbench">
+     <h4>Owner-verified edition identity</h4>
+     <p class="footnote">Label this existing edition's run, volume, issue, imprint and variant. These labels do not regroup works, rename files or replace the scanner's metadata. Published and multi-file editions must be reviewed separately.</p>
+     <label>Comic edition
+      <select id="comic-profile-edition" aria-label="Choose an indexed comic edition"></select>
+     </label>
+     <div id="comic-profile-fields" class="comic-profile-fields"></div>
+     <p id="comic-profile-status" class="footnote" role="status" aria-live="polite">Loading saved edition identity…</p>
+     <div id="comic-profile-diff" class="work-preview-diff" aria-label="Reviewed edition identity changes"></div>
+     <div class="comic-profile-actions">
+      <button id="comic-profile-preview" type="button" class="quiet" disabled>Preview edition labels</button>
+      <button id="comic-profile-apply" type="button" class="primary" disabled>Confirm edition labels</button>
+      <button id="comic-profile-undo-preview" type="button" class="quiet" disabled>Preview last Save undo</button>
+      <button id="comic-profile-undo" type="button" class="quiet" disabled>Confirm undo</button>
+     </div>
+    </div>
    </section>
    <section class="work-meta-panel">
     <h3>Editions &amp; chapter files</h3>

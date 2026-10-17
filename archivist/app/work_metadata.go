@@ -85,7 +85,8 @@ func (a *app)initWorkMetadata()error{
     recorded_at INTEGER NOT NULL
  );
  CREATE INDEX IF NOT EXISTS idx_work_metadata_history_work ON work_metadata_history(work_id,id DESC);`)
- return err
+ if err!=nil{return err}
+ return a.initComicEditionProfiles()
 }
 
 // Manual core-field values are applied INSIDE the same transaction as the

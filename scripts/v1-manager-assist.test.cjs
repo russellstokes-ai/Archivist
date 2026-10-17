@@ -51,6 +51,9 @@ const reply=value=>({ok:true,status:200,headers:{get:()=> 'application/json'},js
 const fieldNames=['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'];
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
 const workCalls=[];
+const editionCalls=[];
+let editionRev=0,editionSaved=false;
+let editionFields={run:'',volume:'',issue:'',imprint:'',variant:'',year:'',notes:''};
 let pauseWorkPreview=false,releaseWorkPreview=null,failNextWorkReload=false;
 let workRevision=0,workFingerprint='a'.repeat(64),workTitle='Grouped audiobook',workYear='',workCoverHash='',workPublicationRevision=0;
 const originalWorkTitle=workTitle;
@@ -88,6 +91,55 @@ const makeComicWorkState=()=>({
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url==='./api/manage/works/2/comic-editions'){
+    editionCalls.push({url,method:'GET'});
+    return reply({workId:2,workFingerprint:'f'.repeat(64),publicationState:'staged',editions:[
+      {workId:2,editionId:20,workFingerprint:'f'.repeat(64),
+       revision:editionRev,fields:{...editionFields},stored:editionSaved,
+       files:1,available:1,editable:true,warnings:[]}
+    ]});
+  }
+  if(url.startsWith('./api/manage/works/2/comic-editions/20/')){
+    editionCalls.push({url,method:options.method||'GET',body:options.body?JSON.parse(options.body):null});
+    const incoming=options.body?JSON.parse(options.body):{};
+    if(url.endsWith('/preview')){
+      assert.equal(incoming.expectedRevision,editionRev);
+      assert.equal(incoming.expectedWorkFingerprint,'f'.repeat(64));
+      const diff=Object.keys(editionFields).filter(name=>incoming.fields[name]!==editionFields[name])
+        .map(name=>({name,from:editionFields[name],to:incoming.fields[name],source:'owner-verified edition label'}));
+      assert(diff.length,'edition edits must not preview without a changed field');
+      return reply({action:'save',workId:2,editionId:20,
+        expectedRevision:editionRev,expectedWorkFingerprint:'f'.repeat(64),
+        before:{...editionFields},after:{...incoming.fields},diff,
+        expiresAt:1790000000,receipt:'signed-edition-identity'});
+    }
+    if(url.endsWith('/apply')){
+      assert.equal(incoming.confirm,true);
+      assert.equal(incoming.preview.receipt,'signed-edition-identity');
+      assert.equal(incoming.preview.expectedRevision,editionRev);
+      editionFields={...incoming.preview.after};editionRev++;editionSaved=true;
+      return reply({workId:2,editionId:20,revision:editionRev,
+        workFingerprint:'f'.repeat(64),fields:{...editionFields}});
+    }
+    if(url.endsWith('/undo-preview')){
+      assert.equal(editionRev,1);
+      const previous={run:'',volume:'',issue:'',imprint:'',variant:'',year:'',notes:''};
+      const diff=Object.keys(editionFields).filter(name=>previous[name]!==editionFields[name])
+        .map(name=>({name,from:editionFields[name],to:previous[name],source:'owner-verified edition label'}));
+      return reply({action:'undo',workId:2,editionId:20,expectedRevision:editionRev,
+        expectedWorkFingerprint:'f'.repeat(64),before:{...editionFields},
+        after:previous,diff,historyId:1,expiresAt:1790000000,
+        receipt:'signed-edition-undo'});
+    }
+    if(url.endsWith('/undo')){
+      assert.equal(incoming.confirm,true);
+      assert.equal(incoming.preview.receipt,'signed-edition-undo');
+      editionFields={...incoming.preview.after};editionRev++;
+      return reply({workId:2,editionId:20,revision:editionRev,
+        workFingerprint:'f'.repeat(64),fields:{...editionFields}});
+    }
+    throw Error('Unexpected edition route: '+url);
+  }
   if(url==='./api/manage/works/2/metadata')return reply(makeComicWorkState());
   if(url==='./api/manage/works/2/metadata/history')return reply({workId:2,events:[]});
   if(url.startsWith('./api/manage/works/2/media?')){
@@ -513,6 +565,43 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
     'mismatched comic issue must not offer ANY provider field selections');
   assert.equal(elements.get('work-apply-button').disabled,true,
     'rendering comic candidates must not change or save book metadata');
+
+  // Independent edition identity uses a persistent revision and guarded
+  // owner preview; no regrouping, file rename or automatic publishing.
+  assert(editionCalls.some(x=>x.url==='./api/manage/works/2/comic-editions'),
+    'the existing comic edition labels must be read from the server');
+  assert.equal(elements.get('comic-profile-edition').value,'20');
+  const editionInputs=elements.get('comic-profile-fields').children;
+  assert.equal(editionInputs.length,7,'comic edition run/volume/issue/variant/imprint/year/notes are editable');
+  const runInput=editionInputs[0].children[0],volumeInput=editionInputs[1].children[0];
+  assert.equal(elements.get('comic-profile-preview').disabled,false);
+  runInput.value='1971 volume run';
+  runInput.listeners.input();
+  volumeInput.value='2';
+  volumeInput.listeners.input();
+  assert.equal(elements.get('comic-profile-apply').disabled,true,'changed values must require signed preview');
+  elements.get('comic-profile-preview').onclick();await settle();
+  assert(editionCalls.some(x=>x.url.endsWith('/comic-editions/20/preview')),
+    'edition-level preview must hit the dedicated signed endpoint');
+  assert.equal(elements.get('comic-profile-apply').disabled,false,'valid signed plan enables manual confirmation');
+  assert.equal(elements.get('comic-profile-diff').children.length,2,'only two edited labels should be previewed');
+  elements.get('comic-profile-apply').onclick();await settle();
+  assert.equal(editionRev,1,'confirmed Save should advance the per-edition revision');
+  assert.equal(editionFields.run,'1971 volume run');
+  assert.equal(editionFields.volume,'2');
+  assert.equal(elements.get('work-dialog').open,true,'saving edition identity must leave book editor open');
+  assert.equal(elements.get('comic-profile-fields').children[0].children[0].value,'1971 volume run');
+  assert.equal(elements.get('work-fields').children[2].children[0].value,'',
+    'edition labels must not overwrite work-level series');
+  assert.equal(elements.get('comic-profile-undo-preview').disabled,false);
+  elements.get('comic-profile-undo-preview').onclick();await settle();
+  assert.equal(elements.get('comic-profile-undo').disabled,false,'last Save undo requires preview');
+  elements.get('comic-profile-undo').onclick();await settle();
+  assert.equal(editionRev,2,'undo creates a new monotonic edition revision');
+  assert.equal(editionFields.run,'');
+  assert.equal(editionFields.volume,'');
+  assert.equal(elements.get('comic-profile-fields').children[0].children[0].value,'',
+    'editor must refresh after confirmed undo');
   elements.get('work-close').onclick();
 
   const health=nav.find(item=>item.dataset.view==='health');
