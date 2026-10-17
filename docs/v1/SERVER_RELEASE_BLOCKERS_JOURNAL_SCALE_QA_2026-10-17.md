@@ -3,7 +3,7 @@
 **Date:** 17 October 2026  
 **Draft:** [PR #83](https://github.com/russellstokes-ai/Archivist/pull/83), branch `integration/archivist-v1-auto-restore-recovery-20261016`  
 **Parent:** `a56a7b1c547a5c8c2c9219d6c4662b329a4303c5`.  
-**Decision:** Source development checkpoint only; overall commercial release **NO-GO**, full exact-source CI and real Pi4/NAS/HA ingress/large-library tests still required.
+**Decision:** Code `d4020db` passed exact-source server/ARM64 CI; overall commercial release **NO-GO** pending real Pi4/NAS/HA ingress/large-library and power-loss acceptance.
 
 ## Why this matters
 
@@ -40,3 +40,7 @@ The existing scanner, automatic logical-work grouping, metadata/provenance, publ
 Mirrored root and `archivist/app/` production changes: `filemoves.go` and `web/filemoves.js`, plus mirrored Go regressions `filemoves_preview_replacement_test.go` and `filemoves_large_journal_index_test.go`. New Node `scripts/v1-legacy-organise-coverage.test.cjs` is registered in `.github/workflows/server-check.yml`. Exact-source server CI must run all root+package Go, Node UI/legacy coverage, standalone Docker/HA and ARM64 smoke, alongside mobile source-lock checks. CI is **not** evidence of real 1000+ media NAS timeouts, power cuts or owner device acceptance.
 
 **Remaining highest-priority gate after source CI:** physical/disposable Pi4 4GB SSD + NAS/SMB/NFS mount-loss, long-scan cancellation and power-failure/SQLite restore, plus real 1920×1080 owner browser/screen reader tests. Product remains **NO-GO** until those tests are performed.
+
+## Verified CI result
+
+The exact code revision `d4020db46c330d28db674315baeb8ef0171f5af0` passed [full server integration](https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502872) (root+packaged Go tests, legacy organiser Node behavior, manager contracts, standalone Docker and Home Assistant smoke) and [hosted native ARM64](https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502678). Parallel mobile/Android/iOS checks were still pending at this documentation checkpoint. The result proves source behavior in synthetic/harness conditions only, not the user's physical Raspberry Pi, NAS, connected personal library or actual disaster recovery.

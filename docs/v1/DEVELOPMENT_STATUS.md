@@ -10,7 +10,7 @@
 
 **Safety/scale:** The original browser organiser previously used unpaged `/api/books`, silently restricting “All loaded files” to 500. It now proves list completeness with bounded pagination and **disables legacy all-files preview when the 501st file exists or pagination fails**, directing the owner to native S7’s 100-file paged batches. New idempotent SQLite indexes avoid a full move-journal scan in preview collision checks after thousands of historical moves. Tests exercise late SQLite write failure, 4,000 history entries, and real legacy browser logic at 503/300/0 files.
 
-**Evidence:** [Dedicated release-blocker source QA](SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md). Exact-head Go/root+packaged, Node legacy/browser, Docker/HA and ARM64 jobs must be checked separately before accepting this source candidate; no real Pi/NAS/HA ingress/media/power-loss acceptance or mobile changes.
+**Evidence:** [Dedicated release-blocker source QA](SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md). **Source CI GREEN on `d4020db`:** [root/packaged Go + legacy Node/browser + Docker/HA job](https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502872) and [native ARM64 hosted smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502678). Mobile/Android/iOS parallel checks pending at documentation checkpoint; no real Pi/NAS/HA ingress/media/power-loss acceptance or mobile changes.
 
 ## 17 October 2026 — Accelerated server Batch 3: S7 safe organiser and large-library bounds
 

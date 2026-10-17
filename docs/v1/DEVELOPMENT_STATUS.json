@@ -1490,7 +1490,7 @@
     "pr": 83,
     "parent_sha": "a56a7b1c547a5c8c2c9219d6c4662b329a4303c5",
     "report": "docs/v1/SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md",
-    "status": "source candidate; full CI and hardware acceptance not yet independently verified",
+    "status": "exact code passed root+packaged Go, legacy organiser Node contract, Docker/HA runtime and native ARM64 smoke; mobile platforms pending at checkpoint; hardware acceptance NO-GO",
     "fixed": [
       "SQLite preview replacement now transactionally cancels prior preview and inserts next preview, rolling both back on late DB failure",
       "batch template no longer preemptively cancels older preview when new candidate is invalid or requires review",
@@ -1513,6 +1513,16 @@
       "physical Pi4 4GB SSD",
       "NAS SMB/NFS disconnects and power interruption",
       "real large media import, owner 16:9 UI and disaster restore"
-    ]
+    ],
+    "verified_code_sha": "d4020db46c330d28db674315baeb8ef0171f5af0",
+    "source_ci": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "not yet final",
+      "android_native": "not yet final",
+      "ios": "not yet final",
+      "server_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502872",
+      "arm64_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502678"
+    }
   }
 }
