@@ -48,5 +48,43 @@ const css=[
   const c=fs.readFileSync(path.join(folder,'sample-8.png'));
   assert(!a.equals(b)&&!b.equals(c),'Animation needs independent middle and final frames');
   console.log('PASS: approved original source generated visibly distinct mid and final frames');
+  // Encode exactly sampled source frames into a deterministic, GPU-independent
+  // startup fallback. Never simplify/rebuild the approved book, pages or emblem.
+  // The native app will use this rather than requiring WebGL support on device.
+  if(process.env.ARCHIVIST_RENDER_VIDEO==='1'){
+    const fps=24,bookFrames=144,shineFrames=35;
+    const originalHash=require('crypto').createHash('sha256').update(fs.readFileSync(asset)).digest('hex');
+    const frames=path.join(folder,'frames');fs.mkdirSync(frames,{recursive:true});
+    // Source shine is a linear 0→1100 SVG gradient translation over 1.3s.
+    // Reproduce the exact source transform numerically, independent of how long
+    // screenshot capture takes on the CI machine.
+    await page.evaluate(()=>document.getElementById('shine-pass')?.remove());
+    for(let i=0;i<bookFrames;i++){
+      await page.evaluate(t=>window.ARCHIVIST_MOTION.renderFrame(t),i/fps);
+      await page.screenshot({path:path.join(frames,'frame-'+String(i).padStart(4,'0')+'.png')});
+    }
+    await page.evaluate(()=>window.ARCHIVIST_MOTION.renderFrame(6));
+    for(let j=0;j<shineFrames;j++){
+      const frame=bookFrames+j,elapsed=j/fps;
+      const value=1100*Math.min(1,elapsed/1.3);
+      await page.evaluate(v=>document.getElementById('wordmark-shine')
+        .setAttribute('gradientTransform','translate('+v+' 0)'),value);
+      await page.screenshot({path:path.join(frames,'frame-'+String(frame).padStart(4,'0')+'.png')});
+    }
+    const first=fs.readFileSync(path.join(frames,'frame-0000.png'));
+    const middle=fs.readFileSync(path.join(frames,'frame-0072.png'));
+    const last=fs.readFileSync(path.join(frames,'frame-0178.png'));
+    assert(!first.equals(middle)&&!middle.equals(last),'Video frames must change over time');
+    fs.writeFileSync(path.join(folder,'provenance.json'),JSON.stringify({
+      source:'mobile/assets/splash/archivist-premium-shine.html',
+      htmlSha256:originalHash,
+      renderEngine:'Original, unmodified WebGL source + source-defined SVG shine translation',
+      viewport:'480x800',fps,bookFrames,shineFrames,
+      durationSeconds:(bookFrames+shineFrames)/fps,
+      cssFit:'62vw / 35vh / 310px capped, centred book, wordmark below',
+    },null,2));
+    console.log('PASS: rendered '+(bookFrames+shineFrames)+' source-faithful 24fps frames');
+  }
+
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
