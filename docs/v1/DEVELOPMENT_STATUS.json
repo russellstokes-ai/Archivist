@@ -1,5 +1,14 @@
 {
   "schema_version": 1,
+  "server_family_views_metadata_2026_10_17": {
+    "base_sha": "577f3b543cf49a908ca61ffc46ce21d54ab90e41",
+    "pr": 83,
+    "state": "implemented_pending_exact_head_ci",
+    "qa": "docs/v1/SERVER_FAMILY_VIEWS_METADATA_QA_2026-10-17.md",
+    "mobile_changed": false,
+    "hardware_accepted": false,
+    "commercial_server_go": false
+  },
   "as_of": "2026-10-17",
   "purpose": "Point-in-time manifest distinguishing canonical source, draft fixes, commercial development work and acceptance; not an automated report of GitHub or installed-device state",
   "repo": "russellstokes-ai/Archivist",

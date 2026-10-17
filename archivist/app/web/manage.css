@@ -287,6 +287,26 @@ dialog::backdrop{background:#010b12cf}
 #family-key{font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all;resize:none;min-height:84px}
 #family-status,#settings-status{overflow-wrap:anywhere}
 @media(max-width:650px){.family-user,.server-session{align-items:stretch;flex-direction:column}.family-user .operations-actions{justify-content:start}}
+.catalogue-layout-label{display:flex;align-items:center;gap:10px;max-width:260px;margin:10px 0 16px}
+.catalogue-tools{display:flex;align-items:center;flex-wrap:wrap;gap:24px}.catalogue-choice[hidden]{display:none}
+.catalogue-cards{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));margin:14px 0}
+.catalogue-cards[hidden],#catalogue-table[hidden]{display:none}
+.catalogue-card{position:relative;min-width:0;padding:14px;border:1px solid var(--rule);border-radius:14px;background:var(--panel)}
+.catalogue-choice{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px}
+.catalogue-choice input,.family-space-choice input{width:auto;flex:none}
+.catalogue-cover{position:relative;aspect-ratio:2/3;max-height:240px;background:var(--raised);border-radius:8px;overflow:hidden;display:grid;place-items:center;color:var(--muted)}
+.catalogue-cover img{position:absolute;width:100%;height:100%;object-fit:contain;background:var(--raised)}
+.catalogue-cover img[hidden]{display:none}
+.catalogue-details{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding-top:12px;overflow-wrap:anywhere;min-width:0}
+.catalogue-details strong{font-family:ArchivistEditorial,Georgia,serif;font-size:17px;color:var(--gold)}
+.catalogue-details .edit-button{margin-top:6px}
+.catalogue-list{grid-template-columns:1fr}
+.catalogue-list .catalogue-card{display:grid;grid-template-columns:74px 65px minmax(0,1fr);align-items:center;gap:18px}
+.catalogue-list .catalogue-choice{margin:0}.catalogue-list .catalogue-details{padding:0}.catalogue-list .catalogue-cover{width:65px}
+.family-user{flex-wrap:wrap}.family-grants{flex-basis:100%;min-width:0;border:1px solid var(--rule);border-radius:8px;padding:12px}
+.family-space-choice{display:flex;align-items:center;gap:10px;margin:8px 0;overflow-wrap:anywhere}
+#family-create-spaces{border:1px solid var(--rule);border-radius:8px;padding:12px}
+@media(max-width:600px){.catalogue-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.catalogue-list{grid-template-columns:1fr}.catalogue-card{padding:10px}.catalogue-list .catalogue-card{grid-template-columns:55px minmax(0,1fr);gap:12px}.catalogue-list .catalogue-choice{grid-column:1/-1}.catalogue-list .catalogue-cover{width:55px}.catalogue-details strong{font-size:15px}}
 
 /* Work-level Assist filters. Counts and paging come from one SQLite snapshot,
    not from filtering a single already-paginated 40-book browser page. */

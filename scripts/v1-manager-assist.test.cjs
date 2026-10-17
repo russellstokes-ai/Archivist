@@ -110,6 +110,7 @@ const fetchFake=async (url,options={})=>{
   if(url==='./api/profiles'&&options.method==='POST'){
     const input=JSON.parse(options.body);
     assert.equal(input.name,'New family user');
+    assert.deepEqual(input.spaces,[], 'creating without a checked library must explicitly deny all');
     assert.equal(options.headers['X-Archivist-Action'],'1');
     familyCalls.push({type:'create',name:input.name});
     const created={id:familyNextId++,name:input.name,revoked:false,spaces:['Books']};
@@ -120,6 +121,13 @@ const fetchFake=async (url,options={})=>{
     assert.equal(options.method,'POST');
     familyCalls.push({type:'rotate',id:5});
     return reply({key:'b'.repeat(64)});
+  }
+  if(url==='./api/profiles/5/grants'){
+    assert.equal(options.method,'PUT');
+    assert.equal(options.headers['X-Archivist-Action'],'1');
+    const input=JSON.parse(options.body);assert.deepEqual(input.spaces,[]);
+    familyCalls.push({type:'grants',spaces:input.spaces});familyProfiles[0].spaces=[];
+    return reply({ok:true,spaces:[]});
   }
   if(url==='./api/profiles/5'&&options.method==='DELETE'){
     familyCalls.push({type:'revoke',id:5});
@@ -324,7 +332,9 @@ const fetchFake=async (url,options={})=>{
        tier:'strong candidate',reasons:['Exact title','Exact creator']},
       {workId:'google-books:test-edition',title:'Aerial Archive',author:'Test Author',
        publishedYear:2024,publisher:'Edition House',source:'Google Books',yearType:'edition publication',
-       tier:'possible candidate',warnings:['Edition year is not first publication']}
+       tier:'possible candidate',warnings:['Edition year is not first publication']},
+      {workId:'apple-books:42',title:'Aerial Archive',author:'Test Author',publishedYear:2025,
+       source:'Apple Books',sourceUrl:'https://books.apple.com/us/audiobook/id42',yearType:'store release'}
     ]});
   }
 
@@ -467,7 +477,7 @@ const fetchFake=async (url,options={})=>{
     organiseCalls.push({type:'journal'});
     return reply(moves);
   }
-  if(url.startsWith('./api/books?'))return reply([]);
+  if(url.startsWith('./api/books?'))return reply([file]);
   if(url.startsWith('./api/manage/review-works/1/files?'))return reply({files:[file,{...file,id:12,title:'Part 2'}],hasMore:false});
   if(url.startsWith('./api/manage/review-works?')){
     if(url.includes('state=published'))return reply({total:1,state:'published',works:[
@@ -496,6 +506,26 @@ vm.runInNewContext(source,sandbox,{filename:'web/manage.js'});
 const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);await Promise.resolve()}};
 (async()=>{
   await settle();
+  assert(elements.has('catalogue-layout'), 'catalogue needs shared grid/list/table control');
+  const initialCatalogueCalls=calls.filter(x=>x.startsWith('./api/books?')).length;
+  elements.get('catalogue-layout').value='grid';elements.get('catalogue-layout').onchange();
+  assert.equal(elements.get('catalogue-cards').children.length,1);
+  const cardCheck=elements.get('catalogue-cards').children[0].children[0].children[0];
+  cardCheck.checked=true;cardCheck.onchange();
+  elements.get('catalogue-layout').value='list';elements.get('catalogue-layout').onchange();
+  assert.equal(elements.get('catalogue-cards').children[0].children[0].children[0].checked,true);
+  elements.get('select-card-page').checked=false;
+  elements.get('select-card-page').onchange({target:elements.get('select-card-page')});
+  assert.equal(elements.get('catalogue-cards').children[0].children[0].children[0].checked,false);
+  elements.get('select-card-page').checked=true;
+  elements.get('select-card-page').onchange({target:elements.get('select-card-page')});
+  elements.get('catalogue-layout').value='table';elements.get('catalogue-layout').onchange();
+  assert.equal(elements.get('records').children[0].children[0].children[0].checked,true);
+  assert.equal(calls.filter(x=>x.startsWith('./api/books?')).length,initialCatalogueCalls,
+    'view changes must reuse the same bounded page, filters and selection');
+  elements.get('clear-selection').onclick();
+  elements.get('sort').value='title';elements.get('sort').listeners.change();await settle();
+  assert(calls.filter(x=>x.startsWith('./api/books?')).at(-1).includes('sort=title'));
   for(const view of ['overview','library','assist','review','health','recovery','family','settings','organise']){
     assert(html.includes('data-view="'+view+'"'),'server owner workspace missing '+view+' navigation');
   }
@@ -604,6 +634,7 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   const multiCall=calls.find(x=>x.startsWith('./api/manage/metadata-candidates?q=')&&x.includes('mode=multi'));
   assert(multiCall&&multiCall.includes('title=')&&multiCall.includes('author='),
     'only explicit book-level search sends source metadata to opt-in multi-provider endpoint');
+  assert(multiCall.includes('format=audio'),'audiobook works must search audiobook metadata');
   const suggestion=elements.get('work-candidates').children[0];
   assert(suggestion,'provider candidates must render without changing saved metadata');
   const useYear=suggestion.children[2].children.find(button=>button.textContent==='Use Year');
@@ -619,6 +650,12 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
     'book workbench may explicitly select a provider-edition publisher for review');
   assert(googleSuggestion.children.some(node=>String(node.textContent||'').includes('Edition year')),
     'edition semantic warnings must remain visible');
+  const appleSuggestion=elements.get('work-candidates').children[2];
+  assert(appleSuggestion.children.some(node=>node.tagName==='A'&&node.href==='https://books.apple.com/us/audiobook/id42'&&node.rel==='noopener noreferrer'));
+  const appleButtons=appleSuggestion.children.find(node=>node.className==='work-candidate-fields');
+  assert(!appleButtons.children.some(button=>button.textContent==='Use Year'),'store release must not replace first publication');
+  appleButtons.children.find(button=>button.textContent==='Use Author').onclick();
+  assert.equal(bookFields.children[1].children[0].dataset.origin,'apple-books');
   assert.equal(elements.get('work-apply-button').disabled,true,'unreviewed suggestion must not save');
   elements.get('work-preview-button').onclick();await settle();
   assert(workCalls.some(x=>x.url.endsWith('/metadata/preview')),'work-level preview must reach versioned backend');
@@ -886,6 +923,12 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(elements.get('view-family').hidden,false);
   assert(familyCalls.some(x=>x.type==='list'),'Family must query the real profile endpoint');
   assert.equal(elements.get('family-profiles').children.length,1);
+  const grantCard=elements.get('family-profiles').children[0];
+  const grantFields=grantCard.children[2];
+  grantFields.children[1].children[0].checked=false;
+  grantFields.children.at(-1).onclick();await settle();
+  assert(familyCalls.some(x=>x.type==='grants'),'owner must explicitly save restricted library access');
+  assert.match(elements.get('family-profiles').children[0].children[0].children[1].textContent,/0 permitted/);
   elements.get('family-name').value='New family user';
   elements.get('family-create').onsubmit({preventDefault(){}});
   await settle();

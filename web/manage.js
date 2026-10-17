@@ -17,6 +17,7 @@
   const editorDecorations=new Map();
   const selectedDetails=new Map();
   const savedViewsKey='archivist-manager-v1-views';
+  let catalogueLayout='table';
   const bulkFields=['narrator','publisher','publishedYear','isbn','asin','language'];
   let bulkGeneration=0,bulkPlan=null,bulkSelectedIds=[],bulkBusy=false;
   let relinkGeneration=0,relinkSelection=null,relinkPlan=null,relinkBusy=false;
@@ -55,6 +56,8 @@
     $('relink-open').disabled=selected.size!==2;
     $('select-page').checked=rows.length>0&&rows.every(item=>selected.has(item.id));
     $('select-page').indeterminate=rows.some(item=>selected.has(item.id))&&!$('select-page').checked;
+    $('select-card-page').checked=$('select-page').checked;
+    $('select-card-page').indeterminate=$('select-page').indeterminate;
   }
   function renderRows(){
     const body=$('records');body.replaceChildren();
@@ -79,6 +82,41 @@
     $('previous').disabled=offset===0;
     $('next').disabled=rows.length<pageSize;
     updateSelected();
+    renderCatalogueCards();
+  }
+  function renderCatalogueCards(){
+    const host=$('catalogue-cards');host.replaceChildren();
+    $('catalogue-table').hidden=catalogueLayout!=='table';
+    host.hidden=catalogueLayout==='table';
+    $('select-card-page-label').hidden=host.hidden;
+    host.className='catalogue-cards catalogue-'+catalogueLayout;
+    if(host.hidden)return;
+    if(!rows.length)host.append(e('p','No matching files. Try clearing the filters.','empty'));
+    for(const item of rows){
+      const card=e('article',undefined,'catalogue-card');
+      const label=e('label',undefined,'catalogue-choice'),check=e('input');
+      check.type='checkbox';check.checked=selected.has(item.id);
+      check.setAttribute('aria-label','Select '+(item.title||'file'));
+      check.onchange=()=>{choose(item,check.checked);updateSelected()};
+      label.append(check,e('span','Select'));card.append(label);
+      const cover=e('div',undefined,'catalogue-cover'),image=e('img');
+      image.alt='';image.loading='lazy';image.decoding='async';
+      image.src='./api/assets/'+encodeURIComponent(String(item.id))+'/cover';
+      image.onerror=()=>{image.hidden=true};
+      cover.append(e('span',item.format||'Book','catalogue-cover-fallback'),image);card.append(cover);
+      const details=e('div',undefined,'catalogue-details');
+      details.append(e('strong',item.title||'Untitled'),e('span',item.author||'Unknown author','subtext'),
+        e('span',[item.series,item.seriesNumber?'#'+item.seriesNumber:'',item.space,item.format].filter(Boolean).join(' · '),'subtext'),
+        e('span',item.needsReview?'Needs review':item.available?'Ready':'Unavailable','pill '+(item.needsReview?'warn':item.available?'ok':'muted')));
+      if(item.needsReview&&item.reviewReason)details.append(e('small',item.reviewReason,'reason'));
+      const edit=e('button','Edit metadata','edit-button');edit.type='button';
+      edit.setAttribute('aria-label','Edit metadata for '+(item.title||'file'));edit.onclick=()=>openEditor(item);
+      details.append(edit);card.append(details);host.append(card);
+    }
+  }
+  function changeCatalogueLayout(){
+    catalogueLayout=['grid','list','table'].includes(s('catalogue-layout'))?s('catalogue-layout'):'table';
+    renderRows();
   }
   async function loadCatalogue(){
     const id=++requestId;
@@ -1195,7 +1233,8 @@
         title:workInputs.get('title')?.input.value||'',
         author:workInputs.get('author')?.input.value||'',
         isbn:workInputs.get('isbn')?.input.value||'',
-        format:workState.editions?.length&&workState.editions.every(item=>item.format==='Comic')?'comic':'book',
+        format:workState.editions?.length&&workState.editions.every(item=>item.format==='Comic')?'comic':
+          workState.editions?.length&&workState.editions.every(item=>item.format==='Audio')?'audio':'book',
         series:workInputs.get('series')?.input.value||'',
         issue:workInputs.get('seriesNumber')?.input.value||''
       });
@@ -1222,7 +1261,7 @@
           if(!item||item.input.readOnly||value===undefined||value===null||value==='')continue;
           // A Google Books edition date cannot populate the book-wide first
           // publication year. Mixed editions cannot safely share one ISBN.
-          if(name==='publishedYear'&&candidate.yearType==='edition publication')continue;
+          if(name==='publishedYear'&&candidate.yearType!=='first publication')continue;
           if(name==='isbn'&&(candidate.identifierMismatch||(workState.editions?.length||0)>1))continue;
           // A matching title/ISBN cannot prove the correct comic issue. Keep
           // all provider field actions disabled until series AND explicit
@@ -1232,17 +1271,26 @@
           button.title='Compare and select this '+label+' suggestion';
           button.onclick=()=>{
             item.input.value=String(value);
-            item.input.dataset.origin=candidate.source==='Google Books'?'google-books':'open-library';
+            item.input.dataset.origin=candidate.source==='Apple Books'?'apple-books':candidate.source==='Google Books'?'google-books':'open-library';
             workClearPlans();
             workMessage('Selected unverified '+(candidate.source||'public')+' '+label+' suggestion. Preview before saving.');
           };
           buttons.append(button);
         }
+        if(typeof candidate.sourceUrl==='string'){
+          try{
+            const url=new URL(candidate.sourceUrl);
+            if(url.protocol==='https:'&&url.hostname==='books.apple.com'&&!url.username&&!url.password){
+              const link=e('a','View Apple Books source','quiet-link');link.href=url.href;
+              link.target='_blank';link.rel='noopener noreferrer';card.append(link);
+            }
+          }catch{}
+        }
         card.append(buttons);
         if(isComic&&(candidate.comicSeriesMatch!=='match'||candidate.comicIssueMatch!=='match')){
           card.append(e('small','Suggestions disabled: series and explicit issue must both agree. Check volume, imprint and variant manually.','work-flag'));
         }
-        if(candidate.yearType==='edition publication'&&candidate.publishedYear){
+        if(candidate.yearType!=='first publication'&&candidate.publishedYear){
           card.append(e('small','Edition year shown for comparison only; first publication year must be independently checked.','subtext'));
         }
         for(const reason of candidate.reasons||[]){card.append(e('small','Match evidence: '+reason,'subtext'))}
@@ -1713,7 +1761,8 @@
   // Family and Settings are native admin views over the existing protected
   // server endpoints. Keys remain memory-only, visible exactly once, and are
   // never written to localStorage, URLs, logs or regular catalogue metadata.
-  let familyEpoch=0,familyBusy=false,familySecret=null;
+  let familyEpoch=0,familyBusy=false,familySecret=null,familyReady=false;
+  let familySpaces=[],familyCreateChoices=[];
   let settingsEpoch=0,settingsBusy=false;
   function familyStatus(message){$('family-status').textContent=String(message)}
   function renderFamilySecret(){
@@ -1724,7 +1773,29 @@
     $('family-key-context').textContent=present?
       'Access key for '+familySecret.name+' · user #'+familySecret.id+
         '. Copy it now. It cannot be retrieved after dismissal or refresh.':'';
-    $('family-create-button').disabled=familyBusy||present;
+    $('family-create-button').disabled=familyBusy||present||!familyReady;
+  }
+  function familySpaceChoices(host,allowed){
+    const choices=[];
+    for(const space of familySpaces){
+      const label=e('label',undefined,'family-space-choice'),check=e('input');
+      check.type='checkbox';check.checked=allowed.includes(space);check.value=space;
+      label.append(check,e('span',space));host.append(label);choices.push(check);
+    }
+    if(!familySpaces.length)host.append(e('p','No library spaces configured.','subtext'));
+    return choices;
+  }
+  async function saveFamilySpaces(id,name,choices,button){
+    if(familyBusy||familySecret||!familyReady)return;
+    const spaces=choices.filter(x=>x.checked).map(x=>x.value);
+    if(!window.confirm('Set '+name+' library access to '+(spaces.length?spaces.join(', '):'no libraries')+'? Removed access stops on subsequent requests; saved progress is retained.'))return;
+    familyBusy=true;button.disabled=true;renderFamilySecret();
+    try{
+      const result=await api('./api/profiles/'+encodeURIComponent(String(id))+'/grants','PUT',{spaces});
+      if(result?.ok!==true)throw Error('Server did not confirm library access.');
+      await loadFamily();familyStatus('Library access saved for '+name+'. Saved progress retained.');
+    }catch(error){familyStatus('Library access was not confirmed: '+error.message)}
+    finally{familyBusy=false;button.disabled=false;renderFamilySecret()}
   }
   function familyKeyValid(answer){
     return Boolean(answer&&Number.isSafeInteger(Number(answer.id))&&
@@ -1733,12 +1804,18 @@
   }
   async function loadFamily(){
     const epoch=++familyEpoch;
+    familyReady=false;renderFamilySecret();
     $('family-refresh').disabled=true;
     if(activeView==='family')familyStatus('Loading household accounts…');
     try{
-      const result=await api('./api/profiles');
+      const [result,sources]=await Promise.all([api('./api/profiles'),api('./api/sources')]);
       if(epoch!==familyEpoch||activeView!=='family')return;
       if(!Array.isArray(result))throw Error('Invalid household response.');
+      if(!Array.isArray(sources))throw Error('Library spaces unavailable.');
+      familySpaces=[...new Set(sources.map(x=>x.space).filter(x=>typeof x==='string'&&x.length))].sort();
+      const checked=familyCreateChoices.filter(x=>x.checked).map(x=>x.value);
+      const createHost=$('family-create-spaces');createHost.replaceChildren(e('legend','Library access'));
+      familyCreateChoices=familySpaceChoices(createHost,checked);
       const host=$('family-profiles');host.replaceChildren();
       if(!result.length)host.append(e('p','No family users configured. Add one to create a private access key.','subtext'));
       for(const profile of result){
@@ -1750,7 +1827,7 @@
         const spaces=Array.isArray(profile.spaces)?profile.spaces.length:0;
         content.append(e('strong',profile.name),
           e('small',profile.revoked?'Access revoked':
-            'User #'+id+' · all-library access · '+spaces+' indexed library space(s)'));
+            'User #'+id+' · '+spaces+' permitted library space(s)'));
         card.append(content);
         if(!profile.revoked){
           const actions=e('div',undefined,'operations-actions');
@@ -1761,11 +1838,17 @@
           revoke.type='button';revoke.disabled=familyBusy||Boolean(familySecret);
           revoke.onclick=()=>void revokeFamilyUser(id,profile.name);
           actions.append(rotate,revoke);card.append(actions);
+          const grants=e('fieldset',undefined,'family-grants');grants.append(e('legend','Library access for '+profile.name));
+          const choices=familySpaceChoices(grants,Array.isArray(profile.spaces)?profile.spaces:[]);
+          const save=e('button','Save library access','quiet');save.type='button';
+          save.onclick=()=>void saveFamilySpaces(id,profile.name,choices,save);
+          grants.append(save);card.append(grants);
         }
         host.append(card);
       }
       familyStatus(result.filter(p=>!p.revoked).length+
-        ' active users. Every active User currently has access to all library spaces.');
+        ' active users. Library access is limited to the selected spaces.');
+      familyReady=true;
       renderFamilySecret();
     }catch(error){
       if(epoch===familyEpoch&&activeView==='family')
@@ -1781,14 +1864,15 @@
   }
   async function createFamilyUser(event){
     event.preventDefault();
-    if(familyBusy||familySecret)return;
+    if(familyBusy||familySecret||!familyReady)return;
     const name=String($('family-name').value||'').trim();
     if(!name||name.length>100){familyStatus('Enter a display name of 1–100 characters.');return}
-    if(!window.confirm('Create '+name+' with access to every library space? The key will be shown only once.'))return;
+    const spaces=familyCreateChoices.filter(x=>x.checked).map(x=>x.value);
+    if(!window.confirm('Create '+name+' with access to '+(spaces.length?spaces.join(', '):'no libraries')+'? The key will be shown only once.'))return;
     familyBusy=true;renderFamilySecret();familyStatus('Creating user…');
     let committed=false;
     try{
-      const answer=await api('./api/profiles','POST',{name});
+      const answer=await api('./api/profiles','POST',{name,spaces});
       committed=true;
       if(!familyKeyValid(answer)||answer.name!==name)
         throw Error('Account may be created, but its one-time key was not returned safely. Inspect and rotate the user key.');
@@ -2423,6 +2507,7 @@
       await loadCatalogue();
     }catch(err){notice(err.message,true)}
   }
+  $('catalogue-layout').onchange=changeCatalogueLayout;
   $('work-close').onclick=closeWorkEditor;
   $('work-refresh').onclick=()=>{
     if(workBusy||!workState)return;
@@ -2480,6 +2565,7 @@
   $('previous').onclick=()=>{if(offset){offset=Math.max(0,offset-pageSize);loadCatalogue()}};
   $('next').onclick=()=>{if(rows.length===pageSize){offset+=pageSize;loadCatalogue()}};
   $('select-page').onchange=event=>{for(const item of rows)choose(item,event.target.checked);renderRows()};
+  $('select-card-page').onchange=$('select-page').onchange;
   $('clear-selection').onclick=()=>{selected.clear();selectedDetails.clear();renderRows()};
   $('export-selection').onclick=exportSelected;
   $('bulk-open').onclick=openBulkEditor;

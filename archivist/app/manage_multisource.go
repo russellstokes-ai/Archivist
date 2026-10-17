@@ -7,6 +7,7 @@ import (
  "io"
  "net/http"
  "net/url"
+ "os"
  "sort"
  "strconv"
  "strings"
@@ -20,6 +21,7 @@ const multiMetadataResponseLimit=2<<20
 type multiMetadataQuery struct{Search,Title,Author,ISBN,MediaFormat,Series,IssueNumber string}
 type multiMetadataCandidate struct {
  publicMetadataCandidate
+ SourceURL string `json:"sourceUrl,omitempty"`
  Score int `json:"score"`
  Tier string `json:"tier"`
  Reasons []string `json:"reasons"`
@@ -230,6 +232,7 @@ func requestMultiMetadata(ctx context.Context,client *http.Client,target multiMe
  switch target.Name{
  case "Open Library":out.Candidates,err=parseOpenLibraryMulti(raw,q)
  case "Google Books":out.Candidates,err=parseGoogleBooksMulti(raw,q)
+ case "Apple Books":out.Candidates,err=parseAppleBooksMulti(raw,q)
  default:err=errors.New("unexpected provider")
  }
  out.Err=err
@@ -276,17 +279,28 @@ func (a *app)serveMultiSourceCandidates(w http.ResponseWriter,r *http.Request,se
  q.ISBN=normalValidISBN(rawISBN)
  warnings:=[]string{}
  if rawISBN!=""&&q.ISBN==""{warnings=append(warnings,"Indexed ISBN has an invalid checksum; identifier ranking disabled")}
- googleQuery:=search
- if q.ISBN!=""{googleQuery="isbn:"+q.ISBN}
- endpoints:=[]multiMetadataEndpoint{
-  {Name:"Open Library",URL:"https://openlibrary.org/search.json?q="+url.QueryEscape(search)+"&fields=key,title,author_name,first_publish_year,isbn,publisher&limit=10"},
-  {Name:"Google Books",URL:"https://www.googleapis.com/books/v1/volumes?q="+url.QueryEscape(googleQuery)+"&maxResults=10&printType=books&projection=lite"},
- }
+ googleKey:=strings.TrimSpace(os.Getenv("GOOGLE_BOOKS_API_KEY"))
+ endpoints:=defaultMultiMetadataEndpoints(search,q,googleKey)
+ provider:="Open Library + Apple Books"
+ if googleKey!=""{provider+=" + Google Books"}else{warnings=append(warnings,"Google Books skipped: no server API key configured")}
  ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
  client:=&http.Client{Timeout:6*time.Second,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}
  candidates,down,succeeded:=a.metadataCache.lookup(ctx,client,endpoints,q)
  if succeeded==0{fail(w,502,errors.New("public metadata providers are unavailable; nothing saved"));return}
  warnings=append(warnings,down...)
- reply(w,map[string]any{"provider":"Open Library + Google Books","candidates":candidates,"warnings":warnings,
+ reply(w,map[string]any{"provider":provider,"candidates":candidates,"warnings":warnings,
  "notice":"Unverified suggestions: select fields individually and confirm the signed book preview."})
+}
+
+func defaultMultiMetadataEndpoints(search string,q multiMetadataQuery,googleKey string)[]multiMetadataEndpoint{
+ endpoints:=[]multiMetadataEndpoint{
+  {Name:"Open Library",URL:"https://openlibrary.org/search.json?q="+url.QueryEscape(search)+"&fields=key,title,author_name,first_publish_year,isbn,publisher&limit=10"},
+  {Name:"Apple Books",URL:appleBooksSearchURL(search,q.MediaFormat)},
+ }
+ if googleKey!=""{
+  googleQuery:=search
+  if q.ISBN!=""{googleQuery="isbn:"+q.ISBN}
+  endpoints=append(endpoints,multiMetadataEndpoint{Name:"Google Books",URL:"https://www.googleapis.com/books/v1/volumes?q="+url.QueryEscape(googleQuery)+"&maxResults=10&printType=books&projection=lite&key="+url.QueryEscape(googleKey)})
+ }
+ return endpoints
 }

@@ -133,7 +133,12 @@ func TestProgressSnapshotPrivatePagedAndReadOnly(t *testing.T) {
     }
     // Changing grants invalidates a formerly permitted snapshot rather than
     // leaking entries that are no longer accessible to this user.
-    if _,err:=a.db.Exec("DELETE FROM grants WHERE profile_id=1 AND space='Open'");err!=nil{t.Fatal(err)}
+    grantRequest:=httptest.NewRequest("PUT","/api/profiles/1/grants",strings.NewReader(`{"spaces":[]}`))
+    grantRequest.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
+    grantRequest.Header.Set("X-Archivist-Action","1")
+    grantResponse:=httptest.NewRecorder()
+    handler.ServeHTTP(grantResponse,grantRequest)
+    if grantResponse.Code!=200{t.Fatalf("revoke snapshot grants: %d %s",grantResponse.Code,grantResponse.Body.String())}
     if code,_=call(alice,"/api/sync/progress?limit=1&offset=1&snapshot="+one.Snapshot,"GET");code!=409{
         t.Fatalf("grant-revoked user continued stale snapshot: %d",code)
     }

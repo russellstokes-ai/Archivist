@@ -295,9 +295,10 @@ func previewMetaChanges(state workMetaState,changes []workMetaChange)([]workMeta
  for _,item:=range changes{
    if !workFieldAllowed(item.Name)||seen[item.Name]{return nil,nil,errors.New("invalid or repeated work field")}
    seen[item.Name]=true
-   if item.Origin!="manual"&&item.Origin!="open-library"&&item.Origin!="google-books"{
+   if item.Origin!="manual"&&item.Origin!="open-library"&&item.Origin!="google-books"&&item.Origin!="apple-books"{
       return nil,nil,errors.New("work metadata must state manual or owner-selected candidate origin")
    }
+   if item.Origin=="apple-books"&&item.Name=="publishedYear"{return nil,nil,errors.New("Apple Books store release is not a first-publication year; verify and enter the year manually")}
    value,err:=validateWorkValue(item.Name,item.Value)
    if err!=nil{return nil,nil,err}
    field:=current[item.Name]
@@ -307,6 +308,7 @@ func previewMetaChanges(state workMetaState,changes []workMetaChange)([]workMeta
    source:="owner edit"
    if item.Origin=="open-library"{source="owner-selected Open Library suggestion (unverified)"}
    if item.Origin=="google-books"{source="owner-selected Google Books edition suggestion (unverified)"}
+   if item.Origin=="apple-books"{source="owner-selected Apple Books store suggestion (unverified)"}
    diffs=append(diffs,workMetaDiff{Name:item.Name,From:field.Value,To:value,Source:source})
  }
  if len(diffs)==0{return nil,nil,errors.New("no book-level changes to preview")}
@@ -386,6 +388,7 @@ func (a *app)applyWorkMetadata(ctx context.Context,p workMetaPreview)(workMetaSt
     source:="owner edit"
     if change.Origin=="open-library"{source="owner-selected Open Library suggestion (unverified)"}
      if change.Origin=="google-books"{source="owner-selected Google Books edition suggestion (unverified)"}
+    if change.Origin=="apple-books"{source="owner-selected Apple Books store suggestion (unverified)"}
     if _,err=tx.ExecContext(ctx,`INSERT INTO work_field_controls(work_id,field,value,source,locked,updated_at)
       VALUES(?,?,?, ?,0,?) ON CONFLICT(work_id,field) DO UPDATE SET
       value=excluded.value,source=excluded.source,updated_at=excluded.updated_at`,

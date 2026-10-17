@@ -23,6 +23,7 @@ type multiMetadataCacheEntry struct {
 type multiMetadataCache struct {
  mu sync.Mutex
  entries map[string]multiMetadataCacheEntry
+ appleNext time.Time
 }
 func multiMetadataCacheKey(q multiMetadataQuery,endpoints []multiMetadataEndpoint)string{
  // JSON gives collision-free encoding for combinations of titles, author
@@ -77,9 +78,26 @@ func (c *multiMetadataCache) lookup(ctx context.Context,client *http.Client,
  if cached,ok:=c.get(key,time.Now());ok{
   return cached.candidates,cached.warnings,cached.succeeded
  }
- candidates,warnings,succeeded:=lookupMultiMetadata(ctx,client,endpoints,q)
+ eligible:=make([]multiMetadataEndpoint,0,len(endpoints))
+ paced:=false
+ for _,endpoint:=range endpoints{
+  if endpoint.Name=="Apple Books"&&!c.allowApple(time.Now()){paced=true;continue}
+  eligible=append(eligible,endpoint)
+ }
+ candidates,warnings,succeeded:=lookupMultiMetadata(ctx,client,eligible,q)
+ if paced{warnings=append(warnings,"Apple Books rate limit: wait a few seconds before another search; no changes were saved")}
  if ctx.Err()==nil&&len(endpoints)>0&&succeeded==len(endpoints){
   c.put(key,time.Now(),candidates,warnings,succeeded)
  }
  return candidates,warnings,succeeded
+}
+
+// Apple's public search API permits approximately twenty requests per minute.
+// Reserve before dispatch, including failures, with no queue or sleeping request.
+// Cached identical searches return before consuming this server-wide allowance.
+func (c *multiMetadataCache) allowApple(now time.Time)bool{
+ c.mu.Lock();defer c.mu.Unlock()
+ if now.Before(c.appleNext){return false}
+ c.appleNext=now.Add(3*time.Second)
+ return true
 }

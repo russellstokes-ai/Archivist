@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+ "database/sql"
+ "strconv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -28,11 +30,7 @@ func (a *app) initHousehold() error {
  CREATE TABLE IF NOT EXISTS grants(profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,space TEXT NOT NULL,PRIMARY KEY(profile_id,space));`); e != nil {
 		return e
 	}
-	// Archivist now has only two roles: Admin and User. Existing profile/grant
-	// databases are upgraded in place by granting every active User every library.
-	_, e := a.db.Exec(`INSERT OR IGNORE INTO grants(profile_id,space)
-		SELECT p.id,s.space FROM profiles p CROSS JOIN sources s WHERE p.revoked=0`)
-	return e
+	return nil
 }
 func (a *app) identify(key string) (identity, bool) {
 	var p identity
@@ -92,7 +90,7 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		var p struct {
 			Name string `json:"name"`
-			Spaces []string `json:"spaces,omitempty"` // accepted for legacy clients; ignored
+			Spaces json.RawMessage `json:"spaces"`
 		}
 		if e := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&p); e != nil {
 			fail(w, 400, e)
@@ -115,6 +113,8 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 			return
 		}
 		defer tx.Rollback()
+        spaces, e := requestedSpaces(tx, p.Spaces, true)
+        if e != nil { fail(w,400,e); return }
 		res, e := tx.Exec("INSERT INTO profiles(name,key_hash) VALUES(?,?)", p.Name, keyHash(key))
 		if e != nil {
 			fail(w, 500, e)
@@ -125,17 +125,15 @@ func (a *app) householdRoutes(mux *http.ServeMux) {
 			fail(w, 500, e)
 			return
 		}
-		if _, e = tx.Exec(`INSERT OR IGNORE INTO grants(profile_id,space)
-			SELECT ?,space FROM sources GROUP BY space`, id); e != nil {
-			fail(w, 500, e)
-			return
-		}
+        if e = replaceProfileGrants(tx,id,spaces); e != nil { fail(w,500,e); return }
+
 		if e = tx.Commit(); e != nil {
 			fail(w, 500, e)
 			return
 		}
-		reply(w, map[string]any{"id": id, "name": p.Name, "role": "user", "key": key})
+		reply(w, map[string]any{"id": id, "name": p.Name, "role": "user", "key": key, "spaces": spaces})
 	})
+	mux.HandleFunc("PUT /api/profiles/{id}/grants", a.updateProfileGrants)
 	mux.HandleFunc("DELETE /api/profiles/{id}", func(w http.ResponseWriter, r *http.Request) {
 		tx,e:=a.db.Begin()
 		if e!=nil{fail(w,500,e);return}
@@ -206,4 +204,47 @@ func (a *app) authorise(r *http.Request, p identity) bool {
 }
 func withIdentity(r *http.Request, p identity) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), identityKey{}, p))
+}
+
+// An omitted create selection preserves old APK behaviour. Explicit [] denies all.
+func requestedSpaces(tx *sql.Tx, raw json.RawMessage, legacyDefault bool) ([]string,error) {
+ spaces:=[]string{}
+ if len(raw)==0 && legacyDefault {
+  rows,err:=tx.Query("SELECT DISTINCT space FROM sources ORDER BY space")
+  if err!=nil{return nil,err};defer rows.Close()
+  for rows.Next(){var space string;if err=rows.Scan(&space);err!=nil{return nil,err};spaces=append(spaces,space)}
+  return spaces,rows.Err()
+ }
+ if len(raw)==0 || strings.TrimSpace(string(raw))=="null" {return nil,errors.New("spaces must be an explicit array")}
+ if err:=json.Unmarshal(raw,&spaces);err!=nil{return nil,errors.New("spaces must be an array of library names")}
+ unique:=[]string{};seen:=map[string]bool{}
+ for _,space:=range spaces {
+  if seen[space]{continue};seen[space]=true
+  var n int
+  if err:=tx.QueryRow("SELECT count(*) FROM sources WHERE space=?",space).Scan(&n);err!=nil{return nil,err}
+  if n==0{return nil,errors.New("unknown library space: "+space)}
+  unique=append(unique,space)
+ }
+ return unique,nil
+}
+func replaceProfileGrants(tx *sql.Tx,id int64,spaces []string) error {
+ if _,err:=tx.Exec("DELETE FROM grants WHERE profile_id=?",id);err!=nil{return err}
+ for _,space:=range spaces {if _,err:=tx.Exec("INSERT INTO grants(profile_id,space) VALUES(?,?)",id,space);err!=nil{return err}}
+ return nil
+}
+func (a *app) updateProfileGrants(w http.ResponseWriter,r *http.Request) {
+ if !who(r).Owner {fail(w,403,errors.New("admin access required"));return}
+ id,err:=strconv.ParseInt(r.PathValue("id"),10,64)
+ if err!=nil||id<=0{fail(w,400,errors.New("invalid profile id"));return}
+ var body struct{Spaces json.RawMessage `json:"spaces"`}
+ if err=json.NewDecoder(http.MaxBytesReader(w,r.Body,8192)).Decode(&body);err!=nil{fail(w,400,err);return}
+ tx,err:=a.db.Begin();if err!=nil{fail(w,500,err);return};defer tx.Rollback()
+ var n int
+ if err=tx.QueryRow("SELECT count(*) FROM profiles WHERE id=? AND revoked=0",id).Scan(&n);err!=nil{fail(w,500,err);return}
+ if n!=1{fail(w,404,errors.New("active profile not found"));return}
+ spaces,err:=requestedSpaces(tx,body.Spaces,false);if err!=nil{fail(w,400,err);return}
+ if err=replaceProfileGrants(tx,id,spaces);err!=nil{fail(w,500,err);return}
+ if err=tx.Commit();err!=nil{fail(w,500,err);return}
+ // Sync continuations compare the live grants digest before returning cached rows.
+ reply(w,map[string]any{"ok":true,"spaces":spaces})
 }

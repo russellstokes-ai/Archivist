@@ -6,6 +6,13 @@
 
 ## 17 October 2026 — Seven-gate server release sprint: software QA green, hardware not accepted
 
+**Later server-only follow-on:** Family library-space selection, shared-page
+Table/Grid/List and no-key Apple Books text metadata are implemented against
+`577f3b5`; exact pushed-head CI must be checked separately. Existing users' grants
+are preserved without automatic broadening at restart/new source. Google Books
+is optional with a server environment key. No protected APK/scanner edits or
+commercial acceptance. [Scope and QA](SERVER_FAMILY_VIEWS_METADATA_QA_2026-10-17.md).
+
 **Draft PR #83. Verified code at `a806ec5`; QA packaging at `20768b6`. Commercial NO-GO.** Two consolidated software commits added read-only Docker/HA/ARM64 smoke, multi-source NAS-disconnect preservation, verified SQLite staged backup/restore including family progress/publication, 10,020-item review/Shelf/Atlas paging, bounded metadata-provider cache with retry-after-outage, family/OPDS/Atlas/streaming integration, peer-aware credential throttle and QA artifact packaging. All seven gates have additional automated/source evidence; **none of the physical production sign-off is implied**.
 
 - [NAS/restore/10k & ARM64 server SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39061379284).
