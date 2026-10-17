@@ -28,6 +28,12 @@ Go/SQLite tests cover valid/fractional issues, ambiguous ranges, dates/volumes n
 
 **Exact source run:** [server root, mirrored/package tests, web contracts, Docker/HA smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436829829), [native Linux ARM64 smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436830030). Both jobs completed SUCCESS on the exact source SHA. Synthetic fixtures and hosted runners do not prove the owner's Pi 4, NAS mounts or 16:9 ingress. Success on a hosted ARM64 runner does not constitute a real Raspberry Pi 4/4GB or attached NAS test.
 
+## Real CBZ-to-catalogue-to-audit source acceptance
+
+Follow-on **source-test-only** commit [`865fab602a0b5b568a0611533b5dfa0997816a4d`](https://github.com/russellstokes-ai/Archivist/commit/865fab602a0b5b568a0611533b5dfa0997816a4d) adds `server_comic_archive_e2e_test.go` in both root/packaged server trees. The test creates three genuine CBZ ZIP archives containing well-formed `ComicInfo.xml` with series, issue, title, creator, year, genre and publisher, plus a valid GIF page. It executes the real server scan, looks up the original indexed work identity, reads the owner-only comic audit, verifies the indexed embedded metadata origin and cautiously flagged issue #2 gap between existing #1/#3/#4 from one year; rescans unchanged media and asserts stable work identity, fingerprint, source evidence and gap; byte-compares all original archives and checks that no work metadata history was written.
+
+**Exact source `865fab6`:** [full server CI success including Docker and Home Assistant disposable runtime](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987007) and [native Linux ARM64 smoke success](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987170). This increases evidence beyond fabricated database rows but is not a physical CBZ/CBR library sampling study, a real Pi4/NAS/HA ingress test, or volume/variant confirmation.
+
 ## Remaining commercial requirements
 
 - This is a **local evidence audit and conservative metadata filter**, not an authoritative specialist comic-provider integration. Explicit series **volume**, issue variant, edition/imprint and publication run are not yet represented as trusted indexed identifiers. Neither Open Library nor Google Books is sufficient to confirm every original comic issue.

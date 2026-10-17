@@ -275,3 +275,10 @@ A1–A6 source corrections and #20/#25 lifecycle candidates implemented under ex
 - **Provenance and correction:** Initial fixture type error failed Go test; next regression surfaced `#1-#2` treated as one issue, fixed in actual parser. Cleared work-level issue/year overrides take precedence over file fallback; renamed issue markers and stale provider results hardened. Tests remain intact; no canonical mobile scanner/Assist/reader changes.
 - **CI:** [Exact source server/HA/Docker run](https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436829829) and [ARM64](https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436830030), check the final job statuses at the documented source. Hardware Pi4, NAS, desktop ingress, live fixture/provider and commercial release gates unaccepted.
 - **Next:** evidence-safe edition/volume identity management, authoritative optional comic reference options, library-scale issue audit, full 16:9/HA production acceptance. Commercial NO-GO and unmerged draft retained.
+
+## 2026-10-17 — Real ComicInfo CBZ scanner integration QA for server issue audit
+
+- **Source:** `865fab602a0b5b568a0611533b5dfa0997816a4d`, additional root/packaged Go test file in unchanged draft PR #83, no media/scanner product code modified.
+- **Acceptance:** Created three actual small zipped CBZ files with embedded ComicInfo.xml, original GIF pages; scanned into SQLite and audited effective series/issue and same-year possible gap; rescanned stable work, fingerprint and source; verified original archive bytes and blank metadata mutation log.
+- **Evidence:** [Server/HA/Docker source CI SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987007), [native ARM64 SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987170). Synthetic source test, not physical Pi4/HAOS/NAS or commercial-release acceptance. Mobile protected source still untouched.
+- **Next:** owner-approved series volume/edition identity modelling, real comic catalogue fixtures, storage and 16:9 UI acceptance.

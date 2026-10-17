@@ -1250,12 +1250,13 @@
     "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
     "pr": 83,
     "source_parent": "ef46420ce38d3975248c4d76a828b381367057ae",
-    "source_head": "a4194150afddd1bdaaaeca08051a185a6700100b",
+    "source_head": "865fab602a0b5b568a0611533b5dfa0997816a4d",
     "source_commits": [
       "dea5afd738f4ed4ad245b10edb8746e5e00f5530",
       "585ecb926b8fb922e09bd816fe1dd198bf705813",
       "fe6f33996f1c95e371c61871ec7a286ad5808462",
-      "a4194150afddd1bdaaaeca08051a185a6700100b"
+      "a4194150afddd1bdaaaeca08051a185a6700100b",
+      "865fab602a0b5b568a0611533b5dfa0997816a4d"
     ],
     "qa": "docs/v1/SERVER_COMIC_IDENTITY_QA_2026-10-17.md",
     "scope": "item 2, milestone B: indexed comic issue evidence and safe opt-in comparison",
@@ -1267,16 +1268,17 @@
       "Open Library and Google Books suggestions selectable only when both comic series and issue match",
       "workbench comic-only evidence panel, no automatic scanning or publication",
       "stale public comparison cards rejected when work metadata input or snapshot changes",
-      "synthetic Go/SQLite and real manager fake-DOM regression coverage"
+      "synthetic Go/SQLite and real manager fake-DOM regression coverage",
+      "full real CBZ archives containing embedded ComicInfo and image pages survive original server scan/rescan; comic audit retains identities and file bytes"
     ],
     "source_checkpoints": {
-      "server_run_id": 39046705057,
-      "server_job_id": 117436829829,
-      "arm64_job_id": 117436830030,
-      "arm64": "success",
+      "server_run_id": 39047128153,
+      "server_job_id": 117437987007,
       "server": "success",
-      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436829829",
-      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39046705057/job/117436830030"
+      "arm64_job_id": 117437987170,
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987007",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987170"
     },
     "limitations": [
       "comic volume, imprint, reprint and issue variant not reliably identified or linked",
@@ -1288,6 +1290,7 @@
     "canonical_mobile_modified": false,
     "pr_draft": true,
     "merged": false,
-    "commercial_server_release_ready": false
+    "commercial_server_release_ready": false,
+    "real_cbz_archive_e2e_source_test": true
   }
 }

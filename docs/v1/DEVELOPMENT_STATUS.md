@@ -6,6 +6,10 @@
 
 ## 17 October 2026 — Indexed comic series/issue audit (item 2, milestone B)
 
+**Additional real-archive acceptance:** [`865fab6`](https://github.com/russellstokes-ai/Archivist/commit/865fab602a0b5b568a0611533b5dfa0997816a4d) tests CBZ archives with genuine ComicInfo.xml and GIF pages through the server scanner, work indexing, owner audit, unchanged rescan and byte-for-byte unchanged files. [Server/HA/Docker CI GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987007) and [Linux ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987170). Production Pi, HA ingress and NAS hardware remain unaccepted.
+
+
+
 **PR #83 draft only.** Code source `a419415` introduces an owner-only indexed comic evidence API and workbench panel; explicit `#issue`/fractional recognition, issue-range ambiguity rejection, bounded same-series peer review and cautiously labelled possible gaps. Comic public candidates cannot offer field changes unless both explicit issue and series match; first publication/edition safeguards and signed Save stay unchanged. Stale search responses and deliberately cleared work-level metadata are protected.
 
 Tests cover the actual API against SQLite fixtures, signed workbench gating and JavaScript interactions. The first two checkpoints detected a fixture-type error then a genuine ambiguous-range parser error, both repaired without removing tests. [Detailed QA](SERVER_COMIC_IDENTITY_QA_2026-10-17.md). No scanner/mobile changes, physical Pi/NAS acceptance, release or merge. Remaining volume/edition identity, full admin parity and real-device work keep the commercial server **NO-GO**.
