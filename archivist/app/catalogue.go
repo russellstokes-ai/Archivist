@@ -30,7 +30,8 @@ func (a *app) initCatalogue() error {
 			return alterErr
 		}
 	}
-	return a.initPublication()
+	if err:=a.initPublication();err!=nil{return err}
+    return a.initMetadataControls()
 }
 
 // Natural ordering makes Track 2 precede Track 10 without modifying filenames.
