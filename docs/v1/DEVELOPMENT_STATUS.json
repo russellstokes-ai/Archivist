@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "as_of": "2026-10-16",
+  "as_of": "2026-10-17",
   "purpose": "Point-in-time manifest distinguishing canonical source, draft fixes, commercial development work and acceptance; not an automated report of GitHub or installed-device state",
   "repo": "russellstokes-ai/Archivist",
   "approved_requirements": {
@@ -946,5 +946,56 @@
     "merged": false,
     "apk_built": false,
     "mobile_scanner_assist_changed_by_this_work": false
+  },
+  "server_parity_pr83_20261017": {
+    "as_of": "2026-10-17",
+    "scope": "PR #83 server parity continuation within existing master plan and 29-gate acceptance register",
+    "previous_verified_source": "e7deb787042b94fc2356309af9994785f0d68c4a",
+    "source_checkpoint": "9f600338a39aabd3284458102f11744e041ed47c",
+    "commits": [
+      "1e8af95d5c24bdf26348de3c75766cfa85b4eaf0",
+      "c229789ebf5ea598a9ab8424183e2b298849045c",
+      "9f600338a39aabd3284458102f11744e041ed47c"
+    ],
+    "protected_covers_blob_restored": "f6381164fb432eb6e50d53199ea1de141b6e7667",
+    "completed": [
+      "selected-cover work fallback isolated from exact reviewed covers.go",
+      "owner-only bounded published-work browsing and reachable unpublish control",
+      "Assist staged and published tabs backed by existing catalogue",
+      "ingress-relative links to existing safe organisation and backup/recovery controls",
+      "synthetic Go/UI contract tests for published review list and owner action"
+    ],
+    "validation": {
+      "cover_adapter_sha": "1e8af95d5c24bdf26348de3c75766cfa85b4eaf0",
+      "cover_adapter_server": "success",
+      "cover_adapter_mobile": "success",
+      "cover_adapter_arm64": "success",
+      "published_manager_sha": "c229789ebf5ea598a9ab8424183e2b298849045c",
+      "published_manager_server": "success",
+      "published_manager_arm64": "success",
+      "published_manager_mobile": "success",
+      "latest_deep_links_source_sha": "9f600338a39aabd3284458102f11744e041ed47c",
+      "latest_source_server": "success",
+      "latest_source_mobile": "success",
+      "latest_source_android_native": "success",
+      "latest_source_ios": "pending_source_check",
+      "latest_source_arm64": "success",
+      "physical_pi_ha_install": "not_tested",
+      "nas_physical": "not_tested",
+      "owner_mobile": "not_tested"
+    },
+    "blocked_remaining": [
+      "work-level metadata/provenance and field locks",
+      "bulk metadata preview/apply and actual safe relinking workflows",
+      "scanner job pause/cancel/resume semantics",
+      "real Pi RAM/CPU/SSD and cover-cache benchmarking",
+      "full responsive visual parity/device QA and HA ingress upgrade",
+      "unaccepted mobile bugs and release/Play testing"
+    ],
+    "commercial_release_ready": false,
+    "merged": false,
+    "production_server_packaged_for_install": false,
+    "new_apk_built": false,
+    "changed_protected_mobile_source": false
   }
 }
