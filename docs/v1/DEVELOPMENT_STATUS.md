@@ -4,6 +4,12 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Comic edition transfer safety preflight (read-only)
+
+**Draft PR #83 · source `2914747` · Commercial NO-GO.** Archivist Assist now includes owner-only **Inspect edition reassignment**, which compares the selected comic edition with an existing destination book. It checks work fingerprints, series/issue/year and library space, automatic grouping, publication, orphan risk, owner-verified edition identities, manual metadata, covers, household progress/completion/activity, historical file moves/relinks and active scanner jobs. The signed report explains blockers and is explicitly **read-only**: there is **no Apply endpoint or button** and no media/SQLite mutation.
+
+[Server root+package, manager interaction, Docker/HA checks GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123523) · [ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123242) · [Mobile source protection GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39051249886). Actual transfer/undo, injected-failure rollback and real Pi4/NAS/Home Assistant ingress remain separate acceptance gates. [Full QA](SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md).
+
 ## 17 October 2026 — Server comic edition/volume identity, item 3 partial
 
 **Exact source `07776dca`, draft [PR #83](https://github.com/russellstokes-ai/Archivist/pull/83), commercial NO-GO.** A separately revisioned owner-verified comic edition identity ledger now supports run, volume, issue, imprint, variant, edition year and notes without regrouping, rewriting media, overwriting book metadata or touching family bookmarks. Owner-only signed preview/confirmed Save, bounded history and signed last-Save undo; published, offline, multi-part or cross-work-conflicted editions fail closed. Book workbench controls reuse the existing approved 16:9 presentation.

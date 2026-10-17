@@ -1,5 +1,7 @@
 # Archivist Server — Comic edition and volume identity ledger: source QA
 
+> **Later milestone:** [Owner-only transfer safety preflight](SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md) is now available, but does not execute edition reassignment or undo. This document is the earlier edition-label QA baseline.
+
 **Date:** 17 October 2026  
 **Repository:** [russellstokes-ai/Archivist, draft PR #83](https://github.com/russellstokes-ai/Archivist/pull/83)  
 **Current implementation source:** `07776dca312ff238ae235d0a1d1380f9d93af5cb`  

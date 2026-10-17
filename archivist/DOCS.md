@@ -169,6 +169,10 @@ These values reflect **stored indexed physical files**, not counts of logical bo
 
 On actual SMB/NFS failures, blocked reads and a delayed stop request can still wait on the operating system; do not treat unit tests or ARM64 CI as real Raspberry Pi/NAS acceptance.
 
+## Read-only comic edition reassignment inspection
+
+Owner Library Manager → Archivist Assist provides **Inspect transfer safety** for an existing edition and an existing destination book. It lists reasons to block a future reparenting, but performs no database move, file modification or progress change. There is **no Apply control** in this build. Read `docs/v1/SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md` for the current source-QA contract.
+
 ## Comic edition and volume identity (QA draft)
 
 In **Library Manager → Archivist Assist → Edit book**, an existing comic edition can be given owner-verified series run, volume, issue, imprint, variant, edition year and notes without changing its original media or work membership. This is optional, requires an unpublished/available single-file comic, and uses explicit preview/Save or separately confirmed undo. These records and their history belong to the SQLite database under `/data`. Keep that database intact across upgrades and include it in backups. This feature is not yet accepted on a physical Pi4/Home Assistant ingress installation or a live NAS; use only disposable data for source-QA builds. Details: `docs/v1/SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md`.

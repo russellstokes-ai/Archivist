@@ -1343,5 +1343,50 @@
     "draft": true,
     "merged": false,
     "commercial_server_release_ready": false
+  },
+  "server_comic_transfer_preflight_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent_sha": "ed509e9a2ebd16a2882d71da4c0e3db783978da5",
+    "source_head": "2914747c0ffa0434f6a5dfa659b7a6be06d4ac8d",
+    "commits": [
+      "6686f0319c2fdadabab49e3b0784f6110452d9c1",
+      "ea1c4c8d3560f5e4c6a6578630a45572213b7465",
+      "2914747c0ffa0434f6a5dfa659b7a6be06d4ac8d"
+    ],
+    "qa": "docs/v1/SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md",
+    "scope": "server owner-only READ-ONLY edition reassignment safety preflight (not an Apply feature)",
+    "source_checks": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "success",
+      "android_native": "success",
+      "ios": "not yet confirmed",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123523",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123242",
+      "mobile_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249886",
+      "android_native_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249870"
+    },
+    "delivered": [
+      "owner-only signed and work-fingerprint-bound read-only source/target/edition conflict inspection",
+      "checks manual grouping, publication, space grants, source retention, issue/year/series compatibility and bounded exact member identities",
+      "blocks owner-verified edition profiles, manual metadata, cover, preferences, completion/activity, reading progress, previous relinks/moves and active scan jobs",
+      "manager UI surfaces descriptive blockers, does not auto-inspect and rejects late stale responses",
+      "real Go/SQLite and manager fake-DOM regressions verify absence of Apply endpoint and no original data mutation",
+      "root/packaged server mirrors plus protected mobile source-lock CI"
+    ],
+    "limitations": [
+      "actual atomic edition reparenting/apply and undo is intentionally NOT IMPLEMENTED",
+      "future Apply needs new write-transaction conflict revalidation and failure-injection rollback",
+      "no unverified cross-volume/variant grouping, edition label rebind, or orphaned work deletion permitted",
+      "no owner physical Pi4 HA ingress / NAS SMB NFS or 1920x1080 browser acceptance",
+      "full server ten-screen parity, specialist comics authority and Play/Fold/Auto gates remain open"
+    ],
+    "no_mutating_transfer_endpoint": true,
+    "source_mirrors_verified_by_ci": true,
+    "canonical_mobile_touched": false,
+    "draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
   }
 }
