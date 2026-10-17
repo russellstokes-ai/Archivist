@@ -62,6 +62,7 @@ const makeWorkState=()=>({
     {name:'title',value:workTitle,source:'catalogue',locked:false},
     {name:'author',value:'Test Author',source:'derived from files',locked:false},
     {name:'series',value:'',source:'missing',locked:false},
+    {name:'seriesNumber',value:'',source:'missing from files',locked:false},
     {name:'genre',value:'Adventure',source:'derived from files',locked:false},
     {name:'publishedYear',value:workYear,source:workYear?'owner-selected Open Library suggestion (unverified)':'missing from files',locked:false},
     ...['narrator','publisher','isbn','asin','language','description'].map(name=>({
@@ -333,7 +334,7 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(elements.get('work-editions').children.length,1,'real audio edition summary required');
   assert.equal(elements.get('work-media').children.length,2,'book must display individual chapter records');
   const bookFields=elements.get('work-fields');
-  assert.equal(bookFields.children.length,11,'work-level fields must cover extended bibliographic metadata');
+  assert.equal(bookFields.children.length,12,'book editor must include fractional comic/series positions');
   elements.get('work-candidate-query').value='Aerial Archive';
   elements.get('work-candidate-search').onclick();await settle();
   assert(calls.some(x=>x.startsWith('./api/manage/metadata-candidates?q=')),'provider search should be explicit');
@@ -342,8 +343,8 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   const useYear=suggestion.children[2].children.find(button=>button.textContent==='Use Year');
   assert(useYear,'candidate fields need deliberate acceptance controls');
   useYear.onclick();
-  assert.equal(bookFields.children[4].children[0].value,'2021');
-  assert.equal(bookFields.children[4].children[0].dataset.origin,'open-library');
+  assert.equal(bookFields.children[5].children[0].value,'2021');
+  assert.equal(bookFields.children[5].children[0].dataset.origin,'open-library');
   assert.equal(elements.get('work-apply-button').disabled,true,'unreviewed suggestion must not save');
   elements.get('work-preview-button').onclick();await settle();
   assert(workCalls.some(x=>x.url.endsWith('/metadata/preview')),'work-level preview must reach versioned backend');
@@ -353,7 +354,7 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert(workCalls.some(x=>x.url.endsWith('/metadata/apply')),'confirmed work edit must use dedicated atomic API');
   assert.equal(elements.get('work-dialog').open,true,'successful metadata Save must not close book editor');
   assert.equal(workRevision,1);
-  assert.equal(elements.get('work-fields').children[4].children[0].value,'2021');
+  assert.equal(elements.get('work-fields').children[5].children[0].value,'2021');
   elements.get('work-undo-preview').onclick();await settle();
   assert.equal(elements.get('work-undo-apply').disabled,false,'signed undo preview enables explicit Apply');
   elements.get('work-undo-apply').onclick();await settle();

@@ -630,7 +630,7 @@
   let workInputs=new Map(),workBusy=false,workMediaOffset=0;
   const workFieldLabels=[
     ['title','Book title'],['author','Author / creator'],['series','Series'],
-    ['genre','Genre / Atlas category'],['publishedYear','First publication year'],
+    ['seriesNumber','Series / issue number'],['genre','Genre / Atlas category'],['publishedYear','First publication year'],
     ['narrator','Narrator'],['publisher','Publisher'],['isbn','ISBN'],
     ['asin','ASIN'],['language','Language'],['description','Description']
   ];
@@ -666,7 +666,10 @@
       if(field.name==='description')label.className='work-full';
       const input=field.name==='description'?e('textarea'):e('input');
       if(field.name==='description')input.rows=4;
-      else{input.type=field.name==='publishedYear'?'number':'text';if(input.type==='number'){input.min=1000;input.max=3000;input.step=1}}
+      else{input.type=(field.name==='publishedYear'||field.name==='seriesNumber')?'number':'text';if(input.type==='number'){
+        if(field.name==='publishedYear'){input.min=1000;input.max=3000;input.step=1}
+        else{input.min=-10000;input.max=100000;input.step='any'}
+      }}
       input.value=field.value??'';input.dataset.initial=input.value;input.dataset.origin='manual';
       input.readOnly=!editable||Boolean(field.locked);
       const line=e('div',undefined,'work-field-line');

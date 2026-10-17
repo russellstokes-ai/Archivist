@@ -10,6 +10,7 @@ import (
  "errors"
  "fmt"
  "io"
+ "math"
  "net/http"
  "strconv"
  "strings"
@@ -18,8 +19,8 @@ import (
 
 const workMetaPreviewTTL=10*time.Minute
 const maxWorkMemberSnapshot=5000
-var workMetaNames=[]string{"title","author","series","genre","publishedYear","narrator","publisher","isbn","asin","language","description"}
-var workMetaExtended=[]string{"publishedYear","narrator","publisher","isbn","asin","language","description"}
+var workMetaNames=[]string{"title","author","series","seriesNumber","genre","publishedYear","narrator","publisher","isbn","asin","language","description"}
+var workMetaExtended=[]string{"seriesNumber","publishedYear","narrator","publisher","isbn","asin","language","description"}
 
 func workFieldAllowed(name string)bool{
  for _,v:=range workMetaNames{if name==v{return true}}
@@ -138,7 +139,7 @@ func (a *app)readWorkMeta(ctx context.Context,q bulkQuerier,id int64)(workMetaSt
  encoder:=json.NewEncoder(h)
  rows,err:=q.QueryContext(ctx,`SELECT ed.id,ed.format,ea.position,a.id,a.relative_path,
     a.available,a.needs_review,a.scan_signature,a.metadata_source,
-    a.title,a.author,a.series,a.genre,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,
+    a.title,a.author,a.series,a.genre,a.series_number,a.published_year,a.narrator,a.publisher,a.isbn,a.asin,a.language,a.description,
     COALESCE((SELECT revision FROM asset_metadata_revisions v WHERE v.asset_id=a.id),0)
     FROM editions ed JOIN edition_assets ea ON ea.edition_id=ed.id
     JOIN assets a ON a.id=ea.asset_id WHERE ed.work_id=?
@@ -149,10 +150,11 @@ func (a *app)readWorkMeta(ctx context.Context,q bulkQuerier,id int64)(workMetaSt
  for rows.Next(){
    var editionID,assetID,fileRev int64
    var pos,year int
+   var seriesNumber float64
    var format,path,signature,source,fileTitle,fileAuthor,fileSeries,fileGenre,narrator,publisher,isbn,asin,language,description string
    var available,needsReview bool
    if err=rows.Scan(&editionID,&format,&pos,&assetID,&path,&available,&needsReview,
-      &signature,&source,&fileTitle,&fileAuthor,&fileSeries,&fileGenre,&year,&narrator,&publisher,&isbn,&asin,&language,&description,&fileRev);err!=nil{
+      &signature,&source,&fileTitle,&fileAuthor,&fileSeries,&fileGenre,&seriesNumber,&year,&narrator,&publisher,&isbn,&asin,&language,&description,&fileRev);err!=nil{
       rows.Close();return state,err
    }
    state.Files++
@@ -167,6 +169,7 @@ func (a *app)readWorkMeta(ctx context.Context,q bulkQuerier,id int64)(workMetaSt
    }
    ed:=&state.Editions[len(state.Editions)-1]
    ed.Files++;if available{ed.Available++};if needsReview{ed.ReviewFiles++}
+   derived["seriesNumber"].consume(strconv.FormatFloat(seriesNumber,'g',-1,64))
    derived["publishedYear"].consume(strconv.Itoa(year))
    derived["narrator"].consume(narrator)
    derived["publisher"].consume(publisher)
@@ -175,7 +178,7 @@ func (a *app)readWorkMeta(ctx context.Context,q bulkQuerier,id int64)(workMetaSt
    derived["language"].consume(language)
    derived["description"].consume(description)
    if err=encoder.Encode([]any{editionID,format,pos,assetID,path,available,needsReview,
-       signature,source,fileRev,fileTitle,fileAuthor,fileSeries,fileGenre,year,narrator,publisher,isbn,asin,language,description});err!=nil{
+       signature,source,fileRev,fileTitle,fileAuthor,fileSeries,fileGenre,seriesNumber,year,narrator,publisher,isbn,asin,language,description});err!=nil{
        rows.Close();return state,err
    }
  }
@@ -256,6 +259,13 @@ func validateWorkValue(name,value string)(string,error){
  switch name{
  case "title":
      if value==""{return "",errors.New("book title cannot be blank")}
+ case "seriesNumber":
+     if value==""||value=="0"{return "",nil}
+     n,err:=strconv.ParseFloat(value,64)
+     if err!=nil||math.IsNaN(n)||math.IsInf(n,0)||n< -10000||n>100000{
+       return "",errors.New("series or issue number must be finite and within accepted bounds")
+     }
+     return strconv.FormatFloat(n,'f',-1,64),nil
  case "publishedYear":
      if value==""||value=="0"{return "",nil}
      y,err:=strconv.Atoi(value)
@@ -275,7 +285,7 @@ func workMetaReceipt(secret string,p workMetaPreview)string{
  return hex.EncodeToString(mac.Sum(nil))
 }
 func previewMetaChanges(state workMetaState,changes []workMetaChange)([]workMetaChange,[]workMetaDiff,error){
- if len(changes)<1||len(changes)>len(workMetaNames){return nil,nil,errors.New("select 1–11 work metadata fields")}
+ if len(changes)<1||len(changes)>len(workMetaNames){return nil,nil,errors.New("select 1–12 work metadata fields")}
  current:=map[string]workMetaField{}
  for _,field:=range state.Fields{current[field.Name]=field}
  seen:=map[string]bool{}

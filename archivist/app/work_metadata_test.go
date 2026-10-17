@@ -299,3 +299,83 @@ func TestWorkAssistCandidateConflictAndVersionedProvenance(t *testing.T){
  }
  _=old
 }
+
+func TestBookSeriesFractionalIssueAndAtlasYearUseApprovedWorkMetadata(t *testing.T){
+    f:=setupWorkFixture(t)
+    for _,init:=range []func()error{f.a.initListening,f.a.initReader,f.a.initPreferences,f.a.initCompletions,f.a.initActivity}{
+        if err:=init();err!=nil{t.Fatal(err)}
+    }
+    if _,err:=f.a.db.Exec("UPDATE assets SET published_year=2001,series_number=1 WHERE source_id=1");err!=nil{t.Fatal(err)}
+    initial:=f.get(t)
+    if fieldValue(initial,"publishedYear").Value!="2001"||fieldValue(initial,"seriesNumber").Value!="1"{
+        t.Fatalf("failed to derive work year/sequence from editions: %+v",initial.Fields)
+    }
+    p:=f.preview(t,initial,[]workMetaChange{
+        {Name:"publishedYear",Value:"2021",Origin:"manual"},
+        {Name:"seriesNumber",Value:"0.5",Origin:"manual"},
+    })
+    if res:=f.apply(t,p,true);res.Code!=200{t.Fatalf("work-level date and fractional issue not saved: %d %s",res.Code,res.Body.String())}
+    state:=f.get(t)
+    if fieldValue(state,"publishedYear").Value!="2021"||fieldValue(state,"seriesNumber").Value!="0.5"{
+        t.Fatalf("work-level sequence/year incorrectly stored: %+v",state.Fields)
+    }
+    var fileYear int
+    if err:=f.a.db.QueryRow("SELECT published_year FROM assets WHERE id=?",f.FirstID).Scan(&fileYear);err!=nil||fileYear!=2001{
+        t.Fatalf("book year overwrite changed edition source metadata: year=%d err=%v",fileYear,err)
+    }
+    // Publication is deliberately a separate, explicit owner action. The
+    // shared catalogue and Atlas rings should use the approved *book* year.
+    if _,err:=f.a.db.Exec(`INSERT INTO work_publication(work_id,state,revision,published_at)
+       VALUES(?,'published',1,1)`,f.WorkID);err!=nil{t.Fatal(err)}
+    works:=workMetaRequest(f.a,"GET","/api/works?year=2021","test-key","",false)
+    if works.Code!=200{t.Fatalf("year-filtered published books %d %s",works.Code,works.Body.String())}
+    var records []struct{
+        ID int64 `json:"id"`
+        PublishedYear int64 `json:"publishedYear"`
+        SeriesNumber float64 `json:"seriesNumber"`
+    }
+    if err:=json.Unmarshal(works.Body.Bytes(),&records);err!=nil{t.Fatal(err)}
+    if len(records)!=1||records[0].ID!=f.WorkID||records[0].PublishedYear!=2021||
+       records[0].SeriesNumber!=0.5{
+        t.Fatalf("published work did not expose approved year and fractional position %+v",records)
+    }
+    previous:=workMetaRequest(f.a,"GET","/api/works?year=2001","test-key","",false)
+    var older []map[string]any
+    if err:=json.Unmarshal(previous.Body.Bytes(),&older);err!=nil||len(older)!=0{
+        t.Fatalf("book-level override ignored by published search: %+v %v",older,err)
+    }
+    summary:=workMetaRequest(f.a,"GET","/api/library-summary","test-key","",false)
+    if summary.Code!=200{t.Fatalf("Atlas summary unavailable %d %s",summary.Code,summary.Body.String())}
+    var library struct{Years []struct{Name string `json:"name"`;Count int `json:"count"`} `json:"years"`}
+    if err:=json.Unmarshal(summary.Body.Bytes(),&library);err!=nil{t.Fatal(err)}
+    if len(library.Years)!=1||library.Years[0].Name!="2021"||library.Years[0].Count!=1{
+        t.Fatalf("Atlas year ring ignored book workbench correction: %+v",library.Years)
+    }
+    if _,err:=f.a.db.Exec("UPDATE work_publication SET state='staged',revision=revision+1 WHERE work_id=?",f.WorkID);err!=nil{t.Fatal(err)}
+    cleared:=f.get(t)
+    clearPlan:=f.preview(t,cleared,[]workMetaChange{{Name:"publishedYear",Value:"",Origin:"manual"}})
+    if result:=f.apply(t,clearPlan,true);result.Code!=200{t.Fatalf("explicit year clearing failed %d %s",result.Code,result.Body.String())}
+    if _,err:=f.a.db.Exec("UPDATE work_publication SET state='published',revision=revision+1 WHERE work_id=?",f.WorkID);err!=nil{t.Fatal(err)}
+    summary=workMetaRequest(f.a,"GET","/api/library-summary","test-key","",false)
+    if err:=json.Unmarshal(summary.Body.Bytes(),&library);err!=nil{t.Fatal(err)}
+    if len(library.Years)!=0{t.Fatalf("explicit cleared book year wrongly fell back to edition year: %+v",library.Years)}
+    // Source edition is still 2001 and visible to file-level editors.
+    if err:=f.a.db.QueryRow("SELECT published_year FROM assets WHERE id=?",f.FirstID).Scan(&fileYear);err!=nil||fileYear!=2001{t.Fatalf("file year lost: %d %v",fileYear,err)}
+}
+
+func TestBookWorkMetaRejectsBadFractionalNumberAndDuplicateFields(t *testing.T){
+    f:=setupWorkFixture(t);state:=f.get(t)
+    for _,candidate:=range []string{"NaN","Infinity","-120000","1000000","1.2.3"}{
+        raw,_:=json.Marshal(workMetaPreviewRequest{ExpectedRevision:state.Revision,ExpectedFingerprint:state.Fingerprint,
+           Changes:[]workMetaChange{{Name:"seriesNumber",Value:candidate,Origin:"manual"}}})
+        response:=workMetaRequest(f.a,"POST",f.path("/preview"),"test-key",string(raw),true)
+        if response.Code!=409{t.Fatalf("invalid fraction %q previewed: %d %s",candidate,response.Code,response.Body.String())}
+    }
+    raw,_:=json.Marshal(workMetaPreviewRequest{ExpectedRevision:state.Revision,ExpectedFingerprint:state.Fingerprint,
+      Changes:[]workMetaChange{
+        {Name:"genre",Value:"History",Origin:"manual"},
+        {Name:"genre",Value:"Fantasy",Origin:"manual"},
+      }})
+    response:=workMetaRequest(f.a,"POST",f.path("/preview"),"test-key",string(raw),true)
+    if response.Code!=409{t.Fatalf("duplicate work field previewed: %d %s",response.Code,response.Body.String())}
+}

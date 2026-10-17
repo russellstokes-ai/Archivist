@@ -432,7 +432,17 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			COALESCE((SELECT wp.rating FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
 			COALESCE((SELECT wp.favourite FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
 			`+workStateExpression(who(r).ID)+`,
-            COALESCE((SELECT digest FROM selected_work_covers sc WHERE sc.work_id=w.id),'')
+            COALESCE((SELECT digest FROM selected_work_covers sc WHERE sc.work_id=w.id),''),
+            CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear')
+    THEN CAST(NULLIF((SELECT wcv.value FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear'),'') AS INTEGER)
+    ELSE (SELECT min(NULLIF(year_asset.published_year,0))
+        FROM editions year_ed JOIN edition_assets year_ea ON year_ea.edition_id=year_ed.id
+        JOIN assets year_asset ON year_asset.id=year_ea.asset_id
+        WHERE year_ed.work_id=w.id) END,
+            CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='seriesNumber')
+              THEN CAST(NULLIF((SELECT wc.value FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='seriesNumber'),'') AS REAL)
+              ELSE CASE WHEN min(NULLIF(a.series_number,0))=max(NULLIF(a.series_number,0))
+                THEN min(NULLIF(a.series_number,0)) ELSE NULL END END
 			FROM published_works w JOIN editions e ON e.work_id=w.id
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ? OR w.genre LIKE ?)
@@ -441,10 +451,12 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			AND (?='' OR w.series=?)
 			AND (?='' OR w.genre=?)
 			AND (?=0 OR trim(w.author)='')
-            AND (?=0 OR (SELECT min(NULLIF(year_asset.published_year,0))
-                FROM editions year_ed JOIN edition_assets year_ea ON year_ea.edition_id=year_ed.id
-                JOIN assets year_asset ON year_asset.id=year_ea.asset_id
-                WHERE year_ed.work_id=w.id)=?)
+            AND (?=0 OR (CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear')
+    THEN CAST(NULLIF((SELECT wcv.value FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear'),'') AS INTEGER)
+    ELSE (SELECT min(NULLIF(year_asset.published_year,0))
+        FROM editions year_ed JOIN edition_assets year_ea ON year_ea.edition_id=year_ed.id
+        JOIN assets year_asset ON year_asset.id=year_ea.asset_id
+        WHERE year_ed.work_id=w.id) END)=?)
 			AND (?='' OR `+workStateExpression(who(r).ID)+`=?)
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences fp WHERE fp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND fp.work_id=w.id AND fp.favourite=1))
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences rp WHERE rp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND rp.work_id=w.id AND rp.rating=?))
@@ -463,8 +475,12 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			var ratingValue int
 			var favouriteValue bool
 			var title, author, series, genre, workSpace, workFormat, state, coverHash string
-			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available,&ratingValue,&favouriteValue,&state,&coverHash); e != nil { fail(w,500,e); return }
-			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0,"rating":ratingValue,"favourite":favouriteValue,"state":state,"coverHash":coverHash})
+            var publishedYear sql.NullInt64
+            var bookSeriesNumber sql.NullFloat64
+			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available,&ratingValue,&favouriteValue,&state,&coverHash,&publishedYear,&bookSeriesNumber); e != nil { fail(w,500,e); return }
+            year:=int64(0);if publishedYear.Valid{year=publishedYear.Int64}
+            number:=float64(0);if bookSeriesNumber.Valid{number=bookSeriesNumber.Float64}
+			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"seriesNumber":number,"publishedYear":year,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0,"rating":ratingValue,"favourite":favouriteValue,"state":state,"coverHash":coverHash})
 		}
 		reply(w,out)
 	})
@@ -539,7 +555,9 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{genres=append(genres,map[string]any{"name":name,"count":count})}};rows.Close() }
         years:=[]map[string]any{}
         rows,e=a.db.Query(`SELECT CAST(p.year AS TEXT),count(*) FROM (
-            SELECT w.id,min(NULLIF(a.published_year,0)) AS year FROM published_works w
+            SELECT w.id,CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='publishedYear')
+               THEN CAST(NULLIF((SELECT wc.value FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='publishedYear'),'') AS INTEGER)
+               ELSE min(NULLIF(a.published_year,0)) END AS year FROM published_works w
             JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id
             JOIN assets a ON a.id=ea.asset_id
             WHERE (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
