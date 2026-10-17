@@ -161,6 +161,13 @@ func relinkRefCount(ctx context.Context,q bulkQuerier,table,column string,id int
 }
 
 func (a *app) relinkCheck(ctx context.Context,q bulkQuerier,old,candidate relinkIdentity)error{
+    return a.relinkCheckCardinality(ctx,q,old,candidate,false)
+}
+
+func (a *app) relinkCheckCardinality(ctx context.Context,q bulkQuerier,old,candidate relinkIdentity,grouped bool)error{
+    if grouped&&(old.Format!="Audio"||candidate.Format!="Audio"){
+        return errors.New("grouped relink is limited to audiobooks")
+    }
     if old.AssetID==candidate.AssetID||old.WorkID==candidate.WorkID||
         old.SourceID!=candidate.SourceID||old.Format!=candidate.Format{
         return errors.New("select one old and one new file of the same format and library")
@@ -188,7 +195,12 @@ func (a *app) relinkCheck(ctx context.Context,q bulkQuerier,old,candidate relink
           (SELECT count(*) FROM edition_assets ea JOIN editions e ON e.id=ea.edition_id
            WHERE e.work_id=?)`,item.WorkID,item.WorkID).Scan(&editions,&files)
         if err!=nil{return err}
-        if editions!=1||files!=1{
+        if editions!=1{
+            return errors.New("relink requires a single edition in each work")
+        }
+        if grouped {
+            if files<2||files>32{return errors.New("grouped relink requires 2–32 tracks per audiobook")}
+        } else if files!=1 {
             return errors.New("a work has multiple files or editions; use a specialist grouped relink")
         }
     }
