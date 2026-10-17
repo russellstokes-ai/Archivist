@@ -215,3 +215,12 @@ dialog::backdrop{background:#010b12cf}
 @media(max-width:1000px){.work-editor-layout{grid-template-columns:1fr}.work-dialog{width:calc(100vw - 24px);max-height:94vh}}
 @media(max-width:600px){.work-field-grid{grid-template-columns:1fr}.work-field-grid label.work-full{grid-column:auto}.work-dialog{padding:18px}.work-search-row{grid-template-columns:1fr}.work-preview-diff article{grid-template-columns:1fr}.work-meta-panel{padding:13px}.work-edit-secondary{min-width:0}}
 @media(prefers-reduced-motion:reduce){.work-dialog *{transition:none!important;animation:none!important}}
+
+/* Read-only indexed comic identity, intentionally inside the existing workbench. */
+.comic-audit-panel[hidden]{display:none!important}
+#work-comic-audit{display:grid;gap:8px;min-width:0}
+#work-comic-audit>strong{color:var(--gold);font-size:15px}
+#work-comic-audit .work-flag{margin:0;font-size:12px}
+.comic-gap-note{font-size:12px;color:var(--gold);border-left:2px solid var(--teal);padding-left:10px;margin:6px 0}
+.comic-evidence-list{display:grid;gap:5px;max-height:190px;overflow:auto}
+.comic-evidence-list p{margin:0;overflow-wrap:anywhere}

@@ -794,6 +794,52 @@
       }
     }catch(error){if(epoch===workEpoch)workMessage('Change history unavailable: '+error.message)}
   }
+  // Indexed comic evidence is local and read-only; never invoke a public
+  // provider or mutate any series, edition, bookmark or selected cover here.
+  async function workLoadComicAudit(epoch){
+    const state=workState,host=$('work-comic-audit'),panel=$('work-comic-panel');
+    const isComic=Boolean(state?.editions?.length)&&state.editions.every(ed=>ed.format==='Comic');
+    panel.hidden=!isComic;
+    host.replaceChildren();
+    if(!isComic||epoch!==workEpoch)return;
+    host.append(e('p','Inspecting indexed series and issue evidence…','subtext'));
+    try{
+      const data=await api('./api/manage/works/'+encodeURIComponent(String(state.workId))+'/comic-audit');
+      if(epoch!==workEpoch||workState!==state)return;
+      host.replaceChildren();
+      if(data.workId!==state.workId||data.fingerprint!==state.fingerprint){
+        host.append(e('p','Comic evidence changed while the editor was open. Reload the book.','work-flag'));
+        return;
+      }
+      host.append(e('strong',(data.series||'Series unknown')+' · issue '+(data.issueNumber||'not identified')),
+        e('small',(data.issueSource||'unknown provenance')+' · '+Number(data.peers?.length||0)+' same-series catalogue entries','subtext'));
+      for(const warning of (data.warnings||[]).slice(0,12)){
+        host.append(e('p',warning,'work-flag'));
+      }
+      if(data.possibleGaps?.length){
+        host.append(e('p','Possible gaps between observed issues: '+data.possibleGaps.join(', ')+'. Not evidence of missing or purchased comics.','comic-gap-note'));
+      }
+      const members=e('div',undefined,'comic-evidence-list');
+      for(const item of (data.fileEvidence||[]).slice(0,40)){
+        members.append(e('p',[
+          'File #'+item.assetId,item.title,
+          item.series?'Series '+item.series:'',
+          item.issueNumber?'#'+item.issueNumber:'Issue unknown',
+          item.metadataSource||'source unknown',
+          item.available?'Available':'Offline'
+        ].filter(Boolean).join(' · '),'subtext'));
+      }
+      host.append(members);
+      if(data.fileEvidenceTruncated||data.peersTruncated){
+        host.append(e('p','Evidence is bounded; no conclusions from unlisted files.','work-flag'));
+      }
+      host.append(e('p','Read-only analysis of existing catalogue records. Verify ComicInfo, series volume and issue before using public metadata.','subtext'));
+    }catch(error){
+      if(epoch===workEpoch&&workState===state){
+        host.replaceChildren(e('p','Comic evidence unavailable: '+error.message,'work-flag'));
+      }
+    }
+  }
   async function workReload(epoch){
     if(epoch!==workEpoch||!$('work-dialog').open)return;
     const id=workState?.workId;
@@ -803,9 +849,10 @@
     if(data.workId!==id||typeof data.fingerprint!=='string'||!Array.isArray(data.fields)){
       throw Error('Server returned an invalid book metadata snapshot.');
     }
+    ++workCandidateEpoch; // invalidate searches ranked against an older book revision
     workState=data;workClearPlans();workRenderSummary(data);workRenderFields(data);
     workResetMedia();
-    await Promise.all([workLoadMedia(epoch),workLoadHistory(epoch)]);
+    await Promise.all([workLoadMedia(epoch),workLoadHistory(epoch),workLoadComicAudit(epoch)]);
   }
   function openWorkEditor(id){
     const parsed=Number(id);
@@ -860,7 +907,7 @@
   }
   async function workFindCandidates(){
     if(!workState||workBusy||workState.publicationState!=='staged')return;
-    const epoch=workEpoch,generation=++workCandidateEpoch;
+    const epoch=workEpoch,generation=++workCandidateEpoch,inputVersion=workEditEpoch;
     const query=$('work-candidate-query').value.trim();
     if(query.length<2){workMessage('Enter a title, author or ISBN to search.');return}
     const box=$('work-candidates');box.replaceChildren(e('p','Searching optional public suggestions…','subtext'));
@@ -871,12 +918,15 @@
         title:workInputs.get('title')?.input.value||'',
         author:workInputs.get('author')?.input.value||'',
         isbn:workInputs.get('isbn')?.input.value||'',
-        format:workState.editions?.some(item=>/comic/i.test(item.format))?'comic':'book'
+        format:workState.editions?.length&&workState.editions.every(item=>item.format==='Comic')?'comic':'book',
+        series:workInputs.get('series')?.input.value||'',
+        issue:workInputs.get('seriesNumber')?.input.value||''
       });
       const response=await api('./api/manage/metadata-candidates?'+hints.toString());
-      if(epoch!==workEpoch||generation!==workCandidateEpoch)return;
+      if(epoch!==workEpoch||generation!==workCandidateEpoch||inputVersion!==workEditEpoch)return;
       box.replaceChildren();
       const candidates=Array.isArray(response.candidates)?response.candidates:[];
+      const isComic=workState?.editions?.length&&workState.editions.every(item=>item.format==='Comic');
       for(const warning of response.warnings||[]){
         box.append(e('p',warning,'work-flag'));
       }
@@ -897,6 +947,10 @@
           // publication year. Mixed editions cannot safely share one ISBN.
           if(name==='publishedYear'&&candidate.yearType==='edition publication')continue;
           if(name==='isbn'&&(candidate.identifierMismatch||(workState.editions?.length||0)>1))continue;
+          // A matching title/ISBN cannot prove the correct comic issue. Keep
+          // all provider field actions disabled until series AND explicit
+          // issue token agree. Manual workbench editing remains available.
+          if(isComic&&(candidate.comicSeriesMatch!=='match'||candidate.comicIssueMatch!=='match'))continue;
           const button=e('button','Use '+label,'quiet');button.type='button';
           button.title='Compare and select this '+label+' suggestion';
           button.onclick=()=>{
@@ -908,6 +962,9 @@
           buttons.append(button);
         }
         card.append(buttons);
+        if(isComic&&(candidate.comicSeriesMatch!=='match'||candidate.comicIssueMatch!=='match')){
+          card.append(e('small','Suggestions disabled: series and explicit issue must both agree. Check volume, imprint and variant manually.','work-flag'));
+        }
         if(candidate.yearType==='edition publication'&&candidate.publishedYear){
           card.append(e('small','Edition year shown for comparison only; first publication year must be independently checked.','subtext'));
         }
@@ -915,7 +972,7 @@
         for(const warning of candidate.warnings||[]){card.append(e('small','Review: '+warning,'work-flag'))}
         box.append(card);
       }
-    }catch(error){if(epoch===workEpoch&&generation===workCandidateEpoch){
+    }catch(error){if(epoch===workEpoch&&generation===workCandidateEpoch&&inputVersion===workEditEpoch){
       box.replaceChildren(e('p','Provider unavailable: '+error.message,'subtext'));
     }}finally{if(epoch===workEpoch)$('work-candidate-search').disabled=workState?.publicationState!=='staged'}
   }

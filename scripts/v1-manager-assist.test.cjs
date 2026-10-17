@@ -71,9 +71,39 @@ const makeWorkState=()=>({
     }))
   ]
 });
+const makeComicWorkState=()=>({
+  ...makeWorkState(),workId:2,title:'The Flash #12',revision:0,fingerprint:'f'.repeat(64),
+  files:1,editions:[{id:20,format:'Comic',files:1,available:1,reviewFiles:0}],
+  fields:makeWorkState().fields.map(field=>{
+    switch(field.name){
+      case 'title':return {...field,value:'The Flash #12'};
+      case 'author':return {...field,value:'Comic Creator'};
+      case 'series':return {...field,value:'The Flash'};
+      case 'seriesNumber':return {...field,value:'12',source:'derived from files'};
+      case 'publishedYear':return {...field,value:'2024',source:'derived from files'};
+      default:return field;
+    }
+  })
+});
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url==='./api/manage/works/2/metadata')return reply(makeComicWorkState());
+  if(url==='./api/manage/works/2/metadata/history')return reply({workId:2,events:[]});
+  if(url.startsWith('./api/manage/works/2/media?')){
+    return reply({workId:2,fingerprint:'f'.repeat(64),hasMore:false,files:[
+      {id:21,title:'The Flash #12',position:0,editionId:20,format:'Comic',
+       available:true,relativePath:'Flash12.cbz',metadataSource:'embedded'}
+    ]});
+  }
+  if(url==='./api/manage/works/2/comic-audit'){
+    return reply({workId:2,fingerprint:'f'.repeat(64),series:'The Flash',
+      issueNumber:'12',issueSource:'derived from files',fileEvidenceTruncated:false,
+      peersTruncated:false,possibleGaps:[11],warnings:['Volume not independently verified'],
+      peers:[{workId:2,title:'The Flash #12',issueNumber:12,year:2024}],
+      fileEvidence:[{assetId:21,editionId:20,title:'The Flash #12',series:'The Flash',
+        issueNumber:12,year:2024,metadataSource:'embedded',available:true,needsReview:false}]});
+  }
   if(url.startsWith('./api/manage/works/1/metadata')){
     workCalls.push({url,method:options.method||'GET',body:options.body?JSON.parse(options.body):undefined});
     if(url==='./api/manage/works/1/metadata'&&(!options.method||options.method==='GET')){
@@ -144,6 +174,17 @@ const fetchFake=async (url,options={})=>{
     return reply({ok:true});
   }
   if(url.startsWith('./api/manage/metadata-candidates?q=')){
+    if(url.includes('format=comic')){
+      return reply({provider:'Open Library + Google Books',candidates:[
+        {workId:'matching',title:'The Flash #12',source:'Google Books',publisher:'Comic House',
+          comicSeriesMatch:'match',comicIssueMatch:'match',tier:'possible comic issue',
+          yearType:'edition publication',publishedYear:2024,
+          reasons:['Exact explicit comic issue number']},
+        {workId:'wrong',title:'The Flash #13',source:'Google Books',publisher:'Other House',
+          comicSeriesMatch:'match',comicIssueMatch:'mismatch',tier:'check carefully',
+          warnings:['Different comic issue number']}
+      ]});
+    }
     return reply({provider:'Open Library',candidates:[
       {workId:'/works/test',title:'Aerial Archive',author:'Test Author',publishedYear:2021,
        isbn:'1234567890',publisher:'Example Press',source:'Open Library',yearType:'first publication',
@@ -439,6 +480,40 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   elements.get('work-close').onclick();
   assert.equal(elements.get('work-dialog').open,false);
   assert.equal(workTitle,originalWorkTitle);
+
+  // Comic files open a read-only issue/series audit, never an automatic rename
+  // or an implicit Internet lookup. Public provider actions require BOTH
+  // matching explicit issue number and series.
+  const comicCard=elements.get('assist-works').children[1];
+  const comicEdit=comicCard.children[2].children.find(button=>
+    button.tagName==='BUTTON'&&button.textContent==='Edit book');
+  assert(comicEdit,'comic books must have the same workbench access as audiobooks');
+  comicEdit.onclick();await settle();
+  assert.equal(elements.get('work-dialog').open,true);
+  assert.equal(elements.get('work-comic-panel').hidden,false,'comic evidence panel should be visible only for comics');
+  assert(calls.includes('./api/manage/works/2/comic-audit'),'comic evidence must come from indexed server catalogue');
+  const comicEvidence=elements.get('work-comic-audit');
+  assert(comicEvidence.children.some(node=>String(node.textContent||'').includes('The Flash · issue 12')),
+    'effective series and issue should be shown as actual source evidence');
+  assert(comicEvidence.children.some(node=>String(node.textContent||'').includes('Possible gaps')),
+    'bounded same-year issue gap warning should be visible and explicitly qualified');
+  const noPreviousExternalRequest=calls.filter(url=>url.includes('mode=multi')).length;
+  elements.get('work-candidate-query').value='The Flash #12';
+  elements.get('work-candidate-search').onclick();await settle();
+  const comicQuery=calls.find(url=>url.includes('mode=multi')&&url.includes('format=comic'));
+  assert(comicQuery&&comicQuery.includes('series=The+Flash')&&comicQuery.includes('issue=12'),
+    'explicit comic comparison must include indexed series and issue identity');
+  assert.equal(calls.filter(url=>url.includes('mode=multi')).length,noPreviousExternalRequest+1,
+    'no provider query may be triggered by opening a comic book');
+  const comicCandidates=elements.get('work-candidates').children;
+  assert.equal(comicCandidates.length,2);
+  assert(comicCandidates[0].children[2].children.some(button=>button.textContent==='Use Publisher'),
+    'exact issue plus series can be manually selected for signed work preview');
+  assert.equal(comicCandidates[1].children[2].children.length,0,
+    'mismatched comic issue must not offer ANY provider field selections');
+  assert.equal(elements.get('work-apply-button').disabled,true,
+    'rendering comic candidates must not change or save book metadata');
+  elements.get('work-close').onclick();
 
   const health=nav.find(item=>item.dataset.view==='health');
   health.onclick();

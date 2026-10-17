@@ -17,7 +17,7 @@ import (
 
 // Source comparisons are owner-initiated, read-only, capped and not scanner inputs.
 const multiMetadataResponseLimit=2<<20
-type multiMetadataQuery struct{Search,Title,Author,ISBN,MediaFormat string}
+type multiMetadataQuery struct{Search,Title,Author,ISBN,MediaFormat,Series,IssueNumber string}
 type multiMetadataCandidate struct {
  publicMetadataCandidate
  Score int `json:"score"`
@@ -27,6 +27,8 @@ type multiMetadataCandidate struct {
  YearType string `json:"yearType,omitempty"`
  ISBNExact bool `json:"isbnExact,omitempty"`
  IdentifierMismatch bool `json:"identifierMismatch,omitempty"`
+ ComicSeriesMatch string `json:"comicSeriesMatch,omitempty"`
+ ComicIssueMatch string `json:"comicIssueMatch,omitempty"`
 }
 type multiMetadataEndpoint struct{Name,URL string}
 type multiMetadataResult struct{Name string; Candidates []multiMetadataCandidate; Err error}
@@ -138,6 +140,7 @@ func multiRank(c *multiMetadataCandidate,q multiMetadataQuery){
  case score>=65:c.Tier="strong candidate"
  default:c.Tier="possible candidate"
  }
+ comicEnrichCandidate(c,q)
 }
 func parseOpenLibraryMulti(raw []byte,q multiMetadataQuery)([]multiMetadataCandidate,error){
  var response openLibrarySearchResponse
@@ -257,10 +260,18 @@ func lookupMultiMetadata(ctx context.Context,client *http.Client,endpoints []mul
 }
 func (a *app)serveMultiSourceCandidates(w http.ResponseWriter,r *http.Request,search string){
  q:=multiMetadataQuery{Search:search,Title:strings.TrimSpace(r.URL.Query().Get("title")),
-  Author:strings.TrimSpace(r.URL.Query().Get("author")),MediaFormat:strings.TrimSpace(r.URL.Query().Get("format"))}
+  Author:strings.TrimSpace(r.URL.Query().Get("author")),MediaFormat:strings.TrimSpace(r.URL.Query().Get("format")),
+  Series:strings.TrimSpace(r.URL.Query().Get("series")),IssueNumber:strings.TrimSpace(r.URL.Query().Get("issue"))}
  rawISBN:=strings.TrimSpace(r.URL.Query().Get("isbn"))
- if len(q.Title)>180||len(q.Author)>180||len(rawISBN)>40||len(q.MediaFormat)>25{
+ if len(q.Title)>180||len(q.Author)>180||len(q.Series)>180||len(q.IssueNumber)>24||
+  len(rawISBN)>40||len(q.MediaFormat)>25{
   fail(w,400,errors.New("metadata matching parameters exceed allowed size"));return
+ }
+ if strings.EqualFold(q.MediaFormat,"comic")&&q.IssueNumber!=""{
+  number,err:=strconv.ParseFloat(q.IssueNumber,64)
+  if err!=nil||!(number>0)||number>100000{
+   fail(w,400,errors.New("comic issue number must be finite and between 0 and 100000"));return
+  }
  }
  q.ISBN=normalValidISBN(rawISBN)
  warnings:=[]string{}

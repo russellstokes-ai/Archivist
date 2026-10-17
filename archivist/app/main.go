@@ -529,6 +529,7 @@ func (a *app) routes() http.Handler {
     a.relinkRoutes(mux)
     a.groupedRelinkRoutes(mux)
 	a.manageCandidateRoutes(mux)
+    a.comicAuditRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
 	a.libraryHealthRoutes(mux)

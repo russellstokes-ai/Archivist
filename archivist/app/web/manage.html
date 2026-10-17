@@ -136,7 +136,7 @@
    <section class="work-meta-panel">
     <div class="section-head"><div><h3>Compare public metadata</h3><p class="footnote">Optional lookup. Candidate information remains unverified until you inspect and explicitly select individual fields.</p></div></div>
     <div class="work-search-row"><label>Title, author or ISBN<input id="work-candidate-query" type="search" autocomplete="off" placeholder="Compare Open Library and Google Books"></label><button id="work-candidate-search" type="button" class="quiet">Find candidates</button></div>
-    <p class="footnote">This button sends the entered search and current title, author and ISBN to Open Library and Google Books. No automatic matching, metadata saves or media uploads. Edition publication year cannot replace the first-publication year automatically.</p><div id="work-candidates" aria-live="polite"></div>
+    <p class="footnote">This button sends the entered search and current title, author, series, issue number and ISBN to Open Library and Google Books. No automatic matching, metadata saves or media uploads. Edition publication year cannot replace the first-publication year automatically.</p><div id="work-candidates" aria-live="polite"></div>
    </section>
    <section class="work-meta-panel">
     <div class="section-head"><h3>Preview before saving</h3></div>
@@ -154,6 +154,11 @@
     <button id="work-cover-clear" type="button" class="quiet">Clear selected cover</button>
     <p id="work-publication" class="footnote">Checking publication status…</p>
     <button id="work-publish-toggle" type="button" class="quiet">Loading publication…</button>
+   </section>
+   <section id="work-comic-panel" class="work-meta-panel comic-audit-panel" hidden>
+    <h3>Comic series &amp; issue evidence</h3>
+    <p class="footnote">Indexed ComicInfo and saved metadata only. Possible gaps are not proof of missing editions; volume identity is not yet independently verified.</p>
+    <div id="work-comic-audit" aria-live="polite"></div>
    </section>
    <section class="work-meta-panel">
     <h3>Editions &amp; chapter files</h3>
