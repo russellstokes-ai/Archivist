@@ -130,7 +130,7 @@ func TestComicAuditIsTypeSafeAndHandlesManualIdentityConflict(t *testing.T){
   t.Fatalf("source conflict not visible: %+v",audit)
  }
  audiobook:=setupWorkFixture(t)
- other:=comicAuditGet(audiobook,"1",true)
+ other:=comicAuditGet(audiobook.a,"1",true)
  if other.Code!=409{t.Fatalf("non-comic book received comic report: %d %s",other.Code,other.Body.String())}
  if missing:=comicAuditGet(a,"999",true);missing.Code!=404{t.Fatalf("absent book returned %d",missing.Code)}
 }
