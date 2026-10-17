@@ -342,6 +342,23 @@ async function pollJobs(){
     for(const j of jobs.slice(0,5)){
       const row=element('article');row.className='scan-card';const top=element('div');top.className='scan-head';const name=element('strong','Scan '+j.id);const state=element('span',j.state);state.className='status-pill '+(j.state==='failed'?'status-error':j.state==='complete'?'status-ok':'status-active');top.append(name,state);row.append(top,element('p',j.message||'Preparing scan…'));
       if(j.state==='queued'||j.state==='running'){const done=Number(j.progress||0),total=Number(j.total||0),pct=total>0?Math.min(100,Math.round(done/total*100)):0;const meta=element('div');meta.className='progress-meta';meta.append(element('span',total?done+' / '+total+' files':'Counting files…'),element('strong',total?pct+'%':'…'));const bar=element('progress');bar.max=total||1;bar.value=total?done:0;row.append(meta,bar)}
+      if(j.state==='queued'||j.state==='failed'||j.state==='cancelled'){
+        const action=j.state==='queued'?'cancel':'retry';
+        const button=element('button',action==='cancel'?'Cancel queued scan':'Retry scan');
+        button.type='button';button.className='quiet';
+        button.onclick=async()=>{
+          if(action==='cancel'&&!window.confirm('Cancel this queued scan? A running scan cannot be stopped safely.'))return;
+          button.disabled=true;
+          try{
+            const result=await api('./api/jobs/'+encodeURIComponent(String(j.id))+'/'+action,'POST');
+            message(action==='cancel'?'Queued scan cancelled.':'Retry queued as scan '+result.job_id+'.');
+            await pollJobs();
+          }catch(error){message(error.message);button.disabled=false}
+        };
+        row.append(button);
+      }else if(j.state==='running'){
+        row.append(element('small','This scan finishes safely before cancellation is allowed.'));
+      }
       $('jobs').append(row)
     }
     const signature=JSON.stringify(jobs);

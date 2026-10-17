@@ -41,12 +41,28 @@ const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new 
 elements.get('sort').value='review';
 const nav=['library','assist','review','health'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
 const calls=[];
+const scanJobs=[
+  {id:2,source_id:1,state:'failed',message:'Storage offline',progress:0,total:1},
+  {id:1,source_id:1,state:'queued',message:'Waiting for scanner',progress:0,total:0},
+  {id:3,source_id:1,state:'running',message:'Scanning',progress:2,total:10}
+];
 const reply=value=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>value});
 const fieldNames=['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'];
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url==='./api/library-health')return reply({summary:{offlineSources:0},sources:[{id:1,online:true,indexedFiles:4,needsReview:2}]});
+  if(url==='./api/jobs')return reply(scanJobs.map(job=>({...job})));
+  if(url==='./api/jobs/1/cancel'&&options.method==='POST'){
+    scanJobs.find(x=>x.id===1).state='cancelled';
+    return reply({ok:true,id:1,state:'cancelled'});
+  }
+  if(url==='./api/jobs/2/retry'&&options.method==='POST'){
+    scanJobs.find(x=>x.id===2).state='cancelled';
+    scanJobs.unshift({id:4,source_id:1,state:'queued',message:'Retry queued',progress:0,total:0});
+    return reply({ok:true,job_id:4,state:'queued'});
+  }
   if(url.startsWith('./api/manage/assets/')&&url.endsWith('/fields')){
     const id=Number(url.split('/')[4]);
     const row=id===11?file:{...file,id,title:'Part 2'};
@@ -76,7 +92,7 @@ const fetchFake=async (url,options={})=>{
     return reply({state:'published',revision:1});
   }
   if(url==='./api/library-summary')return reply({total:3,needsReview:3,reviewWorks:2,spaces:[{name:'Books',count:3}],availability:[]});
-  if(url==='./api/sources')return reply([{space:'Books'}]);
+  if(url==='./api/sources')return reply([{id:1,space:'Books',status:'Ready',works:3,files:4}]);
   if(url.startsWith('./api/books?'))return reply([]);
   if(url.startsWith('./api/manage/review-works/1/files?'))return reply({files:[file,{...file,id:12,title:'Part 2'}],hasMore:false});
   if(url.startsWith('./api/manage/review-works?')){
@@ -154,5 +170,29 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   await settle();
   assert.equal(elements.get('assist-staged').attributes['aria-pressed'],'true');
   assert.equal(elements.get('assist-works').children.length,2);
-  console.log('PASS: Assist stages, publishes, browses published work, unpublishes, preserves real metadata editor');
+
+  const health=nav.find(item=>item.dataset.view==='health');
+  health.onclick();
+  await settle();
+  const list=elements.get('jobs-health');
+  assert.equal(list.children.length,3,'server manager must show the three persisted scan states');
+  const buttons=(row)=>row.children.filter(x=>x.tagName==='BUTTON');
+  const failed=list.children[0];
+  const queued=list.children[1];
+  const running=list.children[2];
+  assert.equal(buttons(failed)[0]?.textContent,'Retry scan','failed jobs need a real retry control');
+  assert.equal(buttons(queued)[0]?.textContent,'Cancel queued scan','queued jobs need safe cancellation');
+  assert.equal(buttons(running).length,0,'running jobs must not expose an unsafe cancel button');
+  buttons(queued)[0].onclick();
+  await settle();
+  assert(calls.includes('./api/jobs/1/cancel'),'cancel action must reach the server');
+  const retryRow=elements.get('jobs-health').children.find(item=>
+    item.children[0]?.textContent==='Source 1 · failed');
+  assert(retryRow,'failed row must remain accessible after cancelling queued work');
+  buttons(retryRow)[0].onclick();
+  await settle();
+  assert(calls.includes('./api/jobs/2/retry'),'retry action must reach the server');
+  assert(elements.get('jobs-health').children.some(item=>
+    item.children[0]?.textContent==='Source 1 · queued'),'new queued retry must be shown on the workbench');
+  console.log('PASS: Assist publication and server health queued-cancel/failed-retry actions; active scans protected');
 })().catch(error=>{console.error(error);process.exitCode=1});

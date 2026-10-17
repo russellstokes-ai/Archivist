@@ -55,3 +55,12 @@ assert.ok(managerHtml.includes('href="./#settings/organisation"'),'Manager must 
 assert.ok(managerHtml.includes('href="./#settings/server"'),'Manager must link to actual backup/recovery controls');
 assert.ok(source.includes('function navigateServerHash()')&&source.includes('navigateServerHash();'),'Ingress-relative manager deep links must resolve after authentication');
 assert.ok(source.includes("['library','organisation','household','server'].includes(section)"),'Deep-link sections must be allowlisted');
+
+const scanManager=fs.readFileSync('web/manage.js','utf8');
+const scanDashboard=fs.readFileSync('web/app.js','utf8');
+for(const sourceText of [scanManager,scanDashboard]){
+  assert.ok(sourceText.includes('Cancel queued scan'),'Owner server UI must offer queued scan cancellation');
+  assert.ok(sourceText.includes('Retry scan'),'Owner server UI must offer retry for failed jobs');
+  assert.ok(sourceText.includes("'/cancel'")||sourceText.includes("+action,'POST'"),
+    'Owner scan actions must post actual API requests');
+}

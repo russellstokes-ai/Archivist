@@ -582,6 +582,25 @@
       row.append(e('strong','Source '+job.source_id+' · '+job.state),e('span',job.message||'','subtext'));
       const done=Number(job.progress||0),total=Number(job.total||0);
       if(total>0){const bar=e('progress');bar.max=total;bar.value=Math.min(total,done);row.append(bar)}
+      // No mid-scan cancellation: the current scanner must finish its atomic
+      // scan transaction so the existing catalogue stays intact.
+      if(job.state==='queued'||job.state==='failed'||job.state==='cancelled'){
+        const action=job.state==='queued'?'cancel':'retry';
+        const button=e('button',action==='cancel'?'Cancel queued scan':'Retry scan','quiet edit-button');
+        button.type='button';
+        button.onclick=async()=>{
+          if(action==='cancel'&&!window.confirm('Cancel this queued scan before it starts? No library files will change.'))return;
+          button.disabled=true;
+          try{
+            const response=await api('./api/jobs/'+encodeURIComponent(String(job.id))+'/'+action,'POST');
+            notice(action==='cancel'?'Queued scan cancelled.':'Scan queued as job '+response.job_id+'.');
+            await Promise.all([loadHealth(),loadSummary()]);
+          }catch(err){notice(err.message,true);button.disabled=false}
+        };
+        row.append(button);
+      }else if(job.state==='running'){
+        row.append(e('small','Running scans must finish safely before they can be stopped.','subtext'));
+      }
       tasks.append(row);
     }
   }
