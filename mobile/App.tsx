@@ -67,6 +67,7 @@ import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, clai
 import {AchievementRewardOverlay} from './AchievementRewardOverlay';
 import {motionForAchievement,motionForLevelUp,rewardPresentationMs} from './rewardMotion';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
+import {atlasSelectPublished,atlasSourceAudit} from './atlasSourceSelection';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {AtlasChartRing} from './AtlasChartRing';
 import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasBreakdown as makeAtlasBreakdown, atlasSummary, atlasGenrePalette} from './atlasInteraction';
@@ -1638,12 +1639,13 @@ function Client() {
   useEffect(()=>{const next=normalizeSpaceSelection(sourceWorks,sourceFilter,space);if(next!==space)setSpace(next);},[sourceFilter,sourceWorks,space]);
 
 
-  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>{
-    const eligible=sourceWorks.filter(work=>work.source!=='local'||work.localWork?.tracks.some(track=>(track as ScannerBook).scannerPublished));
-    const selected=sourceFilter==='all'?dedupeForAll(eligible):eligible.filter(work=>matchesSource(work.source,sourceFilter));
-    const unique=new Map<string,UnifiedWork>();for(const work of selected)unique.set(work.source==='local'?(work.logicalWorkKey||work.canonicalKey):work.canonicalKey,work);
-    return [...unique.values()];
-  },[sourceFilter,sourceWorks]);
+  // One publication-aware boundary, shared by Atlas Universe, rings and relationships.
+  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,sourceFilter),[sourceFilter,sourceWorks]);
+  useEffect(()=>{
+    if(activeTab!=='atlas'||!localCatalogReady)return;
+    // Counts only: never log media titles, paths, cover URLs or profile data.
+    console.info('ArchivistAtlasSourceCounts',JSON.stringify(atlasSourceAudit(sourceWorks,sourceFilter)));
+  },[activeTab,localCatalogReady,sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
   const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
   const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>work.genre),genreColour),[sourceWorks]);
@@ -7555,8 +7557,8 @@ function Client() {
             {recentItem?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:darkMode?tone:p.gold,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.42:.30,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.52]})}]}]}/>:null}
             <View style={[styles.rewardRibbon,styles.rewardRibbonLeft,{backgroundColor:item.unlocked?tone:p.line}]}/>
             <View style={[styles.rewardRibbon,styles.rewardRibbonRight,{backgroundColor:item.unlocked?tone:p.line}]}/>
-            <View style={[styles.rewardMedal,{borderColor:item.unlocked?tone:p.line,backgroundColor:item.unlocked?(darkMode?'#151412':'#FFF9EC'):p.card}]}>
-              <UiIcon name={icon} color={item.unlocked?tone:p.muted} size={22}/>
+            <View style={[styles.rewardMedal,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.gold:p.card}]}>
+              <UiIcon name={icon} color={item.unlocked?'#182C29':p.muted} size={22}/>
             </View>
           </View>
           <View style={{alignItems:'flex-end',gap:3}}>
