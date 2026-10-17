@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "path": "mobile/App.tsx",
-  "scope": "User-directed Test 14: Atlas must populate published/complete legacy logical works and all three chart data views without scanner publication bypass; completed Rewards medallion is brand gold. No scanner, Assist, Comic Focus, Living Book renderer, layout geometry or immutable Lottie edited. Atlas List and ring/graph data now share this same publication boundary, rather than List counting unreviewed raw Library rows. Atlas folder/source filters, list and visual palette are scoped to the same eligible published catalogue. Reader-only SAF classification of user-selected files (CBR/CBZ/CBT/PDF), leaving protected scanner and Comic Focus unchanged.",
+  "scope": "User-directed Test 14: Atlas must populate published/complete legacy logical works and all three chart data views without scanner publication bypass; completed Rewards medallion is brand gold. No scanner, Assist, Comic Focus, Living Book renderer, layout geometry or immutable Lottie edited. Atlas List and ring/graph data now share this same publication boundary, rather than List counting unreviewed raw Library rows. Atlas folder/source filters, list and visual palette are scoped to the same eligible published catalogue. Reader-only SAF classification of user-selected files (CBR/CBZ/CBT/PDF), leaving protected scanner and Comic Focus unchanged. Automatic Now restoration deduplication, correct paused activation and removal of redundant Resume confirmation while retaining saved positions and Shelf recovery.",
   "owner_approval": "User on 2026-10-17 directed robust mobile repairs and Atlas specification compliance, and previously requested the medallion be gold.",
   "previous_approved_git_blob_sha": "d3f9b89f0c2cda360e21eace25460505eb2857a7",
-  "approved_git_blob_sha": "9e66c3fb2b41b845b8a851c45141ac12702be5c8",
+  "approved_git_blob_sha": "bec74d33baec0fd824cdd855557de5ace8f7ff33",
   "release_approved": false,
   "installed_apk_approved": false,
   "changes": [
@@ -47,6 +47,22 @@
     {
       "old": "    if (!book.available) {\n      setError('This file is currently unavailable.');\n      return;\n    }\n    const generation=++readerOpenGeneration.current;",
       "new": "    if (!book.available) {\n      setError('This file is currently unavailable.');\n      return;\n    }\n    // Reader-only SAF identity resolution; never rewrite scanner metadata.\n    if(book.source!=='server'&&book.uri){\n      const format=effectiveLocalReaderFormat(book.format,book.uri);\n      if(format!==book.format)book={...book,format};\n    }\n    const generation=++readerOpenGeneration.current;"
+    },
+    {
+      "old": "  useEffect(()=>{\n    if(!nowSessionReady||activeTab!=='now'||playing||reading||!nowSessionRef.current)return;\n    void resumeNowSession(nowSessionRef.current);\n  },[nowSessionReady,activeTab,playing,reading]);",
+      "new": "  const nowRestorePending=useRef<{key:string;run:Promise<void>}|null>(null);\n  function beginNowRestore(snapshot:DurableNowSession):Promise<void>{\n    // Both the Now effect and its tab handler may attempt restoration in the\n    // same render. Deduplicate identical work/session opens, but allow a newer\n    // session to supersede an in-flight network/media request.\n    const key=String(snapshot.updatedAt)+'|'+snapshot.kind+'|'+\n      String(snapshot.media.uri||snapshot.media.serverWorkId||snapshot.media.localWorkKey||'');\n    if(nowRestorePending.current?.key===key)return nowRestorePending.current.run;\n    let run:Promise<void>;\n    run=Promise.resolve().then(()=>resumeNowSession(snapshot))\n      .catch(error=>{\n        setError(error instanceof Error?error.message:'Unable to restore saved media.');\n      }).finally(()=>{\n        if(nowRestorePending.current?.run===run)nowRestorePending.current=null;\n      });\n    nowRestorePending.current={key,run};\n    return run;\n  }\n  useEffect(()=>{\n    if(!nowSessionReady||activeTab!=='now'||playing||reading||!nowSessionRef.current)return;\n    void beginNowRestore(nowSessionRef.current);\n  },[nowSessionReady,activeTab,playing,reading]);"
+    },
+    {
+      "old": "      await resumeNowSession(snapshot);\n      return;",
+      "new": "      await beginNowRestore(snapshot);\n      return;"
+    },
+    {
+      "old": "    if(lastPlaying){setLiveMode('player');await playBook(lastPlaying);return;}",
+      "new": "    if(lastPlaying){setLiveMode('player');await playBook(lastPlaying,undefined,false);return;}"
+    },
+    {
+      "old": "        ? (lastTitle?'Resume your most recent audiobook, or choose another from Shelf.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.')\n        : (lastTitle?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.')}</Text>\n      {lastTitle&&onResume?<Button label={'Resume '+lastTitle} onPress={onResume}/>:null}",
+      "new": "        ? (lastTitle?'Your listening position is saved. Archivist restores it automatically when the title is available.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.')\n        : (lastTitle?'Your reading page is saved. Archivist restores it automatically when the title is available.':'Open an EPUB, PDF or comic from Shelf.')}</Text>"
     }
   ]
 }
