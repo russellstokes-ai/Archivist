@@ -3957,17 +3957,18 @@ function Client() {
     }
     // Reader-only SAF identity resolution; never rewrite scanner metadata.
     if(book.source!=='server'&&book.uri){
-      const format=effectiveLocalReaderFormat(book.format,book.uri);
+      const localUri=book.uri; // preserve TS narrowing across Book reassignment
+      const format=effectiveLocalReaderFormat(book.format,localUri);
       if(format!==book.format)book={...book,format};
-      const opaque=Platform.OS==='android'&&book.uri.startsWith('content://')
-        &&comicContainerFromUri(book.uri)==='unknown';
+      const opaque=Platform.OS==='android'&&localUri.startsWith('content://')
+        &&comicContainerFromUri(localUri)==='unknown';
       // Android providers can expose a comic or PDF under a numeric document
       // ID. Query the read-only native MIME/display-name enum once per open.
       if(checkOpaque&&opaque&&(book.format==='Comic'||!['Audio','PDF','EPUB'].includes(book.format))){
         const pending=++readerOpenGeneration.current;
         const candidate=book;
         setError('');
-        void comicContainerFromDocument(book.uri).then(kind=>{
+        void comicContainerFromDocument(localUri).then(kind=>{
           if(readerOpenGeneration.current!==pending||selection!==nowResumeGeneration.current)return;
           const resolved=readerFormatFromContainer(candidate.format,kind);
           if(['Comic','PDF','EPUB'].includes(resolved))
