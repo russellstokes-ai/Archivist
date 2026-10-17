@@ -13,6 +13,8 @@
     ['language','Language','text'], ['description','Description','textarea']
   ];
   let activeView='library', offset=0, rows=[], selected=new Set(), requestId=0, timer=0, editing=null, candidateGeneration=0, editorEpoch=0;
+  let editingRevision=null,editingFieldReady=false,editingFieldConflict=false,editingFieldBusy=false;
+  const editorDecorations=new Map();
   const selectedDetails=new Map();
   const savedViewsKey='archivist-manager-v1-views';
   const e=(tag,text,className)=>{
@@ -103,7 +105,7 @@
         const buttons=e('div',undefined,'candidate-fields');
         for(const [key,label] of [['title','Title'],['author','Author'],['publishedYear','Year'],['isbn','ISBN'],['publisher','Publisher']]){
           if(!candidate[key])continue;
-          const field=$('editor-fields').querySelector('[name="'+key+'"]');if(!field)continue;
+          const field=$('editor-fields').querySelector('[name="'+key+'"]');if(!field||field.readOnly)continue;
           const choose=e('button','Use '+label,'quiet');choose.type='button';choose.title='Replace '+label+': '+field.value+' → '+String(candidate[key]);
           choose.onclick=()=>{field.value=String(candidate[key]);field.focus();notice('Selected '+label+' from Open Library. Review your changes before saving.')};
           buttons.append(choose);
@@ -126,30 +128,130 @@
     ++candidateGeneration;
     $('candidate-search-button').disabled=false;
   }
+  function editorHasChanges(){
+    return [...$('editor-fields').querySelectorAll('input,textarea')].some(input=>input.value!==input.dataset.initial);
+  }
+  function setEditorFieldLock(name,locked,source){
+    const item=editorDecorations.get(name);if(!item)return;
+    item.input.readOnly=locked;
+    item.lock.textContent=locked?'Unlock':'Lock';
+    item.lock.setAttribute('aria-pressed',String(locked));
+    item.lock.setAttribute('aria-label',(locked?'Unlock ':'Lock ')+name+' metadata');
+    item.lock.dataset.locked=String(locked);
+    item.provenance.textContent=(source||'Unverified source')+' · '+(locked?'Locked':'Editable');
+  }
+  async function loadEditorFieldControls(target,epoch){
+    if(editing!==target||editorEpoch!==epoch)return;
+    editingFieldReady=false;editingFieldConflict=false;editingRevision=null;
+    $('save-editor').disabled=true;
+    $('retry-field-status').hidden=true;
+    $('editor-lock-status').textContent='Checking field provenance and revision…';
+    try{
+      const response=await api('./api/manage/assets/'+encodeURIComponent(String(target.id))+'/fields');
+      if(editing!==target||editorEpoch!==epoch)return;
+      if(!Number.isSafeInteger(response.revision)||response.revision<0||!Array.isArray(response.fields)){
+        throw Error('Invalid metadata state returned by the server.');
+      }
+      const values=new Map(response.fields.map(item=>[item.name,item]));
+      let stale=false;
+      for(const [name,controls] of editorDecorations){
+        const actual=values.get(name);if(!actual)throw Error('The server is missing '+name+' metadata controls.');
+        const current=String(actual.value??'');
+        const input=controls.input;
+        if(input.value===input.dataset.initial){
+          input.value=current;input.dataset.initial=current;
+        }else if(current!==input.dataset.initial){
+          stale=true;
+        }
+        if(actual.locked&&input.value!==current)stale=true;
+        setEditorFieldLock(name,Boolean(actual.locked),actual.source);
+        controls.lock.disabled=false;
+      }
+      editingRevision=response.revision;
+      for(const row of response.fields){
+        const control=editorDecorations.get(row.name);
+        if(control)control.provenance.dataset.source=row.source||'Unverified source';
+      }
+      editingFieldConflict=stale;
+      editingFieldReady=!stale;
+      $('save-editor').disabled=stale;
+      $('editor-lock-status').textContent=stale?
+        'Another edit changed this file. Close and reopen the editor to avoid overwriting it.':
+        'Field provenance loaded · revision '+response.revision+'. Locked fields cannot be overwritten.';
+      if(stale)notice('Metadata changed while the editor was loading. Reopen before saving.',true);
+    }catch(error){
+      if(editing!==target||editorEpoch!==epoch)return;
+      editingFieldReady=false;$('save-editor').disabled=true;
+      $('retry-field-status').hidden=false;
+      $('editor-lock-status').textContent='Field controls unavailable: '+error.message;
+      notice('Metadata controls unavailable; retry before saving.',true);
+    }
+  }
+  async function toggleEditorField(target,epoch,name){
+    if(editing!==target||editorEpoch!==epoch||!editingFieldReady||editingFieldBusy)return;
+    if(editorHasChanges()){
+      notice('Save or discard your pending edits before changing a field lock.',true);
+      return;
+    }
+    const controls=editorDecorations.get(name);if(!controls)return;
+    const next=controls.lock.dataset.locked!=='true';
+    editingFieldBusy=true;controls.lock.disabled=true;$('save-editor').disabled=true;
+    try{
+      const answer=await api('./api/manage/assets/'+encodeURIComponent(String(target.id))+'/fields/'+encodeURIComponent(name),
+        'PUT',{locked:next,expectedRevision:editingRevision});
+      if(editing!==target||editorEpoch!==epoch)return;
+      if(!Number.isSafeInteger(answer.revision)||answer.locked!==next)throw Error('Server did not confirm the field lock.');
+      editingRevision=answer.revision;
+      setEditorFieldLock(name,Boolean(answer.locked),controls.provenance.dataset.source);
+      $('editor-lock-status').textContent='Field '+name+(next?' locked.':' unlocked.')+' Revision '+answer.revision+'.';
+      notice(name+(next?' locked against further edits.':' unlocked for editing.'));
+    }catch(error){
+      if(editing===target&&editorEpoch===epoch)notice(error.message,true);
+    }finally{
+      if(editing===target&&editorEpoch===epoch){
+        editingFieldBusy=false;controls.lock.disabled=false;
+        $('save-editor').disabled=!editingFieldReady||editingFieldConflict;
+      }
+    }
+  }
   function openEditor(item){
     // Opening a new editor invalidates even a save request for the same
     // record from an earlier dialog lifetime.
     editorEpoch++;
     invalidateCandidateLookup();
-    $('save-editor').disabled=false;
+    editingFieldReady=false;editingFieldConflict=false;editingFieldBusy=false;editingRevision=null;
+    editorDecorations.clear();
+    $('save-editor').disabled=true;
     editing=item;
     $('candidate-query').value=[item.title,item.author].filter(Boolean).join(' ');
     $('candidate-results').replaceChildren();
     $('editor-title').textContent='Edit '+(item.title||'metadata');
     $('editor-context').textContent=[item.format,item.space,'Source: '+(item.metadataSource||'not identified'),item.identificationConfidence?item.identificationConfidence+' confidence':null].filter(Boolean).join(' · ');
     const grid=$('editor-fields');grid.replaceChildren();
+    const openedEpoch=editorEpoch;
     for(const [name,caption,kind] of metadataFields){
       const label=e('label',caption);let field;
       if(kind==='textarea'){field=document.createElement('textarea');field.rows=3}
       else{field=document.createElement('input');field.type=kind;if(kind==='number'){field.step='any';field.inputMode='decimal'}}
-      field.name=name;field.value=item[name]==null?'':String(item[name]);field.dataset.initial=field.value;label.append(field);grid.append(label);
+      field.name=name;field.value=item[name]==null?'':String(item[name]);field.dataset.initial=field.value;
+      const actions=e('div',undefined,'metadata-field-control');
+      const provenance=e('small','Loading provenance…','metadata-field-provenance');
+      const lock=e('button','Lock','metadata-field-lock quiet');lock.type='button';lock.disabled=true;
+      actions.append(provenance,lock);label.append(field,actions);grid.append(label);
+      editorDecorations.set(name,{input:field,provenance,lock});
+      lock.onclick=()=>void toggleEditorField(item,openedEpoch,name);
     }
     $('editor').showModal();
     grid.querySelector('input')?.focus();
+    $('retry-field-status').onclick=()=>void loadEditorFieldControls(item,openedEpoch);
+    void loadEditorFieldControls(item,openedEpoch);
   }
   async function saveEditor(event){
     event.preventDefault();
     if(!editing)return;
+    if(!editingFieldReady||editingFieldConflict||editingFieldBusy||editingRevision===null){
+      notice('Load and verify the current field metadata before saving.',true);return;
+    }
     const target=editing,startedEpoch=editorEpoch;
     const button=$('save-editor'),changes={};
     for(const input of $('editor-fields').querySelectorAll('input,textarea')){
@@ -162,7 +264,8 @@
       }else{changes[key]=input.value.trim()}
     }
     if(!Object.keys(changes).length){closeEditor();return}
-    if(!window.confirm('Save these metadata changes? The current server marks the entire file as manually reviewed.'))return;
+    changes.expectedRevision=editingRevision;
+    if(!window.confirm('Save the reviewed metadata changes? This saves the file, not the book publication state.'))return;
     button.disabled=true;notice('Saving metadata…');
     try{
       await api('./api/assets/'+encodeURIComponent(String(target.id))+'/metadata','PATCH',changes);
@@ -407,12 +510,12 @@
   $('candidate-search-button').onclick=findCandidates;
   $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};
   $('editor-form').addEventListener('submit',saveEditor);
-  function closeEditor(){editorEpoch++;invalidateCandidateLookup();$('editor').close();editing=null}
+  function closeEditor(){editorEpoch++;invalidateCandidateLookup();$('editor').close();editing=null;editingFieldReady=false;editingRevision=null;editorDecorations.clear()}
   $('close-editor').onclick=closeEditor;
   $('cancel-editor').onclick=closeEditor;
   // Escape/native dialog close does not use either explicit close button.
   $('editor').addEventListener('close',()=>{
-    if(!$('editor').open){editorEpoch++;invalidateCandidateLookup();editing=null}
+    if(!$('editor').open){editorEpoch++;invalidateCandidateLookup();editing=null;editingFieldReady=false;editingRevision=null;editorDecorations.clear()}
   });
   $('filters').onsubmit=event=>{event.preventDefault();offset=0;loadCatalogue()};
   $('search').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>{offset=0;loadCatalogue()},260)});

@@ -109,3 +109,12 @@ dialog::backdrop{background:#010b12cf}
 .assist-mode-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 20px}
 .assist-mode-tabs button{min-height:44px;background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:8px 15px;color:var(--muted)}
 .assist-mode-tabs button[aria-pressed=true]{background:var(--raised);color:var(--gold);border-color:var(--teal)}
+
+/* Per-field provenance and explicit revisioned lock controls. */
+.metadata-field-control{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-top:5px}
+.metadata-field-provenance{color:var(--muted);font-size:11px;overflow-wrap:anywhere;flex:1}
+.metadata-field-lock{min-height:32px;min-width:72px;font-size:11px;padding:4px 9px}
+.metadata-field-lock[aria-pressed=true]{color:var(--gold);border-color:var(--gold);background:var(--raised)}
+.field-grid input[readonly],.field-grid textarea[readonly]{border-color:var(--gold);background:var(--raised);color:var(--muted);cursor:not-allowed}
+#editor-lock-status{font-size:12px;margin:14px 0}
+#retry-field-status{margin:0 0 12px}

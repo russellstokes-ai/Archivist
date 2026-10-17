@@ -42,10 +42,19 @@ elements.get('sort').value='review';
 const nav=['library','assist','review','health'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
 const calls=[];
 const reply=value=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>value});
+const fieldNames=['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'];
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
 const fetchFake=async (url,options={})=>{
   calls.push(url);
   if(url==='./api/me')return reply({owner:true});
+  if(url.startsWith('./api/manage/assets/')&&url.endsWith('/fields')){
+    const id=Number(url.split('/')[4]);
+    const row=id===11?file:{...file,id,title:'Part 2'};
+    return reply({assetId:id,revision:0,fields:fieldNames.map(name=>({
+      name,value:row[name]===undefined?(name==='seriesNumber'||name==='publishedYear'?'0':''):String(row[name]),
+      source:'embedded',locked:false,updatedAt:0
+    }))});
+  }
   if(url.endsWith('/api/manage/works/2/publication')){
     if(options.method==='POST'){
       const body=JSON.parse(options.body);
