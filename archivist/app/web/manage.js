@@ -1,3 +1,22 @@
+function candidateFieldAllowed(candidate,name,options={}){
+  if(options.comic&&(candidate.comicSeriesMatch!=='match'||candidate.comicIssueMatch!=='match'))return false;
+  if(name==='publishedYear'&&candidate.yearType!=='first publication')return false;
+  if(['isbn','asin'].includes(name)&&candidate.identifierMismatch)return false;
+  if(Number(options.editions)>1&&['isbn','asin','narrator','language','publisher'].includes(name))return false;
+  return true;
+}
+function candidateMissingFields(candidate,fields,options={}){
+  const changes={};
+  if(candidate.identifierMismatch||(!candidate.isbnExact&&!candidate.asinExact))return changes;
+  for(const [name,field] of Object.entries(fields)){
+    if(field.locked||!candidateFieldAllowed(candidate,name,options))continue;
+    const current=String(field.value??'').trim(),value=candidate[name];
+    if(current!==''&&!(current==='0'&&['seriesNumber','publishedYear'].includes(name)))continue;
+    if(value===undefined||value===null||value==='')continue;
+    changes[name]=String(value);
+  }
+  return changes;
+}
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -128,17 +147,36 @@
       rows=results;renderRows();notice();
     }catch(err){if(id===requestId){rows=[];renderRows();notice(err.message,true)}}
   }
+  function appendDescriptionLookup(card,candidate,isCurrent,select,onLoaded){
+    if(candidate.description||candidate.source!=='Open Library'||!/^\/works\/OL[0-9]{1,15}W$/.test(candidate.workId||''))return;
+    const button=e('button','Find description','quiet');button.type='button';card.append(button);
+    button.onclick=async()=>{
+      if(!isCurrent())return;button.disabled=true;
+      try{
+        const result=await api('./api/manage/metadata-details?work='+encodeURIComponent(candidate.workId));
+        if(!isCurrent())return;
+        if(typeof result.description!=='string'||!result.description.trim()){button.textContent='No description available';return}
+        candidate.description=result.description;
+        card.append(e('p',result.description.slice(0,600)+(result.description.length>600?'…':''),'subtext'));
+        button.textContent='Use description';button.disabled=false;
+        button.onclick=()=>{if(isCurrent())select(result.description)};
+        onLoaded();
+      }catch(error){if(isCurrent()){button.disabled=false;button.textContent='Retry description';notice(error.message,true)}}
+    };
+  }
   async function findCandidates(){
     if(!editing)return;
     const target=editing;
     const generation=++candidateGeneration;
+    const identity=()=>JSON.stringify(['title','author','isbn','asin','series','seriesNumber'].map(name=>$('editor-fields').querySelector('[name="'+name+'"]')?.value||''));
+    const requestedIdentity=identity();
     const query=$('candidate-query').value.trim();
     if(query.length<2){notice('Enter at least two characters to search.',true);return}
     const button=$('candidate-search-button'),box=$('candidate-results');
     button.disabled=true;box.replaceChildren(e('p','Searching book metadata…','subtext'));
     try{
       const params=new URLSearchParams({q:query,mode:'multi',title:target.title||'',author:target.author||'',format:target.format||''});
-      const isbn=$('editor-fields').querySelector('[name="isbn"]')?.value.trim();if(isbn)params.set('isbn',isbn);
+      for(const [name,key] of [['isbn','isbn'],['asin','asin'],['series','series'],['seriesNumber','issue']]){const value=$('editor-fields').querySelector('[name="'+name+'"]')?.value.trim();if(value&&!(name==='seriesNumber'&&Number(value)===0))params.set(key,value)}
       const response=await api('./api/manage/metadata-candidates?'+params);
       // A previous title's late provider response cannot populate this editor.
       if(generation!==candidateGeneration||editing!==target)return;
@@ -152,15 +190,20 @@
         const buttons=e('div',undefined,'candidate-fields');
         card.append(e('small',candidate.source||'Metadata provider','subtext'));
         for(const warning of candidate.warnings||[])card.append(e('p',warning,'subtext'));
-        for(const [key,label] of [['title','Title'],['author','Author'],['publishedYear','Year'],['isbn','ISBN'],['publisher','Publisher']]){
+        for(const [key,label] of [['title','Title'],['author','Author'],['publishedYear','Year'],['isbn','ISBN'],['publisher','Publisher'],['description','Description'],['language','Language'],['genre','Genre'],['series','Series'],['narrator','Narrator'],['asin','ASIN']]){
           if(!candidate[key])continue;
-          if(key==='isbn'&&candidate.identifierMismatch)continue;
-          if(key==='publishedYear'&&candidate.yearType==='store release')continue;
+          if(!candidateFieldAllowed(candidate,key,{comic:String(target.format).toLowerCase()==='comic',editions:1}))continue;
           const field=$('editor-fields').querySelector('[name="'+key+'"]');if(!field||field.readOnly)continue;
           const choose=e('button','Use '+label,'quiet');choose.type='button';choose.title='Replace '+label+': '+field.value+' → '+String(candidate[key]);
           choose.onclick=()=>{field.value=String(candidate[key]);field.focus();notice('Selected '+label+' from '+(candidate.source||'metadata provider')+'. Review your changes before saving.')};
           buttons.append(choose);
         }
+        const fill=e('button','Fill missing details','quiet');fill.type='button';
+        const missing=()=>{if(identity()!==requestedIdentity)return {};const fields={};for(const field of $('editor-fields').querySelectorAll('input,textarea'))fields[field.name]={value:field.value,locked:field.readOnly};return candidateMissingFields(candidate,fields,{comic:String(target.format).toLowerCase()==='comic',editions:1})};
+        fill.disabled=!Object.keys(missing()).length;
+        fill.onclick=()=>{if(editing!==target)return;for(const [name,value] of Object.entries(missing()))$('editor-fields').querySelector('[name="'+name+'"]').value=value;fill.disabled=true;notice('Missing details selected. Existing values were preserved; review before saving.')};
+        if(candidate.isbnExact||candidate.asinExact)buttons.append(fill);
+        if(candidateFieldAllowed(candidate,'description',{comic:String(target.format).toLowerCase()==='comic',editions:1}))appendDescriptionLookup(card,candidate,()=>editing===target&&generation===candidateGeneration&&identity()===requestedIdentity,value=>{const field=$('editor-fields').querySelector('[name="description"]');if(field&&!field.readOnly){field.value=value;field.focus();notice('Description selected. Review before saving.')}},()=>{fill.disabled=!Object.keys(missing()).length});
         card.append(buttons);box.append(card);
       }
     }catch(err){
@@ -1240,6 +1283,7 @@
         title:workInputs.get('title')?.input.value||'',
         author:workInputs.get('author')?.input.value||'',
         isbn:workInputs.get('isbn')?.input.value||'',
+        asin:workInputs.get('asin')?.input.value||'',
         format:workState.editions?.length&&workState.editions.every(item=>item.format==='Comic')?'comic':
           workState.editions?.length&&workState.editions.every(item=>item.format==='Audio')?'audio':'book',
         series:workInputs.get('series')?.input.value||'',
@@ -1268,7 +1312,7 @@
           if(!item||item.input.readOnly||value===undefined||value===null||value==='')continue;
           // A Google Books edition date cannot populate the book-wide first
           // publication year. Mixed editions cannot safely share one ISBN.
-          if(name==='publishedYear'&&candidate.yearType!=='first publication')continue;
+          if(!candidateFieldAllowed(candidate,name,{comic:isComic,editions:workState.editions?.length||0}))continue;
           if(name==='isbn'&&(candidate.identifierMismatch||(workState.editions?.length||0)>1))continue;
           // A matching title/ISBN cannot prove the correct comic issue. Keep
           // all provider field actions disabled until series AND explicit
@@ -1278,12 +1322,18 @@
           button.title='Compare and select this '+label+' suggestion';
           button.onclick=()=>{
             item.input.value=String(value);
-            item.input.dataset.origin=candidate.source==='Apple Books'?'apple-books':candidate.source==='Google Books'?'google-books':'open-library';
+            item.input.dataset.origin=candidate.source==='Audnexus'?'audnexus':candidate.source==='Apple Books'?'apple-books':candidate.source==='Google Books'?'google-books':'open-library';
             workClearPlans();
             workMessage('Selected unverified '+(candidate.source||'public')+' '+label+' suggestion. Preview before saving.');
           };
           buttons.append(button);
         }
+        const fill=e('button','Fill missing details','quiet');fill.type='button';
+        const missing=()=>{if(inputVersion!==workEditEpoch)return {};const fields={};for(const [name,item] of workInputs)fields[name]={value:item.input.value,locked:item.input.readOnly};return candidateMissingFields(candidate,fields,{comic:isComic,editions:workState.editions?.length||0})};
+        fill.disabled=!Object.keys(missing()).length;
+        fill.onclick=()=>{if(epoch!==workEpoch||workBusy)return;for(const [name,value] of Object.entries(missing())){const item=workInputs.get(name);item.input.value=value;item.input.dataset.origin=candidate.source==='Audnexus'?'audnexus':candidate.source==='Google Books'?'google-books':'open-library'}workClearPlans();fill.disabled=true;workMessage('Missing details selected. Existing values and locks preserved. Preview before saving.')};
+        if(candidate.isbnExact||candidate.asinExact)buttons.append(fill);
+        if(candidateFieldAllowed(candidate,'description',{comic:isComic,editions:workState.editions?.length||0}))appendDescriptionLookup(card,candidate,()=>epoch===workEpoch&&generation===workCandidateEpoch&&inputVersion===workEditEpoch&&!workBusy,value=>{const item=workInputs.get('description');if(item&&!item.input.readOnly){item.input.value=value;item.input.dataset.origin='open-library';workClearPlans();workMessage('Description selected. Preview before saving.')}},()=>{fill.disabled=!Object.keys(missing()).length});
         if(typeof candidate.sourceUrl==='string'){
           try{
             const url=new URL(candidate.sourceUrl);
@@ -2511,7 +2561,7 @@
       $('app').hidden=false;
       notice();
       await loadSummary();
-      await loadCatalogue();
+      if(window.location?.hash==='#assist')showView('assist');else await loadCatalogue();
     }catch(err){notice(err.message,true)}
   }
   $('catalogue-layout').onchange=changeCatalogueLayout;

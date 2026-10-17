@@ -66,3 +66,5 @@ for(const sourceText of [scanManager,scanDashboard]){
 }
 
 require('./server-onboarding.test.cjs');
+
+require('./server-enrichment.test.cjs');

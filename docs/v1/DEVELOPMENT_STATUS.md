@@ -384,3 +384,7 @@ See [full scanner partial-source and coverage QA report](./SERVER_SCANNER_PARTIA
 ## Server onboarding/import follow-on — 17 October 2026
 
 Compact state-based setup guidance, shared safe metadata candidates and single-pass scanning with one cached metadata record resident. Local browser contracts pass; Go and physical acceptance remain pending. Richer automatic enrichment and measured canonical performance equivalence are not claimed. See [acceptance notes](SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md).
+
+### Enrichment follow-through
+
+No-key Open Library description lookup and exact-ASIN Audnexus audiobook metadata, optional Google rich fields, guarded fill-missing actions, comic/date protections and direct onboarding-to-Assist navigation are implemented. JavaScript regression/protection checks pass; new Go fixtures are unexecuted. The owner explicitly deferred the final build. Physical and measured canonical-scanner acceptance remain BLOCKED. No commercial GO. See SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md.

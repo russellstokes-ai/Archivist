@@ -42,7 +42,7 @@ const works=[
   {id:10,title:'Book Alpha',author:'Author Alpha',format:'Ebook',space:'Books',available:true,needsReview:true},
   {id:11,title:'Book Beta',author:'Author Beta',format:'Ebook',space:'Books',available:true,needsReview:true},
 ];
-const requests=[],metadataSaves=[],lockChanges=[];
+const requests=[],detailRequests=[],metadataSaves=[],lockChanges=[];
 const fieldVersions=new Map(),lockedFieldNames=new Map();
 const fieldNames=['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'];
 const reply=body=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>body});
@@ -50,6 +50,7 @@ const fetchStub=async (url,options={})=>{
   if(url.startsWith('./api/assets/')&&url.endsWith('/metadata')){
     return new Promise((resolve,reject)=>metadataSaves.push({url,resolve,reject}));
   }
+  if(url.startsWith('./api/manage/metadata-details?'))return new Promise(resolve=>detailRequests.push({url,resolve}));
   if(url.startsWith('./api/manage/metadata-candidates?')){
     return new Promise((resolve,reject)=>requests.push({url,resolve,reject}));
   }
@@ -219,5 +220,22 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   const guardedChoices=results()[0].children.find(child=>child.className==='candidate-fields').children;
   assert(!guardedChoices.some(child=>child.textContent==='Use Year'),'store release cannot replace first-publication year');
   assert(!guardedChoices.some(child=>child.textContent==='Use ISBN'),'mismatched identifier cannot be applied');
+  close();open(0);await settle();
+  const descriptionSearch=search();
+  requests.at(-1).resolve(reply({candidates:[{workId:'/works/OL123W',source:'Open Library',title:'Book Alpha'}]}));
+  await descriptionSearch;await settle();
+  const findDescription=results()[0].children.find(child=>child.textContent==='Find description');
+  assert(findDescription,'Open Library work must offer on-demand description');
+  const pendingDescription=findDescription.onclick();
+  assert.equal(detailRequests.length,1);
+  close();open(1);await settle();
+  detailRequests[0].resolve(reply({description:'Description for the previous book'}));
+  await pendingDescription;await settle();
+  assert.equal(results().length,0,'late description must not attach to another book');
+  assert.equal(elements.get('editor-fields').querySelector('[name="description"]').value,'','late description must not alter another book');
+  close();works[0].format='Comic';open(0);await settle();
+  const comicSearch=search();requests.at(-1).resolve(reply({candidates:[{workId:'/works/OL123W',source:'Open Library',title:'Unknown issue'}]}));
+  await comicSearch;await settle();
+  assert(!results()[0].children.some(child=>child.textContent==='Find description'),'description lookup must not bypass comic issue identity guard');
   console.log('PASS: metadata editor is revision-aware, guards candidate/save races, and supports real lock/unlock controls');
 })().catch(error=>{console.error(error);process.exitCode=1});

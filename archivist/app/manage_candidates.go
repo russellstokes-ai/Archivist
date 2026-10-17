@@ -43,6 +43,7 @@ func parseOpenLibraryCandidates(r io.Reader) ([]publicMetadataCandidate, error) 
 }
 
 func (a *app) manageCandidateRoutes(mux *http.ServeMux) {
+ a.metadataDetailRoutes(mux)
 	mux.HandleFunc("GET /api/manage/metadata-candidates",func(w http.ResponseWriter,r *http.Request) {
 		if !who(r).Owner { fail(w,403,errors.New("administrator only"));return }
 		query:=strings.TrimSpace(r.URL.Query().Get("q"))

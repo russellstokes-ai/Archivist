@@ -1589,10 +1589,17 @@
   "server_onboarding_import_2026_10_17": {
     "base_sha": "eee43df0b07024563950a25fe643c3d931c5e980",
     "pr": 83,
-    "state": "implemented_pending_go_ci_and_acceptance",
+    "state": "source_prepared_build_deferred_by_owner",
     "qa": "docs/v1/SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md",
     "mobile_changed": false,
     "hardware_accepted": false,
-    "commercial_server_go": false
+    "commercial_server_go": false,
+    "enrichment": [
+      "Open Library work descriptions on demand",
+      "Audnexus exact-ASIN audiobook metadata without credentials",
+      "optional Google rich fields",
+      "guarded fill-missing preview"
+    ],
+    "go_tests_verified": false
   }
 }

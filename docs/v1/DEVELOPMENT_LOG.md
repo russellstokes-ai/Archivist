@@ -354,3 +354,7 @@ User-authorised server-only follow-on from 577f3b5: explicit per-user library gr
 ## 17 October 2026 — Server onboarding and import safety
 
 Built on verified PR #83 head eee43df0b07024563950a25fe643c3d931c5e980. Added concise owner guidance, directory-read preflight, one-pass discovery and indexed metadata reuse, shared safe provider searches, regression fixtures and optional synthetic 10,020-file measurement. Preserved atomic grouping, manual edits, original files and canonical/mobile sources. Local JS checks pass; Go unavailable locally. No commercial acceptance, merge or deployment. Details: SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md.
+
+## 17 October 2026 — Complete bounded server enrichment candidate
+
+Continued from remote 7bc716a9b0fe8674a5cc405691dfc363708996e1. Added owner-requested Open Library descriptions, exact-ASIN Audnexus metadata, richer optional Google fields and guarded missing-field selection. Added regressions for wrong identity, stale description responses and comic-guard bypass; JavaScript regressions pass. Kept local scan/grouping and mobile sources protected. New Go fixtures await execution; owner selected Leave final build pending. No build, deployment, merge or release. QA details and physical acceptance steps remain in SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md.

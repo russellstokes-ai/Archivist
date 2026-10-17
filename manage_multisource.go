@@ -18,9 +18,16 @@ import (
 
 // Source comparisons are owner-initiated, read-only, capped and not scanner inputs.
 const multiMetadataResponseLimit=2<<20
-type multiMetadataQuery struct{Search,Title,Author,ISBN,MediaFormat,Series,IssueNumber string}
+type multiMetadataQuery struct{Search,Title,Author,ISBN,ASIN,MediaFormat,Series,IssueNumber string}
 type multiMetadataCandidate struct {
  publicMetadataCandidate
+ Description string `json:"description,omitempty"`
+ Language string `json:"language,omitempty"`
+ Genre string `json:"genre,omitempty"`
+ Series string `json:"series,omitempty"`
+ Narrator string `json:"narrator,omitempty"`
+ ASIN string `json:"asin,omitempty"`
+ ASINExact bool `json:"asinExact,omitempty"`
  SourceURL string `json:"sourceUrl,omitempty"`
  Score int `json:"score"`
  Tier string `json:"tier"`
@@ -173,6 +180,9 @@ type googleBooksCandidateResponse struct{
    Title string `json:"title"`
    Authors []string `json:"authors"`
    Publisher string `json:"publisher"`
+   Description string `json:"description"`
+   Language string `json:"language"`
+   Categories []string `json:"categories"`
    PublishedDate string `json:"publishedDate"`
    IndustryIdentifiers []struct{
     Type string `json:"type"`
@@ -192,6 +202,8 @@ func parseGoogleBooksMulti(raw []byte,q multiMetadataQuery)([]multiMetadataCandi
    publicMetadataCandidate:publicMetadataCandidate{WorkID:"google-books:"+entry.ID,Title:strings.TrimSpace(v.Title),Publisher:strings.TrimSpace(v.Publisher),Source:"Google Books"},
    Reasons:[]string{},Warnings:[]string{"Edition publication date is not necessarily the book's first publication year"},YearType:"edition publication",
   }
+  c.Description=metadataPlainText(v.Description,20000);c.Language=metadataPlainText(v.Language,100)
+  if len(v.Categories)>0{c.Genre=metadataPlainText(v.Categories[0],500)}
   if len(v.Authors)>0{c.Author=strings.TrimSpace(v.Authors[0])}
   if len(v.PublishedDate)>=4{
    year,err:=strconv.Atoi(v.PublishedDate[:4]);if err==nil&&year>=1000&&year<=3000{c.PublishedYear=year}
@@ -231,8 +243,10 @@ func requestMultiMetadata(ctx context.Context,client *http.Client,target multiMe
  if err!=nil||len(raw)>multiMetadataResponseLimit{out.Err=errors.New("provider response exceeds safe limit");return out}
  switch target.Name{
  case "Open Library":out.Candidates,err=parseOpenLibraryMulti(raw,q)
+ case "Open Library details":out.Candidates,err=parseOpenLibraryDetails(raw,q)
  case "Google Books":out.Candidates,err=parseGoogleBooksMulti(raw,q)
  case "Apple Books":out.Candidates,err=parseAppleBooksMulti(raw,q)
+ case "Audnexus":out.Candidates,err=parseAudnexusMulti(raw,q)
  default:err=errors.New("unexpected provider")
  }
  out.Err=err
@@ -276,13 +290,17 @@ func (a *app)serveMultiSourceCandidates(w http.ResponseWriter,r *http.Request,se
    fail(w,400,errors.New("comic issue number must be finite and between 0 and 100000"));return
   }
  }
+ rawASIN:=strings.TrimSpace(r.URL.Query().Get("asin"))
+ if len(rawASIN)>40{fail(w,400,errors.New("audiobook identifier exceeds allowed size"));return}
+ q.ASIN=normalASIN(rawASIN)
  q.ISBN=normalValidISBN(rawISBN)
  warnings:=[]string{}
  if rawISBN!=""&&q.ISBN==""{warnings=append(warnings,"Indexed ISBN has an invalid checksum; identifier ranking disabled")}
  googleKey:=strings.TrimSpace(os.Getenv("GOOGLE_BOOKS_API_KEY"))
  endpoints:=defaultMultiMetadataEndpoints(search,q,googleKey)
  provider:="Open Library + Apple Books"
- if googleKey!=""{provider+=" + Google Books"}else{warnings=append(warnings,"Google Books skipped: no server API key configured")}
+ if q.ASIN!=""&&strings.EqualFold(q.MediaFormat,"audio"){provider+=" + Audnexus"}
+ if googleKey!=""{provider+=" + Google Books"}
  ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
  client:=&http.Client{Timeout:6*time.Second,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}
  candidates,down,succeeded:=a.metadataCache.lookup(ctx,client,endpoints,q)
@@ -297,10 +315,13 @@ func defaultMultiMetadataEndpoints(search string,q multiMetadataQuery,googleKey 
   {Name:"Open Library",URL:"https://openlibrary.org/search.json?q="+url.QueryEscape(search)+"&fields=key,title,author_name,first_publish_year,isbn,publisher&limit=10"},
   {Name:"Apple Books",URL:appleBooksSearchURL(search,q.MediaFormat)},
  }
+ if normalASIN(q.ASIN)!=""&&(strings.EqualFold(q.MediaFormat,"audio")||strings.EqualFold(q.MediaFormat,"audiobook")){
+  endpoints=append(endpoints,multiMetadataEndpoint{Name:"Audnexus",URL:"https://api.audnex.us/books/"+normalASIN(q.ASIN)+"?region=us&update=0&seedAuthors=0"})
+ }
  if googleKey!=""{
   googleQuery:=search
   if q.ISBN!=""{googleQuery="isbn:"+q.ISBN}
-  endpoints=append(endpoints,multiMetadataEndpoint{Name:"Google Books",URL:"https://www.googleapis.com/books/v1/volumes?q="+url.QueryEscape(googleQuery)+"&maxResults=10&printType=books&projection=lite&key="+url.QueryEscape(googleKey)})
+  endpoints=append(endpoints,multiMetadataEndpoint{Name:"Google Books",URL:"https://www.googleapis.com/books/v1/volumes?q="+url.QueryEscape(googleQuery)+"&maxResults=10&printType=books&projection=full&key="+url.QueryEscape(googleKey)})
  }
  return endpoints
 }

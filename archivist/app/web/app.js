@@ -7,7 +7,7 @@ function renderImportGuide(){
  $('import-guide').hidden=!guidance;if(!guidance)return;
  $('import-title').textContent=guidance.title;$('import-detail').textContent=guidance.detail;
  $('import-action').textContent=guidance.label;
- $('import-action').onclick=()=>{if(guidance.action==='review'){window.location.href='./manage.html';return}show('settings');$(guidance.action==='folder'?'path':'source-list').scrollIntoView({block:'center'});if(guidance.action==='folder')$('path').focus()};
+ $('import-action').onclick=()=>{if(guidance.action==='review'){window.location.href='./manage.html#assist';return}show('settings');$(guidance.action==='folder'?'path':'source-list').scrollIntoView({block:'center'});if(guidance.action==='folder')$('path').focus()};
 }
 
 
@@ -186,6 +186,7 @@ async function loadLibrarySummary(){
   const fill=(id,items,type)=>{const box=$(id);box.replaceChildren();if(!items.length)box.append(element('p','Nothing here yet.'));for(const item of items)box.append(atlasButton(item,type))};
   fill('atlas-formats',summaryData.formats||[],'format');fill('atlas-spaces',summaryData.spaces||[],'space');fill('atlas-authors',summaryData.authors||[],'author');
   renderAtlasRings(summaryData);
+  renderImportGuide();
 }
 
 async function loadSources(){
