@@ -10,6 +10,14 @@ const test14=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_APP_EXCEP
 const current=Buffer.from(app,'utf8');
 const currentBlob=crypto.createHash('sha1').update('blob '+current.length+'\0').update(current).digest('hex');
 assert(require('../scripts/test14-app-exception.cjs')(repo,currentBlob),'Test 14 App patch must be exact and reversible');
+// Reverse the owner's first-run-only Atlas exception before restoring prior gallery code.
+const oneTime=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_ATLAS_FIRST_RUN_ONLY_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+assert.equal(oneTime.path,'mobile/App.tsx');assert.equal(oneTime.changes.length,8);
+for(const change of [...oneTime.changes].reverse()){
+ const next=change.new.replaceAll('\r\n','\n'),prior=change.old.replaceAll('\r\n','\n');
+ assert.equal(app.split(next).length-1,1,'First-run-only Atlas source hunk differs or is duplicated');
+ app=app.replace(next,prior);
+}
 // Reverse gallery and Atlas improvements before the previous approved App chain.
 const gallery=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_ATLAS_REWARDS_APP_EXCEPTION_2026-10-17.json'),'utf8'));
 assert.equal(gallery.path,'mobile/App.tsx');assert.equal(gallery.changes.length,18);

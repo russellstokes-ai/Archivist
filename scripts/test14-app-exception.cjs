@@ -16,6 +16,21 @@ module.exports=function test14AppException(root,actual){
  const saf=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_SAF_APP_EXCEPTION_2026-10-17.json'),'utf8'));
  const media=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_MEDIA_APP_EXCEPTION_2026-10-17.json'),'utf8'));
  const gallery=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_ATLAS_REWARDS_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+ const oneTime=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_ATLAS_FIRST_RUN_ONLY_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+ if(actual===oneTime.approved_git_blob_sha){
+   if(oneTime.schema_version!==1||oneTime.path!=='mobile/App.tsx'||
+      oneTime.previous_approved_git_blob_sha!==gallery.approved_git_blob_sha||
+      oneTime.release_approved!==false||oneTime.installed_apk_approved!==false||
+      !Array.isArray(oneTime.changes)||oneTime.changes.length!==8)return false;
+   for(const {old,new:replacement} of [...oneTime.changes].reverse()){
+     if(typeof old!=='string'||typeof replacement!=='string'||!old.length||
+        !replacement.length||source.split(replacement).length!==2)return false;
+     source=source.replace(replacement,old);
+   }
+   const bytes=Buffer.from(source,'utf8');
+   actual=crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
+   if(actual!==gallery.approved_git_blob_sha)return false;
+ }
  if(actual===gallery.approved_git_blob_sha){
    if(gallery.schema_version!==1||gallery.path!=='mobile/App.tsx'||
       gallery.previous_approved_git_blob_sha!==media.approved_git_blob_sha||

@@ -824,6 +824,7 @@ function Client() {
   const autoLocalScanAttempted=useRef(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
+  const [onboardingReady,setOnboardingReady] = useState(false);
   const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
@@ -1642,7 +1643,6 @@ function Client() {
 
 
   // One publication-aware boundary, shared by Atlas Universe, rings and relationships.
-  const atlasAllPublishedWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,'all'),[sourceWorks]);
   const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,sourceFilter),[sourceFilter,sourceWorks]);
   useEffect(()=>{
     if(activeTab!=='atlas'||!localCatalogReady)return;
@@ -1651,7 +1651,6 @@ function Client() {
   },[activeTab,localCatalogReady,sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
   const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
-  const atlasHiddenByLibraryFilter=atlasAllPublishedWorks.length>0&&atlasUniverseWorks.length===0;
   const atlasGenreColors=useMemo(()=>atlasGenrePalette(atlasUniverseWorks.map(work=>work.genre),genreColour),[atlasUniverseWorks]);
   const atlasGenreColor=(name:string)=>atlasGenreColors.get(name.trim()||'Unclassified')||genreColour(name);
   const atlasRingSize=Math.min(width-(width>=940?56:width>=600?48:width<360?28:32),width>=940?720:width>=600?620:520);
@@ -2162,7 +2161,11 @@ function Client() {
     AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
-    }).catch(() => undefined);
+    }).catch(() => {
+      // A storage read error cannot be treated as a fresh first login.
+      // Fail closed rather than repeat an already dismissed walkthrough.
+      setOnboardingDone(true);
+    }).finally(()=>setOnboardingReady(true));
     SecureStore.getItemAsync(shelfServerPromptKey).then(value => {
       setShelfServerPromptHidden(value === '1');
     }).catch(() => undefined);
@@ -4305,8 +4308,13 @@ function Client() {
   }
 
   async function finishOnboarding() {
-    setOnboardingDone(true);
-    await SecureStore.setItemAsync(onboardingDoneKey, '1');
+    try {
+      // The guide disappears only after the one-time completion is durable.
+      await SecureStore.setItemAsync(onboardingDoneKey, '1');
+      setOnboardingDone(true);
+    } catch {
+      setError('Could not save setup completion. Try again.');
+    }
   }
 
   async function useArchivistLocallyOnly(){
@@ -4399,7 +4407,7 @@ function Client() {
   }
 
   function OnboardingGuide() {
-    if (onboardingDone) return null;
+    if (!onboardingReady || onboardingDone) return null;
     const reviewCount = localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
     const hasServer = !!session;
@@ -4451,6 +4459,7 @@ function Client() {
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
               ? 'Tap a book to correct its details. Assist fills the gaps; file organisation is optional in Settings.'
               : 'Available when preparation finishes.'}</Text>
+            <Text style={[styles.meta,{color:p.muted,marginTop:4}]}>Atlas maps published works. Local books enter once metadata and cover review are complete; Library source and folder filters also apply.</Text>
           </View>
         </View>
 
@@ -6784,18 +6793,10 @@ function Client() {
 
         {atlasListMode?<SourceSwitcher/>:null}
         {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
-        {!atlasListMode&&(sourceFilter!=='all'||!!space)&&atlasUniverseWorks.length>0?
-          <Pressable accessibilityRole="button" accessibilityLabel="Clear Atlas source and space filters" onPress={()=>{setSourceFilter('all');setSpace('');}} style={{minHeight:44,justifyContent:'center',alignSelf:'flex-start'}}>
-            <Text style={{color:p.sage,fontSize:12,fontWeight:'700'}}>Filtered Atlas · Show all published works</Text>
+        {!atlasListMode&&(sourceFilter!=='all'||!!space)?
+          <Pressable accessibilityRole="button" accessibilityLabel="Show all Atlas works" onPress={()=>{setSourceFilter('all');setSpace('');}} style={{minHeight:44,justifyContent:'center',alignSelf:'flex-start'}}>
+            <Text style={{color:p.sage,fontSize:12,fontWeight:'700'}}>Show all</Text>
           </Pressable>:null}
-        {atlasUniverseWorks.length===0&&localCatalogReady?
-          <View style={{borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:p.line,paddingVertical:18,gap:9}}>
-            <Text style={{color:p.ink,fontSize:14,fontWeight:'700'}}>{atlasHiddenByLibraryFilter?'Published titles are hidden by Library filters':'No completed titles are ready for Atlas yet'}</Text>
-            <Text style={{color:p.muted,fontSize:12,lineHeight:18}}>{atlasHiddenByLibraryFilter?'Your catalogue contains published works, but the current source or space selection hides them. Nothing has been deleted.':'Atlas only includes fully reviewed, published works with title, author and cover artwork. Needs Review items are not shown.'}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={atlasHiddenByLibraryFilter?'Show all published Atlas works':'Review unpublished library titles'} onPress={()=>{if(atlasHiddenByLibraryFilter){setSourceFilter('all');setSpace('');}else{setSourceFilter('local');setReviewOnly(true);setActiveTab('library');}}} style={{minHeight:44,alignSelf:'flex-start',justifyContent:'center'}}>
-              <Text style={{color:p.sage,fontSize:13,fontWeight:'700'}}>{atlasHiddenByLibraryFilter?'Show all published works':'Open Needs Review'}</Text>
-            </Pressable>
-          </View>:null}
 
         {atlasListMode?<View style={styles.atlasListAlternative}>
           <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
