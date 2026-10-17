@@ -135,9 +135,13 @@ func openDB(path string) (*sql.DB, error) {
 	}
 	// Rows created before provenance tracking may include user corrections.
 	// Preserve them as legacy/manual-quality metadata until the user explicitly changes them.
+	// Only genuinely unclassified legacy rows qualify. Reopening or restoring
+	// an existing database must never downgrade scanned embedded/path/manual
+	// provenance or invalidate work/edition fingerprints. This is idempotent.
 	if _, migrateErr := db.Exec(`UPDATE assets
 		SET metadata_source='legacy',metadata_confidence=100,needs_review=0,review_reason=''
-		WHERE scan_signature='' AND size_bytes=0 AND modified_unix=0
+		WHERE metadata_source='legacy' AND metadata_confidence=0 AND needs_review=1
+		AND scan_signature='' AND size_bytes=0 AND modified_unix=0
 		AND (title<>'' OR author<>'' OR series<>'' OR genre<>'')`); migrateErr != nil {
 		db.Close()
 		return nil, migrateErr
