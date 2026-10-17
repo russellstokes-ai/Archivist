@@ -240,3 +240,51 @@ func TestGroupedRelinkRejectsWrongMappingsIndependentStateAndPartialFailures(t *
         }
     })
 }
+
+func TestLargeSignedMultiTrackConfirmationUnderExplicitRequestCap(t *testing.T){
+    s:=setupGroupedRelink(t)
+    preview:=s.preview(t)
+    // Real long source roots/title strings repeated over 32 tracks readily
+    // exceed the generic 32 KiB metadata PATCH limit. A valid signed grouped
+    // confirmation must be accepted without relaxing the finite 512 KiB cap.
+    preview.Important=strings.Repeat("Confirmed actual paired chapter path. ",1600)
+    preview.Receipt=groupRelinkReceipt(s.a.token,preview)
+    request,_:=json.Marshal(groupedRelinkApply{
+        Preview:preview,Confirm:true,Attestation:"all-chapter-mappings-verified-by-owner",
+    })
+    if len(request)<=32<<10||len(request)>=512<<10{
+        t.Fatalf("test proof must exceed 32 KiB but be within 512 KiB, got %d",len(request))
+    }
+    result:=relinkCall(s.a,"POST","/api/manage/relink-groups/apply",string(request),"test-key",true)
+    if result.Code!=200{
+        t.Fatalf("large valid signed group proof refused: len=%d code=%d body=%s",len(request),result.Code,result.Body.String())
+    }
+    var count int
+    if err:=s.a.db.QueryRow("SELECT count(*) FROM works").Scan(&count);err!=nil||count!=1{
+        t.Fatalf("accepted large proof did not keep original book: %d %v",count,err)
+    }
+}
+
+func TestOversizedGroupedConfirmationDoesNotTouchCataloguedMedia(t *testing.T){
+    s:=setupGroupedRelink(t)
+    preview:=s.preview(t)
+    preview.Important=strings.Repeat("Do not accept unbounded POST payload. ",18000)
+    preview.Receipt=groupRelinkReceipt(s.a.token,preview)
+    raw,_:=json.Marshal(groupedRelinkApply{
+        Preview:preview,Confirm:true,Attestation:"all-chapter-mappings-verified-by-owner",
+    })
+    if len(raw)<=512<<10{t.Fatalf("fixture not oversized: %d",len(raw))}
+    result:=relinkCall(s.a,"POST","/api/manage/relink-groups/apply",string(raw),"test-key",true)
+    if result.Code!=400{
+        t.Fatalf("oversized grouped proof was not bounded: %d %s",result.Code,result.Body.String())
+    }
+    var count int
+    if err:=s.a.db.QueryRow("SELECT count(*) FROM works").Scan(&count);err!=nil||count!=2{
+        t.Fatalf("oversized payload mutated book catalogue: %d %v",count,err)
+    }
+    // A failed oversized upload cannot poison the original signed preview.
+    valid:=s.preview(t)
+    if ok:=s.apply(t,valid,true,"all-chapter-mappings-verified-by-owner");ok.Code!=200{
+        t.Fatalf("recovery after rejected oversized body failed: %d %s",ok.Code,ok.Body.String())
+    }
+}

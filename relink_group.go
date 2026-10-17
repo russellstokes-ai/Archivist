@@ -8,6 +8,7 @@ import (
     "encoding/json"
     "errors"
     "fmt"
+    "io"
     "net/http"
     "os"
     "strconv"
@@ -290,6 +291,23 @@ func (a *app) applyGroupRelink(ctx context.Context,preview groupedRelinkPreview)
     return tx.Commit()
 }
 
+// A signed full-group preview repeats every chapter's identity/path twice;
+// its legitimate representation can exceed the unrelated 32 KiB bulk-metadata
+// request limit. Apply has a separate hard 512 KiB cap, strict JSON fields,
+// mandatory single object, and later validates 2–32 chapter proofs.
+func decodeGroupedRelinkApply(w http.ResponseWriter,r *http.Request,out *groupedRelinkApply)error{
+    decoder:=json.NewDecoder(http.MaxBytesReader(w,r.Body,512<<10))
+    decoder.DisallowUnknownFields()
+    if err:=decoder.Decode(out);err!=nil{
+        return errors.New("invalid or oversized grouped relink confirmation")
+    }
+    var extra any
+    if err:=decoder.Decode(&extra);err!=io.EOF{
+        return errors.New("grouped relink confirmation must be a single JSON object")
+    }
+    return nil
+}
+
 func (a *app) groupedRelinkRoutes(mux *http.ServeMux){
     mux.HandleFunc("GET /api/manage/relink-groups/works/{id}",func(w http.ResponseWriter,r *http.Request){
         if !who(r).Owner{fail(w,403,errors.New("administrator required"));return}
@@ -312,7 +330,7 @@ func (a *app) groupedRelinkRoutes(mux *http.ServeMux){
     mux.HandleFunc("POST /api/manage/relink-groups/apply",func(w http.ResponseWriter,r *http.Request){
         if !who(r).Owner{fail(w,403,errors.New("administrator required"));return}
         var req groupedRelinkApply
-        if err:=decodeBulkJSON(w,r,&req);err!=nil{fail(w,400,err);return}
+        if err:=decodeGroupedRelinkApply(w,r,&req);err!=nil{fail(w,400,err);return}
         if !req.Confirm||req.Attestation!="all-chapter-mappings-verified-by-owner"{
             fail(w,400,errors.New("explicit owner attestation for every chapter is required"));return
         }
