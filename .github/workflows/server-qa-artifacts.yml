@@ -13,7 +13,7 @@ on:
         description: 'QA-only build label, never a public release'
         type: string
         required: false
-        default: '0.9.3-qa'
+        default: '0.9.3-qa.20261017.1'
 
 permissions:
   contents: read
@@ -41,7 +41,7 @@ jobs:
           for file in *.go go.mod go.sum; do cmp "$file" "archivist/app/$file"; done
       - name: Package versioned QA binaries and reproducible HA repository
         env:
-          ARCHIVIST_QA_VERSION: ${{ inputs.qa_version }}
+          ARCHIVIST_QA_VERSION: ${{ inputs.qa_version || '0.9.3-qa.20261017.1' }}
         run: |
           sh scripts/build-server-qa-artifacts.sh "$RUNNER_TEMP/archivist-server-qa"
           (cd "$RUNNER_TEMP/archivist-server-qa" && sha256sum -c SHA256SUMS)

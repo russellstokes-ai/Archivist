@@ -1,9 +1,10 @@
 # Home Assistant test build — PR 83
 
-## Status: build pending
+## Status: test candidate 0.9.3-qa.20261017.1 — validation in progress
 
 Prepared server source: `6e91c2306698b32eee9471c61a97a87fa8079163`.
-The final server build and Go tests are deferred at the owner's request.
+The owner has now requested the final server build for installation testing.
+Server build and Go test results must be checked before treating it as validated.
 This is not a validated release. Physical Home Assistant/Pi4, NAS disconnect,
 browser and phone acceptance remain BLOCKED until tested on those devices.
 Earlier CI results and downloadable artifacts do not validate this candidate.
@@ -28,10 +29,9 @@ Once the readiness checks below pass:
 [Add the QA repository in Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Frussellstokes-ai%2FArchivist%23integration%2Farchivist-v1-auto-restore-recovery-20261016)
 
 The default repository URL without the branch suffix does **not** select PR 83.
-The current manifest still carries the earlier label `0.9.3-qa.20261016.3`;
-do not use that label as evidence that the new source was built or passed.
-Before validation/distribution, assign a new QA version and record the exact
-resulting commit and successful server workflow links here.
+The manifest now selects `0.9.3-qa.20261017.1`. This supersedes the
+16 October label. A version label alone does not establish a passing build.
+See PR 83 Checks for the exact commit and server workflow result.
 
 ## How installation builds the server
 
