@@ -28,3 +28,6 @@ require('./v1-manager-selection.test.cjs');
 
 // Delayed-provider responses must never contaminate a different open editor.
 require('./v1-manager-candidate-race.test.cjs');
+
+// Grouped-book Assist must connect the existing editor without changing file review.
+require('./v1-manager-assist.test.cjs');

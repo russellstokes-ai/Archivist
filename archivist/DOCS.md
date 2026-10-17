@@ -33,6 +33,21 @@ After opening Archivist:
 
 Direct network access uses Archivist authentication rather than the Home Assistant ingress session. Set the owner access key from the ingress UI before connecting the mobile app or using the direct server address.
 
+
+## Archivist Assist 2.0 — book-wide metadata and editions
+
+Open **Library Manager → Archivist Assist → Edit book** on a book card to use the server-side book workbench. This is a widescreen, responsive two-pane screen. The main panel edits logical-book fields; the right panel shows the book's selected cover, publication state, formats/edition IDs, ordered chapter/media records and work-level change history.
+
+You can edit title, author, series, fractional series/issue number, genre, *work publication year*, narrator, publisher, ISBN, ASIN, language and description. Original chapter/file metadata remains separate and is available from **Edit file**. Existing source scanner identification and chapter grouping are not replaced.
+
+Each editable field displays its saved provenance and lock. Conflicting chapter-derived bibliographic values remain visibly unresolved instead of picking an arbitrary value. Optional **Find candidates** searches Open Library on demand, and **Use** on an individual suggested field is *unverified until you review and save*. Saving requires **Preview book changes**, inspection of the exact old/new differences, then **Apply reviewed changes**. The server signs the preview, expires it and rechecks its work/edition/cover/publication/file snapshot and field locks to prevent stale writes. Locked fields must be explicitly unlocked first. Fields are not automatically published by Save.
+
+Book-wide manually verified title/author/series/genre overrides persist across ordinary scans; explicit published-book metadata changes require separate **Unpublish**, Save and then **Publish**. Publication is never automatic. The work's chosen year is used in Library/Atlas year charts and filters without overwriting edition-specific years. The selected cover can be uploaded or cleared without touching original media files.
+
+**Undo** is intentionally limited to the latest confirmed book-wide save if the work, cover, publication state, locks and member files have not changed since. Inspect the signed undo preview before confirming. All actions remain owner-only, revisioned and history-audited. The editor stays open after saves, with **Reload book** to recover from a stale view or network-refresh error.
+
+For code QA and limits see `docs/v1/SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md`. Individual chapter reassignment, manual edition creation and multi-provider comic intelligence are separate work. Real HA ingress/browser and Pi/NAS acceptance remain outstanding.
+
 ## Library folders
 
 The Home Assistant package maps:
@@ -104,6 +119,38 @@ Do not expose port 5056 directly to the public internet. For access outside the 
 
 Archivist separates administrator controls from household reading/listening access. Household profiles keep their own progress and library preferences while administrative actions remain restricted.
 
+## Reconnect a media file renamed outside Archivist
+
+If you rename or move a single media file on disk and then scan, Archivist deliberately keeps the old book and its bookmarks, marks the old file unavailable, and discovers the new path as a separate candidate. **It never automatically merges books because filenames, sizes or metadata look similar.**
+
+To reconnect an independently confirmed rename, open **Library Manager**, choose the original unavailable file and the new available file, and select **Relink renamed file**. Review the displayed work identities, paths, source and complete SHA-256 of the replacement, tick the explicit same-file attestation and confirm. The operation does not modify the actual media: it repairs the database link while keeping the original book, edition, asset ID and household progress.
+
+This operation is intentionally restricted to a single-file/edition work, unchanged format and indexed file size, and two paths within the same source. Newly discovered candidates that have been separately published, edited, queued for listening or given reading/listening progress cannot be retired. Resolve that state independently instead. If the old file reappears, rescan instead of relinking.
+
+**Crucial:** the old file no longer exists at its registered path, so the server cannot compare its bytes with the replacement. The destination SHA-256 only verifies that the available replacement stays unchanged between preview and apply. You must independently confirm the identity; do not use this feature to guess. Multi-track audiobook, cross-library and cross-volume relinking is still unsupported.
+
+The action writes a durable audit event and is all-or-nothing in SQLite. Back up the server before significant organisation or recovery operations. Real NAS and Raspberry Pi installations remain subject to separate acceptance tests.
+
+## Stop or retry an active server scan safely
+
+Library Manager → **Health & scans** and Settings → **Library** show queued, running, cancelling, committing, complete, failed and cancelled scan jobs. Queued scans can be cancelled immediately; failed or cancelled jobs can be retried as a fresh durable job. A scan that has already started may be given a **Request safe stop** command: Archivist returns `cancelling` until the scanner reaches its next safe stage checkpoint, then records `cancelled` while preserving the old catalogue. Do not interpret the HTTP 202 response as a completed stop.
+
+The scanner checks during staging and just before entering its atomic commit barrier. Once a job shows `committing`, cancellation is deliberately refused: it must complete or be recovered after a server restart. If the process crashes while staging, it resumes on startup; a received stop request is honoured. This avoids partial catalogue publication.
+
+On slow or unresponsive NAS shares, a read/metadata operation may not reach the next checkpoint immediately. Archivist does **not** kill arbitrary SMB/NFS system reads or revert an active SQLite transaction. Do not assume physical files are changed by scans, and do not forcibly power off a NAS to speed up stop. See `docs/v1/SERVER_SCANNER_CANCEL_QA_2026-10-17.md` in the repository for synthetic regression coverage and remaining hardware acceptance.
+
+## Reconnect a renamed multi-track audiobook folder
+
+This workflow is intentionally distinct from single-file relinking. In **Library Manager → Archivist Assist**, find your unavailable multi-track audiobook and select **Reconnect audiobook**. The original book ID is prefilled. Enter the newly indexed replacement book ID (shown on each Assist card), select **Inspect chapters** and review every original/target chapter pair. Check each chapter's explicit confirmation box to attest that the old and new tracks correspond in the SAME order. Archivist then checks every complete replacement track and presents its SHA-256 digest. A separate whole-book attestation and confirmation are required before applying.
+
+The server keeps the original work and edition IDs, each original file ID, track order and household bookmarks, and only removes the otherwise untouched staged candidate catalogue records. It does **not** rename or move media files. The group is constrained to 2–32 Audio files, one automatic edition per book, identical source and track order, matching indexed byte lengths per pair and no more than 4 GiB total destination media. Existing manual editions, mixed formats, independent replacement progress/queues and cross-drive moves are intentionally refused.
+
+Because originals are missing, old-to-new content equivalence is **not cryptographically provable**. An exact hash of the replacement prevents its substitution after the preview; it does not prove that replacement was formerly the original. Do not attest a track unless independently verified. This QA feature still requires Pi/NAS hardware testing, and has a potentially substantial two-pass hash I/O cost on slow storage.
+
+## Scan integrity across failures
+
+The server now commits scan file updates, grouped logical-work identity, edition links, source status and publication review invalidation in one SQLite transaction. A failure rebuilding works or recording a publication event rolls back the entire scan catalogue change. A source may still become unavailable or a scan may fail; the old indexed books and saved positions remain retained. When a scanner cancellation is accepted before commit, the same atomicity guarantee applies. Independent organisation operations retain their own recovery journals.
+
 ## Sorting and file safety
 
 Archivist organisation workflows are preview-first.
@@ -111,6 +158,24 @@ Archivist organisation workflows are preview-first.
 Before applying a move, Archivist checks the proposed destination and conflicts. Server moves are journalled so interrupted operations can be recovered. Scanning itself never moves media.
 
 As with any software that can organise files, keep a backup of irreplaceable media.
+
+## Scanner metadata health and partial NAS outages
+
+**Temporary chapter disappearance:** If part of a multi-file audiobook vanishes from a NAS share, the existing indexed audiobook keeps its unavailable track linked to the original edition, in chapter order, with household listening progress and manual metadata intact. Rescanning when the track reappears restores its availability without creating a duplicate. A newly added different track is not assumed to be the missing one. A work with an unexpected ambiguous second edition blocks automated reconciliation rather than deleting that edition.
+
+**Coverage dashboard:** In **Library Manager → Health & scans → Identification & Atlas readiness**, see read-only file-level counts for missing authors, genres and publication years, low identification confidence, files awaiting review and unavailable media. Select a card to open the matching filtered file table and use Archivist Assist/Metadata Workbench to review the values. Saved filters include metadata categories. Saving does not automatically publish a book; the review/publish lifecycle remains explicit.
+
+These values reflect **stored indexed physical files**, not counts of logical books or fresh filesystem content. Genre/year gaps highlight Atlas-readiness questions, not necessarily an Atlas defect: a multi-file work can have different metadata coverage per chapter. Root online status only checks the source folder, not every media file. Reports do not read file bytes, rescan, fetch metadata or overwrite anything.
+
+On actual SMB/NFS failures, blocked reads and a delayed stop request can still wait on the operating system; do not treat unit tests or ARM64 CI as real Raspberry Pi/NAS acceptance.
+
+## Read-only comic edition reassignment inspection
+
+Owner Library Manager → Archivist Assist provides **Inspect transfer safety** for an existing edition and an existing destination book. It lists reasons to block a future reparenting, but performs no database move, file modification or progress change. There is **no Apply control** in this build. Read `docs/v1/SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md` for the current source-QA contract.
+
+## Comic edition and volume identity (QA draft)
+
+In **Library Manager → Archivist Assist → Edit book**, an existing comic edition can be given owner-verified series run, volume, issue, imprint, variant, edition year and notes without changing its original media or work membership. This is optional, requires an unpublished/available single-file comic, and uses explicit preview/Save or separately confirmed undo. These records and their history belong to the SQLite database under `/data`. Keep that database intact across upgrades and include it in backups. This feature is not yet accepted on a physical Pi4/Home Assistant ingress installation or a live NAS; use only disposable data for source-QA builds. Details: `docs/v1/SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md`.
 
 ## Health monitoring
 
@@ -154,3 +219,19 @@ Check that `remote_https` is enabled and the configured certificate/key files ex
 
 Archivist application source is proprietary. Third-party components retain their own licences. See the repository `LICENSE.md` and `THIRD-PARTY-NOTICES.md`.
 
+
+## Owner diagnostics and recovery (QA)
+
+Open **Library Manager → Overview** for indexed logical book, source and scanner counts, or **Health & recovery** to inspect the local database/restore state. A manually requested SQLite quick check inspects database structures only and is time-bounded; it does not test NAS mounts, original media or backup restoration. Existing recovery actions remain in **Settings → Server**. Source Scan controls refuse already active scans and a root that was not confirmed accessible in the latest source health report. All source-QA limitations are in `docs/v1/SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md`; physical HAOS ingress and Pi4/SSD acceptance remains outstanding.
+
+## New Library Manager administration (QA only)
+
+From the owner-only **Library Manager**, **Family** manages User profiles and one-time access keys, **Server settings** shows the owner connection and active sessions, and **Work & metadata** filters the review queue by book identity, format and missing details before pagination. User keys are generated by the existing backend and shown once. Do not refresh the browser until the key has been saved. Household users currently have all-library access; this branch does not implement per-user private-space grants. Preserve the existing server database, profile keys and permission policy during upgrades. See `docs/v1/SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md` for source-QA limits and outstanding hardware acceptance.
+
+## Safe file organisation in Library Manager — source QA
+
+Owner **Library Manager → Organise & relink** now supports paginated indexed-file selection, preview-only path templates, optional explicitly selected Apply, a durable move journal and independently confirmed reverse move. The existing server file-move engine still does all hash/collision/source-file checks; the new UI does not bypass the backend. Empty batches may no longer implicitly preview the first 500 files, and the maximum single batch is 100. Test against **disposable** media only until NAS/USB/HA ingress and power-failure tests have been accepted. Details: `docs/v1/SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md`.
+
+## Organiser integrity and legacy library limits (QA draft)
+
+The server file-move journal now preserves an existing valid preview if a replacement preview fails to write. The older Settings organiser no longer pretends its default 500-file list represents an entire large library: when file count exceeds 500 it disables its bulk Preview and directs owners to the paginated Library Manager Organise workflow. Operations remain explicitly owner-approved; a preview never moves media. Details: `docs/v1/SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md`. No production HA ingress/Pi4/NAS deployment approval.

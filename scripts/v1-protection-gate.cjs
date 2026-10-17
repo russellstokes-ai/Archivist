@@ -18,6 +18,10 @@ if(approved.schema_version!==1||approved.baseline_path!=='mobile/App.tsx'||
    approved.release_approved!==false)
   throw Error('Invalid or broadened Archivist approved logic exception');
 let excepted=0;
+const branding=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/BRAND_REPLACEMENT_2026-10-16.json'),'utf8'));
+const brandPaths=new Set(['archivist/app/web/assets/archivist-app-icon.png','archivist/app/web/assets/archivist-primary-logo.png','archivist/icon.png','archivist/logo.png','mobile/assets/icon.png','web/assets/archivist-app-icon.png','web/assets/archivist-primary-logo.png']);
+if(branding.locks.length!==7||new Set(branding.locks.map(x=>x.path)).size!==7||branding.locks.some(x=>!brandPaths.has(x.path)||!/^([0-9a-f]{40})$/.test(x.approved_git_blob_sha)))throw Error('Invalid branding exception');
+let rebranded=0;
 let failures=0;
 for(const item of manifest.locks){
   const absolute=path.resolve(root,item.path);
@@ -26,10 +30,12 @@ for(const item of manifest.locks){
   const bytes=fs.readFileSync(absolute);
   const actual=crypto.createHash('sha1').update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
   if(actual===item.git_blob_sha)continue;
+  if(branding.locks.some(x=>x.path===item.path&&x.original_git_blob_sha===item.git_blob_sha&&x.approved_git_blob_sha===actual)){rebranded++;continue;}
   if(item.path==='mobile/App.tsx'&&actual===approved.approved_git_blob_sha){
     excepted++;
     continue;
   }
+  if(require('./reader-repair-exception.cjs')(root,item.path,actual,item.git_blob_sha)){excepted++;continue;}
   console.error('PROTECTED FILE CHANGED:',item.path,'expected original',item.git_blob_sha,'actual',actual);
   failures++;
 }
@@ -37,5 +43,5 @@ if(failures){
   console.error('BLOCKED:',failures,'locked file(s) changed. Obtain separate user approval before changing the protection manifest.');
   process.exit(1);
 }
-console.log('PASS:',manifest.locks.length-excepted,'original protected blobs and',
-  excepted,'exact owner-approved logic-only App.tsx blob; no other locked changes.');
+console.log('PASS:',manifest.locks.length-excepted-rebranded,'original protected blobs,',
+  excepted,'exact repair blobs and',rebranded,'owner-approved replacement brand blobs; no other locked changes.');

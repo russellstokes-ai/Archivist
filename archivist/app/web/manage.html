@@ -12,12 +12,19 @@
 <a class="skip" href="#content">Skip to main content</a>
 <div class="layout">
 <aside class="sidebar" aria-label="Administration navigation">
- <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">A</span><span>Archivist<small>LIBRARY SERVER</small></span></a>
+ <a class="brand" href="./"><img class="brand-mark" src="./assets/archivist-app-icon.png" alt="" width="40" height="40"><span>Archivist<small>LIBRARY SERVER</small></span></a>
  <nav aria-label="Manager">
-  <button class="nav-item is-current" type="button" data-view="library" aria-current="page">◫ <span>Library</span></button>
-  <button class="nav-item" type="button" data-view="review">◉ <span>Needs review</span></button>
-  <button class="nav-item" type="button" data-view="health">◈ <span>Health &amp; scans</span></button>
-  <a class="nav-item" href="./">↗ <span>Back to Archivist</span></a>
+  <button class="nav-item" type="button" data-view="overview">⌂ <span>Overview</span></button>
+  <button class="nav-item is-current" type="button" data-view="library" aria-current="page">◫ <span>Library Manager</span></button>
+  <button class="nav-item" type="button" data-view="assist">◉ <span>Work &amp; metadata</span><span id="assist-badge" class="nav-count" aria-label="books requiring review"></span></button>
+  <button class="nav-item" type="button" data-view="review">☷ <span>File review</span></button>
+  <button class="nav-item" type="button" data-view="health">◈ <span>Scanner &amp; sources</span></button>
+  <button class="nav-item" type="button" data-view="organise">⇄ <span>Organise &amp; relink</span></button>
+  <button class="nav-item" type="button" data-view="family">♧ <span>Family</span></button>
+  <button class="nav-item" type="button" data-view="recovery">⊞ <span>Health &amp; recovery</span></button>
+  <button class="nav-item" type="button" data-view="settings">⚙ <span>Server settings</span></button>
+  <a class="nav-item" href="./#atlas">↗ <span>Atlas &amp; Stats</span></a>
+  <a class="nav-item" href="./">↗ <span>Shelf &amp; reading</span></a>
  </nav>
  <div class="sidebar-foot">A private, local-first collection.</div>
 </aside>
@@ -27,30 +34,359 @@
 <div id="app" hidden>
  <section class="metrics" aria-label="Library overview">
   <div class="metric"><span>Logical works</span><strong id="metric-works">—</strong></div>
-  <div class="metric"><span>Files needing review</span><strong id="metric-review">—</strong></div>
+  <div class="metric"><span>Published</span><strong id="metric-published">—</strong></div>
+  <div class="metric"><span>Review / publish queue</span><strong id="metric-review">—</strong></div>
   <div class="metric"><span>Library spaces</span><strong id="metric-spaces">—</strong></div>
   <div class="metric"><span>Unavailable works</span><strong id="metric-unavailable">—</strong></div>
  </section>
+ <section id="view-overview" hidden aria-labelledby="overview-title">
+  <div class="section-head"><div><p class="eyebrow">SERVER WORKSPACE</p><h2 id="overview-title">Overview</h2>
+   <p class="footnote">Actual indexed catalogue and SQLite job state. Storage mounts are not freshly verified here.</p></div>
+   <button id="overview-refresh" type="button" class="quiet">Refresh overview</button>
+  </div>
+  <div class="operations-grid">
+   <article class="panel"><h3>Indexed collection</h3><div id="overview-collection" class="operations-list"><p class="subtext">Open Overview to load current counts.</p></div></article>
+   <article class="panel"><h3>Scan queue</h3><div id="overview-jobs" class="operations-list"><p class="subtext">Read-only job snapshot.</p></div></article>
+  </div>
+  <section class="panel operations-shortcuts"><h3>Continue work</h3>
+   <div class="operations-actions"><button id="overview-assist" type="button" class="quiet">Review &amp; publish books</button>
+    <button id="overview-scanner" type="button" class="quiet">Scanner &amp; sources</button>
+    <button id="overview-recovery" type="button" class="quiet">Check server recovery</button>
+    <a href="./#atlas" class="operations-link">Open Atlas universe ↗</a>
+   </div>
+  </section>
+  <p id="overview-note" class="footnote" role="status" aria-live="polite">Counts describe the indexed database, not a new media scan.</p>
+ </section>
  <section id="view-library" aria-labelledby="library-title">
-  <div class="section-head"><div><p class="eyebrow">CATALOGUE</p><h2 id="library-title">Manage books &amp; media</h2></div><a class="quiet-link" href="./">Open original organisation tools ↗</a></div>
+  <div class="section-head"><div><p class="eyebrow">CATALOGUE</p><h2 id="library-title">Manage books &amp; media</h2></div><a class="quiet-link" href="./#settings/organisation">Manage files &amp; safe moves ↗</a></div>
   <form id="filters" class="filters" role="search">
    <label class="search-field">Search title, author or series<input id="search" type="search" autocomplete="off" placeholder="Search your collection…"></label>
    <label>Library<select id="space"><option value="">All spaces</option></select></label>
    <label>Format<select id="format"><option value="">All formats</option><option value="Ebook">Ebooks</option><option value="Comic">Comics</option><option value="Audio">Audiobooks</option><option value="PDF">PDFs</option></select></label>
    <label>Status<select id="availability"><option value="">Any availability</option><option value="available">Available</option><option value="unavailable">Unavailable</option></select></label>
+   <label>Metadata<select id="metadata-gap"><option value="">All metadata</option><option value="author">Missing author</option><option value="genre">Missing genre</option><option value="year">Missing publication year</option><option value="confidence">Low confidence</option><option value="review">Needs review</option><option value="unavailable">Unavailable files</option></select></label>
    <label>Sort<select id="sort"><option value="review">Review first</option><option value="title">Title</option><option value="author">Author</option><option value="series">Series</option><option value="year">Publication year</option><option value="format">Format</option></select></label>
    <button type="button" id="reset" class="quiet">Clear filters</button><label>Saved filters<select id="saved-views"><option value="">Choose saved view…</option></select></label><label>Save filter as<input id="view-name" maxlength="60" placeholder="e.g. Comics to review"></label><button type="button" id="save-view" class="quiet">Save view</button>
   </form>
-  <div class="table-top"><p id="range" role="status">Loading…</p><div><span id="selected-count" class="selected">0 selected</span><button type="button" id="export-selection" class="quiet">Export selected CSV</button><button type="button" id="clear-selection" class="quiet">Clear selection</button></div></div>
+  <div class="table-top"><p id="range" role="status">Loading…</p><div><span id="selected-count" class="selected">0 selected</span><button type="button" id="bulk-open" class="primary">Bulk edit selected</button><button type="button" id="relink-open" class="quiet" disabled>Relink renamed file</button><button type="button" id="export-selection" class="quiet">Export selected CSV</button><button type="button" id="clear-selection" class="quiet">Clear selection</button></div></div>
   <div class="table-scroll"><table id="catalogue"><thead><tr><th scope="col"><input type="checkbox" id="select-page" aria-label="Select all files on this page"></th><th scope="col">Title / author</th><th scope="col">Series</th><th scope="col">Type</th><th scope="col">Source</th><th scope="col">Status</th><th scope="col">Edit</th></tr></thead><tbody id="records"></tbody></table></div>
   <div class="pager"><button id="previous" type="button" class="quiet">← Previous</button><span id="page-label">Page 1</span><button id="next" type="button" class="quiet">Next →</button></div>
+ </section>
+ <section id="view-assist" hidden aria-labelledby="assist-title">
+  <div class="section-head"><div><p class="eyebrow">ARCHIVIST ASSIST</p><h2 id="assist-title">Review &amp; publish your books</h2>
+   <p class="footnote">Review grouped files and covers, save any metadata corrections, then publish explicitly. Scanning and saving never publish a new book automatically.</p></div>
+   <div class="assist-controls"><button id="group-relink-open" type="button" class="quiet">Reconnect audiobook folder</button><button id="refresh-assist" type="button" class="quiet">Refresh</button></div></div>
+  <div class="assist-mode-tabs" role="group" aria-label="Book publication status">
+    <button id="assist-staged" type="button" aria-pressed="true">Needs review &amp; publishing</button>
+    <button id="assist-published" type="button" aria-pressed="false">Published library</button>
+  </div>
+  <form id="assist-filters" class="assist-review-filters" role="search">
+   <label class="search-field">Book title, author or series<input id="assist-query" type="search" maxlength="120" autocomplete="off" placeholder="Find books to review…" /></label>
+   <label>Library space<select id="assist-space"><option value="">All spaces</option></select></label>
+   <label>Format<select id="assist-format"><option value="">All formats</option><option value="Audio">Audiobooks</option><option value="Comic">Comics</option><option value="Ebook">Ebooks</option><option value="PDF">PDF</option></select></label>
+   <label>Review reason<select id="assist-reason">
+    <option value="">Every reason</option>
+    <option value="unreviewed">Files needing review</option>
+    <option value="unavailable">Unavailable originals</option>
+    <option value="missing-author">Missing book author</option>
+    <option value="missing-genre">Missing book genre</option>
+    <option value="no-selected-cover">No selected cover (may have embedded artwork)</option>
+   </select></label>
+   <button type="submit" id="assist-filter-apply" class="quiet">Filter books</button>
+   <button type="button" id="assist-filter-clear" class="quiet">Clear</button>
+  </form>
+  <p id="assist-range" role="status" aria-live="polite">Choose Archivist Assist to load books.</p>
+  <div id="assist-works" class="assist-works"></div>
+  <div class="pager"><button id="assist-previous" type="button" class="quiet">← Previous books</button><span id="assist-page">Page 1</span><button id="assist-next" type="button" class="quiet">Next books →</button></div>
+ </section>
+ <section id="view-organise" hidden aria-labelledby="organise-title">
+  <div class="section-head">
+   <div><p class="eyebrow">SERVER · FILE ORGANISATION</p><h2 id="organise-title">Organise &amp; recover</h2>
+    <p class="footnote">Choose indexed files on paginated pages, preview exact source/destination paths, then explicitly approve each verified move. No automatic file changes.</p></div>
+   <button id="organise-refresh" type="button" class="quiet">Refresh files</button>
+  </div>
+  <form id="organise-filters" class="organise-search" role="search">
+   <label class="search-field">Find files<input id="organise-search" type="search" maxlength="120" autocomplete="off" placeholder="Title, author or series…" /></label>
+   <label>Library space<select id="organise-space"><option value="">All spaces</option></select></label>
+   <label>Format<select id="organise-format">
+    <option value="">All formats</option><option value="Ebook">Ebook</option><option value="PDF">PDF</option>
+    <option value="Comic">Comic</option><option value="Audio">Audiobook</option></select></label>
+   <button id="organise-find" type="submit" class="quiet">Find files</button>
+   <button id="organise-clear-search" type="button" class="quiet">Clear filters</button>
+  </form>
+  <p id="organise-list-status" class="footnote" role="status" aria-live="polite">Open Organise to select files.</p>
+  <div class="table-scroll"><table class="organise-table">
+   <thead><tr><th><span>Choose</span></th><th>Media</th><th>Series</th><th>Format</th><th>Source library</th><th>Review</th></tr></thead>
+   <tbody id="organise-files"></tbody>
+  </table></div>
+  <div class="pager">
+   <button id="organise-previous" type="button" class="quiet">← Previous</button>
+   <span id="organise-page">Page 1</span>
+   <button id="organise-next" type="button" class="quiet">Next →</button>
+  </div>
+  <section class="panel organise-plan" aria-labelledby="organise-plan-title">
+   <h3 id="organise-plan-title">Safe file-move preview</h3>
+   <p class="footnote">At most 100 explicitly chosen files per batch. The scanner's book groups and metadata are never rewritten by choosing a template. Previewing records journal entries but does not move media.</p>
+   <div class="organise-plan-tools">
+    <label>Folder structure<select id="organise-template">
+     <option value="author-title">Author / Title</option>
+     <option value="author-series-title">Author / Series / Title</option>
+     <option value="format-author-title">Format / Author / Title</option>
+     <option value="format-author-series-title">Format / Author / Series / Title</option>
+    </select></label>
+    <span id="organise-selected-count" class="footnote" role="status">0 files chosen</span>
+    <button id="organise-preview" type="button" class="primary" disabled>Preview selected files</button>
+    <button id="organise-clear-selection" type="button" class="quiet">Clear file selection</button>
+   </div>
+   <p id="organise-preview-status" role="status" aria-live="polite" class="footnote">No move preview yet.</p>
+   <div id="organise-preview-items" class="organise-move-results"></div>
+   <div class="operations-actions">
+    <button id="organise-select-ready" type="button" class="quiet" disabled>Select all Ready</button>
+    <button id="organise-clear-ready" type="button" class="quiet" disabled>Unselect Ready</button>
+    <button id="organise-apply" type="button" class="primary" disabled>Apply chosen verified moves</button>
+    <button id="organise-cancel-preview" type="button" class="quiet" disabled>Cancel staged previews</button>
+   </div>
+  </section>
+  <section class="panel organise-manual">
+   <h3>Advanced · one-file move</h3>
+   <form id="organise-manual-form" class="organise-search">
+    <label>Existing indexed file ID<input id="organise-manual-id" type="number" min="1" step="1" placeholder="e.g. 42" required /></label>
+    <label class="search-field">New relative path within that source folder
+     <input id="organise-manual-path" maxlength="500" placeholder="Author / Series / Title.epub" required /></label>
+    <button id="organise-manual-preview" type="submit" class="quiet">Preview this path</button>
+   </form>
+   <p class="footnote">The backend verifies relative path, extension, source integrity and collision before creating a journaled preview.</p>
+  </section>
+  <section class="panel organise-journal">
+   <div class="section-head">
+    <div><h3>Move journal &amp; safe undo</h3><p class="footnote">Pending previews, incomplete recoveries and recent completed moves. Undo creates a separate verified reverse move and requires confirmation.</p></div>
+    <button id="organise-journal-refresh" type="button" class="quiet">Refresh journal</button>
+   </div>
+   <div id="organise-journal-items" class="organise-move-results"></div>
+   <div class="pager">
+    <button id="organise-journal-prev" type="button" class="quiet">← Newer entries</button>
+    <span id="organise-journal-page">Journal page 1</span>
+    <button id="organise-journal-next" type="button" class="quiet">Older entries →</button>
+   </div>
+   <p id="organise-journal-status" class="footnote" role="status" aria-live="polite">Journal loads only when requested.</p>
+  </section>
+  <p class="footnote">Original library organiser remains available in <a href="./#settings/organisation">Settings → Organisation</a> for compatibility. No automatic scan, mass apply, or delete.</p>
+ </section>
+ <section id="view-family" hidden aria-labelledby="family-title">
+  <div class="section-head"><div><p class="eyebrow">SERVER · HOUSEHOLD</p><h2 id="family-title">Family &amp; access</h2>
+   <p class="footnote">Users have separate progress, ratings and favourites. Current server policy gives every active User access to all library spaces.</p></div>
+   <button id="family-refresh" type="button" class="quiet">Refresh family</button></div>
+  <div class="operations-grid">
+   <article class="panel"><h3>Create a family user</h3>
+    <form id="family-create" class="family-create">
+     <label>Display name<input id="family-name" required maxlength="100" autocomplete="off" placeholder="Family member" /></label>
+     <button id="family-create-button" type="submit" class="primary">Create user and access key</button>
+    </form>
+    <p class="footnote">A unique access key is generated by Archivist. It is shown only once; it cannot be retrieved later.</p>
+   </article>
+   <article class="panel"><h3>One-time access key</h3>
+    <div id="family-key-result" hidden>
+     <p id="family-key-context" class="footnote"></p>
+     <label>Private user access key<textarea id="family-key" readonly rows="3" aria-label="New family access key"></textarea></label>
+     <p class="footnote">Copy the key securely before dismissing it. Do not share the administrator credential.</p>
+     <button id="family-key-dismiss" type="button" class="quiet">I've saved this key · clear</button>
+    </div>
+    <p id="family-no-key" class="footnote">No access key is being displayed. Creating or rotating a key requires a deliberate administrator action.</p>
+   </article>
+  </div>
+  <p id="family-status" role="status" aria-live="polite" class="footnote">Open Family to inspect your configured users.</p>
+  <p class="footnote"><a href="./#settings/household">Open original family settings ↗</a></p>
+  <section class="panel"><h3>Household users</h3><div id="family-profiles" class="family-profiles"></div></section>
+ </section>
+ <section id="view-settings" hidden aria-labelledby="settings-title">
+  <div class="section-head"><div><p class="eyebrow">SERVER · SETTINGS</p><h2 id="settings-title">Server settings</h2>
+   <p class="footnote">Connection status and current administrator sessions, using the existing Archivist server APIs.</p></div>
+   <button id="settings-refresh" type="button" class="quiet">Refresh settings</button></div>
+  <div class="operations-grid">
+   <article class="panel"><h3>Server connection</h3><div id="settings-info" class="operations-list"></div>
+    <p class="footnote">The displayed address is based on your current connection. It does not prove that remote access is enabled or secure.</p>
+    <a href="./#settings/server" class="operations-link">Configure access, HTTPS and backups ↗</a>
+   </article>
+   <article class="panel"><h3>Administrator sessions</h3><div id="settings-sessions" class="server-session-list"></div>
+    <p class="footnote">Ending the session you are currently using will require signing in again.</p>
+   </article>
+  </div>
+  <section class="panel"><h3>Library configuration</h3>
+   <p>Advanced source management, backup verification, provider settings and safe file organisation use the same server core.</p>
+   <div class="operations-actions">
+    <a href="./#settings/library" class="operations-link">Library folders ↗</a>
+    <a href="./#settings/organisation" class="operations-link">Safe file organiser ↗</a>
+    <button id="settings-scanner" type="button" class="quiet">Scanner scheduling &amp; source health</button>
+    <button id="settings-family" type="button" class="quiet">Manage family access</button>
+   </div>
+   <p class="footnote">Some advanced settings remain in the shared Archivist browser rather than duplicating those controls.</p>
+  </section>
+  <p id="settings-status" class="footnote" role="status" aria-live="polite">Choose Settings to load current server details.</p>
+ </section>
+ <section id="view-recovery" hidden aria-labelledby="recovery-title">
+  <div class="section-head"><div><p class="eyebrow">SERVER · OPERATIONS</p><h2 id="recovery-title">Health &amp; recovery</h2>
+   <p class="footnote">Read the saved database state first. SQLite integrity checking is explicit, and does not verify NAS availability or recoverability.</p></div>
+   <button id="recovery-refresh" type="button" class="quiet">Refresh status</button>
+  </div>
+  <div class="operations-grid">
+   <article class="panel"><h3>Local SQLite &amp; recovery state</h3>
+    <div id="recovery-backup" class="operations-list"><p class="subtext">Waiting for an owner-only status read.</p></div>
+    <div class="operations-actions"><a href="./api/backup" download="archivist-backup.db" class="operations-link">Download a new SQLite backup ↗</a>
+     <a href="./#settings/server" class="operations-link">Stage verified restore in Settings ↗</a></div>
+    <p class="footnote">A downloaded backup is not independently verified until copied safely and restored on a disposable installation.</p>
+   </article>
+   <article class="panel"><h3>Explicit integrity check</h3>
+    <p>Check the local SQLite database without reading original book files. Only run when necessary on a low-power device.</p>
+    <button id="recovery-integrity" type="button">Run SQLite quick check</button>
+    <p id="recovery-integrity-result" class="footnote" role="status" aria-live="polite">Not checked in this session.</p>
+    <p class="footnote">This verifies SQLite structures only; it cannot prove that books, a NAS, or a recovery snapshot are accessible.</p>
+   </article>
+  </div>
+  <section class="panel"><h3>Operational caveats</h3><div id="recovery-warnings" class="operations-list"></div>
+   <p class="footnote">For individual source/scan faults, use <button id="recovery-scanner" type="button" class="quiet">Scanner &amp; source diagnostics</button>.</p>
+  </section>
  </section>
  <section id="view-health" hidden aria-labelledby="health-title">
   <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2 id="health-title">Source and scanner health</h2></div><button id="refresh-health" type="button">Refresh</button></div>
   <div class="two-col"><div class="panel"><h3>Source folders</h3><div id="source-health"></div></div><div class="panel"><h3>Recent scan jobs</h3><div id="jobs-health"></div></div></div>
+  <section class="panel scanner-coverage" aria-labelledby="scanner-coverage-title">
+    <div class="section-head"><div><p class="eyebrow">SCANNER QUALITY</p><h3 id="scanner-coverage-title">Identification &amp; Atlas readiness</h3></div></div>
+    <p class="footnote">Counts are indexed files, not individual books. Open a category to review those files without rescanning or changing original media.</p>
+    <div id="scanner-coverage" class="coverage-grid" role="group" aria-label="Scanner metadata gaps"></div>
+    <p id="scanner-coverage-note" class="footnote">Read-only catalogue report; root connectivity and individual file availability can differ.</p>
+  </section>
   <p class="footnote">Scan control and safe file moves remain available in the original Archivist Settings. This workbench does not modify source files.</p>
  </section>
 </div>
 </main></div>
-<dialog id="editor" aria-labelledby="editor-title"><form id="editor-form" method="dialog"><div class="dialog-head"><div><p class="eyebrow">METADATA WORKBENCH</p><h2 id="editor-title">Edit metadata</h2></div><button type="button" id="close-editor" class="quiet" aria-label="Close editor">✕</button></div><p id="editor-context" class="footnote"></p><section class="candidate-workbench" aria-label="Optional public metadata search"><p class="eyebrow">OPTIONAL SECOND OPINION</p><div id="candidate-search-form" role="search"><label>Search public book metadata<input id="candidate-query" type="search" autocomplete="off" placeholder="Title and author, or ISBN"></label><button id="candidate-search-button" type="submit">Find candidates</button></div><p class="footnote">Searches are sent to Open Library only when requested. Suggestions never save themselves; choose individual fields below.</p><div id="candidate-results" aria-live="polite"></div></section><div id="editor-fields" class="field-grid"></div><p class="footnote">Current server behaviour: saving marks this file's metadata as manually reviewed. An individual field-locking feature is planned separately.</p><div class="dialog-actions"><button type="button" class="quiet" id="cancel-editor">Cancel</button><button type="submit" class="primary" id="save-editor" value="save">Save metadata</button></div></form></dialog>
+<dialog id="editor" aria-labelledby="editor-title"><form id="editor-form" method="dialog"><div class="dialog-head"><div><p class="eyebrow">METADATA WORKBENCH</p><h2 id="editor-title">Edit metadata</h2></div><button type="button" id="close-editor" class="quiet" aria-label="Close editor">✕</button></div><p id="editor-context" class="footnote"></p><section class="candidate-workbench" aria-label="Optional public metadata search"><p class="eyebrow">OPTIONAL SECOND OPINION</p><div id="candidate-search-form" role="search"><label>Search public book metadata<input id="candidate-query" type="search" autocomplete="off" placeholder="Title and author, or ISBN"></label><button id="candidate-search-button" type="submit">Find candidates</button></div><p class="footnote">Searches are sent to Open Library only when requested. Suggestions never save themselves; choose individual fields below.</p><div id="candidate-results" aria-live="polite"></div></section><div id="editor-lock-status" class="footnote" role="status" aria-live="polite">Checking metadata field provenance…</div><button id="retry-field-status" type="button" class="quiet" hidden>Retry field status</button><div id="editor-fields" class="field-grid"></div><p class="footnote">Manually corrected values are preserved on later scans. Lock verified fields to prevent accidental edits; unlock explicitly before changing them. Saving metadata never publishes a book.</p><div class="dialog-actions"><button type="button" class="quiet" id="cancel-editor">Cancel</button><button type="submit" class="primary" id="save-editor" value="save">Save metadata</button></div></form></dialog>
+<dialog id="bulk-dialog" aria-labelledby="bulk-title">
+  <form id="bulk-form">
+    <div class="dialog-head"><div><p class="eyebrow">METADATA WORKBENCH</p><h2 id="bulk-title">Bulk edit reviewed files</h2></div><button type="button" id="bulk-close" class="quiet" aria-label="Close bulk editor">✕</button></div>
+    <p id="bulk-context" class="footnote">Selected files are checked individually. No changes occur until you approve the complete preview.</p>
+    <p class="footnote">This initial safe bulk workflow edits narrator, publisher, publication year, ISBN, ASIN and language. Select only the fields you want to replace. Title, author, series and genre remain individual edits to protect work grouping.</p>
+    <div class="bulk-fields" role="group" aria-label="Fields to change">
+      <label><span class="bulk-enable"><input id="bulk-use-narrator" type="checkbox"> Replace narrator</span><input id="bulk-narrator" maxlength="1000" placeholder="Narrator"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-publisher" type="checkbox"> Replace publisher</span><input id="bulk-publisher" maxlength="1000" placeholder="Publisher"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-publishedYear" type="checkbox"> Replace publication year</span><input id="bulk-publishedYear" type="number" min="1000" max="3000" step="1" placeholder="Year; leave blank to clear"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-isbn" type="checkbox"> Replace ISBN</span><input id="bulk-isbn" maxlength="100" placeholder="ISBN"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-asin" type="checkbox"> Replace ASIN</span><input id="bulk-asin" maxlength="100" placeholder="ASIN"></label>
+      <label><span class="bulk-enable"><input id="bulk-use-language" type="checkbox"> Replace language</span><input id="bulk-language" maxlength="100" placeholder="Language"></label>
+    </div>
+    <p id="bulk-status" class="footnote" role="status" aria-live="polite">No preview generated.</p>
+    <div id="bulk-preview" class="bulk-preview" aria-live="polite"></div>
+    <div class="dialog-actions"><button id="bulk-preview-button" type="submit" class="quiet">Preview edits</button><button id="bulk-apply" type="button" class="primary" disabled>Apply approved changes</button></div>
+  </form>
+</dialog>
+
+<dialog id="relink-dialog" aria-labelledby="relink-title">
+ <div class="dialog-head"><div><p class="eyebrow">SAFE FILE RECOVERY</p><h2 id="relink-title">Reconnect renamed book</h2></div><button id="relink-close" type="button" class="quiet" aria-label="Close relink preview">✕</button></div>
+ <p class="footnote">Select exactly two indexed files: the unavailable original and the newly discovered replacement, in the same source and format. This does not move, rename or alter the actual media file.</p>
+ <p id="relink-status" role="status" aria-live="polite" class="footnote">Checking file identity…</p>
+ <div id="relink-details" class="relink-details"></div>
+ <label class="relink-ack"><input type="checkbox" id="relink-attest"><span>I independently confirmed these are the same book and file. I understand that the missing original cannot be compared with the new bytes, and that the action preserves the old book's progress.</span></label>
+ <div class="dialog-actions"><button id="relink-refresh" type="button" class="quiet">Refresh preview</button><button id="relink-apply" type="button" class="primary" disabled>Confirm relink</button></div>
+</dialog>
+
+<dialog id="group-relink-dialog" aria-labelledby="group-relink-title">
+ <div class="dialog-head"><div><p class="eyebrow">AUDIOBOOK RECOVERY</p><h2 id="group-relink-title">Reconnect an entire audiobook</h2></div><button type="button" id="group-relink-close" class="quiet" aria-label="Close audiobook relink">✕</button></div>
+ <p class="footnote">Use the original unavailable book ID and newly discovered replacement book ID from Archivist Assist. Only complete 2–32-track single-edition audiobooks in the same library source are supported. Nothing here moves or deletes media.</p>
+ <div class="group-relink-picker">
+  <label>Unavailable original book ID<input id="group-relink-old" type="number" inputmode="numeric" min="1" step="1" required placeholder="Original book ID"></label>
+  <label>Available replacement book ID<input id="group-relink-new" type="number" inputmode="numeric" min="1" step="1" required placeholder="Newly scanned book ID"></label>
+  <button id="group-relink-load" type="button" class="quiet">Inspect chapters</button>
+ </div>
+ <p id="group-relink-status" class="footnote" role="status" aria-live="polite">Choose both complete audiobooks before reviewing their chapters.</p>
+ <div id="group-relink-pairs" class="group-relink-pairs"></div>
+ <div id="group-relink-hashes" class="group-relink-hashes"></div>
+ <label class="relink-ack"><input id="group-relink-attest" type="checkbox" disabled><span>I independently verified that every original track matches the displayed replacement track in the same playback order. I understand that the missing originals cannot be compared with the new file bytes.</span></label>
+ <div class="dialog-actions"><button id="group-relink-preview" type="button" class="quiet" disabled>Verify full files</button><button id="group-relink-apply" type="button" class="primary" disabled>Confirm group relink</button></div>
+</dialog>
+
+<dialog id="work-dialog" class="work-dialog" aria-labelledby="work-dialog-title">
+ <div class="dialog-head">
+  <div><p class="eyebrow">ARCHIVIST ASSIST · BOOK WORKBENCH</p><h2 id="work-dialog-title">Book metadata</h2><p id="work-context" class="footnote"></p></div>
+  <div class="dialog-actions"><button id="work-refresh" type="button" class="quiet">Reload book</button>
+   <button id="work-close" type="button" class="quiet" aria-label="Close book workbench">✕</button></div>
+ </div>
+ <p id="work-status" class="footnote" role="status" aria-live="polite">Loading book identity…</p>
+ <div class="work-editor-layout">
+  <section class="work-edit-primary">
+   <section class="work-meta-panel">
+    <h3>Verified book details</h3>
+    <p class="footnote">These are <strong>book-level</strong> values; individual edition and chapter metadata is retained. The scanner cannot overwrite approved book corrections.</p>
+    <div id="work-fields" class="work-field-grid" aria-label="Book metadata fields"></div>
+   </section>
+   <section class="work-meta-panel">
+    <div class="section-head"><div><h3>Compare public metadata</h3><p class="footnote">Optional lookup. Candidate information remains unverified until you inspect and explicitly select individual fields.</p></div></div>
+    <div class="work-search-row"><label>Title, author or ISBN<input id="work-candidate-query" type="search" autocomplete="off" placeholder="Compare Open Library and Google Books"></label><button id="work-candidate-search" type="button" class="quiet">Find candidates</button></div>
+    <p class="footnote">This button sends the entered search and current title, author, series, issue number and ISBN to Open Library and Google Books. No automatic matching, metadata saves or media uploads. Edition publication year cannot replace the first-publication year automatically.</p><div id="work-candidates" aria-live="polite"></div>
+   </section>
+   <section class="work-meta-panel">
+    <div class="section-head"><h3>Preview before saving</h3></div>
+    <p id="work-preview-status" class="footnote" role="status" aria-live="polite">No changes selected.</p>
+    <div id="work-preview-diff" class="work-preview-diff" aria-label="Proposed book metadata changes"></div>
+    <div class="dialog-actions"><button type="button" id="work-preview-button" class="quiet">Preview book changes</button><button type="button" id="work-apply-button" class="primary" disabled>Apply reviewed changes</button></div>
+    <p class="footnote">Saving updates metadata only. It never publishes the book, changes original media files, resets reading progress or merges editions.</p>
+   </section>
+  </section>
+  <aside class="work-edit-secondary">
+   <section class="work-meta-panel">
+    <h3>Cover &amp; publication</h3>
+    <div id="work-cover" class="work-cover" aria-label="Current book cover"></div>
+    <label class="assist-cover-picker">Choose cover (JPEG or PNG)<input id="work-cover-upload" type="file" accept="image/jpeg,image/png"></label>
+    <button id="work-cover-clear" type="button" class="quiet">Clear selected cover</button>
+    <p id="work-publication" class="footnote">Checking publication status…</p>
+    <button id="work-publish-toggle" type="button" class="quiet">Loading publication…</button>
+   </section>
+   <section id="work-comic-panel" class="work-meta-panel comic-audit-panel" hidden>
+    <h3>Comic series &amp; issue evidence</h3>
+    <p class="footnote">Indexed ComicInfo and saved metadata only. Possible gaps are not proof of missing editions; volume identity is not yet independently verified.</p>
+    <div id="work-comic-audit" aria-live="polite"></div>
+    <div class="comic-profile-workbench">
+     <h4>Owner-verified edition identity</h4>
+     <p class="footnote">Label this existing edition's run, volume, issue, imprint and variant. These labels do not regroup works, rename files or replace the scanner's metadata. Published and multi-file editions must be reviewed separately.</p>
+     <label>Comic edition
+      <select id="comic-profile-edition" aria-label="Choose an indexed comic edition"></select>
+     </label>
+     <div id="comic-profile-fields" class="comic-profile-fields"></div>
+     <p id="comic-profile-status" class="footnote" role="status" aria-live="polite">Loading saved edition identity…</p>
+     <div id="comic-profile-diff" class="work-preview-diff" aria-label="Reviewed edition identity changes"></div>
+     <div class="comic-profile-actions">
+      <button id="comic-profile-preview" type="button" class="quiet" disabled>Preview edition labels</button>
+      <button id="comic-profile-apply" type="button" class="primary" disabled>Confirm edition labels</button>
+      <button id="comic-profile-undo-preview" type="button" class="quiet" disabled>Preview last Save undo</button>
+      <button id="comic-profile-undo" type="button" class="quiet" disabled>Confirm undo</button>
+     </div>
+    </div>
+    <section class="comic-transfer-review" aria-label="Read-only edition reassignment safety">
+     <h4>Inspect edition reassignment</h4>
+     <p class="footnote">Checks publication, edition membership, bookmarks, source integrity and issue/year conflicts. No files or catalogue entries are changed.</p>
+     <div class="comic-transfer-search">
+      <label>Destination book ID
+       <input id="comic-transfer-target" type="number" min="1" step="1" placeholder="Existing book ID" />
+      </label>
+      <button id="comic-transfer-inspect" type="button" class="quiet">Inspect transfer safety</button>
+     </div>
+     <p id="comic-transfer-status" role="status" aria-live="polite" class="footnote">Enter an existing book ID. Reassignment is disabled in this build.</p>
+     <div id="comic-transfer-findings" class="comic-transfer-findings" aria-label="Edition transfer blockers"></div>
+    </section>
+   </section>
+   <section class="work-meta-panel">
+    <h3>Editions &amp; chapter files</h3>
+    <div id="work-editions" class="work-editions"></div>
+    <div id="work-media" class="work-media"></div>
+    <div class="dialog-actions"><button id="work-more-media" type="button" class="quiet" hidden>More files</button></div>
+    <p class="footnote">Formats, file paths and sequence are shown without changing media. Use each file's editor for track- or edition-specific corrections.</p>
+   </section>
+   <section class="work-meta-panel">
+    <h3>Change history &amp; undo</h3>
+    <div id="work-history" class="work-history"></div>
+    <p id="work-undo-status" class="footnote" role="status">Last saved edit can be undone only when no newer change has occurred.</p>
+    <div id="work-undo-diff" class="work-preview-diff"></div>
+    <div class="dialog-actions"><button id="work-undo-preview" type="button" class="quiet">Preview undo</button><button id="work-undo-apply" type="button" class="primary" disabled>Confirm undo</button></div>
+   </section>
+  </aside>
+ </div>
+</dialog>
 </body></html>

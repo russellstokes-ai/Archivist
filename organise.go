@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -21,6 +22,8 @@ type metadataPatch struct {
 	ASIN          *string  `json:"asin"`
 	Language      *string  `json:"language"`
 	Description   *string  `json:"description"`
+    ExpectedRevision *int64 `json:"expectedRevision,omitempty"`
+    ExpectedFingerprint *string `json:"expectedFingerprint,omitempty"`
 }
 
 // hasFields prevents empty or null-only PATCH requests from silently
@@ -57,22 +60,39 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
 			fail(w, 400, errors.New("provide at least one metadata field"))
 			return
 		}
+        if in.ExpectedRevision!=nil&&*in.ExpectedRevision<0{
+            fail(w,400,errors.New("invalid metadata revision"));return
+        }
+        if in.ExpectedFingerprint!=nil&&len(*in.ExpectedFingerprint)!=64{
+            fail(w,400,errors.New("invalid metadata fingerprint"));return
+        }
 
 		a.scanMu.Lock()
 		defer a.scanMu.Unlock()
 
+        id,err:=strconv.ParseInt(r.PathValue("id"),10,64)
+        if err!=nil||id<1{fail(w,400,errors.New("invalid file ID"));return}
 		var sourceID int64
+        var metadataSource,scanSignature string
 		var title, author, series, genre, narrator, publisher, isbn, asin, language, description string
 		var seriesNumber float64
 		var publishedYear int
-		if err := a.db.QueryRow(`SELECT source_id,title,author,series,series_number,genre,published_year,narrator,publisher,isbn,asin,language,description
+		if err := a.db.QueryRow(`SELECT source_id,title,author,series,series_number,genre,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,scan_signature
 			FROM assets WHERE id=?`, r.PathValue("id")).Scan(
 			&sourceID, &title, &author, &series, &seriesNumber, &genre, &publishedYear,
-			&narrator, &publisher, &isbn, &asin, &language, &description,
+			&narrator, &publisher, &isbn, &asin, &language, &description,&metadataSource,&scanSignature,
 		); err != nil {
 			fail(w, 404, errors.New("asset missing"))
 			return
 		}
+        original:=metadataScalars{
+          Title:title,Author:author,Series:series,SeriesNumber:seriesNumber,Genre:genre,
+          PublishedYear:publishedYear,Narrator:narrator,Publisher:publisher,ISBN:isbn,
+          ASIN:asin,Language:language,Description:description,
+        }
+        if in.ExpectedFingerprint!=nil&&*in.ExpectedFingerprint!=metadataEditorFingerprint(id,sourceID,scanSignature,metadataSource,original){
+            fail(w,409,errors.New("metadata or source changed; reopen the editor"));return
+        }
 
 		title = cleanMetadataValue(in.Title, title)
 		author = cleanMetadataValue(in.Author, author)
@@ -121,7 +141,19 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
 			reviewReason = "Title or author still needs review."
 			confidence = 60
 		}
-		res, err := a.db.Exec(`UPDATE assets
+        updated:=metadataScalars{
+          Title:title,Author:author,Series:series,SeriesNumber:seriesNumber,Genre:genre,
+          PublishedYear:publishedYear,Narrator:narrator,Publisher:publisher,ISBN:isbn,
+          ASIN:asin,Language:language,Description:description,
+        }
+        tx,err:=a.db.BeginTx(r.Context(),nil)
+        if err!=nil{fail(w,500,err);return}
+        defer tx.Rollback()
+        if err=a.recordMetadataChange(tx,id,in.ExpectedRevision,original,updated);err!=nil{
+          if errors.Is(err,errMetadataStale)||errors.Is(err,errMetadataLocked){fail(w,409,err)}else{fail(w,500,err)}
+          return
+        }
+		res, err := tx.Exec(`UPDATE assets
 			SET title=?,author=?,series=?,series_number=?,genre=?,published_year=?,narrator=?,publisher=?,isbn=?,asin=?,language=?,description=?,
 				metadata_source='manual',
 				metadata_confidence=?,
@@ -140,10 +172,13 @@ func (a *app) organisationRoutes(mux *http.ServeMux) {
 			fail(w, 404, errors.New("asset missing"))
 			return
 		}
+        if err=tx.Commit();err!=nil{fail(w,500,err);return}
 		if err = a.syncAutoCatalogueLocked(sourceID); err != nil {
 			fail(w, 500, err)
 			return
 		}
-		reply(w, map[string]bool{"ok": true})
+        state,lookupErr:=a.metadataControlState(id)
+        if lookupErr!=nil{fail(w,500,lookupErr);return}
+		reply(w, map[string]any{"ok":true,"revision":state.Revision})
 	})
 }

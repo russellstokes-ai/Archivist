@@ -57,6 +57,9 @@ func (a *app) manageCandidateRoutes(mux *http.ServeMux) {
 		if !who(r).Owner { fail(w,403,errors.New("administrator only"));return }
 		query:=strings.TrimSpace(r.URL.Query().Get("q"))
 		if len(query)<2 || len(query)>180 { fail(w,400,errors.New("enter a search of 2–180 characters"));return }
+		mode:=r.URL.Query().Get("mode")
+		if mode=="multi"{a.serveMultiSourceCandidates(w,r,query);return}
+		if mode!=""{fail(w,400,errors.New("unsupported candidate search mode"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second)
 		defer cancel()
 		target:="https://openlibrary.org/search.json?q="+url.QueryEscape(query)+"&fields=key,title,author_name,first_publish_year,isbn,publisher&limit=10"

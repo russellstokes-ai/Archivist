@@ -13,6 +13,8 @@ func TestListeningProgressAndReaderHandoff(t *testing.T) {
 	a.initListening()
 	a.db.Exec("INSERT INTO sources(id,space,path) VALUES(1,'Family','/test')")
 	a.db.Exec("INSERT INTO assets(id,source_id,relative_path,title,format) VALUES(1,1,'a.mp3','A','Audio'),(2,1,'b.mp3','B','Audio')")
+    if _,err:=a.group("AB", []int64{1,2});err!=nil{t.Fatal(err)}
+    publishFixtureWorks(t,a)
 	call := func(method, path, body, token string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer "+token)
@@ -21,7 +23,7 @@ func TestListeningProgressAndReaderHandoff(t *testing.T) {
 		a.routes().ServeHTTP(w, r)
 		return w
 	}
-	if w := call("GET", "/api/assets/1/listening", "", "test-key"); w.Code != 200 || !strings.Contains(w.Body.String(), "listening-progress") {
+	if w := call("GET", "/api/assets/1/listening", "", "test-key"); w.Code != 200 || !strings.Contains(w.Body.String(), "/api/editions/") {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	if w := call("PUT", "/api/assets/1/listening-progress", `{"asset":1,"seconds":20,"revision":5}`, "test-key"); w.Code != 409 {
@@ -45,9 +47,8 @@ func TestListeningProgressAndReaderHandoff(t *testing.T) {
 	if w := call("GET", "/api/assets/1/listening-progress", "", token); w.Code != 200 || strings.Contains(w.Body.String(), `"seconds":20`) {
 		t.Fatal("profile isolation")
 	}
-	if _, err := a.group("AB", []int64{1, 2}); err != nil {
-		t.Fatal(err)
-	}
+	// Grouping/publication were prepared above so User media access obeys
+    // the same publish gate as real server libraries.
 	if w := call("GET", "/api/assets/1/listening", "", token); w.Code != 200 || !strings.Contains(w.Body.String(), "/api/editions/") {
 		t.Fatal("group context", w.Body.String())
 	}

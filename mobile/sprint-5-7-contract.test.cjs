@@ -20,10 +20,14 @@ assert.equal(/styles\.coverFallbackMark[\s\S]{0,80}>A<\/Text>/.test(source),fals
 assert.equal(config.expo.icon,'./assets/icon.png','App icon must use the canonical logo');
 const splashPlugin=(config.expo.plugins||[]).find(item=>Array.isArray(item)&&item[0]==='expo-splash-screen');
 assert.ok(splashPlugin,'Expo splash-screen config plugin is missing');
-assert.equal(splashPlugin[1]?.image,'./assets/icon.png','Splash must use the canonical logo');
+assert.equal(splashPlugin[1]?.image,'./assets/splash-icon.png','Splash must use the approved transparent emblem');
 assert.equal(splashPlugin[1]?.resizeMode,'contain','Splash must preserve logo proportions');
-assert.equal(splashPlugin[1]?.dark?.image,'./assets/icon.png','Dark splash must use the canonical logo');
-assert.equal(config.expo.android?.adaptiveIcon?.foregroundImage,'./assets/icon.png','Android adaptive icon must use the canonical logo');
+assert.equal(splashPlugin[1]?.dark?.image,'./assets/splash-icon.png','Dark splash must use the approved transparent emblem');
+assert.equal(config.expo.android?.adaptiveIcon?.foregroundImage,'./assets/adaptive-icon.png','Android adaptive icon must use the approved mask-safe foreground');
+assert.equal(config.expo.android?.adaptiveIcon?.backgroundColor,'#2F8B86');
+assert.equal(splashPlugin[1]?.backgroundColor,'#2F8B86');
+assert.equal(splashPlugin[1]?.dark?.backgroundColor,'#2F8B86');
+for(const file of ['assets/splash-icon.png','assets/adaptive-icon.png'])assert.ok(fs.existsSync(file),'Missing approved brand variant: '+file);
 assert.ok(fs.existsSync('assets/icon.png'),'Canonical icon asset is missing');
 assert.ok(source.includes("import * as SplashScreen from 'expo-splash-screen'"),'Native splash handoff controller is missing');
 assert.ok(source.includes('const brandedLaunchHoldMs=1600') && source.includes('const brandedLaunchFadeMs=380') && source.includes('SplashScreen.hideAsync()') && source.includes('SplashScreen.setOptions({duration:180,fade:true})'), 'Native splash must hand off into a deliberately visible branded launch layer');

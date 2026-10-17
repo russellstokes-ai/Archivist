@@ -135,9 +135,13 @@ func openDB(path string) (*sql.DB, error) {
 	}
 	// Rows created before provenance tracking may include user corrections.
 	// Preserve them as legacy/manual-quality metadata until the user explicitly changes them.
+	// Only genuinely unclassified legacy rows qualify. Reopening or restoring
+	// an existing database must never downgrade scanned embedded/path/manual
+	// provenance or invalidate work/edition fingerprints. This is idempotent.
 	if _, migrateErr := db.Exec(`UPDATE assets
 		SET metadata_source='legacy',metadata_confidence=100,needs_review=0,review_reason=''
-		WHERE scan_signature='' AND size_bytes=0 AND modified_unix=0
+		WHERE metadata_source='legacy' AND metadata_confidence=0 AND needs_review=1
+		AND scan_signature='' AND size_bytes=0 AND modified_unix=0
 		AND (title<>'' OR author<>'' OR series<>'' OR genre<>'')`); migrateErr != nil {
 		db.Close()
 		return nil, migrateErr
@@ -230,8 +234,22 @@ func kind(path string) string {
 	return ""
 }
 func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
+    return a.scanWithProgressJob(context.Background(),id,0,progress)
+}
+// Jobs use the same scanner as the standalone/manual caller. Cancellation is
+// checked while collecting a *staged* catalogue, never inside its commit.
+func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress func(int,int)) error {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
+    lastCheck:=time.Time{}
+    checkpoint:=func(force bool)error{
+        if err:=ctx.Err();err!=nil{return err}
+        if jobID==0{return nil}
+        if !force&&!lastCheck.IsZero()&&time.Since(lastCheck)<150*time.Millisecond{return nil}
+        lastCheck=time.Now()
+        return a.scanJobCheckpoint(ctx,jobID)
+    }
+    if err:=checkpoint(true);err!=nil{return err}
 	if a.movesPending() {
 		return errors.New("finish or recover pending file moves before scanning")
 	}
@@ -245,14 +263,17 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		return errors.New("source unavailable; previous catalogue retained")
 	}
 	total := 0
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+    countErr:=filepath.WalkDir(root,func(path string,d fs.DirEntry,walkErr error)error{
+        if err:=checkpoint(false);err!=nil{return err}
 		if walkErr != nil || d.IsDir() || d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
 			return nil
 		}
 		if kind(path) != "" { total++ }
 		return nil
 	})
+    if countErr!=nil{return countErr}
 	if progress != nil { progress(0, total) }
+    if err:=checkpoint(true);err!=nil{return err}
 	stage, e := os.CreateTemp("", "archivist-scan-*.jsonl")
 	if e != nil {
 		return e
@@ -305,6 +326,7 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	reviewCount := 0
 	sidecars := newSidecarScanCache()
 	e = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+        if err:=checkpoint(false);err!=nil{return err}
 		if walkErr != nil {
 			return walkErr
 		}
@@ -382,9 +404,15 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		return encoder.Encode(item)
 	})
 	if e != nil {
+        if errors.Is(e,errScanCancelled)||errors.Is(e,context.Canceled){return e}
 		a.db.Exec("UPDATE sources SET status='Scan failed; catalogue retained' WHERE id=?", id)
 		return errors.New("scan could not read every folder; previous catalogue retained")
 	}
+    if err:=checkpoint(true);err!=nil{return err}
+    // Owner stop and this transition are competing conditional SQLite
+    // updates: only the winner may change the state. After this transition,
+    // the validated staging file must commit or fail/retry on restart.
+    if err:=a.enterScanCommit(ctx,jobID);err!=nil{return err}
 	if _, e = stage.Seek(0, 0); e != nil {
 		return e
 	}
@@ -438,11 +466,13 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", status, id); e != nil {
 		return e
 	}
+    // No committed intermediate state: files, work/edition grouping, review
+    // invalidation and source status form one consistent SQLite snapshot.
+    // A catalogue trigger/storage failure rolls back all scan records.
+    if e=a.syncAutoCatalogueTx(tx,id);e!=nil{
+        return fmt.Errorf("scan grouping failed; previous catalogue retained: %w",e)
+    }
 	if e = tx.Commit(); e != nil { return e }
-	if e = a.syncAutoCatalogueLocked(id); e != nil {
-		a.db.Exec("UPDATE sources SET status=? WHERE id=?", "Scanned; library grouping needs attention", id)
-		return e
-	}
 	if progress != nil { progress(total, total) }
 	return nil
 }
@@ -477,7 +507,7 @@ func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.backgroundRoutes(mux)
 	a.catalogueRoutes(mux)
-	a.coverRoutes(mux)
+	a.serverCoverRoutes(mux)
 	a.progressRoutes(mux)
 	a.syncProgressRoutes(mux)
 	a.listeningRoutes(mux)
@@ -488,13 +518,25 @@ func (a *app) routes() http.Handler {
 	a.opdsRoutes(mux)
 	a.backupRoutes(mux)
 	a.atlasRoutes(mux)
+	a.serverReviewRoutes(mux)
+	a.publicationRoutes(mux)
+    a.selectedCoverRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
 	a.epubResourceRoutes(mux)
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
+    a.metadataControlRoutes(mux)
+    a.bulkMetadataRoutes(mux)
+    a.workMetadataRoutes(mux)
+    a.relinkRoutes(mux)
+    a.groupedRelinkRoutes(mux)
 	a.manageCandidateRoutes(mux)
+    a.comicAuditRoutes(mux)
+    a.comicEditionRoutes(mux)
+    a.comicTransferRoutes(mux)
+    a.operationsRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
 	a.libraryHealthRoutes(mux)
@@ -509,10 +551,16 @@ func (a *app) routes() http.Handler {
 			count(DISTINCT CASE WHEN a.format='PDF' THEN e.work_id END)
 			FROM sources s
 			LEFT JOIN assets a ON a.source_id=s.id AND a.available=1
+            AND (? OR EXISTS (
+                SELECT 1 FROM published_works pw
+                JOIN editions ed2 ON ed2.work_id=pw.id
+                JOIN edition_assets ea2 ON ea2.edition_id=ed2.id
+                WHERE ea2.asset_id=a.id
+            ))
 			LEFT JOIN edition_assets ea ON ea.asset_id=a.id
 			LEFT JOIN editions e ON e.id=ea.edition_id
 			WHERE ? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)
-			GROUP BY s.id ORDER BY s.id`, who(r).Owner, who(r).ID)
+			GROUP BY s.id ORDER BY s.id`, who(r).Owner, who(r).Owner, who(r).ID)
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -635,6 +683,17 @@ func (a *app) routes() http.Handler {
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		reviewOnly := r.URL.Query().Get("review") == "1"
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+        metadataGap:=strings.TrimSpace(r.URL.Query().Get("metadataGap"))
+        switch metadataGap{
+        case "","author","genre","year","confidence","review","unavailable":
+        default:
+            fail(w,400,errors.New("invalid metadata coverage filter"));return
+        }
+        // Additional diagnostics intentionally remain owner-only. Readers
+        // continue to use the original published-only library contract.
+        if metadataGap!=""&&!who(r).Owner{
+            fail(w,403,errors.New("scanner coverage is owner-only"));return
+        }
 		availability := r.URL.Query().Get("availability")
 		if availability != "" && availability != "available" && availability != "unavailable" {
 			fail(w,400,errors.New("invalid availability filter"))
@@ -666,11 +725,23 @@ func (a *app) routes() http.Handler {
 			AND (?='' OR a.genre=?)
 			AND (?=0 OR trim(a.author)='')
 			AND (?=0 OR a.needs_review=1)
+            AND (?='' OR (?='author' AND trim(a.author)='')
+                OR (?='genre' AND trim(a.genre)='')
+                OR (?='year' AND (a.published_year<1000 OR a.published_year>3000))
+                OR (?='confidence' AND a.metadata_confidence<60)
+                OR (?='review' AND a.needs_review=1)
+                OR (?='unavailable' AND a.available=0))
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
+            AND (? OR EXISTS (
+                SELECT 1 FROM published_works w JOIN editions ed ON ed.work_id=w.id
+                JOIN edition_assets ea ON ea.edition_id=ed.id
+                WHERE ea.asset_id=a.id
+            ))
 			ORDER BY `+sortOrder+` LIMIT ? OFFSET ?`,
 			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
-			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
+            metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,
+			availability, availability, availability, who(r).Owner, who(r).ID, who(r).Owner, limit, offset)
 		if e != nil {
 			fail(w, 500, e)
 			return

@@ -1982,7 +1982,7 @@ function Client() {
       if(state!=='active'){void pauseActiveOfflineDownload();void checkpointNowRef.current();}
     });
     const timer = setInterval(() => controller.tick(),1000);
-    return () => { subscription.remove(); lifecycle.remove(); clearInterval(timer); loadCancel.current?.(); void checkpointNowRef.current(); void controller.stop(); };
+    return () => { ++nowResumeGeneration.current;++readerOpenGeneration.current; subscription.remove(); lifecycle.remove(); clearInterval(timer); loadCancel.current?.(); void checkpointNowRef.current(); void controller.stop(); };
   }, [controller, player]);
 
   useEffect(() => {
@@ -2255,6 +2255,7 @@ function Client() {
     }
     let cancelled = false;
     setShelfLoading(true);
+    setServerLoadingMore(false);setServerBooksLoadingMore(false);
     setServerHasMore(false);
     const timeout = setTimeout(() => {
       Promise.all([
@@ -2477,8 +2478,12 @@ function Client() {
     await setPersistedJSON(accessibilityPreferencesKey,next);
   }
 
+  const catalogueScopeRef=useRef('');
+  catalogueScopeRef.current=JSON.stringify([session?.server,session?.token,authorFilter,availabilityFilter,favouriteOnly,formatFilter,genreFilter,metadataGapFilter,ratingFilter,readingFilter,reviewOnly,query,seriesFilter,space,unknownAuthorOnly]);
+
   async function refreshSourcesAndShelf() {
     if(!session)return;
+    const scope=catalogueScopeRef.current;
     const [items, assets, works, continuing, summary, stats]=await Promise.all([
       request(session,'/api/sources'),
       reviewOnly ? request(session,serverAssetsPath(0,200)) : Promise.resolve([]),
@@ -2487,6 +2492,7 @@ function Client() {
       request(session,'/api/library-summary'),
       request(session,'/api/profile-stats'),
     ]);
+    if(scope!==catalogueScopeRef.current)return;
     const normalizedWorks=(works as ServerWork[]).map(normalizeServerWork) as ServerWork[];
     setSources(items);
     setSpaces([...new Set<string>(items.map((s:{space:string})=>s.space))]);
@@ -2502,9 +2508,11 @@ function Client() {
 
   async function loadMoreServerWorks() {
     if (!session || !serverHasMore || serverLoadingMore || shelfLoading) return;
+    const scope=catalogueScopeRef.current;
     setServerLoadingMore(true);
     try {
       const next = (await request(session,serverWorksPath(serverWorks.length,100)) as ServerWork[]).map(normalizeServerWork) as ServerWork[];
+      if(scope!==catalogueScopeRef.current)return;
       setServerWorks(current => {
         const seen=new Set(current.map(work=>work.id));
         return [...current,...next.filter(work=>!seen.has(work.id))];
@@ -2512,26 +2520,28 @@ function Client() {
       setServerPreferences(current=>({...current,...preferencesFromWorks(next)}));
       setServerHasMore(next.length===100);
     } catch(e) {
-      setError((e as Error).message);
+      if(scope===catalogueScopeRef.current)setError((e as Error).message);
     } finally {
-      setServerLoadingMore(false);
+      if(scope===catalogueScopeRef.current)setServerLoadingMore(false);
     }
   }
 
   async function loadMoreServerBooks() {
     if (!session || !serverBooksHasMore || serverBooksLoadingMore || shelfLoading) return;
+    const scope=catalogueScopeRef.current;
     setServerBooksLoadingMore(true);
     try {
       const next = await request(session,serverAssetsPath(serverBooks.length,200)) as Book[];
+      if(scope!==catalogueScopeRef.current)return;
       setServerBooks(current => {
         const seen=new Set(current.map(book=>book.id));
         return [...current,...next.filter(book=>!seen.has(book.id))];
       });
       setServerBooksHasMore(next.length===200);
     } catch(e) {
-      setError((e as Error).message);
+      if(scope===catalogueScopeRef.current)setError((e as Error).message);
     } finally {
-      setServerBooksLoadingMore(false);
+      if(scope===catalogueScopeRef.current)setServerBooksLoadingMore(false);
     }
   }
 
@@ -2748,6 +2758,8 @@ function Client() {
   }
 
   async function signOut() {
+    ++nowResumeGeneration.current;++readerOpenGeneration.current;
+    setLocalReader(null);setReaderLoading(false);
     if (!session) return;
     loadCancel.current?.();
     await controller.stop();
@@ -3438,11 +3450,15 @@ function Client() {
   function currentLocalResume(work:LocalWork,snapshot:DurableNowSession){
     const ordered=orderedLocalWork(work);
     const wanted=snapshot.trackUri||snapshot.media.uri;
-    const index=Math.max(0,wanted?ordered.tracks.findIndex(track=>track.uri===wanted):-1);
-    const resolved=index>=0?index:0;
+    const requestedIndex=wanted?ordered.tracks.findIndex(track=>track.uri===wanted):-1;
     const saved=localWorkProgress[ordered.key];
-    const savedSameTrack=saved&&!saved.complete&&saved.uri===ordered.tracks[resolved]?.uri?saved.seconds:0;
-    return {work:ordered,index:resolved,seconds:Math.max(snapshot.position||0,savedSameTrack||0)};
+    const savedIndex=saved&&!saved.complete?ordered.tracks.findIndex(track=>track.uri===saved.uri):-1;
+    const index=requestedIndex>=0?requestedIndex:savedIndex>=0?savedIndex:0;
+    // The explicit durable session can represent a deliberate rewind. A larger
+    // older checkpoint is not evidence of a newer position.
+    const seconds=requestedIndex>=0?snapshot.position:
+      savedIndex>=0?saved?.seconds:0;
+    return {work:ordered,index,seconds:Math.max(0,Number.isFinite(seconds)?Number(seconds):0)};
   }
 
   async function resumeNowSession(snapshot:DurableNowSession){
@@ -3453,6 +3469,35 @@ function Client() {
 
     if(source==='server'&&media.serverWorkId){
       const offline=Object.values(offlineWorks).find(item=>item.server===media.originServer&&item.workId===media.serverWorkId);
+      const resumeDownloaded=async()=>{
+        if(!offline)return false;
+        const work=downloadedWorks.find(item=>item.originServer===offline.server&&item.originWorkId===offline.workId);
+        if(!work)return false;
+        const savedTrackId=snapshot.trackId??media.id;
+        const sourceTrack=savedTrackId!==undefined?offline.tracks.find(track=>track.id===savedTrackId)
+          :offline.tracks.find(track=>track.localFormat===media.format);
+        const localTrack=work.tracks.find(track=>track.uri===sourceTrack?.uri);
+        if(!sourceTrack||!localTrack)return false;
+        let info;
+        try{info=await getInfoAsync(sourceTrack.uri);}catch{return false;}
+        if(generation!==nowResumeGeneration.current)return true;
+        const size=info.exists&&!info.isDirectory?Number(info.size):0;
+        const declared=Number(sourceTrack.size);
+        if(!Number.isSafeInteger(size)||size<=0||
+           (Number.isSafeInteger(declared)&&declared>0&&size!==declared))return false;
+        const verifiedWork={...work,tracks:work.tracks.map(track=>track.uri===localTrack.uri?{...track,available:true}:track)};
+        if(snapshot.kind==='audio'){
+          const resolved=currentLocalResume(verifiedWork,{...snapshot,trackUri:localTrack.uri});
+          await controller.stop();
+          if(generation!==nowResumeGeneration.current)return true;
+          await loadLocalWorkTrack(resolved.work,resolved.index,resolved.seconds,false,generation);
+        }else{
+          openBook({...localTrack,available:true,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,localWorkKey:work.key,source:'downloaded',originServer:work.originServer,serverWorkId:work.originWorkId},snapshot.position,generation);
+        }
+        return true;
+      };
+      if(await resumeDownloaded())return;
+      if(generation!==nowResumeGeneration.current)return;
       const canUseServer=!!session&&(!media.originServer||session.server===media.originServer);
       if(canUseServer){
         const work=serverWorks.find(item=>item.id===media.serverWorkId);
@@ -3460,41 +3505,26 @@ function Client() {
           const tracks=await request(session!,'/api/works/'+media.serverWorkId+'/tracks') as WorkTrack[];
           if(generation!==nowResumeGeneration.current)return;
           const available=tracks.filter(track=>track.available);
-          const track=available.find(item=>item.id===snapshot.trackId||item.id===media.id)
-            ||available.find(item=>item.format===media.format)
-            ||available[0];
+          const savedTrackId=snapshot.trackId??media.id;
+          const track=savedTrackId!==undefined?available.find(item=>item.id===savedTrackId)
+            :available.find(item=>item.format===media.format);
+          if(!track){setError('The saved track is unavailable. Choose a track from your library.');return;}
           if(track){
             const current:Book={
               id:track.id,title:work?.title||media.title,author:work?.author||media.author,series:work?.series||media.series,genre:work?.genre||media.genre||'',
               format:track.format,space:work?.space||media.space,available:true,serverWorkId:media.serverWorkId,
               coverShape:track.format==='Audio'?'square':'portrait',source:'server',originServer:session!.server,
             };
-            if(snapshot.kind==='audio')await playBook(current,snapshot.position);
-            else openBook(current,snapshot.position);
+            if(snapshot.kind==='audio')await playBook(current,snapshot.position,false,generation);
+            else openBook(current,snapshot.position,generation);
             return;
           }
         }catch(error){
-          if(!offline){setError(error instanceof Error?error.message:String(error));return;}
-        }
-      }
-      if(offline){
-        const work=downloadedWorks.find(item=>item.originServer===offline.server&&item.originWorkId===offline.workId);
-        if(work){
-          const sourceTrack=offline.tracks.find(track=>track.id===snapshot.trackId||track.id===media.id)
-            ||offline.tracks.find(track=>track.localFormat===media.format)
-            ||offline.tracks[0];
-          const localTrack=work.tracks.find(track=>track.uri===sourceTrack?.uri)||work.tracks[0];
-          if(snapshot.kind==='audio'){
-            const resolved=currentLocalResume(work,{...snapshot,trackUri:localTrack?.uri});
-            await controller.stop();
-            if(generation!==nowResumeGeneration.current)return;
-            await loadLocalWorkTrack(resolved.work,resolved.index,resolved.seconds);
-          }else if(localTrack){
-            openBook({...localTrack,title:work.title,author:work.author,series:work.series,genre:work.genre,coverUri:work.coverUri,localWorkKey:work.key,source:'downloaded',originServer:work.originServer,serverWorkId:work.originWorkId},snapshot.position);
-          }
+          if(generation===nowResumeGeneration.current)setError(error instanceof Error?error.message:String(error));
           return;
         }
       }
+
     }
 
     const localWork=media.localWorkKey?localWorks.find(item=>item.key===media.localWorkKey):localWorks.find(item=>item.tracks.some(track=>track.uri===media.uri||track.uri===snapshot.trackUri));
@@ -3503,10 +3533,10 @@ function Client() {
         const resolved=currentLocalResume(localWork,snapshot);
         await controller.stop();
         if(generation!==nowResumeGeneration.current)return;
-        await loadLocalWorkTrack(resolved.work,resolved.index,resolved.seconds);
+        await loadLocalWorkTrack(resolved.work,resolved.index,resolved.seconds,false,generation);
       }else{
         const track=localWork.tracks.find(item=>item.uri===media.uri)||localWork.tracks.find(item=>item.format===media.format)||localWork.tracks[0];
-        if(track)openBook({...track,title:localWork.title,author:localWork.author,series:localWork.series,genre:localWork.genre,coverUri:localWork.coverUri,localWorkKey:localWork.key,source:localWork.originServer?'downloaded':'local',originServer:localWork.originServer,serverWorkId:localWork.originWorkId},snapshot.position);
+        if(track)openBook({...track,title:localWork.title,author:localWork.author,series:localWork.series,genre:localWork.genre,coverUri:localWork.coverUri,localWorkKey:localWork.key,source:localWork.originServer?'downloaded':'local',originServer:localWork.originServer,serverWorkId:localWork.originWorkId},snapshot.position,generation);
       }
       return;
     }
@@ -3515,8 +3545,8 @@ function Client() {
       const current=localBooks.find(item=>item.uri===media.uri);
       if(current){
         const book={...bookFromNowMedia(media),...current,source:source==='downloaded'?'downloaded':'local' as WorkSource};
-        if(snapshot.kind==='audio')await playBook(book,snapshot.position);
-        else openBook(book,snapshot.position);
+        if(snapshot.kind==='audio')await playBook(book,snapshot.position,false,generation);
+        else openBook(book,snapshot.position,generation);
         return;
       }
     }
@@ -3576,7 +3606,8 @@ function Client() {
     }
   }
 
-  async function loadLocalWorkTrack(work: LocalWork, index: number, seconds = 0) {
+  async function loadLocalWorkTrack(work: LocalWork, index: number, seconds = 0, autoplay = true, selection = ++nowResumeGeneration.current) {
+    if(selection!==nowResumeGeneration.current)return;
     const track = work.tracks[index];
     if (!track?.uri || !track.available) throw Error('This audiobook file is unavailable.');
     loadCancel.current?.();
@@ -3603,7 +3634,7 @@ function Client() {
       serverWorkId: work.originWorkId,
     };
     setPlaying(display);
-    void persistNowSession('audio',display,seconds,{trackUri:track.uri,wasPlaying:true}).catch(()=>undefined);
+    void persistNowSession('audio',display,seconds,{trackUri:track.uri,wasPlaying:autoplay}).catch(()=>undefined);
     setLiveMode('player');
     setActiveTab('now');
 
@@ -3638,11 +3669,12 @@ function Client() {
         finish(e as Error);
       }
     });
+    if(selection!==nowResumeGeneration.current)return;
     player.setPlaybackRate(localSpeed);
-    player.play();
+    if(autoplay)player.play();
   }
 
-  async function playLocalWork(work: LocalWork, resume?:{trackUri?:string;seconds?:number}) {
+  async function playLocalWork(work: LocalWork, resume?:{trackUri?:string;seconds?:number}, autoplay = true, selection = ++nowResumeGeneration.current) {
     work=orderedLocalWork(work);
     if (!work.available || !work.tracks.length) {
       setError('This audiobook is currently unavailable.');
@@ -3650,38 +3682,40 @@ function Client() {
     }
     try {
       await controller.stop();
+      if(selection!==nowResumeGeneration.current)return;
       const saved = localWorkProgress[work.key];
       const requestedIndex=resume?.trackUri?work.tracks.findIndex(track=>track.uri===resume.trackUri):-1;
       const savedIndex = saved && !saved.complete ? work.tracks.findIndex(track => track.uri === saved.uri) : -1;
       const index = requestedIndex>=0?requestedIndex:(savedIndex >= 0 ? savedIndex : 0);
       const savedSeconds=saved&&!saved.complete&&saved.uri===work.tracks[index]?.uri?saved.seconds:0;
-      const seconds=resume?.seconds!==undefined?Math.max(0,Math.max(resume.seconds,savedSeconds)):savedSeconds;
-      await loadLocalWorkTrack(work, index, seconds);
+      const seconds=resume?.seconds!==undefined?Math.max(0,resume.seconds):savedSeconds;
+      await loadLocalWorkTrack(work, index, seconds, autoplay, selection);
     } catch (e) {
       if ((e as Error).message !== 'Playback changed.') setError((e as Error).message);
     }
   }
 
-  async function playBook(book: Book, resumeSeconds?:number) {
+  async function playBook(book: Book, resumeSeconds?:number, autoplay = true, selection = ++nowResumeGeneration.current) {
     if (book.source!=='server') {
       if (book.localWorkKey) {
         const work = localWorks.find(item => item.key === book.localWorkKey);
-        if (work) { await playLocalWork(work); return; }
+        if (work) { await playLocalWork(work,resumeSeconds===undefined?undefined:{trackUri:book.uri,seconds:resumeSeconds},autoplay,selection); return; }
       }
       if (!book.uri) return;
       setError('');
       try {
         loadCancel.current?.();
         await controller.stop();
+        if(selection!==nowResumeGeneration.current)return;
         setPlaying(book);
         const savedSeconds=Math.max(0,resumeSeconds??localProgress[book.uri]??0);
-        void persistNowSession('audio',book,savedSeconds,{trackUri:book.uri,wasPlaying:true}).catch(()=>undefined);
+        void persistNowSession('audio',book,savedSeconds,{trackUri:book.uri,wasPlaying:autoplay}).catch(()=>undefined);
         setLiveMode('player');
         setActiveTab('now');
         player.replace({uri: book.uri});
         player.setActiveForLockScreen(true, {title: book.title, albumTitle: 'Archivist'});
         if (savedSeconds) await player.seekTo(savedSeconds);
-        player.play();
+        if(selection===nowResumeGeneration.current&&autoplay)player.play();
       } catch (e) {
         setError((e as Error).message);
       }
@@ -3695,11 +3729,11 @@ function Client() {
     setError('');
     try {
       setPlaying(book);
-      void persistNowSession('audio',book,Math.max(0,resumeSeconds||0),{trackId:book.id,wasPlaying:true}).catch(()=>undefined);
+      void persistNowSession('audio',book,Math.max(0,resumeSeconds||0),{trackId:book.id,wasPlaying:autoplay}).catch(()=>undefined);
       setLiveMode('player');
       setActiveTab('now');
-      await controller.open(book.id);
-      if(resumeSeconds!==undefined&&resumeSeconds>controller.state.seconds+1)await controller.seek(resumeSeconds);
+      await controller.open(book.id,{autoplay,resumeSeconds});
+      if(selection!==nowResumeGeneration.current)return;
       const order=trackOrders[playbackWorkKey(book)]?.map(Number).filter(Number.isFinite);
       if(order?.length)controller.setTrackOrder(order);
     } catch (e) {
@@ -3892,7 +3926,10 @@ function Client() {
     }catch{}
   }
 
-  function openBook(book: Book, resumePage?:number) {
+  function openBook(book: Book, resumePage?:number, selection = ++nowResumeGeneration.current) {
+    if(selection!==nowResumeGeneration.current)return;
+    loadCancel.current?.();
+    controller.cancelPending();
     if (!book.available) {
       setError('This file is currently unavailable.');
       return;

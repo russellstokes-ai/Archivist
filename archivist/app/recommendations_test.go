@@ -28,6 +28,7 @@ func TestRecommendationsLocalAccessibleAndUnstarted(t *testing.T) {
 	}
 	a.scan(1)
 	a.scan(2)
+    publishFixtureWorks(t,a)
 	a.db.Exec("INSERT INTO profiles(id,name,key_hash) VALUES(1,'Member',?)", keyHash("member"))
 	a.db.Exec("INSERT INTO grants VALUES(1,'Allowed')")
 	token, _ := a.newSession("member")

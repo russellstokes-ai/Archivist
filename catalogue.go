@@ -30,7 +30,10 @@ func (a *app) initCatalogue() error {
 			return alterErr
 		}
 	}
-	return nil
+	if err:=a.initPublication();err!=nil{return err}
+    if err:=a.initMetadataControls();err!=nil{return err}
+    if err:=a.initRelink();err!=nil{return err}
+    return a.initWorkMetadata()
 }
 
 // Natural ordering makes Track 2 precede Track 10 without modifying filenames.
@@ -81,11 +84,18 @@ func commonValue(items []catalogueAsset, field func(catalogueAsset) string) stri
 
 // Auto-catalogue is conservative: a nested audiobook folder is one work;
 // standalone ebook/PDF/comic files are one work each. Explicit user groupings win.
+// Used both by manual metadata edits and by the scanning transaction.
+// The scan MUST commit asset upserts, logical-work grouping, edition links,
+// publication invalidation and source status together or not at all.
 func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
-	tx, e := a.db.Begin()
-	if e != nil { return e }
-	defer tx.Rollback()
+    tx,err:=a.db.Begin()
+    if err!=nil{return err}
+    defer tx.Rollback()
+    if err=a.syncAutoCatalogueTx(tx,sourceID);err!=nil{return err}
+    return tx.Commit()
+}
 
+func (a *app) syncAutoCatalogueTx(tx *sql.Tx,sourceID int64) error {
 	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.genre,a.format,s.space,
 		COALESCE(w.auto,1)
 		FROM assets a JOIN sources s ON s.id=a.source_id
@@ -139,20 +149,74 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 		} else if err != nil {
 			return err
 		} else {
-			if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,genre=? WHERE id=?",title,first.space,author,series,genre,work); err != nil { return err }
-			err = tx.QueryRow("SELECT id FROM editions WHERE work_id=? ORDER BY id LIMIT 1",work).Scan(&edition)
-			if err == sql.ErrNoRows {
-				res, insertErr := tx.Exec("INSERT INTO editions(work_id,format) VALUES(?,?)",work,first.format)
-				if insertErr != nil { return insertErr }
-				edition, insertErr = res.LastInsertId(); if insertErr != nil { return insertErr }
-			} else if err != nil { return err }
-			if _, err = tx.Exec("UPDATE editions SET format=? WHERE id=?",first.format,edition); err != nil { return err }
-			if _, err = tx.Exec("DELETE FROM editions WHERE work_id=? AND id<>?",work,edition); err != nil { return err }
-			if _, err = tx.Exec("DELETE FROM edition_assets WHERE edition_id=?",edition); err != nil { return err }
+            // Automatic works have a single edition. Never delete a second
+            // edition if older data or manual actions made this ambiguous:
+            // that could cascade into profile progress and completion state.
+            var editionCount int
+            if err=tx.QueryRow("SELECT count(*) FROM editions WHERE work_id=?",work).Scan(&editionCount);err!=nil{return err}
+            if editionCount!=1{return errors.New("automatic work has unexpected edition structure; review before scanning")}
+            if _, err = tx.Exec("UPDATE works SET title=?,space=?,author=?,series=?,genre=? WHERE id=?",title,first.space,author,series,genre,work); err != nil { return err }
+            err = tx.QueryRow("SELECT id FROM editions WHERE work_id=?",work).Scan(&edition)
+            if err != nil { return err }
+            if _, err = tx.Exec("UPDATE editions SET format=? WHERE id=?",first.format,edition); err != nil { return err }
+
+            // Retain the original asset-to-edition relationship for offline
+            // chapters. Previously rebuilding only available tracks detached
+            // missing parts of an audiobook. The book ID survived, but its
+            // per-profile progress could reference a track no longer in the
+            // edition. This is especially likely during partial NAS outages.
+            offlineRows, queryErr := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,
+                a.genre,a.format,s.space,a.source_id
+                FROM edition_assets ea JOIN assets a ON a.id=ea.asset_id
+                JOIN sources s ON s.id=a.source_id
+                WHERE ea.edition_id=? AND a.available=0
+                ORDER BY ea.position,a.id`,edition)
+            if queryErr!=nil{return queryErr}
+            offline:=[]catalogueAsset{}
+            for offlineRows.Next(){
+                var saved catalogueAsset
+                var source int64
+                if queryErr=offlineRows.Scan(&saved.id,&saved.path,&saved.title,&saved.author,
+                    &saved.series,&saved.genre,&saved.format,&saved.space,&source);queryErr!=nil{
+                    offlineRows.Close();return queryErr
+                }
+                if source!=sourceID||saved.format!=first.format||saved.space!=first.space{
+                    offlineRows.Close()
+                    return errors.New("automatic work includes an offline track from another source or format; review before scanning")
+                }
+                offline=append(offline,saved)
+            }
+            if queryErr=offlineRows.Err();queryErr!=nil{offlineRows.Close();return queryErr}
+            offlineRows.Close()
+
+            // Remove links only for *currently available* paths; all unavailable
+            // original tracks stay attached and retain their exact asset IDs.
+            // Positions are then rebuilt in natural chapter order including
+            // both offline and online entries, within the same scan transaction.
+            if _,err=tx.Exec(`DELETE FROM edition_assets WHERE edition_id=?
+                AND asset_id IN (SELECT id FROM assets WHERE available=1)`,edition);err!=nil{return err}
+            items=append(items,offline...)
+            sort.SliceStable(items,func(i,j int)bool{return naturalLess(items[i].path,items[j].path)})
 		}
 		for pos,item := range items {
 			if _, err = tx.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,?) ON CONFLICT(asset_id) DO UPDATE SET edition_id=excluded.edition_id,position=excluded.position",item.id,edition,pos); err != nil { return err }
 		}
+        // Reapply explicit work-level corrections while the exact scanner
+        // transaction is still open. Never overwrite protected owner values
+        // with path-derived chapter metadata on a later NAS rescan.
+        if err=applyWorkOverridesTx(tx,work);err!=nil{return err}
+        // A new unresolved file can invalidate a previously published group.
+        // Once staged, completing Save never silently republishes it.
+        result, updateErr := tx.Exec(`UPDATE work_publication
+          SET state='staged',revision=revision+1,published_at=0
+          WHERE work_id=? AND state='published' AND EXISTS (
+            SELECT 1 FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id
+            JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? AND a.needs_review=1
+          )`,work,work)
+        if updateErr!=nil{return updateErr}
+        if affected,_:=result.RowsAffected();affected>0{
+            if _,err=tx.Exec("INSERT INTO work_publication_events(work_id,title,action,recorded_at) VALUES(?,?,'review_reopened',strftime('%s','now'))",work,title);err!=nil{return err}
+        }
 	}
 
 	// Never automatically delete an indexed work simply because its source
@@ -166,8 +230,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	// relink is performed: matching name/size is NOT sufficient proof to
 	// transfer a family's bookmark to another book.
 
-	if e = pruneCatalogue(tx); e != nil { return e }
-	return tx.Commit()
+	return pruneCatalogue(tx)
 }
 const catalogueMigrationVersion = "auto-catalogue-v3"
 
@@ -334,6 +397,12 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		series := strings.TrimSpace(r.URL.Query().Get("series"))
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+        yearFilter:=0
+        if year:=strings.TrimSpace(r.URL.Query().Get("year"));year!="" {
+            n,err:=strconv.Atoi(year)
+            if err!=nil || n<1000 || n>3000 { fail(w,400,errors.New("invalid publication year"));return }
+            yearFilter=n
+        }
 		availability := r.URL.Query().Get("availability")
 		if availability != "" && availability != "available" && availability != "unavailable" {
 			fail(w,400,errors.New("invalid availability filter"))
@@ -362,8 +431,19 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END),
 			COALESCE((SELECT wp.rating FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
 			COALESCE((SELECT wp.favourite FROM work_preferences wp WHERE wp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND wp.work_id=w.id),0),
-			`+workStateExpression(who(r).ID)+`
-			FROM works w JOIN editions e ON e.work_id=w.id
+			`+workStateExpression(who(r).ID)+`,
+            COALESCE((SELECT digest FROM selected_work_covers sc WHERE sc.work_id=w.id),''),
+            CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear')
+    THEN CAST(NULLIF((SELECT wcv.value FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear'),'') AS INTEGER)
+    ELSE (SELECT min(NULLIF(year_asset.published_year,0))
+        FROM editions year_ed JOIN edition_assets year_ea ON year_ea.edition_id=year_ed.id
+        JOIN assets year_asset ON year_asset.id=year_ea.asset_id
+        WHERE year_ed.work_id=w.id) END,
+            CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='seriesNumber')
+              THEN CAST(NULLIF((SELECT wc.value FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='seriesNumber'),'') AS REAL)
+              ELSE CASE WHEN min(NULLIF(a.series_number,0))=max(NULLIF(a.series_number,0))
+                THEN min(NULLIF(a.series_number,0)) ELSE NULL END END
+			FROM published_works w JOIN editions e ON e.work_id=w.id
 			JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id
 			WHERE (w.title LIKE ? OR w.author LIKE ? OR w.series LIKE ? OR w.genre LIKE ?)
 			AND (?='' OR w.space=?) AND (?='' OR e.format=?)
@@ -371,6 +451,12 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			AND (?='' OR w.series=?)
 			AND (?='' OR w.genre=?)
 			AND (?=0 OR trim(w.author)='')
+            AND (?=0 OR (CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear')
+    THEN CAST(NULLIF((SELECT wcv.value FROM work_field_controls wcv WHERE wcv.work_id=w.id AND wcv.field='publishedYear'),'') AS INTEGER)
+    ELSE (SELECT min(NULLIF(year_asset.published_year,0))
+        FROM editions year_ed JOIN edition_assets year_ea ON year_ea.edition_id=year_ed.id
+        JOIN assets year_asset ON year_asset.id=year_ea.asset_id
+        WHERE year_ed.work_id=w.id) END)=?)
 			AND (?='' OR `+workStateExpression(who(r).ID)+`=?)
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences fp WHERE fp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND fp.work_id=w.id AND fp.favourite=1))
 			AND (?=0 OR EXISTS (SELECT 1 FROM work_preferences rp WHERE rp.profile_id=`+strconv.FormatInt(who(r).ID,10)+` AND rp.work_id=w.id AND rp.rating=?))
@@ -378,7 +464,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			GROUP BY w.id
 			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
 			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
-			q,q,q,q,space,space,format,format,author,author,series,series,genre,genre,unknownAuthor,
+			q,q,q,q,space,space,format,format,author,author,series,series,genre,genre,unknownAuthor,yearFilter,yearFilter,
 			reading,reading,favourite,rating,rating,who(r).Owner,who(r).ID,
 			availability,availability,availability,limit,offset)
 		if e != nil { fail(w,500,e); return }
@@ -388,9 +474,13 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			var id, editions, files, available int64
 			var ratingValue int
 			var favouriteValue bool
-			var title, author, series, genre, workSpace, workFormat, state string
-			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available,&ratingValue,&favouriteValue,&state); e != nil { fail(w,500,e); return }
-			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0,"rating":ratingValue,"favourite":favouriteValue,"state":state})
+			var title, author, series, genre, workSpace, workFormat, state, coverHash string
+            var publishedYear sql.NullInt64
+            var bookSeriesNumber sql.NullFloat64
+			if e=rows.Scan(&id,&title,&author,&series,&genre,&workSpace,&editions,&files,&workFormat,&available,&ratingValue,&favouriteValue,&state,&coverHash,&publishedYear,&bookSeriesNumber); e != nil { fail(w,500,e); return }
+            year:=int64(0);if publishedYear.Valid{year=publishedYear.Int64}
+            number:=float64(0);if bookSeriesNumber.Valid{number=bookSeriesNumber.Float64}
+			out=append(out,map[string]any{"id":id,"title":title,"author":author,"series":series,"seriesNumber":number,"publishedYear":year,"genre":genre,"space":workSpace,"editions":editions,"files":files,"format":workFormat,"available":available>0,"rating":ratingValue,"favourite":favouriteValue,"state":state,"coverHash":coverHash})
 		}
 		reply(w,out)
 	})
@@ -400,7 +490,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			count(DISTINCT e.id),count(ea.asset_id),
 			CASE WHEN count(DISTINCT e.format)=1 THEN min(e.format) ELSE 'Mixed' END,
 			sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)
-			FROM works w
+			FROM published_works w
 			JOIN editions e ON e.work_id=w.id
 			JOIN edition_assets ea ON ea.edition_id=e.id
 			JOIN assets a ON a.id=ea.asset_id
@@ -439,32 +529,49 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("GET /api/library-summary", func(w http.ResponseWriter, r *http.Request) {
+        var cataloguedWorks int
+        if who(r).Owner { _=a.db.QueryRow("SELECT count(*) FROM works").Scan(&cataloguedWorks) }
 		var total int
-		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)`,who(r).Owner,who(r).ID).Scan(&total)
+		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM published_works w JOIN editions e ON e.work_id=w.id JOIN edition_assets ea ON ea.edition_id=e.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)`,who(r).Owner,who(r).ID).Scan(&total)
 		formats := []map[string]any{}
-		rows, e := a.db.Query(`SELECT e.format,count(DISTINCT w.id) FROM works w JOIN editions e ON e.work_id=w.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY e.format ORDER BY count(DISTINCT w.id) DESC,e.format`,who(r).Owner,who(r).ID)
+		rows, e := a.db.Query(`SELECT e.format,count(DISTINCT w.id) FROM published_works w JOIN editions e ON e.work_id=w.id WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY e.format ORDER BY count(DISTINCT w.id) DESC,e.format`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{formats=append(formats,map[string]any{"name":name,"count":count})}};rows.Close() }
 		spaces := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.space,count(*) FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY w.space ORDER BY count(*) DESC,w.space`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.space,count(*) FROM published_works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?) GROUP BY w.space ORDER BY count(*) DESC,w.space`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{spaces=append(spaces,map[string]any{"name":name,"count":count})}};rows.Close() }
 		authors := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.author,count(*) FROM works w WHERE w.author<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.author ORDER BY count(*) DESC,w.author LIMIT 12`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.author,count(*) FROM published_works w WHERE w.author<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.author ORDER BY count(*) DESC,w.author LIMIT 12`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{authors=append(authors,map[string]any{"name":name,"count":count})}};rows.Close() }
 		var unknownAuthors int
-		_ = a.db.QueryRow(`SELECT count(*) FROM works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
-		var needsReview int
+		_ = a.db.QueryRow(`SELECT count(*) FROM published_works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
+		var needsReview, reviewWorks int
 		_ = a.db.QueryRow(`SELECT count(*) FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.needs_review=1 AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&needsReview)
+		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id LEFT JOIN work_publication pub ON pub.work_id=w.id WHERE (a.needs_review=1 OR COALESCE(pub.state,'staged')='staged') AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&reviewWorks)
 		series := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.series,count(*) FROM works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.series,count(*) FROM published_works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{series=append(series,map[string]any{"name":name,"count":count})}};rows.Close() }
 		genres := []map[string]any{}
-		rows, e = a.db.Query(`SELECT w.genre,count(*) FROM works w WHERE trim(w.genre)<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.genre ORDER BY count(*) DESC,w.genre LIMIT 20`,who(r).Owner,who(r).ID)
+		rows, e = a.db.Query(`SELECT w.genre,count(*) FROM published_works w WHERE trim(w.genre)<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.genre ORDER BY count(*) DESC,w.genre LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{genres=append(genres,map[string]any{"name":name,"count":count})}};rows.Close() }
+        years:=[]map[string]any{}
+        rows,e=a.db.Query(`SELECT CAST(p.year AS TEXT),count(*) FROM (
+            SELECT w.id,CASE WHEN EXISTS(SELECT 1 FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='publishedYear')
+               THEN CAST(NULLIF((SELECT wc.value FROM work_field_controls wc WHERE wc.work_id=w.id AND wc.field='publishedYear'),'') AS INTEGER)
+               ELSE min(NULLIF(a.published_year,0)) END AS year FROM published_works w
+            JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id
+            JOIN assets a ON a.id=ea.asset_id
+            WHERE (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
+            GROUP BY w.id
+        ) p WHERE p.year IS NOT NULL GROUP BY p.year ORDER BY count(*) DESC,p.year DESC LIMIT 24`,who(r).Owner,who(r).ID)
+        if e!=nil {fail(w,500,e);return}
+        for rows.Next(){var name string;var count int;if e=rows.Scan(&name,&count);e!=nil{rows.Close();fail(w,500,e);return};years=append(years,map[string]any{"name":name,"count":count})}
+        if e=rows.Err();e!=nil{rows.Close();fail(w,500,e);return}
+        rows.Close()
 		availability := []map[string]any{}
 		rows, e = a.db.Query(`
 			SELECT status,count(*) FROM (
 				SELECT w.id,CASE WHEN sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0 THEN 'Available' ELSE 'Unavailable' END AS status
-				FROM works w
+				FROM published_works w
 				JOIN editions ed ON ed.work_id=w.id
 				JOIN edition_assets ea ON ea.edition_id=ed.id
 				JOIN assets a ON a.id=ea.asset_id
@@ -476,7 +583,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		readingSummary := []map[string]any{}
 		rows, e = a.db.Query(`SELECT state,count(*) FROM (
 			SELECT w.id,`+workStateExpression(who(r).ID)+` AS state
-			FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
+			FROM published_works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
 		) GROUP BY state ORDER BY count(*) DESC,state`,who(r).Owner,who(r).ID)
 		if e == nil {
 			for rows.Next(){var state string;var count int;if rows.Scan(&state,&count)==nil{
@@ -488,7 +595,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		ratings := []map[string]any{}
 		rows, e = a.db.Query(`SELECT rating,count(*) FROM (
 			SELECT w.id,`+atlasRatingExpression(who(r).ID)+` AS rating
-			FROM works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
+			FROM published_works w WHERE ? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)
 		) GROUP BY rating ORDER BY CASE rating
 			WHEN '5★' THEN 10 WHEN '4½★' THEN 9 WHEN '4★' THEN 8 WHEN '3½★' THEN 7
 			WHEN '3★' THEN 6 WHEN '2½★' THEN 5 WHEN '2★' THEN 4 WHEN '1½★' THEN 3
@@ -502,7 +609,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			who(r).ID,who(r).Owner,who(r).ID).Scan(&favouriteCount)
 		if favouriteCount>0 { favourites=append(favourites,map[string]any{"name":"Favourites","count":favouriteCount}) }
 
-		reply(w,map[string]any{"total":total,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"series":series,"genres":genres,"availability":availability,"reading":readingSummary,"ratings":ratings,"favourites":favourites})
+		reply(w,map[string]any{"total":total,"cataloguedWorks":cataloguedWorks,"formats":formats,"spaces":spaces,"authors":authors,"unknownAuthors":unknownAuthors,"needsReview":needsReview,"reviewWorks":reviewWorks,"series":series,"genres":genres,"years":years,"availability":availability,"reading":readingSummary,"ratings":ratings,"favourites":favourites})
 	})
 	mux.HandleFunc("GET /api/works/{id}/tracks", func(w http.ResponseWriter, r *http.Request) {
 		rows, e := a.db.Query(`SELECT a.id,a.title,a.format,e.id,a.available,a.relative_path,a.size_bytes FROM editions e JOIN edition_assets ea ON ea.edition_id=e.id JOIN assets a ON a.id=ea.asset_id WHERE e.work_id=? ORDER BY e.id,ea.position`, r.PathValue("id"))

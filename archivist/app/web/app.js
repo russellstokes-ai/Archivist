@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let page='library',request=0,currentProfile=null,libraryOffset=0,libraryFormat='',summaryData=null;
+let page='library',request=0,currentProfile=null,libraryOffset=0,libraryFormat='',libraryGenre='',libraryYear=0,summaryData=null;
 const pageSize=60;
 
 function message(text){$('status').textContent=text}
@@ -49,7 +49,7 @@ function coverFor(work){
   const title=element('strong',work.title||'Untitled');
   const imprint=element('small','ARCHIVIST');imprint.className='cover-imprint';
   fallback.append(author,title,imprint);
-  const img=element('img');img.loading='lazy';img.alt='';img.decoding='async';img.src='./api/works/'+work.id+'/cover';
+  const img=element('img');img.loading='lazy';img.alt='';img.decoding='async';img.src='./api/works/'+work.id+'/cover'+(typeof work.coverHash==='string'&&/^[0-9a-f]{64}$/.test(work.coverHash)?'?v='+work.coverHash:'');
   img.addEventListener('load',()=>wrap.classList.add('has-cover'));
   img.addEventListener('error',()=>img.remove());
   wrap.append(fallback,img);return wrap;
@@ -116,16 +116,20 @@ async function loadBooks(append=false){
   try{
   const params=new URLSearchParams({q:$('search').value,space:$('space').value,limit:String(pageSize),offset:String(libraryOffset)});
   if(libraryFormat)params.set('format',libraryFormat);
+  if(libraryGenre)params.set('genre',libraryGenre);
+  if(libraryYear)params.set('year',String(libraryYear));
   const items=await api('./api/works?'+params.toString());
   if(revision!==request)return;
   if(!append)box.replaceChildren();
   for(const work of items)$('books').append(workCard(work));
   libraryOffset+=items.length;
-  const filtered=libraryFormat||$('space').value||$('search').value.trim();
+  const filtered=libraryFormat||libraryGenre||libraryYear||$('space').value||$('search').value.trim();
   $('count').textContent=filtered?libraryOffset+' matching titles'+(items.length===pageSize?' loaded':''):(summaryData?.total??libraryOffset)+' titles';
   $('load-more').hidden=items.length<pageSize;
-  $('clear-library-filter').hidden=!filtered;$('active-filter').hidden=!libraryFormat;
-  if(libraryFormat){$('active-filter').textContent='Showing '+libraryFormat}
+  $('clear-library-filter').hidden=!filtered;
+  const activeNames=[libraryFormat&&'Format: '+libraryFormat,libraryGenre&&'Genre: '+libraryGenre,libraryYear&&'Year: '+libraryYear].filter(Boolean);
+  $('active-filter').hidden=!activeNames.length;
+  $('active-filter').textContent=activeNames.join(' · ');
   if(!$('books').children.length){
     const empty=element('div');empty.className='empty-state';
     empty.append(element('strong',filtered?'No books found':'A home for your books'),element('p',filtered?'Try a different title, author or format.':currentProfile?.owner?'Add a source folder to begin your collection. Your original files stay where they are.':'Your library is waiting for its first books. Ask your server owner to add a source folder.'));
@@ -153,9 +157,9 @@ function syncFormatFilters(){
 function atlasButton(item,type){
   const b=element('button');b.className='atlas-item';b.append(element('strong',item.name),element('span',String(item.count)));
   b.onclick=()=>{
-    if(type==='format'){libraryFormat=item.name;$('search').value=''}
-    if(type==='space'){$('space').value=item.name;libraryFormat='';$('search').value=''}
-    if(type==='author'){$('search').value=item.name;libraryFormat=''}
+    if(type==='format'){libraryFormat=item.name;libraryGenre='';libraryYear=0;$('search').value=''}
+    if(type==='space'){$('space').value=item.name;libraryFormat='';libraryGenre='';libraryYear=0;$('search').value=''}
+    if(type==='author'){$('search').value=item.name;libraryFormat='';libraryGenre='';libraryYear=0}
     show('library');loadBooks(false).catch(e=>message(e.message));
   };
   return b;
@@ -167,11 +171,12 @@ async function loadLibrarySummary(){
   $('library-summary').replaceChildren();
   for(const item of [{name:'All',count:summaryData.total},...(summaryData.formats||[])]){
     const card=element('button');card.className='summary-card';card.dataset.format=item.name==='All'?'':item.name;card.append(document.createTextNode(item.name),element('span',String(item.count||0)));
-    card.onclick=()=>{libraryFormat=card.dataset.format;show('library');loadBooks(false).catch(e=>message(e.message))};$('library-summary').append(card)
+    card.onclick=()=>{libraryFormat=card.dataset.format;libraryGenre='';libraryYear=0;show('library');loadBooks(false).catch(e=>message(e.message))};$('library-summary').append(card)
   }
   syncFormatFilters();
   const fill=(id,items,type)=>{const box=$(id);box.replaceChildren();if(!items.length)box.append(element('p','Nothing here yet.'));for(const item of items)box.append(atlasButton(item,type))};
   fill('atlas-formats',summaryData.formats||[],'format');fill('atlas-spaces',summaryData.spaces||[],'space');fill('atlas-authors',summaryData.authors||[],'author');
+  renderAtlasRings(summaryData);
 }
 
 async function loadSources(){
@@ -241,17 +246,33 @@ function showSettings(name){
   if(name==='server')loadConfig().catch(e=>message(e.message));
 }
 function show(next){
+  if(next!=='atlas')++atlasLoadVersion;
   page=next;for(const p of ['library','atlas','settings'])$(p).hidden=p!==next;
   document.querySelectorAll('[data-page]').forEach(b=>b.setAttribute('aria-current',b.dataset.page===next?'page':'false'));
   message('');if(next==='atlas'){loadLibrarySummary().catch(e=>message(e.message));loadAtlasUniverse().catch(e=>{$('atlas-map-status').textContent=e.message;});}if(next==='settings')showSettings('library');
 }
+
+// Hash-only deep links remain inside the current HA ingress base; no absolute
+// URLs, admin elevation or duplicate file-management implementation is needed.
+function navigateServerHash(){
+  if(!currentProfile)return;
+  const target=window.location.hash.slice(1);
+  if(target==='atlas'){show('atlas');return}
+  if(target==='library'){show('library');return}
+  if(!currentProfile.owner||!target.startsWith('settings/'))return;
+  const section=target.slice('settings/'.length);
+  if(!['library','organisation','household','server'].includes(section))return;
+  show('settings');showSettings(section);
+}
+window.addEventListener('hashchange',navigateServerHash);
 
 async function start(){
   currentProfile=await api('./api/me');
   await loadSources();await loadLibrarySummary();await loadBooks(false);
   $('setup').hidden=true;$('unlock').hidden=true;$('nav').hidden=false;
   document.querySelector('[data-page="settings"]').hidden=!currentProfile.owner;
-  show('library');window.dispatchEvent(new Event('archivist-ready'))
+  $('assist-link').hidden=!currentProfile.owner;
+  show('library');navigateServerHash();window.dispatchEvent(new Event('archivist-ready'))
 }
 async function boot(){try{await start()}catch(e){try{const setup=await api('./setup/status');$('setup').hidden=setup.configured;$('unlock').hidden=!setup.configured}catch(err){message(err.message)}}}
 
@@ -274,7 +295,8 @@ let searchTimer;
 $('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadBooks(false).catch(e=>message(e.message)),180)};
 $('space').onchange=()=>loadBooks(false).catch(e=>message(e.message));
 $('load-more').onclick=()=>loadBooks(true).catch(e=>message(e.message));
-$('clear-library-filter').onclick=()=>{libraryFormat='';$('search').value='';$('space').value='';loadBooks(false).catch(e=>message(e.message))};
+$('clear-library-filter').onclick=()=>{libraryFormat='';libraryGenre='';libraryYear=0;$('search').value='';$('space').value='';loadBooks(false).catch(e=>message(e.message))};
+$('atlas-more').onclick=()=>{atlasDisplayLimit=Math.min(600,atlasDisplayLimit+120);void loadAtlasUniverse().catch(e=>{$('atlas-map-status').textContent=e.message})};
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>show(b.dataset.page));
 document.querySelectorAll('[data-settings]').forEach(b=>{
   b.onclick=()=>showSettings(b.dataset.settings);
@@ -294,7 +316,7 @@ $('work-detail').addEventListener('click',e=>{if(e.target===$('work-detail'))hid
 $('close-player').onclick=()=>{$('audio').pause();$('audio').removeAttribute('src');$('audio').load();$('player').hidden=true};
 $('audio').onerror=()=>message('Unable to play this file. Check availability and browser codec support.');
 
-$('theme').value=localStorage.getItem('archivist-theme')||'system';
+$('theme').value=localStorage.getItem('archivist-theme')||'dark';
 function theme(){document.documentElement.style.colorScheme=$('theme').value==='system'?'light dark':$('theme').value;localStorage.setItem('archivist-theme',$('theme').value)}
 $('theme').onchange=theme;theme();
 
@@ -319,7 +341,26 @@ async function pollJobs(){
     const jobs=await api('./api/jobs');$('scan-jobs').hidden=jobs.length===0;$('jobs').replaceChildren();
     for(const j of jobs.slice(0,5)){
       const row=element('article');row.className='scan-card';const top=element('div');top.className='scan-head';const name=element('strong','Scan '+j.id);const state=element('span',j.state);state.className='status-pill '+(j.state==='failed'?'status-error':j.state==='complete'?'status-ok':'status-active');top.append(name,state);row.append(top,element('p',j.message||'Preparing scan…'));
-      if(j.state==='queued'||j.state==='running'){const done=Number(j.progress||0),total=Number(j.total||0),pct=total>0?Math.min(100,Math.round(done/total*100)):0;const meta=element('div');meta.className='progress-meta';meta.append(element('span',total?done+' / '+total+' files':'Counting files…'),element('strong',total?pct+'%':'…'));const bar=element('progress');bar.max=total||1;bar.value=total?done:0;row.append(meta,bar)}
+      if(['queued','running','cancelling','committing'].includes(j.state)){const done=Number(j.progress||0),total=Number(j.total||0),pct=total>0?Math.min(100,Math.round(done/total*100)):0;const meta=element('div');meta.className='progress-meta';meta.append(element('span',total?done+' / '+total+' files':'Counting files…'),element('strong',total?pct+'%':'…'));const bar=element('progress');bar.max=total||1;bar.value=total?done:0;row.append(meta,bar)}
+      if((j.state==='queued'||(j.state==='running'&&j.canCancel))||j.state==='failed'||j.state==='cancelled'){
+        const action=(j.state==='queued'||j.state==='running')?'cancel':'retry';
+        const button=element('button',action==='cancel'?(j.state==='running'?'Request safe stop':'Cancel queued scan'):'Retry scan');
+        button.type='button';button.className='quiet';
+        button.onclick=async()=>{
+          if(action==='cancel'&&!window.confirm(j.state==='running'?
+             'Request a safe stop? Files already inspected remain staged; a scan committing its catalogue cannot be stopped.':
+             'Cancel this queued scan before it starts?'))return;
+          button.disabled=true;
+          try{
+            const result=await api('./api/jobs/'+encodeURIComponent(String(j.id))+'/'+action,'POST');
+            message(action==='cancel'?(result.state==='cancelling'?'Safe stop requested. The scanner will confirm before catalogue commit.':'Queued scan cancelled.'):'Retry queued as scan '+result.job_id+'.');
+            await pollJobs();
+          }catch(error){message(error.message);button.disabled=false}
+        };
+        row.append(button);
+      }else if(j.state==='committing'){
+        row.append(element('small','Verified catalogue commit in progress; no cancellation is possible.'));
+      }
       $('jobs').append(row)
     }
     const signature=JSON.stringify(jobs);
@@ -331,20 +372,72 @@ async function pollJobs(){
 boot();pollJobs();
 
 // Atlas uses catalogue identities and the canonical relationship endpoint for inspection.
-let atlasLoadVersion=0;
+let atlasLoadVersion=0,atlasDisplayLimit=120;
 async function loadAtlasUniverse(){
   const version=++atlasLoadVersion;
   $('atlas-map-status').textContent='Opening your reading universe…';
-  const works=await api('./api/works?limit=200&offset=0');
-  if(version!==atlasLoadVersion)return;
+  // Catalogued/published work identities match Library. Only explicit UI
+  // "Show more" requests expand beyond the first 120 to a bounded 600.
+  const works=[];
+  for(let offset=0;offset<atlasDisplayLimit;offset+=120){
+    const limit=Math.min(120,atlasDisplayLimit-offset);
+    const batch=await api('./api/works?'+new URLSearchParams({limit:String(limit),offset:String(offset)}));
+    if(version!==atlasLoadVersion||page!=='atlas')return;
+    if(!Array.isArray(batch))throw Error('Invalid Atlas catalogue response');
+    works.push(...batch);
+    if(batch.length<limit)break;
+  }
   const nodes=[],edges=[],byId=new Map();
-  const hash=text=>{let h=2166136261;for(const c of text)h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0;};
-  const node=(id,label,kind,work)=>{if(byId.has(id))return byId.get(id);const seed=hash(id),angle=(seed%6283)/1000,r=100+seed%230;const n={id,label,kind,work,x:550+Math.cos(angle)*r,y:380+Math.sin(angle)*r};byId.set(id,n);nodes.push(n);return n;};
-  for(const work of works){const w=node('work:'+work.id,work.title,'work',work);for(const kind of ['author','series','genre']){if(!work[kind])continue;const n=node(kind+':'+work[kind],work[kind],kind);edges.push({from:w,to:n});}}
-  for(let iteration=0;iteration<65;iteration++){
-    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const a=nodes[i],b=nodes[j],dx=a.x-b.x,dy=a.y-b.y,d=Math.max(16,Math.hypot(dx,dy)),force=Math.min(4,1000/(d*d));a.x+=dx/d*force;a.y+=dy/d*force;b.x-=dx/d*force;b.y-=dy/d*force;}
-    for(const {from:a,to:b} of edges){const dx=b.x-a.x,dy=b.y-a.y,d=Math.max(1,Math.hypot(dx,dy)),f=(d-105)*.018;a.x+=dx/d*f;a.y+=dy/d*f;b.x-=dx/d*f;b.y-=dy/d*f;}
-    for(const n of nodes){n.x=Math.max(70,Math.min(1030,n.x));n.y=Math.max(65,Math.min(695,n.y));}
+  const hash=text=>{let h=2166136261;for(const ch of String(text))h=Math.imul(h^ch.charCodeAt(0),16777619);return h>>>0;};
+  const clamp=(x,min,max)=>Math.max(min,Math.min(max,x));
+  const node=(id,label,kind,work,x,y)=>{
+    if(byId.has(id))return byId.get(id);
+    const n={id,label,kind,work,x,y};byId.set(id,n);nodes.push(n);return n;
+  };
+  const genreCounts=new Map();
+  for(const work of works){
+    const genre=String(work.genre||'').trim()||'Unclassified';
+    genreCounts.set(genre,(genreCounts.get(genre)||0)+1);
+  }
+  const major=[...genreCounts].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,16);
+  const included=new Set(major.map(([name])=>name));
+  if(genreCounts.size>16)major.push(['Other genres',[...genreCounts].filter(([name])=>!included.has(name)).reduce((sum,[,count])=>sum+count,0)]);
+  const hubs=new Map();
+  major.forEach(([name,count],i)=>{
+    const angle=-Math.PI/2+2*Math.PI*i/major.length;
+    const hub=node('genre:'+name,name,'genre',null,550+Math.cos(angle)*238,380+Math.sin(angle)*214);
+    hub.count=count;hubs.set(name,hub);
+  });
+  const perGenre=new Map(),workNodes=new Map();
+  for(const work of works){
+    const genre=String(work.genre||'').trim()||'Unclassified';
+    const hub=hubs.get(included.has(genre)?genre:'Other genres');
+    const position=perGenre.get(hub.id)||0;perGenre.set(hub.id,position+1);
+    const angle=position*2.3999632+(hash(work.id)%100)/100;
+    const radius=Math.min(165,58+Math.sqrt(position)*24);
+    const w=node('work:'+work.id,work.title,'work',work,
+      clamp(hub.x+Math.cos(angle)*radius,25,1075),clamp(hub.y+Math.sin(angle)*radius,32,728));
+    edges.push({from:hub,to:w});workNodes.set(work.id,w);
+  }
+  for(const kind of ['author','series']){
+    const groups=new Map();
+    for(const work of works){
+      const label=String(work[kind]||'').trim();if(!label)continue;
+      const members=groups.get(label)||[];members.push(work);groups.set(label,members);
+    }
+    for(const [label,members] of [...groups].filter(([,members])=>members.length>1)
+      .sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0]))
+      .slice(0,kind==='author'?20:15)){
+      const related=members.map(w=>workNodes.get(w.id)).filter(Boolean);
+      if(!related.length)continue;
+      const angle=(hash(kind+label)%6283)/1000;
+      const px=related.reduce((sum,w)=>sum+w.x,0)/related.length;
+      const py=related.reduce((sum,w)=>sum+w.y,0)/related.length;
+      const relation=node(kind+':'+label,label,kind,null,
+        clamp(px+Math.cos(angle)*70,25,1075),clamp(py+Math.sin(angle)*70,32,728));
+      relation.count=members.length;
+      for(const w of related)edges.push({from:relation,to:w});
+    }
   }
   const svg=$('atlas-graph'),camera=$('atlas-camera');camera.replaceChildren();
   const make=(tag,attrs)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,String(v));return e;};
@@ -357,12 +450,43 @@ async function loadAtlasUniverse(){
     nodeEls.forEach(({node,el})=>{el.style.opacity=connected.has(node.id)?'1':'.18';el.classList.toggle('selected',node===n);});
     edgeEls.forEach((el,i)=>el.classList.toggle('connected',edges[i].from===n||edges[i].to===n));
     const inspector=$('atlas-inspector');inspector.replaceChildren(element('small',n.kind.toUpperCase()),element('h2',n.label));
-    if(n.work){inspector.append(element('p',[n.work.author,n.work.series,n.work.format].filter(Boolean).join(' · ')));const button=element('button','Open book');button.onclick=()=>openWork(n.work);inspector.append(button);return;}
+    if(n.work){
+      const g=nodeEls.find(item=>item.node===n)?.el;
+      if(g&&!g.querySelector('image')){
+        const image=make('image',{x:-11,y:-17,width:22,height:34,
+          href:'./api/works/'+encodeURIComponent(String(n.work.id))+'/cover'+(typeof n.work.coverHash==='string'&&/^[0-9a-f]{64}$/.test(n.work.coverHash)?'?v='+n.work.coverHash:'')});
+        g.insertBefore(image,g.querySelector('text'));
+      }
+      inspector.append(element('p',[n.work.author,n.work.series,n.work.format].filter(Boolean).join(' · ')));
+      const button=element('button','Open book');button.onclick=()=>openWork(n.work);inspector.append(button);return;
+    }
+    if(n.kind==='genre'&&(n.label==='Unclassified'||n.label==='Other genres')){
+      inspector.append(element('p',n.count+' displayed works · select a cover node to inspect it.'));
+      return;
+    }
     const loading=element('p','Finding connections…');inspector.append(loading);
     try{const data=await api('./api/atlas-relationships?'+new URLSearchParams({kind:n.kind,value:n.label}));if(requestVersion!==selectionVersion)return;loading.textContent=(data.workCount||0)+' connected works';for(const work of (data.works||[]).slice(0,30)){const button=element('button',work.title);button.onclick=()=>openWork(work);inspector.append(button);}}
     catch(e){if(requestVersion===selectionVersion)loading.textContent=e.message;}
   }
-  for(const n of nodes){const g=make('g',{class:'universe-node '+n.kind,transform:`translate(${n.x} ${n.y})`,tabindex:0,role:'button','aria-label':n.kind+' '+n.label});g.append(make('circle',{r:22,class:'node-target'}),make('circle',{r:n.kind==='work'?4.5:8,class:'node-dot'}));const label=make('text',{y:23,'text-anchor':'middle'});label.textContent=n.label.length>30?n.label.slice(0,29)+'…':n.label;if(n.kind==='work'&&nodes.some(other=>other!==n&&Math.abs(other.y-n.y)<24&&Math.abs(other.x-n.x)<145))label.classList.add('crowded-label');const title=make('title',{});title.textContent=n.label;g.append(label,title);g.onclick=()=>{if(!dragged)void select(n);};g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();void select(n);}};camera.append(g);nodeEls.push({node:n,el:g});}
+  let coverBudget=24;
+  for(const n of nodes){
+    const g=make('g',{class:'universe-node '+n.kind,transform:`translate(${n.x} ${n.y})`,
+      tabindex:0,role:'button','aria-label':n.kind+' '+n.label});
+    if(n.kind==='work'){
+      g.append(make('rect',{x:-13,y:-19,width:26,height:38,rx:3,class:'node-cover'}));
+      if(coverBudget-->0)g.append(make('image',{x:-11,y:-17,width:22,height:34,
+        href:'./api/works/'+encodeURIComponent(String(n.work.id))+'/cover'+(typeof n.work.coverHash==='string'&&/^[0-9a-f]{64}$/.test(n.work.coverHash)?'?v='+n.work.coverHash:'')}));
+    }else{
+      g.append(make('circle',{r:22,class:'node-target'}),make('circle',{r:8,class:'node-dot'}));
+    }
+    const label=make('text',{y:n.kind==='work'?34:23,'text-anchor':'middle'});
+    label.textContent=n.label.length>30?n.label.slice(0,29)+'…':n.label;
+    if(n.kind==='work')label.classList.add('crowded-label');
+    const title=make('title',{});title.textContent=n.label;g.append(label,title);
+    g.onclick=()=>{if(!dragged)void select(n)};
+    g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();void select(n)}};
+    camera.append(g);nodeEls.push({node:n,el:g});
+  }
   const apply=()=>camera.setAttribute('transform',`translate(${transform.x} ${transform.y}) scale(${transform.k})`);
   const zoom=(factor,x=550,y=380)=>{const k=Math.max(.45,Math.min(3.5,transform.k*factor)),ratio=k/transform.k;transform={x:x-(x-transform.x)*ratio,y:y-(y-transform.y)*ratio,k};apply();};
   $('atlas-fit').onclick=()=>{transform={x:0,y:0,k:1};apply();};$('atlas-in').onclick=()=>zoom(1.2);$('atlas-out').onclick=()=>zoom(1/1.2);
@@ -374,5 +498,69 @@ async function loadAtlasUniverse(){
   svg.onpointerup=svg.onpointercancel=e=>{pointers.delete(e.pointerId);};
   $('atlas-search').oninput=e=>{const q=e.target.value.trim().toLowerCase();nodeEls.forEach(({node,el})=>el.style.opacity=!q||node.label.toLowerCase().includes(q)?'1':'.12');};
   $('atlas-search').onkeydown=e=>{if(e.key==='Enter'){const q=e.target.value.trim().toLowerCase(),n=nodes.find(n=>n.label.toLowerCase().includes(q));if(n){void select(n);transform={x:550-n.x*1.4,y:380-n.y*1.4,k:1.4};apply();}}};
-  $('atlas-map-status').textContent=works.length?`${works.length} works shown${summaryData?.total>works.length?' of '+summaryData.total:''} · drag to pan · pinch or scroll to zoom`:'Add books to begin your reading universe.';
+  $('atlas-map-status').textContent=works.length?
+    `${works.length} published works shown${summaryData?.total>works.length?' of '+summaryData.total:''} · drag to pan · pinch or scroll to zoom`:
+    'Publish books through Archivist Assist to build your reading universe.';
+  $('atlas-more').hidden=works.length<atlasDisplayLimit||atlasDisplayLimit>=600||
+    (summaryData!==null&&works.length>=Number(summaryData.total||0));
+}
+
+/* Server-aggregated published logical works: SVG rings are rendered entirely
+   client-side, with no dependency on graph engines or media-drive probes. */
+const atlasRingPalette=['#2F8B86','#EAD8AD','#76AFBE','#A792C1','#D58E7C','#83C4AB','#9AA6D0'];
+function renderAtlasRings(summary){
+  const root=$('atlas-rings');
+  if(!root)return;
+  root.replaceChildren();
+  const svgElement=(type,attributes={})=>{
+    const node=document.createElementNS('http://www.w3.org/2000/svg',type);
+    for(const [name,value] of Object.entries(attributes))node.setAttribute(name,String(value));
+    return node;
+  };
+  for(const [heading,items,kind] of [
+    ['Genres',summary.genres||[],'genre'],
+    ['Media formats',summary.formats||[],'format'],
+    ['Publication years',summary.years||[],'year']
+  ]){
+    const panel=element('section');panel.className='atlas-ring-card';panel.append(element('h2',heading));
+    const row=element('div');row.className='atlas-ring-row';
+    const ring=svgElement('svg',{viewBox:'0 0 120 120',class:'atlas-ring-svg',role:'img'});
+    const filtered=items.filter(item=>Number.isFinite(Number(item.count))&&Number(item.count)>0);
+    const values=filtered.slice(0,6);
+    const other=filtered.slice(6).reduce((sum,item)=>sum+Number(item.count),0);
+    if(other>0)values.push({name:'Other',count:other});
+    const total=values.reduce((sum,item)=>sum+Number(item.count),0);
+    ring.setAttribute('aria-label',heading+': '+(values.map(item=>item.name+' '+item.count).join(', ')||'no recorded values'));
+    ring.append(svgElement('circle',{cx:60,cy:60,r:44,class:'atlas-ring-track'}));
+    const circumference=Math.PI*2*44;
+    let start=0;
+    for(let i=0;i<values.length;i++){
+      const amount=Number(values[i].count)/total;
+      const slice=svgElement('circle',{cx:60,cy:60,r:44,fill:'none',
+        stroke:atlasRingPalette[i%atlasRingPalette.length],'stroke-width':16,
+        'stroke-dasharray':(circumference*amount).toFixed(3)+' '+circumference.toFixed(3),
+        'stroke-dashoffset':(-start*circumference).toFixed(3),transform:'rotate(-90 60 60)'});
+      ring.append(slice);start+=amount;
+    }
+    const centre=svgElement('text',{x:60,y:65,'text-anchor':'middle',class:'atlas-ring-total'});
+    centre.textContent=String(total);ring.append(centre);
+    const legend=element('div');legend.className='atlas-ring-legend';
+    if(!values.length)legend.append(element('p','No metadata recorded yet.'));
+    for(let i=0;i<values.length;i++){
+      const item=values[i],interactive=item.name!=='Other';
+      const entry=element(interactive?'button':'div');entry.className='atlas-ring-legend-entry';
+      if(interactive)entry.type='button';
+      const swatch=element('span');swatch.className='atlas-swatch';swatch.dataset.color=String(i%atlasRingPalette.length);
+      entry.append(swatch,element('span',item.name),element('small',String(item.count)));
+      if(interactive)entry.onclick=()=>{
+        libraryFormat=kind==='format'?item.name:'';
+        libraryGenre=kind==='genre'?item.name:'';
+        libraryYear=kind==='year'?Number(item.name)||0:0;
+        $('search').value='';$('space').value='';
+        show('library');void loadBooks(false);
+      };
+      legend.append(entry);
+    }
+    row.append(ring,legend);panel.append(row);root.append(panel);
+  }
 }

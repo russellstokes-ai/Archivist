@@ -42,11 +42,12 @@ try {
   assert.match(docker, /COPY run\.sh \/run\.sh/);
   assert(!docker.includes('COPY home-assistant/'));
   const repository = fs.readFileSync(path.join(extracted, 'repository.yaml'), 'utf8');
-  assert.match(repository, /^name: Archivist$/m);
+  assert.match(repository, /^name: Archivist QA - PR 83\r?$/m);
   assert(!repository.includes('example.invalid'));
   const addonConfig = fs.readFileSync(path.join(extracted, 'archivist/config.yaml'), 'utf8');
   assert.match(addonConfig, /^slug: archivist$/m);
-  assert.match(addonConfig, /^version: 0\.9\.3$/m);
+  assert.match(addonConfig, /^name: Archivist QA \(PR 83\)\r?$/m);
+  assert.match(addonConfig, /^version: 0\.9\.3-qa\.\d{8}\.\d+\r?$/m);
   run('sh', ['-n', path.join(extracted, 'archivist/run.sh')]);
   console.log('PASS: clean rebuild, relative output, root docs, branding, complete source/web bytes and Docker context paths');
 } finally {

@@ -13,6 +13,7 @@ Module._load=function(request,parent,isMain){
     async writeAsStringAsync(uri,text){writes.push([uri,text]);reads.set(uri,text);},
     async readAsStringAsync(uri){return reads.get(uri)||'';},
     async getInfoAsync(uri){return {exists:reads.has(uri)};},
+    async readDirectoryAsync(){return []},
     async deleteAsync(uri){deleted.push(uri);reads.delete(uri);},
   };
   return load.call(this,request,parent,isMain);

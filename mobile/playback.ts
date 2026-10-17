@@ -33,7 +33,7 @@ export class Playback {
   ) {}
   private emit() { this.changed({...this.state}); }
   private fail(e: unknown) { this.state.error = e instanceof Error ? e.message : String(e); this.emit(); }
-  async open(asset: number) {
+  async open(asset: number, options:{autoplay?:boolean;resumeSeconds?:number} = {}) {
     const generation = ++this.generation;
     if(this.state.sleepAt===null)this.sleepExpired=false;
     this.audio.pause();
@@ -50,25 +50,29 @@ export class Playback {
       this.state.tracks = context.tracks;
       this.progressURL = context.progressURL; this.revision = point.revision; this.blocked = false;
       this.complete = point.complete;
-      const restartingCompletedWork = point.complete;
-      const index = restartingCompletedWork ? 0 : Math.max(0, context.tracks.findIndex((t: Track) => t.id === point.asset));
-      await this.load(index, restartingCompletedWork ? 0 : point.seconds, generation);
+      const explicitResume = options.resumeSeconds !== undefined && Number.isFinite(options.resumeSeconds);
+      const restartingCompletedWork = point.complete && !explicitResume;
+      const requestedIndex = context.tracks.findIndex((t: Track) => t.id === (explicitResume ? asset : point.asset));
+      if (explicitResume && requestedIndex < 0) throw Error('Saved audio track is unavailable.');
+      const index = restartingCompletedWork ? 0 : Math.max(0, requestedIndex);
+      const seconds = explicitResume ? Math.max(0, options.resumeSeconds!) : restartingCompletedWork ? 0 : point.seconds;
+      await this.load(index, seconds, generation, options.autoplay!==false);
       if (restartingCompletedWork && generation === this.generation && !this.blocked) {
         await this.save();
       }
     } catch (e) { if (generation === this.generation) { this.state.loading = false; this.fail(e); } }
   }
-  private async load(index: number, seconds = 0, generation = this.generation) {
+  private async load(index: number, seconds = 0, generation = this.generation, autoplay = true) {
     const track = this.state.tracks[index];
     if (!track?.available) throw Error('Track unavailable. Your saved position has been retained.');
-    this.state.loading = true; this.state.playing = false; this.emit();
+    this.state.loading = true; this.state.playing = false; this.state.duration = 0; this.emit();
     await this.audio.load(track, Math.max(0, seconds));
     if (generation !== this.generation) return;
     this.state.index = index; this.state.seconds = Math.max(0, seconds); this.complete = false;
     this.state.completed = false;
     this.state.loading = false; this.audio.speed(this.state.speed);
     if(this.sleepExpired || (this.state.sleepAt!==null && Date.now()>=this.state.sleepAt)){this.tick();}
-    else {this.audio.play();this.state.playing=true;}
+    else if(autoplay) {this.audio.play();this.state.playing=true;}
     this.lastSave = Date.now(); this.emit();
   }
   save(): Promise<void> {
@@ -174,6 +178,10 @@ export class Playback {
     if (this.state.sleepAt!==null && Date.now()>=this.state.sleepAt) {
       this.sleepExpired=true;this.state.sleepAt=null;this.audio.sleep?.(0);this.audio.pause();this.state.playing=false;void this.save();this.emit();
     }
+  }
+  cancelPending() {
+    ++this.generation;
+    if(this.state.loading){this.audio.pause();this.state.loading=false;this.state.playing=false;this.emit();}
   }
   async stop() { ++this.generation;this.audio.sleep?.(0);this.audio.pause();await this.save();this.state.tracks=[];this.progressURL='';this.state.playing=false;this.state.sleepAt=null;this.emit(); }
 }
