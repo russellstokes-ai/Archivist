@@ -9,8 +9,8 @@
   "installed_apk_approved": false,
   "changes": [
     {
-      "old": "available:true,files:work.files,editions:1,readingState:work.readingState",
-      "new": "available:work.available,files:work.files,editions:1,readingState:work.readingState"
+      "old": "      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:true,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];",
+      "new": "      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];"
     },
     {
       "old": "<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0}",
