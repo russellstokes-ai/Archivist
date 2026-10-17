@@ -244,8 +244,7 @@ func lookupMultiMetadata(ctx context.Context,client *http.Client,endpoints []mul
  warnings:=[]string{}
  succeeded:=0
  for result:=range ch{
-  if result.Err!=nil{warnings=append(warnings,result.Name+" unavailable; no changes were saved")}
-  else{succeeded++;candidates=append(candidates,result.Candidates...)}
+  if result.Err!=nil{warnings=append(warnings,result.Name+" unavailable; no changes were saved")} else {succeeded++;candidates=append(candidates,result.Candidates...)}
  }
  sort.Strings(warnings)
  sort.SliceStable(candidates,func(i,j int)bool{
