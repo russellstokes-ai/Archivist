@@ -3557,9 +3557,27 @@ function Client() {
     setError('Your last Now item is not currently available. Archivist kept its saved position and will resume it when the source is available again.');
   }
 
+  const nowRestorePending=useRef<{key:string;run:Promise<void>}|null>(null);
+  function beginNowRestore(snapshot:DurableNowSession):Promise<void>{
+    // Both the Now effect and its tab handler may attempt restoration in the
+    // same render. Deduplicate identical work/session opens, but allow a newer
+    // session to supersede an in-flight network/media request.
+    const key=String(snapshot.updatedAt)+'|'+snapshot.kind+'|'+
+      String(snapshot.media.uri||snapshot.media.serverWorkId||snapshot.media.localWorkKey||'');
+    if(nowRestorePending.current?.key===key)return nowRestorePending.current.run;
+    let run:Promise<void>;
+    run=Promise.resolve().then(()=>resumeNowSession(snapshot))
+      .catch(error=>{
+        setError(error instanceof Error?error.message:'Unable to restore saved media.');
+      }).finally(()=>{
+        if(nowRestorePending.current?.run===run)nowRestorePending.current=null;
+      });
+    nowRestorePending.current={key,run};
+    return run;
+  }
   useEffect(()=>{
     if(!nowSessionReady||activeTab!=='now'||playing||reading||!nowSessionRef.current)return;
-    void resumeNowSession(nowSessionRef.current);
+    void beginNowRestore(nowSessionRef.current);
   },[nowSessionReady,activeTab,playing,reading]);
 
   async function openNowTab(){
@@ -3568,12 +3586,12 @@ function Client() {
     if(snapshot){
       if(snapshot.kind==='audio'&&playing&&sameNowMedia(snapshot.media,nowMediaFromBook(playing))){setLiveMode('player');return;}
       if(snapshot.kind==='reader'&&reading&&sameNowMedia(snapshot.media,nowMediaFromBook(reading))){setLiveMode('reader');return;}
-      await resumeNowSession(snapshot);
+      await beginNowRestore(snapshot);
       return;
     }
     if(playing){setLiveMode('player');return;}
     if(reading){setLiveMode('reader');return;}
-    if(lastPlaying){setLiveMode('player');await playBook(lastPlaying);return;}
+    if(lastPlaying){setLiveMode('player');await playBook(lastPlaying,undefined,false);return;}
     if(lastReading){setLiveMode('reader');openBook(lastReading);return;}
     setLiveMode('player');
   }
@@ -6004,9 +6022,8 @@ function Client() {
       <ArchivistLogo size={46}/>
       <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{playerMode?'Nothing playing':'Reader'}</Text>
       <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{playerMode
-        ? (lastTitle?'Resume your most recent audiobook, or choose another from Shelf.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.')
-        : (lastTitle?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.')}</Text>
-      {lastTitle&&onResume?<Button label={'Resume '+lastTitle} onPress={onResume}/>:null}
+        ? (lastTitle?'Your listening position is saved. Archivist restores it automatically when the title is available.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.')
+        : (lastTitle?'Your reading page is saved. Archivist restores it automatically when the title is available.':'Open an EPUB, PDF or comic from Shelf.')}</Text>
       <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/>
     </View>;
   }
