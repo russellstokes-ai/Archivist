@@ -53,7 +53,7 @@ import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {comicWebViewFailure} from './readerAccessErrors';
-import {effectiveLocalReaderFormat} from './comicSourceFormat';
+import {comicContainerFromDocument,comicContainerFromUri,effectiveLocalReaderFormat,readerFormatFromContainer} from './comicSourceFormat';
 import {comicReaderWebViewSource} from './comicReaderWebViewSource';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';
@@ -3947,7 +3947,7 @@ function Client() {
     }catch{}
   }
 
-  function openBook(book: Book, resumePage?:number, selection = ++nowResumeGeneration.current) {
+  function openBook(book: Book, resumePage?:number, selection = ++nowResumeGeneration.current, checkOpaque=true) {
     if(selection!==nowResumeGeneration.current)return;
     loadCancel.current?.();
     controller.cancelPending();
@@ -3959,6 +3959,30 @@ function Client() {
     if(book.source!=='server'&&book.uri){
       const format=effectiveLocalReaderFormat(book.format,book.uri);
       if(format!==book.format)book={...book,format};
+      const opaque=Platform.OS==='android'&&book.uri.startsWith('content://')
+        &&comicContainerFromUri(book.uri)==='unknown';
+      // Android providers can expose a comic or PDF under a numeric document
+      // ID. Query the read-only native MIME/display-name enum once per open.
+      if(checkOpaque&&opaque&&(book.format==='Comic'||!['Audio','PDF','EPUB'].includes(book.format))){
+        const pending=++readerOpenGeneration.current;
+        const candidate=book;
+        setError('');
+        void comicContainerFromDocument(book.uri).then(kind=>{
+          if(readerOpenGeneration.current!==pending||selection!==nowResumeGeneration.current)return;
+          const resolved=readerFormatFromContainer(candidate.format,kind);
+          if(['Comic','PDF','EPUB'].includes(resolved))
+            openBook({...candidate,format:resolved},resumePage,selection,false);
+          else setError('Unable to identify this document. Reconnect its library folder or choose a PDF, EPUB, CBZ, CBR or CBT file.');
+        }).catch(()=>{
+          if(readerOpenGeneration.current===pending&&selection===nowResumeGeneration.current)
+            setError('Unable to access this document. Reconnect its library folder.');
+        });
+        return;
+      }
+      if(!['Audio','Comic','PDF','EPUB'].includes(book.format)){
+        setError('Unsupported document format. Choose a PDF, EPUB, CBZ, CBR or CBT file.');
+        return; // never send an unidentified archive URI to a raw WebView
+      }
     }
     const generation=++readerOpenGeneration.current;
     comicWebViewFallbackAttempt.current=false;

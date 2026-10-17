@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),crypto=require('node:crypto'),path=require('node:path');
+const source=fs.readFileSync(__dirname+'/App.tsx','utf8');
+assert(source.includes('const pending=++readerOpenGeneration.current;'));
+assert(source.includes('readerOpenGeneration.current!==pending||selection!==nowResumeGeneration.current'));
+assert(source.includes('openBook({...candidate,format:resolved},resumePage,selection,false)'));
+assert(source.includes('if(checkOpaque&&opaque&&'));
+assert(source.includes('return; // never send an unidentified archive URI to a raw WebView'));
+assert(source.includes("if(['Comic','PDF','EPUB'].includes(resolved))"));
+assert(source.includes('const format=effectiveLocalReaderFormat(book.format,book.uri)'));
+const root=path.resolve(__dirname,'..'),b=Buffer.from(source);
+const sha=crypto.createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');
+assert(require('../scripts/test14-app-exception.cjs')(root,sha),'Exact App exception must reverse through transport, Test14 and canonical baseline');
+const test=JSON.parse(fs.readFileSync(root+'/docs/v1/TEST14_SAF_APP_EXCEPTION_2026-10-17.json','utf8'));
+assert.equal(test.changes.length,3);
+console.log('PASS: reader-only opaque SAF routing, generation fencing, one-shot recursion, no raw WebView and exact canonical App restoration');

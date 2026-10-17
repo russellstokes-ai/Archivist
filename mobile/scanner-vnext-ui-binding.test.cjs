@@ -10,6 +10,15 @@ const test14=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_APP_EXCEP
 const current=Buffer.from(app,'utf8');
 const currentBlob=crypto.createHash('sha1').update('blob '+current.length+'\0').update(current).digest('hex');
 assert(require('../scripts/test14-app-exception.cjs')(repo,currentBlob),'Test 14 App patch must be exact and reversible');
+// Remove reader-only SAF routing first; the historical scanner source
+// comparison then sees only its pre-existing, independently approved changes.
+const saf=JSON.parse(fs.readFileSync(path.join(repo,'docs/v1/TEST14_SAF_APP_EXCEPTION_2026-10-17.json'),'utf8'));
+assert.equal(saf.path,'mobile/App.tsx');assert.equal(saf.changes.length,3);
+for(const change of [...saf.changes].reverse()){
+  const next=change.new.replaceAll('\r\n','\n'),prior=change.old.replaceAll('\r\n','\n');
+  assert.equal(app.split(next).length-1,1,'Reader-only SAF hunk differs or is duplicated');
+  app=app.replace(next,prior);
+}
 // Reverse the separately pinned minimum-width transport exception FIRST,
 // otherwise scanner binding restoration sees unrelated layout-only changes.
 // Scanner/Assist source and every prior canonical assertion remain unchanged.
