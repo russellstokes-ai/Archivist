@@ -113,6 +113,14 @@ export default function PremiumLaunch({children}:{children:React.ReactNode}){
     };
   },[complete,visible]);
 
+  useEffect(()=>{
+    if(!visible||reduced!==true)return;
+    // Reduced Motion intentionally presents a quiet branded endpoint briefly,
+    // never holding a static icon for the full animated duration.
+    const end=setTimeout(complete,650);
+    return()=>clearTimeout(end);
+  },[complete,reduced,visible]);
+
   return <View style={styles.root}>
     {children}
     {visible?<View style={styles.overlay}
