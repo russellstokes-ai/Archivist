@@ -294,7 +294,7 @@ func previewMetaChanges(state workMetaState,changes []workMetaChange)([]workMeta
  for _,item:=range changes{
    if !workFieldAllowed(item.Name)||seen[item.Name]{return nil,nil,errors.New("invalid or repeated work field")}
    seen[item.Name]=true
-   if item.Origin!="manual"&&item.Origin!="open-library"{
+   if item.Origin!="manual"&&item.Origin!="open-library"&&item.Origin!="google-books"{
       return nil,nil,errors.New("work metadata must state manual or owner-selected candidate origin")
    }
    value,err:=validateWorkValue(item.Name,item.Value)
@@ -305,6 +305,7 @@ func previewMetaChanges(state workMetaState,changes []workMetaChange)([]workMeta
    normalized=append(normalized,workMetaChange{Name:item.Name,Value:value,Origin:item.Origin})
    source:="owner edit"
    if item.Origin=="open-library"{source="owner-selected Open Library suggestion (unverified)"}
+   if item.Origin=="google-books"{source="owner-selected Google Books edition suggestion (unverified)"}
    diffs=append(diffs,workMetaDiff{Name:item.Name,From:field.Value,To:value,Source:source})
  }
  if len(diffs)==0{return nil,nil,errors.New("no book-level changes to preview")}
@@ -383,6 +384,7 @@ func (a *app)applyWorkMetadata(ctx context.Context,p workMetaPreview)(workMetaSt
     before.Controls=append(before.Controls,workFieldBefore{Name:change.Name,DisplayValue:fields[change.Name].Value,Control:control})
     source:="owner edit"
     if change.Origin=="open-library"{source="owner-selected Open Library suggestion (unverified)"}
+     if change.Origin=="google-books"{source="owner-selected Google Books edition suggestion (unverified)"}
     if _,err=tx.ExecContext(ctx,`INSERT INTO work_field_controls(work_id,field,value,source,locked,updated_at)
       VALUES(?,?,?, ?,0,?) ON CONFLICT(work_id,field) DO UPDATE SET
       value=excluded.value,source=excluded.source,updated_at=excluded.updated_at`,

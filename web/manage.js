@@ -866,30 +866,54 @@
     const box=$('work-candidates');box.replaceChildren(e('p','Searching optional public suggestions…','subtext'));
     $('work-candidate-search').disabled=true;
     try{
-      const response=await api('./api/manage/metadata-candidates?q='+encodeURIComponent(query));
+      const hints=new URLSearchParams({
+        q:query,mode:'multi',
+        title:workInputs.get('title')?.input.value||'',
+        author:workInputs.get('author')?.input.value||'',
+        isbn:workInputs.get('isbn')?.input.value||'',
+        format:workState.editions?.some(item=>/comic/i.test(item.format))?'comic':'book'
+      });
+      const response=await api('./api/manage/metadata-candidates?'+hints.toString());
       if(epoch!==workEpoch||generation!==workCandidateEpoch)return;
       box.replaceChildren();
       const candidates=Array.isArray(response.candidates)?response.candidates:[];
+      for(const warning of response.warnings||[]){
+        box.append(e('p',warning,'work-flag'));
+      }
       if(!candidates.length){box.append(e('p','No candidates. The existing book metadata was not changed.','subtext'));return}
       for(const candidate of candidates){
         const card=e('article',undefined,'work-candidate');
         card.append(e('strong',candidate.title||'Unnamed result'),
-          e('small',[candidate.author,candidate.publishedYear,candidate.publisher,candidate.isbn].filter(Boolean).join(' · '),'subtext'));
+          e('small',[
+            candidate.source||'Public source',candidate.tier||'unverified',
+            candidate.author,candidate.publishedYear,
+            candidate.publisher,candidate.isbn
+          ].filter(Boolean).join(' · '),'subtext'));
         const buttons=e('div',undefined,'work-candidate-fields');
         for(const [name,label] of [['title','Title'],['author','Author'],['publishedYear','Year'],['isbn','ISBN'],['publisher','Publisher']]){
           const item=workInputs.get(name),value=candidate[name];
           if(!item||item.input.readOnly||value===undefined||value===null||value==='')continue;
+          // A Google Books edition date cannot populate the book-wide first
+          // publication year. Mixed editions cannot safely share one ISBN.
+          if(name==='publishedYear'&&candidate.yearType==='edition publication')continue;
+          if(name==='isbn'&&(candidate.identifierMismatch||(workState.editions?.length||0)>1))continue;
           const button=e('button','Use '+label,'quiet');button.type='button';
           button.title='Compare and select this '+label+' suggestion';
           button.onclick=()=>{
             item.input.value=String(value);
-            item.input.dataset.origin='open-library';
+            item.input.dataset.origin=candidate.source==='Google Books'?'google-books':'open-library';
             workClearPlans();
-            workMessage('Selected an unverified Open Library '+label+' suggestion. Preview before saving.');
+            workMessage('Selected unverified '+(candidate.source||'public')+' '+label+' suggestion. Preview before saving.');
           };
           buttons.append(button);
         }
-        card.append(buttons);box.append(card);
+        card.append(buttons);
+        if(candidate.yearType==='edition publication'&&candidate.publishedYear){
+          card.append(e('small','Edition year shown for comparison only; first publication year must be independently checked.','subtext'));
+        }
+        for(const reason of candidate.reasons||[]){card.append(e('small','Match evidence: '+reason,'subtext'))}
+        for(const warning of candidate.warnings||[]){card.append(e('small','Review: '+warning,'work-flag'))}
+        box.append(card);
       }
     }catch(error){if(epoch===workEpoch&&generation===workCandidateEpoch){
       box.replaceChildren(e('p','Provider unavailable: '+error.message,'subtext'));

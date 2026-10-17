@@ -146,7 +146,11 @@ const fetchFake=async (url,options={})=>{
   if(url.startsWith('./api/manage/metadata-candidates?q=')){
     return reply({provider:'Open Library',candidates:[
       {workId:'/works/test',title:'Aerial Archive',author:'Test Author',publishedYear:2021,
-       isbn:'1234567890',publisher:'Example Press',source:'Open Library'}
+       isbn:'1234567890',publisher:'Example Press',source:'Open Library',yearType:'first publication',
+       tier:'strong candidate',reasons:['Exact title','Exact creator']},
+      {workId:'google-books:test-edition',title:'Aerial Archive',author:'Test Author',
+       publishedYear:2024,publisher:'Edition House',source:'Google Books',yearType:'edition publication',
+       tier:'possible candidate',warnings:['Edition year is not first publication']}
     ]});
   }
 
@@ -355,7 +359,9 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(bookFields.children.length,12,'book editor must include fractional comic/series positions');
   elements.get('work-candidate-query').value='Aerial Archive';
   elements.get('work-candidate-search').onclick();await settle();
-  assert(calls.some(x=>x.startsWith('./api/manage/metadata-candidates?q=')),'provider search should be explicit');
+  const multiCall=calls.find(x=>x.startsWith('./api/manage/metadata-candidates?q=')&&x.includes('mode=multi'));
+  assert(multiCall&&multiCall.includes('title=')&&multiCall.includes('author='),
+    'only explicit book-level search sends source metadata to opt-in multi-provider endpoint');
   const suggestion=elements.get('work-candidates').children[0];
   assert(suggestion,'provider candidates must render without changing saved metadata');
   const useYear=suggestion.children[2].children.find(button=>button.textContent==='Use Year');
@@ -363,6 +369,14 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   useYear.onclick();
   assert.equal(bookFields.children[5].children[0].value,'2021');
   assert.equal(bookFields.children[5].children[0].dataset.origin,'open-library');
+  const googleSuggestion=elements.get('work-candidates').children[1];
+  assert(googleSuggestion,'a second provider should appear as its own candidate');
+  assert(!googleSuggestion.children[2].children.some(btn=>btn.textContent==='Use Year'),
+    'edition-year results must not overwrite work-level first publication');
+  assert(googleSuggestion.children[2].children.some(btn=>btn.textContent==='Use Publisher'),
+    'book workbench may explicitly select a provider-edition publisher for review');
+  assert(googleSuggestion.children.some(node=>String(node.textContent||'').includes('Edition year')),
+    'edition semantic warnings must remain visible');
   assert.equal(elements.get('work-apply-button').disabled,true,'unreviewed suggestion must not save');
   elements.get('work-preview-button').onclick();await settle();
   assert(workCalls.some(x=>x.url.endsWith('/metadata/preview')),'work-level preview must reach versioned backend');
