@@ -3,7 +3,7 @@
 **Date:** 17 October 2026
 **Repository:** [Draft PR #83](https://github.com/russellstokes-ai/Archivist/pull/83), `integration/archivist-v1-auto-restore-recovery-20261016`.
 **Starting source:** `edcfcc02524f9d78bb2a1f48350bcf0b3c893b4e`.
-**Release gate:** **NO-GO**. Protected canonical mobile source and reader/renderer/scanner are outside this server-only batch. Root/packaged code and tests must pass exact-head CI before even source QA acceptance.
+**Source acceptance:** Full server/ARM64/mobile CI **GREEN** at exact code `6336ce166a4d14a254a8ec22231c4ba0534fd5af`. **Commercial release NO-GO**; physical device, NAS, real 16:9 and end-to-end family acceptance are not proven. No installation or merge.
 
 ## Delivery and integration
 
@@ -31,6 +31,13 @@
 New mirrored production Go code: `server_review.go`. New mirrored Go fixture: `server_review_filter_test.go`. Mirrored manager HTML/CSS/JS: `web/manage.html`, `web/manage.css`, `web/manage.js`. Extended owner fake-DOM tests: `scripts/v1-manager-assist.test.cjs`. Every server file above is paired byte-identically under `archivist/app/`; the mobile application is not modified.
 
 Go synthetic tests cover filtered staged/published works, work-vs-file cardinality, fixed reasons, selected-cover wording, title/series matching, space/format restrictions, server-side pagination/total agreement, bad inputs and anonymous refusal, and ensure no assets/grouping are edited. Browser interaction tests cover true existing API calls, owner explicit create/rotate/revoke, key display/dismissal/retention across screen navigation, no browser-storage secret persistence, authenticated session listing/revocation, filter query normalization/reset and regression of existing scanner/cover/preview/undo/Atlas/recovery paths.
+
+## Automated source CI results (exact `6336ce1`)
+
+- [Full server job SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004189): root and packaged Go tests, owner API/SQLite fixtures, manager browser interactions, source mirror/lock contracts, standalone Docker runtime and Home Assistant add-on smoke.
+- [Native Linux ARM64 smoke SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004037): hosted runner, **not** owner's Pi4.
+- [Mobile source regression SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321480): protects unrelated canonical mobile modules, **not** device acceptance.
+- [Android-native source checks SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321516). iOS checks were still independently running at this checkpoint. No device APK, Fold, NAS mount, ingress browser or production restore was exercised.
 
 ## Remaining commercial gates
 

@@ -10,7 +10,7 @@
 
 **Archivist Assist:** Added *book-level*, server-side title/author/series search and library/format/review-reason filters. The page and total are computed from the same consistent SQLite snapshot and grouped by logical work; no file-level counter is mislabeled as a book. Filter values are bounded/whitelisted. Published and staged visibility are unchanged, and nothing automatically publishes or modifies source media.
 
-**Verification:** exact source [PR #83 checks](https://github.com/russellstokes-ai/Archivist/pull/83/checks) must pass mirrored root/package Go, manager DOM, Docker/HA, native ARM64 and protected mobile source checks before source-accepted. This plan's documentation does not claim hardware, visual 16:9 or release readiness. [Full batch QA](SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md).
+**Source verification GREEN at `6336ce1`:** [full root/packaged Go + manager DOM + Docker/HA](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004189), [native ARM64 hosted smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004037), and [mobile source-lock regressions](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321480). [Android-native source checks SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321516); iOS checks were still running at the record checkpoint. No physical Pi/NAS, browser 16:9, Fold or release readiness claim. [Full batch QA](SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md).
 
 ## 17 October 2026 — Accelerated server owner workspace and operations batch
 

@@ -1420,7 +1420,7 @@
     "parent_sha": "edcfcc02524f9d78bb2a1f48350bcf0b3c893b4e",
     "pr": 83,
     "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
-    "release_gate": "NO-GO; exact-code full CI and physical acceptance pending",
+    "release_gate": "NO-GO: source server/ARM64/mobile CI GREEN; physical Pi/NAS/16:9/Fold and product integration pending",
     "report": "docs/v1/SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md",
     "delivered": [
       "native 16:9 owner Family and Settings views over existing authenticated server APIs",
@@ -1446,8 +1446,20 @@
       "web/manage.js",
       "scripts/v1-manager-assist.test.cjs"
     ],
-    "implementation_pending_ci": true,
+    "implementation_pending_ci": false,
     "merged": false,
-    "commercial_go": false
+    "commercial_go": false,
+    "source_code_sha": "6336ce166a4d14a254a8ec22231c4ba0534fd5af",
+    "source_ci": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "success",
+      "android_native": "success",
+      "ios": "not yet verified at this checkpoint",
+      "server_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004189",
+      "arm64_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004037",
+      "mobile_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321480",
+      "android_native_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321516"
+    }
   }
 }
