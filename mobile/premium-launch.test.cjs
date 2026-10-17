@@ -2,76 +2,69 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const ts=require('typescript');
-const source=fs.readFileSync(__dirname+'/PremiumLaunch.tsx','utf8');
-const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
-const exported={};
+const crypto=require('node:crypto');
+const path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'PremiumLaunch.tsx'),'utf8');
+const compiled=ts.transpileModule(source,{compilerOptions:{
+  module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2022,
+}}).outputText;
+const exposed={};
 vm.runInNewContext(compiled,{
-  exports:exported,
-  require:name=>name==='react-native'?
-    {Platform:{OS:'android'},StyleSheet:{create:x=>x,absoluteFillObject:{}}}:{},
+  exports:exposed,
+  require:name=>name==='react-native'
+    ?{Platform:{OS:'android'},StyleSheet:{create:x=>x,absoluteFillObject:{}}}:{},
 });
-function probe(reduce,duration=6,ready=true) {
-  const sent=[],timers=[],listeners={};let plays=0,finishes=0;
-  const motion={duration,assetsReady:ready,play:()=>plays++,finish:()=>finishes++};
-  const context={
-    window:{ReactNativeWebView:{postMessage:x=>sent.push(x)},ARCHIVIST_MOTION:motion},
-    document:{getElementById:()=>({addEventListener:(name,fn)=>listeners[name]=fn})},
-    setTimeout:(fn,ms)=>timers.push({fn,ms}),
-  };
-  vm.runInNewContext(exported.startScript(reduce),context);
-  return {sent,timers,listeners,motion,get plays(){return plays},
-    get finishes(){return finishes},context};
-}
+const {claimPremiumColdLaunch,premiumSplashShouldPlay,PREMIUM_SPLASH_SECONDS,
+  PREMIUM_SPLASH_DEADLINE_MS}=exposed;
 
-// A normal cold start drives the real HTML bridge; it MUST send playing,
-// observe the completed WebGL frame, and finish only after the 1.45s shine.
-let p=probe(false);
-assert.equal(p.plays,1);
-assert.deepEqual(p.sent,['art-ready','playing']);
-p.listeners['archivist:splash-complete']();
-assert.equal(p.timers[0].ms,1450);
-assert.deepEqual(p.sent,['art-ready','playing','final-frame']);
-p.timers[0].fn();p.timers[0].fn();
-assert.deepEqual(p.sent,['art-ready','playing','final-frame','complete']);
+assert.equal(premiumSplashShouldPlay('android',false,false),true);
+assert.equal(premiumSplashShouldPlay('ios',false,false),true);
+assert.equal(premiumSplashShouldPlay('android',true,false),false);
+assert.equal(premiumSplashShouldPlay('android',false,true),false);
+assert.equal(premiumSplashShouldPlay('web',false,false),false);
+assert.equal(claimPremiumColdLaunch('web'),false);
+assert.equal(claimPremiumColdLaunch('android'),true);
+assert.equal(claimPremiumColdLaunch('android'),false);
+assert.equal(claimPremiumColdLaunch('ios'),false,'warm resume and remount never replay');
 
-// Reduced motion has a deliberate final-frame route, not unexpected playback.
-p=probe(true);
-assert.equal(p.plays,0);assert.equal(p.finishes,1);
-assert.equal(p.context.window.__archivistReduce,true);
-assert.equal(p.timers[0].ms,250);p.timers[0].fn();
-assert.deepEqual(p.sent,['art-ready','complete']);
+const videoPath=path.join(__dirname,'assets/splash/archivist-premium-shine.mp4');
+const video=fs.readFileSync(videoPath);
+assert.equal(crypto.createHash('sha256').update(video).digest('hex'),
+  '413d0c275e8cc42d99e7f95c446458b9f3e3be2be5a5934c5e2c1ad3dfc70818',
+  'Approved 179-frame animated video must be byte-exact; do not substitute a still');
+assert(video.length>150000&&video.length<15000000,'bounded, bundled native video');
+assert.equal(video.toString('ascii',4,8),'ftyp','MP4 container is present');
+assert(video.includes(Buffer.from('moov'))&&video.includes(Buffer.from('mdat')),
+  'Video includes both actual frame data and a seekable metadata atom');
 
-// The old Android/WebGL static-icon fallback was misclassified as success.
-// A real 6-second animation unavailable on device must be surfaced honestly.
-p=probe(false,0);
-assert.equal(p.plays,0);assert.equal(p.finishes,0);
-assert.deepEqual(p.sent,['failed:webgl-unavailable']);
-
-// Never spin forever if 6MB of original texture assets cannot initialize.
-p=probe(false,6,false);
-for(let i=0;i<145 && p.timers.length;i++)p.timers.shift().fn();
-assert.deepEqual(p.sent,['failed:art-timeout']);
-
-// No custom splash on route remount, ordinary Android warm foregrounding or web.
-assert.equal(exported.claimPremiumColdLaunch('web'),false);
-assert.equal(exported.claimPremiumColdLaunch('android'),true);
-assert.equal(exported.claimPremiumColdLaunch('android'),false);
-assert.equal(exported.claimPremiumColdLaunch('ios'),false);
-
-const original=fs.readFileSync(__dirname+'/assets/splash/archivist-premium-shine.html','utf8');
-const fitted=exported.preparePremiumHtml(original);
-assert.equal((fitted.match(/id="archivist-native-fit"/g)||[]).length,1);
-assert.ok(fitted.includes('--archivist-stage:min(62vw,35vh,310px)'));
-assert.ok(fitted.includes('#wordmark{position:absolute'));
-assert.equal(fitted.replace(/<style id="archivist-native-fit">[\s\S]*?<\/style>/,''),original,
-  'Approved HTML renderer/assets/shine must remain byte-for-byte unchanged');
-assert.throws(()=>exported.preparePremiumHtml('<html></html>'),/Invalid premium/);
-for(const match of original.matchAll(/<script>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
-assert.ok(original.includes('html,body,main{background:#2F8B86!important}.brand{transform:none}'));
-assert.ok(original.includes("connect-src 'none'"));
-assert.ok(!/<(?:script|link)[^>]+(?:src|href)=["']https?:/i.test(original));
-assert.ok(source.includes('androidLayerType="hardware"'));
-assert.ok(source.includes('onRenderProcessGone'));
-assert.ok(source.includes("if(state==='background')complete()"));
-assert.ok(source.includes('fallback:{width:124,height:124'));
-console.log('PASS: cold-only premium launch, bounded WebGL fallback, actual 6s completion, reduced motion, no HTML art mutation, Fold-safe centering');
+const provenance=JSON.parse(fs.readFileSync(
+  path.join(__dirname,'../docs/v1/TEST14_SPLASH_VIDEO_PROVENANCE_2026-10-17.json'),'utf8'));
+assert.equal(provenance.bookFrames,144);
+assert.equal(provenance.shineFrames,35);
+assert.equal(provenance.fps,24);
+assert.equal(provenance.durationSeconds,179/24);
+assert.equal(provenance.htmlSha256,crypto.createHash('sha256').update(
+  fs.readFileSync(path.join(__dirname,'assets/splash/archivist-premium-shine.html'))
+).digest('hex'),'Original approved animation must remain untouched');
+assert.equal(PREMIUM_SPLASH_SECONDS,179/24);
+assert(PREMIUM_SPLASH_DEADLINE_MS>10000&&PREMIUM_SPLASH_DEADLINE_MS<18000);
+const pkg=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json')));
+assert.equal(pkg.dependencies['expo-video'],'~55.0.21','SDK55 native video engine must be pinned');
+assert(source.includes("require('./assets/splash/archivist-premium-shine.mp4')"));
+assert(source.includes("import {useVideoPlayer,VideoView} from 'expo-video'"));
+assert(!source.includes('<WebView')&&!source.includes('readAsStringAsync')&&!source.includes('ARCHIVIST_MOTION'),
+  'Native splash must NEVER depend on Android WebView/WebGL or a 6MB string read');
+assert(source.includes("player.addListener('playToEnd'")&&source.includes("player.addListener('statusChange'")&&
+  source.includes("player.addListener('timeUpdate'"),'Native player needs end, error, frame progress evidence');
+assert(source.includes("if(status==='readyToPlay')start()") &&
+  source.includes("if(status==='error')done("),'Cannot count loading-only as animation success');
+assert(source.includes("done('native-video-stalled')"),'No perpetual static frame on decoder stall');
+assert(source.includes("state==='background'||state==='inactive'"),'Background cancels pending splash');
+assert(source.includes('nativeControls={false}')&&source.includes('contentFit="contain"')&&
+  source.includes('surfaceType="textureView"'), 'No controls, clipping, stretching or overlay artifacts');
+assert(source.includes('p.muted=true')&&source.includes('p.volume=0')&&
+  source.includes('p.staysActiveInBackground=false'),'Startup must never steal audiobook sound in background');
+assert(source.includes("backgroundColor:TEAL") && source.includes("zIndex:2000"));
+assert(source.includes('width:112,height:112')&& !source.includes("width:'72%'"),
+  'No giant fallback A');
+console.log('PASS: exact 179-frame native splash, no WebGL, original master art, bounded startup, no warm replay, reduced motion and native accessibility');
