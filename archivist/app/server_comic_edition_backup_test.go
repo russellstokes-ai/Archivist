@@ -48,7 +48,13 @@ func TestComicEditionLedgerSurvivesRealSQLiteBackupAndStagedRestore(t *testing.T
  if err!=nil{t.Fatal(err)}
  if edition.Revision!=confirmed.Revision||edition.Fields!=confirmed.Fields||
   edition.WorkFingerprint!=confirmed.WorkFingerprint||!edition.Stored{
-  t.Fatalf("SQLite restore lost owner edition identity: wanted %+v got %+v",confirmed,edition)
+  sourceTx,txErr:=original.db.BeginTx(ctx,nil)
+  if txErr!=nil{t.Fatal(txErr)}
+  sourceWork,readErr:=original.readWorkMeta(ctx,sourceTx,workID)
+  sourceTx.Rollback()
+  if readErr!=nil{t.Fatal(readErr)}
+  t.Fatalf("SQLite restore changed work snapshot: source=%+v restored=%+v originalEdition=%+v restoredEdition=%+v",
+   sourceWork,work,confirmed,edition)
  }
  var edits int
  if err=tx.QueryRowContext(ctx,"SELECT count(*) FROM comic_edition_profile_history WHERE edition_id=?",editionID).
