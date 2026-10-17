@@ -294,3 +294,29 @@ dialog::backdrop{background:#010b12cf}
 .assist-review-filters button{white-space:nowrap}
 @media(max-width:1250px){.assist-review-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.assist-review-filters .search-field{grid-column:span 2}}
 @media(max-width:600px){.assist-review-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.assist-review-filters .search-field{grid-column:1/-1}}
+
+/* S7 Organise owner workbench: paged indexed files and deliberate verified
+   journalled moves; no unsafely auto-selected bulk changes. */
+.organise-search{display:grid;grid-template-columns:minmax(220px,2fr) repeat(2,minmax(130px,1fr)) auto auto;align-items:end;gap:11px;margin:18px 0}
+.organise-table{min-width:650px}
+.organise-table td:first-child{width:64px}
+.organise-plan,.organise-manual,.organise-journal{margin-top:20px;min-width:0}
+.organise-plan-tools{display:flex;flex-wrap:wrap;align-items:end;gap:12px}
+.organise-plan-tools label{flex:1 1 250px}
+.organise-plan-tools button{flex:0 1 auto}
+.organise-move-results{display:grid;gap:8px;max-height:480px;overflow:auto;min-width:0}
+.organise-move-item{padding:12px 14px;border:1px solid var(--rule);background:var(--raised);border-radius:11px;display:grid;gap:6px;overflow-wrap:anywhere}
+.organise-move-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px}
+.organise-move-header strong{color:var(--gold);font-weight:600}
+.organise-move-paths{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;font-size:12px}
+.organise-move-paths code{overflow-wrap:anywhere;word-break:break-word;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
+.organise-move-item small,.organise-move-item p{color:var(--muted);margin:0}
+.organise-move-item .operations-actions{margin:0;justify-content:flex-end}
+.organise-move-item.organise-move-risk{border-color:var(--danger)}
+.organise-move-item.organise-move-ready{border-color:var(--teal)}
+.organise-choice{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--ink)}
+.organise-choice input{flex:none}
+#organise-selected-count{margin:0;align-self:center}
+#organise-list-status,#organise-preview-status,#organise-journal-status{overflow-wrap:anywhere}
+@media(max-width:1160px){.organise-search{grid-template-columns:repeat(3,minmax(0,1fr))}.organise-search .search-field{grid-column:span 2}}
+@media(max-width:650px){.organise-search{grid-template-columns:repeat(2,minmax(0,1fr))}.organise-search .search-field{grid-column:1/-1}.organise-move-paths{grid-template-columns:minmax(0,1fr)}.organise-move-paths span{display:none}}

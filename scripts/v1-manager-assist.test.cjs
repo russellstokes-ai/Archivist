@@ -40,7 +40,7 @@ class Element {
 }
 const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new Element()]));
 elements.get('sort').value='review';
-const nav=['library','assist','review','health','overview','recovery','family','settings'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
+const nav=['library','assist','review','health','overview','recovery','family','settings','organise'].map(view=>{const item=new Element('button');item.dataset.view=view;return item});
 const calls=[];
 const scanJobs=[
   {id:2,source_id:1,state:'failed',message:'Storage offline',progress:0,total:1},
@@ -53,6 +53,10 @@ const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'
 const workCalls=[];
 const editionCalls=[];
 const transferCalls=[];
+const organiseCalls=[];
+const organiseMoves=new Map();
+const batchMoveID='c'.repeat(32),manualMoveID='d'.repeat(32),undoMoveID='e'.repeat(32);
+
 const familyCalls=[];
 const localStorageWrites=[];
 const familyProfiles=[{id:5,name:'Existing user',revoked:false,spaces:['Books']}];
@@ -403,6 +407,66 @@ const fetchFake=async (url,options={})=>{
   }
   if(url==='./api/library-summary')return reply({total:3,needsReview:3,reviewWorks:2,spaces:[{name:'Books',count:3}],availability:[]});
   if(url==='./api/sources')return reply([{id:1,space:'Books',status:'Ready',works:3,files:4}]);
+  if(url.startsWith('./api/books?')&&url.includes('limit=40')){
+    const query=new URL(url,'http://server.invalid');
+    organiseCalls.push({type:'list',query:query.search});
+    return reply([
+      {id:11,title:'First book',author:'Author',series:'',format:'Ebook',space:'Books',available:true,needsReview:false},
+      {id:12,title:'Review book',author:'Author',series:'',format:'Ebook',space:'Books',available:true,needsReview:true},
+      {id:13,title:'Offline comic',author:'Creator',series:'',format:'Comic',space:'Books',available:false,needsReview:false}
+    ]);
+  }
+  if(url==='./api/file-moves/preview-template-batch'){
+    assert.equal(options.method,'POST');
+    const p=JSON.parse(options.body);
+    organiseCalls.push({type:'preview',payload:p});
+    assert.equal(p.template,'author-title');
+    assert.equal(p.assets.length,1);
+    assert.equal(p.assets[0],11);
+    const move={id:batchMoveID,asset:11,root:'/books',from:'First.epub',to:'Author/First.epub',hash:'a'.repeat(64),state:'preview'};
+    organiseMoves.set(move.id,move);
+    return reply({ok:1,failed:0,items:[{asset:11,title:'First book',status:'ready',from:move.from,to:move.to,move}]});
+  }
+  if(url==='./api/file-moves/apply-batch'){
+    assert.equal(options.method,'POST');
+    const p=JSON.parse(options.body);
+    organiseCalls.push({type:'apply',ids:p.ids});
+    assert.deepEqual(Array.from(p.ids),[batchMoveID]);
+    const move=organiseMoves.get(batchMoveID);
+    move.state='done';
+    return reply({ok:1,failed:0,items:[{asset:11,move}]});
+  }
+  if(url==='./api/file-moves/preview'){
+    const p=JSON.parse(options.body);
+    organiseCalls.push({type:'manual-preview',payload:p});
+    assert.equal(p.asset,12);
+    assert.equal(p.to,'Author/Review.epub');
+    const move={id:manualMoveID,asset:12,root:'/books',from:'Review.epub',to:p.to,hash:'b'.repeat(64),state:'preview'};
+    organiseMoves.set(move.id,move);
+    return reply(move);
+  }
+  if(url===`./api/file-moves/${manualMoveID}/cancel`){
+    organiseCalls.push({type:'cancel',id:manualMoveID});
+    organiseMoves.get(manualMoveID).state='cancelled';
+    return reply({ok:true});
+  }
+  if(url===`./api/file-moves/${batchMoveID}/undo-preview`){
+    organiseCalls.push({type:'undo-preview',id:batchMoveID});
+    const m={id:undoMoveID,asset:11,root:'/books',from:'Author/First.epub',to:'First.epub',hash:'a'.repeat(64),state:'preview'};
+    organiseMoves.set(undoMoveID,m);
+    return reply(m);
+  }
+  if(url===`./api/file-moves/${undoMoveID}/apply`){
+    organiseCalls.push({type:'undo-apply',id:undoMoveID});
+    const m=organiseMoves.get(undoMoveID);
+    m.state='done';
+    return reply(m);
+  }
+  if(url.startsWith('./api/file-moves?')){
+    const moves=[...organiseMoves.values()].reverse().map(m=>({...m}));
+    organiseCalls.push({type:'journal'});
+    return reply(moves);
+  }
   if(url.startsWith('./api/books?'))return reply([]);
   if(url.startsWith('./api/manage/review-works/1/files?'))return reply({files:[file,{...file,id:12,title:'Part 2'}],hasMore:false});
   if(url.startsWith('./api/manage/review-works?')){
@@ -432,7 +496,7 @@ vm.runInNewContext(source,sandbox,{filename:'web/manage.js'});
 const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);await Promise.resolve()}};
 (async()=>{
   await settle();
-  for(const view of ['overview','library','assist','review','health','recovery','family','settings']){
+  for(const view of ['overview','library','assist','review','health','recovery','family','settings','organise']){
     assert(html.includes('data-view="'+view+'"'),'server owner workspace missing '+view+' navigation');
   }
   for(const destination of ['./#settings/organisation','./#settings/household',
@@ -869,5 +933,63 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
     value.includes('b'.repeat(64))),
     'one-time family keys must not persist in browser storage');
 
+  // Integrated S7 uses the preexisting journalled server move engine. No
+  // implicit whole-library operation is issued by navigation or selection.
+  const organise=nav.find(item=>item.dataset.view==='organise');
+  assert(organise&&typeof organise.onclick==='function','Organise must be a native owner screen');
+  elements.get('organise-template').value='author-title';
+  organise.onclick();await settle();
+  assert.equal(elements.get('view-organise').hidden,false);
+  assert(organiseCalls.some(c=>c.type==='list'&&c.query.includes('limit=40')),
+    'file selection must be loaded in bounded indexed pages');
+  assert.equal(organiseCalls.some(c=>c.type==='preview'),false,
+    'navigating to Organise may not automatically prepare a move');
+  const fileRows=elements.get('organise-files').children;
+  assert.equal(fileRows.length,3,'organiser lists indexed files with their availability/review state');
+  assert.equal(fileRows[2].children[0].children[0].disabled,true,
+    'offline media cannot be selected for an automatic move');
+  fileRows[0].children[0].children[0].checked=true;
+  fileRows[0].children[0].children[0].onchange();
+  assert.equal(elements.get('organise-preview').disabled,false,'explicit selection permits preview');
+  elements.get('organise-preview').onclick();await settle();
+  assert(organiseCalls.some(c=>c.type==='preview'&&c.payload.assets[0]===11));
+  assert.equal(elements.get('organise-apply').disabled,true,
+    'hash verified preview alone must NEVER authorise file moves');
+  assert.equal(elements.get('organise-preview-items').children.length,1);
+  assert.match(elements.get('organise-preview-status').textContent,/No media moved/);
+  elements.get('organise-select-ready').onclick();
+  assert.equal(elements.get('organise-apply').disabled,false,
+    'only deliberate approval of an exact path may enable Apply');
+  elements.get('organise-apply').onclick();await settle();
+  assert(organiseCalls.some(c=>c.type==='apply'),'Apply must call existing hash-verified journal API');
+  assert.equal(organiseMoves.get(batchMoveID).state,'done');
+  assert.match(elements.get('organise-preview-status').textContent,/1 move\(s\) completed/);
+  assert.equal(elements.get('organise-apply').disabled,true,
+    'a completed move must not be replayed by clicking Apply twice');
+  assert(elements.get('organise-journal-items').children.some(row=>row.children[0].children[1]?.textContent==='done'),
+    'journal shows the actual completed state');
+  const doneCard=elements.get('organise-journal-items').children.find(row=>
+    row.children[0]?.children?.[0]?.textContent==='File #11'&&
+    row.children[0]?.children?.[1]?.textContent==='done');
+  assert(doneCard,'completed move available for reversible owner inspection');
+  doneCard.children.at(-1).children[0].onclick();await settle();
+  assert(organiseCalls.some(c=>c.type==='undo-preview'),'Undo must request a fresh reverse preview');
+  assert(organiseCalls.some(c=>c.type==='undo-apply'),'Undo must apply only after the explicit owner confirmation');
+  assert.equal(organiseMoves.get(undoMoveID).state,'done');
+  // One-off destination path is still server validated and kept separate
+  // from template batch selection; cancelling a preview never moves media.
+  elements.get('organise-manual-id').value='12';
+  elements.get('organise-manual-path').value='Author/Review.epub';
+  elements.get('organise-manual-form').onsubmit({preventDefault(){}});
+  await settle();
+  assert(organiseCalls.some(c=>c.type==='manual-preview'),
+    'manual one-file path must use the same verified server preview route');
+  assert.equal(elements.get('organise-apply').disabled,true,
+    'manual preview must still require explicit selection/approval');
+  elements.get('organise-cancel-preview').onclick();await settle();
+  assert(organiseCalls.some(c=>c.type==='cancel'&&c.id===manualMoveID));
+  assert.equal(organiseMoves.get(manualMoveID).state,'cancelled');
+  assert.equal(elements.get('organise-apply').disabled,true);
+  console.log('PASS: S7 paged safe preview, owner-attested apply, verified undo and journal rollback');
   console.log('PASS: Server Assist work-level filters, native Family/Settings, real scanner, Atlas and recovery navigation');
 })().catch(error=>{console.error(error);process.exitCode=1});

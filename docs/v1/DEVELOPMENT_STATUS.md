@@ -4,6 +4,14 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Accelerated server Batch 3: S7 safe organiser and large-library bounds
+
+**Draft PR #83, source CI pending, commercial NO-GO.** The owner manager now implements routine S7 file organisation directly in the same 16:9 workspace, retaining existing signed/hash-verified file-move and undo endpoints rather than building a second engine. Indexed files are paginated 40 at a time, filtered and explicitly selected up to 100 per batch; exact from/to paths and conflicts appear before any optional Apply. No move is auto-approved. Recent moves, pending previews and interrupted states remain visible through the real journal with cancellation and owner-confirmed verified inverse preview.
+
+**Critical scale protection:** the Go move engine no longer interprets an empty batch as permission to hash/preview the first 500 library files; it requires 1–100 unique valid asset IDs, and independently caps Apply to 100 valid, distinct server-issued move IDs. Unknown fields/extra JSON payloads are rejected. New root and packaged Go/real-byte round-trip + manager interaction tests are included.
+
+**Release gate:** Check the *exact new code SHA* CI for Go, JavaScript, Docker/HA, hosted ARM64, mobile locks. Physical Pi4/SSD/NAS/HA ingress/1920×1080 and live media tests remain open. [Full source QA](SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md).
+
 ## 17 October 2026 — Batch 2: native Family/Settings and scalable Archivist Assist
 
 **Draft PR #83, source-QA candidate, commercial NO-GO.** Family (S8) and Server settings (S10) now render natively in the owner manager instead of requiring the shared reader browser for routine work. Family uses existing backend user/session APIs, with explicit create/rotate/revoke confirmation, memory-only once-displayed access keys and a visible all-library User access notice. Settings reuses actual current server and owner-session APIs; advanced connectivity/backup and Organise stay accessible via existing working deep links. Permission semantics are unchanged.

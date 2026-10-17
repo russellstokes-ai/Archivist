@@ -209,20 +209,42 @@ func (a *app) previewMoveTemplate(asset int64, template string) (fileMove, error
 	return a.previewMove(asset, target)
 }
 
+// A batch is an explicitly selected bounded set, never "all files" if the
+// caller accidentally supplies an empty list. Full libraries are paginated
+// by the owner UI and previewed in deliberate small chunks.
+const maxOrganiseBatchFiles = 100
+
+func validateOrganiseAssets(assets []int64) error {
+	if len(assets)<1||len(assets)>maxOrganiseBatchFiles {
+		return errors.New("select between 1 and 100 specific files to preview")
+	}
+	seen:=make(map[int64]bool,len(assets))
+	for _,id:=range assets{
+		if id<1||seen[id]{return errors.New("select distinct valid file identities")}
+		seen[id]=true
+	}
+	return nil
+}
+func validateOrganiseMoveIDs(ids []string) error {
+	if len(ids)<1||len(ids)>maxOrganiseBatchFiles {
+		return errors.New("select at least one ready move (maximum 100)")
+	}
+	seen:=make(map[string]bool,len(ids))
+	for _,id:=range ids {
+		if len(id)!=32||strings.Trim(id,"0123456789abcdef")!=""||seen[id] {
+			return errors.New("move preview IDs must be unique and server-issued")
+		}
+		seen[id]=true
+	}
+	return nil
+}
+func organiseBatchError(err error) fileMoveBatchResult {
+	return fileMoveBatchResult{Failed:1,Items:[]fileMoveBatchItem{{Status:"conflict",Error:err.Error()}}}
+}
 func (a *app) previewMoveTemplateBatch(assets []int64, template string) fileMoveBatchResult {
-	if len(assets) == 0 {
-		rows, e := a.db.Query(`SELECT id FROM assets WHERE available=1 ORDER BY id LIMIT 500`)
-		if e != nil {
-			return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Status:"conflict",Error: e.Error()}}}
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id int64
-			if e = rows.Scan(&id); e != nil {
-				return fileMoveBatchResult{Failed: 1, Items: []fileMoveBatchItem{{Status:"conflict",Error: e.Error()}}}
-			}
-			assets = append(assets, id)
-		}
+	if err:=validateOrganiseAssets(assets);err!=nil{return organiseBatchError(err)}
+	if _,err:=sortTemplatePathWithSeriesNumber(template,"Example","Creator","","Ebook","example.epub",0);err!=nil{
+		return organiseBatchError(err)
 	}
 	type candidate struct {
 		item fileMoveBatchItem
@@ -284,9 +306,7 @@ func (a *app) previewMoveTemplateBatch(assets []int64, template string) fileMove
 }
 
 func (a *app) applyMoveBatch(ids []string) fileMoveBatchResult {
-	if len(ids) == 0 {
-		return fileMoveBatchResult{Failed:1,Items:[]fileMoveBatchItem{{Status:"conflict",Error:"select at least one ready move"}}}
-	}
+	if err:=validateOrganiseMoveIDs(ids);err!=nil{return organiseBatchError(err)}
 	out := fileMoveBatchResult{}
 	for _, id := range ids {
 		m, e := a.applyMove(id)
@@ -565,9 +585,11 @@ func (a *app) moveRoutes(mux *http.ServeMux) {
 			Assets   []int64 `json:"assets"`
 			Template string  `json:"template"`
 		}
-		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536)).Decode(&in) != nil {
-			fail(w, 400, errors.New("invalid batch template preview"))
-			return
+		if err:=workMetadataJSON(w,r,&in);err!=nil{
+			fail(w,400,err);return
+		}
+		if err:=validateOrganiseAssets(in.Assets);err!=nil{
+			fail(w,400,err);return
 		}
 		out := a.previewMoveTemplateBatch(in.Assets, in.Template)
 		reply(w, out)
@@ -576,9 +598,11 @@ func (a *app) moveRoutes(mux *http.ServeMux) {
 		var in struct {
 			IDs []string `json:"ids"`
 		}
-		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536)).Decode(&in) != nil {
-			fail(w, 400, errors.New("invalid batch apply"))
-			return
+		if err:=workMetadataJSON(w,r,&in);err!=nil{
+			fail(w,400,err);return
+		}
+		if err:=validateOrganiseMoveIDs(in.IDs);err!=nil{
+			fail(w,400,err);return
 		}
 		out := a.applyMoveBatch(in.IDs)
 		reply(w, out)

@@ -19,7 +19,7 @@
   <button class="nav-item" type="button" data-view="assist">◉ <span>Work &amp; metadata</span><span id="assist-badge" class="nav-count" aria-label="books requiring review"></span></button>
   <button class="nav-item" type="button" data-view="review">☷ <span>File review</span></button>
   <button class="nav-item" type="button" data-view="health">◈ <span>Scanner &amp; sources</span></button>
-  <a class="nav-item" href="./#settings/organisation">↗ <span>Organise &amp; relink</span></a>
+  <button class="nav-item" type="button" data-view="organise">⇄ <span>Organise &amp; relink</span></button>
   <button class="nav-item" type="button" data-view="family">♧ <span>Family</span></button>
   <button class="nav-item" type="button" data-view="recovery">⊞ <span>Health &amp; recovery</span></button>
   <button class="nav-item" type="button" data-view="settings">⚙ <span>Server settings</span></button>
@@ -98,6 +98,79 @@
   <p id="assist-range" role="status" aria-live="polite">Choose Archivist Assist to load books.</p>
   <div id="assist-works" class="assist-works"></div>
   <div class="pager"><button id="assist-previous" type="button" class="quiet">← Previous books</button><span id="assist-page">Page 1</span><button id="assist-next" type="button" class="quiet">Next books →</button></div>
+ </section>
+ <section id="view-organise" hidden aria-labelledby="organise-title">
+  <div class="section-head">
+   <div><p class="eyebrow">SERVER · FILE ORGANISATION</p><h2 id="organise-title">Organise &amp; recover</h2>
+    <p class="footnote">Choose indexed files on paginated pages, preview exact source/destination paths, then explicitly approve each verified move. No automatic file changes.</p></div>
+   <button id="organise-refresh" type="button" class="quiet">Refresh files</button>
+  </div>
+  <form id="organise-filters" class="organise-search" role="search">
+   <label class="search-field">Find files<input id="organise-search" type="search" maxlength="120" autocomplete="off" placeholder="Title, author or series…" /></label>
+   <label>Library space<select id="organise-space"><option value="">All spaces</option></select></label>
+   <label>Format<select id="organise-format">
+    <option value="">All formats</option><option value="Ebook">Ebook</option><option value="PDF">PDF</option>
+    <option value="Comic">Comic</option><option value="Audio">Audiobook</option></select></label>
+   <button id="organise-find" type="submit" class="quiet">Find files</button>
+   <button id="organise-clear-search" type="button" class="quiet">Clear filters</button>
+  </form>
+  <p id="organise-list-status" class="footnote" role="status" aria-live="polite">Open Organise to select files.</p>
+  <div class="table-scroll"><table class="organise-table">
+   <thead><tr><th><span>Choose</span></th><th>Media</th><th>Series</th><th>Format</th><th>Source library</th><th>Review</th></tr></thead>
+   <tbody id="organise-files"></tbody>
+  </table></div>
+  <div class="pager">
+   <button id="organise-previous" type="button" class="quiet">← Previous</button>
+   <span id="organise-page">Page 1</span>
+   <button id="organise-next" type="button" class="quiet">Next →</button>
+  </div>
+  <section class="panel organise-plan" aria-labelledby="organise-plan-title">
+   <h3 id="organise-plan-title">Safe file-move preview</h3>
+   <p class="footnote">At most 100 explicitly chosen files per batch. The scanner's book groups and metadata are never rewritten by choosing a template. Previewing records journal entries but does not move media.</p>
+   <div class="organise-plan-tools">
+    <label>Folder structure<select id="organise-template">
+     <option value="author-title">Author / Title</option>
+     <option value="author-series-title">Author / Series / Title</option>
+     <option value="format-author-title">Format / Author / Title</option>
+     <option value="format-author-series-title">Format / Author / Series / Title</option>
+    </select></label>
+    <span id="organise-selected-count" class="footnote" role="status">0 files chosen</span>
+    <button id="organise-preview" type="button" class="primary" disabled>Preview selected files</button>
+    <button id="organise-clear-selection" type="button" class="quiet">Clear file selection</button>
+   </div>
+   <p id="organise-preview-status" role="status" aria-live="polite" class="footnote">No move preview yet.</p>
+   <div id="organise-preview-items" class="organise-move-results"></div>
+   <div class="operations-actions">
+    <button id="organise-select-ready" type="button" class="quiet" disabled>Select all Ready</button>
+    <button id="organise-clear-ready" type="button" class="quiet" disabled>Unselect Ready</button>
+    <button id="organise-apply" type="button" class="primary" disabled>Apply chosen verified moves</button>
+    <button id="organise-cancel-preview" type="button" class="quiet" disabled>Cancel staged previews</button>
+   </div>
+  </section>
+  <section class="panel organise-manual">
+   <h3>Advanced · one-file move</h3>
+   <form id="organise-manual-form" class="organise-search">
+    <label>Existing indexed file ID<input id="organise-manual-id" type="number" min="1" step="1" placeholder="e.g. 42" required /></label>
+    <label class="search-field">New relative path within that source folder
+     <input id="organise-manual-path" maxlength="500" placeholder="Author / Series / Title.epub" required /></label>
+    <button id="organise-manual-preview" type="submit" class="quiet">Preview this path</button>
+   </form>
+   <p class="footnote">The backend verifies relative path, extension, source integrity and collision before creating a journaled preview.</p>
+  </section>
+  <section class="panel organise-journal">
+   <div class="section-head">
+    <div><h3>Move journal &amp; safe undo</h3><p class="footnote">Pending previews, incomplete recoveries and recent completed moves. Undo creates a separate verified reverse move and requires confirmation.</p></div>
+    <button id="organise-journal-refresh" type="button" class="quiet">Refresh journal</button>
+   </div>
+   <div id="organise-journal-items" class="organise-move-results"></div>
+   <div class="pager">
+    <button id="organise-journal-prev" type="button" class="quiet">← Newer entries</button>
+    <span id="organise-journal-page">Journal page 1</span>
+    <button id="organise-journal-next" type="button" class="quiet">Older entries →</button>
+   </div>
+   <p id="organise-journal-status" class="footnote" role="status" aria-live="polite">Journal loads only when requested.</p>
+  </section>
+  <p class="footnote">Original library organiser remains available in <a href="./#settings/organisation">Settings → Organisation</a> for compatibility. No automatic scan, mass apply, or delete.</p>
  </section>
  <section id="view-family" hidden aria-labelledby="family-title">
   <div class="section-head"><div><p class="eyebrow">SERVER · HOUSEHOLD</p><h2 id="family-title">Family &amp; access</h2>

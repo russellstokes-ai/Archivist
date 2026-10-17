@@ -1461,5 +1461,29 @@
       "mobile_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321480",
       "android_native_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321516"
     }
+  },
+  "server_batch3_unified_organise_20261017": {
+    "pr": 83,
+    "parent_sha": "9f636083cd22a0dc64f2c6531acbc01462596691",
+    "qa": "docs/v1/SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md",
+    "implementation_status": "source candidate, pending exact-code full server/ARM64/mobile regression CI",
+    "delivered": [
+      "native 16:9 owner Organise/S7 page with paged indexed files, search, space/format filters and up to 100 explicit selections across pages",
+      "exact template and manual relative-path preview using existing hash-verified file move backend; no implicit moves",
+      "zero moves preselected for Apply, separate owner approvals, bounded Apply and explicit partial-result reporting",
+      "persistent 40-row-page move journal with preview cancel and fresh verified reverse move/undo",
+      "server limits template preview to 1–100 distinct valid assets and apply to 1–100 unique signed-format move IDs; no automatic 500-asset preview on empty request",
+      "strict JSON/action gates; real filesystem file integrity and stable work/edition/asset ID round-trip tests",
+      "full root plus packaged Go/JS mirrored source and browser regressions"
+    ],
+    "deferred": [
+      "full physical Pi4/HA ingress/NAS/SMB/NFS power-loss acceptance",
+      "large 1000+ media performance measurement in actual environment",
+      "optional comic edition transfer Apply and specialist comics external providers",
+      "no mobile/Play release or production migration approval"
+    ],
+    "commercial_go": false,
+    "draft_pr_unmerged": true,
+    "protected_mobile_unchanged": true
   }
 }

@@ -1601,6 +1601,14 @@
     picker.replaceChildren(new Option('All spaces',''));
     for(const item of sources){if(item.space&&!Array.from(picker.options).some(o=>o.value===item.space))picker.add(new Option(item.space,item.space))}
     picker.value=Array.from(picker.options).some(o=>o.value===before)?before:'';
+    const organisePicker=$('organise-space'),organiseBefore=organisePicker.value;
+    organisePicker.replaceChildren(new Option('All spaces',''));
+    for(const item of sources){
+      if(item.space&&!Array.from(organisePicker.options).some(x=>x.value===item.space))
+        organisePicker.add(new Option(item.space,item.space));
+    }
+    organisePicker.value=Array.from(organisePicker.options).some(x=>x.value===organiseBefore)?
+      organiseBefore:'';
     const reviewPicker=$('assist-space'),previous=reviewPicker.value;
     reviewPicker.replaceChildren(new Option('All spaces',''));
     for(const item of sources){
@@ -1896,6 +1904,368 @@
       serverStatus('Session change uncertain: '+error.message+'. Refresh or sign in again.');
     }finally{settingsBusy=false}
   }
+  // S7 Organise: deliberately small, paginated owner selections. All media
+  // hashing, path safety, collision checks, copy/verify and journalling are
+  // delegated to the existing server file-move engine.
+  const organisePageSize=40,organiseSelectionCap=100;
+  let organiseOffset=0,organiseJournalOffset=0;
+  let organiseListEpoch=0,organisePlanEpoch=0,organiseJournalEpoch=0;
+  let organiseFiles=[],organiseSelected=new Map(),organisePlan=[],organiseApproved=new Set();
+  let organiseBusy=false;
+  const organiseMoveID=id=>typeof id==='string'&&/^[0-9a-f]{32}$/.test(id);
+  function organiseStatus(message){$('organise-preview-status').textContent=String(message)}
+  function organiseSelectionStatus(){
+    $('organise-selected-count').textContent=organiseSelected.size+' / '+organiseSelectionCap+' files chosen';
+    $('organise-preview').disabled=organiseBusy||organiseSelected.size===0;
+    $('organise-clear-selection').disabled=organiseBusy||organiseSelected.size===0;
+  }
+  function organisePlanButtons(){
+    const ready=organisePlan.filter(item=>item.status==='ready'&&organiseMoveID(item.move?.id));
+    const valid=new Set(ready.map(item=>item.move.id));
+    const checked=[...organiseApproved].filter(id=>valid.has(id));
+    $('organise-apply').disabled=organiseBusy||!checked.length;
+    $('organise-apply').textContent=checked.length?'Apply chosen verified moves ('+checked.length+')':'Apply chosen verified moves';
+    $('organise-select-ready').disabled=organiseBusy||!ready.length;
+    $('organise-clear-ready').disabled=organiseBusy||!checked.length;
+    $('organise-cancel-preview').disabled=organiseBusy||!ready.length;
+  }
+  function organiseResetPlan(message){
+    ++organisePlanEpoch;
+    organisePlan=[];organiseApproved.clear();
+    $('organise-preview-items').replaceChildren();
+    organiseStatus(message||'No move preview yet.');
+    organisePlanButtons();
+  }
+  function organiseSetBusy(value){
+    organiseBusy=Boolean(value);
+    for(const id of ['organise-preview','organise-clear-selection','organise-manual-preview',
+      'organise-refresh','organise-find','organise-clear-search','organise-journal-refresh',
+      'organise-template','organise-search','organise-space','organise-format',
+      'organise-previous','organise-next','organise-journal-prev','organise-journal-next']){
+      const control=$(id);
+      if(control)control.disabled=organiseBusy;
+    }
+    organiseSelectionStatus();organisePlanButtons();
+  }
+  function organiseFileList(){
+    const container=$('organise-files');container.replaceChildren();
+    if(!organiseFiles.length){
+      const tr=e('tr'),td=e('td','No indexed media on this page. Try a narrower search or earlier page.','empty');
+      td.colSpan=6;tr.append(td);container.append(tr);
+    }
+    for(const item of organiseFiles){
+      const tr=e('tr');
+      const id=Number(item.id);
+      const td=e('td'),box=e('input');
+      box.type='checkbox';box.checked=organiseSelected.has(id);
+      box.disabled=organiseBusy||!item.available||!Number.isSafeInteger(id)||id<1;
+      box.setAttribute('aria-label','Select indexed file '+id+' '+String(item.title||'Untitled'));
+      box.onchange=()=>{
+        if(organiseBusy){box.checked=organiseSelected.has(id);return}
+        if(box.checked){
+          if(organiseSelected.size>=organiseSelectionCap&&!organiseSelected.has(id)){
+            box.checked=false;
+            $('organise-list-status').textContent='Selection capped at 100 files. Preview this batch before choosing more.';
+            return;
+          }
+          organiseSelected.set(id,item);
+        }else{organiseSelected.delete(id)}
+        organiseResetPlan('File selection changed. Earlier journal previews remain accessible below.');
+        organiseSelectionStatus();
+      };
+      td.append(box);
+      const name=e('td');name.append(e('strong',item.title||'Untitled'),e('small',item.author||'Unknown author','subtext'));
+      const series=e('td',(item.series||'—')+(item.seriesNumber?' · #'+item.seriesNumber:''));
+      const format=e('td',item.format||'Unknown'),space=e('td',item.space||'—');
+      const state=e('td',item.available?item.needsReview?'Review required':'Available':'Unavailable');
+      tr.append(td,name,series,format,space,state);
+      container.append(tr);
+    }
+    $('organise-page').textContent='Page '+(Math.floor(organiseOffset/organisePageSize)+1);
+    $('organise-previous').disabled=organiseBusy||organiseOffset===0;
+    $('organise-next').disabled=organiseBusy||organiseFiles.length<organisePageSize;
+    organiseSelectionStatus();
+  }
+  async function loadOrganiseFiles(){
+    const generation=++organiseListEpoch,offset=organiseOffset;
+    $('organise-list-status').textContent='Loading a bounded page of indexed files…';
+    try{
+      const query=new URLSearchParams({limit:String(organisePageSize),offset:String(offset),sort:'title'});
+      const filters=[['q','organise-search'],['space','organise-space'],['format','organise-format']];
+      for(const [name,id] of filters){
+        const value=String($(id).value||'').trim();
+        if(value)query.set(name,value);
+      }
+      const items=await api('./api/books?'+query);
+      if(generation!==organiseListEpoch||activeView!=='organise')return;
+      if(!Array.isArray(items)||items.length>organisePageSize){
+        throw Error('Invalid or unbounded catalogue page.');
+      }
+      organiseFiles=items;organiseFileList();
+      $('organise-list-status').textContent=
+        'Showing '+(items.length?offset+1:0)+'–'+(offset+items.length)+
+        ' indexed files on this page. '+organiseSelected.size+' selected across pages; total library size is not inferred.';
+    }catch(error){
+      if(generation===organiseListEpoch&&activeView==='organise'){
+        organiseFiles=[];organiseFileList();
+        $('organise-list-status').textContent='Unable to list indexed files: '+error.message;
+      }
+    }
+  }
+  function organisePaths(item){
+    const container=e('div',undefined,'organise-move-paths');
+    const a=e('code',item.from||item.move?.from||'Not recorded');
+    const arrow=e('span','→');
+    const b=e('code',item.to||item.move?.to||'Not recorded');
+    container.append(a,arrow,b);return container;
+  }
+  function organiseRenderPlan(){
+    const area=$('organise-preview-items');area.replaceChildren();
+    let ready=0,blocked=0,unchanged=0;
+    for(const item of organisePlan.slice(0,organiseSelectionCap)){
+      const state=String(item.status||'conflict'),move=item.move;
+      if(state==='ready'&&organiseMoveID(move?.id))ready++;
+      else if(state==='same')unchanged++;
+      else blocked++;
+      const card=e('article',undefined,'organise-move-item '+(state==='ready'?'organise-move-ready':'organise-move-risk'));
+      const heading=e('div',undefined,'organise-move-header');
+      heading.append(e('strong',String(item.title||'File #'+String(item.asset||move?.asset||'?'))),
+        e('span',state==='ready'?'Ready (hash verified during preview)':state==='same'?'Already organised':state==='review'?'Review first':'Conflict','pill '+(state==='ready'?'ok':'warn')));
+      card.append(heading,organisePaths(item));
+      if(item.error)card.append(e('p',String(item.error)));
+      if(state==='ready'&&organiseMoveID(move?.id)){
+        const choice=e('label',undefined,'organise-choice'),box=e('input');
+        box.type='checkbox';box.checked=organiseApproved.has(move.id);
+        box.disabled=organiseBusy;
+        box.setAttribute('aria-label','Approve move '+String(move.from||'')+' to '+String(move.to||''));
+        box.onchange=()=>{
+          if(organiseBusy){box.checked=organiseApproved.has(move.id);return}
+          if(box.checked)organiseApproved.add(move.id);
+          else organiseApproved.delete(move.id);
+          organisePlanButtons();
+        };
+        choice.append(box,e('span','Approve this exact journaled move'));
+        card.append(choice);
+      }
+      area.append(card);
+    }
+    if(organisePlan.length>organiseSelectionCap)area.append(e('p','Some previews were omitted; no omitted item can be applied.','subtext'));
+    organisePlanButtons();
+    return {ready,blocked,unchanged};
+  }
+  async function previewOrganise(){
+    if(organiseBusy||organiseSelected.size===0)return;
+    const selected=[...organiseSelected.keys()];
+    if(selected.length>organiseSelectionCap){organiseStatus('Selection exceeds the server batch cap.');return}
+    const epoch=++organisePlanEpoch,template=$('organise-template').value;
+    organisePlan=[];organiseApproved.clear();organiseRenderPlan();
+    organiseSetBusy(true);
+    organiseStatus('Preparing verified, non-moving previews for '+selected.length+' explicitly selected files…');
+    try{
+      const result=await api('./api/file-moves/preview-template-batch','POST',{assets:selected,template});
+      if(epoch!==organisePlanEpoch)return;
+      const data=Array.isArray(result?.items)?result.items:[];
+      if(data.length>organiseSelectionCap||!Number.isSafeInteger(Number(result.ok))||!Number.isSafeInteger(Number(result.failed))){
+        throw Error('Unexpected batch preview response.');
+      }
+      organisePlan=data;
+      const tally=organiseRenderPlan();
+      organiseStatus(tally.ready+' Ready, '+tally.blocked+' conflicts/reviews, '+tally.unchanged+
+        ' already organised. No media moved. Tick the exact Ready moves you approve.');
+      void loadOrganiseJournal();
+    }catch(error){
+      if(epoch===organisePlanEpoch){
+        organisePlan=[];organiseApproved.clear();organiseRenderPlan();
+        organiseStatus('Preview incomplete: '+error.message+
+          '. Some journal records may have been created. Inspect Move journal before retrying.');
+      }
+    }finally{
+      if(epoch===organisePlanEpoch){
+        organiseSetBusy(false);organiseRenderPlan();organiseFileList();
+      }
+    }
+  }
+  async function applyOrganise(){
+    if(organiseBusy)return;
+    const ready=organisePlan.filter(item=>item.status==='ready'&&organiseMoveID(item.move?.id));
+    const active=new Set(ready.map(item=>item.move.id));
+    const ids=[...organiseApproved].filter(id=>active.has(id));
+    if(!ids.length||ids.length>organiseSelectionCap)return;
+    if(!window.confirm('Apply '+ids.length+' explicitly approved hash-verified file moves? Each move will be checked again. A failed batch can partially succeed, so check the journal afterwards.'))return;
+    const epoch=++organisePlanEpoch;organiseSetBusy(true);
+    organiseStatus('Applying '+ids.length+' selected journal moves. No unselected file is authorised…');
+    // Never permit a client retry of the same unverified response: a network
+    // error may arrive after a successful server-side move.
+    organiseApproved.clear();organisePlan=[];organiseRenderPlan();
+    try{
+      const result=await api('./api/file-moves/apply-batch','POST',{ids});
+      if(epoch!==organisePlanEpoch)return;
+      if(!Number.isSafeInteger(Number(result?.ok))||!Number.isSafeInteger(Number(result?.failed))){
+        throw Error('Server did not provide a reliable per-batch result.');
+      }
+      const lines=Array.isArray(result.items)?result.items:[];
+      const failures=lines.filter(x=>x.error).slice(0,8).map(x=>x.error);
+      organiseStatus(result.ok+' move(s) completed, '+result.failed+' failed or need review. '+
+        (failures.length?failures.join(' · ')+' · ':'')+
+        'Inspect the journal before any retry.');
+      organiseSelected.clear();
+      void loadOrganiseFiles();
+      void loadOrganiseJournal();
+    }catch(error){
+      if(epoch===organisePlanEpoch)organiseStatus(
+        'Move outcome unverified: '+error.message+'. Do not retry blindly. Refresh the move journal first.');
+    }finally{
+      if(epoch===organisePlanEpoch){organiseSetBusy(false);organiseFileList()}
+    }
+  }
+  async function cancelOrganisePlan(){
+    if(organiseBusy)return;
+    const ids=organisePlan.filter(x=>x.status==='ready'&&organiseMoveID(x.move?.id)).map(x=>x.move.id);
+    if(!ids.length)return;
+    if(!window.confirm('Cancel '+ids.length+' staged previews? No original media will be changed. Already applying or completed moves cannot be cancelled.'))return;
+    const epoch=++organisePlanEpoch;
+    organiseSetBusy(true);
+    const failed=[];
+    let canceled=0;
+    for(const id of ids){
+      try{
+        const result=await api('./api/file-moves/'+encodeURIComponent(id)+'/cancel','POST');
+        if(result.ok===true)canceled++;else failed.push(id);
+      }catch(error){failed.push(id)}
+    }
+    if(epoch===organisePlanEpoch){
+      organisePlan=organisePlan.filter(x=>failed.includes(x.move?.id));
+      organiseApproved.clear();
+      organiseRenderPlan();
+      organiseStatus(canceled+' previews cancelled, '+failed.length+
+        ' could not be cancelled. Unresolved moves remain in the persistent journal.');
+      void loadOrganiseJournal();
+      organiseSetBusy(false);organiseRenderPlan();organiseFileList();
+    }
+  }
+  async function previewOrganiseManual(event){
+    event.preventDefault();
+    if(organiseBusy)return;
+    const id=Number($('organise-manual-id').value),to=String($('organise-manual-path').value||'').trim();
+    if(!Number.isSafeInteger(id)||id<1||!to||to.length>500){
+      organiseStatus('Choose a valid indexed file ID and a relative destination path.');return;
+    }
+    const epoch=++organisePlanEpoch;organiseSetBusy(true);
+    organiseStatus('Validating exact source and relative destination; no file will be moved…');
+    try{
+      const move=await api('./api/file-moves/preview','POST',{asset:id,to});
+      if(epoch!==organisePlanEpoch)return;
+      if(!organiseMoveID(move?.id)||move.asset!==id||move.to!==to||move.state!=='preview')
+        throw Error('Server returned an invalid or stale manual preview.');
+      organisePlan=[{asset:id,title:'File #'+id,from:move.from,to:move.to,status:'ready',move}];
+      organiseApproved.clear();
+      organiseRenderPlan();
+      organiseStatus('Manual move preview created. Review exact paths and tick Approve to apply.');
+      void loadOrganiseJournal();
+    }catch(error){
+      if(epoch===organisePlanEpoch)organiseStatus('Manual preview unavailable: '+error.message+
+        '. Check the move journal before retrying.');
+    }finally{
+      if(epoch===organisePlanEpoch){
+        organiseSetBusy(false);organiseRenderPlan();organiseFileList();
+      }
+    }
+  }
+  async function loadOrganiseJournal(){
+    const epoch=++organiseJournalEpoch,offset=organiseJournalOffset;
+    $('organise-journal-status').textContent='Reading recent journal records…';
+    try{
+      const moves=await api('./api/file-moves?'+new URLSearchParams({limit:'40',offset:String(offset)}));
+      if(epoch!==organiseJournalEpoch||activeView!=='organise')return;
+      if(!Array.isArray(moves)||moves.length>40)throw Error('Invalid or oversized move history.');
+      const area=$('organise-journal-items');area.replaceChildren();
+      if(!moves.length)area.append(e('p','No move journal entries on this page.','subtext'));
+      for(const move of moves){
+        if(!organiseMoveID(move.id))continue;
+        const state=String(move.state||'unknown');
+        const card=e('article',undefined,'organise-move-item '+(state==='done'?'organise-move-ready':''));
+        const heading=e('div',undefined,'organise-move-header');
+        heading.append(e('strong','File #'+String(move.asset)),
+          e('span',state,'pill '+(state==='done'?'ok':'warn')));
+        card.append(heading,organisePaths(move));
+        const actions=e('div',undefined,'operations-actions');
+        if(state==='preview'){
+          const cancel=e('button','Cancel this preview','quiet');
+          cancel.type='button';cancel.disabled=organiseBusy;
+          cancel.onclick=async()=>{
+            if(!window.confirm('Cancel this staged file-move preview?'))return;
+            cancel.disabled=true;
+            try{
+              const result=await api('./api/file-moves/'+encodeURIComponent(move.id)+'/cancel','POST');
+              if(result.ok!==true)throw Error('Server did not confirm cancellation.');
+              $('organise-journal-status').textContent='Preview cancelled. Originals unchanged.';
+              await loadOrganiseJournal();
+            }catch(error){
+              $('organise-journal-status').textContent='Cancellation not confirmed: '+error.message;
+            }finally{cancel.disabled=false}
+          };
+          actions.append(cancel);
+        }else if(state==='done'){
+          const undo=e('button','Preview verified undo','quiet');
+          undo.type='button';undo.disabled=organiseBusy;
+          undo.onclick=async()=>{
+            undo.disabled=true;
+            try{
+              const reverse=await api('./api/file-moves/'+encodeURIComponent(move.id)+'/undo-preview','POST');
+              if(!organiseMoveID(reverse?.id)||reverse.asset!==move.asset||
+                 reverse.from!==move.to||reverse.to!==move.from||reverse.state!=='preview'){
+                throw Error('Undo preview does not match the original completed move.');
+              }
+              if(!window.confirm('Reverse this completed move?\n\nCurrent: '+reverse.from+
+                '\nRestore to: '+reverse.to+
+                '\n\nArchivist will verify original file hash and path before applying.')){
+                $('organise-journal-status').textContent='Undo not applied. A reverse preview is present in the journal.';
+                await loadOrganiseJournal();return;
+              }
+              const result=await api('./api/file-moves/'+encodeURIComponent(reverse.id)+'/apply','POST');
+              if(result.state!=='done'||result.asset!==move.asset)
+                throw Error('Server did not confirm the reverse move.');
+              $('organise-journal-status').textContent='Verified reverse move completed; inspect the refreshed history.';
+              await Promise.all([loadOrganiseJournal(),loadOrganiseFiles()]);
+            }catch(error){
+              $('organise-journal-status').textContent='Undo uncertain or unavailable: '+error.message+
+                '. Do not retry until the journal is refreshed.';
+            }finally{undo.disabled=false}
+          };
+          actions.append(undo);
+        }else if(state==='applying'||state==='linked'){
+          card.append(e('p','Recovery in progress. Do not delete or manually move source/destination files.'));
+        }
+        if(actions.children.length)card.append(actions);
+        area.append(card);
+      }
+      $('organise-journal-page').textContent='Journal page '+(Math.floor(offset/40)+1);
+      $('organise-journal-prev').disabled=offset===0;
+      $('organise-journal-next').disabled=moves.length<40;
+      $('organise-journal-status').textContent='Showing '+moves.length+
+        ' bounded journal entries. Recent order is not proof that a move completed.';
+    }catch(error){
+      if(epoch===organiseJournalEpoch&&activeView==='organise'){
+        $('organise-journal-items').replaceChildren();
+        $('organise-journal-status').textContent='Unable to read journal: '+error.message;
+      }
+    }
+  }
+  function organiseChangeScope(){
+    if(organiseBusy){
+      $('organise-list-status').textContent='Complete the current preview or move before changing filters.';
+      return;
+    }
+    organiseOffset=0;
+    organiseSelected.clear();organiseResetPlan('Filters changed; existing previews remain in the journal.');
+    organiseSelectionStatus();
+    void loadOrganiseFiles();
+  }
+  function openOrganise(){
+    if(activeView!=='organise')return;
+    void loadOrganiseFiles();
+    void loadOrganiseJournal();
+  }
   // Operational views are intentionally lazy: opening Library or reading
   // a book must not trigger NAS probes or database integrity checks.
   let operationsEpoch=0,integrityEpoch=0,integrityBusy=false;
@@ -2018,6 +2388,7 @@
     $('view-recovery').hidden=view!=='recovery';
     $('view-family').hidden=view!=='family';
     $('view-settings').hidden=view!=='settings';
+    $('view-organise').hidden=view!=='organise';
     for(const item of document.querySelectorAll('[data-view]')){
       item.classList.toggle('is-current',item.dataset.view===view);
       if(item.dataset.view===view)item.setAttribute('aria-current','page');
@@ -2029,6 +2400,10 @@
     if(view==='health'){++requestId;loadHealth().catch(err=>notice(err.message,true));return}
     if(view==='family'){++requestId;++settingsEpoch;void loadFamily();return}
     if(view==='settings'){++requestId;++familyEpoch;void loadServerSettings();return}
+    if(view==='organise'){
+      ++requestId;++familyEpoch;++settingsEpoch;
+      openOrganise();return;
+    }
     ++familyEpoch;++settingsEpoch;
     if(view==='overview'||view==='recovery'){
       ++requestId;
@@ -2153,6 +2528,53 @@
   $('settings-refresh').onclick=()=>void loadServerSettings();
   $('settings-scanner').onclick=()=>showView('health');
   $('settings-family').onclick=()=>showView('family');
+  $('organise-filters').onsubmit=event=>{event.preventDefault();organiseChangeScope()};
+  $('organise-clear-search').onclick=()=>{
+    for(const id of ['organise-search','organise-space','organise-format'])$(id).value='';
+    organiseChangeScope();
+  };
+  $('organise-refresh').onclick=()=>void loadOrganiseFiles();
+  $('organise-previous').onclick=()=>{
+    if(organiseBusy)return;
+    if(organiseOffset>0){organiseOffset-=organisePageSize;void loadOrganiseFiles()}
+  };
+  $('organise-next').onclick=()=>{
+    if(organiseBusy)return;
+    if(organiseFiles.length===organisePageSize){
+      organiseOffset+=organisePageSize;void loadOrganiseFiles();
+    }
+  };
+  $('organise-template').onchange=()=>{
+    if(organiseBusy)return;
+    organiseResetPlan('Template changed. Old staged previews remain in the journal.');
+  };
+  $('organise-preview').onclick=()=>void previewOrganise();
+  $('organise-clear-selection').onclick=()=>{
+    if(organiseBusy)return;
+    organiseSelected.clear();organiseResetPlan('File selection cleared. Existing journaled previews are still available below.');
+    organiseFileList();
+  };
+  $('organise-select-ready').onclick=()=>{
+    if(organiseBusy)return;
+    organiseApproved=new Set(organisePlan.filter(x=>x.status==='ready'&&organiseMoveID(x.move?.id))
+      .map(x=>x.move.id));organiseRenderPlan();
+  };
+  $('organise-clear-ready').onclick=()=>{
+    if(organiseBusy)return;
+    organiseApproved.clear();organiseRenderPlan();
+  };
+  $('organise-apply').onclick=()=>void applyOrganise();
+  $('organise-cancel-preview').onclick=()=>void cancelOrganisePlan();
+  $('organise-manual-form').onsubmit=event=>void previewOrganiseManual(event);
+  $('organise-journal-refresh').onclick=()=>void loadOrganiseJournal();
+  $('organise-journal-prev').onclick=()=>{
+    if(organiseJournalOffset>0){organiseJournalOffset-=40;void loadOrganiseJournal()}
+  };
+  $('organise-journal-next').onclick=()=>{
+    if(!$('organise-journal-next').disabled){
+      organiseJournalOffset+=40;void loadOrganiseJournal();
+    }
+  };
   $('overview-refresh').onclick=()=>void loadOperations('overview');
   $('overview-assist').onclick=()=>showView('assist');
   $('overview-scanner').onclick=()=>showView('health');
