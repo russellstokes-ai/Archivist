@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "path": "mobile/App.tsx",
-  "scope": "Remove the repeat Atlas help/explanation panel entirely, keep minimal Show all filters control, place one concise Atlas introduction within the existing three-step first-run onboarding, persist completion before dismiss, and gate first-run rendering until saved completion has hydrated. No scanner, Assist, Atlas renderer, Living Book renderer, or other UI changes.",
+  "scope": "Remove repeated Atlas help entirely while keeping Show all filter control. Add a one-time Atlas note alongside the existing exact-byte canonical three-step onboarding WITHOUT changing protected OnboardingGuide, finishOnboarding, scanner/Assist, Library reviewer, Atlas charts, Living Book, or other layouts. Hide until saved completion state has hydrated; reuse existing persistent one-time completion key.",
   "owner_approval": "Owner specifically directed Atlas explanation to appear only within first-login onboarding and disappear forever after completion, 2026-10-17.",
   "previous_approved_git_blob_sha": "463a84ee43524249d64dd93c416883d5fea568d6",
-  "approved_git_blob_sha": "f02bc1d74a12eee0db30cd5787a8133555e606ce",
+  "approved_git_blob_sha": "5ec933dc6a0fa013cb370c72971d293c32a64ca6",
   "release_approved": false,
   "installed_apk_approved": false,
   "changes": [
@@ -17,18 +17,6 @@
       "new": "    SecureStore.getItemAsync(onboardingDoneKey).then(value => {\n      setOnboardingDone(value === '1');\n    }).catch(() => {\n      // A storage read error cannot be treated as a fresh first login.\n      // Fail closed rather than repeat an already dismissed walkthrough.\n      setOnboardingDone(true);\n    }).finally(()=>setOnboardingReady(true));"
     },
     {
-      "old": "  async function finishOnboarding() {\n    setOnboardingDone(true);\n    await SecureStore.setItemAsync(onboardingDoneKey, '1');\n  }",
-      "new": "  async function finishOnboarding() {\n    try {\n      // The guide disappears only after the one-time completion is durable.\n      await SecureStore.setItemAsync(onboardingDoneKey, '1');\n      setOnboardingDone(true);\n    } catch {\n      setError('Could not save setup completion. Try again.');\n    }\n  }"
-    },
-    {
-      "old": "  function OnboardingGuide() {\n    if (onboardingDone) return null;",
-      "new": "  function OnboardingGuide() {\n    if (!onboardingReady || onboardingDone) return null;"
-    },
-    {
-      "old": "            <Text style={[styles.meta,{color:p.muted}]}>{setupReady\n              ? 'Tap a book to correct its details. Assist fills the gaps; file organisation is optional in Settings.'\n              : 'Available when preparation finishes.'}</Text>",
-      "new": "            <Text style={[styles.meta,{color:p.muted}]}>{setupReady\n              ? 'Tap a book to correct its details. Assist fills the gaps; file organisation is optional in Settings.'\n              : 'Available when preparation finishes.'}</Text>\n            <Text style={[styles.meta,{color:p.muted,marginTop:4}]}>Atlas maps published works. Local books enter once metadata and cover review are complete; Library source and folder filters also apply.</Text>"
-    },
-    {
       "old": "  const atlasAllPublishedWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,'all'),[sourceWorks]);\n  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,sourceFilter),[sourceFilter,sourceWorks]);",
       "new": "  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,sourceFilter),[sourceFilter,sourceWorks]);"
     },
@@ -39,6 +27,14 @@
     {
       "old": "        {!atlasListMode&&(sourceFilter!=='all'||!!space)&&atlasUniverseWorks.length>0?\n          <Pressable accessibilityRole=\"button\" accessibilityLabel=\"Clear Atlas source and space filters\" onPress={()=>{setSourceFilter('all');setSpace('');}} style={{minHeight:44,justifyContent:'center',alignSelf:'flex-start'}}>\n            <Text style={{color:p.sage,fontSize:12,fontWeight:'700'}}>Filtered Atlas · Show all published works</Text>\n          </Pressable>:null}\n        {atlasUniverseWorks.length===0&&localCatalogReady?\n          <View style={{borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:p.line,paddingVertical:18,gap:9}}>\n            <Text style={{color:p.ink,fontSize:14,fontWeight:'700'}}>{atlasHiddenByLibraryFilter?'Published titles are hidden by Library filters':'No completed titles are ready for Atlas yet'}</Text>\n            <Text style={{color:p.muted,fontSize:12,lineHeight:18}}>{atlasHiddenByLibraryFilter?'Your catalogue contains published works, but the current source or space selection hides them. Nothing has been deleted.':'Atlas only includes fully reviewed, published works with title, author and cover artwork. Needs Review items are not shown.'}</Text>\n            <Pressable accessibilityRole=\"button\" accessibilityLabel={atlasHiddenByLibraryFilter?'Show all published Atlas works':'Review unpublished library titles'} onPress={()=>{if(atlasHiddenByLibraryFilter){setSourceFilter('all');setSpace('');}else{setSourceFilter('local');setReviewOnly(true);setActiveTab('library');}}} style={{minHeight:44,alignSelf:'flex-start',justifyContent:'center'}}>\n              <Text style={{color:p.sage,fontSize:13,fontWeight:'700'}}>{atlasHiddenByLibraryFilter?'Show all published works':'Open Needs Review'}</Text>\n            </Pressable>\n          </View>:null}",
       "new": "        {!atlasListMode&&(sourceFilter!=='all'||!!space)?\n          <Pressable accessibilityRole=\"button\" accessibilityLabel=\"Show all Atlas works\" onPress={()=>{setSourceFilter('all');setSpace('');}} style={{minHeight:44,justifyContent:'center',alignSelf:'flex-start'}}>\n            <Text style={{color:p.sage,fontSize:12,fontWeight:'700'}}>Show all</Text>\n          </Pressable>:null}"
+    },
+    {
+      "old": "      <OnboardingGuide/>\n\n      {shelfSections.find(item=>item.id==='continue')",
+      "new": "      <FirstRunOnboarding/>\n\n      {shelfSections.find(item=>item.id==='continue')"
+    },
+    {
+      "old": "  function OnboardingGuide() {",
+      "new": "  function FirstRunOnboarding() {\n    if(!onboardingReady||onboardingDone)return null;\n    return <View style={{gap:7}}>\n      <OnboardingGuide/>\n      <Text style={[styles.meta,{color:p.muted,marginHorizontal:2,marginTop:-2}]}>\n        Atlas includes published local books after metadata and cover review. Library source and folder filters also apply.\n      </Text>\n    </View>;\n  }\n\n  function OnboardingGuide() {"
     }
   ]
 }

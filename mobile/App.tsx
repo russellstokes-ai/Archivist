@@ -4308,13 +4308,8 @@ function Client() {
   }
 
   async function finishOnboarding() {
-    try {
-      // The guide disappears only after the one-time completion is durable.
-      await SecureStore.setItemAsync(onboardingDoneKey, '1');
-      setOnboardingDone(true);
-    } catch {
-      setError('Could not save setup completion. Try again.');
-    }
+    setOnboardingDone(true);
+    await SecureStore.setItemAsync(onboardingDoneKey, '1');
   }
 
   async function useArchivistLocallyOnly(){
@@ -4406,8 +4401,18 @@ function Client() {
     </View>;
   }
 
+  function FirstRunOnboarding() {
+    if(!onboardingReady||onboardingDone)return null;
+    return <View style={{gap:7}}>
+      <OnboardingGuide/>
+      <Text style={[styles.meta,{color:p.muted,marginHorizontal:2,marginTop:-2}]}>
+        Atlas includes published local books after metadata and cover review. Library source and folder filters also apply.
+      </Text>
+    </View>;
+  }
+
   function OnboardingGuide() {
-    if (!onboardingReady || onboardingDone) return null;
+    if (onboardingDone) return null;
     const reviewCount = localBooks.filter(book => book.needsReview).length;
     const hasFolder = localFolders.length > 0;
     const hasServer = !!session;
@@ -4459,7 +4464,6 @@ function Client() {
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
               ? 'Tap a book to correct its details. Assist fills the gaps; file organisation is optional in Settings.'
               : 'Available when preparation finishes.'}</Text>
-            <Text style={[styles.meta,{color:p.muted,marginTop:4}]}>Atlas maps published works. Local books enter once metadata and cover review are complete; Library source and folder filters also apply.</Text>
           </View>
         </View>
 
@@ -5797,7 +5801,7 @@ function Client() {
         </Pressable>
       </PageToolbar>
 
-      <OnboardingGuide/>
+      <FirstRunOnboarding/>
 
       {shelfSections.find(item=>item.id==='continue')?section(shelfSections.find(item=>item.id==='continue') as ShelfSectionPref):null}
 

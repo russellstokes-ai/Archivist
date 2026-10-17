@@ -21,7 +21,7 @@ module.exports=function test14AppException(root,actual){
    if(oneTime.schema_version!==1||oneTime.path!=='mobile/App.tsx'||
       oneTime.previous_approved_git_blob_sha!==gallery.approved_git_blob_sha||
       oneTime.release_approved!==false||oneTime.installed_apk_approved!==false||
-      !Array.isArray(oneTime.changes)||oneTime.changes.length!==8)return false;
+      !Array.isArray(oneTime.changes)||oneTime.changes.length!==7)return false;
    for(const {old,new:replacement} of [...oneTime.changes].reverse()){
      if(typeof old!=='string'||typeof replacement!=='string'||!old.length||
         !replacement.length||source.split(replacement).length!==2)return false;
