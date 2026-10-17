@@ -53,6 +53,7 @@ import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {comicWebViewFailure} from './readerAccessErrors';
+import {effectiveLocalReaderFormat} from './comicSourceFormat';
 import {comicReaderWebViewSource} from './comicReaderWebViewSource';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';
@@ -3935,6 +3936,11 @@ function Client() {
     if (!book.available) {
       setError('This file is currently unavailable.');
       return;
+    }
+    // Reader-only SAF identity resolution; never rewrite scanner metadata.
+    if(book.source!=='server'&&book.uri){
+      const format=effectiveLocalReaderFormat(book.format,book.uri);
+      if(format!==book.format)book={...book,format};
     }
     const generation=++readerOpenGeneration.current;
     comicWebViewFallbackAttempt.current=false;
