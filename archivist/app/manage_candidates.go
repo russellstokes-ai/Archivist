@@ -33,23 +33,13 @@ type openLibrarySearchResponse struct {
 }
 
 func parseOpenLibraryCandidates(r io.Reader) ([]publicMetadataCandidate, error) {
-	var result openLibrarySearchResponse
-	if err := json.NewDecoder(io.LimitReader(r, 2<<20)).Decode(&result); err != nil {
-		return nil, err
-	}
-	out := make([]publicMetadataCandidate, 0, len(result.Docs))
-	for _, doc := range result.Docs {
-		title := strings.TrimSpace(doc.Title)
-		if title == "" { continue }
-		item := publicMetadataCandidate{WorkID:doc.Key,Title:title,PublishedYear:doc.Year,Source:"Open Library"}
-		if len(doc.Authors)>0 { item.Author = strings.TrimSpace(doc.Authors[0]) }
-		if len(doc.ISBN)>0 { item.ISBN = strings.TrimSpace(doc.ISBN[0]) }
-		if len(doc.Publishers)>0 { item.Publisher = strings.TrimSpace(doc.Publishers[0]) }
-		if item.PublishedYear<1000 || item.PublishedYear>3000 { item.PublishedYear=0 }
-		out=append(out,item)
-		if len(out)>=10 { break }
-	}
-	return out,nil
+ raw,err:=io.ReadAll(io.LimitReader(r,2<<20))
+ if err!=nil{return nil,err}
+ candidates,err:=parseOpenLibraryMulti(raw,multiMetadataQuery{})
+ if err!=nil{return nil,err}
+ out:=make([]publicMetadataCandidate,0,len(candidates))
+ for _,candidate:=range candidates{out=append(out,candidate.publicMetadataCandidate)}
+ return out,nil
 }
 
 func (a *app) manageCandidateRoutes(mux *http.ServeMux) {

@@ -247,7 +247,7 @@ func TestRunningScanCancellationLeavesExistingCatalogueUntouched(t *testing.T){
     if _,err:=a.db.Exec("UPDATE jobs SET state='running' WHERE id=?",jobID);err!=nil{t.Fatal(err)}
     requested:=false
     got:=a.scanWithProgressJob(context.Background(),1,jobID,func(done,total int){
-        if !requested && done>=10 && total>=60{
+        if !requested && done>=10{
             res:=scanJobRequest(a,"POST","/api/jobs/"+strconv.FormatInt(jobID,10)+"/cancel","test-key",true)
             if res.Code!=202{t.Errorf("midstage stop was refused: %d %s",res.Code,res.Body.String())}
             requested=true

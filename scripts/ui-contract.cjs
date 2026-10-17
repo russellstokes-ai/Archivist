@@ -64,3 +64,5 @@ for(const sourceText of [scanManager,scanDashboard]){
   assert.ok(sourceText.includes("'/cancel'")||sourceText.includes("+action,'POST'"),
     'Owner scan actions must post actual API requests');
 }
+
+require('./server-onboarding.test.cjs');

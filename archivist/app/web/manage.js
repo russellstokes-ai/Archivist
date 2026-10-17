@@ -135,23 +135,30 @@
     const query=$('candidate-query').value.trim();
     if(query.length<2){notice('Enter at least two characters to search.',true);return}
     const button=$('candidate-search-button'),box=$('candidate-results');
-    button.disabled=true;box.replaceChildren(e('p','Searching Open Library…','subtext'));
+    button.disabled=true;box.replaceChildren(e('p','Searching book metadata…','subtext'));
     try{
-      const response=await api('./api/manage/metadata-candidates?q='+encodeURIComponent(query));
+      const params=new URLSearchParams({q:query,mode:'multi',title:target.title||'',author:target.author||'',format:target.format||''});
+      const isbn=$('editor-fields').querySelector('[name="isbn"]')?.value.trim();if(isbn)params.set('isbn',isbn);
+      const response=await api('./api/manage/metadata-candidates?'+params);
       // A previous title's late provider response cannot populate this editor.
       if(generation!==candidateGeneration||editing!==target)return;
       box.replaceChildren();
+      for(const warning of response.warnings||[])box.append(e('p',warning,'subtext'));
       const candidates=Array.isArray(response.candidates)?response.candidates:[];
       if(!candidates.length){box.append(e('p','No matches found. Your current metadata has not changed.','subtext'));return}
       for(const candidate of candidates){
         const card=e('article',undefined,'candidate-card');
         card.append(e('strong',candidate.title||'Untitled'),e('small',[candidate.author,candidate.publishedYear,candidate.publisher].filter(Boolean).join(' · '),'subtext'));
         const buttons=e('div',undefined,'candidate-fields');
+        card.append(e('small',candidate.source||'Metadata provider','subtext'));
+        for(const warning of candidate.warnings||[])card.append(e('p',warning,'subtext'));
         for(const [key,label] of [['title','Title'],['author','Author'],['publishedYear','Year'],['isbn','ISBN'],['publisher','Publisher']]){
           if(!candidate[key])continue;
+          if(key==='isbn'&&candidate.identifierMismatch)continue;
+          if(key==='publishedYear'&&candidate.yearType==='store release')continue;
           const field=$('editor-fields').querySelector('[name="'+key+'"]');if(!field||field.readOnly)continue;
           const choose=e('button','Use '+label,'quiet');choose.type='button';choose.title='Replace '+label+': '+field.value+' → '+String(candidate[key]);
-          choose.onclick=()=>{field.value=String(candidate[key]);field.focus();notice('Selected '+label+' from Open Library. Review your changes before saving.')};
+          choose.onclick=()=>{field.value=String(candidate[key]);field.focus();notice('Selected '+label+' from '+(candidate.source||'metadata provider')+'. Review your changes before saving.')};
           buttons.append(choose);
         }
         card.append(buttons);box.append(card);

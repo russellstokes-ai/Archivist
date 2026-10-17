@@ -179,6 +179,12 @@ func (a *app) addSource(space, path string) error {
 	if e != nil {
 		return errors.New("folder is unavailable or is not a directory")
 	}
+ // Verify read access without modifying media or walking the whole tree.
+ folder,readErr:=os.Open(p)
+ if readErr!=nil{return errors.New("folder cannot be read; check the mount and server permissions")}
+ _,readErr=folder.ReadDir(1)
+ folder.Close()
+ if readErr!=nil&&readErr!=io.EOF{return errors.New("folder cannot be read; check the mount and server permissions")}
 	space = strings.TrimSpace(space)
 	if space == "" || len(space) > 100 {
 		return errors.New("enter a space name, up to 100 characters")
@@ -258,18 +264,8 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 		a.db.Exec("UPDATE sources SET status='Unavailable' WHERE id=?", id)
 		return errors.New("source unavailable; previous catalogue retained")
 	}
-	total := 0
-    countErr:=filepath.WalkDir(root,func(path string,d fs.DirEntry,walkErr error)error{
-        if err:=checkpoint(false);err!=nil{return err}
-		if walkErr != nil || d.IsDir() || d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
-			return nil
-		}
-		if kind(path) != "" { total++ }
-		return nil
-	})
-    if countErr!=nil{return countErr}
-	if progress != nil { progress(0, total) }
-    if err:=checkpoint(true);err!=nil{return err}
+	total := 0 // Unknown until discovery finishes.
+	if progress != nil { progress(0, 0) }
 	stage, e := os.CreateTemp("", "archivist-scan-*.jsonl")
 	if e != nil {
 		return e
@@ -295,27 +291,10 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
-	cached := map[string]cachedEntry{}
-	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
-	if cacheErr != nil {
-		return cacheErr
-	}
-	for rows.Next() {
-		var rel string
-		var item cachedEntry
-		var review int
-		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.Genre,&item.SeriesNumber,&item.PublishedYear,&item.Narrator,&item.Publisher,&item.ISBN,&item.ASIN,&item.Language,&item.Description,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
-			rows.Close()
-			return cacheErr
-		}
-		item.NeedsReview = review != 0
-		cached[rel] = item
-	}
-	if cacheErr = rows.Err(); cacheErr != nil {
-		rows.Close()
-		return cacheErr
-	}
-	rows.Close()
+ // Keep one cached record resident using the indexed source/path key.
+ cache, cacheErr := a.db.Prepare("SELECT title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=? AND relative_path=?")
+ if cacheErr != nil { return cacheErr }
+ defer cache.Close()
 
 	count := 0
 	reused := 0
@@ -355,7 +334,12 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			SizeBytes: info.Size(),
 			ModifiedUnix: info.ModTime().Unix(),
 		}
-		if existing, ok := cached[rel]; ok && existing.ScanSignature == signature {
+		var existing cachedEntry
+        var review int
+        cacheErr := cache.QueryRow(id,rel).Scan(&existing.Title,&existing.Author,&existing.Series,&existing.Genre,&existing.SeriesNumber,&existing.PublishedYear,&existing.Narrator,&existing.Publisher,&existing.ISBN,&existing.ASIN,&existing.Language,&existing.Description,&existing.MetadataSource,&existing.MetadataConfidence,&review,&existing.ReviewReason,&existing.ScanSignature,&existing.SizeBytes,&existing.ModifiedUnix)
+        if cacheErr != nil && cacheErr != sql.ErrNoRows { return cacheErr }
+        existing.NeedsReview = review != 0
+        if cacheErr == nil && existing.ScanSignature == signature {
 			item.Title = existing.Title
 			item.Author = existing.Author
 			item.Series = existing.Series
@@ -396,7 +380,7 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			reviewCount++
 		}
 		count++
-		if progress != nil && (count == total || count%10 == 0) { progress(count, total) }
+		if progress != nil && count%10 == 0 { progress(count, 0) }
 		return encoder.Encode(item)
 	})
 	if e != nil {
@@ -404,6 +388,8 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 		a.db.Exec("UPDATE sources SET status='Scan failed; catalogue retained' WHERE id=?", id)
 		return errors.New("scan could not read every folder; previous catalogue retained")
 	}
+    total = count
+    if progress != nil { progress(count, total) }
     if err:=checkpoint(true);err!=nil{return err}
     // Owner stop and this transition are competing conditional SQLite
     // updates: only the winner may change the state. After this transition,

@@ -181,7 +181,7 @@ func (a *app) worker(ctx context.Context) {
             if claimErr!=nil||n!=1{continue}
 			state, msg := "complete", "Scan complete"
 			progressFn := func(done, total int) {
-				message := "Scanning"
+				message := fmt.Sprintf("Reading book details · %d files found", done)
 				if total > 0 {
 					message = fmt.Sprintf("Scanning %d of %d files", done, total)
 				}

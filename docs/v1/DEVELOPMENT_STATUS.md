@@ -380,3 +380,7 @@ See [full scanner partial-source and coverage QA report](./SERVER_SCANNER_PARTIA
 - **Handoff:** Item 1 is **source-development ready for item 2**, with *real* 1920×1080/ingress/browser accessibility and hardware signoff deferred to cross-cutting QA stages. Next item 2 is advanced metadata intelligence and explainable confidence across providers, not another replacement of the protected scanner. Full server release remains **NO-GO**.
 
 [Detailed source acceptance report](./SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md).
+
+## Server onboarding/import follow-on — 17 October 2026
+
+Compact state-based setup guidance, shared safe metadata candidates and single-pass scanning with one cached metadata record resident. Local browser contracts pass; Go and physical acceptance remain pending. Richer automatic enrichment and measured canonical performance equivalence are not claimed. See [acceptance notes](SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md).

@@ -17,7 +17,7 @@ assert(js.includes("api('./api/library-health')"),'manager health panel must use
 assert(js.includes('Storage unavailable'),'manager must distinguish missing NAS storage from stored catalogue flags');
 
 assert(!js.includes('innerHTML'),'render external provider metadata only as text, not HTML');
-assert(js.includes("encodeURIComponent(query)"),'encode optional provider searches');
+assert(js.includes("new URLSearchParams({q:query"),'encode optional provider searches');
 assert(js.includes("candidate[key]"),'metadata candidates need per-field selection');
 assert(css.includes('prefers-reduced-motion'),'manager must respect reduced motion');
 assert(css.includes('max-width:590px'),'manager must have phone layout');

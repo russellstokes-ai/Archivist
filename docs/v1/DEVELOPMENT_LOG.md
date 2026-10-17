@@ -350,3 +350,7 @@ A1–A6 source corrections and #20/#25 lifecycle candidates implemented under ex
 ## 2026-10-17 — Scoped family access, catalogue views and metadata
 
 User-authorised server-only follow-on from 577f3b5: explicit per-user library grants persisted without startup/new-source broadening; legacy spaces API retained; shared-page table/grid/list; Apple Books text-only ebook/audiobook metadata with manual review, store-date guard, safe source link and pacing. Google Books remains optional through a server environment key. Manager regression first failed and now passes; Go/packaging need hosted exact-head CI because local tools are absent. Protected blobs verified unchanged. Physical/browser/commercial acceptance remains blocked. Details: SERVER_FAMILY_VIEWS_METADATA_QA_2026-10-17.md. No APK, live media, merge or deployment.
+
+## 17 October 2026 — Server onboarding and import safety
+
+Built on verified PR #83 head eee43df0b07024563950a25fe643c3d931c5e980. Added concise owner guidance, directory-read preflight, one-pass discovery and indexed metadata reuse, shared safe provider searches, regression fixtures and optional synthetic 10,020-file measurement. Preserved atomic grouping, manual edits, original files and canonical/mobile sources. Local JS checks pass; Go unavailable locally. No commercial acceptance, merge or deployment. Details: SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md.

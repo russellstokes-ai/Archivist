@@ -1,13 +1,14 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#081B27"><title>Archivist</title><link rel="stylesheet" href="./style.css"><script defer src="./app.js"></script><script defer src="./catalogue.js"></script><script defer src="./playback.js"></script><script defer src="./household.js"></script><script defer src="./accounts.js"></script><script defer src="./organise.js"></script><script defer src="./filemoves.js"></script></head><body>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#081B27"><title>Archivist</title><link rel="stylesheet" href="./style.css"><script defer src="./onboarding.js"></script><script defer src="./app.js"></script><script defer src="./catalogue.js"></script><script defer src="./playback.js"></script><script defer src="./household.js"></script><script defer src="./accounts.js"></script><script defer src="./organise.js"></script><script defer src="./filemoves.js"></script></head><body>
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="app-header"><img class="header-mark" src="./assets/archivist-app-icon.png" alt="" width="48" height="48"><span class="brand-wordmark">Archivist</span><div class="header-actions"><a id="assist-link" href="./manage.html" hidden>Archivist Assist</a><select id="theme" aria-label="Appearance"><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select></div></header>
 <main id="main" tabindex="-1">
 <div id="activity" class="activity-banner" hidden role="status" aria-live="polite"><div><strong id="activity-label">Working…</strong><span id="activity-detail"></span></div><progress id="activity-progress"></progress></div>
 
-<section id="setup" hidden class="auth-card"><span class="eyebrow">First run</span><h1>Create owner access</h1><p>Choose the access key you will use to manage this Archivist server.</p><form id="setup-form"><label>Owner access key<input id="setup-key" type="password" required minlength="8" autocomplete="new-password"></label><button class="primary">Create access</button></form></section>
+<section id="setup" hidden class="auth-card"><span class="eyebrow">First run</span><h1>Create owner access</h1><p>Create your private owner access. You can add family accounts later.</p><form id="setup-form"><label>Owner access key<input id="setup-key" type="password" required minlength="8" autocomplete="new-password"></label><button class="primary">Create access</button></form></section>
 <section id="unlock" hidden class="auth-card"><span class="eyebrow">Archivist</span><h1>Your library. Yours.</h1><p>Enter your Archivist access key.</p><form id="login"><label>Access key<input id="key" type="password" required autocomplete="current-password"></label><button class="primary">Unlock</button></form></section>
 
+<section id="import-guide" hidden class="panel-card" aria-labelledby="import-title"><h2 id="import-title"></h2><p id="import-detail" role="status" aria-live="polite"></p><button id="import-action" type="button" class="primary"></button></section>
 <section id="library" hidden>
   <div class="shelf-hero">
     <div><span class="eyebrow">Your collection</span><h1>Library</h1><p>Every book. In its place.</p></div>
@@ -44,8 +45,8 @@
   </div>
 
   <section id="sources" role="tabpanel" data-settings-panel="library">
-    <div class="workflow-steps"><span><b>1</b>Add folders</span><span><b>2</b>Scan & enrich</span><span><b>3</b>Browse Shelf</span></div>
-    <section class="panel-card"><div class="section-heading"><div><h2>Add a source</h2><p>Add media folders without changing their contents.</p></div></div><form id="add"><label>Folder on the server<input id="path" required placeholder="/media/books"></label><label>Library space<input id="new-space" required value="My library" maxlength="100" list="spaces"><datalist id="spaces"></datalist></label><button class="primary">Add folder</button></form><p class="note">Scanning reads metadata and builds the Shelf. Sorting files is optional.</p></section>
+    <div class="workflow-steps"><span><b>1</b>Add folders</span><span><b>2</b>Import books</span><span><b>3</b>Review & open Shelf</span></div>
+    <section class="panel-card"><div class="section-heading"><div><h2>Add a source</h2><p>Add media folders without changing their contents.</p></div></div><form id="add"><label>Folder on the server<input id="path" required placeholder="/media/books"></label><label>Library space<input id="new-space" required value="My library" maxlength="100" list="spaces"><datalist id="spaces"></datalist></label><button class="primary">Add folder</button></form><p class="note">Your original files stay unchanged.</p><details><summary>Using Docker or a network share?</summary><p>Choose the path visible inside the server, such as /media/books. Mount your share before adding it. Read-only access is enough to import.</p></details></section>
     <section class="panel-card"><div class="section-heading"><div><h2>Sources</h2><p>Scan or refresh a source when files change.</p></div></div><div id="source-list"></div><div id="scan-jobs" hidden><h3>Scan activity</h3><div id="jobs"></div></div></section>
   </section>
 

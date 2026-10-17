@@ -1,6 +1,15 @@
 const $=id=>document.getElementById(id);
 let page='library',request=0,currentProfile=null,libraryOffset=0,libraryFormat='',libraryGenre='',libraryYear=0,summaryData=null;
 const pageSize=60;
+let importSources=[],importJobs=[];
+function renderImportGuide(){
+ const guidance=importGuidance(currentProfile?.owner,importSources,importJobs,summaryData||{});
+ $('import-guide').hidden=!guidance;if(!guidance)return;
+ $('import-title').textContent=guidance.title;$('import-detail').textContent=guidance.detail;
+ $('import-action').textContent=guidance.label;
+ $('import-action').onclick=()=>{if(guidance.action==='review'){window.location.href='./manage.html';return}show('settings');$(guidance.action==='folder'?'path':'source-list').scrollIntoView({block:'center'});if(guidance.action==='folder')$('path').focus()};
+}
+
 
 function message(text){$('status').textContent=text}
 function activity(label,detail='',current=null,total=null){
@@ -181,6 +190,7 @@ async function loadLibrarySummary(){
 
 async function loadSources(){
   const sources=await api('./api/sources'),value=$('space').value;
+  importSources=sources;renderImportGuide();
   $('space').replaceChildren(new Option('All spaces',''));$('spaces').replaceChildren();
   for(const name of [...new Set(sources.map(s=>s.space))]){$('space').add(new Option(name,name));$('spaces').append(new Option(name,name))}
   if([...$('space').options].some(o=>o.value===value))$('space').value=value;
@@ -196,7 +206,7 @@ async function loadSources(){
     const actions=element('div');actions.className='source-actions';
     const scan=element('button','Scan / refresh');scan.className='primary';scan.onclick=async()=>{
       scan.disabled=true;scan.textContent='Starting scan…';activity('Starting scan',s.space);
-      try{await api('./api/sources/'+s.id+'/scan','POST');message('Scan started. Shelf updates automatically when it completes.');pollJobs()}
+      try{await api('./api/sources/'+s.id+'/scan','POST');message('Import started. Review new books in Assist when it completes.');pollJobs()}
       catch(e){message(e.message)}finally{activity('');scan.disabled=false;scan.textContent='Scan / refresh'}
     };
     const watchWrap=element('span');watchWrap.className='watch-controls';
@@ -272,7 +282,7 @@ async function start(){
   $('setup').hidden=true;$('unlock').hidden=true;$('nav').hidden=false;
   document.querySelector('[data-page="settings"]').hidden=!currentProfile.owner;
   $('assist-link').hidden=!currentProfile.owner;
-  show('library');navigateServerHash();window.dispatchEvent(new Event('archivist-ready'))
+  show('library');renderImportGuide();navigateServerHash();window.dispatchEvent(new Event('archivist-ready'))
 }
 async function boot(){try{await start()}catch(e){try{const setup=await api('./setup/status');$('setup').hidden=setup.configured;$('unlock').hidden=!setup.configured}catch(err){message(err.message)}}}
 
@@ -338,10 +348,10 @@ async function pollJobs(){
   clearTimeout(jobTimer);
   try{
     if(!currentProfile?.owner)return;
-    const jobs=await api('./api/jobs');$('scan-jobs').hidden=jobs.length===0;$('jobs').replaceChildren();
+    const jobs=await api('./api/jobs');importJobs=jobs;renderImportGuide();$('scan-jobs').hidden=jobs.length===0;$('jobs').replaceChildren();
     for(const j of jobs.slice(0,5)){
       const row=element('article');row.className='scan-card';const top=element('div');top.className='scan-head';const name=element('strong','Scan '+j.id);const state=element('span',j.state);state.className='status-pill '+(j.state==='failed'?'status-error':j.state==='complete'?'status-ok':'status-active');top.append(name,state);row.append(top,element('p',j.message||'Preparing scan…'));
-      if(['queued','running','cancelling','committing'].includes(j.state)){const done=Number(j.progress||0),total=Number(j.total||0),pct=total>0?Math.min(100,Math.round(done/total*100)):0;const meta=element('div');meta.className='progress-meta';meta.append(element('span',total?done+' / '+total+' files':'Counting files…'),element('strong',total?pct+'%':'…'));const bar=element('progress');bar.max=total||1;bar.value=total?done:0;row.append(meta,bar)}
+      if(['queued','running','cancelling','committing'].includes(j.state)){const done=Number(j.progress||0),total=Number(j.total||0),pct=total>0?Math.min(100,Math.round(done/total*100)):0;const meta=element('div');meta.className='progress-meta';meta.append(element('span',total?done+' / '+total+' files':done+' files found'),element('strong',total?pct+'%':'…'));const bar=element('progress');if(total){bar.max=total;bar.value=done}row.append(meta,bar)}
       if((j.state==='queued'||(j.state==='running'&&j.canCancel))||j.state==='failed'||j.state==='cancelled'){
         const action=(j.state==='queued'||j.state==='running')?'cancel':'retry';
         const button=element('button',action==='cancel'?(j.state==='running'?'Request safe stop':'Cancel queued scan'):'Retry scan');
@@ -363,10 +373,10 @@ async function pollJobs(){
       }
       $('jobs').append(row)
     }
-    const signature=JSON.stringify(jobs);
+    const signature=JSON.stringify(jobs.map(j=>[j.id,j.state]));
     if(signature!==jobSignature){jobSignature=signature;await loadSources();await loadLibrarySummary();await loadBooks(false)}
   }catch(e){if(!$('unlock').hidden)return;message(e.message)}
-  finally{jobTimer=setTimeout(pollJobs,2000)}
+  finally{jobTimer=setTimeout(pollJobs,importJobs.some(j=>['queued','running','cancelling','committing'].includes(j.state))?2000:15000)}
 }
 
 boot();pollJobs();

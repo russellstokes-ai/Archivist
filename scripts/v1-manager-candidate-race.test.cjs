@@ -106,6 +106,7 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   assert.equal(titleField().value,'Book Alpha');
   const older=search();
   assert.equal(requests.length,1);
+  assert(requests[0].url.includes('mode=multi'),'file editor must use the shared safe provider path');
   assert.equal(elements.get('candidate-search-button').disabled,true);
   close();
   open(1);
@@ -123,7 +124,7 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   requests[1].resolve(lookupResponse('Correct Beta Candidate'));
   await current;await settle();
   assert.equal(results().length,1,'current editor must receive its own candidates');
-  const choices=results()[0].children[2].children;
+  const choices=results()[0].children.find(child=>child.className==='candidate-fields').children;
   const useTitle=choices.find(el=>el.textContent==='Use Title');
   assert(useTitle,'current candidate must retain a field-by-field selection control');
   useTitle.onclick();
@@ -212,5 +213,11 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   assert.equal(titleField().readOnly,false,'explicit unlock restores field editability');
   assert.equal(lockButton.attributes['aria-pressed'],'false');
   assert.equal(elements.get('save-editor').disabled,false);
+  const guarded=search();
+  requests.at(-1).resolve(reply({candidates:[{title:'Store result',source:'Apple Books',publishedYear:2026,yearType:'store release',isbn:'9780441172719',identifierMismatch:true}]}));
+  await guarded;await settle();
+  const guardedChoices=results()[0].children.find(child=>child.className==='candidate-fields').children;
+  assert(!guardedChoices.some(child=>child.textContent==='Use Year'),'store release cannot replace first-publication year');
+  assert(!guardedChoices.some(child=>child.textContent==='Use ISBN'),'mismatched identifier cannot be applied');
   console.log('PASS: metadata editor is revision-aware, guards candidate/save races, and supports real lock/unlock controls');
 })().catch(error=>{console.error(error);process.exitCode=1});
