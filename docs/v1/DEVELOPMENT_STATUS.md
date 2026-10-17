@@ -1,3 +1,13 @@
+## Home Assistant test build — 17 October 2026
+
+Version **0.9.3-qa.20261017.1**, built and tested source **8c4e02e6f85334c892ff7dba5e078600e54f592d**.
+
+- [Server checks passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785499): root/packaged Go tests, ARM64 compile/runtime, JS contracts, parity, Docker and HA smoke checks.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785558/artifacts/12116812219): Linux amd64/arm64 binaries, HA repository ZIP and SHA256SUMS. Artifact expires 24 October 2026; repository installation remains available.
+- Artifact archive SHA256: `7f78748c6ea18fa39bd37b7bb5ff39b6190acfa9a64d2a18bf354a4c031e144a`.
+- Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain BLOCKED. No commercial-release claim, merge or production deployment.
+- Subsequent documentation-only commit records these results; executable source and package version are unchanged.
+
 # Archivist v1.0 — Development State & Release Gate
 
 **Single current-status entrypoint · updated 17 October 2026.** This is a **point-in-time snapshot**, not a live dashboard. It differentiates the approved canonical app, protected development baseline, unmerged bug-fix candidates, separate commercial feature work and on-device acceptance. The machine-readable source is [DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json); retain every historical change in the [append-only development log](./DEVELOPMENT_LOG.md).

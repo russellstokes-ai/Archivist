@@ -1,20 +1,21 @@
 # Home Assistant test build — PR 83
 
-## Status: test candidate 0.9.3-qa.20261017.1 — validation in progress
+## Home Assistant test build — 17 October 2026
 
-Prepared server source: `6e91c2306698b32eee9471c61a97a87fa8079163`.
-The owner has now requested the final server build for installation testing.
-Server build and Go test results must be checked before treating it as validated.
-This is not a validated release. Physical Home Assistant/Pi4, NAS disconnect,
-browser and phone acceptance remain BLOCKED until tested on those devices.
-Earlier CI results and downloadable artifacts do not validate this candidate.
+Version **0.9.3-qa.20261017.1**, built and tested source **8c4e02e6f85334c892ff7dba5e078600e54f592d**.
+
+- [Server checks passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785499): root/packaged Go tests, ARM64 compile/runtime, JS contracts, parity, Docker and HA smoke checks.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785558/artifacts/12116812219): Linux amd64/arm64 binaries, HA repository ZIP and SHA256SUMS. Artifact expires 24 October 2026; repository installation remains available.
+- Artifact archive SHA256: `7f78748c6ea18fa39bd37b7bb5ff39b6190acfa9a64d2a18bf354a4c031e144a`.
+- Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain BLOCKED. No commercial-release claim, merge or production deployment.
+- Subsequent documentation-only commit records these results; executable source and package version are unchanged.
 
 ## Add the test repository
 
 Use Home Assistant OS with the Supervisor app store on **aarch64 (64-bit Pi4)**
 or **amd64**. Home Assistant Container alone cannot install this app.
 
-Once the readiness checks below pass:
+To install the tested candidate:
 
 1. Open **Settings → Apps → Install app → ⋮ → Repositories**
    (older versions: **Settings → Add-ons → Add-on Store**).

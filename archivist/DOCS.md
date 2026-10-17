@@ -1,4 +1,4 @@
-> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261017.1; validation in progress.** See the [QA installation and build guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for the branch repository URL, validation status, setup, updates and rollback. The default repository URL below does not select this candidate.
+> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261017.1; server checks passed; ready for installation testing.** See the [QA installation and build guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for the branch repository URL, validation status, setup, updates and rollback. The default repository URL below does not select this candidate.
 
 # Archivist for Home Assistant — Documentation
 

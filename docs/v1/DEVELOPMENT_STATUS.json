@@ -1601,5 +1601,15 @@
       "guarded fill-missing preview"
     ],
     "go_tests_verified": false
+  },
+  "home_assistant_test_build_2026_10_17": {
+    "version": "0.9.3-qa.20261017.1",
+    "tested_sha": "8c4e02e6f85334c892ff7dba5e078600e54f592d",
+    "state": "built_server_ci_passed_ready_for_owner_testing",
+    "server_run": 39075785499,
+    "artifact_run": 39075785558,
+    "artifact_id": 12116812219,
+    "hardware_accepted": false,
+    "commercial_server_go": false
   }
 }

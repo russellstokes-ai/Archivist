@@ -358,3 +358,14 @@ Built on verified PR #83 head eee43df0b07024563950a25fe643c3d931c5e980. Added co
 ## 17 October 2026 — Complete bounded server enrichment candidate
 
 Continued from remote 7bc716a9b0fe8674a5cc405691dfc363708996e1. Added owner-requested Open Library descriptions, exact-ASIN Audnexus metadata, richer optional Google fields and guarded missing-field selection. Added regressions for wrong identity, stale description responses and comic-guard bypass; JavaScript regressions pass. Kept local scan/grouping and mobile sources protected. New Go fixtures await execution; owner selected Leave final build pending. No build, deployment, merge or release. QA details and physical acceptance steps remain in SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md.
+
+
+## Home Assistant test build — 17 October 2026
+
+Version **0.9.3-qa.20261017.1**, built and tested source **8c4e02e6f85334c892ff7dba5e078600e54f592d**.
+
+- [Server checks passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785499): root/packaged Go tests, ARM64 compile/runtime, JS contracts, parity, Docker and HA smoke checks.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785558/artifacts/12116812219): Linux amd64/arm64 binaries, HA repository ZIP and SHA256SUMS. Artifact expires 24 October 2026; repository installation remains available.
+- Artifact archive SHA256: `7f78748c6ea18fa39bd37b7bb5ff39b6190acfa9a64d2a18bf354a4c031e144a`.
+- Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain BLOCKED. No commercial-release claim, merge or production deployment.
+- Subsequent documentation-only commit records these results; executable source and package version are unchanged.
