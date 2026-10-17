@@ -1524,5 +1524,57 @@
       "server_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502872",
       "arm64_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502678"
     }
+  },
+  "server_seven_release_gates_20261017": {
+    "pr": 83,
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "source_code_checks": "a806ec5a8d437a8eebe88b15e5b58198c99f78ae",
+    "checked_packaging_commit": "20768b64d9c14e4b69be7380bac1122f690beaba",
+    "source_qa": "docs/v1/SERVER_SEVEN_GATE_RELEASE_QA_2026-10-17.md",
+    "stages": {
+      "1": {
+        "software": "green, multiarch native ARM64 and HA/Docker read-only smoke, d4a7d1a",
+        "physical": "blocked, no real Raspberry Pi/HAOS ingress"
+      },
+      "2": {
+        "software": "green, multi-source synthetic empty/unmounted/reconnect continuity",
+        "physical": "blocked, no real SMB/NFS disconnected mount"
+      },
+      "3": {
+        "software": "green, SQLite staged restore with household progress, publication, rollback snapshot",
+        "physical": "blocked, no power-cut or independent off-host restore"
+      },
+      "4": {
+        "software": "green, provider cache, ISBN/score validation, retry partial outage",
+        "physical": "blocked, representative real metadata-provider/annual/variant accuracy unaccepted"
+      },
+      "5": {
+        "software": "green, 10020 indexed items + review/Atlas/Shelf paging",
+        "physical": "blocked, Pi CPU/RAM and real 10k mixed-media dataset absent"
+      },
+      "6": {
+        "software": "green, cross-feature family/OPDS/Atlas/streaming/revocation",
+        "physical": "blocked, actual 1920x1080 HAOS browser, accessibility and remote phones absent"
+      },
+      "7": {
+        "software": "green, direct-peer throttling and actual QA artifacts built and checksummed",
+        "production": "blocked, security audit/SSL reverse-proxy, signed multiarch image, upgrade/rollback and owner release approval absent"
+      }
+    },
+    "ci": {
+      "nas_restore_large_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39061379284",
+      "metadata_access_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39062163904",
+      "qa_packaging_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39062366626",
+      "qa_artifact_id": 12112016159,
+      "qa_artifact_name": "archivist-server-qa-20768b64d9c14e4b69be7380bac1122f690beaba",
+      "qa_artifact_bytes": 17470120,
+      "qa_artifact_retention_days": 7,
+      "exact_latest_server_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39062366710"
+    },
+    "live_family_media_touched": false,
+    "canonical_mobile_touched": false,
+    "draft_unmerged": true,
+    "hardware_accepted": false,
+    "commercial_server_go": false
   }
 }

@@ -4,6 +4,17 @@
 
 > **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
 
+## 17 October 2026 — Seven-gate server release sprint: software QA green, hardware not accepted
+
+**Draft PR #83. Verified code at `a806ec5`; QA packaging at `20768b6`. Commercial NO-GO.** Two consolidated software commits added read-only Docker/HA/ARM64 smoke, multi-source NAS-disconnect preservation, verified SQLite staged backup/restore including family progress/publication, 10,020-item review/Shelf/Atlas paging, bounded metadata-provider cache with retry-after-outage, family/OPDS/Atlas/streaming integration, peer-aware credential throttle and QA artifact packaging. All seven gates have additional automated/source evidence; **none of the physical production sign-off is implied**.
+
+- [NAS/restore/10k & ARM64 server SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39061379284).
+- [Metadata, household integration, credential protection & ARM64 server SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39062163904).
+- [QA artifacts SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39062366626): Linux amd64/arm64 binaries, Home Assistant repository ZIP and SHA-256 manifest, one short-lived 17.5 MB Actions artifact; no public release.
+- [Latest packaging-source server CI SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39062366710). Physical Raspberry Pi 4B / Home Assistant ingress 1920×1080, real SMB/NFS, brownout/SSD recovery, real EPUB/CBR/CBZ/large-audio performance, live family phone/OPDS, security audit and signed production rollback remain **blocked or pending external acceptance**.
+
+Full factual [seven-stage acceptance report](SERVER_SEVEN_GATE_RELEASE_QA_2026-10-17.md). Do not merge/install against the real library, produce a commercial release tag or falsely claim 100% complete.
+
 ## 17 October 2026 — Release-blocker fixes: move journal and large-library completeness
 
 **Draft PR #83; commercial NO-GO.** Replaced a non-atomic preview-replacement sequence with one SQLite transaction: a failed new journal insert no longer invalidates the last valid file-move preview. Template batches no longer eagerly cancel earlier previews for unreviewed/conflicting records. Restored operations remain preview/explicit-Apply only.

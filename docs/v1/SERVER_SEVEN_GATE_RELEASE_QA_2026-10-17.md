@@ -40,3 +40,21 @@
 No new app/APK compilation, no canonical mobile scanner or reader change, no production merge, no public deployment, and no modification of actual household media. **CI and hosted ARM64 are necessary but not sufficient.** A fully green software QA matrix plus successful disposable-device and network share testing with retained snapshots is required before changing **NO-GO** to **GO**.
 
 **The fastest remaining sequence:** accept software CI for Stages 4/6/7, run the read-only smoke on the user's disposable Pi installation, exercise synthetic and representative media on actual SMB/NFS shares, capture browser/CPU/memory evidence, test restart/restore, verify pinning/upgrades and only then issue a production candidate.
+
+## Final source-check evidence and live-acceptance handoff
+
+| Stage | Exact verification | Source result | Physical / release status |
+|---|---|---|---|
+| 1 Deployment | [full NAS/recovery/ARM64/HA smoke CI](https://github.com/russellstokes-ai/Archivist/actions/runs/39061379284) | PASS | Pi4 4 GB SSD + actual HAOS/ingress BLOCKED |
+| 2 NAS safety | Same run, Go `TestMultiSourceNASLossDoesNotCrossContaminateBooksOrBookmarks` | PASS synthetic | SMB/NFS unmount/permission tests BLOCKED |
+| 3 State restore | Same run, Go `TestReleaseBackupRestoresBooksFamilyProgressAndRetainsRollback` | PASS synthetic | Off-host restored backup and actual brownout BLOCKED |
+| 4 Metadata | [provider cache/ranking suite](https://github.com/russellstokes-ai/Archivist/actions/runs/39062163904) | PASS source | External provider accuracy and real annual/variant fixtures BLOCKED |
+| 5 10k scale | [10,020-entry Go/SQLite query suite](https://github.com/russellstokes-ai/Archivist/actions/runs/39061379284) | PASS synthetic | Actual Pi RAM/latency/real archives BLOCKED |
+| 6 Cross-feature | [User/Atlas/OPDS/streaming/revoke suite](https://github.com/russellstokes-ai/Archivist/actions/runs/39062163904) | PASS source | Real 1920×1080/HA ingress/accessibility/phones BLOCKED |
+| 7 Security/packaging | [security CI](https://github.com/russellstokes-ai/Archivist/actions/runs/39062163904), [QA packaging SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39062366626), [latest server CI](https://github.com/russellstokes-ai/Archivist/actions/runs/39062366710) | PASS QA-only | Signed production image, restore/upgrade, audit and approval BLOCKED |
+
+**Actual QA artifact:** GitHub Actions `archivist-server-qa-20768b64d9c14e4b69be7380bac1122f690beaba`, artifact ID `12112016159`, 17,470,120 bytes, configured to expire after 7 days. It contains QA-only AMD64 and ARM64 server binaries, reproducible Home Assistant repository ZIP and `SHA256SUMS`. No release tagging/publishing is performed.
+
+**Disposable-device acceptance order:** On a real Pi 4B 4GB+SSD, deploy this source to an isolated data volume and readonly synthetic/owned media mounts. Run `ARCHIVIST_SMOKE_REQUIRE_PI=1 sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:5056` on the Pi, then exercise a synthetic SMB/NFS mount disappearing/empty/reappearing, pause/stop/retry scans, 2 simultaneous real audio/comic streams, publication and progress across two users, SSD restart after staged restore, confirmed independent rollback, and admin 1920×1080 keyboard/screen-reader/HA ingress. Record exact source/image checksum, OS/version, memory/latency, before/after IDs, logs and operator signoff. Never test destructive actions against real family media.
+
+**Decision:** As of the latest source and packaging checkpoint, software evidence is green but **hardware_accepted=false, merge=false, commercial_server_go=false**. This is the final required external input; further code changes should be driven by failures from that acceptance matrix rather than speculative features.
