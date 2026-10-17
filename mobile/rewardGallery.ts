@@ -13,7 +13,7 @@ export function rewardCabinetEntries(achievements:readonly Achievement[]):Reward
     const sorted=[...items].sort((a,b)=>a.target-b.target||a.id.localeCompare(b.id));
     const earned=sorted.filter(item=>item.unlocked);
     const featured=earned.length?earned[earned.length-1]:sorted[0];
-    const nextTier=sorted.find(item=>!item.unlocked&&item.target>featured.target);
+    const nextTier=earned.length?sorted.find(item=>!item.unlocked&&item.target>featured.target):undefined;
     const title=/^(.+?)\s*·\s*[\d,]+$/.exec(featured.title)?.[1]||featured.title;
     return {...featured,title,familyKey,earnedTiers:earned.length,totalTiers:sorted.length,...(nextTier?{nextTier}:{})};
   });

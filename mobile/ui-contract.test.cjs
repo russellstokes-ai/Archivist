@@ -187,8 +187,8 @@ assert.ok(source.includes('profileAvatar.photoUri?<Image') && source.includes('p
 assert.ok(source.includes('>PERSONAL BESTS</Text>') && source.includes('>CURRENT GOALS</Text>') && source.includes("recentAchievementId?'RECENT MILESTONES':'MILESTONE HIGHLIGHTS'") && source.includes('profileTraitRow'), 'Profile must include reading identity traits, personal bests, goals and milestone highlights');
 assert.ok(source.includes('>Your progression</Text>') && source.includes("id:'Reading' as const") && source.includes("id:'Listening' as const") && source.includes("id:'Library' as const") && source.includes("id:'Ritual' as const"), 'Rewards must expose the four long-term progression paths');
 assert.ok(source.includes('>Milestones</Text>') && source.includes("{level:5,title:'Explorer'") && source.includes("{level:60,title:'Master'"), 'Rewards must retain the long-horizon level milestone journey');
-assert.ok(source.includes('>Next up</Text>') && source.includes('>Trophy cabinet</Text>') && source.includes('rewardTrophyGrid') && source.includes('rewardMedal') && source.includes('rewardIcon(item)'), 'Rewards must use the graphical trophy cabinet and next-up hierarchy');
-assert.ok(source.includes('recentAchievementId') && source.includes('rewardPulseHalo') && source.includes('>RECENT</Text>') && source.includes('>Recently earned</Text>'), 'Recent rewards must receive a theme-aware outward halo and recent marker');
+assert.ok(source.includes('>Next up</Text>') && source.includes('>Trophy cabinet</Text>') && source.includes('rewardTrophyGrid') && source.includes('rewardMedal') && source.includes('rewardCabinetEntries(profileAchievements)') && source.includes('item.target.toLocaleString()'), 'Rewards must retain next-up hierarchy and show collectible numbered medallions with every underlying achievement tier preserved');
+assert.ok(source.includes('recentAchievementId') && source.includes('rewardPulseHalo') && source.includes("recentItem?'RECENT · ':'')") && source.includes('>Recently earned</Text>'), 'Recent minted rewards must retain the outward halo and visible recent marker');
 
 
 const atlasStart=source.indexOf('function Atlas()');

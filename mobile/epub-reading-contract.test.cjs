@@ -3,7 +3,7 @@ const {stripTypeScriptTypes}=require('node:module');
 const {DOMParser}=require('@xmldom/xmldom');
 const src=fs.readFileSync(path.join(__dirname,'epubContent.ts'),'utf8');
 const js=stripTypeScriptTypes(src,{mode:'transform'})
- .replace(/^import\s+\{DOMParser\}\s+from\s+['"]@xmldom\/xmldom['"];?/m,'')
+ .replace(/^\s*import\s+\{\s*DOMParser\s*\}\s+from\s+['"]@xmldom\/xmldom['"];?\s*$/m,'')
  .replace(/^export\s+/gm,'');
 const buildEpubContent=new Function('DOMParser',js+'\nreturn buildEpubContent;')(DOMParser);
 const entry=(name,data)=>({name,dir:false,async:async(kind)=>kind==='text'?data:Buffer.from(data).toString('base64')});
