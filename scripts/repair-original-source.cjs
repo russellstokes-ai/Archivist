@@ -4,6 +4,19 @@ module.exports=function(file){
  const root=path.resolve(__dirname,'..');
  const record=file==='mobile/localReader.ts'?'READER_REPAIR_EXCEPTION_2026-10-16.json':'LIVING_WRAPPER_REPAIR_EXCEPTION_2026-10-16.json';
  const e=JSON.parse(fs.readFileSync(path.join(root,'docs/v1',record)));let text=fs.readFileSync(path.join(root,file),'utf8');
+ if(file==='mobile/LivingBookCanvas.tsx'){
+  const next=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_LIVING_WRAPPER_EXCEPTION_2026-10-17.json'),'utf8'));
+  if(next.path!==file || next.previous_approved_git_blob_sha!==e.approved_git_blob_sha ||
+     next.release_approved!==false || next.installed_apk_approved!==false ||
+     hash(text)!==next.approved_git_blob_sha || next.changes.length!==2)
+    throw Error('Unreviewed Test 14 Living Book source');
+  for(const change of [...next.changes].reverse()){
+   if(text.split(change.new).length!==2)throw Error('Non-reversible Test 14 Living Book wrapper');
+   text=text.replace(change.new,change.old);
+  }
+  if(hash(text)!==e.approved_git_blob_sha)throw Error('Previous exact Living Book wrapper was modified');
+ }
+
  if(e.path!==file||hash(text)!==e.approved_git_blob_sha)throw Error('Unexpected source outside exact repair exception');
  for(const change of [...e.changes].reverse()){if(text.split(change.new).length!==2)throw Error('Non-reversible repair');text=text.replace(change.new,change.old);}
  if(hash(text)!==e.original_git_blob_sha)throw Error('Original source protection failed');return text;
