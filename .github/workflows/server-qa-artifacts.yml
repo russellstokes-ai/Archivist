@@ -1,6 +1,12 @@
 name: Archivist server QA artifacts (manual only)
 
 on:
+  # Only source changes to the QA packager build artefacts automatically.
+  # No image/tag/release is published; short-lived Actions artifacts only.
+  pull_request:
+    paths:
+      - '.github/workflows/server-qa-artifacts.yml'
+      - 'scripts/build-server-qa-artifacts.sh'
   workflow_dispatch:
     inputs:
       qa_version:
@@ -18,6 +24,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Verify protected source and server code
         run: |
           node scripts/v1-protection-gate.cjs
@@ -41,7 +49,7 @@ jobs:
       - name: Upload QA-only build evidence
         uses: actions/upload-artifact@v4
         with:
-          name: archivist-server-qa-${{ github.sha }}
+          name: archivist-server-qa-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/archivist-server-qa/
           retention-days: 7
           if-no-files-found: error
