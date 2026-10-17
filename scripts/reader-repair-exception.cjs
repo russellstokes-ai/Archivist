@@ -5,9 +5,21 @@ module.exports=function(root,file,actual,original){
  if(file!=='mobile/localReader.ts'||e.path!==file||e.release_approved!==false||e.original_git_blob_sha!==original)return false;
  let content=fs.readFileSync(path.join(root,file),'utf8');
  const test14=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_READER_DISPATCH_EXCEPTION_2026-10-17.json')));
+ const cbt=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_CBT_READER_EXCEPTION_2026-10-17.json')));
+ if(cbt.schema_version!==1||cbt.path!==file||
+    cbt.previous_approved_git_blob_sha!==test14.approved_git_blob_sha||
+    cbt.release_approved!==false||cbt.installed_apk_approved!==false||
+    cbt.changes.length!==4||cbt.approved_git_blob_sha!==actual)return false;
+ for(const change of [...cbt.changes].reverse()){
+   if(typeof change.old!=='string'||typeof change.new!=='string'||
+      !change.new.length||content.split(change.new).length!==2)return false;
+   content=content.replace(change.new,change.old);
+ }
+ const cbtReversed=Buffer.from(content);
+ if(crypto.createHash('sha1').update('blob '+cbtReversed.length+'\0').update(cbtReversed).digest('hex')!==test14.approved_git_blob_sha)return false;
  if(test14.path!==file||test14.previous_approved_git_blob_sha!==e.approved_git_blob_sha||
     test14.release_approved!==false||test14.installed_apk_approved!==false||
-    test14.approved_git_blob_sha!==actual||test14.changes.length!==2)return false;
+    test14.changes.length!==2)return false;
  for(const change of [...test14.changes].reverse()){
    if(content.split(change.new).length!==2)return false;
    content=content.replace(change.new,change.old);
