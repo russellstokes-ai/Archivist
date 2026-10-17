@@ -1,3 +1,5 @@
+> **PR 83 Home Assistant candidate: final build pending.** See the [QA installation and build guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for the branch repository URL, validation status, setup, updates and rollback. The default repository URL below does not select this candidate.
+
 # Archivist for Home Assistant — Documentation
 
 ## Overview

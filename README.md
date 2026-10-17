@@ -1,3 +1,5 @@
+> **PR 83 Home Assistant candidate: final build pending.** See the [QA installation and build guide](docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for the branch repository URL, validation status, setup, updates and rollback. The default repository URL below does not select this candidate.
+
 <p align="center">
   <img src="web/assets/archivist-primary-logo.png" alt="Archivist" width="220">
 </p>
