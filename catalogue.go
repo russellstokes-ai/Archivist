@@ -83,11 +83,18 @@ func commonValue(items []catalogueAsset, field func(catalogueAsset) string) stri
 
 // Auto-catalogue is conservative: a nested audiobook folder is one work;
 // standalone ebook/PDF/comic files are one work each. Explicit user groupings win.
+// Used both by manual metadata edits and by the scanning transaction.
+// The scan MUST commit asset upserts, logical-work grouping, edition links,
+// publication invalidation and source status together or not at all.
 func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
-	tx, e := a.db.Begin()
-	if e != nil { return e }
-	defer tx.Rollback()
+    tx,err:=a.db.Begin()
+    if err!=nil{return err}
+    defer tx.Rollback()
+    if err=a.syncAutoCatalogueTx(tx,sourceID);err!=nil{return err}
+    return tx.Commit()
+}
 
+func (a *app) syncAutoCatalogueTx(tx *sql.Tx,sourceID int64) error {
 	rows, e := tx.Query(`SELECT a.id,a.relative_path,a.title,a.author,a.series,a.genre,a.format,s.space,
 		COALESCE(w.auto,1)
 		FROM assets a JOIN sources s ON s.id=a.source_id
@@ -180,8 +187,7 @@ func (a *app) syncAutoCatalogueLocked(sourceID int64) error {
 	// relink is performed: matching name/size is NOT sufficient proof to
 	// transfer a family's bookmark to another book.
 
-	if e = pruneCatalogue(tx); e != nil { return e }
-	return tx.Commit()
+	return pruneCatalogue(tx)
 }
 const catalogueMigrationVersion = "auto-catalogue-v3"
 

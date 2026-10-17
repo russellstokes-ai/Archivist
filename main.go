@@ -462,11 +462,13 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", status, id); e != nil {
 		return e
 	}
+    // No committed intermediate state: files, work/edition grouping, review
+    // invalidation and source status form one consistent SQLite snapshot.
+    // A catalogue trigger/storage failure rolls back all scan records.
+    if e=a.syncAutoCatalogueTx(tx,id);e!=nil{
+        return fmt.Errorf("scan grouping failed; previous catalogue retained: %w",e)
+    }
 	if e = tx.Commit(); e != nil { return e }
-	if e = a.syncAutoCatalogueLocked(id); e != nil {
-		a.db.Exec("UPDATE sources SET status=? WHERE id=?", "Scanned; library grouping needs attention", id)
-		return e
-	}
 	if progress != nil { progress(total, total) }
 	return nil
 }
