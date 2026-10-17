@@ -721,6 +721,7 @@
     action.textContent=state.publicationState==='published'?'Unpublish book':'Publish reviewed book';
     action.disabled=workBusy;
     $('work-cover-upload').disabled=state.publicationState==='published'||workBusy;
+    $('work-cover-clear').disabled=state.publicationState==='published'||workBusy||!state.coverHash;
     const cover=$('work-cover');cover.replaceChildren();
     const img=e('img');img.alt='Selected cover for '+state.title;
     img.src='./api/works/'+encodeURIComponent(String(state.workId))+'/cover'+
@@ -1030,6 +1031,27 @@
       workSetInputBusy(false);input.disabled=workState?.publicationState!=='staged'
     }}
   }
+  async function workClearCover(){
+    if(!workState||workBusy||!workState.coverHash)return;
+    if(workDirty()){workMessage('Save or discard unsaved book edits before clearing a cover.');return}
+    if(workState.publicationState==='published'){workMessage('Unpublish this book before clearing its selected cover.');return}
+    const state=workState,epoch=workEpoch;
+    if(!window.confirm('Clear this selected book cover? Original media artwork, edition metadata and progress will not be changed.'))return;
+    workBusy=true;workSetInputBusy(true);$('work-cover-clear').disabled=true;
+    let committed=false;
+    try{
+      const answer=await api('./api/manage/works/'+encodeURIComponent(String(state.workId))+'/cover','DELETE');
+      if(!answer.ok)throw Error('Cover removal was not confirmed.');
+      committed=true;
+      await workReload(epoch);
+      await Promise.all([loadAssist(),loadSummary()]);
+      if(epoch===workEpoch)workMessage('Selected cover cleared. The media and household positions are unchanged.');
+    }catch(error){if(epoch===workEpoch)workMessage((committed?'Cover cleared; refresh failed: ':'Cover change was not confirmed: ')+error.message)}
+    finally{
+      workBusy=false;
+      if(epoch===workEpoch){workSetInputBusy(false);if(workState)workRenderSummary(workState)}
+    }
+  }
   async function loadAssist(){
     const generation=++assistRequest,location=assistOffset,mode=assistMode;
     const container=$('assist-works');
@@ -1337,6 +1359,7 @@
   $('work-undo-apply').onclick=()=>void workApplyUndo();
   $('work-publish-toggle').onclick=()=>void workTogglePublication();
   $('work-cover-upload').onchange=()=>void workUploadCover();
+  $('work-cover-clear').onclick=()=>void workClearCover();
   $('work-more-media').onclick=()=>void workLoadMedia(workEpoch);
   $('candidate-search-button').onclick=findCandidates;
   $('candidate-query').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();findCandidates()}};

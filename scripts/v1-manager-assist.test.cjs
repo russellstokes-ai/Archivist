@@ -52,12 +52,12 @@ const fieldNames=['title','author','series','seriesNumber','genre','publishedYea
 const file={id:11,title:'Part 1',author:'Test Author',genre:'Adventure',format:'Audio',space:'Books',needsReview:true,reviewReason:'Check edition',available:true,metadataSource:'embedded'};
 const workCalls=[];
 let pauseWorkPreview=false,releaseWorkPreview=null,failNextWorkReload=false;
-let workRevision=0,workFingerprint='a'.repeat(64),workTitle='Grouped audiobook',workYear='';
+let workRevision=0,workFingerprint='a'.repeat(64),workTitle='Grouped audiobook',workYear='',workCoverHash='',workPublicationRevision=0;
 const originalWorkTitle=workTitle;
 const makeWorkState=()=>({
   workId:1,title:workTitle,space:'Books',automatic:true,
   revision:workRevision,fingerprint:workFingerprint,memberDigest:'d'.repeat(64),
-  publicationState:'staged',publicationRevision:0,coverHash:'',files:3,
+  publicationState:'staged',publicationRevision:workPublicationRevision,coverHash:workCoverHash,files:3,
   editions:[{id:10,format:'Audio',files:3,available:3,reviewFiles:2}],
   fields:[
     {name:'title',value:workTitle,source:'catalogue',locked:false},
@@ -136,6 +136,12 @@ const fetchFake=async (url,options={})=>{
       {id:12,title:'Part 2',author:'Test Author',position:1,editionId:10,format:'Audio',
         available:true,relativePath:'Aerial/Part 2.mp3',metadataSource:'embedded'}
     ]});
+  }
+  if(url==='./api/manage/works/1/cover'&&options.method==='DELETE'){
+    workCalls.push({url,method:'DELETE'});
+    assert(workCoverHash,'cover deletion requires an existing selected book cover');
+    workCoverHash='';workPublicationRevision++;workFingerprint='f'.repeat(64);
+    return reply({ok:true});
   }
   if(url.startsWith('./api/manage/metadata-candidates?q=')){
     return reply({provider:'Open Library',candidates:[
@@ -403,6 +409,19 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   elements.get('work-refresh').onclick();await settle();
   assert.equal(elements.get('work-fields').children[5].children[0].value,'2021',
     'owner must be able to recover a book editor after a refresh outage');
+  // The book editor should also own its cover *removal*, rather than forcing
+  // the administrator to leave the unified workbench to use the old card.
+  // The server owns the delete and the cover is not changed until it replies.
+  workCoverHash='e'.repeat(64);workFingerprint='e'.repeat(64);
+  elements.get('work-refresh').onclick();await settle();
+  const clearCover=elements.get('work-cover-clear');
+  assert.equal(clearCover.disabled,false,'selected cover should have a functional remove control');
+  clearCover.onclick();await settle();
+  assert(workCalls.some(c=>c.url==='./api/manage/works/1/cover'&&c.method==='DELETE'),
+    'book-level cover deletion must use owner-only server endpoint');
+  assert.equal(workCoverHash,'','selected cover should disappear only after server confirmation');
+  assert.equal(clearCover.disabled,true,'cover reset control must disable after deletion');
+
   elements.get('work-close').onclick();
   assert.equal(elements.get('work-dialog').open,false);
   assert.equal(workTitle,originalWorkTitle);
