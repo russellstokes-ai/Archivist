@@ -124,6 +124,18 @@ The scanner checks during staging and just before entering its atomic commit bar
 
 On slow or unresponsive NAS shares, a read/metadata operation may not reach the next checkpoint immediately. Archivist does **not** kill arbitrary SMB/NFS system reads or revert an active SQLite transaction. Do not assume physical files are changed by scans, and do not forcibly power off a NAS to speed up stop. See `docs/v1/SERVER_SCANNER_CANCEL_QA_2026-10-17.md` in the repository for synthetic regression coverage and remaining hardware acceptance.
 
+## Reconnect a renamed multi-track audiobook folder
+
+This workflow is intentionally distinct from single-file relinking. In **Library Manager → Archivist Assist**, find your unavailable multi-track audiobook and select **Reconnect audiobook**. The original book ID is prefilled. Enter the newly indexed replacement book ID (shown on each Assist card), select **Inspect chapters** and review every original/target chapter pair. Check each chapter's explicit confirmation box to attest that the old and new tracks correspond in the SAME order. Archivist then checks every complete replacement track and presents its SHA-256 digest. A separate whole-book attestation and confirmation are required before applying.
+
+The server keeps the original work and edition IDs, each original file ID, track order and household bookmarks, and only removes the otherwise untouched staged candidate catalogue records. It does **not** rename or move media files. The group is constrained to 2–32 Audio files, one automatic edition per book, identical source and track order, matching indexed byte lengths per pair and no more than 4 GiB total destination media. Existing manual editions, mixed formats, independent replacement progress/queues and cross-drive moves are intentionally refused.
+
+Because originals are missing, old-to-new content equivalence is **not cryptographically provable**. An exact hash of the replacement prevents its substitution after the preview; it does not prove that replacement was formerly the original. Do not attest a track unless independently verified. This QA feature still requires Pi/NAS hardware testing, and has a potentially substantial two-pass hash I/O cost on slow storage.
+
+## Scan integrity across failures
+
+The server now commits scan file updates, grouped logical-work identity, edition links, source status and publication review invalidation in one SQLite transaction. A failure rebuilding works or recording a publication event rolls back the entire scan catalogue change. A source may still become unavailable or a scan may fail; the old indexed books and saved positions remain retained. When a scanner cancellation is accepted before commit, the same atomicity guarantee applies. Independent organisation operations retain their own recovery journals.
+
 ## Sorting and file safety
 
 Archivist organisation workflows are preview-first.

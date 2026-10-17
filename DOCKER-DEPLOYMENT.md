@@ -14,6 +14,10 @@ This is the first standalone packaging candidate for Archivist's **existing Go/S
 
 The image builds for the architecture supported by the Docker host. `linux/amd64` and `linux/arm64` are intended deployment targets; both still need platform acceptance before marking this package release-ready.
 
+## Multi-track external rename recovery
+
+The single-work Docker/NAS server now has a separate **Library Manager → Archivist Assist → Reconnect audiobook** workflow for a folder containing 2–32 Audio chapters (up to 4 GiB total media). The owner must inspect each old/new track pairing in order and confirm every mapping, after which the server hashes the complete replacement tracks and, with separate owner attestation, applies one atomic database relink. The old files are missing and cannot be compared cryptographically; this is owner-confirmed identification only, not automatic matching. No host media writes are required. This is a QA feature pending actual NAS/Pi tests.
+
 ## Recovery after external renames
 
 For a single-file work renamed within the same mounted library, the server now offers an explicit **Library Manager → Relink renamed file** workflow. Select the old unavailable entry and the newly indexed available entry after scanning, inspect the signed full-hash preview, and attest that you independently verified they are the same file. The server does not move original media; it preserves the old book's internal identity and bookmarks and transactionally retires an unused staged candidate. No automatic filename/size guesses are performed. The absent original cannot be cryptographically compared with the new content. Multi-file and cross-root relinking are not yet supported.

@@ -1077,5 +1077,36 @@
     "protected_mobile_unchanged": true,
     "merged": false,
     "commercial_release_ready": false
+  },
+  "server_atomic_catalogue_group_relink_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "first_parent": "db614eb068b693f9d6429dafc0955d192b6c4838",
+    "code_shas": [
+      "01cba0472bbab19ffe970a24e496a7021dc5300f",
+      "3e86057177ae4e55ece37e8a3a55c57b7de391a6",
+      "58761036697e4653c1b4e9c1cc43f7054433d40e"
+    ],
+    "QA": "docs/v1/SERVER_ATOMIC_CATALOGUE_GROUP_RELINK_QA_2026-10-17.md",
+    "guarantees": [
+      "single-transaction scan files/groupings/publication/status",
+      "fault-injection atomic rollback and retry",
+      "explicit all-chapter position mapping",
+      "owner confirmation of each paired track",
+      "independent candidate state guarded",
+      "SHA256 at preview and at apply",
+      "single transaction retains originals and user bookmarks"
+    ],
+    "limitations": [
+      "original source bytes unavailable: owner-attested, not cryptographically proven equivalence",
+      "Audio only, one auto edition and 2–32 tracks",
+      "same source, same order and length per chapter",
+      "4GiB max hashed candidate bytes",
+      "no cross-source multi-edition/manual grouping support",
+      "no real HAOS/Pi/NAS/SMB/NFS physical acceptance"
+    ],
+    "mobile_source_modified_by_this_work": false,
+    "PR_draft": true,
+    "commercial_go": false
   }
 }
