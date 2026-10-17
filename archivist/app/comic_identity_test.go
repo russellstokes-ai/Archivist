@@ -18,6 +18,8 @@ func TestComicIssueExtractionRejectsYearsVolumesAndAmbiguity(t *testing.T){
   {"The Flash Vol 2",0,"unknown"},
   {"Issue #12 and #13",0,"ambiguous"},
   {"Comics #1-#2",0,"ambiguous"},
+  {"Comics #1/#2",0,"ambiguous"},
+  {"Comics #1,#2",0,"ambiguous"},
   {"The Flash #12 Issue 12",12,"match"},
   {"The Flash number 12",12,"match"},
  }{

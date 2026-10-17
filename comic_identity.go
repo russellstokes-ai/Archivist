@@ -14,7 +14,7 @@ import (
 
 // Strict explicit comic issue tokens. Never interpret bare dates, years,
 // ISBNs, "volume 2" or a filename's first number as an issue.
-var comicHashToken=regexp.MustCompile(`(?i)(?:^|[\s(])#\s*(\d{1,5}(?:\.\d{1,3})?)\b`)
+var comicHashToken=regexp.MustCompile(`(?i)(?:^|[^[:alnum:]])#\s*(\d{1,5}(?:\.\d{1,3})?)\b`)
 var comicNamedToken=regexp.MustCompile(`(?i)\b(?:issue|no\.?|number)\s*#?\s*(\d{1,5}(?:\.\d{1,3})?)\b`)
 
 // "match" requires one unambiguous explicit issue token. Titles with several
