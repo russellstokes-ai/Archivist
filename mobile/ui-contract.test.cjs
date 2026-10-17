@@ -188,7 +188,7 @@ assert.ok(source.includes('>PERSONAL BESTS</Text>') && source.includes('>CURRENT
 assert.ok(source.includes('>Your progression</Text>') && source.includes("id:'Reading' as const") && source.includes("id:'Listening' as const") && source.includes("id:'Library' as const") && source.includes("id:'Ritual' as const"), 'Rewards must expose the four long-term progression paths');
 assert.ok(source.includes('>Milestones</Text>') && source.includes("{level:5,title:'Explorer'") && source.includes("{level:60,title:'Master'"), 'Rewards must retain the long-horizon level milestone journey');
 assert.ok(source.includes('>Next up</Text>') && source.includes('>Trophy cabinet</Text>') && source.includes('rewardTrophyGrid') && source.includes('rewardMedal') && source.includes('rewardCabinetEntries(profileAchievements)') && source.includes('item.target.toLocaleString()'), 'Rewards must retain next-up hierarchy and show collectible numbered medallions with every underlying achievement tier preserved');
-assert.ok(source.includes('recentAchievementId') && source.includes('rewardPulseHalo') && source.includes("recentItem?'RECENT · ':'')") && source.includes('>Recently earned</Text>'), 'Recent minted rewards must retain the outward halo and visible recent marker');
+assert.ok(source.includes('recentAchievementId') && source.includes('rewardPulseHalo') && source.includes("recentItem?'RECENT · ':''") && source.includes('>Recently earned</Text>'), 'Recent minted rewards must retain the outward halo and visible recent marker');
 
 
 const atlasStart=source.indexOf('function Atlas()');
