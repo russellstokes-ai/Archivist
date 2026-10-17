@@ -1,0 +1,28 @@
+name: Test 14 owner-authorised one-shot Android QA request
+on:
+  push:
+    branches:
+      - fix/test14-mobile-acceptance-20261017
+    paths:
+      - .github/workflows/test14-owner-apk-request-once.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-test14:
+    name: Dispatch protected manual Android QA workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Request confirmed branch-specific Test 14 QA build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$TARGET_BRANCH" = "fix/test14-mobile-acceptance-20261017"
+          gh workflow run android-apk.yml --repo "$GH_REPO" --ref "$TARGET_BRANCH" --field qa_confirmation=true
+          echo "Requested owner-authorised gated QA-only test14 build; no merge or release."
