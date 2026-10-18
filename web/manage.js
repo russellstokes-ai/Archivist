@@ -1724,7 +1724,10 @@ function candidateMissingFields(candidate,fields,options={}){
     reviewPicker.value=Array.from(reviewPicker.options).some(x=>x.value===previous)?previous:'';
   }
   async function loadHealth(){
-    const [sources,health,jobs]=await Promise.all([api('./api/sources'),api('./api/library-health'),api('./api/jobs')]);
+    const [sources,health,jobs,report]=await Promise.all([api('./api/sources'),api('./api/library-health'),api('./api/jobs'),api('./api/manage/scan-report')]);
+    const books=report.books||{};
+    $('book-metadata-coverage').textContent='Library & Atlas: '+(books.total||0)+' books · '+(books.missingGenre||0)+' missing genre · '+(books.missingYear||0)+' missing year · '+(books.missingAuthor||0)+' missing author. Includes saved book-level enrichment.';
+    $('enrichment-progress').textContent='Automatic metadata '+(report.automaticMetadataEnabled?'enabled':'paused')+' · '+Object.entries(report.enrichment||{}).map(([status,count])=>count+' '+status).join(' · ')+'. Refresh to update. Unresolved items remain readable.';
     const list=$('source-health');list.replaceChildren();
     if(!sources.length)list.append(e('p','No source folders configured.','subtext'));
     const healthById=new Map((health.sources||[]).map(item=>[Number(item.id),item]));
@@ -1757,6 +1760,9 @@ function candidateMissingFields(candidate,fields,options={}){
         }catch(error){notice('Scan could not be queued: '+error.message,true);scan.disabled=false}
       };
       card.append(scan);
+      const evidence=(report.sources||[]).find(s=>Number(s.id)===Number(item.id))?.report;
+      const skipped=Object.values(evidence?.extensions||{}).filter(x=>x.skipped).sort((a,b)=>b.skipped-a.skipped);
+      card.append(e('small',evidence?'Skipped: '+(skipped.map(x=>x.extension+': '+x.skipped).join(' · ')||'none'):'Run Scan / refresh source once to collect skipped extension details.','subtext'));
       list.append(card);
     }
     const coverage=$('scanner-coverage');coverage.replaceChildren();
@@ -2664,6 +2670,7 @@ function candidateMissingFields(candidate,fields,options={}){
   $('save-view').onclick=saveView;
   $('saved-views').onchange=applyView;
   updateViews();
+  $('download-scan-report').onclick=()=>{window.location.href='./api/manage/scan-report?download=1'};
   $('refresh-health').onclick=()=>loadHealth().catch(err=>notice(err.message,true));
   $('family-create').onsubmit=event=>void createFamilyUser(event);
   $('family-refresh').onclick=()=>void loadFamily();

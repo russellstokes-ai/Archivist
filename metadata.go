@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/zip"
+ "archive/tar"
+ "regexp"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -337,7 +339,13 @@ func comicMetadata(filename string) embeddedMetadata {
 		Summary     string  `xml:"Summary"`
 		Year        int     `xml:"Year"`
 	}
-	if strings.EqualFold(filepath.Ext(filename), ".cbr") {
+	if strings.EqualFold(filepath.Ext(filename), ".cbt") {
+  f,err:=os.Open(filename);if err!=nil{return embeddedMetadata{}};defer f.Close()
+  tr:=tar.NewReader(io.LimitReader(f,256<<20))
+  found:=false
+  for i:=0;i<10000;i++{h,err:=tr.Next();if err!=nil{break};if strings.EqualFold(h.Name,"ComicInfo.xml") && h.Size>=0 && h.Size<=metadataXMLLimit {if xml.NewDecoder(io.LimitReader(tr,metadataXMLLimit)).Decode(&info)==nil{found=true};break}}
+  if !found{return embeddedMetadata{}}
+ } else if strings.EqualFold(filepath.Ext(filename), ".cbr") {
 		f, err := os.Open(filename)
 		if err != nil { return embeddedMetadata{} }
 		defer f.Close()
@@ -397,6 +405,7 @@ func sidecarMetadata(filename string) embeddedMetadata {
 	return sidecarMetadataWithCache(filename, nil)
 }
 
+var comicOrderPrefix=regexp.MustCompile(`^\d{1,5}\s*-\s+(.+)$`)
 func pathMetadata(relative, format string) metadataCandidate {
 	parts := strings.Split(filepath.ToSlash(relative), "/")
 	base := cleanMetadata(strings.TrimSuffix(filepath.Base(relative), filepath.Ext(relative)))
@@ -440,6 +449,14 @@ func pathMetadata(relative, format string) metadataCandidate {
 		}
 		return metadataCandidate{embeddedMetadata: m, source: "path", confidence: confidence}
 	}
+
+ if format=="Comic" {
+  if len(parts)>=2 {m.Series=cleanMetadata(parts[len(parts)-2]);confidence=52}
+  // Collection folders are not authors. Bare story numbers/ranges are not issues.
+  if n,status:=comicTitleIssue(base);status=="match"{m.SeriesNumber=n}
+  return metadataCandidate{embeddedMetadata:m,source:"path",confidence:confidence}
+ }
+ if format=="PDF" {if match:=comicOrderPrefix.FindStringSubmatch(base);len(match)==2 {m.Title=cleanMetadata(match[1]);if len(parts)>=2{m.Series=cleanMetadata(parts[len(parts)-2])};return metadataCandidate{embeddedMetadata:m,source:"path",confidence:52}}
 
 	if len(parts) >= 3 {
 		m.Author = cleanMetadata(parts[len(parts)-3])
@@ -689,7 +706,7 @@ func metadataFor(filename, relative, format string) identifiedMetadata {
 }
 
 func metadataSignatureWithCache(filename string, info os.FileInfo, cache *sidecarScanCache) string {
-	parts := []string{fmt.Sprintf("file:%d:%d", info.Size(), info.ModTime().UnixNano())}
+	parts := []string{fmt.Sprintf("metadata-v2:file:%d:%d", info.Size(), info.ModTime().UnixNano())}
 	for _, sidecar := range sidecarCandidates(filename) {
 		if size, modNano, exists := cache.stat(sidecar); exists {
 			parts = append(parts, fmt.Sprintf("%s:%d:%d", filepath.Base(sidecar), size, modNano))

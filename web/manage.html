@@ -35,7 +35,7 @@
  <section class="metrics" aria-label="Library overview">
   <div class="metric"><span>Logical works</span><strong id="metric-works">—</strong></div>
   <div class="metric"><span>Published</span><strong id="metric-published">—</strong></div>
-  <div class="metric"><span>Review / publish queue</span><strong id="metric-review">—</strong></div>
+  <div class="metric"><span>Needs attention</span><strong id="metric-review">—</strong></div>
   <div class="metric"><span>Library spaces</span><strong id="metric-spaces">—</strong></div>
   <div class="metric"><span>Unavailable works</span><strong id="metric-unavailable">—</strong></div>
  </section>
@@ -251,12 +251,12 @@
   </section>
  </section>
  <section id="view-health" hidden aria-labelledby="health-title">
-  <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2 id="health-title">Source and scanner health</h2></div><button id="refresh-health" type="button">Refresh</button></div>
+  <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2 id="health-title">Source and scanner health</h2></div><div><button id="download-scan-report" type="button">Download scan report</button> <button id="refresh-health" type="button">Refresh</button></div></div>
   <div class="two-col"><div class="panel"><h3>Source folders</h3><div id="source-health"></div></div><div class="panel"><h3>Recent scan jobs</h3><div id="jobs-health"></div></div></div>
   <section class="panel scanner-coverage" aria-labelledby="scanner-coverage-title">
-    <div class="section-head"><div><p class="eyebrow">SCANNER QUALITY</p><h3 id="scanner-coverage-title">Identification &amp; Atlas readiness</h3></div></div>
+    <div class="section-head"><div><p class="eyebrow">SCANNER QUALITY</p><h3 id="scanner-coverage-title">File metadata coverage</h3></div></div>
     <p class="footnote">Counts are indexed files, not individual books. Open a category to review those files without rescanning or changing original media.</p>
-    <div id="scanner-coverage" class="coverage-grid" role="group" aria-label="Scanner metadata gaps"></div>
+    <p id="book-metadata-coverage" role="status"></p><p id="enrichment-progress" role="status"></p><div id="scanner-coverage" class="coverage-grid" role="group" aria-label="Scanner metadata gaps"></div>
     <p id="scanner-coverage-note" class="footnote">Read-only catalogue report; root connectivity and individual file availability can differ.</p>
   </section>
   <p class="footnote">Scan control and safe file moves remain available in the original Archivist Settings. This workbench does not modify source files.</p>

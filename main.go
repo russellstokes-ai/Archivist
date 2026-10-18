@@ -297,6 +297,7 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
  defer cache.Close()
 
 	count := 0
+    discovery:=newScanDiscoveryReport()
     skipped := 0
     ignoredLinks := 0
 	reused := 0
@@ -309,6 +310,7 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 		}
 		if d.Type()&os.ModeSymlink != 0 {
             ignoredLinks++
+            discovery.Symlinks++
 			return nil
 		}
 		if d.IsDir() {
@@ -318,6 +320,7 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			return nil
 		}
 		format := kind(path)
+        discovery.observe(path,format!="")
 		if format == "" {
             skipped++
 			return nil
@@ -380,7 +383,8 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			item.NeedsReview = meta.NeedsReview
 			item.ReviewReason = meta.ReviewReason
 		}
-		if item.NeedsReview {
+		if item.MetadataSource=="path"{discovery.PathFallback++}
+        if item.NeedsReview {
 			reviewCount++
 		}
 		count++
@@ -448,6 +452,9 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			return e
 		}
 	}
+	discovery.CompletedAt=time.Now().UTC().Format(time.RFC3339)
+    rawReport,reportErr:=json.Marshal(discovery);if reportErr!=nil{return reportErr}
+    if _,e=tx.Exec("INSERT INTO app_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",fmt.Sprintf("scan_report_%d",id),string(rawReport));e!=nil{return e}
 	status := fmt.Sprintf("%d media files imported · %d unchanged · %d metadata flags · %d non-media/unsupported files skipped · %d symbolic links skipped · %s", count, reused, reviewCount, skipped, ignoredLinks, time.Now().Format("2 Jan 15:04"))
 	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", status, id); e != nil {
 		return e

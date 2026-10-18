@@ -370,6 +370,7 @@ const fetchFake=async (url,options={})=>{
     assert.equal(request.preview.receipt,'server-signed-preview');
     return reply({ok:true,workId:1,editionId:100,tracks:3});
   }
+  if(url==='./api/manage/scan-report')return reply({books:{total:3,missingGenre:1,missingYear:2},automaticMetadataEnabled:true,enrichment:{waiting:2},sources:[]});
   if(url==='./api/library-health')return reply({
     summary:{offlineSources:0,indexedFiles:4,indexedWorks:3,publishedWorks:1,
       missingAuthor:1,missingGenre:2,missingYear:3,lowConfidence:2,needsReview:2,offlineFiles:0},
@@ -864,6 +865,8 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert(elements.get('jobs-health').children.some(item=>
     item.children[0]?.textContent==='Source 1 · queued'),'new queued retry must be shown on the workbench');
   const coverage=elements.get('scanner-coverage');
+  assert(elements.get('book-metadata-coverage').textContent.includes('3 books'),'effective book coverage shown');
+  assert(elements.get('enrichment-progress').textContent.includes('2 waiting'),'enrichment queue shown');
   assert.equal(coverage.children.length,6,'scanner health must offer six meaningful coverage categories');
   const genre=coverage.children.find(item=>item.children[1]?.textContent==='Missing genre');
   assert(genre,'Atlas genre coverage must be an actionable review category');

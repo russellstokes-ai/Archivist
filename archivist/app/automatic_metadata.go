@@ -25,7 +25,8 @@ func automaticMetadataCandidate(items []multiMetadataCandidate,q multiMetadataQu
  for _,c:=range items {
   if c.IdentifierMismatch {continue}
   exactText:=q.Title!=""&&q.Author!=""&&strings.Join(multiTokens(q.Title)," ")==strings.Join(multiTokens(c.Title)," ")&&strings.Join(multiTokens(q.Author)," ")==strings.Join(multiTokens(c.Author)," ")
-  if !c.ISBNExact&&!c.ASINExact&&!exactText {continue}
+  comicIdentity:=strings.EqualFold(q.MediaFormat,"Comic")&&c.ComicSeriesMatch=="match"&&c.ComicIssueMatch=="match"&&q.Series!=""&&q.IssueNumber!=""
+  if !c.ISBNExact&&!c.ASINExact&&!exactText&&!comicIdentity {continue}
   // A book ISBN search cannot establish a particular comic issue.
   if strings.EqualFold(q.MediaFormat,"Comic")&&(c.ComicSeriesMatch!="match"||c.ComicIssueMatch!="match"){continue}
   if found&&chosen.WorkID!=c.WorkID{return multiMetadataCandidate{},false}
@@ -52,6 +53,7 @@ func (a *app)initAutomaticMetadata()error{
  work_id INTEGER PRIMARY KEY REFERENCES works(id) ON DELETE CASCADE,
  retry_at INTEGER NOT NULL, status TEXT NOT NULL);
  CREATE INDEX IF NOT EXISTS automatic_metadata_retry ON automatic_metadata_attempts(retry_at);`)
+ if err==nil {_,err=a.db.Exec(`DELETE FROM automatic_metadata_attempts WHERE NOT EXISTS(SELECT 1 FROM app_meta WHERE key='metadata_match_v2'); INSERT OR IGNORE INTO app_meta(key,value) VALUES('metadata_match_v2','1');`)}
  return err
 }
 
@@ -62,6 +64,7 @@ func (a *app)automaticMetadataEnabled()bool{
 }
 
 func (a *app)automaticMetadataRoutes(mux *http.ServeMux){
+ a.discoveryReportRoutes(mux)
  mux.HandleFunc("GET /api/manage/automatic-metadata",func(w http.ResponseWriter,r *http.Request){
   if !who(r).Owner{http.Error(w,"administrator access required",403);return}
   reply(w,map[string]bool{"enabled":a.automaticMetadataEnabled()})
@@ -101,15 +104,26 @@ func (a *app)enrichNextWork(ctx context.Context){
  if !missing{status="details present";return}
  if len(state.Editions)!=1{status="multiple editions require matching";return}
  q:=multiMetadataQuery{Title:fields["title"],Author:fields["author"],ISBN:normalValidISBN(fields["isbn"]),ASIN:normalASIN(fields["asin"]),MediaFormat:state.Editions[0].Format,Series:fields["series"],IssueNumber:fields["seriesNumber"]}
- if q.Title==""||q.Title=="Untitled"||(q.Author==""&&q.ISBN==""&&q.ASIN==""){return}
+ comicIdentity:=q.MediaFormat=="Comic"&&q.Series!=""&&q.IssueNumber!=""
+ seriesOnly:=q.MediaFormat=="Comic"&&q.Series!=""&&!comicIdentity&&fields["genre"]==""
+ if q.Title==""||q.Title=="Untitled"||(q.Author==""&&q.ISBN==""&&q.ASIN==""&&!comicIdentity&&!seriesOnly){status="insufficient identity";return}
  search:="title:\""+q.Title+"\" author:\""+q.Author+"\""
+ if comicIdentity&&q.Author==""{search="title:\""+q.Series+" #"+q.IssueNumber+"\""}
+ if seriesOnly{search="title:\""+q.Series+"\""}
  if q.ISBN!=""{search="isbn:"+q.ISBN}
  endpoints:=[]multiMetadataEndpoint{{Name:"Open Library",URL:"https://openlibrary.org/search.json?q="+url.QueryEscape(search)+"&fields=key,title,author_name,first_publish_year,isbn,subject&limit=10"}}
  if q.MediaFormat=="Audio"&&q.ASIN!=""{endpoints=append(endpoints,multiMetadataEndpoint{Name:"Audnexus",URL:"https://api.audnex.us/books/"+q.ASIN+"?region=us&update=0&seedAuthors=0"})}
  lookupCtx,cancel:=context.WithTimeout(ctx,8*time.Second);defer cancel()
  client:=&http.Client{Timeout:8*time.Second,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}
- candidates,_,succeeded:=a.metadataCache.lookup(lookupCtx,client,endpoints,q)
+ lookupQuery:=q
+ if seriesOnly{lookupQuery=multiMetadataQuery{Title:q.Series,Series:q.Series,MediaFormat:"Comic"}}
+ candidates,_,succeeded:=a.metadataCache.lookup(lookupCtx,client,endpoints,lookupQuery)
  if succeeded==0{retry=now+3600;status="provider unavailable";return}
+ if seriesOnly {
+  candidate,ok:=automaticSeriesGenre(candidates,q.Series)
+  if ok&&a.saveAutomaticMetadata(ctx,state,candidate){status="filled series genre"}else{status="series genre unresolved; issue identity needed"}
+  return
+ }
  var chosen multiMetadataCandidate
  matched:=false
  for _,provider:=range []string{"Audnexus","Open Library"} {
@@ -133,14 +147,23 @@ func (a *app)saveAutomaticMetadata(ctx context.Context,state workMetaState,chose
  current,err:=a.readWorkMeta(ctx,tx,id);if err!=nil||current.Fingerprint!=state.Fingerprint{return false}
  values:=automaticMetadataValues(current,chosen)
  if len(values)==0{return false}
+ written:=int64(0)
  for field,value:=range values{
   var protected int
   if err=tx.QueryRowContext(ctx,`SELECT count(*) FROM asset_field_controls ac JOIN edition_assets ea ON ea.asset_id=ac.asset_id JOIN editions ed ON ed.id=ea.edition_id WHERE ed.work_id=? AND ac.field=? AND (ac.locked=1 OR ac.source='manual')`,id,field).Scan(&protected);err!=nil{return false}
   if protected>0{continue}
 
-  if _,err=tx.ExecContext(ctx,`INSERT OR IGNORE INTO work_field_controls(work_id,field,value,source,locked,updated_at) VALUES(?,?,?,?,0,?)`,id,field,value,"automatic "+chosen.Source+" identity match",now);err!=nil{return false}
+  result,writeErr:=tx.ExecContext(ctx,`INSERT OR IGNORE INTO work_field_controls(work_id,field,value,source,locked,updated_at) VALUES(?,?,?,?,0,?)`,id,field,value,"automatic "+chosen.Source+" identity match",now);if writeErr!=nil{return false};n,_:=result.RowsAffected();written+=n
  }
+ if written==0{return false}
  if err=applyWorkOverridesTx(tx,id);err!=nil{return false}
  if _,err=tx.ExecContext(ctx,`INSERT INTO work_metadata_revisions(work_id,revision) VALUES(?,1) ON CONFLICT(work_id) DO UPDATE SET revision=revision+1`,id);err!=nil{return false}
  return tx.Commit()==nil
+}
+
+// Series matches may supply a shared genre only, never issue year or credits.
+func automaticSeriesGenre(items []multiMetadataCandidate,series string)(multiMetadataCandidate,bool){
+ var out multiMetadataCandidate;found:=false;identity:=""
+ for _,c:=range items {if !strings.EqualFold(strings.TrimSpace(c.Title),strings.TrimSpace(series))||c.WorkID==""{continue};if identity!=""&&identity!=c.WorkID{return multiMetadataCandidate{},false};identity=c.WorkID;if c.Genre==""{continue};out=multiMetadataCandidate{publicMetadataCandidate:publicMetadataCandidate{WorkID:c.WorkID,Source:c.Source+" series genre"},Genre:c.Genre};found=true}
+ return out,found
 }
