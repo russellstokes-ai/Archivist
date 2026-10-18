@@ -67,8 +67,19 @@ class ArchivistMetadataModule(private val context:ReactApplicationContext):React
       require(SystemClock.elapsedRealtime()<deadline){"Metadata deadline"}
       val m=input.getJSONObject(index);val name=m.getString("path");require(relative(name)&&paths.add(name))
       val uri=Uri.parse(m.getString("uri"));require(uri.scheme=="content"&&uri.authority==tree.authority)
-      val parent=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree))
-      require(DocumentsContract.isChildDocument(resolver,parent,uri)){"Document outside selected source"}
+      // Resolve each component through the granted tree. Document IDs are opaque;
+      // string prefixes cannot prove ancestry, and isChildDocument needs API 29.
+      var documentId=DocumentsContract.getTreeDocumentId(tree)
+      val components=name.split('/')
+      for((partIndex,part) in components.withIndex()){
+        require(SystemClock.elapsedRealtime()<deadline){"Metadata deadline"}
+        val matches=children(tree,documentId).filter{it.name==part}
+        require(matches.size==1){"Missing or ambiguous source document"}
+        val child=matches.single()
+        if(partIndex<components.lastIndex)require(child.mime==DocumentsContract.Document.MIME_TYPE_DIR){"Source parent is not a folder"}
+        documentId=child.id
+      }
+      require(documentId==DocumentsContract.getDocumentId(uri)){"Document outside selected source"}
       val digest=MessageDigest.getInstance("SHA-256");var count=0L
       resolver.openInputStream(uri)?.use{stream->val b=ByteArray(65536);while(true){
         require(SystemClock.elapsedRealtime()<deadline){"Metadata deadline"}
