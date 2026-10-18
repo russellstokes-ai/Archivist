@@ -465,7 +465,10 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
     if e=a.syncAutoCatalogueTx(tx,id);e!=nil{
         return fmt.Errorf("scan grouping failed; previous catalogue retained: %w",e)
     }
-	if e = tx.Commit(); e != nil { return e }
+	if count>reused {
+      if _,e=tx.Exec("DELETE FROM automatic_metadata_attempts WHERE work_id IN (SELECT ed.work_id FROM editions ed JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id WHERE a.source_id=?)",id);e!=nil{return e}
+    }
+    if e = tx.Commit(); e != nil { return e }
 	if progress != nil { progress(total, total) }
 	return nil
 }

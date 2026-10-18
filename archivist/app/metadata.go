@@ -456,7 +456,7 @@ func pathMetadata(relative, format string) metadataCandidate {
   if n,status:=comicTitleIssue(base);status=="match"{m.SeriesNumber=n}
   return metadataCandidate{embeddedMetadata:m,source:"path",confidence:confidence}
  }
- if format=="PDF" {if match:=comicOrderPrefix.FindStringSubmatch(base);len(match)==2 {m.Title=cleanMetadata(match[1]);if len(parts)>=2{m.Series=cleanMetadata(parts[len(parts)-2])};return metadataCandidate{embeddedMetadata:m,source:"path",confidence:52}}
+ if format=="PDF" {if match:=comicOrderPrefix.FindStringSubmatch(base);len(match)==2 {m.Title=cleanMetadata(match[1]);if len(parts)>=2{m.Series=cleanMetadata(parts[len(parts)-2])};return metadataCandidate{embeddedMetadata:m,source:"path",confidence:52}}}
 
 	if len(parts) >= 3 {
 		m.Author = cleanMetadata(parts[len(parts)-3])
