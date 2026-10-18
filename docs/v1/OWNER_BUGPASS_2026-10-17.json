@@ -14,9 +14,17 @@
         {
           "old": "Math.min(1,(now-transitionStart)/1500)",
           "new": "Math.min(1,(now-transitionStart)/((phase==='opening'?900:1000)*Math.max(.001,Math.abs(transitionTo-transitionFrom))))"
+        },
+        {
+          "old": "Math.min(1,(now-transitionStart)/",
+          "new": "Math.min(1,Math.max(0,now-transitionStart)/"
+        },
+        {
+          "old": "Math.min(1,(now-turnStart)/duration)",
+          "new": "Math.min(1,Math.max(0,now-turnStart)/duration)"
         }
       ],
-      "current": "ef691c8592b0bb3941523f0f336610bc72e504ad"
+      "current": "dfd769bc00ee28e80feda161baee3bb98fa9fc05"
     },
     "mobile/speechFocus.ts": {
       "previous": "280b441936ce366554a908bbde9f0d20c047c71d",
