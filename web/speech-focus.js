@@ -35,8 +35,8 @@ function detectBubbleRegion(
   const total=width*height;
   const visited=new Uint8Array(total);
   const queue=new Int32Array(total);
-  const tolerance=95*95;
-  const minLum=Math.max(75,baseLum-95);
+  const tolerance=45*45;
+  const minLum=Math.max(100,baseLum-45);
   const maxArea=Math.max(96,Math.floor(total*0.30));
   let head=0,tail=0,area=0;
   let left=width,top=height,right=-1,bottom=-1;
@@ -59,10 +59,12 @@ function detectBubbleRegion(
   }
 
   if(area<Math.max(28,total*0.00035)||right<=left||bottom<=top)return null;
-  const boxArea=(right-left+1)*(bottom-top+1);
+  const boxWidth=right-left+1,boxHeight=bottom-top+1;
+  if(boxHeight>boxWidth*3.5||boxWidth>boxHeight*6)return null;
+  const boxArea=boxWidth*boxHeight;
   if(boxArea>total*0.32||(right-left)>width*0.88||(bottom-top)>height*0.78)return null;
 
-  const pad=Math.max(2,Math.round(Math.min(right-left+1,bottom-top+1)*0.045));
+  const pad=2; // Include outline ink, without a proportional halo of surrounding artwork.
   left=Math.max(0,left-pad);right=Math.min(width-1,right+pad);
   top=Math.max(0,top-pad);bottom=Math.min(height-1,bottom+pad);
   // Flood the *outside* of the selected component. Enclosed holes are ink
@@ -79,6 +81,15 @@ function detectBubbleRegion(
     if(x>left)outside(pos-1);if(x<right)outside(pos+1);
     if(y>top)outside(pos-width);if(y<bottom)outside(pos+width);
   }
+  // A closed bright shape alone can be skin, clothing or scenery. Require
+  // enclosed contrasting ink before offering dialogue focus; ordinary zoom
+  // remains available for blank or low-confidence artwork.
+  let ink=0;
+  for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+    const pos=y*width+x,p=pos*4;
+    if(visited[pos]!==2&&visited[pos]!==3&&lum(pixels[p],pixels[p+1],pixels[p+2])<baseLum-65)ink++;
+  }
+  if(ink<Math.max(3,area*.001)||ink>area*.35)return null;
   // Round dilation includes outline ink without bridging a whole concavity.
   // Bound the mask to the crop; no full-resolution source allocations.
   const maskW=right-left+1,maskH=bottom-top+1;

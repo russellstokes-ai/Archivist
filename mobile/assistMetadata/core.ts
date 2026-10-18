@@ -4,6 +4,7 @@ import type {MetadataWork,WorkFields} from '../scannerVNext/fieldEvidence';
 export type SearchClues={text:string;title?:string;author?:string;isbn?:string;asin?:string;series?:string;annualLabel?:string};
 export const canonicalText=(value:unknown)=>String(value??'').normalize('NFKC').toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]/gu,'');
 const clean=(value:unknown)=>String(value??'').normalize('NFKC').replace(/\s+/g,' ').trim();
+const annualLabel=(value:string)=>(value.match(/\b((?:18|19|20)\d{2})\s+annual\b/i)||value.match(/\bannual\s+((?:18|19|20)\d{2})\b/i))?.[1];
 const identifier=(value:unknown)=>clean(value).replace(/[-\s]/g,'').toUpperCase();
 function validISBN(value:string){
  if(/^\d{13}$/.test(value))return [...value].reduce((sum,c,i)=>sum+Number(c)*(i%2?3:1),0)%10===0;
@@ -36,19 +37,29 @@ const words=(s:unknown)=>new Set(clean(s).toLowerCase().replace(/[^\p{L}\p{N}]/g
 function overlap(a:unknown,b:unknown){const left=words(a),right=words(b);if(!left.size||!right.size)return 0;let n=0;for(const x of left)if(right.has(x))n++;return n/Math.max(left.size,right.size);}
 function equalTitle(a?:string,b?:string){return !!a&&!!b&&canonicalText(a)===canonicalText(b);}
 function ids(c:Candidate){return [...new Set([...c.identifiers,c.fields.isbn,c.fields.asin].filter((x):x is string=>!!x).map(identifier))];}
-export function rankAssistCandidates(fields:SearchFields,candidates:Candidate[]):RankedCandidate[]{
+export function rankAssistCandidates(fields:WorkFields,candidates:Candidate[]):RankedCandidate[]{
  return candidates.map(candidate=>{
   const title=equalTitle(fields.title,candidate.fields.title),author=!!fields.author&&canonicalText(fields.author)===canonicalText(candidate.fields.author);
   const own=[fields.isbn,fields.asin].filter((x):x is string=>!!x).map(identifier),other=ids(candidate),exactId=own.some(x=>other.includes(x));
   const conflicts:string[]=[];
+  const requestedAnnual=annualLabel(fields.title||'');
+  const returnedAnnual=annualLabel(candidate.fields.title||'');
+  if(requestedAnnual&&returnedAnnual&&requestedAnnual!==returnedAnnual)conflicts.push('annual-label');
   if(fields.author&&candidate.fields.author&&!author)conflicts.push('author');
   if(own.length&&other.length&&!exactId)conflicts.push('identifier');
+  for(const field of ['isbn','asin'] as const){
+   if(fields[field]&&candidate.fields[field]&&identifier(fields[field])!==identifier(candidate.fields[field])&&!conflicts.includes('identifier'))conflicts.push('identifier');
+  }
+  for(const field of ['series','language','publishedYear','narrator'] as const){
+   const incoming=(candidate.fields as WorkFields)[field];
+   if(fields[field]&&incoming&&canonicalText(fields[field])!==canonicalText(incoming))conflicts.push(field);
+  }
   if(fields.seriesNumber&&candidate.fields.seriesNumber&&canonicalText(fields.seriesNumber)!==canonicalText(candidate.fields.seriesNumber))conflicts.push('series-number');
   if(candidate.anthology)conflicts.push('anthology');
   if(exactId&&fields.title&&candidate.fields.title&&!title&&overlap(fields.title,candidate.fields.title)<.45)conflicts.push('title');
   const clue=overlap(fields.title,[candidate.fields.title,candidate.fields.author,candidate.fields.series].filter(Boolean).join(' '));
   const score=(exactId?1000:0)+(title?100:Math.round(clue*70))+(author?40:0)-(conflicts.length*150);
-  return {candidate,score,conflicts,automaticEligible:!conflicts.length&&(exactId||title&&author)};
+  return {candidate,score,conflicts,automaticEligible:!candidate.relatedMatch&&!conflicts.length&&(exactId||title&&author)};
  }).sort((a,b)=>b.score-a.score||a.candidate.id.localeCompare(b.candidate.id));
 }
 export function selectAutomatic(work:Pick<MetadataWork,'fields'>,candidates:Candidate[]):Candidate|null{
@@ -60,7 +71,7 @@ export function selectAutomatic(work:Pick<MetadataWork,'fields'>,candidates:Cand
   const other=ids(candidate);
   if(reference.length&&other.length&&!other.some(x=>reference.includes(x)))return null;
   if(!equalTitle(best.fields.title,candidate.fields.title)||canonicalText(best.fields.author)!==canonicalText(candidate.fields.author))return null;
-  for(const field of ['seriesNumber','language','publishedYear','narrator'] as const){
+  for(const field of ['series','seriesNumber','language','publishedYear','narrator','isbn','asin'] as const){
    const a=(best.fields as Record<string,string|undefined>)[field],b=(candidate.fields as Record<string,string|undefined>)[field];
    if(a&&b&&canonicalText(a)!==canonicalText(b))return null;
   }

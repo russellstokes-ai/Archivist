@@ -6,6 +6,7 @@ export type MetadataSettings={
     enabled:boolean;
     openLibrary:boolean;
     googleBooks:boolean;
+    audible?:boolean;
   };
   comics:{
     enabled:boolean;
@@ -17,7 +18,7 @@ export const defaultMetadataSettings:MetadataSettings={
   onlineEnabled:true,
   automaticEnrichment:true,
   applyHighConfidence:true,
-  books:{enabled:true,openLibrary:true,googleBooks:false},
+  books:{enabled:true,openLibrary:true,googleBooks:false,audible:true},
   comics:{enabled:true,metron:true},
 };
 
@@ -32,6 +33,7 @@ export function sanitizeMetadataSettings(value:unknown):MetadataSettings{
     books:{
       enabled:books.enabled===undefined?defaultMetadataSettings.books.enabled:!!books.enabled,
       openLibrary:books.openLibrary===undefined?defaultMetadataSettings.books.openLibrary:!!books.openLibrary,
+      audible:books.audible===undefined?true:!!books.audible,
       googleBooks:books.googleBooks===undefined?defaultMetadataSettings.books.googleBooks:!!books.googleBooks,
     },
     comics:{

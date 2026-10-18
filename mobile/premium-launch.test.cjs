@@ -29,8 +29,11 @@ assert.equal(claimPremiumColdLaunch('ios'),false,'warm resume and remount never 
 
 const videoPath=path.join(__dirname,'assets/splash/archivist-premium-shine.mp4');
 const video=fs.readFileSync(videoPath);
+const hq=JSON.parse(fs.readFileSync(path.join(__dirname,'../docs/v1/SPLASH_HQ_REPAIR_2026-10-17.json'),'utf8'));
+assert.equal(hq.previousVideoSha256,'413d0c275e8cc42d99e7f95c446458b9f3e3be2be5a5934c5e2c1ad3dfc70818');
+assert.equal(hq.viewport,'960x1600');assert.equal(hq.release_approved,false);assert.equal(hq.installed_apk_approved,false);
 assert.equal(crypto.createHash('sha256').update(video).digest('hex'),
-  '413d0c275e8cc42d99e7f95c446458b9f3e3be2be5a5934c5e2c1ad3dfc70818',
+  hq.videoSha256,
   'Approved 179-frame animated video must be byte-exact; do not substitute a still');
 assert(video.length>150000&&video.length<15000000,'bounded, bundled native video');
 assert.equal(video.toString('ascii',4,8),'ftyp','MP4 container is present');

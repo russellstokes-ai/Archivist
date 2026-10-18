@@ -10,6 +10,8 @@ module.exports=function test14AppException(root,actual){
     !Array.isArray(next.changes) ||
     next.changes.length!==14) return false;
  let source=fs.readFileSync(path.join(root,'mobile/App.tsx'),'utf8');
+ source=require('./owner-bugpass-source.cjs')('mobile/App.tsx',source);
+ actual=crypto.createHash('sha1').update('blob '+Buffer.byteLength(source)+'\0').update(source).digest('hex');
  // Apply any owner-directed follow-on responsive layout exception strictly
  // in reverse, then enforce the original 14-patch baseline as before.
  const follow=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_TRANSPORT_APP_EXCEPTION_2026-10-17.json'),'utf8'));

@@ -9,7 +9,7 @@ function plans(work:SearchWork,options:AssistPolicy):Query[]{
   const clues=parseSearchClues(options.clues);
   if(clues.isbn)return [{isbn:clues.isbn}];
   if(clues.asin)return [{asin:clues.asin}];
-  return clueQueries(options.clues).map(title=>({title,...(clues.author?{author:clues.author}:{}),broad:!clues.author}));
+  return clueQueries(options.clues).map(title=>({title,...(clues.author?{author:clues.author}:{}),broad:false}));
  }
  const f=work.fields;
  if(f.isbn)return [{isbn:f.isbn,...(f.title?{title:f.title}:{}),...(f.author?{author:f.author}:{})}];
@@ -19,12 +19,12 @@ function plans(work:SearchWork,options:AssistPolicy):Query[]{
  return queries;
 }
 export function createAssistSearchService(providers:AssistProvider[],cache:SearchCache){
- if(providers.length>3||new Set(providers.map(p=>p.id)).size!==providers.length)throw Error('Invalid Assist providers');
+ if(providers.length>4||new Set(providers.map(p=>p.id)).size!==providers.length)throw Error('Invalid Assist providers');
  async function search(work:SearchWork,options:AssistPolicy):Promise<SearchResult>{
   check(options.signal);if(!options.online)return empty('offline');
   if(!options.automatic&&!options.explicit)return empty('disabled');
   const queries=plans(work,options);if(!queries.length)return empty('pending');
-  const key=JSON.stringify(['assist-search-v1',queries,providers.map(p=>[p.id,p.available!==false])]);
+  const key=JSON.stringify(['assist-search-v3',queries,providers.map(p=>[p.id,p.available!==false])]);
   const rankingFields=options.clues!==undefined?parseSearchClues(options.clues):work.fields;
   if(!options.retry){try{const entry=await cache.load(key);check(options.signal);if(entry&&entry.expires>Date.now())return {...entry.value,requests:0,cacheHit:true,candidates:rankAssistCandidates(rankingFields,entry.value.candidates.map(x=>x.candidate))};}catch{check(options.signal);}}
   const result=empty('pending'),found=new Map<string,Candidate>();

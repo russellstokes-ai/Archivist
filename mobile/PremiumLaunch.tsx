@@ -3,6 +3,9 @@ import {AccessibilityInfo,AppState,Image,Platform,StyleSheet,View} from 'react-n
 import {useVideoPlayer,VideoView} from 'expo-video';
 
 const TEAL='#2F8B86';
+// Decoded H.264 matte sampled from the bundled video (RGB 46,137,134).
+// Match letterboxing to the encoded pixels, preserving contain and centring.
+const VIDEO_MATTE='#2E8986';
 const VIDEO=require('./assets/splash/archivist-premium-shine.mp4');
 export const PREMIUM_SPLASH_SECONDS=179/24; // 144 3D frames + 35 exact-source shine frames
 export const PREMIUM_SPLASH_DEADLINE_MS=13000;
@@ -136,6 +139,6 @@ const styles=StyleSheet.create({
   root:{flex:1,backgroundColor:TEAL},
   overlay:{...StyleSheet.absoluteFillObject,backgroundColor:TEAL,
     alignItems:'center',justifyContent:'center',zIndex:2000},
-  video:{...StyleSheet.absoluteFillObject,backgroundColor:TEAL},
+  video:{...StyleSheet.absoluteFillObject,backgroundColor:VIDEO_MATTE},
   reducedIcon:{width:112,height:112,maxWidth:'30%',maxHeight:'20%'},
 });

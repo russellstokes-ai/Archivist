@@ -12,3 +12,7 @@ Historical Git commits and previously downloaded binaries retain their original
 artwork; rebuild/install the current QA branch to receive this identity.
 
 Latest source: Russell’s 37867.png, supplied 16 October 2026. App and Home Assistant icons use the existing Archivist teal #2F8B86 background. Logo and splash sources retain transparency.
+
+## Mobile icon preference, 17 October 2026
+
+The owner selected warm ivory (#F4EBDD) for the mobile launcher background. The approved emblem master is unchanged. `scripts/generate-mobile-ivory-icons.cjs` regenerates the mobile icon and Android launcher density variants; the adaptive foreground and splash artwork retain their existing assets. This preference does not approve an APK or release.

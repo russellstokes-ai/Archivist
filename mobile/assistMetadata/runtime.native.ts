@@ -29,7 +29,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
   return service;
  }
  const assist=await createImprovedAssist(db,store,{search:async(...args)=>(await configured()).search(...args),more:async(...args)=>(await configured()).more(...args)});
- const native=NativeModules.ArchivistMetadata as {exportRecord?:(root:string,input:string)=>Promise<string>;restoreRecord?:(root:string,members:string)=>Promise<string|null>;inspectArtwork?:(uri:string)=>Promise<string|null>}|undefined;
+ const native=NativeModules.ArchivistMetadata as {createPortableId?:()=>Promise<string>;exportRecord?:(root:string,input:string)=>Promise<string>;restoreRecord?:(root:string,members:string)=>Promise<string|null>;inspectArtwork?:(uri:string)=>Promise<string|null>}|undefined;
  const pending=new Map<string,Promise<Receipt>>();
  async function context(id:string){
   const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_catalogue WHERE work_id=?',id);
@@ -46,20 +46,24 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
   await db.runAsync('INSERT INTO scanner_vnext_durable_meta VALUES(?,?,?) ON CONFLICT(work_id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload',id,revision,JSON.stringify(value));
  }
  async function persist(id:string,force=false):Promise<Receipt>{
-  const running=pending.get(id);if(running)return running;
+  const running=pending.get(id);if(running){await running;return persist(id,force);}
   if(pending.size>=32)return {state:'queued'};
   const job=(async()=>{
    const work=await store.get(id);if(!work||!work.identityConfirmed)return {state:'identity-needs-review'};
    const previous=await durableStatus(id);
    if(!force&&previous.revision===work.revision&&['saved','restored','metadata-saved-cover-missing'].includes(previous.state))return previous;
-   const priorId=previous.portableId;
+   let priorId=previous.portableId;
    try{
     if(!native?.exportRecord)throw Error('Native persistence unavailable');
+    if(!priorId){
+     priorId=await native.createPortableId?.();
+     if(!priorId||!(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/).test(priorId))throw Error('Portable identity unavailable');
+    }
     await receipt(id,work.revision,{state:'saving',revision:work.revision,portableId:priorId});
     const source=await context(id);
     const payload={...makePortableFields(work),revision:work.revision,members:source.members,portableId:priorId,coverUri:work.fields.coverUri||''};
     const result=JSON.parse(await native.exportRecord(source.root,JSON.stringify(payload))) as Receipt;
-    if(!['saved','metadata-saved-cover-missing'].includes(result.state)||result.revision!==work.revision)throw Error('Invalid persistence receipt');
+    if(!['saved','metadata-saved-cover-missing'].includes(result.state)||result.revision!==work.revision||result.portableId!==priorId)throw Error('Invalid persistence receipt');
     await receipt(id,work.revision,result);return result;
    }catch{
     const result={state:'needs-writable-folder',revision:work.revision,portableId:priorId};await receipt(id,work.revision,result);return result;
@@ -69,7 +73,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  async function cacheArtwork(id:string,signal?:AbortSignal){
   const work=await store.get(id);const url=work?.fields.coverUri;
   if(!work||!url||!url.startsWith('https://')||!(await settings()).metadata.onlineEnabled)return;
-  const approved=new URL(url);if(approved.username||approved.password||!['covers.openlibrary.org','books.google.com','books.googleusercontent.com','metron.cloud','static.metron.cloud'].includes(approved.hostname))return;
+  const approved=new URL(url);if(approved.username||approved.password||!['covers.openlibrary.org','books.google.com','books.googleusercontent.com','metron.cloud','static.metron.cloud','m.media-amazon.com','images-na.ssl-images-amazon.com'].includes(approved.hostname))return;
   await artworkQueue.run('artwork',async inner=>{
    check(signal);const response=await expoFetch(url,{signal:inner,redirect:'error'});
    if(!response.ok||!response.body)throw Error('Artwork unavailable');
@@ -92,12 +96,16 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  }
  async function restore(id:string,signal?:AbortSignal){
   if(!native?.restoreRecord)return false;const status=await durableStatus(id);
-  if(status.state!=='not-saved')return false;
+  if(!['not-saved','restoring'].includes(status.state))return false;
   const current=await store.get(id);if(!current||Object.values(current.manual).some(Boolean))return false;
   try{
    check(signal);const source=await context(id),raw=await native.restoreRecord(source.root,JSON.stringify(source.members));check(signal);
    if(!raw)return false;const response=JSON.parse(raw),record=validatePortableRecord(response.record);
+   if(status.portableId&&status.portableId!==record.portableId)throw Error('Conflicting restore identity');
    const fields={...record.fields,...(typeof response.coverUri==='string'&&response.coverUri.startsWith('file:///')?{coverUri:response.coverUri}:{})};
+   // Reserve the recovered identity before committing fields/manual locks.
+   // A crash or failed final receipt must not cause the next export to fork it.
+   await receipt(id,current.revision,{state:'restoring',revision:current.revision,portableId:record.portableId});
    const next=await store.restorePortable(id,fields,record.manual,current.revision,signal);
    await receipt(id,next.revision,{state:'restored',revision:next.revision,portableId:record.portableId});return true;
   }catch{check(signal);return false;}

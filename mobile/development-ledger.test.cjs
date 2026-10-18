@@ -52,6 +52,11 @@ for(const {path:lockedPath,git_blob_sha} of locks.locks){
   const source=fs.readFileSync(path.join(root,lockedPath));
   const actual=crypto.createHash('sha1')
     .update(Buffer.from('blob '+source.length+'\0')).update(source).digest('hex');
+  if(lockedPath==='mobile/assets/icon.png'){
+    const ivory=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/MOBILE_IVORY_ICON_2026-10-17.json'),'utf8'));
+    assert.equal(ivory.schema,1);assert.equal(ivory.path,lockedPath);assert.equal(ivory.release_approved,false);assert.equal(ivory.installed_apk_approved,false);
+    assert.equal(ivory.previous,approvedBrand.locks.find(item=>item.path===lockedPath).approved_git_blob_sha);assert.equal(actual,ivory.current);continue;
+  }
   if(lockedPath==='mobile/App.tsx'&&actual===approvedLogic.approved_git_blob_sha)continue;
   if(lockedPath==='mobile/App.tsx'&&require('../scripts/test14-app-exception.cjs')(root,actual))continue;
   if(approvedBrand.locks.some(item=>item.path===lockedPath&&item.original_git_blob_sha===git_blob_sha&&item.approved_git_blob_sha===actual))continue;

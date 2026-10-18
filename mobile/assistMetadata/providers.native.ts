@@ -5,9 +5,10 @@ import type {MetadataSettings} from '../metadataSettings';
 import {lookupOnlineComic} from '../onlineComicMetadata';
 import {ProviderQueue,parseSearchClues} from './core';
 import type {AssistProvider} from './service';
+import {createAudibleProvider} from './audible';
 const queues=new ProviderQueue();
 const clean=(value:unknown,max=512)=>typeof value==='string'?value.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,max):undefined;
-const hosts=new Set(['openlibrary.org','www.googleapis.com','metron.cloud']);
+const hosts=new Set(['openlibrary.org','www.googleapis.com','metron.cloud','api.audible.co.uk']);
 async function request(url:string,signal?:AbortSignal,token?:string){
  const target=new URL(url);if(target.protocol!=='https:'||!hosts.has(target.hostname)||target.username||target.password)throw Error('Unapproved catalogue endpoint');
  const headers:Record<string,string>={Accept:'application/json','User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'};
@@ -46,10 +47,15 @@ export function createAssistProviders(settings:MetadataSettings,googleKey?:strin
    const raw=query.title||query.series||'',clues=parseSearchClues(raw);
    if(!clues.annualLabel&&!query.series&&!/\b(?:comic|annual|issue|#\s*\d)/i.test(raw))return {candidates:[],nextPage:null};
    const input={format:'Comic',title:raw,series:clues.series||query.series||raw,comicIssueNumber:clues.annualLabel||query.seriesNumber,isbn:query.isbn};
-   const result=await lookupOnlineComic(input,{token:metronToken,timeoutMs:8000,fetcher:async(url)=>{
+   const options={token:metronToken,timeoutMs:8000,fetcher:async(url:string)=>{
     const payload=await queues.run('metron',s=>request(url,s,metronToken),signal,3100);
     return {ok:true,status:200,json:async()=>payload};
-   }});
+   }};
+   let result=await lookupOnlineComic(input,options);
+   // Annual cover labels are not necessarily catalogue issue numbers. Keep
+   // the returned facts unchanged and offer broader results for review.
+   if(clues.annualLabel&&result.status==='none'&&!result.candidates.length&&!signal?.aborted)
+    result=await lookupOnlineComic({...input,comicIssueNumber:undefined},options);
    if(['offline','rate-limited','unconfigured'].includes(result.status))throw Error('Comic catalogue unavailable');
    const candidates:Candidate[]=result.candidates.slice(0,20).map(c=>{
     const fields:Record<string,string>={};
@@ -60,5 +66,6 @@ export function createAssistProviders(settings:MetadataSettings,googleKey?:strin
    });return {candidates,nextPage:null};
   }});
  }
+ if(settings.books.enabled&&settings.books.audible)out.push(createAudibleProvider((url,signal)=>queues.run('audible-uk',s=>request(url,s),signal,1000)));
  return out;
 }

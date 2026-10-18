@@ -23,7 +23,7 @@
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2F8B86"
+        "backgroundColor": "#F4EBDD"
       },
       "versionCode": 103,
       "permissions": [

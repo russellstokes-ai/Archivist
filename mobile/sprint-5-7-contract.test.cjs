@@ -24,7 +24,7 @@ assert.equal(splashPlugin[1]?.image,'./assets/splash-icon.png','Splash must use 
 assert.equal(splashPlugin[1]?.resizeMode,'contain','Splash must preserve logo proportions');
 assert.equal(splashPlugin[1]?.dark?.image,'./assets/splash-icon.png','Dark splash must use the approved transparent emblem');
 assert.equal(config.expo.android?.adaptiveIcon?.foregroundImage,'./assets/adaptive-icon.png','Android adaptive icon must use the approved mask-safe foreground');
-assert.equal(config.expo.android?.adaptiveIcon?.backgroundColor,'#2F8B86');
+assert.equal(config.expo.android?.adaptiveIcon?.backgroundColor,'#F4EBDD');
 assert.equal(splashPlugin[1]?.backgroundColor,'#2F8B86');
 assert.equal(splashPlugin[1]?.dark?.backgroundColor,'#2F8B86');
 for(const file of ['assets/splash-icon.png','assets/adaptive-icon.png'])assert.ok(fs.existsSync(file),'Missing approved brand variant: '+file);

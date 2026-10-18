@@ -4,7 +4,7 @@ const crypto=require('node:crypto');
 const path=require('node:path');
 const read=(n)=>fs.readFileSync(path.join(__dirname,n),'utf8');
 const source=read('localReader.ts'),app=read('App.tsx');
-const speech=read('speechFocus.ts');
+const speech=require('../scripts/owner-bugpass-source.cjs')('mobile/speechFocus.ts',read('speechFocus.ts'));
 const archive=read('archiveReader.ts');
 const nativeZip=read('nativeZip.ts');
 const gitBlob=(s)=>crypto.createHash('sha1').update('blob '+Buffer.byteLength(s)+'\0').update(s).digest('hex');

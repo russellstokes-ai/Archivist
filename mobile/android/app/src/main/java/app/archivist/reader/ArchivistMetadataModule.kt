@@ -100,6 +100,7 @@ class ArchivistMetadataModule(private val context:ReactApplicationContext):React
     return JSONObject().put("mime",bounds.outMimeType).put("base64",Base64.encodeToString(bytes,Base64.NO_WRAP)).put("sha256",hash(bytes))
   }
   @ReactMethod fun inspectArtwork(uri:String,promise:Promise)=job(promise){if(artwork(uri)!=null)"valid" else null}
+  @ReactMethod fun createPortableId(promise:Promise){promise.resolve(UUID.randomUUID().toString())}
   @ReactMethod fun exportRecord(rootUri:String,inputJson:String,promise:Promise)=job(promise){
     require(inputJson.length<=1024*1024);val tree=root(rootUri,true);val input=JSONObject(inputJson)
     val fields=input.getJSONObject("fields");require(fields.optString("title").isNotBlank()&&fields.optString("author").isNotBlank()&&!fields.has("coverUri"))

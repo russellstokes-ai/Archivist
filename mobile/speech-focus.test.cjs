@@ -26,6 +26,9 @@ function ellipse(data,width,height,cx,cy,rx,ry,fill=245,border=20){
       pixel(data,width,x,y,v,v,v);
     }
   }
+  // Positive dialogue fixtures include enclosed lettering. Blank bright
+  // shapes are now negative cases in comic-focus-artwork-rejection.test.cjs.
+  textBlock(data,width,cx-5,cy-3,cx+5,cy,25);
 }
 function textBlock(data,width,left,top,right,bottom,value=25){
   for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++)pixel(data,width,x,y,value,value,value);

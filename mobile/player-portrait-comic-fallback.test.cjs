@@ -8,7 +8,7 @@ const read=file=>fs.readFileSync(__dirname+'/'+file,'utf8');
 const app=read('App.tsx');
 const morph=read('LivePlayerPlayPauseMorph.tsx');
 const reader=require('../scripts/repair-original-source.cjs')('mobile/localReader.ts');
-const speech=read('speechFocus.ts');
+const speech=require('../scripts/owner-bugpass-source.cjs')('mobile/speechFocus.ts',read('speechFocus.ts'));
 const body=read('comicReaderWebViewSource.ts');
 
 const loaded=ts.transpileModule(body,{

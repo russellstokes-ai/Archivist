@@ -13,7 +13,7 @@ export function AssistClueSearch({workId,online,search,onResult,onCancel,colors}
   finally{if(ticket===generation.current)active.current='';}
  };
  useEffect(()=>{setText('');setStatus('');active.current='';return()=>{++generation.current;if(timer.current)clearTimeout(timer.current);handlers.current.onCancel();};},[workId]);
- useEffect(()=>{if(!online){++generation.current;if(timer.current)clearTimeout(timer.current);handlers.current.onCancel();setStatus('Online metadata is off.');}},[online]);
+ useEffect(()=>{if(!online){++generation.current;active.current='';if(timer.current)clearTimeout(timer.current);handlers.current.onCancel();setStatus('Online metadata is off.');}},[online]);
  return <View style={{gap:5}}>
   <Text style={{color:colors.ink,fontSize:13,fontWeight:'600'}}>Search clues</Text>
   <TextInput accessibilityLabel="Archivist Assist search clues" value={text} maxLength={512} autoCorrect={false} returnKeyType="search" placeholder="Title, creator, ISBN or annual…" placeholderTextColor={colors.muted}

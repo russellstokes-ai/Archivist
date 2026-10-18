@@ -22,6 +22,22 @@ const candidate=(id,fields,provider='test')=>({id,provider,fields,identifiers:fi
  assert.equal(core.selectAutomatic(work(),[a,b])?.id,'a');
  assert.equal(core.selectAutomatic(work(),[a,candidate('different',{...a.fields,isbn:'9780140328721'})]),null);
  assert.equal(core.selectAutomatic(work({author:'Different Author'}),[a]),null);
+ for(const [field,existing,incoming] of [
+  ['narrator','Reader One','Reader Two'],['language','en','fr'],
+  ['publishedYear','1999','2024'],['series','Original Series','Different Series'],
+ ]){
+  const edition=candidate('edition',{...a.fields,[field]:incoming});
+  assert.equal(core.selectAutomatic(work({[field]:existing}),[edition]),null,`${field} conflict with saved edition must require review`);
+  assert.equal(core.selectAutomatic(work({[field]:incoming}),[edition])?.id,'edition');
+ }
+ assert.equal(core.selectAutomatic(work({isbn:'9780306406157',asin:'B08D6X6LKX'}),[
+  candidate('contradictory',{...a.fields,asin:'B000000001'}),
+ ]),null,'Matching ISBN must not conceal a conflicting ASIN');
+ for(const [field,left,right] of [['series','First Series','Other Series'],['asin','B08D6X6LKX','B000000001']]){
+  assert.equal(core.selectAutomatic(work(),[
+   candidate('left',{...a.fields,[field]:left}),candidate('right',{...a.fields,[field]:right}),
+  ]),null,`Conflicting candidate ${field} values must require review even with a shared ISBN`);
+ }
  assert.equal(core.rankAssistCandidates({title:'From the Oasthouse: The Alan Partridge Podcast',author:'Alan Partridge'},[candidate('synthetic-shape',{title:'From the Oast House: The Alan Partridge Podcast',author:'Alan Partridge'})])[0].automaticEligible,true);
  assert.equal(core.rankAssistCandidates({title:'A wholly different title',isbn:'9780306406157'},[a])[0].automaticEligible,false);
  assert(core.missingMetadata(work()).includes('description'));

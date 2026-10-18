@@ -11,6 +11,14 @@ assert.deepEqual(gold.layers[2].shapes[1].it[1].c.k,
  [185/255,154/255,104/255,1],
  'Single approved badge medallion fill is Archivist gold #B99A68');
 gold.layers[2].shapes[1].it[1].c.k=[1,1,1,1];
+for(const layer of [3,4]){
+ const items=gold.layers[layer].shapes[0].it;
+ const fill=items.findIndex(x=>x.ty==='fl');
+ assert(fill>=0,'Both ribbon tails must have an opaque blue fill');
+ assert.deepEqual(items[fill].c.k,[36/255,87/255,156/255,1]);
+ assert.equal(items[fill].o.k,100);
+ items.splice(fill,1);
+}
 assert.deepEqual(gold,original,
  'All original paths, transforms, timing, keyframes, frame count, shapes and opacity MUST remain identical');
 const overlay=fs.readFileSync(__dirname+'/AchievementRewardOverlay.tsx','utf8');

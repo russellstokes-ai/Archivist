@@ -1,0 +1,21 @@
+{
+  "source": "mobile/assets/splash/archivist-premium-shine.html",
+  "htmlSha256": "779faec70b31e247cf5d3c7debdf49e3abec9c7401e1483e3dce3ecc46c61f06",
+  "renderEngine": "Original, unmodified WebGL source + source-defined SVG shine translation",
+  "viewport": "960x1600",
+  "fps": 24,
+  "bookFrames": 144,
+  "shineFrames": 35,
+  "durationSeconds": 7.458333333333333,
+  "cssFit": "62vw / 35vh / 310px capped, centred book, wordmark below",
+  "schema": 1,
+  "previousVideoSha256": "413d0c275e8cc42d99e7f95c446458b9f3e3be2be5a5934c5e2c1ad3dfc70818",
+  "videoSha256": "780f013cda266eba314ba0f29079a4bd37cf6b3f503bcbf447514b781917c87e",
+  "codec": "h264",
+  "pixelFormat": "yuv420p",
+  "crf": 14,
+  "deviceScaleFactor": 2,
+  "decodedMatte": "#2E8986",
+  "release_approved": false,
+  "installed_apk_approved": false
+}

@@ -4,6 +4,7 @@ module.exports=function(file){
  const root=path.resolve(__dirname,'..');
  const record=file==='mobile/localReader.ts'?'READER_REPAIR_EXCEPTION_2026-10-16.json':'LIVING_WRAPPER_REPAIR_EXCEPTION_2026-10-16.json';
  const e=JSON.parse(fs.readFileSync(path.join(root,'docs/v1',record)));let text=fs.readFileSync(path.join(root,file),'utf8');
+ text=require('./owner-bugpass-source.cjs')(file,text);
  if(file==='mobile/localReader.ts'){
   const next=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_READER_DISPATCH_EXCEPTION_2026-10-17.json'),'utf8'));
   const tar=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_CBT_READER_EXCEPTION_2026-10-17.json'),'utf8'));

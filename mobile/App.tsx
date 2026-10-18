@@ -65,6 +65,8 @@ import {assistFeedback} from './scannerVNext/assistFeedback';
 import {acknowledgeAndroidAutoProgress, consumeAndroidAutoProgress, persistAndroidAutoLibrary, type AndroidAutoProgress} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
 import {rewardCabinetEntries,type RewardCabinetItem} from './rewardGallery';
+import {MedalShimmer} from './MedalShimmer';
+import {exportMetadataCopy} from './assistMetadata/exportCopy';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
 import {AchievementRewardOverlay} from './AchievementRewardOverlay';
 import {motionForAchievement,motionForLevelUp,rewardPresentationMs} from './rewardMotion';
@@ -5017,6 +5019,14 @@ function Client() {
     if(!editing)return null;
     const localEdit=editing.source!=='server'&&!!editing.uri;
     const targets=editingUris.length?editingUris:(editing.uri?[editing.uri]:[]);
+    const exportFormat=(()=>{try{return decodeURIComponent(editing.uri||'').match(/\.(epub|cbz)$/i)?.[1].toLowerCase() as 'epub'|'cbz'|undefined;}catch{return undefined;}})();
+    const exportCopy=async()=>{
+      if(!editing.uri||!exportFormat||busy)return;
+      setBusy(true);setError('');
+      try{await exportMetadataCopy(editing.uri,exportFormat,{title:editTitle,author:editAuthor,series:editSeries,seriesNumber:editSeriesNumber,genre:editGenre,publishedYear:editYear,publisher:editPublisher,language:editLanguage,description:editDescription});}
+      catch(e){setError(e instanceof Error?e.message:'Metadata copy could not be exported.');}
+      finally{setBusy(false);}
+    };
     const draftVersion=metadataDraftRef.current;
     const assistCompleted=async(id:string,state:AssistState)=>{
       if(editingScannerId.current===id)setAssistState(state);
@@ -5235,6 +5245,7 @@ function Client() {
               <Button label="Confirm saved identity" tone="quiet" disabled={busy||editorDirty||!editTitle.trim()||!editAuthor.trim()} onPress={()=>void confirmDetails()}/>
               {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>Choose a genre, or let Assist find one. Books with missing details remain visible.</Text>:null}
             </View>:null}
+            {localEdit&&targets.length===1&&exportFormat?<View style={{gap:6}}><Button label="Export embedded metadata copy" tone="quiet" disabled={busy||editorDirty} onPress={()=>void exportCopy()}/><Text style={[styles.meta,{color:p.muted}]}>Creates a new {exportFormat.toUpperCase()} copy, up to 64 MB. The original stays unchanged. Text metadata only; covers and identifiers are preserved.</Text></View>:null}
             {localEdit&&!editing.scannerWorkId?<Button label="Use scanned metadata & cover" tone="quiet" disabled={busy} onPress={()=>void restoreScanned()}/>:null}
             </ScrollView>
             <View style={{flexShrink:0,gap:6,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:p.line,paddingTop:8}}>
@@ -7615,6 +7626,7 @@ function Client() {
           <View style={styles.rewardMedalWrap}>
             {recentItem?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:darkMode?tone:p.gold,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.42:.30,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.52]})}]}]}/>:null}
             <View style={[styles.rewardMedal,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.gold:p.card}]}>
+              <MedalShimmer earned={item.unlocked} reducedMotion={reduceMotion} active={appActive}/>
               <View style={{width:62,height:62,borderRadius:31,borderWidth:1,borderColor:item.unlocked?'rgba(24,44,41,.44)':p.line,alignItems:'center',justifyContent:'center'}}>
                 <Text adjustsFontSizeToFit numberOfLines={1} style={{color:item.unlocked?'#182C29':p.muted,fontFamily:'ArchivistEditorial',fontSize:number.length>4?18:number.length>3?20:27,fontWeight:'500',maxWidth:56}}>{number}</Text>
               </View>
@@ -8209,6 +8221,10 @@ function Client() {
                 <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Open Library</Text><Text style={[styles.meta,{color:p.sage}]}>Ready · no setup</Text></View>
                   <Toggle label="Open Library" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={metadataSettings.books.openLibrary} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,openLibrary:!current.books.openLibrary}}))}/>
+                </View>
+                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Audible UK</Text><Text style={[styles.meta,{color:p.muted}]}>Audiobook catalogue · review matches</Text></View>
+                  <Toggle label="Audible UK" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={!!metadataSettings.books.audible} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,audible:!current.books.audible}}))}/>
                 </View>
                 <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Google Books</Text><Text style={[styles.meta,{color:googleBooksConfigured?p.sage:p.muted}]}>{googleBooksConfigured?'Configured':'Optional fallback'}</Text></View>

@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "release_approved": false,
+  "installed_apk_approved": false,
+  "reason": "Owner requested Assist, splash, Comic Focus, rewards, Living Book and warm-ivory icon repairs on 17 October 2026",
+  "files": {
+    "mobile/LivingBookCanvas.tsx": {
+      "previous": "3f1a54362aeb3bf2a4664cad3168f86974071087",
+      "changes": [
+        {
+          "old": "const previous=phase;phase=next;const now=performance.now();",
+          "new": "const previous=phase;if((next==='opening'||next==='closing')&&activeTurn)commitTurn();phase=next;const now=performance.now();"
+        },
+        {
+          "old": "Math.min(1,(now-transitionStart)/1500)",
+          "new": "Math.min(1,(now-transitionStart)/((phase==='opening'?900:1000)*Math.max(.001,Math.abs(transitionTo-transitionFrom))))"
+        }
+      ],
+      "current": "ef691c8592b0bb3941523f0f336610bc72e504ad"
+    },
+    "mobile/speechFocus.ts": {
+      "previous": "280b441936ce366554a908bbde9f0d20c047c71d",
+      "changes": [
+        {
+          "old": "const tolerance=95*95;",
+          "new": "const tolerance=45*45;"
+        },
+        {
+          "old": "const minLum=Math.max(75,baseLum-95);",
+          "new": "const minLum=Math.max(100,baseLum-45);"
+        },
+        {
+          "old": "const boxArea=(right-left+1)*(bottom-top+1);",
+          "new": "const boxWidth=right-left+1,boxHeight=bottom-top+1;\n  if(boxHeight>boxWidth*3.5||boxWidth>boxHeight*6)return null;\n  const boxArea=boxWidth*boxHeight;"
+        },
+        {
+          "old": "const pad=Math.max(2,Math.round(Math.min(right-left+1,bottom-top+1)*0.045));",
+          "new": "const pad=2; // Include outline ink, without a proportional halo of surrounding artwork."
+        },
+        {
+          "old": "  // Round dilation includes outline ink without bridging a whole concavity.",
+          "new": "  // A closed bright shape alone can be skin, clothing or scenery. Require\n  // enclosed contrasting ink before offering dialogue focus; ordinary zoom\n  // remains available for blank or low-confidence artwork.\n  let ink=0;\n  for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){\n    const pos=y*width+x,p=pos*4;\n    if(visited[pos]!==2&&visited[pos]!==3&&lum(pixels[p],pixels[p+1],pixels[p+2])<baseLum-65)ink++;\n  }\n  if(ink<Math.max(3,area*.001)||ink>area*.35)return null;\n  // Round dilation includes outline ink without bridging a whole concavity."
+        }
+      ],
+      "current": "58411e92381048d510902b408d3f9f267cde5a79"
+    },
+    "mobile/App.tsx": {
+      "previous": "5ec933dc6a0fa013cb370c72971d293c32a64ca6",
+      "changes": [
+        {
+          "old": "import {rewardCabinetEntries,type RewardCabinetItem} from './rewardGallery';",
+          "new": "import {rewardCabinetEntries,type RewardCabinetItem} from './rewardGallery';\nimport {MedalShimmer} from './MedalShimmer';"
+        },
+        {
+          "old": "<View style={[styles.rewardMedal,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.gold:p.card}]}>\n",
+          "new": "<View style={[styles.rewardMedal,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.gold:p.card}]}>\n              <MedalShimmer earned={item.unlocked} reducedMotion={reduceMotion} active={appActive}/>\n"
+        },
+        {
+          "old": "                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Google Books</Text>",
+          "new": "                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Audible UK</Text><Text style={[styles.meta,{color:p.muted}]}>Audiobook catalogue · review matches</Text></View>\n                  <Toggle label=\"Audible UK\" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={!!metadataSettings.books.audible} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,audible:!current.books.audible}}))}/>\n                </View>\n                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Google Books</Text>"
+        },
+        {
+          "old": "import {MedalShimmer} from './MedalShimmer';",
+          "new": "import {MedalShimmer} from './MedalShimmer';\nimport {exportMetadataCopy} from './assistMetadata/exportCopy';"
+        },
+        {
+          "old": "    const draftVersion=metadataDraftRef.current;",
+          "new": "    const exportFormat=(()=>{try{return decodeURIComponent(editing.uri||'').match(/\\.(epub|cbz)$/i)?.[1].toLowerCase() as 'epub'|'cbz'|undefined;}catch{return undefined;}})();\n    const exportCopy=async()=>{\n      if(!editing.uri||!exportFormat||busy)return;\n      setBusy(true);setError('');\n      try{await exportMetadataCopy(editing.uri,exportFormat,{title:editTitle,author:editAuthor,series:editSeries,seriesNumber:editSeriesNumber,genre:editGenre,publishedYear:editYear,publisher:editPublisher,language:editLanguage,description:editDescription});}\n      catch(e){setError(e instanceof Error?e.message:'Metadata copy could not be exported.');}\n      finally{setBusy(false);}\n    };\n    const draftVersion=metadataDraftRef.current;"
+        },
+        {
+          "old": "            {localEdit&&!editing.scannerWorkId?<Button label=\"Use scanned metadata & cover\"",
+          "new": "            {localEdit&&targets.length===1&&exportFormat?<View style={{gap:6}}><Button label=\"Export embedded metadata copy\" tone=\"quiet\" disabled={busy||editorDirty} onPress={()=>void exportCopy()}/><Text style={[styles.meta,{color:p.muted}]}>Creates a new ${exportFormat.toUpperCase()} copy, up to 64 MB. The original stays unchanged. Text metadata only; covers and identifiers are preserved.</Text></View>:null}\n            {localEdit&&!editing.scannerWorkId?<Button label=\"Use scanned metadata & cover\""
+        },
+        {
+          "old": "Creates a new ${exportFormat.toUpperCase()} copy",
+          "new": "Creates a new {exportFormat.toUpperCase()} copy"
+        }
+      ],
+      "current": "1e6487d0f235f59540a12ef26f6f3c75881b53a4"
+    }
+  }
+}
