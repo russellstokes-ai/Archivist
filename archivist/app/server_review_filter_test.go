@@ -87,10 +87,10 @@ func TestAssistReviewFilteringCountsLogicalWorksAndPreservesPublication(t *testi
   {"?space=Books",[]int64{},0},
   {"?space=Comics&format=Comic",[]int64{1,2},2},
   {"?space=Comics&format=Ebook",[]int64{},0},
-  {"?state=published",[]int64{3,4},2},
-  {"?state=published&reason=no-selected-cover",[]int64{3},1},
-  {"?state=published&reason=unreviewed",[]int64{},0},
-  {"?state=published&q=flash&format=Comic",[]int64{4},1},
+  {"?state=published",[]int64{3,4,1,2},4},
+  {"?state=published&reason=no-selected-cover",[]int64{3,1,2},3},
+  {"?state=published&reason=unreviewed",[]int64{1},1},
+  {"?state=published&q=flash&format=Comic",[]int64{4,1,2},3},
   {"?q=flash&limit=1&offset=1",[]int64{2},2},
  }
  for _,tc:=range checks{

@@ -549,7 +549,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		_ = a.db.QueryRow(`SELECT count(*) FROM published_works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
 		var needsReview, reviewWorks int
 		_ = a.db.QueryRow(`SELECT count(*) FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.needs_review=1 AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&needsReview)
-		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id LEFT JOIN work_publication pub ON pub.work_id=w.id WHERE a.needs_review=1 AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&reviewWorks)
+		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id LEFT JOIN work_publication pub ON pub.work_id=w.id WHERE (a.needs_review=1 OR a.available=0) AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&reviewWorks)
 		series := []map[string]any{}
 		rows, e = a.db.Query(`SELECT w.series,count(*) FROM published_works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{series=append(series,map[string]any{"name":name,"count":count})}};rows.Close() }

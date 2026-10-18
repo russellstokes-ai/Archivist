@@ -49,6 +49,7 @@ type workMetaState struct{
  Space string `json:"space"`
  Auto bool `json:"automatic"`
  Revision int64 `json:"revision"`
+ LibraryVisible bool `json:"libraryVisible"`
  PublicationState string `json:"publicationState"`
  PublicationRevision int64 `json:"publicationRevision"`
  CoverHash string `json:"coverHash"`
@@ -131,9 +132,9 @@ func (a *app)readWorkMeta(ctx context.Context,q bulkQuerier,id int64)(workMetaSt
    COALESCE((SELECT revision FROM work_metadata_revisions wr WHERE wr.work_id=w.id),0),
    COALESCE((SELECT state FROM work_publication p WHERE p.work_id=w.id),'staged'),
    COALESCE((SELECT revision FROM work_publication p WHERE p.work_id=w.id),0),
-   COALESCE((SELECT digest FROM selected_work_covers c WHERE c.work_id=w.id),'')
+   COALESCE((SELECT digest FROM selected_work_covers c WHERE c.work_id=w.id),''),w.id IN (SELECT id FROM published_works)
    FROM works w WHERE w.id=?`,id).Scan(&title,&author,&series,&genre,&state.Space,&auto,
-   &state.Revision,&state.PublicationState,&state.PublicationRevision,&state.CoverHash)
+   &state.Revision,&state.PublicationState,&state.PublicationRevision,&state.CoverHash,&state.LibraryVisible)
  if err!=nil{return state,err}
  state.Title=title;state.Auto=auto!=0
  h:=sha256.New()

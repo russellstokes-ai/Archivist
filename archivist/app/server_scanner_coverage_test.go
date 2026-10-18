@@ -40,7 +40,7 @@ func TestScannerCoverageIsRealReadOnlyAndUpdatesAfterReview(t *testing.T){
         return result.Summary,result.Sources[0]
     }
     first,source:=health()
-    if first.IndexedFiles!=2||first.IndexedWorks!=2||first.PublishedWorks!=0||
+    if first.IndexedFiles!=2||first.IndexedWorks!=2||first.PublishedWorks!=2||
       first.MissingAuthor!=2||first.MissingGenre!=2||first.MissingYear!=2||
       first.LowConfidence!=2||first.NeedsReview!=2||first.OfflineFiles!=0{
         t.Fatalf("scanner gaps misleading on pristine library: %+v",first)

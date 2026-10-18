@@ -1080,8 +1080,9 @@ function candidateMissingFields(candidate,fields,options={}){
     }
     $('work-publication').textContent=state.publicationState==='published'?
       'Published to household readers. Unpublish explicitly before editing book metadata.':
-      'Staged and private. Editing or saving does not publish this book.';
+      'Imported books are available in your authorised library. Review improves their details.';
     const action=$('work-publish-toggle');
+    action.hidden=state.libraryVisible&&state.publicationState!=='published';
     action.textContent=state.publicationState==='published'?'Unpublish book':'Publish reviewed book';
     action.disabled=workBusy;
     $('work-cover-upload').disabled=state.publicationState==='published'||workBusy;
@@ -1522,7 +1523,7 @@ function candidateMissingFields(candidate,fields,options={}){
     for(const [id,state] of [['assist-staged','staged'],['assist-published','published']]){
       $(''+id).setAttribute('aria-pressed',String(mode===state));
     }
-    $('assist-range').textContent=mode==='published'?'Loading your published books…':'Finding books awaiting publication…';
+    $('assist-range').textContent=mode==='published'?'Loading your published books…':'Finding items needing attention…';
     try {
       const query=new URLSearchParams({limit:String(assistPageSize),offset:String(location),state:mode});
       for(const [param,id] of [['q','assist-query'],['space','assist-space'],
@@ -1535,7 +1536,7 @@ function candidateMissingFields(candidate,fields,options={}){
       const works=Array.isArray(result.works)?result.works:[];
       container.replaceChildren();
       if(!works.length){
-        container.append(e('p',location?'No more books on this page.':mode==='published'?'Nothing published yet. Publish reviewed books to make them visible to readers.':'No books require publication or review.','empty'));
+        container.append(e('p',location?'No more books on this page.':mode==='published'?'No books imported yet. Add a library folder to begin.':'No books need attention.','empty'));
       }
       for(const work of works){
         const article=e('article',undefined,'assist-work');
@@ -1551,8 +1552,7 @@ function candidateMissingFields(candidate,fields,options={}){
         details.append(e('span',[work.author||'Unknown author',work.series,work.format,work.space].filter(Boolean).join(' · '),'subtext'));
         details.append(e('small','Book ID '+work.id+' · '+work.files+' indexed media files','subtext'));
         details.append(e('span',Number(work.reviewFiles)+' of '+work.files+' files need review','pill '+(work.reviewFiles?'warn':'ok')));
-        details.append(e('span',work.publicationState==='published'?
-          'Published to family':'Awaiting explicit publication or review','subtext'));
+        details.append(e('span',work.libraryVisible?'Available in authorised libraries':'Hidden from library','subtext'));
         const controls=e('div',undefined,'assist-controls');
         const reveal=e('button','Review book files','quiet');reveal.type='button';reveal.setAttribute('aria-expanded','false');
         const filePanel=e('div',undefined,'assist-files');filePanel.hidden=true;
@@ -1637,11 +1637,11 @@ function candidateMissingFields(candidate,fields,options={}){
           };
           controls.append(reset);
         }
-        if(work.publicationState!=='published'){
+        if(!work.libraryVisible&&work.publicationState!=='published'){
           const publish=e('button',work.reviewFiles?'Finish review before publishing':'Publish book','primary');
           publish.type='button';
           publish.disabled=!!work.reviewFiles;
-          publish.title=work.reviewFiles?'Review every file before publishing':'Explicitly make this book visible in Library, Atlas and OPDS';
+          publish.title=work.reviewFiles?'Optional legacy publication control':'Explicitly make this book visible in Library, Atlas and OPDS';
           publish.onclick=async()=>{
             if(!window.confirm('Publish '+work.title+' to Library, Atlas and family readers? Confirm its cover and metadata first.'))return;
             publish.disabled=true;
@@ -1658,7 +1658,7 @@ function candidateMissingFields(candidate,fields,options={}){
             finally{publish.disabled=false}
           };
           controls.append(publish);
-        }else{
+        }else if(work.publicationState==='published'){
           const unpublish=e('button','Unpublish book','quiet');
           unpublish.type='button';
           unpublish.onclick=async()=>{

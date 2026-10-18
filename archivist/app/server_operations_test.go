@@ -43,7 +43,7 @@ func TestOperationsOverviewReportsOnlyIndexedStateAndLocalBackupFlags(t *testing
  var got operationsOverview
  if err:=json.Unmarshal(response.Body.Bytes(),&got);err!=nil{t.Fatal(err)}
  if got.IndexedSources!=1||got.WatchedSources!=1||got.IndexedFiles!=2||
-  got.IndexedWorks!=2||got.PublishedWorks!=1||got.StagedWorks!=1||
+  got.IndexedWorks!=2||got.PublishedWorks!=2||got.StagedWorks!=0||
   got.ReviewFiles!=1||got.UnavailableFileFlags!=1||got.Jobs.Running!=1||
   got.Jobs.Failed!=1||got.Jobs.Queued!=1||!got.Backup.StagedRestore||
   !got.Backup.RecoverySnapshot||got.Backup.RestoreInFlight||

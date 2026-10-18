@@ -304,7 +304,7 @@ $('restore-button').onclick=async()=>{
     $('restore-file').value='';message('Backup verified and staged. Restart the Archivist add-on to apply it.');
   }catch(e){message(e.message)}finally{activity('');button.disabled=false}
 };
-$('add').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button'),label=b.textContent;b.disabled=true;b.textContent='Adding…';activity('Adding source folder',$('new-space').value);try{await api('./api/sources','POST',{path:$('path').value,space:$('new-space').value});$('path').value='';await loadSources();message('Folder added. Scan it to build the Shelf.')}catch(e){message(e.message)}finally{activity('');b.disabled=false;b.textContent=label}};
+$('add').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button'),label=b.textContent;b.disabled=true;b.textContent='Adding…';activity('Adding source folder',$('new-space').value);try{const added=await api('./api/sources','POST',{path:$('path').value,space:$('new-space').value});$('path').value='';await loadSources();await api('./api/sources/'+added.source_id+'/scan','POST');message('Folder added. Importing your library…');pollJobs()}catch(e){message(e.message)}finally{activity('');b.disabled=false;b.textContent=label}};
 
 let searchTimer;
 $('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadBooks(false).catch(e=>message(e.message)),180)};
@@ -379,7 +379,7 @@ async function pollJobs(){
       $('jobs').append(row)
     }
     const signature=JSON.stringify(jobs.map(j=>[j.id,j.state]));
-    if(signature!==jobSignature){jobSignature=signature;await loadSources();await loadLibrarySummary();await loadBooks(false)}
+    if(signature!==jobSignature){jobSignature=signature;await loadSources();await loadLibrarySummary();await loadBooks(false);if(typeof loadExperience==='function')loadExperience(page)}
   }catch(e){if(!$('unlock').hidden)return;message(e.message)}
   finally{jobTimer=setTimeout(pollJobs,importJobs.some(j=>['queued','running','cancelling','committing'].includes(j.state))?2000:15000)}
 }

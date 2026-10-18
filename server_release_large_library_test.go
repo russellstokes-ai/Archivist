@@ -52,8 +52,8 @@ func TestReleaseTenThousandMediaReviewAtlasAndPaging(t *testing.T){
   t.Fatalf("10020-item catalogue page missing: len=%d %v",len(books),err)
  }
  for _,tc:=range []struct{url string;want int}{
-  {"/api/manage/review-works?state=published&limit=40&offset=4970",5010},
-  {"/api/manage/review-works?state=staged&limit=40&offset=4970",5010},
+  {"/api/manage/review-works?state=published&limit=40&offset=4970",10020},
+  {"/api/manage/review-works?state=staged&limit=40&offset=4970",0},
   {"/api/manage/review-works?state=staged&reason=unreviewed",0},
   {"/api/manage/review-works?state=staged&space=Comics",0},
  }{
@@ -63,14 +63,14 @@ func TestReleaseTenThousandMediaReviewAtlasAndPaging(t *testing.T){
   if err=json.Unmarshal(body,&result);err!=nil||result.Total!=tc.want{
    t.Fatalf("wrong complete work totals for %s: %+v %v",tc.url,result,err)
   }
-  if tc.want==5010 && len(result.Works)!=40{
+  if tc.want==10020 && len(result.Works)!=40{
    t.Fatalf("large book review page truncated for %s: got %d",tc.url,len(result.Works))
   }
  }
  code,body,_=call("/api/atlas-relationships?kind=genre&value=Mixed+Archive")
  if code!=200{t.Fatalf("large Atlas query HTTP %d %s",code,body)}
  var atlas atlasRelationship
- if err=json.Unmarshal(body,&atlas);err!=nil||atlas.WorkCount!=5010||len(atlas.Works)!=50{
+ if err=json.Unmarshal(body,&atlas);err!=nil||atlas.WorkCount!=10020||len(atlas.Works)!=50{
   t.Fatalf("Atlas large-library count/50 work cap incorrect: %+v %v",atlas,err)
  }
  code,body,_=call("/api/works?limit=40&offset=4970")

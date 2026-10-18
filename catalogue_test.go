@@ -163,7 +163,7 @@ func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 	if res.Code!=200{t.Fatalf("work filter=%d %s",res.Code,res.Body.String())}
 	var works []map[string]any
 	if e:=json.Unmarshal(res.Body.Bytes(),&works);e!=nil{t.Fatal(e)}
-	if len(works)!=0{t.Fatalf("unreviewed unknown work leaked through filters=%v",works)}
+	if len(works)!=1{t.Fatalf("attention work missing from filters=%v",works)}
 
 	res=call("/api/library-summary")
 	if res.Code!=200{t.Fatalf("summary=%d %s",res.Code,res.Body.String())}
@@ -175,10 +175,10 @@ func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 		Availability []struct{Name string `json:"name"`;Count int `json:"count"`} `json:"availability"`
 	}
 	if e:=json.Unmarshal(res.Body.Bytes(),&summary);e!=nil{t.Fatal(e)}
-	if summary.Total!=2 || summary.UnknownAuthors!=0 || summary.NeedsReview!=1 {
+	if summary.Total!=3 || summary.UnknownAuthors!=1 || summary.NeedsReview!=1 {
 		t.Fatalf("summary=%+v",summary)
 	}
-	if len(summary.Series)!=1 || len(summary.Availability)!=1 {
+	if len(summary.Series)!=2 || len(summary.Availability)!=2 {
 		t.Fatalf("summary aggregates series=%v availability=%v",summary.Series,summary.Availability)
 	}
 }

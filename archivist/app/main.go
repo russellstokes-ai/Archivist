@@ -613,9 +613,13 @@ func (a *app) routes() http.Handler {
 			fail(w, 400, e)
 			return
 		}
-		reply(w, map[string]bool{"ok": true})
-	})
-	mux.HandleFunc("PATCH /api/sources/{id}/watch", func(w http.ResponseWriter, r *http.Request) {
+		resolved,err:=canonical(s.Path)
+        if err!=nil{fail(w,400,err);return}
+        var sourceID int64
+        if err=a.db.QueryRow("SELECT id FROM sources WHERE path=?",resolved).Scan(&sourceID);err!=nil{fail(w,500,err);return}
+        reply(w,map[string]any{"ok":true,"source_id":sourceID})
+    })
+    mux.HandleFunc("PATCH /api/sources/{id}/watch", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Enabled bool `json:"enabled"`
 			Minutes int  `json:"minutes"`

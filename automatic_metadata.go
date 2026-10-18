@@ -27,7 +27,7 @@ func automaticMetadataCandidate(items []multiMetadataCandidate,q multiMetadataQu
   exactText:=q.Title!=""&&q.Author!=""&&strings.Join(multiTokens(q.Title)," ")==strings.Join(multiTokens(c.Title)," ")&&strings.Join(multiTokens(q.Author)," ")==strings.Join(multiTokens(c.Author)," ")
   if !c.ISBNExact&&!c.ASINExact&&!exactText {continue}
   // A book ISBN search cannot establish a particular comic issue.
-  if strings.EqualFold(q.MediaFormat,"Comic")&&(c.ComicSeriesMatch==""||c.ComicIssueMatch==""){continue}
+  if strings.EqualFold(q.MediaFormat,"Comic")&&(c.ComicSeriesMatch!="match"||c.ComicIssueMatch!="match"){continue}
   if found&&chosen.WorkID!=c.WorkID{return multiMetadataCandidate{},false}
   chosen=c;found=true
  }
@@ -35,7 +35,7 @@ func automaticMetadataCandidate(items []multiMetadataCandidate,q multiMetadataQu
 }
 
 func automaticMetadataValues(state workMetaState,c multiMetadataCandidate)map[string]string{
- possible:=map[string]string{"genre":c.Genre,"description":c.Description,"language":c.Language,"narrator":c.Narrator,"series":c.Series}
+ possible:=map[string]string{"author":c.Author,"genre":c.Genre,"description":c.Description,"language":c.Language,"narrator":c.Narrator,"series":c.Series}
  if c.YearType=="first publication"&&c.PublishedYear>=1000&&c.PublishedYear<=time.Now().Year()+1{possible["publishedYear"]=strconv.Itoa(c.PublishedYear)}
  out:=map[string]string{}
  for _,field:=range state.Fields{
@@ -122,16 +122,25 @@ func (a *app)enrichNextWork(ctx context.Context){
   chosen.Source+=" + "+candidate.Source
  }
  if !matched{return}
+ if a.saveAutomaticMetadata(ctx,state,chosen){status="filled missing details"}
+}
+
+func (a *app)saveAutomaticMetadata(ctx context.Context,state workMetaState,chosen multiMetadataCandidate)bool{
+ id:=state.WorkID;now:=time.Now().Unix()
  a.scanMu.Lock();defer a.scanMu.Unlock()
- if !a.automaticMetadataEnabled(){return}
- tx,err:=a.db.BeginTx(ctx,nil);if err!=nil{return};defer tx.Rollback()
- current,err:=a.readWorkMeta(ctx,tx,id);if err!=nil||current.Fingerprint!=state.Fingerprint{retry=now+60;return}
+ if !a.automaticMetadataEnabled(){return false}
+ tx,err:=a.db.BeginTx(ctx,nil);if err!=nil{return false};defer tx.Rollback()
+ current,err:=a.readWorkMeta(ctx,tx,id);if err!=nil||current.Fingerprint!=state.Fingerprint{return false}
  values:=automaticMetadataValues(current,chosen)
- if len(values)==0{status="no missing fields to fill";return}
+ if len(values)==0{return false}
  for field,value:=range values{
-  if _,err=tx.ExecContext(ctx,`INSERT OR IGNORE INTO work_field_controls(work_id,field,value,source,locked,updated_at) VALUES(?,?,?,?,0,?)`,id,field,value,"automatic "+chosen.Source+" identity match",now);err!=nil{return}
+  var protected int
+  if err=tx.QueryRowContext(ctx,`SELECT count(*) FROM asset_field_controls ac JOIN edition_assets ea ON ea.asset_id=ac.asset_id JOIN editions ed ON ed.id=ea.edition_id WHERE ed.work_id=? AND ac.field=? AND (ac.locked=1 OR ac.source='manual')`,id,field).Scan(&protected);err!=nil{return false}
+  if protected>0{continue}
+
+  if _,err=tx.ExecContext(ctx,`INSERT OR IGNORE INTO work_field_controls(work_id,field,value,source,locked,updated_at) VALUES(?,?,?,?,0,?)`,id,field,value,"automatic "+chosen.Source+" identity match",now);err!=nil{return false}
  }
- if err=applyWorkOverridesTx(tx,id);err!=nil{return}
- if _,err=tx.ExecContext(ctx,`INSERT INTO work_metadata_revisions(work_id,revision) VALUES(?,1) ON CONFLICT(work_id) DO UPDATE SET revision=revision+1`,id);err!=nil{return}
- if err=tx.Commit();err==nil{status="filled missing details"}
+ if err=applyWorkOverridesTx(tx,id);err!=nil{return false}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO work_metadata_revisions(work_id,revision) VALUES(?,1) ON CONFLICT(work_id) DO UPDATE SET revision=revision+1`,id);err!=nil{return false}
+ return tx.Commit()==nil
 }

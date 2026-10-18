@@ -49,8 +49,8 @@ func TestServerReviewGroupsFilesIntoLogicalBooks(t *testing.T) {
     if published.Code!=200{t.Fatalf("published view: %d %s",published.Code,published.Body.String())}
     var visible struct { Total int `json:"total"`; State string `json:"state"`; Works []serverReviewWork `json:"works"` }
     if err:=json.Unmarshal(published.Body.Bytes(),&visible);err!=nil{t.Fatal(err)}
-    if visible.State!="published"||visible.Total!=1||len(visible.Works)!=1||visible.Works[0].ID!=3||
-       visible.Works[0].PublicationState!="published"||visible.Works[0].ReviewFiles!=0 {
+    if visible.State!="published"||visible.Total!=3||len(visible.Works)!=1||visible.Works[0].ID!=2||
+       visible.Works[0].PublicationState!="staged"||visible.Works[0].ReviewFiles!=1 {
         t.Fatalf("cannot manage published book: %+v",visible)
     }
     if denied:=call("/api/manage/review-works?state=published",false);denied.Code!=http.StatusUnauthorized{
