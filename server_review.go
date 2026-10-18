@@ -75,11 +75,11 @@ func (a *app) serverReviewRoutes(mux *http.ServeMux) {
         default:fail(w,400,errors.New("unsupported book-level review reason"));return
         }
         filter:="1=1"
-        groupedFilter:="sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)>0 OR COALESCE(max(pub.state),'staged')='staged'"
+        groupedFilter:="sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)>0"
         sorting:="sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END) DESC,w.title COLLATE NOCASE,w.id"
         if state=="published"{
             filter="w.id IN (SELECT id FROM published_works)"
-            groupedFilter="COALESCE(max(pub.state),'staged')='published' AND sum(CASE WHEN ast.needs_review=1 THEN 1 ELSE 0 END)=0"
+            groupedFilter="1=1"
             sorting="w.title COLLATE NOCASE,w.id"
         }
         args:=[]any{}

@@ -33,7 +33,8 @@ func (a *app) initCatalogue() error {
 	if err:=a.initPublication();err!=nil{return err}
     if err:=a.initMetadataControls();err!=nil{return err}
     if err:=a.initRelink();err!=nil{return err}
-    return a.initWorkMetadata()
+    if err:=a.initWorkMetadata();err!=nil{return err}
+    return a.initAutomaticMetadata()
 }
 
 // Natural ordering makes Track 2 precede Track 10 without modifying filenames.
@@ -391,7 +392,9 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		reply(w, map[string]int64{"id": id})
 	})
 	mux.HandleFunc("GET /api/works", func(w http.ResponseWriter, r *http.Request) {
-		q := "%" + r.URL.Query().Get("q") + "%"
+		order:="w.title COLLATE NOCASE,w.id"
+        switch r.URL.Query().Get("sort"){case "title-desc":order="w.title COLLATE NOCASE DESC,w.id";case "author":order="w.author COLLATE NOCASE,w.title COLLATE NOCASE,w.id";case "recent":order="w.id DESC"}
+        q := "%" + r.URL.Query().Get("q") + "%"
 		space, format := r.URL.Query().Get("space"), r.URL.Query().Get("format")
 		author := strings.TrimSpace(r.URL.Query().Get("author"))
 		series := strings.TrimSpace(r.URL.Query().Get("series"))
@@ -463,7 +466,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 			AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
 			GROUP BY w.id
 			HAVING (?='' OR (?='available' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)>0) OR (?='unavailable' AND sum(CASE WHEN a.available=1 THEN 1 ELSE 0 END)=0))
-			ORDER BY w.title,w.id LIMIT ? OFFSET ?`,
+			ORDER BY `+order+` LIMIT ? OFFSET ?`,
 			q,q,q,q,space,space,format,format,author,author,series,series,genre,genre,unknownAuthor,yearFilter,yearFilter,
 			reading,reading,favourite,rating,rating,who(r).Owner,who(r).ID,
 			availability,availability,availability,limit,offset)
@@ -546,7 +549,7 @@ func (a *app) catalogueRoutes(mux *http.ServeMux) {
 		_ = a.db.QueryRow(`SELECT count(*) FROM published_works w WHERE trim(w.author)='' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&unknownAuthors)
 		var needsReview, reviewWorks int
 		_ = a.db.QueryRow(`SELECT count(*) FROM assets a JOIN sources s ON s.id=a.source_id WHERE a.needs_review=1 AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&needsReview)
-		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id LEFT JOIN work_publication pub ON pub.work_id=w.id WHERE (a.needs_review=1 OR COALESCE(pub.state,'staged')='staged') AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&reviewWorks)
+		_ = a.db.QueryRow(`SELECT count(DISTINCT w.id) FROM works w JOIN editions ed ON ed.work_id=w.id JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id LEFT JOIN work_publication pub ON pub.work_id=w.id WHERE a.needs_review=1 AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))`,who(r).Owner,who(r).ID).Scan(&reviewWorks)
 		series := []map[string]any{}
 		rows, e = a.db.Query(`SELECT w.series,count(*) FROM published_works w WHERE w.series<>'' AND (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?)) GROUP BY w.series ORDER BY count(*) DESC,w.series LIMIT 20`,who(r).Owner,who(r).ID)
 		if e == nil { for rows.Next(){var name string;var count int;if rows.Scan(&name,&count)==nil{series=append(series,map[string]any{"name":name,"count":count})}};rows.Close() }

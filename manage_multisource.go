@@ -161,6 +161,7 @@ func parseOpenLibraryMulti(raw []byte,q multiMetadataQuery)([]multiMetadataCandi
    publicMetadataCandidate:publicMetadataCandidate{WorkID:item.Key,Title:strings.TrimSpace(item.Title),Source:"Open Library"},
    Reasons:[]string{},Warnings:[]string{"Work-level result: publisher and ISBN may vary by edition"},YearType:"first publication",
   }
+  c.Genre=atlasGenre(item.Subjects)
   if len(item.Authors)>0{c.Author=strings.TrimSpace(item.Authors[0])}
   if item.Year>=1000&&item.Year<=3000{c.PublishedYear=item.Year}
   // Open Library work search can list hundreds of edition ISBNs. Never pick
@@ -312,7 +313,7 @@ func (a *app)serveMultiSourceCandidates(w http.ResponseWriter,r *http.Request,se
 
 func defaultMultiMetadataEndpoints(search string,q multiMetadataQuery,googleKey string)[]multiMetadataEndpoint{
  endpoints:=[]multiMetadataEndpoint{
-  {Name:"Open Library",URL:"https://openlibrary.org/search.json?q="+url.QueryEscape(search)+"&fields=key,title,author_name,first_publish_year,isbn,publisher&limit=10"},
+  {Name:"Open Library",URL:"https://openlibrary.org/search.json?q="+url.QueryEscape(search)+"&fields=key,title,author_name,first_publish_year,isbn,publisher,subject&limit=10"},
   {Name:"Apple Books",URL:appleBooksSearchURL(search,q.MediaFormat)},
  }
  if normalASIN(q.ASIN)!=""&&(strings.EqualFold(q.MediaFormat,"audio")||strings.EqualFold(q.MediaFormat,"audiobook")){

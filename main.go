@@ -297,6 +297,8 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
  defer cache.Close()
 
 	count := 0
+    skipped := 0
+    ignoredLinks := 0
 	reused := 0
 	reviewCount := 0
 	sidecars := newSidecarScanCache()
@@ -306,6 +308,7 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			return walkErr
 		}
 		if d.Type()&os.ModeSymlink != 0 {
+            ignoredLinks++
 			return nil
 		}
 		if d.IsDir() {
@@ -316,6 +319,7 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 		}
 		format := kind(path)
 		if format == "" {
+            skipped++
 			return nil
 		}
 		rel, e := filepath.Rel(root, path)
@@ -444,7 +448,7 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			return e
 		}
 	}
-	status := fmt.Sprintf("%d files · %d reused · %d need review · %s", count, reused, reviewCount, time.Now().Format("2 Jan 15:04"))
+	status := fmt.Sprintf("%d media files imported · %d unchanged · %d metadata flags · %d non-media/unsupported files skipped · %d symbolic links skipped · %s", count, reused, reviewCount, skipped, ignoredLinks, time.Now().Format("2 Jan 15:04"))
 	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", status, id); e != nil {
 		return e
 	}
@@ -510,6 +514,7 @@ func (a *app) routes() http.Handler {
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
     a.metadataControlRoutes(mux)
+    a.automaticMetadataRoutes(mux)
     a.bulkMetadataRoutes(mux)
     a.workMetadataRoutes(mux)
     a.relinkRoutes(mux)
@@ -1006,6 +1011,7 @@ func main() {
 	}
 	go a.worker(context.Background())
 	go a.watcher(context.Background())
+    go a.automaticMetadataWorker(context.Background())
 	handler := a.routes()
 	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	if *tlsAddr != "" {

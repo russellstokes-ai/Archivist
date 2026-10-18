@@ -36,7 +36,7 @@ func TestServerImportTenThousand(t *testing.T) {
  a:=fixture(t)
  root:=t.TempDir()
  for i:=0;i<10020;i++ {
-  if err:=os.WriteFile(filepath.Join(root,fmt.Sprintf("Synthetic Book %05d.pdf",i)),[]byte("synthetic PDF placeholder"),0600);err!=nil{t.Fatal(err)}
+  if err:=os.WriteFile(filepath.Join(root,fmt.Sprintf("Synthetic Book %05d%s",i,[]string{".CBZ",".cbr",".pdf",".cbt"}[i%4])),[]byte("synthetic PDF placeholder"),0600);err!=nil{t.Fatal(err)}
  }
  if err:=a.addSource("Synthetic import",root);err!=nil{t.Fatal(err)}
  for _,label:=range []string{"first import","unchanged rescan"}{

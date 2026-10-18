@@ -11,9 +11,9 @@ import (
     "time"
 )
 
-// An absent publication row means STAGED. Only a single one-time migration
-// grandfathers the already-reviewed works that predated explicit publication.
-// This preserves existing libraries while preventing new scans from leaking.
+// New imports are visible within existing family space grants. Review is metadata
+// advice, not an access gate. Explicitly hidden works stay hidden across restart.
+// The legacy publication ledger remains for owner actions and revision checks.
 func (a *app) initPublication() error {
     _, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS work_publication(
         work_id INTEGER PRIMARY KEY REFERENCES works(id) ON DELETE CASCADE,
@@ -35,14 +35,11 @@ func (a *app) initPublication() error {
         digest TEXT NOT NULL,
         updated_at INTEGER NOT NULL
     );
-    CREATE VIEW IF NOT EXISTS published_works AS SELECT w.* FROM works w
-      JOIN work_publication pub ON pub.work_id=w.id AND pub.state='published'
-      WHERE NOT EXISTS (
-        SELECT 1 FROM editions ed
-        JOIN edition_assets ea ON ea.edition_id=ed.id
-        JOIN assets ast ON ast.id=ea.asset_id
-        WHERE ed.work_id=w.id AND ast.needs_review=1
-      );
+    DROP VIEW IF EXISTS published_works;
+    CREATE VIEW published_works AS SELECT w.* FROM works w
+      LEFT JOIN work_publication pub ON pub.work_id=w.id
+      WHERE pub.work_id IS NULL OR pub.state='published'
+        OR (SELECT action FROM work_publication_events ev WHERE ev.work_id=w.id ORDER BY ev.id DESC LIMIT 1)='review_reopened';
     CREATE INDEX IF NOT EXISTS idx_publication_events_work ON work_publication_events(work_id,id);
     CREATE INDEX IF NOT EXISTS idx_edition_assets_edition ON edition_assets(edition_id,asset_id);
     CREATE TRIGGER IF NOT EXISTS publication_review_reopened

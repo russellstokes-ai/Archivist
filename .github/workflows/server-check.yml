@@ -75,6 +75,9 @@ jobs:
           go mod tidy
           go test ./...
 
+      - name: Ten thousand mixed comic/PDF import and rescan
+        run: ARCHIVIST_IMPORT_BENCHMARK=1 go test -run TestServerImportTenThousand -count=1 -v
+
       - name: Packaged server tests
         run: |
           (cd archivist/app && go mod tidy && go test ./...)

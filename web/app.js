@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let page='library',request=0,currentProfile=null,libraryOffset=0,libraryFormat='',libraryGenre='',libraryYear=0,summaryData=null;
+let page='shelf',request=0,currentProfile=null,libraryOffset=0,libraryFormat='',libraryGenre='',libraryYear=0,summaryData=null;
 const pageSize=60;
 let importSources=[],importJobs=[];
 function renderImportGuide(){
@@ -72,11 +72,13 @@ function workCard(work){
   const title=element('strong',work.title);const sub=element('small');
   sub.textContent=work.author||'Unknown author';
   meta.append(title,sub);
+  const details=[work.genre,work.publishedYear].filter(Boolean).join(' · ');if(details)meta.append(element('small',details));
   if(!work.available){const unavailable=element('small','Currently unavailable');meta.append(unavailable)}
   button.append(meta);button.onclick=()=>openWork(work);return button;
 }
 
 async function openWork(work){
+  window.activeServerWork=work;
   if(!work.available){message('This work is currently unavailable.');return}
   activity('Opening',work.title);
   try{
@@ -86,7 +88,7 @@ async function openWork(work){
     if(editions.length===1){
       const edition=editions[0],selected=tracks.filter(t=>t.edition===edition),format=selected[0]?.format;
       if(format==='Audio'){await openAudiobook(work.title,tracks,edition);return}
-      if(selected.length===1){window.open('./reader.html?asset='+selected[0].id,'_blank','noopener');return}
+      if(selected.length===1){window.location.href='./reader.html?asset='+selected[0].id;return}
     }
     const content=$('work-detail-content');content.replaceChildren();
     content.append(element('span',work.format));content.firstChild.className='eyebrow';
@@ -99,7 +101,7 @@ async function openWork(work){
         const play=element('button','Play audiobook');play.className='primary';play.onclick=()=>{hideOverlay('work-detail');openAudiobook(work.title,tracks,edition)};block.append(play);
       }else{
         for(const item of selected){
-          const open=element('button','Open '+item.title);open.disabled=!item.available;open.onclick=()=>{hideOverlay('work-detail');window.open('./reader.html?asset='+item.id,'_blank','noopener')};block.append(open);
+          const open=element('button','Open '+item.title);open.disabled=!item.available;open.onclick=()=>{hideOverlay('work-detail');window.location.href='./reader.html?asset='+item.id};block.append(open);
         }
       }
       content.append(block);
@@ -124,6 +126,7 @@ async function loadBooks(append=false){
   }
   try{
   const params=new URLSearchParams({q:$('search').value,space:$('space').value,limit:String(pageSize),offset:String(libraryOffset)});
+  params.set('sort',$('library-sort').value);
   if(libraryFormat)params.set('format',libraryFormat);
   if(libraryGenre)params.set('genre',libraryGenre);
   if(libraryYear)params.set('year',String(libraryYear));
@@ -207,7 +210,7 @@ async function loadSources(){
     const actions=element('div');actions.className='source-actions';
     const scan=element('button','Scan / refresh');scan.className='primary';scan.onclick=async()=>{
       scan.disabled=true;scan.textContent='Starting scan…';activity('Starting scan',s.space);
-      try{await api('./api/sources/'+s.id+'/scan','POST');message('Import started. Review new books in Assist when it completes.');pollJobs()}
+      try{await api('./api/sources/'+s.id+'/scan','POST');message('Import started. Books appear automatically when the scan completes.');pollJobs()}
       catch(e){message(e.message)}finally{activity('');scan.disabled=false;scan.textContent='Scan / refresh'}
     };
     const watchWrap=element('span');watchWrap.className='watch-controls';
@@ -258,9 +261,9 @@ function showSettings(name){
 }
 function show(next){
   if(next!=='atlas')++atlasLoadVersion;
-  page=next;for(const p of ['library','atlas','settings'])$(p).hidden=p!==next;
+  page=next;for(const p of ['shelf','library','atlas','stats','listen','settings'])$(p).hidden=p!==next;
   document.querySelectorAll('[data-page]').forEach(b=>b.setAttribute('aria-current',b.dataset.page===next?'page':'false'));
-  message('');if(next==='atlas'){loadLibrarySummary().catch(e=>message(e.message));loadAtlasUniverse().catch(e=>{$('atlas-map-status').textContent=e.message;});}if(next==='settings')showSettings('library');
+  message('');if(typeof loadExperience==='function')loadExperience(next);if(next==='atlas'){loadLibrarySummary().catch(e=>message(e.message));loadAtlasUniverse().catch(e=>{$('atlas-map-status').textContent=e.message;});}if(next==='settings')showSettings('library');
 }
 
 // Hash-only deep links remain inside the current HA ingress base; no absolute
@@ -268,6 +271,7 @@ function show(next){
 function navigateServerHash(){
   if(!currentProfile)return;
   const target=window.location.hash.slice(1);
+  if(['shelf','stats','listen'].includes(target)){show(target);return}
   if(target==='atlas'){show('atlas');return}
   if(target==='library'){show('library');return}
   if(!currentProfile.owner||!target.startsWith('settings/'))return;
@@ -283,7 +287,7 @@ async function start(){
   $('setup').hidden=true;$('unlock').hidden=true;$('nav').hidden=false;
   document.querySelector('[data-page="settings"]').hidden=!currentProfile.owner;
   $('assist-link').hidden=!currentProfile.owner;
-  show('library');renderImportGuide();navigateServerHash();window.dispatchEvent(new Event('archivist-ready'))
+  show('shelf');renderImportGuide();navigateServerHash();window.dispatchEvent(new Event('archivist-ready'))
 }
 async function boot(){try{await start()}catch(e){try{const setup=await api('./setup/status');$('setup').hidden=setup.configured;$('unlock').hidden=!setup.configured}catch(err){message(err.message)}}}
 

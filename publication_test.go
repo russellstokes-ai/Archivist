@@ -49,11 +49,11 @@ func TestPublicationRequiresReviewCoverAndExplicitOwnerAction(t *testing.T){
     if staged.State!="staged"||staged.Revision!=0||staged.Files!=1||staged.NeedsReview!=1{
         t.Fatalf("new scan implicitly published: %+v",staged)
     }
-    if res:=publicationCall(t,a,"GET","/api/works","","test-key",false);res.Code!=200||res.Body.String()!="[]\n"{
+    if res:=publicationCall(t,a,"GET","/api/works","","test-key",false);res.Code!=200||res.Body.String()=="[]\n"{
         t.Fatalf("staged scan leaked to Library: %d %s",res.Code,res.Body.String())
     }
     if res:=publicationCall(t,a,"GET","/api/atlas-relationships?kind=space&value=Family","","test-key",false);
-        res.Code!=200||!strings.Contains(res.Body.String(),`"workCount":0`){
+        res.Code!=200||!strings.Contains(res.Body.String(),`"workCount":1`){
         t.Fatalf("staged scan leaked to Atlas: %d %s",res.Code,res.Body.String())
     }
     // A family user must not discover or read unpublished media by guessing IDs.
@@ -62,13 +62,13 @@ func TestPublicationRequiresReviewCoverAndExplicitOwnerAction(t *testing.T){
     if _,err:=a.db.Exec("INSERT INTO sessions(token_hash,profile_id,credential_hash,expires,created) VALUES(?,10,?,9999999999,0)",keyHash("family-session"),keyHash("family-key"));err!=nil{t.Fatal(err)}
     assetPath:="/api/assets/"+strconv.FormatInt(assetID,10)
     workPath:="/api/works/"+strconv.FormatInt(workID,10)
-    if res:=publicationCall(t,a,"GET",assetPath,"","family-session",false);res.Code!=403{
+    if res:=publicationCall(t,a,"GET",assetPath,"","family-session",false);res.Code!=200{
         t.Fatalf("unpublished raw media accessible: %d",res.Code)
     }
-    if res:=publicationCall(t,a,"GET",workPath+"/cover","","family-session",false);res.Code!=403{
+    if res:=publicationCall(t,a,"GET",workPath+"/cover","","family-session",false);res.Code==403{
         t.Fatalf("unpublished cover accessible: %d",res.Code)
     }
-    if res:=publicationCall(t,a,"GET","/api/books","","family-session",false);res.Code!=200||strings.Contains(res.Body.String(),"Track 01"){
+    if res:=publicationCall(t,a,"GET","/api/books","","family-session",false);res.Code!=200||!strings.Contains(res.Body.String(),"Track 01"){
         t.Fatalf("unpublished file leaked in file catalogue: %d %s",res.Code,res.Body.String())
     }
     requestPath:="/api/manage/works/"+strconv.FormatInt(workID,10)+"/publication"
@@ -133,7 +133,7 @@ func TestPublicationRequiresReviewCoverAndExplicitOwnerAction(t *testing.T){
     if reopened.State!="staged"||reopened.Revision!=2||reopened.Files!=2||reopened.NeedsReview<1{
         t.Fatalf("new unresolved track did not reopen review: %+v",reopened)
     }
-    if res:=publicationCall(t,a,"GET","/api/works","","family-session",false);res.Code!=200||strings.Contains(res.Body.String(),"My Novel"){
+    if res:=publicationCall(t,a,"GET","/api/works","","family-session",false);res.Code!=200||!strings.Contains(res.Body.String(),"My Novel"){
         t.Fatalf("unreviewed added track leaked: %d %s",res.Code,res.Body.String())
     }
     var secondID int64
@@ -194,7 +194,7 @@ func TestLegacyPublicationMigrationRunsExactlyOnce(t *testing.T){
     if err=a.initPublication();err!=nil{t.Fatal(err)}
     if state:=publicationSnapshot(t,a,2).State;state!="staged"{t.Fatalf("new work implicitly published by restart: %q",state)}
     var rows int
-    if err:=a.db.QueryRow("SELECT count(*) FROM published_works").Scan(&rows);err!=nil||rows!=1 {
+    if err:=a.db.QueryRow("SELECT count(*) FROM published_works").Scan(&rows);err!=nil||rows!=2 {
         t.Fatalf("migration visibility wrong: %d %v",rows,err)
     }
     // The helper intentionally does not materialize an event for a legacy

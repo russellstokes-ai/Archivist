@@ -26,6 +26,7 @@ type openLibrarySearchResponse struct {
 		Title     string   `json:"title"`
 		Authors   []string `json:"author_name"`
 		Year      int      `json:"first_publish_year"`
+        Subjects []string `json:"subject"`
 		ISBN      []string `json:"isbn"`
 		Publishers []string `json:"publisher"`
 	} `json:"docs"`
