@@ -1,0 +1,10 @@
+const fs=require('fs'),assert=require('node:assert/strict'),ts=require('typescript');
+const app=fs.readFileSync(__dirname+'/App.tsx','utf8');
+const source=ts.createSourceFile('App.tsx',app,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const imports=source.statements.filter(ts.isImportDeclaration);
+assert(imports.some(n=>n.moduleSpecifier.text==='./assistMetadata/runtimeFactory'&&n.importClause?.namedBindings?.elements.some(e=>e.name.text==='createAndroidCatalogueRuntime')),'App must invoke the improved runtime, not merely bundle it');
+assert(!imports.some(n=>n.moduleSpecifier.text==='./scannerVNext/runtimeFactory'),'Historical factory bypasses new providers and persistence');
+assert(app.includes('<AssistClueSearch workId={editing.scannerWorkId}'),'Actual editor must render clue search');
+assert(app.includes('automatic:false,clues,retry:true'),'Typed clues must reach search without overwriting saved identity');
+assert(app.includes("(current.fields[key as keyof typeof current.fields]??'')!==value"),'Untouched empty fields must not become manual clears');
+console.log('PASS: actual editor connects improved runtime, clue search, and preserves missing fields for enrichment');

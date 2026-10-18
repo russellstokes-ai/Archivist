@@ -56,7 +56,7 @@ import {comicWebViewFailure} from './readerAccessErrors';
 import {comicContainerFromDocument,comicContainerFromUri,effectiveLocalReaderFormat,readerFormatFromContainer} from './comicSourceFormat';
 import {comicReaderWebViewSource} from './comicReaderWebViewSource';
 import {groupLocalWorks, LocalWork} from './localWorks';
-import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';
+import {createAndroidCatalogueRuntime} from './assistMetadata/runtimeFactory';
 import {projectScannerWorks,toFields,type ScannerBook} from './scannerVNext/runtime';
 import type {AssistState} from './scannerVNext/assist';
 import {normalizeGenre} from './scannerVNext/genre';
@@ -67,6 +67,7 @@ import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, s
 import {rewardCabinetEntries,type RewardCabinetItem} from './rewardGallery';
 import {MedalShimmer} from './MedalShimmer';
 import {exportMetadataCopy} from './assistMetadata/exportCopy';
+import {AssistClueSearch} from './assistMetadata/ClueSearch';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
 import {AchievementRewardOverlay} from './AchievementRewardOverlay';
 import {motionForAchievement,motionForLevelUp,rewardPresentationMs} from './rewardMotion';
@@ -5062,7 +5063,7 @@ function Client() {
         try{
           const runtime=await freshRuntime(),current=await runtime.metadata.get(id);if(!current)throw new Error('Work is unavailable. Prepare the library again.');
           const draft=toFields({title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||undefined});
-          const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));
+          const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>(current.fields[key as keyof typeof current.fields]??'')!==value));
           const result=await runtime.save(id,patch,assistPolicy());
           await applyScannerRows(await runtime.refresh(id));
           setEditing({...editing,title,author,series:seriesName,seriesNumber,genre,publishedYear,narrator,publisher,isbn,asin,language,description,coverUri:coverUri||editing.coverUri});setEditPickedCover(null);
@@ -5224,6 +5225,11 @@ function Client() {
             </View>:null}
             {!localEdit?<Text style={[styles.meta,{color:p.muted}]}>Server cover art is refreshed from the source file or companion artwork during a server scan. Text metadata saved here is marked manual and protected from later scans.</Text>:null}
             {editing.scannerWorkId?<View style={styles.settingsSubgroup}>
+              <AssistClueSearch workId={editing.scannerWorkId} online={assistPolicy(true).online} colors={{ink:p.ink,muted:p.muted,line:p.line,raised:p.raised}}
+                search={async clues=>{const runtime=await freshRuntime();const result=await runtime.assist.search(editing.scannerWorkId!,{...assistPolicy(true),automatic:false,clues,retry:true});return result.completion;}}
+                onResult={state=>{if(editingScannerId.current===editing.scannerWorkId)setAssistState(state);}}
+                onCancel={()=>{const id=editing.scannerWorkId!;void freshRuntime().then(runtime=>runtime.assist.cancel(id));}}/>
+
               <Animated.View style={!reduceMotion&&(!editTitle.trim()||!editAuthor.trim()||normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'||!editYear||!(editCoverUri||editing.coverUri))&&assistState?.state!=='pending'?{opacity:interfacePulse.interpolate({inputRange:[0,.5,1],outputRange:[.72,1,.72]})}:undefined}>
               <Button label={editorDirty?'Save details first':assistState?.state==='pending'?'Searching…':'Archivist Assist'} tone="gold" disabled={busy||coverPicking||editorDirty||assistState?.state==='pending'} onPress={()=>void runAssist()}/>
               </Animated.View>
@@ -5326,7 +5332,7 @@ function Client() {
             const representative=localBooks.find(book=>book.scannerWorkId===id&&book.uri&&localUpdates.has(book.uri));if(!representative?.uri)continue;
             const current=await runtime.metadata.get(id);if(!current)throw new Error('Unknown work');
             const draft=toFields(localUpdates.get(representative.uri)!);
-            const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));
+            const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>(current.fields[key as keyof typeof current.fields]??'')!==value));
             const saved=await runtime.save(id,patch,assistPolicy());void saved.completion.then(async state=>{if(state.state==='accepted')await applyScannerRows(await runtime.refresh(id));}).catch(()=>undefined);
             for(const book of await runtime.refresh(id))freshUpdates.set(book.uri,book);
           }

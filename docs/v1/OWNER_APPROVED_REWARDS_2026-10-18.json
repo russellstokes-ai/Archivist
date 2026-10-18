@@ -1,0 +1,16 @@
+{
+  "approvedBy": "Owner device acceptance on 2026-10-18",
+  "scope": "Awards appearance and animations only",
+  "files": {
+    "mobile/MedalShimmer.tsx": "74088937258fa0c032c1d767d19c6d7e60b0f1a4a912c1574a76968a5a5af4b7",
+    "mobile/assets/motion/rewards/badge-gold-variant.json": "960f73700a18f0670f68790fc9b859737bd284a69ce7898d7ae3e835e8f3eca7",
+    "mobile/assets/motion/rewards/badge-original.json": "cff72e0202982a1503bdba29b500a3fa072b463992203dc9385bd6201140adba",
+    "mobile/assets/motion/rewards/books-stack-original.json": "11c7602bf99323a43c6b9a1abb37ee61061b1ea2b2bc77b0abdecef4dc11af8a",
+    "mobile/assets/motion/rewards/crown-original.json": "b3d250e102393cbfb6095f2b7e67e62b3ccf067d0ed1660e42fb8307938577da",
+    "mobile/assets/motion/rewards/firework-original.json": "0475d55289d34ae990967e4abcbdbcd56434894dd0d904348928e17b515d84a6",
+    "mobile/assets/motion/rewards/headphones-original.json": "5ff7875d245e73ed160e37f4e36fc4c83b61b993764b392691185c7371739b8d",
+    "mobile/assets/motion/rewards/level-confetti-original.json": "4191579d863c2334859f45086ee544826f6fd4a687ddc533ca2907c0079e10d9",
+    "mobile/assets/motion/rewards/SOURCE_MANIFEST.json": "8aa2009cf79a5c9bce8cee8e927073fd8ac4f8ff303c70d671d8e8b11b3bf9f1",
+    "mobile/assets/motion/rewards/trophy-original.json": "dd68917c8057179f19f7ded62b3a474d01dd8daf3ea02d5d92c8790f539b8e6f"
+  }
+}

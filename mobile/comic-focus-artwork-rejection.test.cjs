@@ -1,16 +1,5 @@
-const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
-require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,p);
-const {detectBubbleRegion}=require('./speechFocus.ts');
-const w=180,h=160;
-function fixture(){const p=new Uint8ClampedArray(w*h*4);for(let i=0;i<p.length;i+=4){p[i]=p[i+1]=p[i+2]=45;p[i+3]=255;}return p;}
-function rect(p,x1,y1,x2,y2,r,g=r,b=r){for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++){const i=(y*w+x)*4;p[i]=r;p[i+1]=g;p[i+2]=b;}}
-for(const color of [[245,245,245],[225,181,150]]){
- const p=fixture();rect(p,70,20,91,125,...color);
- assert.equal(detectBubbleRegion(p,w,h,80,65),null,'An elongated bright or skin-coloured limb is not dialogue');
-}
-const blank=fixture();rect(blank,40,40,120,90,245);
-assert.equal(detectBubbleRegion(blank,w,h,65,70),null,'A bright artwork patch without enclosed lettering is not dialogue');
-const p=fixture();rect(p,40,40,120,90,245);rect(p,55,55,62,61,20);rect(p,68,55,75,61,20);
-const r=detectBubbleRegion(p,w,h,80,70);assert(r,'Lettered bubble must remain focusable');
-assert(r.left>=38&&r.right<=122&&r.top>=38&&r.bottom<=92,'Crop includes only a small outline allowance');
-console.log('PASS: limbs and unlettered artwork rejected; lettered bubble tightly isolated');
+// Owner rejected the tightened detector on device. Retain canonical recall until real-page fixtures justify a change.
+const fs=require('fs'),path=require('path'),crypto=require('crypto'),assert=require('node:assert/strict');
+const locks={"mobile/speechFocus.ts":"c21c0736b4734f31ab1cf737a8aa5b8338c63957a1d47ff240118c0f1223b987","mobile/speechFocus.generated.ts":"bbbabae82bd707de1d0290fba1eae31ad2e6dc88a9059d8b4047f7f5271306fa","web/speech-focus.js":"3017e9b2d1aac429b90cd84a5541ae64dd01328eb029c348f6bfd28ef68348ec","archivist/app/web/speech-focus.js":"3017e9b2d1aac429b90cd84a5541ae64dd01328eb029c348f6bfd28ef68348ec"};
+for(const [file,hash]of Object.entries(locks))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'..',file))).digest('hex'),hash,'Canonical Comic Focus changed: '+file);
+console.log('PASS: canonical Comic Focus restored in native and both web copies');
