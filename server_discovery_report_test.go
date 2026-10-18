@@ -57,3 +57,16 @@ func TestScanReportCountsSkippedAndEffectiveWorkMetadata(t *testing.T){
  session,err:=a.newSession("report-user");if err!=nil{t.Fatal(err)}
  req=httptest.NewRequest("GET","/api/manage/scan-report",nil);req.AddCookie(&http.Cookie{Name:"archivist_session",Value:session});res=httptest.NewRecorder();a.routes().ServeHTTP(res,req);if res.Code!=403{t.Fatalf("household report access: %d",res.Code)}
 }
+
+func TestComicTextIssueKeepsOtherMetadata(t *testing.T){
+ for _,label:=range []string{"1A","1/2","Annual",""}{
+  t.Run(label,func(t *testing.T){
+   root:=t.TempDir();p:=filepath.Join(root,"Example.cbz")
+   body:=`<ComicInfo><Title>Special</Title><Series>Example</Series><Number>`+label+`</Number><Writer>A Writer</Writer><Genre>Fantasy</Genre><Year>2001</Year></ComicInfo>`
+   writeZipFixture(t,p,map[string]string{"ComicInfo.xml":body})
+   embedded:=comicMetadata(p)
+   side:=filepath.Join(root,"ComicInfo.xml");if err:=os.WriteFile(side,[]byte(body),0600);err!=nil{t.Fatal(err)}
+   for _,m:=range []embeddedMetadata{embedded,parseSidecarFile(side)}{if m.Author!="A Writer"||m.Genre!="Fantasy"||m.PublishedYear!=2001||m.SeriesNumber!=0{t.Fatalf("text issue discarded metadata or invented number: %+v",m)}}
+  })
+ }
+}

@@ -143,8 +143,8 @@ func parseSidecarFile(filename string) embeddedMetadata {
 			WriterComic   string  `xml:"Writer"`
 			Series        string  `xml:"series"`
 			SeriesComic   string  `xml:"Series"`
-			Number        float64 `xml:"number"`
-			NumberComic   float64 `xml:"Number"`
+			Number        string `xml:"number"`
+			NumberComic   string `xml:"Number"`
 			Genre         string  `xml:"genre"`
 			GenreComic    string  `xml:"Genre"`
 			Narrator      string  `xml:"narrator"`
@@ -166,8 +166,8 @@ func parseSidecarFile(filename string) embeddedMetadata {
 				}
 				return ""
 			}
-			number := x.Number
-			if number == 0 { number = x.NumberComic }
+			number := comicXMLNumber(x.Number)
+			if number == 0 { number = comicXMLNumber(x.NumberComic) }
 			year := x.Year
 			if year == 0 { year = x.YearComic }
 			return embeddedMetadata{
@@ -327,11 +327,18 @@ func epubMetadata(filename string) embeddedMetadata {
 	return opfMetadataFromReader(func(dst any) bool { return readZipXML(&z.Reader, name, dst) })
 }
 
+// ComicInfo Number is text. Unsupported labels must not discard other fields.
+func comicXMLNumber(value string)float64{
+ n,err:=strconv.ParseFloat(strings.TrimSpace(value),64)
+ if err!=nil||!(n>0&&n<=100000){return 0}
+ return n
+}
+
 func comicMetadata(filename string) embeddedMetadata {
 	var info struct {
 		Title       string  `xml:"Title"`
 		Series      string  `xml:"Series"`
-		Number      float64 `xml:"Number"`
+		Number      string `xml:"Number"`
 		Writer      string  `xml:"Writer"`
 		Genre       string  `xml:"Genre"`
 		Publisher   string  `xml:"Publisher"`
@@ -359,7 +366,7 @@ func comicMetadata(filename string) embeddedMetadata {
 	}
 	return embeddedMetadata{
 		Title:cleanMetadata(info.Title), Author:normalizeAuthor(info.Writer),
-		Series:cleanMetadata(info.Series), SeriesNumber:info.Number, Genre:cleanMetadata(info.Genre),
+		Series:cleanMetadata(info.Series), SeriesNumber:comicXMLNumber(info.Number), Genre:cleanMetadata(info.Genre),
 		Publisher:cleanMetadata(info.Publisher), Language:cleanMetadata(info.Language),
 		Description:cleanMetadata(info.Summary), PublishedYear:info.Year,
 	}
