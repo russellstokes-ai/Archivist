@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.3-qa.20261018.2 — Discovery diagnostics and comic metadata
+
+- Icons for all six main sections.
+- Administrator diagnostic download: extension counts, skipped examples, jobs, build/runtime, metadata gaps, enrichment outcomes and repeated-title candidates.
+- Book-level coverage shown separately from file-level gaps.
+- CBT metadata reads TAR; nonnumeric ComicInfo issue labels no longer discard author/genre/year.
+- Safer comic folder interpretation, numbered PDF titles and authorless explicit comic-identity matching; series-only matches can supply genre, never issue dates.
+- Source media untouched; repeated titles are not automatically merged.
+- Rescan once after updating to collect new diagnostic evidence.
+
 ## 0.9.3-qa.20261018.1 — Automatic library test candidate
 
 - Adding a folder starts scanning; imports are readable without bulk approval.

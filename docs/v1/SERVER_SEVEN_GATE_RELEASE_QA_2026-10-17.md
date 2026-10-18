@@ -71,3 +71,16 @@ Version **0.9.3-qa.20261018.1**, built and tested source **f31fa44557bad9f6ea5c7
 - Documentation-only follow-up records these results; executable source and package version are unchanged. See [automatic import acceptance](SERVER_AUTOMATIC_LIBRARY_QA_2026-10-18.md).
 
 This supersedes automated software evidence only. All seven physical/representative-media/security acceptance gates above retain their outstanding requirements; no release-gate waiver.
+
+
+## Diagnostic and comic metadata test build — 18 October 2026
+
+Version **0.9.3-qa.20261018.2**. Exact executable source **1755831ad6e40124b539f6c2c4221b36aa0ab106**.
+
+- [Server validation](https://github.com/russellstokes-ai/Archivist/actions/runs/39123247395): SUCCESS. Root/packaged Go, mixed 10,020-file import/rescan, UI/manager contracts, protected sources/parity, native ARM64, Docker/HA checks.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39123247449/artifacts/12135032009): Linux binaries and HA repository ZIP; expiry 25 October. Archive SHA256 `b876eaa140c095145baa46c23a35c14eb3fd3a548238d613dff06fb92a325001`.
+- Icons included. New **Scanner & sources → Download scan report**. Rescan once per source after updating to populate skipped-extension evidence. [Report guide](SERVER_DIAGNOSTIC_REPORT_2026-10-18.md).
+- CBT/TAR extraction and ComicInfo text issue labels repaired; safer comic folder/PDF name handling and limited authorless comic matching. Dedicated Metron/Comic Vine/MusicBrainz integrations are **not** included. [Research findings](METADATA_ECOSYSTEM_FINDINGS_2026-10-18.md).
+- Physical HA/Pi4/NAS and real archive/browser/phone acceptance remain **BLOCKED**. No commercial release claim, merge or production deployment. The skipped 3,375 files have not yet been identified.
+
+Only automated software evidence is updated. Physical and representative-media release gates retain their outstanding requirements.

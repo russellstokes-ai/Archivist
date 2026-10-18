@@ -326,5 +326,15 @@
     "physical_acceptance": "BLOCKED",
     "browser_acceptance": "BLOCKED",
     "commercial_server_go": false
+  },
+  "server_diagnostics_2026_10_18": {
+    "version": "0.9.3-qa.20261018.2",
+    "tested_sha": "1755831ad6e40124b539f6c2c4221b36aa0ab106",
+    "server_checks": 39123247395,
+    "qa_artifacts": 12135032009,
+    "state": "ready_for_owner_installation_testing",
+    "commercial_server_go": false,
+    "physical_acceptance": "BLOCKED",
+    "report": "docs/v1/SERVER_DIAGNOSTIC_REPORT_2026-10-18.md"
   }
 }

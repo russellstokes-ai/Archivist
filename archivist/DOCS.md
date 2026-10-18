@@ -1,4 +1,4 @@
-> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261018.1; server checks passed; ready for installation testing.** See the [QA installation and build guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for the branch repository URL, validation status, setup, updates and rollback. The default repository URL below does not select this candidate.
+> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261018.2; server checks passed; ready for installation testing.** See the [QA installation and build guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for the branch repository URL, validation status, setup, updates and rollback. The default repository URL below does not select this candidate.
 
 # Archivist for Home Assistant — Documentation
 
@@ -6,7 +6,7 @@
 
 Archivist is a self-hosted personal library server for books, audiobooks, comics and PDFs. The Home Assistant package provides the Archivist web interface and API, persistent catalogue storage, household profiles and access for the Archivist Android app.
 
-Current Home Assistant version: **0.9.3-qa.20261018.1 (test release)**
+Current Home Assistant version: **0.9.3-qa.20261018.2 (test release)**
 
 ## Installation
 
@@ -245,3 +245,7 @@ Shelf, Library, Atlas, Player, Stats and Settings are separate destinations. Lib
 Automatic metadata is enabled by default and can be disabled in source settings. Open Library receives title/author or ISBN searches; Audnexus receives exact audiobook ASINs. Media files are not uploaded. Matching is deliberately conservative, filling missing fields (especially genre and first-publication year) without replacing corrections or locks. Comic issue identity must be verified before online enrichment; missing details may remain. Existing embedded metadata is used during scanning.
 
 The source status reports imported files, unchanged files, metadata flags, skipped non-media/unsupported files and symlinks. File totals and logical book totals differ when editions/tracks are grouped. Supported comic inputs include CBZ/ZIP, CBR, CBT and PDF; CB7 and bare RAR are not imported. The 10,020-file automated check uses synthetic placeholders and proves enumeration/rescan counts, not real archive decoding or Pi performance. See the QA installation guide for runnable acceptance.
+
+## Download diagnostics
+
+Open **Archivist Assist → Scanner & sources → Download scan report**. After upgrading to 0.9.3-qa.20261018.2, scan each source once to collect extension counts and skipped filename examples. The download also contains build/runtime, recent jobs, metadata provenance/gaps, effective book coverage, enrichment outcomes and repeated-title candidates. It includes filenames and titles, but not source root paths, access keys or media contents. See [report contents and limits](../docs/v1/SERVER_DIAGNOSTIC_REPORT_2026-10-18.md).
