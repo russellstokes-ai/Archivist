@@ -369,3 +369,18 @@ Version **0.9.3-qa.20261017.1**, built and tested source **8c4e02e6f85334c892ff7
 - Artifact archive SHA256: `7f78748c6ea18fa39bd37b7bb5ff39b6190acfa9a64d2a18bf354a4c031e144a`.
 - Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain BLOCKED. No commercial-release claim, merge or production deployment.
 - Subsequent documentation-only commit records these results; executable source and package version are unchanged.
+
+
+## 18 October 2026 — Automatic library and mixed comic discovery
+
+## Home Assistant test build — 18 October 2026
+
+Version **0.9.3-qa.20261018.1**, built and tested source **f31fa44557bad9f6ea5c772f35e0aeea8f067c7b**.
+
+- [Server checks passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39117974038): root/packaged Go suites, 10,020 mixed-extension synthetic files imported and rescanned, UI contracts, protected source/parity, native ARM64, Docker persistence and HA smoke.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39117974040/artifacts/12133286010): Linux amd64/arm64 binaries, HA repository ZIP and SHA256SUMS; expiry 25 October 2026.
+- Artifact archive SHA256: `41b58967916822fa4b3fe96511c52b2df51be5894007f66bdf7c7dbbb8b1129c`.
+- Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain **BLOCKED**. No commercial-release claim, merge or production deployment.
+- Documentation-only follow-up records these results; executable source and package version are unchanged. See [automatic import acceptance](SERVER_AUTOMATIC_LIBRARY_QA_2026-10-18.md).
+
+New imports no longer require individual publication. Added safe background enrichment, source accounting and server Shelf/Player/Stats navigation. Original media and canonical mobile/scanner/reader source unchanged. Real 8,300-file user library was not accessed; actual decoding, grouping and browser/device acceptance remain unverified.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.3-qa.20261018.1 — Automatic library test candidate
+
+- Adding a folder starts scanning; imports are readable without bulk approval.
+- Optional attention queue for metadata flags/unavailable items; explicit hidden items stay hidden.
+- Conservative background missing-field enrichment, including genre and first-publication year, preserving file/work locks and corrections.
+- Shelf, Library grid/list/sort, Atlas, simple Player and separate Stats/Settings.
+- Scan accounting and 10,020 mixed-extension synthetic import/rescan check.
+- Exact-source server, ARM64, Docker/HA and QA packaging passed; physical/browser acceptance remains pending.
+
 ## 0.9.3-qa.20261017.1 — Home Assistant test candidate
 
 - New-user import guidance and single-pass scans with unchanged-file reuse.

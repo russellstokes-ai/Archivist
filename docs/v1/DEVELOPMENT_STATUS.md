@@ -1,12 +1,12 @@
-## Home Assistant test build — 17 October 2026
+## Home Assistant test build — 18 October 2026
 
-Version **0.9.3-qa.20261017.1**, built and tested source **8c4e02e6f85334c892ff7dba5e078600e54f592d**.
+Version **0.9.3-qa.20261018.1**, built and tested source **f31fa44557bad9f6ea5c772f35e0aeea8f067c7b**.
 
-- [Server checks passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785499): root/packaged Go tests, ARM64 compile/runtime, JS contracts, parity, Docker and HA smoke checks.
-- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39075785558/artifacts/12116812219): Linux amd64/arm64 binaries, HA repository ZIP and SHA256SUMS. Artifact expires 24 October 2026; repository installation remains available.
-- Artifact archive SHA256: `7f78748c6ea18fa39bd37b7bb5ff39b6190acfa9a64d2a18bf354a4c031e144a`.
-- Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain BLOCKED. No commercial-release claim, merge or production deployment.
-- Subsequent documentation-only commit records these results; executable source and package version are unchanged.
+- [Server checks passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39117974038): root/packaged Go suites, 10,020 mixed-extension synthetic files imported and rescanned, UI contracts, protected source/parity, native ARM64, Docker persistence and HA smoke.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39117974040/artifacts/12133286010): Linux amd64/arm64 binaries, HA repository ZIP and SHA256SUMS; expiry 25 October 2026.
+- Artifact archive SHA256: `41b58967916822fa4b3fe96511c52b2df51be5894007f66bdf7c7dbbb8b1129c`.
+- Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain **BLOCKED**. No commercial-release claim, merge or production deployment.
+- Documentation-only follow-up records these results; executable source and package version are unchanged. See [automatic import acceptance](SERVER_AUTOMATIC_LIBRARY_QA_2026-10-18.md).
 
 # Archivist v1.0 — Development State & Release Gate
 

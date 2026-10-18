@@ -58,3 +58,16 @@ No new app/APK compilation, no canonical mobile scanner or reader change, no pro
 **Disposable-device acceptance order:** On a real Pi 4B 4GB+SSD, deploy this source to an isolated data volume and readonly synthetic/owned media mounts. Run `ARCHIVIST_SMOKE_REQUIRE_PI=1 sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:5056` on the Pi, then exercise a synthetic SMB/NFS mount disappearing/empty/reappearing, pause/stop/retry scans, 2 simultaneous real audio/comic streams, publication and progress across two users, SSD restart after staged restore, confirmed independent rollback, and admin 1920×1080 keyboard/screen-reader/HA ingress. Record exact source/image checksum, OS/version, memory/latency, before/after IDs, logs and operator signoff. Never test destructive actions against real family media.
 
 **Decision:** As of the latest source and packaging checkpoint, software evidence is green but **hardware_accepted=false, merge=false, commercial_server_go=false**. This is the final required external input; further code changes should be driven by failures from that acceptance matrix rather than speculative features.
+
+
+## Home Assistant test build — 18 October 2026
+
+Version **0.9.3-qa.20261018.1**, built and tested source **f31fa44557bad9f6ea5c772f35e0aeea8f067c7b**.
+
+- [Server checks passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39117974038): root/packaged Go suites, 10,020 mixed-extension synthetic files imported and rescanned, UI contracts, protected source/parity, native ARM64, Docker persistence and HA smoke.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39117974040/artifacts/12133286010): Linux amd64/arm64 binaries, HA repository ZIP and SHA256SUMS; expiry 25 October 2026.
+- Artifact archive SHA256: `41b58967916822fa4b3fe96511c52b2df51be5894007f66bdf7c7dbbb8b1129c`.
+- Ready for owner installation testing. Physical HA/Pi4, real NAS SMB/NFS and browser/phone acceptance remain **BLOCKED**. No commercial-release claim, merge or production deployment.
+- Documentation-only follow-up records these results; executable source and package version are unchanged. See [automatic import acceptance](SERVER_AUTOMATIC_LIBRARY_QA_2026-10-18.md).
+
+This supersedes automated software evidence only. All seven physical/representative-media/security acceptance gates above retain their outstanding requirements; no release-gate waiver.

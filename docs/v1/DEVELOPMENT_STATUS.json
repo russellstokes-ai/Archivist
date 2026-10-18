@@ -1611,5 +1611,16 @@
     "artifact_id": 12116812219,
     "hardware_accepted": false,
     "commercial_server_go": false
+  },
+  "server_automatic_library_2026_10_18": {
+    "version": "0.9.3-qa.20261018.1",
+    "tested_sha": "f31fa44557bad9f6ea5c772f35e0aeea8f067c7b",
+    "server_checks": "https://github.com/russellstokes-ai/Archivist/actions/runs/39117974038",
+    "qa_artifacts": "https://github.com/russellstokes-ai/Archivist/actions/runs/39117974040/artifacts/12133286010",
+    "state": "ready_for_owner_installation_testing",
+    "synthetic_file_count": 10020,
+    "physical_acceptance": "BLOCKED",
+    "browser_acceptance": "BLOCKED",
+    "commercial_server_go": false
   }
 }
