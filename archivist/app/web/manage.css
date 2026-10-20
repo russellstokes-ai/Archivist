@@ -73,3 +73,270 @@ dialog::backdrop{background:#010b12cf}
 .candidate-fields{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .candidate-fields button{font-size:11px;min-height:34px;padding:6px 9px}
 @media(max-width:590px){#candidate-search-form{align-items:stretch;flex-direction:column}}
+
+/* Archivist Assist shares the catalogue's type, artwork and navigation language. */
+.brand-mark{display:block;object-fit:cover;background:#2F8B86;border-radius:10px;padding:0;flex:none}
+.nav-count{margin-left:auto;color:var(--gold);font-variant-numeric:tabular-nums;font-size:12px}
+.assist-works{display:grid;gap:12px;margin:19px 0}
+.assist-work{display:grid;grid-template-columns:70px minmax(0,1fr) auto;align-items:center;gap:18px;padding:17px;border:1px solid var(--rule);border-radius:16px;background:var(--panel);min-width:0}
+.assist-cover{width:60px;aspect-ratio:2/3;position:relative;overflow:hidden;border-radius:3px 7px 7px 3px;border-left:4px solid #030c1590;background:#274450;display:grid;place-items:center;color:var(--gold);font:25px/1 ArchivistEditorial,Georgia,serif;box-shadow:3px 4px 10px #0005}
+.assist-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0}
+.assist-cover.has-cover img{opacity:1}
+.assist-details{min-width:0;display:grid;gap:6px}
+.assist-details>strong{font:23px/1.2 ArchivistEditorial,Georgia,serif;overflow-wrap:anywhere}
+.assist-details>.pill{justify-self:start}
+.assist-files{grid-column:1/-1;border-top:1px solid var(--rule);padding-top:12px;min-width:0}
+.assist-file{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 2px;border-bottom:1px solid var(--rule)}
+.assist-file>div{min-width:0;overflow-wrap:anywhere}
+.assist-file strong{display:block;font-weight:500}
+.assist-controls{justify-self:end}
+@media(max-width:590px){.assist-work{grid-template-columns:52px minmax(0,1fr);gap:11px;padding:12px}.assist-cover{width:49px}.assist-details>strong{font-size:19px}.assist-controls{grid-column:1/-1;justify-self:stretch}.assist-controls button{width:100%}.assist-file{align-items:flex-start}.assist-file .edit-button{flex-shrink:0}}
+
+/* The two independent actions are never conflated: metadata Save edits a file;
+   Publish is an explicit, owner-confirmed catalogue transition. */
+.assist-controls{display:flex;flex-wrap:wrap;gap:8px}
+.assist-controls .primary{background:#2F8B86;border-color:#2F8B86;color:#fff}
+.assist-controls button:disabled{cursor:not-allowed;opacity:.48}
+@media(max-width:760px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.assist-controls{grid-column:1/-1;justify-self:stretch}}
+
+.assist-cover-picker{display:grid;align-items:center;gap:5px;border:1px solid var(--rule);border-radius:10px;padding:6px 9px;font-size:12px;color:var(--ink);cursor:pointer;min-width:0}
+.assist-cover-picker input{font-size:11px;width:min(235px,100%);min-height:28px;padding:0;color:var(--muted)}
+.assist-cover-picker input::file-selector-button{border:1px solid var(--rule);background:var(--raised);color:var(--ink);border-radius:8px;padding:5px 8px;cursor:pointer}
+@media(max-width:590px){.assist-cover-picker{width:100%}}
+
+/* Book lifecycle is two independently navigable lists, not a hidden
+   unpublish action in a review-only queue. */
+.assist-mode-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 20px}
+.assist-mode-tabs button{min-height:44px;background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:8px 15px;color:var(--muted)}
+.assist-mode-tabs button[aria-pressed=true]{background:var(--raised);color:var(--gold);border-color:var(--teal)}
+
+/* Per-field provenance and explicit revisioned lock controls. */
+.metadata-field-control{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-top:5px}
+.metadata-field-provenance{color:var(--muted);font-size:11px;overflow-wrap:anywhere;flex:1}
+.metadata-field-lock{min-height:32px;min-width:72px;font-size:11px;padding:4px 9px}
+.metadata-field-lock[aria-pressed=true]{color:var(--gold);border-color:var(--gold);background:var(--raised)}
+.field-grid input[readonly],.field-grid textarea[readonly]{border-color:var(--gold);background:var(--raised);color:var(--muted);cursor:not-allowed}
+#editor-lock-status{font-size:12px;margin:14px 0}
+#retry-field-status{margin:0 0 12px}
+
+/* Preview-first bulk metadata panel: small, deliberate, fully explicit fields. */
+.bulk-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:20px 0}
+.bulk-fields label{display:grid;gap:7px;min-width:0}
+.bulk-enable{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--gold)}
+.bulk-enable input{width:17px;height:17px;accent-color:var(--teal)}
+.bulk-preview{display:grid;gap:8px;max-height:275px;overflow:auto}
+.bulk-preview-item{background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:10px 13px}
+.bulk-preview-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.bulk-diff{display:flex;gap:14px;justify-content:space-between;font-size:12px;border-top:1px solid var(--rule);padding:6px 0;overflow-wrap:anywhere}
+.bulk-diff strong{color:var(--gold);font-weight:500}
+.bulk-diff span{max-width:75%;text-align:right}
+@media(max-width:590px){.bulk-fields{grid-template-columns:1fr}.bulk-diff{flex-direction:column;gap:2px}.bulk-diff span{text-align:left;max-width:100%}}
+
+/* Owner-attested file recovery. Present both real identities and full
+   destination hash; never equate a matching filename/size to verified bytes. */
+.relink-details{display:grid;gap:11px;margin:17px 0}
+.relink-identity{border:1px solid var(--rule);background:var(--panel);border-radius:12px;padding:13px 16px;min-width:0}
+.relink-identity strong{display:block;font:22px/1.35 ArchivistEditorial,Georgia,serif;overflow-wrap:anywhere}
+.relink-identity p{margin:4px 0 0;overflow-wrap:anywhere}
+.relink-sha{font-size:11px;overflow-wrap:anywhere;color:var(--muted)}
+.relink-warning{font-size:13px;color:var(--gold);border-left:3px solid var(--gold);padding:10px 13px;background:var(--panel)}
+.relink-ack{display:flex;align-items:flex-start;gap:11px;font-size:13px;margin:18px 0;padding:12px;border:1px solid var(--rule);border-radius:12px}
+.relink-ack input{width:18px;height:18px;flex:none;accent-color:var(--teal);margin-top:2px}
+@media(max-width:590px){.relink-identity strong{font-size:19px}.relink-ack{font-size:12px}}
+
+/* Multi-track relink is explicit chapter-by-chapter, not a loose folder merge. */
+.group-relink-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;gap:12px;align-items:end;margin:18px 0}
+.group-relink-picker label{min-width:0;display:grid;gap:6px;font-size:12px}
+.group-relink-picker input{min-height:44px;max-width:100%}
+.group-relink-pairs{display:grid;gap:8px;max-height:330px;overflow-y:auto;margin:16px 0}
+.group-relink-summary{font:21px/1.3 ArchivistEditorial,Georgia,serif;color:var(--gold)}
+.group-relink-pair{display:flex;gap:11px;align-items:start;padding:12px 13px;background:var(--panel);border:1px solid var(--rule);border-radius:12px;cursor:pointer}
+.group-relink-pair input{width:19px;height:19px;flex:none;accent-color:var(--teal);margin-top:3px}
+.group-relink-pair div{min-width:0;overflow-wrap:anywhere}
+.group-relink-pair strong{display:block;font-size:13px}
+.group-relink-pair .subtext{display:block;font-size:12px}
+.group-relink-hashes{display:grid;gap:4px;max-height:240px;overflow:auto}
+@media(max-width:590px){.group-relink-picker{grid-template-columns:1fr}.group-relink-pair{padding:10px}.group-relink-summary{font-size:18px}}
+
+/* Scanner metadata health: low-I/O read-only counts and real catalogue actions. */
+.scanner-coverage{margin-top:20px}
+.coverage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:17px}
+.coverage-tile{display:grid;text-align:left;gap:3px;min-width:0;background:var(--raised);border:1px solid var(--rule);border-radius:12px;padding:14px 16px}
+.coverage-tile strong{color:var(--gold);font-size:clamp(22px,2.5vw,32px);font-variant-numeric:tabular-nums}
+.coverage-tile span{font-size:13px;color:var(--ink)}
+.coverage-tile small{font-size:11px;color:var(--teal)}
+.coverage-tile:hover,.coverage-tile:focus-visible{border-color:var(--teal)}
+@media(max-width:1000px){.coverage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:590px){.coverage-grid{grid-template-columns:1fr}}
+
+/* Book-level Assist workbench is a true two-pane desktop view, not a resized phone editor.
+   All controls remain local in the server's navy/gold/ivory/teal system. */
+.work-dialog{width:min(1540px,calc(100vw - 40px));max-width:none;max-height:calc(100vh - 30px);padding:clamp(18px,2.4vw,36px)}
+.work-editor-layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,1fr);gap:20px;align-items:start}
+.work-edit-primary,.work-edit-secondary{display:grid;gap:18px;min-width:0}
+.work-meta-panel{background:var(--panel);border:1px solid var(--rule);padding:18px;border-radius:15px;min-width:0}
+.work-meta-panel h3{margin:0 0 11px;color:var(--gold);font-size:23px}
+.work-meta-panel .footnote{margin:8px 0 14px}
+.work-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.work-field-grid label{display:grid;gap:6px;min-width:0;font-size:13px}
+.work-field-grid label.work-full{grid-column:1/-1}
+.work-field-grid input,.work-field-grid textarea{width:100%;min-width:0}
+.work-field-grid textarea{resize:vertical}
+.work-field-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.work-field-line small{min-width:0;flex:1;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.work-field-line button{min-height:30px;min-width:65px;font-size:11px;padding:4px 9px}
+.work-field-line button[aria-pressed=true]{color:var(--gold);border-color:var(--gold)}
+.work-flag{font-size:11px;color:var(--danger);font-weight:600}
+.work-search-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+.work-search-row label{display:grid;gap:5px;font-size:12px}
+.work-candidate{border:1px solid var(--rule);border-radius:12px;margin:10px 0;padding:12px;background:var(--side)}
+.work-candidate strong{display:block;font-size:14px}
+.work-candidate-fields{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0 0}
+.work-candidate-fields button{font-size:11px;min-height:32px;padding:5px 9px}
+.work-preview-diff{display:grid;gap:7px;margin:9px 0}
+.work-preview-diff article{display:grid;grid-template-columns:minmax(90px,.4fr) minmax(0,1fr);gap:10px;padding:9px;background:var(--raised);border-radius:10px}
+.work-preview-diff strong{color:var(--gold);font-size:12px}
+.work-preview-diff span{font-size:12px;overflow-wrap:anywhere}
+.work-cover{display:grid;place-items:center;width:min(155px,100%);aspect-ratio:2/3;background:var(--raised);border-radius:5px 12px 12px 5px;border-left:5px solid #0005;margin:12px auto;overflow:hidden;box-shadow:4px 8px 16px #0006}
+.work-cover img{width:100%;height:100%;object-fit:cover}
+.work-editions{display:grid;gap:8px}
+.work-editions>div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--rule);padding:8px 0;font-size:13px}
+.work-editions strong{color:var(--gold)}
+.work-media{display:grid;gap:8px;margin-top:12px;max-height:380px;overflow:auto}
+.work-media-item{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--raised);border-radius:10px;padding:10px}
+.work-media-item div{min-width:0}
+.work-media-item strong{font-size:13px;display:block;overflow-wrap:anywhere}
+.work-media-item small{font-size:11px;display:block;color:var(--muted);overflow-wrap:anywhere}
+.work-media-item button{font-size:11px;min-height:32px;padding:5px 8px}
+.work-history{max-height:230px;overflow:auto;display:grid;gap:8px}
+.work-history-item{padding:10px;background:var(--raised);border-radius:10px;font-size:12px}
+.work-history-item strong{color:var(--gold)}
+.work-history-item small{display:block;color:var(--muted)}
+@media(max-width:1000px){.work-editor-layout{grid-template-columns:1fr}.work-dialog{width:calc(100vw - 24px);max-height:94vh}}
+@media(max-width:600px){.work-field-grid{grid-template-columns:1fr}.work-field-grid label.work-full{grid-column:auto}.work-dialog{padding:18px}.work-search-row{grid-template-columns:1fr}.work-preview-diff article{grid-template-columns:1fr}.work-meta-panel{padding:13px}.work-edit-secondary{min-width:0}}
+@media(prefers-reduced-motion:reduce){.work-dialog *{transition:none!important;animation:none!important}}
+
+/* Read-only indexed comic identity, intentionally inside the existing workbench. */
+.comic-audit-panel[hidden]{display:none!important}
+#work-comic-audit{display:grid;gap:8px;min-width:0}
+#work-comic-audit>strong{color:var(--gold);font-size:15px}
+#work-comic-audit .work-flag{margin:0;font-size:12px}
+.comic-gap-note{font-size:12px;color:var(--gold);border-left:2px solid var(--teal);padding-left:10px;margin:6px 0}
+.comic-evidence-list{display:grid;gap:5px;max-height:190px;overflow:auto}
+.comic-evidence-list p{margin:0;overflow-wrap:anywhere}
+
+/* Edition labels belong to an existing immutable comic edition ID, not a scan
+   or file move. Keep all controls within the approved 16:9 book workbench. */
+.comic-profile-workbench{border-top:1px solid var(--rule);margin-top:20px;padding-top:18px;display:grid;gap:12px}
+.comic-profile-workbench h4{font:20px/1.25 ArchivistEditorial,Georgia,serif;color:var(--gold);margin:0}
+.comic-profile-workbench>.footnote{margin:0!important}
+.comic-profile-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.comic-profile-fields label{min-width:0}
+.comic-profile-fields label:last-child{grid-column:1/-1}
+.comic-profile-fields textarea{min-height:90px}
+.comic-profile-actions{display:flex;flex-wrap:wrap;gap:8px}
+.comic-profile-actions button{flex:1 1 155px}
+#comic-profile-diff{max-height:230px;overflow:auto;display:grid;gap:6px}
+#comic-profile-status{overflow-wrap:anywhere;margin:0!important}
+@media(max-width:600px){.comic-profile-fields{grid-template-columns:1fr}.comic-profile-fields label:last-child{grid-column:auto}}
+
+/* Read-only transfer inspector, without an Apply control. */
+.comic-transfer-review{margin-top:18px;padding-top:16px;border-top:1px solid var(--rule);display:grid;gap:9px;min-width:0}
+.comic-transfer-review h4{font:19px/1.2 ArchivistEditorial,Georgia,serif;color:var(--gold);margin:0}
+.comic-transfer-review>.footnote{margin:0!important}
+.comic-transfer-search{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+.comic-transfer-findings{display:grid;gap:7px;max-height:300px;overflow-y:auto}
+.comic-transfer-finding{border-left:2px solid var(--rule);padding:8px 10px;background:var(--raised);font-size:12px;overflow-wrap:anywhere}
+.comic-transfer-finding.is-blocked{border-left-color:var(--danger)}
+.comic-transfer-finding strong{display:block;font-size:12px;color:var(--gold)}
+.comic-transfer-finding p{margin:3px 0 0;color:var(--muted)}
+@media(max-width:580px){.comic-transfer-search{grid-template-columns:1fr}}
+
+/* Consolidated ten-workflow server shell, still sharing original Archivist
+   wordmark, colors, typography and real server-backed management actions. */
+.sidebar{gap:20px;overflow-y:auto;scrollbar-width:thin}
+.sidebar nav{gap:5px}
+.sidebar .nav-item{min-height:41px;padding:7px 10px}
+.operations-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}
+.operations-grid .panel{min-width:0}
+.operations-grid h3{color:var(--gold);margin-bottom:10px}
+.operations-list{display:grid;gap:8px}
+.operations-line{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.operations-line strong{font-variant-numeric:tabular-nums;color:var(--gold);text-align:right}
+.operations-actions{display:flex;flex-wrap:wrap;gap:9px;margin:16px 0 5px}
+.operations-actions button{flex:1 1 155px}
+.operations-link{display:inline-flex;min-height:42px;align-items:center;border:1px solid var(--rule);padding:9px 12px;border-radius:9px;font-size:13px}
+.operations-link:hover{border-color:var(--teal)}
+.operations-shortcuts{margin-bottom:18px}
+#view-recovery>.panel{margin-top:16px}
+#recovery-integrity-result{min-height:22px;overflow-wrap:anywhere}
+@media(max-width:850px){.operations-grid{grid-template-columns:1fr}}
+@media(max-width:580px){.sidebar nav{gap:5px}.operations-line{align-items:flex-start;flex-wrap:wrap}}
+
+/* Integrated owner S8 Family and S10 Settings; all actions reuse existing
+   authenticated server routes, with no extra credential storage. */
+.family-create{display:grid;gap:14px;max-width:440px}
+.family-profiles,.server-session-list{display:grid;gap:10px}
+.family-user,.server-session{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border-radius:12px;border:1px solid var(--rule);background:var(--raised);min-width:0}
+.family-user>div,.server-session>div{display:grid;gap:3px;min-width:0;overflow-wrap:anywhere}
+.family-user strong,.server-session strong{color:var(--gold);font-weight:600}
+.family-user small,.server-session small{color:var(--muted)}
+.family-user .operations-actions,.server-session .operations-actions{margin:0;flex:0 0 auto;justify-content:end}
+.family-user .operations-actions button{flex:0 0 auto}
+#family-key-result[hidden]{display:none!important}
+#family-key{font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all;resize:none;min-height:84px}
+#family-status,#settings-status{overflow-wrap:anywhere}
+@media(max-width:650px){.family-user,.server-session{align-items:stretch;flex-direction:column}.family-user .operations-actions{justify-content:start}}
+.catalogue-layout-label{display:flex;align-items:center;gap:10px;max-width:260px;margin:10px 0 16px}
+.catalogue-tools{display:flex;align-items:center;flex-wrap:wrap;gap:24px}.catalogue-choice[hidden]{display:none}
+.catalogue-cards{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));margin:14px 0}
+.catalogue-cards[hidden],#catalogue-table[hidden]{display:none}
+.catalogue-card{position:relative;min-width:0;padding:14px;border:1px solid var(--rule);border-radius:14px;background:var(--panel)}
+.catalogue-choice{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px}
+.catalogue-choice input,.family-space-choice input{width:auto;flex:none}
+.catalogue-cover{position:relative;aspect-ratio:2/3;max-height:240px;background:var(--raised);border-radius:8px;overflow:hidden;display:grid;place-items:center;color:var(--muted)}
+.catalogue-cover img{position:absolute;width:100%;height:100%;object-fit:contain;background:var(--raised)}
+.catalogue-cover img[hidden]{display:none}
+.catalogue-details{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding-top:12px;overflow-wrap:anywhere;min-width:0}
+.catalogue-details strong{font-family:ArchivistEditorial,Georgia,serif;font-size:17px;color:var(--gold)}
+.catalogue-details .edit-button{margin-top:6px}
+.catalogue-list{grid-template-columns:1fr}
+.catalogue-list .catalogue-card{display:grid;grid-template-columns:74px 65px minmax(0,1fr);align-items:center;gap:18px}
+.catalogue-list .catalogue-choice{margin:0}.catalogue-list .catalogue-details{padding:0}.catalogue-list .catalogue-cover{width:65px}
+.family-user{flex-wrap:wrap}.family-grants{flex-basis:100%;min-width:0;border:1px solid var(--rule);border-radius:8px;padding:12px}
+.family-space-choice{display:flex;align-items:center;gap:10px;margin:8px 0;overflow-wrap:anywhere}
+#family-create-spaces{border:1px solid var(--rule);border-radius:8px;padding:12px}
+@media(max-width:600px){.catalogue-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.catalogue-list{grid-template-columns:1fr}.catalogue-card{padding:10px}.catalogue-list .catalogue-card{grid-template-columns:55px minmax(0,1fr);gap:12px}.catalogue-list .catalogue-choice{grid-column:1/-1}.catalogue-list .catalogue-cover{width:55px}.catalogue-details strong{font-size:15px}}
+
+/* Work-level Assist filters. Counts and paging come from one SQLite snapshot,
+   not from filtering a single already-paginated 40-book browser page. */
+.assist-review-filters{display:grid;grid-template-columns:minmax(210px,2.1fr) repeat(3,minmax(140px,1fr)) auto auto;gap:10px;align-items:end;margin:16px 0 14px}
+.assist-review-filters button{white-space:nowrap}
+@media(max-width:1250px){.assist-review-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.assist-review-filters .search-field{grid-column:span 2}}
+@media(max-width:600px){.assist-review-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.assist-review-filters .search-field{grid-column:1/-1}}
+
+/* S7 Organise owner workbench: paged indexed files and deliberate verified
+   journalled moves; no unsafely auto-selected bulk changes. */
+.organise-search{display:grid;grid-template-columns:minmax(220px,2fr) repeat(2,minmax(130px,1fr)) auto auto;align-items:end;gap:11px;margin:18px 0}
+.organise-table{min-width:650px}
+.organise-table td:first-child{width:64px}
+.organise-plan,.organise-manual,.organise-journal{margin-top:20px;min-width:0}
+.organise-plan-tools{display:flex;flex-wrap:wrap;align-items:end;gap:12px}
+.organise-plan-tools label{flex:1 1 250px}
+.organise-plan-tools button{flex:0 1 auto}
+.organise-move-results{display:grid;gap:8px;max-height:480px;overflow:auto;min-width:0}
+.organise-move-item{padding:12px 14px;border:1px solid var(--rule);background:var(--raised);border-radius:11px;display:grid;gap:6px;overflow-wrap:anywhere}
+.organise-move-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px}
+.organise-move-header strong{color:var(--gold);font-weight:600}
+.organise-move-paths{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;font-size:12px}
+.organise-move-paths code{overflow-wrap:anywhere;word-break:break-word;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
+.organise-move-item small,.organise-move-item p{color:var(--muted);margin:0}
+.organise-move-item .operations-actions{margin:0;justify-content:flex-end}
+.organise-move-item.organise-move-risk{border-color:var(--danger)}
+.organise-move-item.organise-move-ready{border-color:var(--teal)}
+.organise-choice{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--ink)}
+.organise-choice input{flex:none}
+#organise-selected-count{margin:0;align-self:center}
+#organise-list-status,#organise-preview-status,#organise-journal-status{overflow-wrap:anywhere}
+@media(max-width:1160px){.organise-search{grid-template-columns:repeat(3,minmax(0,1fr))}.organise-search .search-field{grid-column:span 2}}
+@media(max-width:650px){.organise-search{grid-template-columns:repeat(2,minmax(0,1fr))}.organise-search .search-field{grid-column:1/-1}.organise-move-paths{grid-template-columns:minmax(0,1fr)}.organise-move-paths span{display:none}}

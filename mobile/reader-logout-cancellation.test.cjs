@@ -1,0 +1,5 @@
+const assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm'),ts=require('typescript'),cp=require('child_process');
+const source=process.env.TEST_PRIOR_SOURCE?cp.execFileSync('git',['show','HEAD:mobile/App.tsx'],{encoding:'utf8'}):fs.readFileSync(__dirname+'/App.tsx','utf8');
+const tree=ts.createSourceFile('App.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let fn;function visit(n){if(ts.isFunctionDeclaration(n)&&n.name?.text==='signOut')fn=n.getText(tree);ts.forEachChild(n,visit)}visit(tree);
+const c={session:null,nowResumeGeneration:{current:2},readerOpenGeneration:{current:3},setLocalReader(){},setReaderLoading(){}};vm.createContext(c);vm.runInContext(ts.transpileModule(fn,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,c);
+(async()=>{await c.signOut();assert.equal(c.readerOpenGeneration.current,4,'logout must invalidate pending reader callbacks even after session expiration');assert(source.includes('++readerOpenGeneration.current; subscription.remove()'),'unmount must invalidate readers');console.log('PASS: logout/unmount invalidate pending reader completion');})().catch(e=>{console.error(e);process.exitCode=1});

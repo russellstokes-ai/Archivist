@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
-  "as_of": "2026-10-16",
+  "server_family_views_metadata_2026_10_17": {
+    "base_sha": "577f3b543cf49a908ca61ffc46ce21d54ab90e41",
+    "pr": 83,
+    "state": "implemented_pending_exact_head_ci",
+    "qa": "docs/v1/SERVER_FAMILY_VIEWS_METADATA_QA_2026-10-17.md",
+    "mobile_changed": false,
+    "hardware_accepted": false,
+    "commercial_server_go": false
+  },
+  "as_of": "2026-10-17",
   "purpose": "Point-in-time manifest distinguishing canonical source, draft fixes, commercial development work and acceptance; not an automated report of GitHub or installed-device state",
   "repo": "russellstokes-ai/Archivist",
   "approved_requirements": {
@@ -781,5 +790,860 @@
       "Google Play production AAB/privacy/license",
       "final new logo splash files"
     ]
+  },
+  "chat_followon_native_auto_and_restore_20261016": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "parent_source_pr": 81,
+    "parent_source_sha": "7a3a69fcb6648af7085aa393b6ebf09f9b6452ec",
+    "restored_source_pr": 82,
+    "reviewed_source_sha": "1c09a46b4b04cd2b48634b2eab1de26ad93340cf",
+    "auto_red_run": 38946476178,
+    "auto_green_mobile": 38946792706,
+    "auto_green_android_native": 38946792697,
+    "auto_ios": 38946792692,
+    "restore_red_run": 38947203459,
+    "restore_green_server": 38947395536,
+    "approval": "draft source only",
+    "real_device_accepted": false,
+    "original_eight_device_accepted": 0,
+    "full_commercial_release": false
+  },
+  "work_execution_20261016": {
+    "authoritative_for_this_continuation": false,
+    "base_pr": 83,
+    "base_sha": "70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9",
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "decision": "NO-GO",
+    "original_bugs_fixed_this_session": 0,
+    "device_accepted": 0,
+    "app_source_changed": false,
+    "protected_original_blobs": 45,
+    "approved_app_blob_unchanged": true,
+    "local_verification": {
+      "mobile_suites": "128/128 passed with JDK 17",
+      "typecheck": "passed",
+      "root_go": "passed",
+      "packaged_go": "passed",
+      "ha_contract": "passed",
+      "ha_reproducibility": "RED then GREEN"
+    },
+    "baseline_ci": {
+      "mobile": 38948050600,
+      "server": 38948050770,
+      "android": 38948050610,
+      "ios": 38948050648,
+      "all_completed_success": true
+    },
+    "confirmed_source_failures": {
+      "23": "Actual resumeNowSession + loadLocalWorkTrack call player.play() for paused restoration",
+      "31": "Actual resumeNowSession requests server before available downloaded copy"
+    },
+    "diagnostic": "docs/v1/diagnostics/resume-no-autoplay.red.cjs",
+    "ha_package": "qa/pr83/Archivist-HA-70ddc922.zip",
+    "apk": "not built: manual workflow dispatch unavailable in connector; browser signed out; no Android SDK installed",
+    "remaining": "Six original bugs; native #31/#32; ten-screen server, workbench, safe relink and scan controls; complete Auto/cross-device; performance/accessibility and Play preparation",
+    "approval_required": "Narrow App.tsx logic exception for paused restoration and verified download-first resume; existing exception is exact-blob and does not authorize these changes"
+  },
+  "resume_repair_20261016": {
+    "authoritative_for_this_continuation": true,
+    "base_sha": "0e5f078ef819c6fd54267adf7b7b7b3c6e9d9b79",
+    "decision": "NO-GO",
+    "source_corrections": [
+      "#23 restoration loads paused, explicit Play retains autoplay",
+      "#31 valid nonempty matching-size downloaded file checked before server access",
+      "requested server chapter and rewind position loaded atomically; missing saved track does not select a different chapter"
+    ],
+    "device_accepted": 0,
+    "protected_original_blobs": 45,
+    "scope": "App.tsx five scoped functions only, Playback loader and tests; canonical JSX/styles/scanners/Assist/assets unchanged",
+    "verification_report": "docs/v1/RESUME_REPAIR_QA_2026-10-16.md",
+    "remaining": "Original physical symptoms require Fold acceptance; #16/#19/#25/#17/#20, PDF hardware checks, full server commercial scope, Auto/cross-device hardware and release gates remain."
+  },
+  "wider_mobile_audit_20261016": {
+    "base_sha": "0abf80f4e0df5b01effc4f17496662a74570a526",
+    "report": "docs/v1/APP_WIDE_AUDIT_2026-10-16.md",
+    "confirmed_finding_groups": [
+      "A1 stale playback duration",
+      "A2 stale restore overrides newer Play",
+      "A3 EPUB spine order and truncation",
+      "A4 incomplete EPUB sanitization",
+      "A5 PDF Reduced Motion ignored",
+      "A6 stale catalogue pagination"
+    ],
+    "product_changes": false,
+    "physical_acceptance": false,
+    "decision": "NO-GO"
+  },
+  "consolidated_repair_20261016": {
+    "base_sha": "a48d3470ca0c1692e422e6ed757679be6865277b",
+    "report": "docs/v1/CONSOLIDATED_REPAIR_QA_2026-10-16.md",
+    "audit_source_fixes": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "A5",
+      "A6"
+    ],
+    "lifecycle_source_candidates": [
+      20,
+      25
+    ],
+    "original_device_acceptance": 0,
+    "mobile_tests": "134/134 passed",
+    "typecheck": "passed",
+    "root_go": "passed",
+    "packaged_go": "passed",
+    "server_builds": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "server_runtime_smoke": "amd64 disposable DB health passed",
+    "apk": "manual workflow dispatch required; not built",
+    "unchanged_original_locks": 44,
+    "reversible_exceptions": [
+      "mobile/App.tsx",
+      "mobile/localReader.ts"
+    ],
+    "decision": "NO-GO",
+    "remaining_original_diagnostics": [
+      16,
+      19,
+      17
+    ]
+  },
+  "server_parity_pr83_chat_20261016": {
+    "scope": "PR #83 server parity incremental source delivery, subordinate to existing master development plan",
+    "initial_verified_sha": "99e97c7715b3502bda0c750926e9c4e44dacf722",
+    "source_and_ci_checkpoint": "d778e88f6f2485b9f4b0fdfbe32dafd23a565311",
+    "later_independent_mobile_splash_sha": "a9984f3f758c07a63b9d37d935fe9b0ac47879e5",
+    "work_commits": [
+      "8ba223d185e85de84e7e86119727e5e0d55e1baf",
+      "3c6b6f646769fbd326c648aa580f7420c49ab643",
+      "1d2653467a1d73bba2c638b04a9b0d3d819c4560",
+      "8fd51ee5651490d7b156f753711aa20e75a10925",
+      "d778e88f6f2485b9f4b0fdfbe32dafd23a565311"
+    ],
+    "validation": {
+      "server_check": "success",
+      "server_check_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38973855856/job/117218430783",
+      "arm64_smoke": "success",
+      "arm64_smoke_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/38973855856/job/117218430351",
+      "pi_install": "not_tested",
+      "owner_device": "not_tested"
+    },
+    "completed": [
+      "owner-only paginated logical work review API",
+      "work-level review count alongside existing file-level count",
+      "Assist book-first screen linked to existing candidate/metadata editor",
+      "canonical web dark palette and approved teal-background emblem",
+      "root-packaged Go/web source parity",
+      "synthetic grouped Assist browser and Go regressions"
+    ],
+    "remaining": [
+      "explicit work publish state and published-only Library/Atlas",
+      "Atlas full cover graph and ring chart parity with performance limit",
+      "field-level provenance and locks",
+      "cover selection and persistent cover cache",
+      "bulk metadata operations and approved file move/relink/undo",
+      "resumable job pause/cancel/resume",
+      "real Pi ingress/Docker/NAS and power-cut acceptance",
+      "mobile/Android Auto owner acceptance"
+    ],
+    "commercially_complete": false,
+    "published": false,
+    "merged": false,
+    "apk_built": false,
+    "mobile_scanner_assist_changed_by_this_work": false
+  },
+  "server_parity_pr83_20261017": {
+    "as_of": "2026-10-17",
+    "scope": "PR #83 server parity continuation within existing master plan and 29-gate acceptance register",
+    "previous_verified_source": "e7deb787042b94fc2356309af9994785f0d68c4a",
+    "source_checkpoint": "9f600338a39aabd3284458102f11744e041ed47c",
+    "commits": [
+      "1e8af95d5c24bdf26348de3c75766cfa85b4eaf0",
+      "c229789ebf5ea598a9ab8424183e2b298849045c",
+      "9f600338a39aabd3284458102f11744e041ed47c"
+    ],
+    "protected_covers_blob_restored": "f6381164fb432eb6e50d53199ea1de141b6e7667",
+    "completed": [
+      "selected-cover work fallback isolated from exact reviewed covers.go",
+      "owner-only bounded published-work browsing and reachable unpublish control",
+      "Assist staged and published tabs backed by existing catalogue",
+      "ingress-relative links to existing safe organisation and backup/recovery controls",
+      "synthetic Go/UI contract tests for published review list and owner action"
+    ],
+    "validation": {
+      "cover_adapter_sha": "1e8af95d5c24bdf26348de3c75766cfa85b4eaf0",
+      "cover_adapter_server": "success",
+      "cover_adapter_mobile": "success",
+      "cover_adapter_arm64": "success",
+      "published_manager_sha": "c229789ebf5ea598a9ab8424183e2b298849045c",
+      "published_manager_server": "success",
+      "published_manager_arm64": "success",
+      "published_manager_mobile": "success",
+      "latest_deep_links_source_sha": "9f600338a39aabd3284458102f11744e041ed47c",
+      "latest_source_server": "success",
+      "latest_source_mobile": "success",
+      "latest_source_android_native": "success",
+      "latest_source_ios": "pending_source_check",
+      "latest_source_arm64": "success",
+      "physical_pi_ha_install": "not_tested",
+      "nas_physical": "not_tested",
+      "owner_mobile": "not_tested"
+    },
+    "blocked_remaining": [
+      "work-level metadata/provenance and field locks",
+      "bulk metadata preview/apply and actual safe relinking workflows",
+      "scanner job pause/cancel/resume semantics",
+      "real Pi RAM/CPU/SSD and cover-cache benchmarking",
+      "full responsive visual parity/device QA and HA ingress upgrade",
+      "unaccepted mobile bugs and release/Play testing"
+    ],
+    "commercial_release_ready": false,
+    "merged": false,
+    "production_server_packaged_for_install": false,
+    "new_apk_built": false,
+    "changed_protected_mobile_source": false
+  },
+  "server_relink_pr83_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "first_parent": "94f9020780dee26210b2e2abea39a3805459a430",
+    "code_heads": [
+      "e00a881c17e9e8f813889a24f9925545162230c2",
+      "de768fd3377c552eb46bf6d403c6903cf6c257e6",
+      "71b1818304b6ae0a9a7af6f5733f3dbc1a3ddcb3"
+    ],
+    "scoped_files": [
+      "relink.go",
+      "relink_test.go",
+      "catalogue.go",
+      "main.go",
+      "web/manage.js",
+      "web/manage.html",
+      "web/manage.css",
+      "scripts/v1-manager-selection.test.cjs",
+      "archivist/app/* mirrors"
+    ],
+    "verification_report": "docs/v1/SERVER_RELINK_QA_2026-10-17.md",
+    "capabilities": [
+      "explicit owner-attested one-to-one relink",
+      "full streaming target hash at preview and apply",
+      "15-minute HMAC preview",
+      "stable work/edition/asset and bookmarks",
+      "atomic SQLite rollback and append-only relink audit",
+      "independent user state and pending-move protections",
+      "working manager preview+confirmation"
+    ],
+    "limitations": [
+      "no original media digest available, identity owner-attested only",
+      "single-file single-edition within one source and same format/size",
+      "no multi-track or cross-source relinking",
+      "full replacement hash can impose I/O latency on Pi4",
+      "no physical Pi, NAS or HA ingress acceptance"
+    ],
+    "accepted_on_real_hardware": false,
+    "canonical_mobile_touched_by_server_work": false,
+    "merged": false,
+    "commercial_release_ready": false
+  },
+  "server_scanner_cancel_pr83_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent": "7733c75f198cdde164f544a9fec226fe812b5e52",
+    "code_head": "cad76e8db1c0d10954e4d84e07e232cd9d727435",
+    "code_commits": [
+      "49cf1e3cf718d77f78b7c1c2be4436f51fda83e7",
+      "cad76e8db1c0d10954e4d84e07e232cd9d727435"
+    ],
+    "qa_report": "docs/v1/SERVER_SCANNER_CANCEL_QA_2026-10-17.md",
+    "verified_ci": {
+      "server": "success",
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39031960719/job/117394060348",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39031960719/job/117394060052"
+    },
+    "achieved": [
+      "running-scan safe stop request (202 pending)",
+      "atomic committing boundary with 409 too-late cancellation",
+      "durable cancel_requested database migration",
+      "idempotent restart recovery of unfinished committing scans",
+      "rejected duplicate queue jobs",
+      "source staging stops before catalogue transaction",
+      "real owner web controls with legacy queued-action compatibility",
+      "Go integration and ARM64 source gates"
+    ],
+    "limitations": [
+      "blocked NAS I/O stops only at next callback",
+      "a scan that entered committing cannot be cancelled",
+      "Go synthetic fixtures and CI do not replace hardware testing",
+      "no real Pi4 NAS SMB NFS HA ingress benchmarks",
+      "no cross-volume or multi-track relink",
+      "no completed/released commercial package"
+    ],
+    "protected_mobile_unchanged": true,
+    "merged": false,
+    "commercial_release_ready": false
+  },
+  "server_atomic_catalogue_group_relink_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "first_parent": "db614eb068b693f9d6429dafc0955d192b6c4838",
+    "code_shas": [
+      "01cba0472bbab19ffe970a24e496a7021dc5300f",
+      "3e86057177ae4e55ece37e8a3a55c57b7de391a6",
+      "58761036697e4653c1b4e9c1cc43f7054433d40e"
+    ],
+    "QA": "docs/v1/SERVER_ATOMIC_CATALOGUE_GROUP_RELINK_QA_2026-10-17.md",
+    "guarantees": [
+      "single-transaction scan files/groupings/publication/status",
+      "fault-injection atomic rollback and retry",
+      "explicit all-chapter position mapping",
+      "owner confirmation of each paired track",
+      "independent candidate state guarded",
+      "SHA256 at preview and at apply",
+      "single transaction retains originals and user bookmarks"
+    ],
+    "limitations": [
+      "original source bytes unavailable: owner-attested, not cryptographically proven equivalence",
+      "Audio only, one auto edition and 2–32 tracks",
+      "same source, same order and length per chapter",
+      "4GiB max hashed candidate bytes",
+      "no cross-source multi-edition/manual grouping support",
+      "no real HAOS/Pi/NAS/SMB/NFS physical acceptance"
+    ],
+    "mobile_source_modified_by_this_work": false,
+    "PR_draft": true,
+    "commercial_go": false,
+    "followup_large_apply": {
+      "commit": "c676349dd96074db44b7d7b720feb0bfb5575fa7",
+      "signed_apply_max_bytes": 524288,
+      "unknown_fields_rejected": true,
+      "single_json_object": true,
+      "prior_generic_limit_bytes": 32768,
+      "regression_cases": [
+        "valid signed body >32KiB",
+        "oversized body >512KiB fails without touching catalogue",
+        "valid retry after rejection"
+      ],
+      "scope": "grouped-relLink/apply only; unrelated routes unchanged",
+      "commercial_go": false
+    }
+  },
+  "server_scanner_partial_nas_and_coverage_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent_sha": "70dc1a6f30714ec704c7d771c6b794e16ceec4ef",
+    "code_head": "bfcfea4ee0207ffbed045563b9170fd40fcfe8aa",
+    "commits": [
+      "af2ec765df2b20450836eb41f944e9a4f44e595a",
+      "2db4cd4b70c3e6c98cfa88a831597cfabe946506",
+      "bfcfea4ee0207ffbed045563b9170fd40fcfe8aa"
+    ],
+    "QA": "docs/v1/SERVER_SCANNER_PARTIAL_NAS_AND_COVERAGE_QA_2026-10-17.md",
+    "completed": [
+      "automatic audio editions preserve unavailable chapter links and positions",
+      "partial NAS disconnect/reconnect keeps multi-profile bookmarks and reviewed metadata",
+      "ambiguous unexpected extra edition fails safe",
+      "owner-only read-only file-level metadata gap counts per source and globally",
+      "six actionable genre/year/author/confidence/review/availability filters in server Library Manager",
+      "saved coverage filters and actual browser interaction tests"
+    ],
+    "ci": {
+      "server": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39037438153/job/117410001891",
+      "arm64": "success",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39037438153/job/117410001608"
+    },
+    "limits": [
+      "root availability not per-file verification",
+      "indexed-file metadata coverage is not a work-level Atlas audit",
+      "existing scanner identification algorithm unchanged",
+      "real Pi4/NAS SMB/NFS and large library performance unverified",
+      "cross-source/multi-edition manual relinks not finished",
+      "production release artifacts absent"
+    ],
+    "canonical_mobile_untouched": true,
+    "draft": true,
+    "merged": false,
+    "commercial_go": false
+  },
+  "server_assist_book_workbench_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent": "9d2d932e8d7287849ea1a2e59a7444440d5bfcd4",
+    "source_head": "a0ef0747569a52e2647bfc76ffef4c34bbd21b15",
+    "code_commits": [
+      "818b1f9304e905e17880bb2d03571ef717222b95",
+      "503dbe93f4fb038b5854f7088c057e636e35d24f",
+      "9a4c78425bd70eec3bab3a344548759562ce2b1d",
+      "9663d00b82cd1cf3232fa661f142bfa8672f76d6",
+      "3a5ab6409f67d1ea92486cdc5e032c755b252b51",
+      "c4555d9837420823a954468abe4d2e889828f95d",
+      "a0ef0747569a52e2647bfc76ffef4c34bbd21b15"
+    ],
+    "qa_report": "docs/v1/SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md",
+    "source_item_1_implemented": true,
+    "source_item_1_ci_ready_for_next_step": true,
+    "source_qa": {
+      "server": "success",
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39043520648/job/117427584869",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39043520648/job/117427584714"
+    },
+    "server_only_features": [
+      "12 reversible and rev-locked book-level metadata fields",
+      "up to 100 edition and 5000 media member fingerprint snapshots",
+      "manual work metadata persisted through rescans independent of source chapters",
+      "field-level source provenance and owner lock/unlock",
+      "owner-initiated Open Library candidate selection with unverified provenance",
+      "strict 10 minute signed preview/apply, 256 KiB JSON bound",
+      "latest confirmed edit undo and 25 entry change history",
+      "1920x1080-oriented 2 pane Archivist Assist UI with responsive CSS",
+      "selected cover upload/clear, publication controls, edition/chapter drilldown",
+      "published Library/Atlas uses approved book-level year and fractional series position",
+      "real code manager interaction tests and Go rollback/conflict/access regressions"
+    ],
+    "limitations": [
+      "advanced provider matching, scored per-field confidence, comics matching are item 2",
+      "full manual multi-edition creation/reorder/migration remains item 3",
+      "real browser 16:9 accessibility/focus/ingress not device accepted",
+      "real Pi4 HAOS NAS SMB/NFS and multi-profile hardware acceptance pending",
+      "no production server release/package and no draft PR merge"
+    ],
+    "canonical_mobile_modified": false,
+    "pr_draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
+  },
+  "server_assist_multisource_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "source_parent": "ecdffde67a97db1920c57b6ed0786e4199a92f29",
+    "code_commits": [
+      "cda736a4e12dd0348b9b2eb0e144b2826aae1975",
+      "93b9c40758ec2d9d2f953ac844aa187abdf651c3"
+    ],
+    "source_head": "93b9c40758ec2d9d2f953ac844aa187abdf651c3",
+    "qa_report": "docs/v1/SERVER_ASSIST_MULTISOURCE_MATCH_QA_2026-10-17.md",
+    "phase": "item 2 / milestone A",
+    "source_test_status": "green",
+    "source_tests": {
+      "server": "success",
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918769",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918998"
+    },
+    "verified_features": [
+      "optional owner-triggered Open Library and Google Books comparison; legacy file editor retained",
+      "bounded provider requests and deterministic candidate evidence ranking",
+      "ISBN-10/13 checksum validation and equivalent edition matching; no false edition ISBN inference",
+      "first-publication vs edition-year controls; comic issue uncertainty disclosed",
+      "provider-origin-aware signed work preview, Save, history and undo",
+      "root/packaged source parity plus synthetic Go and fake-browser regression checks"
+    ],
+    "limitations": [
+      "external provider availability/accuracy and real-fixture matching unverified",
+      "specialist comics, ASIN authority and multi-edition merge/creation not completed",
+      "provider cache, throttle, 16:9 browser and Pi HA ingress acceptance pending",
+      "mobile original bugs and commercial release unaccepted"
+    ],
+    "canonical_mobile_modified": false,
+    "draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
+  },
+  "server_assist_comic_identity_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "source_parent": "ef46420ce38d3975248c4d76a828b381367057ae",
+    "source_head": "865fab602a0b5b568a0611533b5dfa0997816a4d",
+    "source_commits": [
+      "dea5afd738f4ed4ad245b10edb8746e5e00f5530",
+      "585ecb926b8fb922e09bd816fe1dd198bf705813",
+      "fe6f33996f1c95e371c61871ec7a286ad5808462",
+      "a4194150afddd1bdaaaeca08051a185a6700100b",
+      "865fab602a0b5b568a0611533b5dfa0997816a4d"
+    ],
+    "qa": "docs/v1/SERVER_COMIC_IDENTITY_QA_2026-10-17.md",
+    "scope": "item 2, milestone B: indexed comic issue evidence and safe opt-in comparison",
+    "completed": [
+      "owner-only read-only revision/fingerprint-bound comic identity and series-peers audit",
+      "bounded 40 file/100 peer evidence, missing source/reprint/manual-conflict warnings",
+      "same-year numeric conservative possible-gap review with volume caveats",
+      "explicit issue marker/range disambiguation; bare years and volumes never treated as issue numbers",
+      "Open Library and Google Books suggestions selectable only when both comic series and issue match",
+      "workbench comic-only evidence panel, no automatic scanning or publication",
+      "stale public comparison cards rejected when work metadata input or snapshot changes",
+      "synthetic Go/SQLite and real manager fake-DOM regression coverage",
+      "full real CBZ archives containing embedded ComicInfo and image pages survive original server scan/rescan; comic audit retains identities and file bytes"
+    ],
+    "source_checkpoints": {
+      "server_run_id": 39047128153,
+      "server_job_id": 117437987007,
+      "server": "success",
+      "arm64_job_id": 117437987170,
+      "arm64": "success",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987007",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987170"
+    },
+    "limitations": [
+      "comic volume, imprint, reprint and issue variant not reliably identified or linked",
+      "generic providers are not specialist authority for every comic issue",
+      "bounded gap evidence is advisory, not confirmed missing media",
+      "real Raspberry Pi, HA ingress, NAS, 16:9 browser and provider reliability unaccepted",
+      "no package released or main/canonical merge"
+    ],
+    "canonical_mobile_modified": false,
+    "pr_draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false,
+    "real_cbz_archive_e2e_source_test": true
+  },
+  "server_comic_edition_profiles_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "draft_pr": 83,
+    "parent_sha": "ccbbfcf58bbbfb1b15f0674a39ffaa69928d4e8d",
+    "source_head": "07776dca312ff238ae235d0a1d1380f9d93af5cb",
+    "qa": "docs/v1/SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md",
+    "implementation_commits": [
+      "3fc9f4156ce7dc6e634be64cdc59c3dbb2d67b36",
+      "8059fde2e6804712f3125e446fe846ac17f65977",
+      "ae80ec6283dd6c0f045315e4b7ba59f01e323440",
+      "a8979a520a0826e1c996b29182c2c7e75814b983",
+      "6f242e2602a84e5c8f1d73a782c9493ad98db6c6",
+      "2894f89fd92289bf1fcf84212e4b6e0d764017fa",
+      "e6a8ebacf7de641677fba53e7cc0a83dffec6430",
+      "07776dca312ff238ae235d0a1d1380f9d93af5cb"
+    ],
+    "milestone": "item 3 partial, source-complete/CI-tested existing comic edition identity labels only",
+    "source_ci": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "success",
+      "android_native": "not yet confirmed",
+      "ios": "not yet confirmed",
+      "server_job_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291766",
+      "arm64_job_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291948",
+      "mobile_run_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39049590947"
+    },
+    "delivered": [
+      "owner-verifiable separate SQLite comic edition run, volume, issue, imprint, variant, year and notes keyed to immutable edition ID",
+      "owner-only revisioned signed 10 minute preview/save and last Save undo; 25 entry ledger",
+      "staged-only available single-file Comic identity writes, no media move or file/meta regroup",
+      "stale/tamper/replay/member drift, cross-work identity, CSRF and DB fault rollback checks",
+      "original edition and household progress untouched with multiple-edition safeguards",
+      "actual SQLite backup/staged restore retains new identity, undo journal, and work fingerprint",
+      "startup legacy-metadata migration no longer overwrites embedded/path/manual provenance",
+      "same-series gap analysis refuses cross-run/volume/incomplete edition cohorts",
+      "existing book workbench UI auto-refreshes audit and invalidates stale public suggestions"
+    ],
+    "limitations": [
+      "no edition regroup/move/new edition creation or consolidation; independent high-risk work",
+      "no specialist comic provider verification of volume/imprint/variant authority",
+      "no real 1920x1080 or HA ingress browser approval",
+      "no Pi4 4GB SSD/NAS SMB NFS power-loss or family playback acceptance",
+      "full server ten-screen commercial parity and mobile/Play gates remain open"
+    ],
+    "original_mobile_locked": true,
+    "root_packaged_source_mirrored": true,
+    "draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
+  },
+  "server_comic_transfer_preflight_20261017": {
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "pr": 83,
+    "parent_sha": "ed509e9a2ebd16a2882d71da4c0e3db783978da5",
+    "source_head": "2914747c0ffa0434f6a5dfa659b7a6be06d4ac8d",
+    "commits": [
+      "6686f0319c2fdadabab49e3b0784f6110452d9c1",
+      "ea1c4c8d3560f5e4c6a6578630a45572213b7465",
+      "2914747c0ffa0434f6a5dfa659b7a6be06d4ac8d"
+    ],
+    "qa": "docs/v1/SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md",
+    "scope": "server owner-only READ-ONLY edition reassignment safety preflight (not an Apply feature)",
+    "source_checks": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "success",
+      "android_native": "success",
+      "ios": "not yet confirmed",
+      "server_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123523",
+      "arm64_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123242",
+      "mobile_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249886",
+      "android_native_url": "https://github.com/russellstokes-ai/Archivist/actions/runs/39051249870"
+    },
+    "delivered": [
+      "owner-only signed and work-fingerprint-bound read-only source/target/edition conflict inspection",
+      "checks manual grouping, publication, space grants, source retention, issue/year/series compatibility and bounded exact member identities",
+      "blocks owner-verified edition profiles, manual metadata, cover, preferences, completion/activity, reading progress, previous relinks/moves and active scan jobs",
+      "manager UI surfaces descriptive blockers, does not auto-inspect and rejects late stale responses",
+      "real Go/SQLite and manager fake-DOM regressions verify absence of Apply endpoint and no original data mutation",
+      "root/packaged server mirrors plus protected mobile source-lock CI"
+    ],
+    "limitations": [
+      "actual atomic edition reparenting/apply and undo is intentionally NOT IMPLEMENTED",
+      "future Apply needs new write-transaction conflict revalidation and failure-injection rollback",
+      "no unverified cross-volume/variant grouping, edition label rebind, or orphaned work deletion permitted",
+      "no owner physical Pi4 HA ingress / NAS SMB NFS or 1920x1080 browser acceptance",
+      "full server ten-screen parity, specialist comics authority and Play/Fold/Auto gates remain open"
+    ],
+    "no_mutating_transfer_endpoint": true,
+    "source_mirrors_verified_by_ci": true,
+    "canonical_mobile_touched": false,
+    "draft": true,
+    "merged": false,
+    "commercial_server_release_ready": false
+  },
+  "server_accelerated_workspace_20261017": {
+    "pr": 83,
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "source_parent": "830001c91d61ac77392750f058d8c6dd3a6b3a84",
+    "qa": "docs/v1/SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md",
+    "status": "submitted as one integrated code+test+docs batch; exact-head CI is required and must be checked independently",
+    "delivered": [
+      "owner-only read-only SQLite operations summary with separate physical-file and logical-work counts and per-state jobs",
+      "local restore pending/inflight/recovery artifact status with explicit unknown/untrusted warnings; no remote backup success claim",
+      "explicit time-limited process-single-flight owner-only SQLite quick_check(1), not an automatic mount/media probe",
+      "desktop Overview and Health & Recovery in the existing Archivist owner manager",
+      "S1–S10 workflow navigation using existing implemented book editors, Assist, Scanner, Organise, Family and main-app Settings deep links",
+      "guarded source scan control tied to current source connectivity and persisted job states",
+      "root+packaged code mirror and actual Go/API/fake DOM regression coverage"
+    ],
+    "intentionally_deferred": [
+      "comic edition transfer Apply and undo (preflight remains read-only)",
+      "independent redesign of ten server screens (existing shared app workflows reused)",
+      "family space-grant policy change without owner decision",
+      "physical Pi4/HA ingress/NAS and real-size/real-media performance acceptance"
+    ],
+    "canonical_mobile_modified": false,
+    "existing_scanner_rewritten": false,
+    "draft_pr_unmerged": true,
+    "commercial_go": false,
+    "ci": "PR #83 exact commit server and ARM64 checks are the gate; no CI result is claimed at source-authoring time"
+  },
+  "server_batch2_family_settings_assist_20261017": {
+    "parent_sha": "edcfcc02524f9d78bb2a1f48350bcf0b3c893b4e",
+    "pr": 83,
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "release_gate": "NO-GO: source server/ARM64/mobile CI GREEN; physical Pi/NAS/16:9/Fold and product integration pending",
+    "report": "docs/v1/SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md",
+    "delivered": [
+      "native 16:9 owner Family and Settings views over existing authenticated server APIs",
+      "new user/rotated access keys shown once, memory-only, explicit dismissal and key persistence within current session until copied",
+      "owner-confirmed family user revocation and active session management; no backend permission policy changes",
+      "real server-info and session status, existing advanced Settings/Organise deep links retained",
+      "work-level Assist filterable by title, series or author, space, format, review reason",
+      "Assist count and page use one read-only SQLite transaction, grouped by logical work rather than media files",
+      "server strict bounded parameter validation and tests for revoked owner/anonymous, review reasons and page totals",
+      "Go root/package and browser regressions added; canonical mobile/scanner/reader untouched"
+    ],
+    "intentionally_open": [
+      "S7 file organiser continues to reuse existing working shared browser controls",
+      "per-user library-space grants remain global by current product policy and require owner decision",
+      "real device, Pi4/HA ingress/NAS/1000+ metadata/performance/accessibility acceptance not complete",
+      "no comic transfer Apply enabled; draft PR unmerged"
+    ],
+    "source_files": [
+      "server_review.go",
+      "server_review_filter_test.go",
+      "web/manage.html",
+      "web/manage.css",
+      "web/manage.js",
+      "scripts/v1-manager-assist.test.cjs"
+    ],
+    "implementation_pending_ci": false,
+    "merged": false,
+    "commercial_go": false,
+    "source_code_sha": "6336ce166a4d14a254a8ec22231c4ba0534fd5af",
+    "source_ci": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "success",
+      "android_native": "success",
+      "ios": "not yet verified at this checkpoint",
+      "server_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004189",
+      "arm64_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004037",
+      "mobile_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321480",
+      "android_native_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39055321516"
+    }
+  },
+  "server_batch3_unified_organise_20261017": {
+    "pr": 83,
+    "parent_sha": "9f636083cd22a0dc64f2c6531acbc01462596691",
+    "qa": "docs/v1/SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md",
+    "implementation_status": "source candidate, pending exact-code full server/ARM64/mobile regression CI",
+    "delivered": [
+      "native 16:9 owner Organise/S7 page with paged indexed files, search, space/format filters and up to 100 explicit selections across pages",
+      "exact template and manual relative-path preview using existing hash-verified file move backend; no implicit moves",
+      "zero moves preselected for Apply, separate owner approvals, bounded Apply and explicit partial-result reporting",
+      "persistent 40-row-page move journal with preview cancel and fresh verified reverse move/undo",
+      "server limits template preview to 1–100 distinct valid assets and apply to 1–100 unique signed-format move IDs; no automatic 500-asset preview on empty request",
+      "strict JSON/action gates; real filesystem file integrity and stable work/edition/asset ID round-trip tests",
+      "full root plus packaged Go/JS mirrored source and browser regressions"
+    ],
+    "deferred": [
+      "full physical Pi4/HA ingress/NAS/SMB/NFS power-loss acceptance",
+      "large 1000+ media performance measurement in actual environment",
+      "optional comic edition transfer Apply and specialist comics external providers",
+      "no mobile/Play release or production migration approval"
+    ],
+    "commercial_go": false,
+    "draft_pr_unmerged": true,
+    "protected_mobile_unchanged": true
+  },
+  "server_release_blocker_journal_scale_20261017": {
+    "pr": 83,
+    "parent_sha": "a56a7b1c547a5c8c2c9219d6c4662b329a4303c5",
+    "report": "docs/v1/SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md",
+    "status": "exact code passed root+packaged Go, legacy organiser Node contract, Docker/HA runtime and native ARM64 smoke; mobile platforms pending at checkpoint; hardware acceptance NO-GO",
+    "fixed": [
+      "SQLite preview replacement now transactionally cancels prior preview and inserts next preview, rolling both back on late DB failure",
+      "batch template no longer preemptively cancels older preview when new candidate is invalid or requires review",
+      "legacy Settings organiser detects >500 indexed assets and disables its incomplete all-files preview; failures are fail-closed",
+      "small legacy libraries paginate in bounded 200-file reads and 100-file preview batches",
+      "journal collision query gains partial active-destination and asset-state indexes without deleting history"
+    ],
+    "proof": [
+      "injected SQLite journal insert failure preserves old move preview and leaves original bytes intact",
+      "4,000 completed-move journal fixtures and EXPLAIN QUERY PLAN verify index usage and retained history",
+      "actual legacy browser JS exercised against 503, 300 and 0 synthetic indexed files under CI"
+    ],
+    "source_pair_mirrored": true,
+    "mobile_scanner_protected": true,
+    "draft": true,
+    "merged": false,
+    "commercial_release_go": false,
+    "missing_acceptance": [
+      "final exact-code CI results",
+      "physical Pi4 4GB SSD",
+      "NAS SMB/NFS disconnects and power interruption",
+      "real large media import, owner 16:9 UI and disaster restore"
+    ],
+    "verified_code_sha": "d4020db46c330d28db674315baeb8ef0171f5af0",
+    "source_ci": {
+      "server": "success",
+      "arm64": "success",
+      "mobile": "not yet final",
+      "android_native": "not yet final",
+      "ios": "not yet final",
+      "server_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502872",
+      "arm64_job": "https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502678"
+    }
+  },
+  "server_seven_release_gates_20261017": {
+    "pr": 83,
+    "branch": "integration/archivist-v1-auto-restore-recovery-20261016",
+    "source_code_checks": "a806ec5a8d437a8eebe88b15e5b58198c99f78ae",
+    "checked_packaging_commit": "20768b64d9c14e4b69be7380bac1122f690beaba",
+    "source_qa": "docs/v1/SERVER_SEVEN_GATE_RELEASE_QA_2026-10-17.md",
+    "stages": {
+      "1": {
+        "software": "green, multiarch native ARM64 and HA/Docker read-only smoke, d4a7d1a",
+        "physical": "blocked, no real Raspberry Pi/HAOS ingress"
+      },
+      "2": {
+        "software": "green, multi-source synthetic empty/unmounted/reconnect continuity",
+        "physical": "blocked, no real SMB/NFS disconnected mount"
+      },
+      "3": {
+        "software": "green, SQLite staged restore with household progress, publication, rollback snapshot",
+        "physical": "blocked, no power-cut or independent off-host restore"
+      },
+      "4": {
+        "software": "green, provider cache, ISBN/score validation, retry partial outage",
+        "physical": "blocked, representative real metadata-provider/annual/variant accuracy unaccepted"
+      },
+      "5": {
+        "software": "green, 10020 indexed items + review/Atlas/Shelf paging",
+        "physical": "blocked, Pi CPU/RAM and real 10k mixed-media dataset absent"
+      },
+      "6": {
+        "software": "green, cross-feature family/OPDS/Atlas/streaming/revocation",
+        "physical": "blocked, actual 1920x1080 HAOS browser, accessibility and remote phones absent"
+      },
+      "7": {
+        "software": "green, direct-peer throttling and actual QA artifacts built and checksummed",
+        "production": "blocked, security audit/SSL reverse-proxy, signed multiarch image, upgrade/rollback and owner release approval absent"
+      }
+    },
+    "ci": {
+      "nas_restore_large_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39061379284",
+      "metadata_access_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39062163904",
+      "qa_packaging_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39062366626",
+      "qa_artifact_id": 12112016159,
+      "qa_artifact_name": "archivist-server-qa-20768b64d9c14e4b69be7380bac1122f690beaba",
+      "qa_artifact_bytes": 17470120,
+      "qa_artifact_retention_days": 7,
+      "exact_latest_server_run": "https://github.com/russellstokes-ai/Archivist/actions/runs/39062366710"
+    },
+    "live_family_media_touched": false,
+    "canonical_mobile_touched": false,
+    "draft_unmerged": true,
+    "hardware_accepted": false,
+    "commercial_server_go": false
+  },
+  "server_onboarding_import_2026_10_17": {
+    "base_sha": "eee43df0b07024563950a25fe643c3d931c5e980",
+    "pr": 83,
+    "state": "source_prepared_build_deferred_by_owner",
+    "qa": "docs/v1/SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md",
+    "mobile_changed": false,
+    "hardware_accepted": false,
+    "commercial_server_go": false,
+    "enrichment": [
+      "Open Library work descriptions on demand",
+      "Audnexus exact-ASIN audiobook metadata without credentials",
+      "optional Google rich fields",
+      "guarded fill-missing preview"
+    ],
+    "go_tests_verified": false
+  },
+  "home_assistant_test_build_2026_10_17": {
+    "version": "0.9.3-qa.20261017.1",
+    "tested_sha": "8c4e02e6f85334c892ff7dba5e078600e54f592d",
+    "state": "built_server_ci_passed_ready_for_owner_testing",
+    "server_run": 39075785499,
+    "artifact_run": 39075785558,
+    "artifact_id": 12116812219,
+    "hardware_accepted": false,
+    "commercial_server_go": false
+  },
+  "server_automatic_library_2026_10_18": {
+    "version": "0.9.3-qa.20261018.1",
+    "tested_sha": "f31fa44557bad9f6ea5c772f35e0aeea8f067c7b",
+    "server_checks": "https://github.com/russellstokes-ai/Archivist/actions/runs/39117974038",
+    "qa_artifacts": "https://github.com/russellstokes-ai/Archivist/actions/runs/39117974040/artifacts/12133286010",
+    "state": "ready_for_owner_installation_testing",
+    "synthetic_file_count": 10020,
+    "physical_acceptance": "BLOCKED",
+    "browser_acceptance": "BLOCKED",
+    "commercial_server_go": false
+  },
+  "server_diagnostics_2026_10_18": {
+    "version": "0.9.3-qa.20261018.2",
+    "tested_sha": "1755831ad6e40124b539f6c2c4221b36aa0ab106",
+    "server_checks": 39123247395,
+    "qa_artifacts": 12135032009,
+    "state": "ready_for_owner_installation_testing",
+    "commercial_server_go": false,
+    "physical_acceptance": "BLOCKED",
+    "report": "docs/v1/SERVER_DIAGNOSTIC_REPORT_2026-10-18.md"
+  },
+  "server_library_onboarding_2026_10_20": {
+    "version": "0.9.3-qa.20261020.1",
+    "state": "ready_for_owner_installation_testing",
+    "qa": "docs/v1/SERVER_LIBRARY_ONBOARDING_QA_2026-10-20.md",
+    "physical_acceptance": "BLOCKED",
+    "live_provider_acceptance": "BLOCKED",
+    "commercial_server_go": false,
+    "tested_sha": "29a68642528bba1b87f0005002413c2077695f05",
+    "server_checks": "https://github.com/russellstokes-ai/Archivist/actions/runs/39458881433",
+    "qa_artifacts": "https://github.com/russellstokes-ai/Archivist/actions/runs/39458885802/artifacts/12280354655",
+    "synthetic_import_files": 10020,
+    "synthetic_rescan_seconds": 0.435
   }
 }

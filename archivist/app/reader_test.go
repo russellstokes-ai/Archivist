@@ -80,6 +80,7 @@ func TestReaderPermissionsAndProgress(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "book.epub"), makeReaderEPUB(t), 0600)
 	a.addSource("Private", root)
 	a.scan(1)
+    publishFixtureWorks(t,a)
 	a.db.Exec("INSERT INTO profiles(id,name,key_hash) VALUES(1,'Member',?)", keyHash("member"))
 	token, _ := a.newSession("member")
 	call := func(method, path, body, key string) *httptest.ResponseRecorder {

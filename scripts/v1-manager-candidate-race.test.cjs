@@ -42,14 +42,34 @@ const works=[
   {id:10,title:'Book Alpha',author:'Author Alpha',format:'Ebook',space:'Books',available:true,needsReview:true},
   {id:11,title:'Book Beta',author:'Author Beta',format:'Ebook',space:'Books',available:true,needsReview:true},
 ];
-const requests=[],metadataSaves=[];
+const requests=[],detailRequests=[],metadataSaves=[],lockChanges=[];
+const fieldVersions=new Map(),lockedFieldNames=new Map();
+const fieldNames=['title','author','series','seriesNumber','genre','publishedYear','narrator','publisher','isbn','asin','language','description'];
 const reply=body=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>body});
-const fetchStub=async url=>{
+const fetchStub=async (url,options={})=>{
   if(url.startsWith('./api/assets/')&&url.endsWith('/metadata')){
     return new Promise((resolve,reject)=>metadataSaves.push({url,resolve,reject}));
   }
+  if(url.startsWith('./api/manage/metadata-details?'))return new Promise(resolve=>detailRequests.push({url,resolve}));
   if(url.startsWith('./api/manage/metadata-candidates?')){
     return new Promise((resolve,reject)=>requests.push({url,resolve,reject}));
+  }
+  if(url.startsWith('./api/manage/assets/')&&url.endsWith('/fields')){
+    const id=Number(url.split('/')[4]),work=works.find(item=>item.id===id);
+    assert(work,'field controls for unrecognised file '+url);
+    return reply({assetId:id,revision:fieldVersions.get(id)||0,fingerprint:'a'.repeat(64),fields:fieldNames.map(name=>({
+      name,value:work[name]===undefined?(name==='publishedYear'||name==='seriesNumber'?'0':''):String(work[name]),
+      source:'path',locked:lockedFieldNames.get(id)?.has(name)||false,updatedAt:0
+    }))});
+  }
+  if(url.startsWith('./api/manage/assets/')&&url.includes('/fields/')&&options.method==='PUT'){
+    const id=Number(url.split('/')[4]),field=url.split('/')[6],payload=JSON.parse(options.body);
+    lockChanges.push({id,field,payload});
+    assert.equal(payload.expectedRevision,fieldVersions.get(id)||0,'locks use current version');
+    const newVersion=(fieldVersions.get(id)||0)+1;fieldVersions.set(id,newVersion);
+    if(!lockedFieldNames.has(id))lockedFieldNames.set(id,new Set());
+    if(payload.locked)lockedFieldNames.get(id).add(field);else lockedFieldNames.get(id).delete(field);
+    return reply({ok:true,revision:newVersion,locked:payload.locked});
   }
   if(url.startsWith('./api/books?'))return reply(works);
   if(url==='./api/me')return reply({owner:true});
@@ -87,6 +107,7 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   assert.equal(titleField().value,'Book Alpha');
   const older=search();
   assert.equal(requests.length,1);
+  assert(requests[0].url.includes('mode=multi'),'file editor must use the shared safe provider path');
   assert.equal(elements.get('candidate-search-button').disabled,true);
   close();
   open(1);
@@ -104,7 +125,7 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   requests[1].resolve(lookupResponse('Correct Beta Candidate'));
   await current;await settle();
   assert.equal(results().length,1,'current editor must receive its own candidates');
-  const choices=results()[0].children[2].children;
+  const choices=results()[0].children.find(child=>child.className==='candidate-fields').children;
   const useTitle=choices.find(el=>el.textContent==='Use Title');
   assert(useTitle,'current candidate must retain a field-by-field selection control');
   useTitle.onclick();
@@ -128,6 +149,7 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   // currently active editor for work B, nor use work B's id to edit state.
   close();
   open(0);
+  await settle();
   titleField().value='Edited Alpha';
   const saveForm=elements.get('editor-form');
   const pendingSave=saveForm.listeners.submit({preventDefault(){}});
@@ -145,6 +167,7 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   // A late failed PATCH must not flash A's error over the new B editor.
   close();
   open(0);
+  await settle();
   titleField().value='Edited Again Alpha';
   const failedSave=saveForm.listeners.submit({preventDefault(){}});
   assert.equal(metadataSaves.length,2);
@@ -162,6 +185,7 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   // failure and re-enable retry; never silently discard unsaved user fields.
   close();
   open(0);
+  await settle();
   titleField().value='Retry This Metadata';
   const retryable=saveForm.listeners.submit({preventDefault(){}});
   assert.equal(metadataSaves.length,3);
@@ -172,5 +196,46 @@ const lookupResponse=(title)=>reply({candidates:[{title,author:'Candidate author
   assert.equal(elements.get('save-editor').disabled,false,'failed save must allow retry');
   assert.match(elements.get('notice').textContent,/Simulated provider\/storage failure/);
 
-  console.log('PASS: stale candidate and metadata-save completions cannot cross editors; current failures are retryable');
+  close();open(0);await settle();
+  const titleControl=elements.get('editor-fields').children[0];
+  const lockButton=titleControl.children[1].children[1];
+  assert.equal(lockButton.textContent,'Lock','field lock must render inside the editor');
+  assert.equal(lockButton.disabled,false,'field controls must load before lock actions');
+  lockButton.onclick();await settle();
+  assert.equal(lockChanges.length,1);
+  assert.equal(lockChanges[0].field,'title');
+  assert.equal(lockChanges[0].payload.locked,true);
+  assert.equal(lockChanges[0].payload.expectedRevision,0);
+  assert.equal(titleField().readOnly,true,'locked title cannot be typed over');
+  assert.equal(lockButton.attributes['aria-pressed'],'true');
+  lockButton.onclick();await settle();
+  assert.equal(lockChanges.length,2);
+  assert.equal(lockChanges[1].payload.expectedRevision,1);
+  assert.equal(titleField().readOnly,false,'explicit unlock restores field editability');
+  assert.equal(lockButton.attributes['aria-pressed'],'false');
+  assert.equal(elements.get('save-editor').disabled,false);
+  const guarded=search();
+  requests.at(-1).resolve(reply({candidates:[{title:'Store result',source:'Apple Books',publishedYear:2026,yearType:'store release',isbn:'9780441172719',identifierMismatch:true}]}));
+  await guarded;await settle();
+  const guardedChoices=results()[0].children.find(child=>child.className==='candidate-fields').children;
+  assert(!guardedChoices.some(child=>child.textContent==='Use Year'),'store release cannot replace first-publication year');
+  assert(!guardedChoices.some(child=>child.textContent==='Use ISBN'),'mismatched identifier cannot be applied');
+  close();open(0);await settle();
+  const descriptionSearch=search();
+  requests.at(-1).resolve(reply({candidates:[{workId:'/works/OL123W',source:'Open Library',title:'Book Alpha'}]}));
+  await descriptionSearch;await settle();
+  const findDescription=results()[0].children.find(child=>child.textContent==='Find description');
+  assert(findDescription,'Open Library work must offer on-demand description');
+  const pendingDescription=findDescription.onclick();
+  assert.equal(detailRequests.length,1);
+  close();open(1);await settle();
+  detailRequests[0].resolve(reply({description:'Description for the previous book'}));
+  await pendingDescription;await settle();
+  assert.equal(results().length,0,'late description must not attach to another book');
+  assert.equal(elements.get('editor-fields').querySelector('[name="description"]').value,'','late description must not alter another book');
+  close();works[0].format='Comic';open(0);await settle();
+  const comicSearch=search();requests.at(-1).resolve(reply({candidates:[{workId:'/works/OL123W',source:'Open Library',title:'Unknown issue'}]}));
+  await comicSearch;await settle();
+  assert(!results()[0].children.some(child=>child.textContent==='Find description'),'description lookup must not bypass comic issue identity guard');
+  console.log('PASS: metadata editor is revision-aware, guards candidate/save races, and supports real lock/unlock controls');
 })().catch(error=>{console.error(error);process.exitCode=1});

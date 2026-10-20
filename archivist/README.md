@@ -1,10 +1,12 @@
+> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261020.1; server checks and QA build passed; ready for owner installation testing.** See the [installation guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md).
+
 <p align="center">
   <img src="logo.png" alt="Archivist" width="190">
 </p>
 
 # Archivist for Home Assistant
 
-**Version 0.9.3**
+**Version 0.9.3-qa.20261020.1 (test release)**
 
 Archivist turns Home Assistant into a private library server for books, audiobooks, comics and PDFs. It provides a polished web library, household profiles, safe organisation tools and an optional server connection for the Archivist Android app.
 

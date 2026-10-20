@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -102,25 +101,9 @@ func (a *app) accountRoutes(mux *http.ServeMux) {
 		}
 		reply(w, map[string]bool{"ok": true})
 	})
-	mux.HandleFunc("PUT /api/profiles/{id}/spaces", func(w http.ResponseWriter, r *http.Request) {
-		// Compatibility route for older clients. Archivist Users now always see
-		// the whole library, so a legacy "space selection" simply restores all spaces.
-		id, e := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if e != nil { fail(w,400,e); return }
-		var n int
-		if e=a.db.QueryRow("SELECT count(*) FROM profiles WHERE id=? AND revoked=0",id).Scan(&n);e!=nil||n!=1 {
-			fail(w,404,errors.New("active user not found"));return
-		}
-		tx,e:=a.db.Begin()
-		if e!=nil{fail(w,500,e);return}
-		defer tx.Rollback()
-		if _,e=tx.Exec("DELETE FROM grants WHERE profile_id=?",id);e!=nil{fail(w,500,e);return}
-		if _,e=tx.Exec(`INSERT OR IGNORE INTO grants(profile_id,space) SELECT ?,space FROM sources GROUP BY space`,id);e!=nil{fail(w,500,e);return}
-		if e=tx.Commit();e!=nil{fail(w,500,e);return}
-		reply(w,map[string]bool{"ok":true})
-	})
+	mux.HandleFunc("PUT /api/profiles/{id}/spaces", a.updateProfileGrants)
 	mux.HandleFunc("GET /api/profiles/{id}/spaces", func(w http.ResponseWriter, r *http.Request) {
-		rows,e:=a.db.Query("SELECT DISTINCT space FROM sources ORDER BY space")
+		rows,e:=a.db.Query("SELECT space FROM grants WHERE profile_id=? ORDER BY space",r.PathValue("id"))
 		if e!=nil{fail(w,500,e);return}
 		defer rows.Close()
 		out:=[]string{}

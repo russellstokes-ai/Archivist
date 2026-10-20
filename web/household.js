@@ -8,7 +8,7 @@ householdHead.append(householdCopy);
 const profileList=element('div'),createBlock=element('div'),createForm=element('form'),nameField=element('input'),createButton=element('button','Add user');
 createBlock.className='profile-create';createButton.className='primary';
 nameField.placeholder='User name';nameField.required=true;nameField.maxLength=100;nameField.setAttribute('aria-label','User name');
-createBlock.append(element('h3','Add a family user'),element('p','Every User can access the whole library. Personal progress, ratings, favourites and stats remain separate.'),createForm);
+createBlock.append(element('h3','Add a family user'),element('p','Choose the library spaces each user can access. Personal progress, ratings, favourites and stats remain separate.'),createForm);
 createForm.append(nameField,createButton);household.append(householdHead,createBlock,profileList);$('household-settings').append(household);
 
 async function refreshHousehold(){

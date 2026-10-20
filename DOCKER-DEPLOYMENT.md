@@ -14,6 +14,16 @@ This is the first standalone packaging candidate for Archivist's **existing Go/S
 
 The image builds for the architecture supported by the Docker host. `linux/amd64` and `linux/arm64` are intended deployment targets; both still need platform acceptance before marking this package release-ready.
 
+## Multi-track external rename recovery
+
+The single-work Docker/NAS server now has a separate **Library Manager → Archivist Assist → Reconnect audiobook** workflow for a folder containing 2–32 Audio chapters (up to 4 GiB total media). The owner must inspect each old/new track pairing in order and confirm every mapping, after which the server hashes the complete replacement tracks and, with separate owner attestation, applies one atomic database relink. The old files are missing and cannot be compared cryptographically; this is owner-confirmed identification only, not automatic matching. No host media writes are required. This is a QA feature pending actual NAS/Pi tests.
+
+## Recovery after external renames
+
+For a single-file work renamed within the same mounted library, the server now offers an explicit **Library Manager → Relink renamed file** workflow. Select the old unavailable entry and the newly indexed available entry after scanning, inspect the signed full-hash preview, and attest that you independently verified they are the same file. The server does not move original media; it preserves the old book's internal identity and bookmarks and transactionally retires an unused staged candidate. No automatic filename/size guesses are performed. The absent original cannot be cryptographically compared with the new content. Multi-file and cross-root relinking are not yet supported.
+
+This feature operates on the SQLite catalogue and therefore also works with the default read-only Docker media mount, subject to adequate read permissions for a full destination SHA-256. It is still a QA feature requiring real NAS/Pi verification; back up `/data` and do not treat it as a replacement for proper filesystem backups.
+
 ## Data separation and non-destructive media access
 
 - `archivist-data` is a persistent Docker volume mounted at `/data`, containing the database, user settings and recovery information.
@@ -117,3 +127,61 @@ The ARM64 gate checks:
 - The published HTTP port remains bound to localhost in the test.
 
 **Important:** these are representative host bind mounts on GitHub's runner, **not real SMB/NFS mounts** and **not a Synology/QNAP/TrueNAS/Unraid certification test**. Real host filesystems, NAS firmware, drive disconnect/reconnect, write-authorised organiser actions, and Android remote access require separate acceptance on actual target installations. This test uses disposable synthetic content and must never mount or modify a user's media.
+
+## Scanner health for NAS-mounted libraries
+
+The desktop **Library Manager → Health & scans** now offers read-only identification and Atlas metadata coverage per indexed file, plus immediate owner-only filters for missing author/genre/year, low confidence, review-needed and unavailable records. These are SQLite diagnostics; they never silently launch scans, fetch metadata, alter mounted media or publish books. They remain available when the media share is offline, although the availability flags reflect the last completed scan.
+
+If a mounted share briefly hides one or more tracks from an already-indexed audiobook, the server retains those offline tracks' original edition mappings and bookmarks while marking their database file-availability flags accurately on a completed scan. Restoring the path and scanning again keeps work, edition and asset IDs. Do not treat an entirely new file as the missing original without owner verification. Complete album/cross-volume relinking is a separate explicit and constrained workflow.
+
+Exact synthetic acceptance and remaining physical-NAS caveats are recorded under `docs/v1/SERVER_SCANNER_PARTIAL_NAS_AND_COVERAGE_QA_2026-10-17.md`. This draft remains QA software, not a verified production NAS package.
+
+## Using the book-level metadata workbench
+
+The server includes **Archivist Assist 2.0** in `/manage.html` (open Archivist Assist, choose **Edit book**). Its logical-book fields, per-field origins/locks, revisioned confirm/undo, edition membership and selected cover live in the persistent SQLite catalogue under `/data`. Backups must retain all SQLite database tables, including `work_field_controls`, `work_metadata_revisions` and `work_metadata_history`. Do not delete or reset those tables during upgrades or package changes. The scanner preserves manual work-level title/author/series/genre overrides without changing original mounted media.
+
+The UI supports 16:9 desktop browsers and narrower layouts in source; no real Home Assistant ingress, Pi4 or commercial NAS device acceptance is implied by green CI. Consult `docs/v1/SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md` before a production upgrade.
+
+## Optional multi-provider metadata comparison (QA PR #83)
+
+In **Archivist Assist → Edit book**, explicit **Find candidates** compares Open Library work metadata and Google Books edition metadata. Searches send the entered text and current title/creator/series/issue/ISBN to those public services only after the owner clicks the button; no family identifiers, files, source paths, covers or playback data are uploaded. Google editions do not silently overwrite first-publication year, and work-level ISBN is never auto-inferred from arbitrary editions. Every edit still requires a signed preview and explicit Save; no automatic metadata rewriting has been added to scans. Provider requests may fail on offline/rate-limited installations and do not block local metadata work. See `docs/v1/SERVER_ASSIST_MULTISOURCE_MATCH_QA_2026-10-17.md` for tested limits and remaining physical acceptance.
+
+## Comic identity QA audit
+
+In the owner-only **Archivist Assist → Edit book** workbench, a comic-only **Comic series & issue evidence** section reads the existing SQLite catalogue without scanning a disk, contacting metadata providers, or changing a book. It labels effective series and issue, stored file metadata, offline entries, conflicting evidence, same-series records and **possible** short issue gaps, never verified missing books. Peer analysis stops at 100 works and source display at 40 files. Work-level cleared issue/year overrides remain cleared rather than being replaced with older file values. Comic provider field suggestions are offered only for the same explicitly numbered issue and series; publication/volume/reprint/variant authority is not claimed. Consult `docs/v1/SERVER_COMIC_IDENTITY_QA_2026-10-17.md` before comparing with real libraries. No external provider search occurs unless the owner clicks **Find candidates**.
+
+## Owner-verified comic edition and volume labels (QA draft PR #83)
+
+Archivist Assist → **Edit book** → **Comic series & issue evidence** now contains an edition selector and a separate seven-field identity editor. An owner may explicitly label an existing single-file staged comic edition's series run, volume, issue, publisher/imprint, printing/cover variant, edition year and notes. Review the signed old/new diff before pressing **Confirm edition labels**. **Preview last Save undo** and **Confirm undo** restore the previous labels with a new audit revision. These actions do not group books, move/rename media, overwrite source ComicInfo, publish books, or alter family bookmarks.
+
+The existing SQLite database stored in the persistent `/data` location now includes `comic_edition_profiles` and `comic_edition_profile_history`; **do not delete these tables during updates**. Normal database backup and staged restore includes both; a synthetic live SQLite backup→restore test verified the exact saved revision and source fingerprint. Startup only migrates genuinely unclassified legacy metadata now, preserving embedded/file metadata provenance across restart. Production migration and restore on the owner's live Raspberry Pi/NAS remain **unapproved** pending disposable-volume testing.
+
+Multi-file, unavailable, published and cross-work-inconsistent editions are read-only. Selecting verified volume/run labels constrains possible missing-issue signals; incomplete and mixed cohorts suppress the gap hint entirely. See `docs/v1/SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md` for tested and untested contracts.
+
+## QA: comic edition transfer safety inspection
+
+In the owner-only Archivist Assist workbench, choose a comic edition, enter an existing destination book ID, and select **Inspect transfer safety**. This reads metadata conflicts, household progress, publication and scan state, and lists blockers without changing SQLite or media files. **There is no Apply route or button in this source milestone.** Refer to `docs/v1/SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md`. Do not manually reparent editions or use real household databases for experimental changes.
+
+## Owner Operations overview and SQLite checks (QA branch)
+
+The owner-only **Library Manager → Overview** now reports indexed catalogue and job counts, while **Health & recovery** shows only local SQLite/restore markers and explicit caveats. The `GET /api/manage/operations` response is read-only, does not walk a NAS, and cannot confirm whether media bytes remain readable. The `POST /api/manage/operations/integrity` operation runs SQLite `quick_check(1)` **only when an owner clicks the button**; it is bounded to eight seconds, cannot run concurrently with itself, and does not verify external backup restoration. Never interpret local `.before-restore` existence as an independently tested backup.
+
+The desktop manager includes source-specific **Scan / refresh source** controls guarded by last-known connectivity and active scan jobs; the server performs its own source validation. The separate original **Settings → Server** continues handling the existing verified backup download/staged restore, while **Organise** and **Family** remain on the functional shared Archivist browser app. This v1 source-QA batch does not install or update a live Pi/NAS, merge the draft PR or authorise migration of a family media library. Full scope: `docs/v1/SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md`.
+
+## Archivist Assist book filters and owner Family/Settings (source-QA)
+
+**Library Manager → Work & metadata** now filters *logical books*, not physical tracks, by title/author/series, library space, format and specific review reasons. Filtered total and page are taken from the same SQLite snapshot, and file-specific issues are still accessible in the book workbench. No metadata is changed merely by filtering or scanning.
+
+**Library Manager → Family** provides owner-confirmed create/rotate/revoke on the existing profile backend. A server-generated User key appears **once** and stays only in browser memory until explicitly dismissed; save it securely because it cannot later be retrieved. Current server policy grants each active User access to all library spaces, with separate progress. **Library Manager → Server settings** shows current connection and owner sessions, with separately confirmed session termination. More advanced server configuration, verified recovery/staged restore and the existing safe file organiser remain available from their original browser destinations. Details: `docs/v1/SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md`.
+
+This is a draft source-QA feature set, not approval to update a live Home Assistant/Pi/NAS library or merge PR #83.
+
+## Organise in the unified owner manager (draft S7 QA)
+
+Use **Library Manager → Organise & relink** to page through indexed files, select specific available assets (up to 100 per preview), inspect relative source/destination paths, then tick only the Ready journalled moves you want applied. No preview implicitly selects files for Apply. Recent and interrupted journal states, preview cancellation and explicit hash-verified reverse undo are shown on the same page. The Go API now rejects empty/duplicate/oversized batches instead of silently queuing up to 500 first-library files. Manual file preview still requires an exact relative destination under the existing source root. This is not a reason to scan, rename or reorganise real NAS libraries before physical staging tests. See `docs/v1/SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md`.
+
+## Safe move preview recovery and large-library compatibility (QA draft)
+
+A failed replacement file-move preview should **not** invalidate its existing verified journal record. The newer server performs preview replacement in one SQLite transaction and preserves older previews when a new template candidate is invalid/unreviewed. Long history collision checks are indexed; completed journal entries remain retained.
+
+The legacy browser Settings organiser now checks for the 501st indexed asset. If more than 500 files exist, it **refuses legacy all-files preview** instead of silently omitting later albums/books and links to **Library Manager → Organise & relink** for paged 100-file batches. Paginated source-list failures likewise disable mass operations. See `docs/v1/SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md`. This source candidate must not be installed against a live library until Pi/NAS/power-loss recovery acceptance is complete.

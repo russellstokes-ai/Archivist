@@ -12,6 +12,8 @@ on:
       - 'scripts/v1-manager-contract.test.cjs'
       - 'scripts/v1-manager-selection.test.cjs'
       - 'scripts/v1-manager-candidate-race.test.cjs'
+      - 'scripts/v1-legacy-organise-coverage.test.cjs'
+      - 'scripts/server-release-readonly-smoke.sh'
       - 'scripts/package-ha*'
       - 'repository.yaml'
       - 'archivist/**'
@@ -33,6 +35,8 @@ on:
       - 'scripts/v1-manager-contract.test.cjs'
       - 'scripts/v1-manager-selection.test.cjs'
       - 'scripts/v1-manager-candidate-race.test.cjs'
+      - 'scripts/v1-legacy-organise-coverage.test.cjs'
+      - 'scripts/server-release-readonly-smoke.sh'
       - 'scripts/package-ha*'
       - 'repository.yaml'
       - 'archivist/**'
@@ -54,6 +58,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify protected Archivist features
         run: node scripts/v1-protection-gate.cjs
@@ -68,6 +74,9 @@ jobs:
         run: |
           go mod tidy
           go test ./...
+
+      - name: Ten thousand mixed comic/PDF import and rescan
+        run: ARCHIVIST_IMPORT_BENCHMARK=1 go test -run TestServerImportTenThousand -count=1 -v
 
       - name: Packaged server tests
         run: |
@@ -93,8 +102,14 @@ jobs:
       - name: Advanced manager contract
         run: node scripts/v1-manager-contract.test.cjs
 
+      - name: Legacy large-library organiser fail-closed contract
+        run: node scripts/v1-legacy-organise-coverage.test.cjs
+
       - name: Home Assistant package contract
         run: node scripts/package-ha.test.cjs
+
+      - name: Reproducible Home Assistant package
+        run: node scripts/package-ha-reproducible.test.cjs
 
       - name: Add-on launcher syntax
         run: |
@@ -160,6 +175,7 @@ jobs:
             sleep 2
           done
           test "$healthy" = 1
+          sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:15057
           python3 scripts/mobile-server-protocol-smoke.py --origin http://127.0.0.1:15057 --source /media --state-out "$RUNNER_TEMP/archivist-amd64-state.json"
           docker compose -f compose.yaml exec -T server sh -ec 'touch /data/archivist-ci-persistence-marker'
           if docker compose -f compose.yaml exec -T server sh -c 'touch /media/archivist-ci-forbidden-write >/dev/null 2>&1'; then
@@ -214,6 +230,7 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:15056/healthz
+          sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:15056
           curl -kfsS https://127.0.0.1:15443/healthz
 
 
@@ -229,6 +246,8 @@ jobs:
       COMPOSE_PROJECT_NAME: archivist-arm64-ci
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify protected app source and standalone contract
         run: |
@@ -294,6 +313,7 @@ jobs:
             sleep 2
           done
           test "$ready" = 1
+          sh scripts/server-release-readonly-smoke.sh http://127.0.0.1:15058
           compose exec -T server test -r '/media/Fiction collection/sample.txt'
           compose exec -T server test -r /media-external/sample.txt
           python3 scripts/mobile-server-protocol-smoke.py --origin http://127.0.0.1:15058 --source /media --state-out "$RUNNER_TEMP/archivist-arm64-state.json"

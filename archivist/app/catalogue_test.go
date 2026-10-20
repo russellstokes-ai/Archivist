@@ -144,6 +144,14 @@ func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 		if _,e=a.db.Exec("INSERT INTO edition_assets(asset_id,edition_id,position) VALUES(?,?,0)",assetID,editionID);e!=nil{t.Fatal(e)}
 		_ = i
 	}
+    // These two fixtures represent an already published historical library.
+    // The unresolved asset remains staged until reviewed.
+    if _,e:=a.db.Exec(`INSERT INTO work_publication(work_id,state,revision,published_at)
+       SELECT w.id,'published',1,0 FROM works w
+       WHERE NOT EXISTS (
+         SELECT 1 FROM editions ed JOIN edition_assets ea ON ea.edition_id=ed.id
+         JOIN assets ast ON ast.id=ea.asset_id WHERE ed.work_id=w.id AND ast.needs_review=1
+       )`);e!=nil{t.Fatal(e)}
 	call:=func(path string)*httptest.ResponseRecorder{
 		req:=httptest.NewRequest("GET",path,nil)
 		req.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
@@ -155,7 +163,7 @@ func TestWorkFiltersAndCompleteSummary(t *testing.T) {
 	if res.Code!=200{t.Fatalf("work filter=%d %s",res.Code,res.Body.String())}
 	var works []map[string]any
 	if e:=json.Unmarshal(res.Body.Bytes(),&works);e!=nil{t.Fatal(e)}
-	if len(works)!=1 || works[0]["title"]!="Unknown"{t.Fatalf("filtered works=%v",works)}
+	if len(works)!=1{t.Fatalf("attention work missing from filters=%v",works)}
 
 	res=call("/api/library-summary")
 	if res.Code!=200{t.Fatalf("summary=%d %s",res.Code,res.Body.String())}

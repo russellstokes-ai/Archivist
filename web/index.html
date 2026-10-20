@@ -1,13 +1,17 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Archivist</title><link rel="stylesheet" href="./style.css"><script defer src="./app.js"></script><script defer src="./catalogue.js"></script><script defer src="./playback.js"></script><script defer src="./household.js"></script><script defer src="./accounts.js"></script><script defer src="./organise.js"></script><script defer src="./filemoves.js"></script></head><body>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#081B27"><title>Archivist</title><link rel="stylesheet" href="./style.css"><script defer src="./onboarding.js"></script><script defer src="./app.js"></script><script defer src="./catalogue.js"></script><script defer src="./playback.js"></script><script defer src="./experience.js"></script><script defer src="./household.js"></script><script defer src="./accounts.js"></script><script defer src="./organise.js"></script><script defer src="./filemoves.js"></script></head><body>
 <a class="skip-link" href="#main">Skip to content</a>
-<header class="app-header"><span class="brand-wordmark">Archivist</span><div class="header-actions"><select id="theme" aria-label="Appearance"><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select></div></header>
+<header class="app-header"><img class="header-mark" src="./assets/archivist-app-icon.png" alt="" width="48" height="48"><span class="brand-wordmark">Archivist</span><div class="header-actions"><a id="assist-link" href="./manage.html" hidden>Archivist Assist</a><select id="theme" aria-label="Appearance"><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select></div></header>
 <main id="main" tabindex="-1">
 <div id="activity" class="activity-banner" hidden role="status" aria-live="polite"><div><strong id="activity-label">Working…</strong><span id="activity-detail"></span></div><progress id="activity-progress"></progress></div>
 
-<section id="setup" hidden class="auth-card"><span class="eyebrow">First run</span><h1>Create owner access</h1><p>Choose the access key you will use to manage this Archivist server.</p><form id="setup-form"><label>Owner access key<input id="setup-key" type="password" required minlength="8" autocomplete="new-password"></label><button class="primary">Create access</button></form></section>
+<section id="setup" hidden class="auth-card"><span class="eyebrow">First run</span><h1>Create owner access</h1><p>Create your private owner access. You can add family accounts later.</p><form id="setup-form"><label>Owner access key<input id="setup-key" type="password" required minlength="8" autocomplete="new-password"></label><button class="primary">Create access</button></form></section>
 <section id="unlock" hidden class="auth-card"><span class="eyebrow">Archivist</span><h1>Your library. Yours.</h1><p>Enter your Archivist access key.</p><form id="login"><label>Access key<input id="key" type="password" required autocomplete="current-password"></label><button class="primary">Unlock</button></form></section>
 
+<section id="import-guide" hidden class="panel-card" aria-labelledby="import-title"><p id="import-step" class="note"></p><h2 id="import-title"></h2><p id="import-detail" role="status" aria-live="polite"></p><button id="import-action" type="button" class="primary"></button></section>
+<section id="shelf" hidden><div class="page-heading"><h1>Shelf</h1><p>Pick up where you left off.</p></div><h2>Continue reading & listening</h2><div id="shelf-continue" class="shelf-grid"></div><h2>Your favourites</h2><div id="shelf-favourites" class="shelf-grid"></div><h2>Recently added</h2><div id="shelf-recent" class="shelf-grid"></div></section>
+<section id="stats" hidden><div class="page-heading"><h1>Stats</h1><p>Your reading and listening.</p></div><div id="stats-summary" class="library-summary"></div><h2>Recent activity</h2><div id="stats-activity"></div></section>
+<section id="listen" hidden><div class="page-heading"><h1>Player</h1><p id="player-empty">Choose an audiobook from Shelf or Library to begin.</p></div><div id="player-art"></div><div id="player-controls"></div></section>
 <section id="library" hidden>
   <div class="shelf-hero">
     <div><span class="eyebrow">Your collection</span><h1>Library</h1><p>Every book. In its place.</p></div>
@@ -17,6 +21,7 @@
     <input id="search" type="search" placeholder="Search title, author or series" aria-label="Search library">
     <select id="space" aria-label="Library space"><option value="">All spaces</option></select>
   </div>
+  <label>Sort <select id="library-sort"><option value="title">Title A–Z</option><option value="title-desc">Title Z–A</option><option value="author">Author</option><option value="recent">Recently added</option></select></label><label>View <select id="library-view"><option value="grid">Covers</option><option value="list">List</option></select></label>
   <div id="library-summary" class="library-summary" role="group" aria-label="Filter by format"></div>
   <div id="active-filter" class="active-filter" hidden></div>
   <div class="section-heading catalogue-count"><p id="count" role="status"></p><button id="clear-library-filter" hidden>Clear filters</button></div>
@@ -29,6 +34,8 @@
   <div class="atlas-toolbar"><input id="atlas-search" type="search" placeholder="Find a book, author or series" aria-label="Find in Atlas"><button id="atlas-fit">Fit map</button><button id="atlas-out" aria-label="Zoom out">−</button><button id="atlas-in" aria-label="Zoom in">+</button></div>
   <div class="atlas-space"><svg id="atlas-graph" viewBox="0 0 1100 760" role="group" aria-label="Connected library universe"><g id="atlas-camera"></g></svg><aside id="atlas-inspector" aria-live="polite"><h2>Your reading universe</h2><p>Select a point to follow its connections.</p></aside></div>
   <p id="atlas-map-status" class="note">Drag to explore · scroll or pinch to zoom · select a point for details.</p>
+  <div class="atlas-paging"><button id="atlas-more" type="button" hidden>Show more books in Atlas</button></div>
+  <div id="atlas-rings" class="atlas-rings" aria-label="Collection charts"></div>
   <details class="atlas-directory"><summary>Browse as a list</summary><div class="atlas-grid"><section><h2>Formats</h2><div id="atlas-formats"></div></section><section><h2>Spaces</h2><div id="atlas-spaces"></div></section><section><h2>Authors</h2><div id="atlas-authors"></div></section></div></details>
 </section>
 
@@ -42,9 +49,9 @@
   </div>
 
   <section id="sources" role="tabpanel" data-settings-panel="library">
-    <div class="workflow-steps"><span><b>1</b>Add folders</span><span><b>2</b>Scan & enrich</span><span><b>3</b>Browse Shelf</span></div>
-    <section class="panel-card"><div class="section-heading"><div><h2>Add a source</h2><p>Add media folders without changing their contents.</p></div></div><form id="add"><label>Folder on the server<input id="path" required placeholder="/media/books"></label><label>Library space<input id="new-space" required value="My library" maxlength="100" list="spaces"><datalist id="spaces"></datalist></label><button class="primary">Add folder</button></form><p class="note">Scanning reads metadata and builds the Shelf. Sorting files is optional.</p></section>
-    <section class="panel-card"><div class="section-heading"><div><h2>Sources</h2><p>Scan or refresh a source when files change.</p></div></div><div id="source-list"></div><div id="scan-jobs" hidden><h3>Scan activity</h3><div id="jobs"></div></div></section>
+    <div class="workflow-steps"><span><b>1</b>Add folders</span><span><b>2</b>Import books</span><span><b>3</b>Review & open Shelf</span></div>
+    <section class="panel-card"><div class="section-heading"><div><h2>Add a library folder</h2><p>Add media folders without changing their contents.</p></div></div><form id="add"><label>Folder on the server<input id="path" required placeholder="/media/books"></label><label>Library space<input id="new-space" required value="My library" maxlength="100" list="spaces"><datalist id="spaces"></datalist></label><button class="primary">Add folder</button></form><p class="note">Your original files stay unchanged.</p><details><summary>Using Docker or a network share?</summary><p>Choose the path visible inside the server, such as /media/books. Mount your share before adding it. Read-only access is enough to import.</p></details></section>
+    <section class="panel-card"><div class="section-heading"><div><h2>Your folders</h2><p>Scan or refresh a source when files change.</p></div></div><div id="source-list"></div><div id="scan-jobs" hidden><h3>Scan activity</h3><div id="jobs"></div></div></section>
   </section>
 
   <section id="organisation-settings" role="tabpanel" data-settings-panel="organisation" hidden><section class="panel-card"><h2>Advanced Library Manager</h2><p>Review metadata, search and filter thousands of files, and check source health from a dedicated desktop-friendly workbench.</p><a class="button-link primary" href="./manage.html">Open Library Manager ↗</a></section></section>
@@ -73,5 +80,5 @@
 <p id="status" role="status" aria-live="polite"></p>
 </main>
 <aside id="player" hidden><div><strong id="playing-title"></strong><button id="close-player" aria-label="Close player">Close</button></div><audio id="audio" controls preload="metadata"></audio></aside>
-<nav hidden id="nav" aria-label="Main navigation"><button data-page="library" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l3-1 4 15-3 1z"/></svg><span>Library</span></button><button data-page="atlas"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="18" r="3"/><path d="m9 7 7-1M8 10l5 5m5-7-2 7"/></svg><span>Atlas</span></button><button data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg><span>Settings</span></button></nav>
+<nav hidden id="nav" aria-label="Main navigation"><button data-page="shelf"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M5 17V5h4v12M11 17V3h4v14M17 17V7h3v10"/></svg><span>Shelf</span></button><button data-page="library" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l3-1 4 15-3 1z"/></svg><span>Library</span></button><button data-page="atlas"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="18" r="3"/><path d="m9 7 7-1M8 10l5 5m5-7-2 7"/></svg><span>Atlas</span></button><button data-page="listen"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/></svg><span>Player</span></button><button data-page="stats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h17M7 16v-5M12 16V4M17 16V8"/></svg><span>Stats</span></button><button data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg><span>Settings</span></button></nav>
 </body></html>

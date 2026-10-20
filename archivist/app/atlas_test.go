@@ -30,10 +30,13 @@ func TestAtlasRelationshipsAreExactAndGrantAware(t *testing.T) {
 	foundation:=addAtlasWork(t,a,1,"Main","Foundation","Isaac Asimov","Foundation","Science Fiction","Ebook")
 	addAtlasWork(t,a,1,"Main","Anonymous Work","","Misc","Mystery","Comic")
 	hidden:=addAtlasWork(t,a,2,"Hidden","Hidden Dune","Frank Herbert","Dune","Science Fiction","Ebook")
+    publishFixtureWorks(t,a)
 	initAllProgressForTest(t,a)
 
 	if _,e:=a.db.Exec("INSERT INTO profiles(id,name,key_hash,revoked) VALUES(1,'Reader',?,0)",keyHash("reader-key"));e!=nil{t.Fatal(e)}
 	if e:=a.initHousehold();e!=nil{t.Fatal(e)}
+	// This fixture intentionally starts with both spaces; startup no longer grants them implicitly.
+	if _,e:=a.db.Exec("INSERT INTO grants(profile_id,space) VALUES(1,'Main'),(1,'Hidden')");e!=nil{t.Fatal(e)}
 	if _,e:=a.db.Exec("INSERT INTO sessions(token_hash,profile_id,credential_hash,expires,created) VALUES(?,1,?,9999999999,0)",keyHash("reader-session"),keyHash("reader-key"));e!=nil{t.Fatal(e)}
 
 	var messiahEdition,messiahAsset int64

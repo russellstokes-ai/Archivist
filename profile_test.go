@@ -66,7 +66,7 @@ func TestProfileStatsUsesVerifiedProgress(t *testing.T) {
 	}
 }
 
-func TestProfileStatsUserSeesWholeLibrary(t *testing.T) {
+func TestProfileStatsUserSeesGrantedLibraries(t *testing.T) {
 	a := fixture(t)
 	initAllProgressForTest(t,a)
 
@@ -81,7 +81,8 @@ func TestProfileStatsUserSeesWholeLibrary(t *testing.T) {
 	res,err:=a.db.Exec("INSERT INTO profiles(name,key_hash,revoked) VALUES('Child',?,0)",keyHash("child-key"))
 	if err!=nil{t.Fatal(err)}
 	profileID,_:=res.LastInsertId()
-	// Startup migration grants every active User every existing library.
+	// Explicit grants survive initialization without gaining private libraries.
+ if _,err=a.db.Exec("INSERT INTO grants(profile_id,space) VALUES(?,'Main')",profileID);err!=nil{t.Fatal(err)}
 	if err=a.initHousehold();err!=nil{t.Fatal(err)}
 	if _,err=a.db.Exec("INSERT INTO sessions(token_hash,profile_id,credential_hash,expires,created) VALUES(?,?,?,9999999999,0)",keyHash("child-session"),profileID,keyHash("child-key"));err!=nil{t.Fatal(err)}
 	if _,err=a.db.Exec("INSERT INTO profile_progress(profile_id,edition_id,asset_id,seconds,revision,complete) VALUES(?,?,?,?,1,1)",profileID,mainEdition,mainAsset,12.0);err!=nil{t.Fatal(err)}
@@ -94,7 +95,7 @@ func TestProfileStatsUserSeesWholeLibrary(t *testing.T) {
 	if resw.Code!=200{t.Fatalf("child stats=%d %s",resw.Code,resw.Body.String())}
 	var got profileStats
 	if err=json.Unmarshal(resw.Body.Bytes(),&got);err!=nil{t.Fatal(err)}
-	if got.Name!="Child" || got.Owner || got.Works!=2 || got.CompletedAudio!=2 || got.Completed!=2 {
-		t.Fatalf("whole-library User stats mismatch=%+v",got)
+	if got.Name!="Child" || got.Owner || got.Works!=1 || got.CompletedAudio!=1 || got.Completed!=1 {
+		t.Fatalf("scoped User stats mismatch=%+v",got)
 	}
 }

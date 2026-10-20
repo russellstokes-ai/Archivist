@@ -19,6 +19,7 @@ func TestOPDSBasicAuthAndProfileIsolation(t *testing.T){
 	}
 	if e:=a.scan(1);e!=nil{t.Fatal(e)}
 	if e:=a.scan(2);e!=nil{t.Fatal(e)}
+    publishFixtureWorks(t,a)
 	if _,e:=a.db.Exec("INSERT INTO profiles(id,name,key_hash) VALUES(1,'Reader',?)",keyHash("reader-key"));e!=nil{t.Fatal(e)}
 	if _,e:=a.db.Exec("INSERT INTO grants(profile_id,space) VALUES(1,'Allowed')");e!=nil{t.Fatal(e)}
 	req:=httptest.NewRequest("GET","/api/opds",nil);req.SetBasicAuth("archivist","reader-key")

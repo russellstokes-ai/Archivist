@@ -99,7 +99,7 @@ func (a *app) opdsRoutes(mux *http.ServeMux){
         if e!=nil{fail(w,500,e);return}
         defer tx.Rollback()
         query:=`SELECT w.id,w.title,w.author,w.space,lower(w.title)
-            FROM works w
+            FROM published_works w
             WHERE (? OR w.space IN (SELECT space FROM grants WHERE profile_id=?))
               AND EXISTS (
                 SELECT 1 FROM editions ed

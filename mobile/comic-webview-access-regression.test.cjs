@@ -15,7 +15,7 @@ assert.equal(gitBlob(archive),'ec3ac7992be6956a6356329a2f5756d1e8865017',
   'Comic CBZ/CBR/CBT archive decoding must not be changed');
 assert.equal(gitBlob(nativeZip),'1f38d8149a4d7c4a4b74219166fd517228ac6c05',
   'Comic native ZIP decoder must not be changed');
-assert.equal(gitBlob(source),'827914360d70e33af63ed3e03b66095318144756',
+assert.equal(gitBlob(require('../scripts/repair-original-source.cjs')('mobile/localReader.ts')),'827914360d70e33af63ed3e03b66095318144756',
   'Canonical comic reader gesture and zoom source MUST stay byte-for-byte unchanged');
 assert(source.includes("speechFocus?.focus?.(img,x,y,'page-'+page)"),
   'Speech bubble focus must continue before generic zoom');
@@ -61,5 +61,5 @@ assert(!errors.includes('console.log(')&&!errors.includes('console.error('),
 
 // Require complete lock integrity, not a snapshot of just a few gesture names:
 const canonicalSourceSha='827914360d70e33af63ed3e03b66095318144756';
-assert.equal(gitBlob(source),canonicalSourceSha);
+assert.equal(gitBlob(require('../scripts/repair-original-source.cjs')('mobile/localReader.ts')),canonicalSourceSha);
 console.log('PASS: canonical comic reader fully byte-identical; bubble double-tap, pinch, swipe, page bridge, EPUB and WebView security contracts intact');

@@ -13,11 +13,14 @@ func TestPersonalPreferencesAreIsolatedAndUserWritable(t *testing.T) {
 	initAllProgressForTest(t,a)
 	if _,err:=a.db.Exec("INSERT INTO sources(id,space,path,status) VALUES(1,'Main','/tmp','Ready')");err!=nil{t.Fatal(err)}
 	work,edition,asset:=addProfileStatsWork(t,a,1,"Main","Dune","Audio","Dune",true)
+    publishFixtureWorks(t,a)
 
 	for _,row:=range []struct{id int;name,key string}{{1,"Alice","alice-key"},{2,"Bob","bob-key"}} {
 		if _,err:=a.db.Exec("INSERT INTO profiles(id,name,key_hash,revoked) VALUES(?,?,?,0)",row.id,row.name,keyHash(row.key));err!=nil{t.Fatal(err)}
 	}
 	if err:=a.initHousehold();err!=nil{t.Fatal(err)}
+	// Both test users explicitly receive this space; restarting must not broaden access.
+	if _,err:=a.db.Exec("INSERT INTO grants(profile_id,space) VALUES(1,'Main'),(2,'Main')");err!=nil{t.Fatal(err)}
 	aliceSession,err:=a.newSession("alice-key");if err!=nil{t.Fatal(err)}
 	bobSession,err:=a.newSession("bob-key");if err!=nil{t.Fatal(err)}
 

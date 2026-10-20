@@ -22,8 +22,8 @@
       "package": "app.archivist.reader",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#072632"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2F8B86"
       },
       "versionCode": 102,
       "permissions": [
@@ -52,13 +52,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FBFAF7",
-          "image": "./assets/icon.png",
+          "backgroundColor": "#2F8B86",
+          "image": "./assets/splash-icon.png",
           "imageWidth": 180,
           "resizeMode": "contain",
           "dark": {
-            "image": "./assets/icon.png",
-            "backgroundColor": "#07151C"
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#2F8B86"
           }
         }
       ],

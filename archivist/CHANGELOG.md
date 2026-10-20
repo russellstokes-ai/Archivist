@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.9.3-qa.20261020.1 — Library discovery and onboarding
+
+- Open Library after import; optional metadata improvements stay optional.
+- Improved comic filenames, embedded metadata and skipped-file diagnostics.
+- Optional Metron genre/issue-year matching with protected credentials.
+- Fast unchanged rescans, regression coverage and retained navigation icons.
+- Rescan each source once after updating. See the repository QA guide for remaining limitations.
+
+
+## 0.9.3-qa.20261018.2 — Discovery diagnostics and comic metadata
+
+- Icons for all six main sections.
+- Administrator diagnostic download: extension counts, skipped examples, jobs, build/runtime, metadata gaps, enrichment outcomes and repeated-title candidates.
+- Book-level coverage shown separately from file-level gaps.
+- CBT metadata reads TAR; nonnumeric ComicInfo issue labels no longer discard author/genre/year.
+- Safer comic folder interpretation, numbered PDF titles and authorless explicit comic-identity matching; series-only matches can supply genre, never issue dates.
+- Source media untouched; repeated titles are not automatically merged.
+- Rescan once after updating to collect new diagnostic evidence.
+
+## 0.9.3-qa.20261018.1 — Automatic library test candidate
+
+- Adding a folder starts scanning; imports are readable without bulk approval.
+- Optional attention queue for metadata flags/unavailable items; explicit hidden items stay hidden.
+- Conservative background missing-field enrichment, including genre and first-publication year, preserving file/work locks and corrections.
+- Shelf, Library grid/list/sort, Atlas, simple Player and separate Stats/Settings.
+- Scan accounting and 10,020 mixed-extension synthetic import/rescan check.
+- Exact-source server, ARM64, Docker/HA and QA packaging passed; physical/browser acceptance remains pending.
+
+## 0.9.3-qa.20261017.1 — Home Assistant test candidate
+
+- New-user import guidance and single-pass scans with unchanged-file reuse.
+- Keyless metadata options, exact-ASIN audiobook details and guarded missing-field suggestions.
+- Family library-space access and manager grid/list/table sorting.
+- Server CI validation requested; physical HA/Pi/NAS acceptance remains pending.
+- Install from the PR 83 branch repository; back up before updating.
+
 ## 0.9.3 — UI testing release
 
 - Updated library and connected Atlas presentation with shared typography and teal atmosphere.

@@ -1,3 +1,7 @@
+> **Continuing development in another chat?** Read the [Server development handoff](docs/v1/DEVELOPMENT_HANDOFF.md) for the current build, verified tests, unfinished work and next priorities.
+
+> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261020.1; server checks and QA build passed; ready for owner installation testing.** See the [installation guide](docs/v1/HOME_ASSISTANT_QA_INSTALL.md).
+
 <p align="center">
   <img src="web/assets/archivist-primary-logo.png" alt="Archivist" width="220">
 </p>

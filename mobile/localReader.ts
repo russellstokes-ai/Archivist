@@ -1,4 +1,5 @@
 import {openNativeZip,BookZip} from './nativeZip';
+import {buildEpubContent} from './epubContent';
 import JSZip from 'jszip';
 import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
 import {speechFocusBrowserSource} from './speechFocus';
@@ -14,7 +15,6 @@ export type LocalReaderDocument = {
 };
 
 const imageExt = /\.(jpe?g|png|gif|webp)$/i;
-const textExt = /\.(xhtml|html|htm)$/i;
 
 export async function buildLocalReaderDocument(uri: string, format: string, title: string, initialPage = 0): Promise<LocalReaderDocument> {
   if (format === 'PDF') return {uri};
@@ -66,15 +66,7 @@ function comicArchiveDocument(images: ArchiveImage[], title: string, initialPage
 async function epubHtml(uri: string, title: string, initialPage: number) {
   const zip = await zipFromUri(uri);
   try{
-  const docs = Object.values(zip.files)
-    .filter(file => !file.dir && textExt.test(file.name))
-    .sort((a, b) => scoreEpubPath(a.name) - scoreEpubPath(b.name));
-  const parts:string[]=[];
-  for(const file of docs.slice(0,80)){
-    const raw = await file.async('text');
-    parts.push(`<section>${sanitizeEpubHtml(raw)}</section>`);
-  }
-  return shell(title, parts.join('\n') || '<p>No readable EPUB text found.</p>', 'epub', initialPage);
+  return shell(title,await buildEpubContent(zip as any),'epub',initialPage);
   }finally{await zip.dispose?.();}
 }
 
@@ -483,24 +475,6 @@ function readerInteractionScript(mode: 'comic' | 'epub', initialPage: number, ex
   });
 })();
 </script>`;
-}
-
-function sanitizeEpubHtml(raw: string) {
-  return raw
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<head[\s\S]*?<\/head>/gi, '')
-    .replace(/<\/?(?:html|body)[^>]*>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '')
-    .replace(/\s(src|href)=["'](?!data:|#)[^"']*["']/gi, '');
-}
-
-function scoreEpubPath(path: string) {
-  const lower = path.toLowerCase();
-  if (lower.includes('nav') || lower.includes('toc')) return 9000;
-  if (lower.includes('cover')) return 8000;
-  return 0;
 }
 
 function mime(name: string) {

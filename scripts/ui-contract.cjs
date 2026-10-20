@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
 const html = fs.readFileSync('web/index.html','utf8');
-const jsFiles = ['web/app.js','web/catalogue.js','web/filemoves.js','web/organise.js','web/household.js','web/playback.js','web/reader.js'];
+const jsFiles = ['web/app.js','web/experience.js','web/catalogue.js','web/filemoves.js','web/organise.js','web/household.js','web/playback.js','web/reader.js'];
 const source = jsFiles.map(file => fs.readFileSync(file,'utf8')).join('\n');
 
 for (const banned of ['Coming soon','Not implemented','TODO','FIXME','cover-initials','function initials(']) {
@@ -26,6 +26,9 @@ for (const route of [
 
 console.log('PASS: browser controls are referenced, core routes are wired, and placeholder UI markers are absent');
 
+// Atlas contract executes the ring renderer and checks source parity.
+require('./v1-atlas-parity.test.cjs');
+
 assert.ok(html.includes('id="picker" hidden class="picker-overlay" role="dialog" aria-modal="true"'), 'Folder picker must be a modal dialog');
 assert.ok(html.includes('id="work-detail" hidden class="work-overlay" role="dialog" aria-modal="true"'), 'Work detail must be a modal dialog');
 assert.ok(html.includes('role="tablist" aria-label="Settings sections"'), 'Settings tabs need tablist semantics');
@@ -46,3 +49,23 @@ assert.ok(source.includes('selectedIds=new Set'), 'Organisation preview must mai
 const css=fs.readFileSync('web/style.css','utf8');
 assert.ok(css.includes('focus-visible'), 'Browser controls need visible keyboard focus');
 assert.ok(css.includes('prefers-reduced-motion'), 'Browser UI must respect reduced-motion preference');
+
+const managerHtml=fs.readFileSync('web/manage.html','utf8');
+assert.ok(managerHtml.includes('href="./#settings/organisation"'),'Manager must open working organisation tools inside ingress');
+assert.ok(managerHtml.includes('href="./#settings/server"'),'Manager must link to actual backup/recovery controls');
+assert.ok(source.includes('function navigateServerHash()')&&source.includes('navigateServerHash();'),'Ingress-relative manager deep links must resolve after authentication');
+assert.ok(source.includes("['library','organisation','household','server'].includes(section)"),'Deep-link sections must be allowlisted');
+
+const scanManager=fs.readFileSync('web/manage.js','utf8');
+const scanDashboard=fs.readFileSync('web/app.js','utf8');
+for(const sourceText of [scanManager,scanDashboard]){
+  assert.ok(sourceText.includes('Cancel queued scan'),'Owner server UI must offer queued scan cancellation');
+  assert.ok(sourceText.includes('Retry scan'),'Owner server UI must offer retry for failed jobs');
+  assert.ok(sourceText.includes("'/cancel'")||sourceText.includes("+action,'POST'"),
+    'Owner scan actions must post actual API requests');
+}
+
+require('./server-onboarding.test.cjs');
+
+require('./server-enrichment.test.cjs');
+require('./server-experience.test.cjs');

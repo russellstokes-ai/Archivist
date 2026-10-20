@@ -1,8 +1,182 @@
+## Library discovery and welcoming onboarding — 20 October 2026
+
+Version **0.9.3-qa.20261020.1**. Exact executable source **29a68642528bba1b87f0005002413c2077695f05**. [Server checks](https://github.com/russellstokes-ai/Archivist/actions/runs/39458881433) and [QA build](https://github.com/russellstokes-ai/Archivist/actions/runs/39458885802) **PASSED**. [Download binaries and HA repository ZIP](https://github.com/russellstokes-ai/Archivist/actions/runs/39458885802/artifacts/12280354655) (expires 27 October 2026). Artifact SHA256: 7562af1fc153f4c30f24bb6091122d37f136e575ad5923e520073f586da9f97e.
+
+Exact-SHA hosted test: **10,020 files**, first import **11.74s**, unchanged rescan **0.435s**, all retained. Allocations 157,462,928 and 54,746,144 bytes respectively (not peak memory or Pi measurements). Root and packaged Go suites, UI/manager/parity/protected-source gates, ARM64 runtime and Docker/Home Assistant smoke checks passed. The fast-path multi-edition safeguard regression was caught by the first Linux run, fixed, and verified in this final run.
+
+- Three-step onboarding: choose folders, find books, open Library. Optional metadata gaps no longer lead the first-import action to mass review. Existing books stay accessible during other imports or failed refreshes. All six navigation icons retained.
+- Clearer skipped-file reasons; recover validated comic ZIPs with the reported malformed ]cbz suffix; distinguish multi-book ZIP packs from page comics. No source file is renamed or extracted.
+- Better dotted/bracketed comic filenames, inferred bracketed years, conservative issue parsing, preserved annual/volume qualifiers and fractional issues. Case-insensitive ComicInfo, invalid optional years isolated, ComicBookLover ZIP comments, case-insensitive JSON keys/string arrays. Volume is not an issue number.
+- Optional Metron token under Settings → library folders → Improve comic details. Unique exact series/issue lookup can fill missing genre and issue year. Tokens are owner-only, never returned/exported, and stored in the private server database (protect backups). No credentials or files go to arbitrary endpoints. Requests have time/body bounds, redirect rejection, pacing and durable failure pause. Connecting saves the token; it does not claim credentials were verified.
+- Local synthetic 10,020-file measurement: first import 17.13s, unchanged rescan 4.66s versus 84.90s before the optimisation. This is Windows workstation evidence, not Pi/NAS speed or peak memory. A version-change rescan must re-read metadata once.
+- Scan-report schema 2 adds reason counts/examples plus series, issue, year and review reason on sampled files. Counts describe recognised/indexed files, not a guarantee of successful full decoding or identification.
+
+### Install and test
+
+Back up Archivist first. Refresh the existing PR83 Home Assistant app repository, update **Archivist QA (PR 83)** to **0.9.3-qa.20261020.1**, and open its Web UI. Keep the same repository:
+
+https://github.com/russellstokes-ai/Archivist#integration/archivist-v1-auto-restore-recovery-20261016
+
+Rescan each source once. Confirm the Library opens without a review requirement; open a CBZ/CBR/PDF and play an audiobook. Download **Library Manager → Scanner & sources → Download scan report** and compare imported/supporting/unsupported counts. Test a second unchanged scan. Optional: connect Metron in Settings, then check whether genre/year coverage improves. Disconnecting the provider leaves existing saved details intact.
+
+### Acceptance limits and remaining plan scope
+
+Physical Pi4/HAOS/SMB/NFS, representative personal media, actual browser/phone/accessibility and live authenticated Metron acceptance remain **BLOCKED**. The full Linux suite and packaging run in CI; local Windows tests involving Linux paths, hardlinks and simulated mount renames cannot substitute for them.
+
+This candidate does not add CB7 decoding, loose-image-folder reading, MOBI reading, arbitrary archive-pack extraction, PDF metadata extraction, MetronInfo XML, cover-image matching, Comic Vine/MusicBrainz adapters, persistent series caches or a grouped series-choice editor. Generic comic ZIPs are inspected; CBZ/CBR/CBT full readability is established when opened, not exhaustively during discovery. No duplicate auto-merge or guessed genre. Those parts of the wider plan remain unfinished. Existing manual review, metadata locks, family access and protected mobile/reader/scanner remain in place. No commercial release claim or merge.
+
+
+---
+
+## Diagnostic and comic metadata test build — 18 October 2026
+
+Version **0.9.3-qa.20261018.2**. Exact executable source **1755831ad6e40124b539f6c2c4221b36aa0ab106**.
+
+- [Server validation](https://github.com/russellstokes-ai/Archivist/actions/runs/39123247395): SUCCESS. Root/packaged Go, mixed 10,020-file import/rescan, UI/manager contracts, protected sources/parity, native ARM64, Docker/HA checks.
+- [Compiled QA artifacts](https://github.com/russellstokes-ai/Archivist/actions/runs/39123247449/artifacts/12135032009): Linux binaries and HA repository ZIP; expiry 25 October. Archive SHA256 `b876eaa140c095145baa46c23a35c14eb3fd3a548238d613dff06fb92a325001`.
+- Icons included. New **Scanner & sources → Download scan report**. Rescan once per source after updating to populate skipped-extension evidence. [Report guide](SERVER_DIAGNOSTIC_REPORT_2026-10-18.md).
+- CBT/TAR extraction and ComicInfo text issue labels repaired; safer comic folder/PDF name handling and limited authorless comic matching. Dedicated Metron/Comic Vine/MusicBrainz integrations are **not** included. [Research findings](METADATA_ECOSYSTEM_FINDINGS_2026-10-18.md).
+- Physical HA/Pi4/NAS and real archive/browser/phone acceptance remain **BLOCKED**. No commercial release claim, merge or production deployment. The skipped 3,375 files have not yet been identified.
+
 # Archivist v1.0 — Development State & Release Gate
 
-**Single current-status entrypoint · updated 16 October 2026.** This is a **point-in-time snapshot**, not a live dashboard. It differentiates the approved canonical app, protected development baseline, unmerged bug-fix candidates, separate commercial feature work and on-device acceptance. The machine-readable source is [DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json); retain every historical change in the [append-only development log](./DEVELOPMENT_LOG.md).
+**Single current-status entrypoint · updated 17 October 2026.** This is a **point-in-time snapshot**, not a live dashboard. It differentiates the approved canonical app, protected development baseline, unmerged bug-fix candidates, separate commercial feature work and on-device acceptance. The machine-readable source is [DEVELOPMENT_STATUS.json](./DEVELOPMENT_STATUS.json); retain every historical change in the [append-only development log](./DEVELOPMENT_LOG.md).
 
-> **IMPORTANT: No development work in PRs #40–#80 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+> **IMPORTANT: No development work in PRs #40–#83 has been merged, installed or released.** A passing CI job is not evidence that an issue has been fixed on the owner's Fold. Do not use this file as approval for changing locked code.
+
+## 17 October 2026 — Seven-gate server release sprint: software QA green, hardware not accepted
+
+**Later server-only follow-on:** Family library-space selection, shared-page
+Table/Grid/List and no-key Apple Books text metadata are implemented against
+`577f3b5`; exact pushed-head CI must be checked separately. Existing users' grants
+are preserved without automatic broadening at restart/new source. Google Books
+is optional with a server environment key. No protected APK/scanner edits or
+commercial acceptance. [Scope and QA](SERVER_FAMILY_VIEWS_METADATA_QA_2026-10-17.md).
+
+**Draft PR #83. Verified code at `a806ec5`; QA packaging at `20768b6`. Commercial NO-GO.** Two consolidated software commits added read-only Docker/HA/ARM64 smoke, multi-source NAS-disconnect preservation, verified SQLite staged backup/restore including family progress/publication, 10,020-item review/Shelf/Atlas paging, bounded metadata-provider cache with retry-after-outage, family/OPDS/Atlas/streaming integration, peer-aware credential throttle and QA artifact packaging. All seven gates have additional automated/source evidence; **none of the physical production sign-off is implied**.
+
+- [NAS/restore/10k & ARM64 server SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39061379284).
+- [Metadata, household integration, credential protection & ARM64 server SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39062163904).
+- [QA artifacts SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39062366626): Linux amd64/arm64 binaries, Home Assistant repository ZIP and SHA-256 manifest, one short-lived 17.5 MB Actions artifact; no public release.
+- [Latest packaging-source server CI SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39062366710). Physical Raspberry Pi 4B / Home Assistant ingress 1920×1080, real SMB/NFS, brownout/SSD recovery, real EPUB/CBR/CBZ/large-audio performance, live family phone/OPDS, security audit and signed production rollback remain **blocked or pending external acceptance**.
+
+Full factual [seven-stage acceptance report](SERVER_SEVEN_GATE_RELEASE_QA_2026-10-17.md). Do not merge/install against the real library, produce a commercial release tag or falsely claim 100% complete.
+
+## 17 October 2026 — Release-blocker fixes: move journal and large-library completeness
+
+**Draft PR #83; commercial NO-GO.** Replaced a non-atomic preview-replacement sequence with one SQLite transaction: a failed new journal insert no longer invalidates the last valid file-move preview. Template batches no longer eagerly cancel earlier previews for unreviewed/conflicting records. Restored operations remain preview/explicit-Apply only.
+
+**Safety/scale:** The original browser organiser previously used unpaged `/api/books`, silently restricting “All loaded files” to 500. It now proves list completeness with bounded pagination and **disables legacy all-files preview when the 501st file exists or pagination fails**, directing the owner to native S7’s 100-file paged batches. New idempotent SQLite indexes avoid a full move-journal scan in preview collision checks after thousands of historical moves. Tests exercise late SQLite write failure, 4,000 history entries, and real legacy browser logic at 503/300/0 files.
+
+**Evidence:** [Dedicated release-blocker source QA](SERVER_RELEASE_BLOCKERS_JOURNAL_SCALE_QA_2026-10-17.md). **Source CI GREEN on `d4020db`:** [root/packaged Go + legacy Node/browser + Docker/HA job](https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502872) and [native ARM64 hosted smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39057876438/job/117469502678). Mobile/Android/iOS parallel checks pending at documentation checkpoint; no real Pi/NAS/HA ingress/media/power-loss acceptance or mobile changes.
+
+## 17 October 2026 — Accelerated server Batch 3: S7 safe organiser and large-library bounds
+
+**Draft PR #83, source CI pending, commercial NO-GO.** The owner manager now implements routine S7 file organisation directly in the same 16:9 workspace, retaining existing signed/hash-verified file-move and undo endpoints rather than building a second engine. Indexed files are paginated 40 at a time, filtered and explicitly selected up to 100 per batch; exact from/to paths and conflicts appear before any optional Apply. No move is auto-approved. Recent moves, pending previews and interrupted states remain visible through the real journal with cancellation and owner-confirmed verified inverse preview.
+
+**Critical scale protection:** the Go move engine no longer interprets an empty batch as permission to hash/preview the first 500 library files; it requires 1–100 unique valid asset IDs, and independently caps Apply to 100 valid, distinct server-issued move IDs. Unknown fields/extra JSON payloads are rejected. New root and packaged Go/real-byte round-trip + manager interaction tests are included.
+
+**Release gate:** Check the *exact new code SHA* CI for Go, JavaScript, Docker/HA, hosted ARM64, mobile locks. Physical Pi4/SSD/NAS/HA ingress/1920×1080 and live media tests remain open. [Full source QA](SERVER_BATCH3_ORGANISE_AND_SCALE_QA_2026-10-17.md).
+
+## 17 October 2026 — Batch 2: native Family/Settings and scalable Archivist Assist
+
+**Draft PR #83, source-QA candidate, commercial NO-GO.** Family (S8) and Server settings (S10) now render natively in the owner manager instead of requiring the shared reader browser for routine work. Family uses existing backend user/session APIs, with explicit create/rotate/revoke confirmation, memory-only once-displayed access keys and a visible all-library User access notice. Settings reuses actual current server and owner-session APIs; advanced connectivity/backup and Organise stay accessible via existing working deep links. Permission semantics are unchanged.
+
+**Archivist Assist:** Added *book-level*, server-side title/author/series search and library/format/review-reason filters. The page and total are computed from the same consistent SQLite snapshot and grouped by logical work; no file-level counter is mislabeled as a book. Filter values are bounded/whitelisted. Published and staged visibility are unchanged, and nothing automatically publishes or modifies source media.
+
+**Source verification GREEN at `6336ce1`:** [full root/packaged Go + manager DOM + Docker/HA](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004189), [native ARM64 hosted smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321470/job/117462004037), and [mobile source-lock regressions](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321480). [Android-native source checks SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/39055321516); iOS checks were still running at the record checkpoint. No physical Pi/NAS, browser 16:9, Fold or release readiness claim. [Full batch QA](SERVER_BATCH2_FAMILY_SETTINGS_ASSIST_QA_2026-10-17.md).
+
+## 17 October 2026 — Accelerated server owner workspace and operations batch
+
+**Draft PR #83, commercial NO-GO.** To reduce repeated milestone/CI cycles, this batch consolidates the S1 Overview and S9 Health & Recovery owner screens, a read-only server operations snapshot, an explicit SQLite integrity check, guarded per-source Scan control and working navigation across the existing S1–S10 workflows. The underlying Library, Assist, Work/Edition, Metadata, Review, Scanner, Organise, Family, Atlas/Shelf and Settings code is **reused**, not rewritten. Actual ten-screen visual acceptance and independent S7/S8/S10 panels remain open; the high-risk comic reassignment Apply remains disabled.
+
+The Go operations API distinguishes indexed files from logical works and local restore markers from verified backups; no NAS/media probes or integrity checks run automatically. SQLite quick check is owner-only, CSRF/action-bound, eight-second context-limited and single-flight. The original scanner, asset grouping, protection locks, mobile UI/renderer and personal media are untouched.
+
+**Verification:** [exact-code PR checks](https://github.com/russellstokes-ai/Archivist/pull/83/checks), including root and packaged Go, JS/manager browser contracts, Docker/HA, native ARM64 and mobile source-lock gates. **Do not mark a green release without checking the latest code SHA and real hardware.** [Consolidated batch QA](SERVER_ACCELERATED_OWNER_WORKSPACE_QA_2026-10-17.md).
+
+## 17 October 2026 — Comic edition transfer safety preflight (read-only)
+
+**Draft PR #83 · source `2914747` · Commercial NO-GO.** Archivist Assist now includes owner-only **Inspect edition reassignment**, which compares the selected comic edition with an existing destination book. It checks work fingerprints, series/issue/year and library space, automatic grouping, publication, orphan risk, owner-verified edition identities, manual metadata, covers, household progress/completion/activity, historical file moves/relinks and active scanner jobs. The signed report explains blockers and is explicitly **read-only**: there is **no Apply endpoint or button** and no media/SQLite mutation.
+
+[Server root+package, manager interaction, Docker/HA checks GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123523) · [ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39051249918/job/117450123242) · [Mobile source protection GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39051249886). Actual transfer/undo, injected-failure rollback and real Pi4/NAS/Home Assistant ingress remain separate acceptance gates. [Full QA](SERVER_COMIC_EDITION_TRANSFER_PREFLIGHT_QA_2026-10-17.md).
+
+## 17 October 2026 — Server comic edition/volume identity, item 3 partial
+
+**Exact source `07776dca`, draft [PR #83](https://github.com/russellstokes-ai/Archivist/pull/83), commercial NO-GO.** A separately revisioned owner-verified comic edition identity ledger now supports run, volume, issue, imprint, variant, edition year and notes without regrouping, rewriting media, overwriting book metadata or touching family bookmarks. Owner-only signed preview/confirmed Save, bounded history and signed last-Save undo; published, offline, multi-part or cross-work-conflicted editions fail closed. Book workbench controls reuse the existing approved 16:9 presentation.
+
+[Root/packaged Go + web manager + Docker/HA server CI **SUCCESS**](https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291766), [native ARM64 smoke **SUCCESS**](https://github.com/russellstokes-ai/Archivist/actions/runs/39049590998/job/117445291948), [mobile source-lock regressions **SUCCESS**](https://github.com/russellstokes-ai/Archivist/actions/runs/39049590947). This slice also found and repaired a real startup `metadata_source` legacy-migration bug: valid embedded scanner provenance and a saved work fingerprint now survive an actual staged SQLite backup/restore, tested in root+packaged source. Comic gap detection refuses mixed/unverified volume-run cohorts and refreshes after identity Save/undo. A temporary false browser fixture and diagnostic CI failures were fixed, not waived. [Full source QA and remaining gates](SERVER_COMIC_EDITION_PROFILES_QA_2026-10-17.md).
+
+**Incomplete:** true edition reassign/merge, duplicate volume/variant authority, full ten-screen server and physical 1920×1080/HA ingress/Pi4/NAS/SMB/NFS/power-loss acceptance. No new APK, release, install or merge; protected canonical mobile code and scanner unchanged.
+
+## 17 October 2026 — Indexed comic series/issue audit (item 2, milestone B)
+
+**Additional real-archive acceptance:** [`865fab6`](https://github.com/russellstokes-ai/Archivist/commit/865fab602a0b5b568a0611533b5dfa0997816a4d) tests CBZ archives with genuine ComicInfo.xml and GIF pages through the server scanner, work indexing, owner audit, unchanged rescan and byte-for-byte unchanged files. [Server/HA/Docker CI GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987007) and [Linux ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39047128153/job/117437987170). Production Pi, HA ingress and NAS hardware remain unaccepted.
+
+
+
+**PR #83 draft only.** Code source `a419415` introduces an owner-only indexed comic evidence API and workbench panel; explicit `#issue`/fractional recognition, issue-range ambiguity rejection, bounded same-series peer review and cautiously labelled possible gaps. Comic public candidates cannot offer field changes unless both explicit issue and series match; first publication/edition safeguards and signed Save stay unchanged. Stale search responses and deliberately cleared work-level metadata are protected.
+
+Tests cover the actual API against SQLite fixtures, signed workbench gating and JavaScript interactions. The first two checkpoints detected a fixture-type error then a genuine ambiguous-range parser error, both repaired without removing tests. [Detailed QA](SERVER_COMIC_IDENTITY_QA_2026-10-17.md). No scanner/mobile changes, physical Pi/NAS acceptance, release or merge. Remaining volume/edition identity, full admin parity and real-device work keep the commercial server **NO-GO**.
+
+## 17 October 2026 — Server Assist multisource matching (item 2, milestone A)
+
+**Draft only; commercial NO-GO.** Source `93b9c40` extends the approved book-level workbench with explicit owner-initiated Open Library plus Google Books comparisons. Rank explanations, ISBN-10/13 checksum/equivalence, provider-outage limits, edition-vs-work publication-year controls, provider provenance and 13-file root/package + UI test parity are implemented. No unreviewed metadata automatically changes a book, and the old per-file editor stays Open Library-only.
+
+At exact `93b9c40`, [server/HA/Docker checks GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918769) and [native Linux ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39045022675/job/117431918998). The preceding compile failure at `cda736a` was corrected, not waived. Specialist comics, ASIN/edition authority, provider policies and actual NAS/Pi HA browser acceptance remain open. [QA and limitations](SERVER_ASSIST_MULTISOURCE_MATCH_QA_2026-10-17.md). No canonical mobile edits, merge, install or released package.
+
+## 17 October 2026 — PR #83 server parity continuation
+
+**Draft only; NO-GO for commercial release.** Branch head at source checkpoint: `9f600338a39aabd3284458102f11744e041ed47c`. This work extends the existing v1 master plan/acceptance register and does not replace them.
+
+- **Verified fixes:** [`1e8af95`](https://github.com/russellstokes-ai/Archivist/commit/1e8af95d5c24bdf26348de3c75766cfa85b4eaf0) restored both copies of reviewed `covers.go` to the exact approved Git blob `f6381164fb432eb6e50d53199ea1de141b6e7667`, moving selected-cover precedence into independent `server_cover.go`. Original mobile source lock test remains unchanged. Root/packaged server, ARM64 smoke, mobile and Android-native jobs were successful on that SHA, but real Raspberry Pi HA ingress acceptance is **not** established.
+- **Published book management:** [`c229789`](https://github.com/russellstokes-ai/Archivist/commit/c229789ebf5ea598a9ab8424183e2b298849045c) adds bounded owner-only published-work paging beside the staged Assist review list, with reachable explicit Unpublish action, real file-editor linkage, valid-state rejection and synthetic regression coverage. Source-level server/ARM64/mobile/Android-native checks passed on that SHA. Media, progress and manual corrections are retained by unpublication; actual household-device acceptance remains pending.
+- **Existing operations integration:** [`9f60033`](https://github.com/russellstokes-ai/Archivist/commit/9f600338a39aabd3284458102f11744e041ed47c) adds ingress-relative links from the manager to the existing Organisation/relink controls and Backup/Recovery in the primary web shell, resolving them through an authenticated, allowlisted fragment route. [Full server integration and ARM64 smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39019466015), [mobile regression](https://github.com/russellstokes-ai/Archivist/actions/runs/39019466037) and [Android-native checks](https://github.com/russellstokes-ai/Archivist/actions/runs/39019466038) succeeded on exact source SHA `9f60033`. The iOS check was still in progress at status write; no physical HA ingress/browser or Pi device acceptance is implied.
+- **Retained previous parity slices:** explicit staged → reviewed → owner-published lifecycle, published-only Library/Atlas/OPDS and non-owner downloads, canonical-dark web identity, bounded book-based Assist, selected-cover storage, and responsive server Atlas graph/rings from PR #83's earlier source checkpoints. Source-level CI success is not visual parity or physical acceptance.
+- **Still required:** per-field metadata provenance and locks (current manual metadata is protected at file level), advanced work-level/bulk metadata and candidate preview, integrated safe file relinking/undo, resumable scan pause/cancel, cached media artwork load/performance benchmarks, physical Pi 4/4GB HA ingress and Docker/NAS power-loss/source-disconnect trials, real-media fixtures and complete ten-screen server administration. Mobile originals #16/#19/#17 and other Fold acceptance remain separate and unaccepted; no APK or production release was built.
+
+**Security/protection:** exact original `covers.go` regression lock is restored; do not modify the mobile scanner, mobile Assist, protected readers, original lock manifest or canonical `df4c39b`. Server-only root/packaged source mirrors are retained. Nothing was merged into `main` or installed on hardware.
+
+## 16 October 2026 — PR #83 server book-review continuation
+
+**This is an additive checkpoint within the existing v1 master plan, not a replacement scope or a production release.** Started at verified branch `99e97c7715b3502bda0c750926e9c4e44dacf722`; the server-only implementation and tests reached `d778e88f6f2485b9f4b0fdfbe32dafd23a565311`. The branch subsequently received independent approved mobile splash work at `a9984f3f758c07a63b9d37d935fe9b0ac47879e5`; that mobile commit is not part of this server slice.
+
+- **Completed, source-level:** owner-only bounded work-based review endpoint, per-work paginated file details, logical-work review metric alongside old file count, dedicated cover-led Archivist Assist web navigation into the existing metadata editor, canonical emblem/navy/teal web presentation and owner entry link. Original file manager, metadata candidate search and existing scanner remain untouched. Root and packaged Go/web sources are byte-paired.
+- **Automated validation of server-code checkpoint:** [Server checks SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/38973855856/job/117218430783), [real ARM64 CI smoke SUCCESS](https://github.com/russellstokes-ai/Archivist/actions/runs/38973855856/job/117218430351). Root and mirrored Go tests, JavaScript syntax, manager interactions including new Assist fake-DOM coverage, package contract under the PR #83 QA name/version, and source mirror gate succeeded. Native ARM64 CI is not the owner's Raspberry Pi.
+- **Known incomplete:** no explicit Save→Publish gate, no durable per-field locks/selected-cover provenance, no end-to-end Atlas published-only and ring parity, no progressive thumbnail cache, no full ten-screen admin parity, no advanced safe relinking/bulk metadata completion or pause/cancel/resume acceptance. The grouping endpoint is read-only; existing file metadata saving remains the editor's semantics. Do not call the manager commercially complete.
+- **Physical acceptance blocked/pending:** HA OS ingress install/upgrade, Pi 4 4GB SSD load/restart/source-disconnect/backup tests, NAS Docker and source-mount trials, real library fixtures and owner Fold approval. No new APK/AAB, production release, canonical merge or Play submission. Mobile bug/device acceptance remains separate and pending.
+- **Scope:** no code from the protected mobile scanner/Assist/Atlas/reader was edited by this server work. Check all retained original blob locks at each later source move; source/CI is not device acceptance. Work left is tracked by the current master plan and the [29-gate acceptance register](COMMERCIAL_GATE_REGISTER_2026-10-16.json).
+
+## 16 October 2026 — Consolidated repairs and test builds
+
+[Consolidated QA report](CONSOLIDATED_REPAIR_QA_2026-10-16.md): A1–A6 source repairs and #20/#25 lifecycle candidates implemented; 134/134 mobile suites and TypeScript pass. Root/packaged Go pass; amd64/arm64 server binaries built, amd64 health smoke verified. HA/Docker test sources packaged. APK still requires the existing manual workflow trigger. Original #16/#19/#17 need source/device evidence; no original issue is device-accepted. Advanced server features remain incomplete. No release/merge/install.
+
+## 16 October 2026 — Wider mobile audit
+
+[Six additional source finding groups](APP_WIDE_AUDIT_2026-10-16.md) are confirmed and prioritized. Reproductions cover stale restore/pagination, old duration, EPUB ordering/truncation/sanitization, and the PDF Reduced Motion gap. No app behavior changed during this audit; these findings remain open alongside the original bugs and commercial scope.
+
+## 16 October 2026 — Resume/offline source repair continuation
+
+Latest source work is recorded in [Resume repair QA](RESUME_REPAIR_QA_2026-10-16.md) and `resume_repair_20261016` in the JSON manifest. Paused restoration and download-first dispatch now have passing actual-function regressions. Server restoration loads the requested chapter and position together, avoiding a later seek against a switched title. Missing saved tracks cannot silently select another chapter. Five App functions changed logically; canonical JSX/styles/scanner/Assist/renderer/assets remain byte-equivalent through reversible exception verification.
+
+This supersedes the earlier source-failure/approval-pending checkpoint below. It does not close the original physical-device bugs or authorize release. Device acceptance remains 0/8; full server and release work remains open.
+
+## 16 October 2026 — Work continuation from exact PR #83
+
+**Current continuation:** see [verified start and diagnostic report](ASTRA_EXECUTION_START_PR83_2026-10-16.md) and `work_execution_20261016` in the JSON manifest. Earlier sections are dated history.
+
+- Started at `70ddc9226e6182f1a0271ce8a08c77b71c3b4ed9`; named start file was missing and is now supplied as a new entrypoint, not represented as an original handoff.
+- Confirmed all four starting-commit CI results, including iOS [38948050648](https://github.com/russellstokes-ai/Archivist/actions/runs/38948050648), completed success. Local 128/128 mobile suites, TypeScript and root/packaged Go pass; initial two Java test failures were missing javac and passed after JDK setup.
+- **New actual-function RED diagnostics:** #23 paused Now restoration starts audio; #31 Now resume requests server ahead of its available downloaded copy. Existing helper CI remains valid but does not establish end-to-end fixes. No App.tsx or other protected experience changed. Narrow logic repair proposal is in the report; exact existing App.tsx byte lock requires owner approval before implementation.
+- **HA package ready for disposable-data testing:** `qa/pr83/Archivist-HA-70ddc922.zip`, checksum and provenance in the same directory. Existing package script now produces deterministic ZIP bytes with SOURCE_DATE_EPOCH; genuine RED→GREEN regression and original package contract pass. Requires Python 3. Server runtime is unchanged from PR #83.
+- **APK not built:** manual-only workflow dispatch unavailable through connector; browser is signed out, local Android SDK absent. Build recipe remains in repo. No automatic upload workaround added.
+- **NO-GO:** 0/8 owner-device acceptance; six original bugs unresolved; advanced ten-screen server/workbench/relink/scan controls and Auto/cross-device/performance/accessibility/Play work remain. No canonical/main merge, scanner/Assist change, installation, personal-media migration or release.
+
+## 16 October 2026 — additional chat reliability fixes, native Auto and server restore
+
+- **Candidate:** `integration/archivist-v1-auto-restore-recovery-20261016` based on [PR #81](https://github.com/russellstokes-ai/Archivist/pull/81), importing exact mirrored backup/recovery source and tests from [PR #82](https://github.com/russellstokes-ai/Archivist/pull/82). It is unmerged and unreleased.
+- **Auto P1:** [Mobile RED #38946476178](https://github.com/russellstokes-ai/Archivist/actions/runs/38946476178) proved unreadable pending journal wrongly skipped outgoing chapters. Fail-closed directory/unknown-event checks and strict four-arg native test contract now [Mobile GREEN #38946792706](https://github.com/russellstokes-ai/Archivist/actions/runs/38946792706) and [Android-native GREEN #38946792697](https://github.com/russellstokes-ai/Archivist/actions/runs/38946792697); iOS #38946792692 needs exact completed outcome verification. No car/vehicle acceptance.
+- **Restore P0/P1:** Three source-level crash-state failures genuinely RED at [Server #38947203459](https://github.com/russellstokes-ai/Archivist/actions/runs/38947203459) became GREEN at [Server #38947395536](https://github.com/russellstokes-ai/Archivist/actions/runs/38947395536). Exclusive fsynced transaction marker distinguishes prior backups from interrupted DB/WAL promotion; incomplete install recovers original while pending snapshot remains, completed install validates new database and retains previous recovery snapshot; malformed marker fails closed. Real NAS/Pi power-cut acceptance still missing.
+- **Protected/release boundary:** Existing owner-approved byte-pinned App.tsx logic exception from PR #80 is unchanged; other 45 source locks, scanners, Assist, readers/visuals and assets untouched. Exact integrated four-workflow CI is required. Six original bug fixes still unresolved, #31/#32 native/Fold tests pending, 0/8 physical acceptance. Advanced server metadata, mount loss, car, release AAB, privacy and new logo/splash remain NO-GO.
 
 ## 16 October 2026 — P0/P1/P2 combined draft source candidate #80
 
@@ -185,3 +359,72 @@ All eleven are **OPEN DRAFT / UNMERGED**. Each PR targets the previous draft, no
 - [46 exact protected Git blob hashes](./PROTECTED_BLOB_LOCKS.json)
 - [Commercial master development plan](https://github.com/russellstokes-ai/Archivist/blob/plan/archivist-v1-master-2026-10-12/docs/ARCHIVIST_V1_MASTER_DEVELOPMENT_PLAN_2026-10-12.md)
 - [Full release work handoff](https://github.com/russellstokes-ai/Archivist/blob/plan/archivist-v1-master-2026-10-12/docs/ARCHIVIST_V1_COMMERCIAL_RELEASE_WORK_HANDOFF_2026-10-13.md)
+
+
+## 2026-10-17 — PR #83 server: owner-attested single-file rename recovery and safety audit
+
+**Source checkpoint:** `71b1818304b6ae0a9a7af6f5733f3dbc1a3ddcb3`; commits `e00a881` (backend), `de768fd` (Library Manager), `71b1818` (queue/organisation safety). This sequence was added to the existing unmerged PR #83 branch after re-reading the latest head, preserving parallel mobile work. **No original mobile, Living Book, scanner, Assist or protected cover source was modified.**
+
+- **Complete in code:** Owner-only `POST /api/manage/relink/preview` and `POST /api/manage/relink/apply`; file-pair selection from real Library Manager; complete streaming SHA-256 of the replacement at preview and apply; signed short-lived preview including source paths and metadata, explicit owner attestation, transactional retirement of the untouched staged candidate, stable original work/edition/asset IDs and saved household progress, durable `asset_relink_events` audit. Protects independent candidate metadata, publication, reading/listening progress, listening queues, selected artwork, ratings/activity and pending organiser actions. Rerunning a scan should not re-create a duplicate logical work.
+- **Acceptance boundaries:** Only single-file/edition works in **one source**, same format and indexed byte size. Does **not** automatically infer sameness from title, size or sampled content; original bytes are missing and cannot be cryptographically compared, so full destination hashing proves freshness/integrity only. Owner must independently confirm the identity. Multi-track/multi-edition books, cross-source and cross-volume moves, generic filesystem restore, batch relink, reader/named device acceptance are still **not implemented or not accepted**. No user media is deleted or moved by relink.
+- **Regression evidence:** `relink_test.go` covers scanner's distinct original/candidate stage, staged and published work state, two household progress snapshots, preservation of manual metadata, replay/tamper/CSRF/access refusal, candidate SHA mutation, symlink swap, original reappearance, candidate independent progress/publication/manual edits, listening queue, pending move, transactional SQLite failure rollback, next scan and restart persistence. Manager fake-DOM test exercises the actual selection/preview/attest/apply controls. Source parity root and HA-packaged `archivist/app/` is mandatory.
+- **Remaining P0:** Robust multi-file audio relink, stronger external mount/change reconciliation, safe running-scan cancellation semantics, unreleased host-specific Home Assistant/NAS/Pi throughput/backup acceptance. Server release remains **NO-GO**. No HA image/artifact/version was published from this PR.
+
+
+## 2026-10-17 — PR #83 server scanner: truthful safe running cancellation (draft)
+
+**Current verified source checkpoint:** `cad76e8db1c0d10954e4d84e07e232cd9d727435` (implementation `49cf1e3`, legacy-manager compatibility `cad76e8`), rooted at previous safe relink checkpoint `7733c75`. Server/ARM64 CI: [server GREEN at source checkpoint](https://github.com/russellstokes-ai/Archivist/actions/runs/39031960719/job/117394060348); [native ARM64 smoke GREEN](https://github.com/russellstokes-ai/Archivist/actions/runs/39031960719/job/117394060052). Physical hardware acceptance remains pending. No changes to mobile scanner or its canonical source locks.
+
+- **Implemented:** `jobs.cancel_requested` persistent migration, atomic conditional `running→committing` barrier, owner-only running safe-stop request returns HTTP 202 `cancelling` (never falsely `cancelled`), queued cancel immediate, eventual scanner/worker `cancelled` before catalogue commit, committing scan rejects stop with 409, truthful `GET /api/jobs` capabilities and states. Both the main server dashboard and Library Manager expose stop request + pending/committing status while retaining queued Cancel and cancelled/failed Retry.
+- **Recovery:** Interrupted committing/running job requeued on restart for a safe, idempotent scan; crash with already recorded cancellation is retained as cancelled. Partial unique index covers queued/running/committing per source. No new queue loops. Source scanner stages to JSONL and checks context/cancellation before copying any staged entries into SQLite. Previous catalogue, publication state and bookmarks remain unaffected by an accepted pre-commit cancellation.
+- **Coverage:** New Go regression cases for pending stop vs acknowledged stop, stop after partial staging, stop at last progress callback, stop refused after committing begins, restart of stop/commit states, deduplication and ownership/CSRF gates; existing root+packaged suites and manager contracts remain green. CI does not prove NAS read interruption latency or full Pi4 resource budgets.
+- **Limitations:** Mid-file metadata parsing and blocked SMB/NFS read operations cannot be forcibly interrupted safely; stop takes effect at the next scanner checkpoint. Never pretend a full commit or arbitrary filesystem operation can be aborted. Multi-file relink and real Pi/HAOS/NAS failure acceptance are still open. Commercial server release remains **NO-GO**.
+
+
+## 2026-10-17 — PR #83 commercial server: atomic scans and verified multi-track audiobook relink
+
+**Draft source:** `01cba0472bbab19ffe970a24e496a7021dc5300f` (atomic scan and catalogue transaction), `3e86057177ae4e55ece37e8a3a55c57b7de391a6` (explicit grouped-relink backend), `58761036697e4653c1b4e9c1cc43f7054433d40e` (real Archivist Assist workflow). Code was added to the active PR #83 branch in ordered non-forced commits. No mobile source, protected reader or mobile scanner modified, no merge to main.
+
+- **P0 — Catalogue atomicity fixed at source level.** Scanner file upserts, logical-work grouping, edition asset links, review-state publication invalidation and source status now share **one SQLite transaction**; a failed work update/insert or reopening audit event rolls back all of these. The server no longer exposes a half-committed file scan requiring a separate post-commit grouping repair. Fault-injection Go tests prove unchanged assets, source status, publication revisions and household playback bookmarks when grouping fails; retry then succeeds.
+- **P0 — Multi-track external-rename repair implemented.** Separate owner-only `GET /api/manage/relink-groups/works/{id}`, `POST /api/manage/relink-groups/preview`, `POST /api/manage/relink-groups/apply`. Require a complete user-confirmed 2–32 chapter map in original order, same source and Audio format, same per-track size, one automatic edition per work, untouched/staged replacement and total hash workload up to 4 GiB. Refuse ambiguous order, overlapping/missing mappings, independently published/edited/queued/bookmarked candidates and outstanding move transactions. Hash each complete replacement file twice (signed preview and apply) and keep original work, edition, asset IDs, chapter order, per-user progress, queue and manual metadata; retire only the untouched candidate work with one SQLite transaction and full per-chapter audit events.
+- **Owner UI:** Library Manager → Archivist Assist offers **Reconnect audiobook** on multi-file audio works. Book IDs displayed, both groups inspected, all chapter pairings shown; each track requires its own verification checkbox, followed by full-file SHA-256 preview and separate whole-work attestation before Apply. Responsive dialog is mirrored into `archivist/app/web/` and exercises a fake-DOM API route test. No original media are moved or deleted.
+- **Fundamental identity boundary:** The original files no longer exist at old paths and cannot be byte-hashed. Even a complete SHA-256 of the new files is **not proof** of old-to-new equality. This is explicit owner-attested identity; never automatic fuzzy relinking. An out-of-order replacement, >32 tracks, >4 GiB group, multi-edition/manual group, cross-source/cross-volume move or replacement with separate state must be managed through specialist recovery.
+- **Acceptance:** CI source gates and regressions are a QA baseline, not actual Raspberry Pi 4/HAOS/SMB/NFS acceptance. Production version, signed/package release, real media migration and household/device tests remain unaccepted. Commercial server release **NO-GO**.
+
+
+## 2026-10-17 — Follow-on grouped relink large-preview durability (source checkpoint)
+
+A further source review caught an integration limit: one signed `apply` preview repeats each track's indexed identity, path and digest, so a valid 32-track group can exceed the shared 32 KiB bulk-metadata JSON limit. Commit `c676349dd96074db44b7d7b720feb0bfb5575fa7` gives **only** the owner-only grouped `/api/manage/relink-groups/apply` route a strict 512 KiB JSON request ceiling, unknown-field rejection and single-object enforcement. All existing group/track count, 4 GiB content hashing, signed snapshot, approval and database transaction checks remain mandatory. Regression tests verify successful signed requests above 32 KiB and rejection of bodies above 512 KiB with no catalogue changes. Source/ARM64 and real-device acceptance remain separately recorded; **NO-GO**.
+
+
+## 2026-10-17 — PR #83 scanner partial-NAS audiobook identity + identification coverage
+
+**Provenance:** Latest code `bfcfea4ee0207ffbed045563b9170fd40fcfe8aa`, after `af2ec765df2b20450836eb41f944e9a4f44e595a` (retain unavailable chapters) and `2db4cd4b70c3e6c98cfa88a831597cfabe946506` (metadata coverage). All changes remain in the draft unmerged server integration branch; no changes to the canonical mobile app or protected mobile scanner/Assist/reader sources.
+
+- **Partial NAS outage fix:** automatic audiobook grouping now retains linked offline chapters with their exact asset IDs and ordered edition positions instead of dropping them when available files are rescanned. Two independent household bookmarks, manual author corrections and publication state survive remove/reconnect. Addition of a new chapter while one remains missing also keeps the original bookmark. Ambiguous unexpected multiple editions block reconciliation instead of being destructively deleted. The single atomic scan/group/publication transaction remains in place.
+- **Read-only scanner quality and Atlas metadata coverage:** `GET /api/library-health` reports exact per-source and global physical-file gaps (author, genre, publication year, confidence below 60, review and unavailable), alongside distinct indexed/published logical-book totals and root online status. The 16:9 Library Manager Health panel displays six actionable coverage cards and per-source diagnostics. Owner-only `metadataGap` filters in `GET /api/books` lead directly to reviewed files and persist in saved views. No enrichment, rescan, automatic publication, source renaming or physical media modification.
+- **Regression / proof:** New `server_partial_audio_mount_test.go` and `server_scanner_coverage_test.go`; updated real fake-DOM manager interaction test. Root/packaged Go and server/ARM64 CI **GREEN** at exact `bfcfea4`: [server checks](https://github.com/russellstokes-ai/Archivist/actions/runs/39037438153/job/117410001891), [native ARM64 smoke](https://github.com/russellstokes-ai/Archivist/actions/runs/39037438153/job/117410001608). First health-API source draft was compile-RED due to a Go trailing comma; corrected in `bfcfea4` without weakening any test.
+- **Outstanding:** True identification accuracy improvements, real EPUB/comic/NAS datasets, larger libraries, filesystem timeouts, Pi4 CPU/RAM/SSD and concurrent stream/scan profiling, release-versioned Docker/HA/NAS install and upgrade/recovery, and full ten-screen desktop parity remain open. The metadata coverage report is about **indexed files** and cannot prove individual NAS files are accessible or that a logical work lacks all genre/year evidence. Commercial server release remains **NO-GO**.
+
+See [full scanner partial-source and coverage QA report](./SERVER_SCANNER_PARTIAL_NAS_AND_COVERAGE_QA_2026-10-17.md).
+
+
+## 2026-10-17 — PR #83: Archivist Assist 2.0 book-level workbench (checklist item 1)
+
+**Verified source head:** `a0ef0747569a52e2647bfc76ffef4c34bbd21b15` after `818b1f9` (book-level SQLite transaction/history), `503dbe9` (SQL import correction), `9a4c784` (two-pane desktop editor), `9663d00` (work-level year and fractional series position in Library/Atlas), `3a5ab64` (bounded large-description signed apply), `c4555d9` (stale preview and refresh-fault semantics), `a0ef074` (complete selected-cover controls). Draft PR #83 remains unmerged; no canonical mobile sources changed.
+
+- **Book-level Assist 2.0 source-complete:** One logical-book editor with 12 owner-editable fields; list of editions, tracks, formats, original path and availability; selected covers and explicit publication/unpublish; optional manually selected Open Library values. A distinct work-metadata table stores book-level overrides, origin, locks and revision; scanner respects title/author/series/genre overrides without modifying individual media files.
+- **Safe write discipline:** Short-lived HMAC-signed preview of selected changes, data-fingerprint and revision conflict protection, latest-save undo preview/confirm, 25-entry change history with before/after values, bounded JSON payloads (256 KiB for metadata change), strict owner and CSRF checks. Only staged/unpublished books can be edited. Failed DB writes leave metadata unchanged; browser retry/reload distinguishes confirmed commit from UI refresh failure. Approved book year is included in published Library/Atlas summaries; edition-specific year remains untouched.
+- **Widescreen UI:** Archivist-branded two-pane 16:9-first workbench with responsive single column, real cover upload/clear, work publication, chapter drilldown and existing per-file editing; Edit book entry on Archivist Assist cards; candidate field-by-field selection and reviewable signed diff. Server-side original scanner/Assist on mobile and locked Living Book remain untouched.
+- **Exact CI:** [server-check passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39043520648/job/117427584869) and [ARM64 smoke passed](https://github.com/russellstokes-ai/Archivist/actions/runs/39043520648/job/117427584714) at `a0ef074`; manager real-code fake-DOM contract and Go rollback/undo/source-persistence tests executed by server workflow. This is synthetic/CI acceptance, not physical browser or Raspberry Pi validation.
+- **Handoff:** Item 1 is **source-development ready for item 2**, with *real* 1920×1080/ingress/browser accessibility and hardware signoff deferred to cross-cutting QA stages. Next item 2 is advanced metadata intelligence and explainable confidence across providers, not another replacement of the protected scanner. Full server release remains **NO-GO**.
+
+[Detailed source acceptance report](./SERVER_ASSIST_BOOK_WORKBENCH_QA_2026-10-17.md).
+
+## Server onboarding/import follow-on — 17 October 2026
+
+Compact state-based setup guidance, shared safe metadata candidates and single-pass scanning with one cached metadata record resident. Local browser contracts pass; Go and physical acceptance remain pending. Richer automatic enrichment and measured canonical performance equivalence are not claimed. See [acceptance notes](SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md).
+
+### Enrichment follow-through
+
+No-key Open Library description lookup and exact-ASIN Audnexus audiobook metadata, optional Google rich fields, guarded fill-missing actions, comic/date protections and direct onboarding-to-Assist navigation are implemented. JavaScript regression/protection checks pass; new Go fixtures are unexecuted. The owner explicitly deferred the final build. Physical and measured canonical-scanner acceptance remain BLOCKED. No commercial GO. See SERVER_ONBOARDING_IMPORT_QA_2026-10-17.md.

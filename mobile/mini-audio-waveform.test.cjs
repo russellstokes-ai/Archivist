@@ -59,7 +59,7 @@ assert(app.includes("miniPlayer: {minHeight:64,marginHorizontal:12,marginBottom:
 assert(app.includes("miniButton: {width:40,height:40,borderRadius:10"),'Control sizes must remain unchanged');
 assert(app.includes("miniMeta: {fontSize:10.5,lineHeight:14"),'Status typography must remain unchanged');
 
-const book=read('LivingBookCanvas.tsx');
+const book=require('../scripts/repair-original-source.cjs')('mobile/LivingBookCanvas.tsx');
 const gitBlob=crypto.createHash('sha1')
   .update('blob '+Buffer.byteLength(book)+'\0').update(book).digest('hex');
 assert.equal(gitBlob,'3f2b6f2b91dbe77e71f65c02a8696b372d2126fd',

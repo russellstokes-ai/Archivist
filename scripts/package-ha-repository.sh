@@ -14,7 +14,7 @@ for DOC in LICENSE.md VALIDATION.md TESTING-READINESS.md THIRD-PARTY-NOTICES.md 
 done
 "$ROOT/scripts/package-ha-addon.sh" "$STAGE/addon.zip" >/dev/null
 (cd "$STAGE" && unzip -q addon.zip)
-(cd "$STAGE" && zip -qr repository.zip repository.yaml *.md archivist)
+(cd "$STAGE" && python3 "$ROOT/scripts/package-ha-zip.py" "$STAGE" "$STAGE/repository.zip" repository.yaml *.md archivist)
 mv "$STAGE/repository.zip" "$OUT"
 printf '%s\n' "$OUT"
 

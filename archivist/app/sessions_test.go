@@ -64,13 +64,14 @@ func TestSessionRotationLogoutAndExpiry(t *testing.T) {
 		t.Fatal("logout did not revoke server session")
 	}
 }
-func TestLegacyGrantRoutesPreserveWholeLibraryUserAccess(t *testing.T) {
+func TestLegacyGrantRoutesRespectScopedAccess(t *testing.T) {
 	a := fixture(t)
 	a.db.Exec("INSERT INTO profiles(id,name,key_hash) VALUES(1,'Member',?)", keyHash("key"))
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "a.mp3"), []byte("a"), 0600)
 	a.addSource("Family", root)
 	a.scan(1)
+    publishFixtureWorks(t,a)
 	a.db.Exec("INSERT INTO grants VALUES(1,'Family')")
 	token, _ := a.newSession("key")
 	call := func(method, path, body, key string) *httptest.ResponseRecorder {
@@ -81,7 +82,7 @@ func TestLegacyGrantRoutesPreserveWholeLibraryUserAccess(t *testing.T) {
 		a.routes().ServeHTTP(w, r)
 		return w
 	}
-	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":["Missing"]}`, "test-key"); w.Code != 200 {
+	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":["Missing"]}`, "test-key"); w.Code != 400 {
 		t.Fatalf("legacy grant compatibility route=%d %s",w.Code,w.Body.String())
 	}
 	if w := call("GET", "/api/assets/1", "", token); w.Code != 200 {
@@ -90,8 +91,8 @@ func TestLegacyGrantRoutesPreserveWholeLibraryUserAccess(t *testing.T) {
 	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":[]}`, "test-key"); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
-	if w := call("GET", "/api/assets/1", "", token); w.Code != 200 {
-		t.Fatal("legacy grant edit removed whole-library User access")
+	if w := call("GET", "/api/assets/1", "", token); w.Code != 403 {
+		t.Fatal("empty grant selection retained asset access")
 	}
 	if w := call("PUT", "/api/profiles/1/spaces", `{"spaces":["Family"]}`, token); w.Code != 403 {
 		t.Fatal("User changed Admin-only compatibility route")

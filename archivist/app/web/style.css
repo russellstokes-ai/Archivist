@@ -1,6 +1,6 @@
 /* Shared Archivist presentation. Artwork supplies colour; controls stay quiet. */
 @font-face{font-family:Archivist Editorial;src:url('./assets/LibreCaslonText.ttf') format('truetype');font-style:normal;font-weight:400 700;font-display:swap}
-:root{color-scheme:light dark;--paper:light-dark(#FFFFFF,#000000);--text:light-dark(#111111,#F5F5F5);--muted:light-dark(#6B6B6B,#A0A0A0);--surface:light-dark(#F7F7F7,#111111);--raised:light-dark(#FFFFFF,#181818);--line:light-dark(#E8E8E8,#252525);--sage:#47736F;--active:light-dark(#365D59,#8DB8B2);--danger:light-dark(#A94F4F,#DE8585);--serif:'Archivist Editorial',Georgia,serif}
+:root{color-scheme:dark;--paper:light-dark(#FFFFFF,#081B27);--text:light-dark(#15232C,#F5EBD7);--muted:light-dark(#50636B,#A2B5B7);--surface:light-dark(#F2F6F5,#0C2633);--raised:light-dark(#FFFFFF,#112D3B);--line:light-dark(#D2DDDB,#36535A);--sage:#2F8B86;--active:light-dark(#246E69,#89CFC0);--danger:light-dark(#B94D4D,#F5A49C);--serif:'Archivist Editorial',Georgia,serif}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--text);font:15px/1.55 system-ui,sans-serif;-webkit-font-smoothing:antialiased}button,input,select,textarea{font:inherit;color:inherit;max-width:100%}button,select,input,.button-link{min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--surface)}button{cursor:pointer;transition:background .16s ease,opacity .12s ease}button:hover:not(:disabled){background:var(--line)}button:active:not(:disabled){opacity:.78}button:disabled{opacity:.4;cursor:default}input{width:100%;min-width:0}textarea{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}a{color:var(--active)}svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}[hidden]{display:none!important}
 :where(button,input,select,textarea,a,summary,[tabindex]):focus-visible{outline:2px solid var(--active);outline-offset:4px}.skip-link{position:fixed;top:-100px;left:16px;z-index:100;background:var(--paper);padding:12px}.skip-link:focus{top:12px}
 h1,h2,h3{font-family:var(--serif);font-weight:400;line-height:1.22;overflow-wrap:anywhere}h1{font-size:clamp(36px,4vw,52px);letter-spacing:-1.1px;margin:8px 0 12px}h2{font-size:25px;margin:0 0 12px}h3{font-size:20px}p{color:var(--muted);margin:8px 0 16px;overflow-wrap:anywhere}.note{font-size:13px;line-height:1.6;max-width:72ch}.eyebrow{display:block;text-transform:uppercase;letter-spacing:.16em;font-size:10px;font-weight:600;color:var(--muted);margin-bottom:12px}
@@ -32,3 +32,43 @@ body{background-image:radial-gradient(ellipse 650px 440px at 55% 0,light-dark(rg
 @media(max-width:759px){.atlas-space .universe-node text{font-size:26px}.universe-node.work text{display:none}.universe-node.work.selected text{display:block}.node-dot{r:7}.universe-node.work .node-dot{r:5}}
 
 .universe-node .crowded-label{opacity:0}.universe-node:hover .crowded-label,.universe-node:focus .crowded-label,.universe-node.selected .crowded-label{opacity:1}
+
+/* Approved cross-product emblem and default dark Archivist shell. */
+.header-mark{width:44px;height:44px;object-fit:cover;border-radius:12px;background:#2F8B86;flex:none}
+.header-actions>a{display:inline-flex;min-height:44px;align-items:center;padding:8px 14px;border:1px solid var(--line);border-radius:11px;color:var(--text);font-size:13px;text-decoration:none}
+.header-actions>a:hover{border-color:var(--active);color:var(--active)}
+@media(max-width:759px){.header-mark{width:38px;height:38px;border-radius:10px}.header-actions>a{font-size:11px;padding:8px}.brand-wordmark{white-space:nowrap}}
+
+/* Browser Atlas: static graph at native fidelity, bounded image extraction,
+   SVG rings and responsive inspector. Permanent palette stays Archivist. */
+.atlas-paging{display:flex;justify-content:center;margin:18px 0}
+.atlas-paging button{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:10px 22px}
+.universe-node.work .node-cover{fill:#193846;stroke:#EAD8AD;stroke-width:1}
+.universe-node.work image{pointer-events:none}
+.universe-node.work.selected .node-cover,.universe-node.work:focus-visible .node-cover{stroke:var(--active);stroke-width:2.5}
+.atlas-rings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;margin:24px 0 36px}
+.atlas-ring-card{border:1px solid var(--line);border-radius:17px;background:var(--surface);padding:20px;min-width:0}
+.atlas-ring-card h2{font-size:21px;margin:0 0 14px}
+.atlas-ring-row{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+.atlas-ring-svg{width:124px;height:124px;flex:0 0 124px;overflow:visible}
+.atlas-ring-track{fill:none;stroke:var(--line);stroke-width:16}
+.atlas-ring-total{fill:var(--text);font:27px var(--serif)}
+.atlas-ring-legend{display:grid;gap:1px;min-width:120px;flex:1}
+.atlas-ring-legend-entry{border:0;display:flex;align-items:center;gap:9px;width:100%;padding:6px 3px;text-align:left;font-size:12px;line-height:1.3;background:transparent;min-height:29px}
+.atlas-ring-legend-entry:hover:not(:disabled){background:var(--raised);color:var(--active)}
+.atlas-ring-legend-entry span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere}
+.atlas-ring-legend-entry small{color:var(--muted);font-variant-numeric:tabular-nums}
+.atlas-swatch{height:9px;width:9px;border-radius:3px;flex:0 0 9px}
+.atlas-swatch[data-color="0"]{background:#2F8B86}
+.atlas-swatch[data-color="1"]{background:#EAD8AD}
+.atlas-swatch[data-color="2"]{background:#76AFBE}
+.atlas-swatch[data-color="3"]{background:#A792C1}
+.atlas-swatch[data-color="4"]{background:#D58E7C}
+.atlas-swatch[data-color="5"]{background:#83C4AB}
+.atlas-swatch[data-color="6"]{background:#9AA6D0}
+@media(max-width:1199px){.atlas-rings{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:759px){.atlas-rings{grid-template-columns:1fr}.atlas-ring-svg{width:114px;height:114px;flex-basis:114px}.atlas-ring-card{padding:16px}}
+@media(prefers-reduced-motion:reduce){.atlas-ring-svg,.universe-node{animation:none!important;transition:none!important}}
+
+/* Server reading surfaces: covers and transport instead of animated effects. */
+#player-art .cover{width:180px;aspect-ratio:2/3;margin:0 auto}#player-art{text-align:center}#player-controls{max-width:640px;margin:1rem auto;padding-bottom:140px}#player-controls select{margin:12px;max-width:90%}.library-list{display:flex;flex-direction:column}.library-list .book{display:flex;text-align:left;gap:18px;align-items:center}.library-list .cover{width:58px;min-width:58px}.library-list .book-meta{flex:1}#nav{overflow-x:auto}#nav button{min-width:65px}#shelf h2{margin-top:2rem}

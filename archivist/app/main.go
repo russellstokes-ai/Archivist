@@ -37,6 +37,8 @@ type app struct {
 	scanMu sync.Mutex
 	syncMu sync.Mutex
 	syncSnapshots map[string]*progressSnapshot
+	metadataCache multiMetadataCache
+	authLimiter authFailureLimiter
 }
 type source struct {
 	ID           int64  `json:"id"`
@@ -79,7 +81,9 @@ type book struct {
 func openDB(path string) (*sql.DB, error) {
 	// Configure SQLite on every pooled connection. WAL + a small four-connection
 	// pool lets the Pi serve readers/streams while a scan or progress save writes.
-	u := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	uriPath := filepath.ToSlash(path)
+ if filepath.VolumeName(path)!="" && !strings.HasPrefix(uriPath,"/") {uriPath="/"+uriPath}
+ u := &url.URL{Scheme: "file", Path: uriPath}
 	q := u.Query()
 	// modernc applies _pragma values to every pooled connection.
 	q.Add("_pragma", "foreign_keys(1)")
@@ -135,9 +139,13 @@ func openDB(path string) (*sql.DB, error) {
 	}
 	// Rows created before provenance tracking may include user corrections.
 	// Preserve them as legacy/manual-quality metadata until the user explicitly changes them.
+	// Only genuinely unclassified legacy rows qualify. Reopening or restoring
+	// an existing database must never downgrade scanned embedded/path/manual
+	// provenance or invalidate work/edition fingerprints. This is idempotent.
 	if _, migrateErr := db.Exec(`UPDATE assets
 		SET metadata_source='legacy',metadata_confidence=100,needs_review=0,review_reason=''
-		WHERE scan_signature='' AND size_bytes=0 AND modified_unix=0
+		WHERE metadata_source='legacy' AND metadata_confidence=0 AND needs_review=1
+		AND scan_signature='' AND size_bytes=0 AND modified_unix=0
 		AND (title<>'' OR author<>'' OR series<>'' OR genre<>'')`); migrateErr != nil {
 		db.Close()
 		return nil, migrateErr
@@ -173,6 +181,12 @@ func (a *app) addSource(space, path string) error {
 	if e != nil {
 		return errors.New("folder is unavailable or is not a directory")
 	}
+ // Verify read access without modifying media or walking the whole tree.
+ folder,readErr:=os.Open(p)
+ if readErr!=nil{return errors.New("folder cannot be read; check the mount and server permissions")}
+ _,readErr=folder.ReadDir(1)
+ folder.Close()
+ if readErr!=nil&&readErr!=io.EOF{return errors.New("folder cannot be read; check the mount and server permissions")}
 	space = strings.TrimSpace(space)
 	if space == "" || len(space) > 100 {
 		return errors.New("enter a space name, up to 100 characters")
@@ -208,12 +222,6 @@ func (a *app) addSource(space, path string) error {
 	if _, e = tx.Exec("INSERT INTO sources(space,path) VALUES(?,?)", space, p); e != nil {
 		return e
 	}
-	// Every active User sees every library. Admin remains the only role allowed
-	// to add, scan, organise or remove server content.
-	if _, e = tx.Exec(`INSERT OR IGNORE INTO grants(profile_id,space)
-		SELECT id,? FROM profiles WHERE revoked=0`, space); e != nil {
-		return e
-	}
 	return tx.Commit()
 }
 func kind(path string) string {
@@ -230,8 +238,22 @@ func kind(path string) string {
 	return ""
 }
 func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
+    return a.scanWithProgressJob(context.Background(),id,0,progress)
+}
+// Jobs use the same scanner as the standalone/manual caller. Cancellation is
+// checked while collecting a *staged* catalogue, never inside its commit.
+func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress func(int,int)) error {
 	a.scanMu.Lock()
 	defer a.scanMu.Unlock()
+    lastCheck:=time.Time{}
+    checkpoint:=func(force bool)error{
+        if err:=ctx.Err();err!=nil{return err}
+        if jobID==0{return nil}
+        if !force&&!lastCheck.IsZero()&&time.Since(lastCheck)<150*time.Millisecond{return nil}
+        lastCheck=time.Now()
+        return a.scanJobCheckpoint(ctx,jobID)
+    }
+    if err:=checkpoint(true);err!=nil{return err}
 	if a.movesPending() {
 		return errors.New("finish or recover pending file moves before scanning")
 	}
@@ -244,15 +266,8 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		a.db.Exec("UPDATE sources SET status='Unavailable' WHERE id=?", id)
 		return errors.New("source unavailable; previous catalogue retained")
 	}
-	total := 0
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() || d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
-			return nil
-		}
-		if kind(path) != "" { total++ }
-		return nil
-	})
-	if progress != nil { progress(0, total) }
+	total := 0 // Unknown until discovery finishes.
+	if progress != nil { progress(0, 0) }
 	stage, e := os.CreateTemp("", "archivist-scan-*.jsonl")
 	if e != nil {
 		return e
@@ -278,37 +293,26 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		MetadataConfidence, SizeBytes, ModifiedUnix int64
 		NeedsReview bool
 	}
-	cached := map[string]cachedEntry{}
-	rows, cacheErr := a.db.Query(`SELECT relative_path,title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=?`, id)
-	if cacheErr != nil {
-		return cacheErr
-	}
-	for rows.Next() {
-		var rel string
-		var item cachedEntry
-		var review int
-		if cacheErr = rows.Scan(&rel,&item.Title,&item.Author,&item.Series,&item.Genre,&item.SeriesNumber,&item.PublishedYear,&item.Narrator,&item.Publisher,&item.ISBN,&item.ASIN,&item.Language,&item.Description,&item.MetadataSource,&item.MetadataConfidence,&review,&item.ReviewReason,&item.ScanSignature,&item.SizeBytes,&item.ModifiedUnix); cacheErr != nil {
-			rows.Close()
-			return cacheErr
-		}
-		item.NeedsReview = review != 0
-		cached[rel] = item
-	}
-	if cacheErr = rows.Err(); cacheErr != nil {
-		rows.Close()
-		return cacheErr
-	}
-	rows.Close()
+ // Keep one cached record resident using the indexed source/path key.
+ cache, cacheErr := a.db.Prepare("SELECT title,author,series,genre,series_number,published_year,narrator,publisher,isbn,asin,language,description,metadata_source,metadata_confidence,needs_review,review_reason,scan_signature,size_bytes,modified_unix FROM assets WHERE source_id=? AND relative_path=?")
+ if cacheErr != nil { return cacheErr }
+ defer cache.Close()
 
 	count := 0
+    discovery:=newScanDiscoveryReport()
+    skipped := 0
+    ignoredLinks := 0
 	reused := 0
 	reviewCount := 0
 	sidecars := newSidecarScanCache()
 	e = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+        if err:=checkpoint(false);err!=nil{return err}
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.Type()&os.ModeSymlink != 0 {
+            ignoredLinks++
+            discovery.Symlinks++
 			return nil
 		}
 		if d.IsDir() {
@@ -317,8 +321,11 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		if !d.Type().IsRegular() {
 			return nil
 		}
-		format := kind(path)
+		format,discoveryReason := discoverMedia(path)
+        discovery.observe(path,format!="")
+        discovery.observeReason(path,discoveryReason)
 		if format == "" {
+            skipped++
 			return nil
 		}
 		rel, e := filepath.Rel(root, path)
@@ -337,7 +344,12 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			SizeBytes: info.Size(),
 			ModifiedUnix: info.ModTime().Unix(),
 		}
-		if existing, ok := cached[rel]; ok && existing.ScanSignature == signature {
+		var existing cachedEntry
+        var review int
+        cacheErr := cache.QueryRow(id,rel).Scan(&existing.Title,&existing.Author,&existing.Series,&existing.Genre,&existing.SeriesNumber,&existing.PublishedYear,&existing.Narrator,&existing.Publisher,&existing.ISBN,&existing.ASIN,&existing.Language,&existing.Description,&existing.MetadataSource,&existing.MetadataConfidence,&review,&existing.ReviewReason,&existing.ScanSignature,&existing.SizeBytes,&existing.ModifiedUnix)
+        if cacheErr != nil && cacheErr != sql.ErrNoRows { return cacheErr }
+        existing.NeedsReview = review != 0
+        if cacheErr == nil && existing.ScanSignature == signature {
 			item.Title = existing.Title
 			item.Author = existing.Author
 			item.Series = existing.Series
@@ -374,17 +386,26 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			item.NeedsReview = meta.NeedsReview
 			item.ReviewReason = meta.ReviewReason
 		}
-		if item.NeedsReview {
+		if item.MetadataSource=="path"{discovery.PathFallback++}
+        if item.NeedsReview {
 			reviewCount++
 		}
 		count++
-		if progress != nil && (count == total || count%10 == 0) { progress(count, total) }
+		if progress != nil && count%10 == 0 { progress(count, 0) }
 		return encoder.Encode(item)
 	})
 	if e != nil {
+        if errors.Is(e,errScanCancelled)||errors.Is(e,context.Canceled){return e}
 		a.db.Exec("UPDATE sources SET status='Scan failed; catalogue retained' WHERE id=?", id)
 		return errors.New("scan could not read every folder; previous catalogue retained")
 	}
+    total = count
+    if progress != nil { progress(count, total) }
+    if err:=checkpoint(true);err!=nil{return err}
+    // Owner stop and this transition are competing conditional SQLite
+    // updates: only the winner may change the state. After this transition,
+    // the validated staging file must commit or fail/retry on restart.
+    if err:=a.enterScanCommit(ctx,jobID);err!=nil{return err}
 	if _, e = stage.Seek(0, 0); e != nil {
 		return e
 	}
@@ -393,6 +414,18 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 		return e
 	}
 	defer tx.Rollback()
+ unchanged:=false
+ if count==reused {
+  var indexed,available,linked int
+  if e=tx.QueryRow(`SELECT count(*),COALESCE(sum(a.available),0),count(ea.asset_id) FROM assets a LEFT JOIN edition_assets ea ON ea.asset_id=a.id WHERE a.source_id=?`,id).Scan(&indexed,&available,&linked);e!=nil{return e}
+  unchanged=indexed==count&&available==count&&linked==count
+  if unchanged {
+   var ambiguous bool
+   if e=tx.QueryRow(`SELECT EXISTS(SELECT ed.work_id FROM editions ed JOIN works w ON w.id=ed.work_id WHERE w.auto=1 AND w.id IN (SELECT e.work_id FROM assets a JOIN edition_assets ea ON ea.asset_id=a.id JOIN editions e ON e.id=ea.edition_id WHERE a.source_id=?) GROUP BY ed.work_id HAVING count(*)<>1)`,id).Scan(&ambiguous);e!=nil{return e}
+   unchanged=!ambiguous
+  }
+ }
+ if !unchanged {
 	if _, e = tx.Exec("UPDATE assets SET available=0 WHERE source_id=?", id); e != nil {
 		return e
 	}
@@ -434,15 +467,24 @@ func (a *app) scanWithProgress(id int64, progress func(int, int)) error {
 			return e
 		}
 	}
-	status := fmt.Sprintf("%d files · %d reused · %d need review · %s", count, reused, reviewCount, time.Now().Format("2 Jan 15:04"))
+	}
+    discovery.CompletedAt=time.Now().UTC().Format(time.RFC3339)
+    rawReport,reportErr:=json.Marshal(discovery);if reportErr!=nil{return reportErr}
+    if _,e=tx.Exec("INSERT INTO app_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",fmt.Sprintf("scan_report_%d",id),string(rawReport));e!=nil{return e}
+	status := fmt.Sprintf("%d media files imported · %d unchanged · %d metadata flags · %d non-media/unsupported files skipped · %d symbolic links skipped · %s", count, reused, reviewCount, skipped, ignoredLinks, time.Now().Format("2 Jan 15:04"))
 	if _, e = tx.Exec("UPDATE sources SET status=? WHERE id=?", status, id); e != nil {
 		return e
 	}
-	if e = tx.Commit(); e != nil { return e }
-	if e = a.syncAutoCatalogueLocked(id); e != nil {
-		a.db.Exec("UPDATE sources SET status=? WHERE id=?", "Scanned; library grouping needs attention", id)
-		return e
-	}
+    // No committed intermediate state: files, work/edition grouping, review
+    // invalidation and source status form one consistent SQLite snapshot.
+    // A catalogue trigger/storage failure rolls back all scan records.
+    if !unchanged {if e=a.syncAutoCatalogueTx(tx,id);e!=nil{
+        return fmt.Errorf("scan grouping failed; previous catalogue retained: %w",e)
+    }}
+	if count>reused {
+      if _,e=tx.Exec("DELETE FROM automatic_metadata_attempts WHERE work_id IN (SELECT ed.work_id FROM editions ed JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id WHERE a.source_id=?)",id);e!=nil{return e}
+    }
+    if e = tx.Commit(); e != nil { return e }
 	if progress != nil { progress(total, total) }
 	return nil
 }
@@ -477,7 +519,7 @@ func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	a.backgroundRoutes(mux)
 	a.catalogueRoutes(mux)
-	a.coverRoutes(mux)
+	a.serverCoverRoutes(mux)
 	a.progressRoutes(mux)
 	a.syncProgressRoutes(mux)
 	a.listeningRoutes(mux)
@@ -488,13 +530,26 @@ func (a *app) routes() http.Handler {
 	a.opdsRoutes(mux)
 	a.backupRoutes(mux)
 	a.atlasRoutes(mux)
+	a.serverReviewRoutes(mux)
+	a.publicationRoutes(mux)
+    a.selectedCoverRoutes(mux)
 	a.preferenceRoutes(mux)
 	a.accountRoutes(mux)
 	a.readerRoutes(mux)
 	a.epubResourceRoutes(mux)
 	a.recommendationRoutes(mux)
 	a.organisationRoutes(mux)
+    a.metadataControlRoutes(mux)
+    a.automaticMetadataRoutes(mux)
+    a.bulkMetadataRoutes(mux)
+    a.workMetadataRoutes(mux)
+    a.relinkRoutes(mux)
+    a.groupedRelinkRoutes(mux)
 	a.manageCandidateRoutes(mux)
+    a.comicAuditRoutes(mux)
+    a.comicEditionRoutes(mux)
+    a.comicTransferRoutes(mux)
+    a.operationsRoutes(mux)
 	a.duplicateRoutes(mux)
 	a.moveRoutes(mux)
 	a.libraryHealthRoutes(mux)
@@ -509,10 +564,16 @@ func (a *app) routes() http.Handler {
 			count(DISTINCT CASE WHEN a.format='PDF' THEN e.work_id END)
 			FROM sources s
 			LEFT JOIN assets a ON a.source_id=s.id AND a.available=1
+            AND (? OR EXISTS (
+                SELECT 1 FROM published_works pw
+                JOIN editions ed2 ON ed2.work_id=pw.id
+                JOIN edition_assets ea2 ON ea2.edition_id=ed2.id
+                WHERE ea2.asset_id=a.id
+            ))
 			LEFT JOIN edition_assets ea ON ea.asset_id=a.id
 			LEFT JOIN editions e ON e.id=ea.edition_id
 			WHERE ? OR s.space IN (SELECT space FROM grants WHERE profile_id=?)
-			GROUP BY s.id ORDER BY s.id`, who(r).Owner, who(r).ID)
+			GROUP BY s.id ORDER BY s.id`, who(r).Owner, who(r).Owner, who(r).ID)
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -578,9 +639,13 @@ func (a *app) routes() http.Handler {
 			fail(w, 400, e)
 			return
 		}
-		reply(w, map[string]bool{"ok": true})
-	})
-	mux.HandleFunc("PATCH /api/sources/{id}/watch", func(w http.ResponseWriter, r *http.Request) {
+		resolved,err:=canonical(s.Path)
+        if err!=nil{fail(w,400,err);return}
+        var sourceID int64
+        if err=a.db.QueryRow("SELECT id FROM sources WHERE path=?",resolved).Scan(&sourceID);err!=nil{fail(w,500,err);return}
+        reply(w,map[string]any{"ok":true,"source_id":sourceID})
+    })
+    mux.HandleFunc("PATCH /api/sources/{id}/watch", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Enabled bool `json:"enabled"`
 			Minutes int  `json:"minutes"`
@@ -635,6 +700,17 @@ func (a *app) routes() http.Handler {
 		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
 		reviewOnly := r.URL.Query().Get("review") == "1"
 		unknownAuthor := r.URL.Query().Get("unknownAuthor") == "1"
+        metadataGap:=strings.TrimSpace(r.URL.Query().Get("metadataGap"))
+        switch metadataGap{
+        case "","author","genre","year","confidence","review","unavailable":
+        default:
+            fail(w,400,errors.New("invalid metadata coverage filter"));return
+        }
+        // Additional diagnostics intentionally remain owner-only. Readers
+        // continue to use the original published-only library contract.
+        if metadataGap!=""&&!who(r).Owner{
+            fail(w,403,errors.New("scanner coverage is owner-only"));return
+        }
 		availability := r.URL.Query().Get("availability")
 		if availability != "" && availability != "available" && availability != "unavailable" {
 			fail(w,400,errors.New("invalid availability filter"))
@@ -666,11 +742,23 @@ func (a *app) routes() http.Handler {
 			AND (?='' OR a.genre=?)
 			AND (?=0 OR trim(a.author)='')
 			AND (?=0 OR a.needs_review=1)
+            AND (?='' OR (?='author' AND trim(a.author)='')
+                OR (?='genre' AND trim(a.genre)='')
+                OR (?='year' AND (a.published_year<1000 OR a.published_year>3000))
+                OR (?='confidence' AND a.metadata_confidence<60)
+                OR (?='review' AND a.needs_review=1)
+                OR (?='unavailable' AND a.available=0))
 			AND (?='' OR (?='available' AND a.available=1) OR (?='unavailable' AND a.available=0))
 			AND (? OR s.space IN (SELECT space FROM grants WHERE profile_id=?))
+            AND (? OR EXISTS (
+                SELECT 1 FROM published_works w JOIN editions ed ON ed.work_id=w.id
+                JOIN edition_assets ea ON ea.edition_id=ed.id
+                WHERE ea.asset_id=a.id
+            ))
 			ORDER BY `+sortOrder+` LIMIT ? OFFSET ?`,
 			q, q, q, q, space, space, format, format, author, author, series, series, genre, genre, unknownAuthor, reviewOnly,
-			availability, availability, availability, who(r).Owner, who(r).ID, limit, offset)
+            metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,metadataGap,
+			availability, availability, availability, who(r).Owner, who(r).ID, who(r).Owner, limit, offset)
 		if e != nil {
 			fail(w, 500, e)
 			return
@@ -789,7 +877,10 @@ func (a *app) routes() http.Handler {
 					key = strings.TrimPrefix(bearer, "Bearer ")
 				}
 				if _, password, basic := r.BasicAuth(); basic {
+					if !a.credentialPeerPermitted(w,r){return}
 					profile, valid = a.identify(password)
+					if valid{a.authLimiter.succeeded(authPeerKey(r.RemoteAddr))
+					}else{a.authLimiter.failed(authPeerKey(r.RemoteAddr),time.Now())}
 				} else {
 					profile, valid = a.sessionIdentity(key)
 				}
@@ -813,11 +904,13 @@ func (a *app) routes() http.Handler {
 				fail(w, 403, errors.New("invalid request"))
 				return
 			}
+			if !a.credentialPeerPermitted(w,r){return}
 			var body struct {
 				Token string `json:"token"`
 			}
 			json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body)
 			if _, valid := a.identify(body.Token); !valid {
+				a.authLimiter.failed(authPeerKey(r.RemoteAddr),time.Now())
 				fail(w, 401, errors.New("incorrect access key"))
 				return
 			}
@@ -826,6 +919,7 @@ func (a *app) routes() http.Handler {
 				fail(w, 500, e)
 				return
 			}
+			a.authLimiter.succeeded(authPeerKey(r.RemoteAddr))
 			http.SetCookie(w, &http.Cookie{Name: "archivist_session", Value: session, HttpOnly: true, Secure: requestIsSecure(r), SameSite: http.SameSiteStrictMode, Path: base})
 			if r.URL.Path == "/session" {
 				reply(w, map[string]string{"token": session})
@@ -947,6 +1041,7 @@ func main() {
 	}
 	go a.worker(context.Background())
 	go a.watcher(context.Background())
+    go a.automaticMetadataWorker(context.Background())
 	handler := a.routes()
 	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	if *tlsAddr != "" {

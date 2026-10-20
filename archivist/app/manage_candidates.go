@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -27,36 +26,31 @@ type openLibrarySearchResponse struct {
 		Title     string   `json:"title"`
 		Authors   []string `json:"author_name"`
 		Year      int      `json:"first_publish_year"`
+        Subjects []string `json:"subject"`
 		ISBN      []string `json:"isbn"`
 		Publishers []string `json:"publisher"`
 	} `json:"docs"`
 }
 
 func parseOpenLibraryCandidates(r io.Reader) ([]publicMetadataCandidate, error) {
-	var result openLibrarySearchResponse
-	if err := json.NewDecoder(io.LimitReader(r, 2<<20)).Decode(&result); err != nil {
-		return nil, err
-	}
-	out := make([]publicMetadataCandidate, 0, len(result.Docs))
-	for _, doc := range result.Docs {
-		title := strings.TrimSpace(doc.Title)
-		if title == "" { continue }
-		item := publicMetadataCandidate{WorkID:doc.Key,Title:title,PublishedYear:doc.Year,Source:"Open Library"}
-		if len(doc.Authors)>0 { item.Author = strings.TrimSpace(doc.Authors[0]) }
-		if len(doc.ISBN)>0 { item.ISBN = strings.TrimSpace(doc.ISBN[0]) }
-		if len(doc.Publishers)>0 { item.Publisher = strings.TrimSpace(doc.Publishers[0]) }
-		if item.PublishedYear<1000 || item.PublishedYear>3000 { item.PublishedYear=0 }
-		out=append(out,item)
-		if len(out)>=10 { break }
-	}
-	return out,nil
+ raw,err:=io.ReadAll(io.LimitReader(r,2<<20))
+ if err!=nil{return nil,err}
+ candidates,err:=parseOpenLibraryMulti(raw,multiMetadataQuery{})
+ if err!=nil{return nil,err}
+ out:=make([]publicMetadataCandidate,0,len(candidates))
+ for _,candidate:=range candidates{out=append(out,candidate.publicMetadataCandidate)}
+ return out,nil
 }
 
 func (a *app) manageCandidateRoutes(mux *http.ServeMux) {
+ a.metadataDetailRoutes(mux)
 	mux.HandleFunc("GET /api/manage/metadata-candidates",func(w http.ResponseWriter,r *http.Request) {
 		if !who(r).Owner { fail(w,403,errors.New("administrator only"));return }
 		query:=strings.TrimSpace(r.URL.Query().Get("q"))
 		if len(query)<2 || len(query)>180 { fail(w,400,errors.New("enter a search of 2–180 characters"));return }
+		mode:=r.URL.Query().Get("mode")
+		if mode=="multi"{a.serveMultiSourceCandidates(w,r,query);return}
+		if mode!=""{fail(w,400,errors.New("unsupported candidate search mode"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second)
 		defer cancel()
 		target:="https://openlibrary.org/search.json?q="+url.QueryEscape(query)+"&fields=key,title,author_name,first_publish_year,isbn,publisher&limit=10"

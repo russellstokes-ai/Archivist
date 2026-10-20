@@ -95,6 +95,10 @@ export default function LocalPdfReader({uri,title,initialPage,requestedPage,pape
     const next=Math.max(0,Math.min(count-1,page+delta));
     if(next===page)return;
     const generation=active.generation;
+    if(reduceMotion){
+      setSession(s=>pdfSessionReducer(s,{type:'page',uri,generation,page:next}));
+      return;
+    }
     Animated.sequence([
       Animated.timing(turn,{toValue:delta>0?1:-1,duration:120,useNativeDriver:true}),
       Animated.timing(turn,{toValue:0,duration:1,useNativeDriver:true}),

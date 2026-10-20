@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const context={};vm.createContext(context);
+vm.runInContext(fs.readFileSync('web/manage.js','utf8').split('(() => {')[0],context);
+const pick=(candidate,fields,options={})=>JSON.parse(JSON.stringify(context.candidateMissingFields(candidate,fields,options)));
+const candidate={isbnExact:true,title:'Provider title',narrator:'Narrator',description:'Summary',publishedYear:2020,yearType:'edition publication'};
+assert.deepEqual(pick(candidate,{title:{value:'My title'},narrator:{value:'',locked:true},description:{value:''},publishedYear:{value:'0'}}),{description:'Summary'});
+assert.deepEqual(pick({...candidate,isbnExact:false},{description:{value:''}}),{},'title match alone must not bulk-fill');
+assert.deepEqual(pick(candidate,{narrator:{value:''}},{editions:2}),{},'mixed editions cannot share a guessed narrator');
+assert.deepEqual(pick(candidate,{description:{value:''}},{comic:true}),{},'comic identity requires series and issue');
+assert.deepEqual(pick({...candidate,asinExact:true,isbnExact:false},{narrator:{value:''}}),{narrator:'Narrator'});
+assert.deepEqual(pick({...candidate,identifierMismatch:true},{description:{value:''}}),{});
+console.log('PASS enrichment preserves values/locks and rejects uncertain, mixed-edition and comic matches');

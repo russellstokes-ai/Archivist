@@ -25,6 +25,7 @@ func TestHouseholdPermissionsAndProgress(t *testing.T) {
 	if err:=a.scan(2);err!=nil{t.Fatal(err)}
 	if _,err:=a.group("Adult", []int64{1});err!=nil{t.Fatal(err)}
 	if _,err:=a.group("Family", []int64{2});err!=nil{t.Fatal(err)}
+    publishFixtureWorks(t,a)
 
 	adminReq:=httptest.NewRequest("POST","/api/profiles",strings.NewReader(`{"name":"Child"}`))
 	adminReq.AddCookie(&http.Cookie{Name:"archivist_session",Value:"test-key"})
