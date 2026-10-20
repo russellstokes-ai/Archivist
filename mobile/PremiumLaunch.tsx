@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {AccessibilityInfo,AppState,Image,Platform,StyleSheet,View} from 'react-native';
+import {AccessibilityInfo,AppState,Image,NativeModules,Platform,StyleSheet,View} from 'react-native';
 import {useVideoPlayer,VideoView} from 'expo-video';
 
 const TEAL='#2F8B86';
@@ -26,7 +26,24 @@ export function premiumSplashShouldPlay(platform:string,alreadyClaimed:boolean,r
  * This is a frame-faithful rendering of the separately preserved approved HTML
  * animation, produced by test14-splash-video-build.yml and SHA-verified there.
  */
-function PremiumVideo({onComplete}:{onComplete:()=>void}){
+function PremiumVideo({onComplete,onMatte,matte}:{onComplete:()=>void;onMatte:(color:string)=>void;matte:string}){
+  const sampling=useRef(false);
+  const sampleTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const sampleGeneration=useRef(0);
+  useEffect(()=>()=>{sampleGeneration.current++;if(sampleTimer.current)clearTimeout(sampleTimer.current);},[]);
+  const matchMatte=useCallback(()=>{
+    if(Platform.OS!=='android'||sampling.current||!NativeModules.ArchivistSplash?.sampleMatte)return;
+    sampling.current=true;
+    const generation=sampleGeneration.current;
+    const sample=async(attempt:number)=>{
+      const color=await NativeModules.ArchivistSplash.sampleMatte().catch(()=>null);
+      if(generation!==sampleGeneration.current)return;
+      if(typeof color==='string'&&/^#[0-9A-F]{6}$/i.test(color)){onMatte(color);return;}
+      if(attempt<3)sampleTimer.current=setTimeout(()=>void sample(attempt+1),100);
+      else sampling.current=false;
+    };
+    void sample(0);
+  },[onMatte]);
   const started=useRef(false);
   const lastProgress=useRef({seconds:0,at:Date.now()});
   const finished=useRef(false);
@@ -84,12 +101,14 @@ function PremiumVideo({onComplete}:{onComplete:()=>void}){
     surfaceType="textureView"
     useExoShutter={false}
     allowsPictureInPicture={false}
-    style={styles.video}
+    onFirstFrameRender={matchMatte}
+    style={[styles.video,{backgroundColor:matte}]}
     accessible={false}
   />;
 }
 
 export default function PremiumLaunch({children}:{children:React.ReactNode}){
+  const [matte,setMatte]=useState(VIDEO_MATTE);
   const [visible,setVisible]=useState(()=>claimPremiumColdLaunch(Platform.OS));
   const [reduced,setReduced]=useState<boolean|null>(null);
   const completed=useRef(false);
@@ -126,9 +145,9 @@ export default function PremiumLaunch({children}:{children:React.ReactNode}){
 
   return <View style={styles.root}>
     {children}
-    {visible?<View style={styles.overlay}
+    {visible?<View style={[styles.overlay,{backgroundColor:matte}]}
       accessibilityLabel="Opening Archivist" accessibilityViewIsModal>
-      {reduced===false?<PremiumVideo onComplete={complete}/>:null}
+      {reduced===false?<PremiumVideo onComplete={complete} onMatte={setMatte} matte={matte}/>:null}
       {reduced===true?
         <Image source={require('./assets/splash-icon.png')}
           resizeMode="contain" style={styles.reducedIcon}/>:null}

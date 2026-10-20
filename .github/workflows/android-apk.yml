@@ -11,8 +11,14 @@ on:
         type: boolean
         default: false
 
+      publish_direct_apk:
+        description: "Publish a QA prerelease with a direct APK download (never latest/production)"
+        required: true
+        type: boolean
+        default: false
+
 permissions:
-  contents: read
+  contents: write
 
 env:
   TEST_BUILD: '14'
@@ -182,6 +188,23 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Publish owner-requested direct QA APK
+        if: ${{ inputs.publish_direct_apk == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          QA_SHA: ${{ github.sha }}
+          QA_RUN: ${{ github.run_id }}
+          QA_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="qa-test14-${QA_RUN}-${QA_ATTEMPT}"
+          APK="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk"
+          printf '%s\n' 'Owner-requested device test APK. Not a production release.' "Source commit: $QA_SHA" 'Includes Assist wiring, canonical Comic Focus, bounded Living Book animation and device-decoded splash matte. Awards remain locked.' 'Typecheck, regression tests, release lint, package, signature and alignment checks passed. Phone acceptance is still required. Emulator evidence is recorded separately in the workflow run.' > "$RUNNER_TEMP/qa-notes.txt"
+          gh release create "$TAG" "$APK" "$APK.sha256" --target "$QA_SHA" --prerelease --latest=false --title "Archivist Test 14 repairs — QA $QA_RUN" --notes-file "$RUNNER_TEMP/qa-notes.txt"
+          echo "Direct APK: https://github.com/$GH_REPO/releases/download/$TAG/$(basename "$APK")" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Launch test APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -206,5 +229,5 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Confirm no public release
-        run: echo "Private QA artifact uploaded only to this workflow run; Google Play/release publication is disabled."
+      - name: Confirm production isolation
+        run: echo "QA package only. Direct prerelease requires explicit manual opt-in; Google Play and latest production release remain unchanged."

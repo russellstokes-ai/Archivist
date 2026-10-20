@@ -44,7 +44,8 @@ export function createAssistSearchService(providers:AssistProvider[],cache:Searc
    }
    if(selectAutomatic({fields:rankingFields},[...found.values()]))break;
   }
-  let ranked=rankAssistCandidates(rankingFields,[...found.values()]).filter(x=>x.score>0||!rankingFields.title);
+  // Conflicts prevent automatic acceptance, but must not hide a relevant title from review.
+  let ranked=rankAssistCandidates(rankingFields,[...found.values()]).filter(x=>x.score+x.conflicts.length*150>0||!rankingFields.title);
   for(const row of ranked.slice(0,2)){
    const provider=providers.find(p=>p.id===row.candidate.provider);
    if(!provider?.details)continue;
@@ -53,7 +54,7 @@ export function createAssistSearchService(providers:AssistProvider[],cache:Searc
    try{result.requests++;const detailed=await provider.details(row.candidate,options.signal);check(options.signal);if(detailed.id!==row.candidate.id||detailed.provider!==row.candidate.provider)throw Error('Detail identity mismatch');found.set(detailed.provider+'|'+detailed.id,detailed);}
    catch{check(options.signal);result.issues.push(row.candidate.provider+':detail-unavailable');}
   }
-  ranked=rankAssistCandidates(rankingFields,[...found.values()]).filter(x=>x.score>0||!rankingFields.title);
+  ranked=rankAssistCandidates(rankingFields,[...found.values()]).filter(x=>x.score+x.conflicts.length*150>0||!rankingFields.title);
   result.candidates=ranked;result.state=ranked.length?'review':result.issues.length?'pending':'no-match';
   check(options.signal);
   if(!result.issues.length){try{await cache.save(key,{expires:Date.now()+(ranked.length?7*86400000:3600000),value:result},options.signal);}catch{check(options.signal);}}

@@ -15,7 +15,7 @@ assert.match(gradle,/versionCode\s+103/);
 assert.match(gradle,/versionName\s+"0\.9\.4"/);
 assert.match(apkWorkflow,/TEST_BUILD:\s*'14'/);
 assert.ok(apkWorkflow.includes('workflow_dispatch:')&&apkWorkflow.includes('qa_confirmation'),'Test 14 QA APK must remain buildable through an explicitly confirmed manual workflow');
-assert.ok(!apkWorkflow.includes('gh release create')&&!/^  push:/m.test(apkWorkflow),'A test APK must never be automatically published or replace the production app');
+assert.ok(apkWorkflow.includes('inputs.publish_direct_apk == true')&&apkWorkflow.includes('--prerelease --latest=false')&&!/^  push:/m.test(apkWorkflow),'A test APK must never be automatically published or replace the production app');
 assert.ok(apkWorkflow.includes("app.archivist.reader.qa"),'Device acceptance APK must have a separate QA application ID');
 assert.ok(apkWorkflow.includes('Android test-release lint'),'release APK gate must lint the optimized release variant');
 assert.ok(apkWorkflow.includes('Verify test APK package, signature and alignment'),'release gate must verify package, signature and zip alignment');

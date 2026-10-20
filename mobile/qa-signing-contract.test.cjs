@@ -24,7 +24,7 @@ assert.match(workflow,/package: name='app\.archivist\.reader\.qa'/,
   'QA workflow must reject production app ID');
 assert(!/^  push:/m.test(workflow),
   'QA APK must not automatically upload from arbitrary main/development push');
-assert(!workflow.includes('gh release create')&&!workflow.includes('gh release upload'),
+assert(workflow.includes('inputs.publish_direct_apk == true')&&workflow.includes('--prerelease --latest=false'),
   'QA workflow must never automatically publish a public download');
 assert.match(workflow,/check-16kb-native-libs\.cjs/,
   'QA build must check actual ELF program header alignment, not just zipalign');

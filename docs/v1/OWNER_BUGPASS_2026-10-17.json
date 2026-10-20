@@ -139,6 +139,46 @@
         }
       ],
       "current": "a8d4c8e9733790cd9f00fa8e44156e15ba2c0299"
+    },
+    "mobile/android/app/src/main/java/app/archivist/reader/MainApplication.kt": {
+      "previous": "b3fb683ee3e7dfbe817881ce77b8ce20858227c8",
+      "changes": [
+        {
+          "old": "          add(ArchivistMetadataPackage())",
+          "new": "          add(ArchivistMetadataPackage())\n          add(ArchivistSplashPackage())"
+        }
+      ],
+      "current": "7ef2a501bbb93a635797b0b882e79b0336b931a0"
+    },
+    "mobile/PremiumLaunch.tsx": {
+      "previous": "aa7a6dc87e706c32fe3a3e79e68621487eb01e9b",
+      "changes": [
+        {
+          "old": "Image,Platform,StyleSheet,View",
+          "new": "Image,NativeModules,Platform,StyleSheet,View"
+        },
+        {
+          "old": "function PremiumVideo({onComplete}:{onComplete:()=>void}){",
+          "new": "function PremiumVideo({onComplete,onMatte,matte}:{onComplete:()=>void;onMatte:(color:string)=>void;matte:string}){\n  const sampling=useRef(false);\n  const sampleTimer=useRef<ReturnType<typeof setTimeout>|null>(null);\n  const sampleGeneration=useRef(0);\n  useEffect(()=>()=>{sampleGeneration.current++;if(sampleTimer.current)clearTimeout(sampleTimer.current);},[]);\n  const matchMatte=useCallback(()=>{\n    if(Platform.OS!=='android'||sampling.current||!NativeModules.ArchivistSplash?.sampleMatte)return;\n    sampling.current=true;\n    const generation=sampleGeneration.current;\n    const sample=async(attempt:number)=>{\n      const color=await NativeModules.ArchivistSplash.sampleMatte().catch(()=>null);\n      if(generation!==sampleGeneration.current)return;\n      if(typeof color==='string'&&/^#[0-9A-F]{6}$/i.test(color)){onMatte(color);return;}\n      if(attempt<3)sampleTimer.current=setTimeout(()=>void sample(attempt+1),100);\n      else sampling.current=false;\n    };\n    void sample(0);\n  },[onMatte]);"
+        },
+        {
+          "old": "    style={styles.video}",
+          "new": "    onFirstFrameRender={matchMatte}\n    style={[styles.video,{backgroundColor:matte}]}"
+        },
+        {
+          "old": "  const [visible,setVisible]=useState(()=>claimPremiumColdLaunch(Platform.OS));",
+          "new": "  const [matte,setMatte]=useState(VIDEO_MATTE);\n  const [visible,setVisible]=useState(()=>claimPremiumColdLaunch(Platform.OS));"
+        },
+        {
+          "old": "{visible?<View style={styles.overlay}",
+          "new": "{visible?<View style={[styles.overlay,{backgroundColor:matte}]}"
+        },
+        {
+          "old": "<PremiumVideo onComplete={complete}/>",
+          "new": "<PremiumVideo onComplete={complete} onMatte={setMatte} matte={matte}/>"
+        }
+      ],
+      "current": "b95dfd671788d732914a4d616bf649a1cbc25d1a"
     }
   }
 }
