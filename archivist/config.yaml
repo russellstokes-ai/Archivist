@@ -1,7 +1,7 @@
 name: Archivist QA (PR 83)
 slug: archivist
-description: PR 83 test build - 18 October 2026. Private library server for books, audiobooks and comics.
-version: 0.9.3-qa.20261018.2
+description: PR 83 test build - 20 October 2026. Private library server for books, audiobooks and comics.
+version: 0.9.3-qa.20261020.1
 url: https://github.com/russellstokes-ai/Archivist/tree/integration/archivist-v1-auto-restore-recovery-20261016
 arch:
   - aarch64

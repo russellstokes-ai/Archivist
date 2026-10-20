@@ -12,7 +12,7 @@ import (
 
 // Recognised genres only: a subject such as a place or language is not a genre.
 func atlasGenre(subjects []string) string {
- genres:=[]string{"Science fiction","Fantasy","Mystery","Thriller","Horror","Romance","Historical fiction","Biography","Autobiography","History","Science","Poetry","Drama","Adventure","Humor","Children's fiction","Young adult fiction","Nonfiction","Fiction"}
+ genres:=[]string{"Superhero","Crime","Western","War","Science fiction","Fantasy","Mystery","Thriller","Horror","Romance","Historical fiction","Biography","Autobiography","History","Science","Poetry","Drama","Adventure","Humor","Children's fiction","Young adult fiction","Nonfiction","Fiction"}
  for _,genre:=range genres {for _,subject:=range subjects {
   if strings.EqualFold(strings.TrimSpace(subject),genre){return genre}
  }}
@@ -37,7 +37,8 @@ func automaticMetadataCandidate(items []multiMetadataCandidate,q multiMetadataQu
 
 func automaticMetadataValues(state workMetaState,c multiMetadataCandidate)map[string]string{
  possible:=map[string]string{"author":c.Author,"genre":c.Genre,"description":c.Description,"language":c.Language,"narrator":c.Narrator,"series":c.Series}
- if c.YearType=="first publication"&&c.PublishedYear>=1000&&c.PublishedYear<=time.Now().Year()+1{possible["publishedYear"]=strconv.Itoa(c.PublishedYear)}
+ comicYear:=c.YearType=="comic issue"&&len(state.Editions)==1&&state.Editions[0].Format=="Comic"
+ if (c.YearType=="first publication"||comicYear)&&c.PublishedYear>=1000&&c.PublishedYear<=time.Now().Year()+1{possible["publishedYear"]=strconv.Itoa(c.PublishedYear)}
  out:=map[string]string{}
  for _,field:=range state.Fields{
   if field.Locked||field.Conflicting||(field.Value!=""&&field.Value!="0"){continue}
@@ -65,6 +66,7 @@ func (a *app)automaticMetadataEnabled()bool{
 
 func (a *app)automaticMetadataRoutes(mux *http.ServeMux){
  a.discoveryReportRoutes(mux)
+ a.comicProviderRoutes(mux)
  mux.HandleFunc("GET /api/manage/automatic-metadata",func(w http.ResponseWriter,r *http.Request){
   if !who(r).Owner{http.Error(w,"administrator access required",403);return}
   reply(w,map[string]bool{"enabled":a.automaticMetadataEnabled()})
@@ -107,6 +109,16 @@ func (a *app)enrichNextWork(ctx context.Context){
  comicIdentity:=q.MediaFormat=="Comic"&&q.Series!=""&&q.IssueNumber!=""
  seriesOnly:=q.MediaFormat=="Comic"&&q.Series!=""&&!comicIdentity&&fields["genre"]==""
  if q.Title==""||q.Title=="Untitled"||(q.Author==""&&q.ISBN==""&&q.ASIN==""&&!comicIdentity&&!seriesOnly){status="insufficient identity";return}
+ if q.MediaFormat=="Comic" {if token:=a.metronToken();token!="" {
+  if !a.metronReady(now){retry=now+30;status="comic provider paused; retry later";return}
+  _,_=a.db.Exec("INSERT INTO app_meta(key,value) VALUES('metron_retry_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",strconv.FormatInt(now+15,10))
+  lookupCtx,cancel:=context.WithTimeout(ctx,8*time.Second);defer cancel()
+  candidate,outcome:=lookupMetron(lookupCtx,metronHTTPClient,"https://metron.cloud/api",token,q)
+  status=outcome
+  if outcome=="matched" {if a.saveAutomaticMetadata(ctx,state,candidate){status="filled comic details"}else{status="comic details already present or protected"};return}
+  if strings.HasPrefix(outcome,"provider "){a.pauseMetron(now);retry=now+3600}
+  return
+ }}
  search:="title:\""+q.Title+"\" author:\""+q.Author+"\""
  if comicIdentity&&q.Author==""{search="title:\""+q.Series+" #"+q.IssueNumber+"\""}
  if seriesOnly{search="title:\""+q.Series+"\""}
@@ -143,6 +155,7 @@ func (a *app)saveAutomaticMetadata(ctx context.Context,state workMetaState,chose
  id:=state.WorkID;now:=time.Now().Unix()
  a.scanMu.Lock();defer a.scanMu.Unlock()
  if !a.automaticMetadataEnabled(){return false}
+ if strings.HasPrefix(chosen.Source,"Metron ")&&a.metronToken()==""{return false}
  tx,err:=a.db.BeginTx(ctx,nil);if err!=nil{return false};defer tx.Rollback()
  current,err:=a.readWorkMeta(ctx,tx,id);if err!=nil||current.Fingerprint!=state.Fingerprint{return false}
  values:=automaticMetadataValues(current,chosen)

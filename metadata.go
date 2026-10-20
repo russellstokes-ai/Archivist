@@ -156,8 +156,8 @@ func parseSidecarFile(filename string) embeddedMetadata {
 			LanguageComic string  `xml:"LanguageISO"`
 			Description   string  `xml:"description"`
 			Summary       string  `xml:"Summary"`
-			Year          int     `xml:"year"`
-			YearComic     int     `xml:"Year"`
+			Year          string  `xml:"year"`
+			YearComic     string  `xml:"Year"`
 		}
 		if readXMLFile(filename, &x) {
 			first := func(values ...string) string {
@@ -168,8 +168,8 @@ func parseSidecarFile(filename string) embeddedMetadata {
 			}
 			number := comicXMLNumber(x.Number)
 			if number == 0 { number = comicXMLNumber(x.NumberComic) }
-			year := x.Year
-			if year == 0 { year = x.YearComic }
+			year := yearFromText(x.Year)
+			if year == 0 { year = yearFromText(x.YearComic) }
 			return embeddedMetadata{
 				Title:first(x.Title,x.TitleComic), Author:first(x.Author,x.Writer,x.WriterComic),
 				Series:first(x.Series,x.SeriesComic), SeriesNumber:number,
@@ -344,7 +344,7 @@ func comicMetadata(filename string) embeddedMetadata {
 		Publisher   string  `xml:"Publisher"`
 		Language    string  `xml:"LanguageISO"`
 		Summary     string  `xml:"Summary"`
-		Year        int     `xml:"Year"`
+		Year        string     `xml:"Year"`
 	}
 	if strings.EqualFold(filepath.Ext(filename), ".cbt") {
   f,err:=os.Open(filename);if err!=nil{return embeddedMetadata{}};defer f.Close()
@@ -362,13 +362,19 @@ func comicMetadata(filename string) embeddedMetadata {
 		z, err := zip.OpenReader(filename)
 		if err != nil { return embeddedMetadata{} }
 		defer z.Close()
-		if !readZipXML(&z.Reader, "ComicInfo.xml", &info) { return embeddedMetadata{} }
+		found:=false
+  for _,entry:=range z.File {if strings.EqualFold(strings.TrimPrefix(entry.Name,"./"),"ComicInfo.xml")&&entry.UncompressedSize64<=metadataXMLLimit {r,e:=entry.Open();if e==nil{found=xml.NewDecoder(io.LimitReader(r,metadataXMLLimit)).Decode(&info)==nil;r.Close()};break}}
+  if !found {
+   var comment map[string]any
+   if len(z.Comment)<=metadataXMLLimit && json.Unmarshal([]byte(z.Comment),&comment)==nil {if data,ok:=comment["ComicBookInfo/1.0"].(map[string]any);ok{return metadataFromMap(data)}}
+   return embeddedMetadata{}
+  }
 	}
 	return embeddedMetadata{
 		Title:cleanMetadata(info.Title), Author:normalizeAuthor(info.Writer),
 		Series:cleanMetadata(info.Series), SeriesNumber:comicXMLNumber(info.Number), Genre:cleanMetadata(info.Genre),
 		Publisher:cleanMetadata(info.Publisher), Language:cleanMetadata(info.Language),
-		Description:cleanMetadata(info.Summary), PublishedYear:info.Year,
+		Description:cleanMetadata(info.Summary), PublishedYear:yearFromText(info.Year),
 	}
 }
 
@@ -458,9 +464,9 @@ func pathMetadata(relative, format string) metadataCandidate {
 	}
 
  if format=="Comic" {
-  if len(parts)>=2 {m.Series=cleanMetadata(parts[len(parts)-2]);confidence=52}
+  m=comicFilenameMetadata(base)
+  if len(parts)>=2 && m.Series=="" {m.Series=cleanMetadata(parts[len(parts)-2])};confidence=52
   // Collection folders are not authors. Bare story numbers/ranges are not issues.
-  if n,status:=comicTitleIssue(base);status=="match"{m.SeriesNumber=n}
   return metadataCandidate{embeddedMetadata:m,source:"path",confidence:confidence}
  }
  if format=="PDF" {if match:=comicOrderPrefix.FindStringSubmatch(base);len(match)==2 {m.Title=cleanMetadata(match[1]);if len(parts)>=2{m.Series=cleanMetadata(parts[len(parts)-2])};return metadataCandidate{embeddedMetadata:m,source:"path",confidence:52}}}
@@ -653,22 +659,25 @@ func numberFromText(value string) float64 {
 }
 
 func metadataFromMap(raw map[string]any) embeddedMetadata {
-	pick:=func(keys ...string) string {
-		for _,key:=range keys {
-			if value,ok:=raw[key];ok {
-				if text:=cleanMetadata(fmt.Sprint(value));text!="" && text!="<nil>" { return text }
-			}
-		}
-		return ""
-	}
-	return embeddedMetadata{
-		Title:pick("title","name"), Author:normalizeAuthor(pick("author","creator","writer")),
-		Series:pick("series","collection"), SeriesNumber:numberFromText(pick("seriesNumber","series_index","seriesIndex","number","volume")),
-		Genre:pick("genre","subject"), PublishedYear:yearFromText(pick("publishedYear","year","date","published")),
-		Narrator:pick("narrator"), Publisher:pick("publisher"), ISBN:normalizeIdentifier(pick("isbn","ISBN")),
-		ASIN:normalizeIdentifier(pick("asin","ASIN")), Language:pick("language"),
-		Description:pick("description","summary","comments"),
-	}
+ normalized:=map[string]any{}
+ for key,value:=range raw {normalized[strings.ToLower(key)]=value}
+ text:=func(value any)string{
+  switch v:=value.(type){
+  case string:return cleanMetadata(v)
+  case float64:return strconv.FormatFloat(v,'f',-1,64)
+  case int:return strconv.Itoa(v)
+  case []any:
+   values:=[]string{};for _,item:=range v{if word,ok:=item.(string);ok&&cleanMetadata(word)!=""{values=append(values,cleanMetadata(word))}};return strings.Join(uniqueStrings(values),"; ")
+  }
+  return ""
+ }
+ pick:=func(keys ...string)string{for _,key:=range keys{if value:=text(normalized[strings.ToLower(key)]);value!=""{return value}};return ""}
+ return embeddedMetadata{
+  Title:pick("title","name"),Author:normalizeAuthor(pick("author","authors","creator","writer")),
+  Series:pick("series","collection"),SeriesNumber:comicXMLNumber(pick("seriesNumber","series_index","seriesIndex","number","issue")),
+  Genre:pick("genre","genres","subject","subjects"),PublishedYear:yearFromText(pick("publishedYear","publicationYear","year","date","published")),
+  Narrator:pick("narrator"),Publisher:pick("publisher"),ISBN:normalizeIdentifier(pick("isbn")),ASIN:normalizeIdentifier(pick("asin")),Language:pick("language"),Description:pick("description","summary","comments"),
+ }
 }
 
 func uniqueStrings(items []string) []string {
@@ -713,7 +722,7 @@ func metadataFor(filename, relative, format string) identifiedMetadata {
 }
 
 func metadataSignatureWithCache(filename string, info os.FileInfo, cache *sidecarScanCache) string {
-	parts := []string{fmt.Sprintf("metadata-v2:file:%d:%d", info.Size(), info.ModTime().UnixNano())}
+	parts := []string{fmt.Sprintf("metadata-v3:file:%d:%d", info.Size(), info.ModTime().UnixNano())}
 	for _, sidecar := range sidecarCandidates(filename) {
 		if size, modNano, exists := cache.stat(sidecar); exists {
 			parts = append(parts, fmt.Sprintf("%s:%d:%d", filepath.Base(sidecar), size, modNano))

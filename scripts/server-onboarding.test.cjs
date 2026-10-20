@@ -5,14 +5,22 @@ vm.runInContext(fs.readFileSync('web/onboarding.js','utf8'),context);
 const state=(sources=[],jobs=[],summary={})=>context.importGuidance(true,sources,jobs,summary);
 assert.equal(context.importGuidance(false,[],[],{}),null);
 assert.equal(state().action,'folder');
+assert.equal(state().step,1);
 assert.equal(state([{id:1}]).action,'scan');
 assert.equal(state([{id:1}],[{source_id:1,state:'running',progress:30}]).action,'wait');
 assert.equal(state([{id:1}],[{source_id:1,state:'failed',message:'Unavailable'}]).action,'retry');
-assert.equal(state([{id:1}],[{source_id:1,state:'complete'}],{reviewWorks:12}).action,'review');
-assert.equal(state([{id:1}],[{source_id:1,state:'complete'}],{total:12,reviewWorks:0}),null);
+const ready=state([{id:1}],[{source_id:1,state:'complete'}],{total:5143,reviewWorks:2045});
+assert.equal(ready.action,'library','Metadata gaps must not send a completed import to bulk review');
+assert.equal(ready.step,3);
+assert.match(ready.title,/5,143/);
+assert.doesNotMatch(ready.detail,/2045|2,045|review|attention/i);
+const partial=state([{id:1},{id:2}],[{source_id:1,state:'complete'},{source_id:2,state:'running'}],{total:25});
+assert.equal(partial.action,'library','Available books remain accessible during another scan');
+assert.match(partial.detail,/continu/i);
+const failure=state([{id:1}],[{source_id:1,state:'failed'}],{total:25});
+assert.equal(failure.action,'library','A failed refresh must not hide the retained library');
+assert.match(failure.detail,/folder|connection/i);
 assert.equal(state([{id:1}],[{source_id:1,state:'complete'}],{}).action,'empty');
-// Removed sources and historical failures must not send users down a dead end.
 assert.equal(state([{id:2}],[{source_id:1,state:'failed'}]).action,'scan');
-assert.equal(state([{id:1}],[{source_id:1,state:'complete'},{source_id:1,state:'failed'}],{total:1}),null);
-console.log('PASS onboarding decisions: new user, family, active, failed, empty, review, complete, stale jobs');
-
+assert.equal(state([{id:1}],[{source_id:1,state:'complete'},{source_id:1,state:'failed'}],{total:1}).action,'library');
+console.log('PASS onboarding: folder, scan, ready, partial, retained library, empty and stale jobs');

@@ -5,9 +5,10 @@ let importSources=[],importJobs=[];
 function renderImportGuide(){
  const guidance=importGuidance(currentProfile?.owner,importSources,importJobs,summaryData||{});
  $('import-guide').hidden=!guidance;if(!guidance)return;
+ $('import-step').textContent='Step '+guidance.step+' of 3 · Choose folders → Find books → Start reading';
  $('import-title').textContent=guidance.title;$('import-detail').textContent=guidance.detail;
  $('import-action').textContent=guidance.label;
- $('import-action').onclick=()=>{if(guidance.action==='review'){window.location.href='./manage.html#assist';return}show('settings');$(guidance.action==='folder'?'path':'source-list').scrollIntoView({block:'center'});if(guidance.action==='folder')$('path').focus()};
+ $('import-action').onclick=()=>{if(guidance.action==='library'){show('library');return}show('settings');$(guidance.action==='folder'?'path':'source-list').scrollIntoView({block:'center'});if(guidance.action==='folder')$('path').focus()};
 }
 
 

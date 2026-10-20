@@ -59,3 +59,15 @@ const enrichHelp=element('p','Uses book identifiers or title and author with Ope
 enrichHelp.className='note';$('sources').append(enrichLabel,enrichHelp);
 enrich.onchange=async()=>{try{await api('./api/manage/automatic-metadata','PUT',{enabled:enrich.checked})}catch(e){enrich.checked=!enrich.checked;message(e.message)}};
 window.addEventListener('archivist-ready',async()=>{if(currentProfile?.owner){try{enrich.checked=(await api('./api/manage/automatic-metadata')).enabled}catch(e){message(e.message)}}});
+// Optional provider setup is deliberately outside the first-import steps.
+const comicProvider=element('details'),comicSummary=element('summary','Improve comic details (optional)');
+const comicHelp=element('p','Connect a Metron account to look up comic genre and issue year. Your files stay on the server. Importing and reading do not require this.');
+const comicLink=element('a','Get a token from Metron');comicLink.href='https://metron.cloud/';comicLink.target='_blank';comicLink.rel='noopener noreferrer';
+const comicToken=element('input');comicToken.type='password';comicToken.autocomplete='new-password';comicToken.setAttribute('aria-label','Metron API token');comicToken.placeholder='Paste API token';
+const comicConnect=element('button','Connect'),comicDisconnect=element('button','Disconnect'),comicState=element('p');
+comicConnect.type=comicDisconnect.type='button';comicState.setAttribute('role','status');
+async function saveComicProvider(token){comicConnect.disabled=comicDisconnect.disabled=true;try{const result=await api('./api/manage/comic-provider','PUT',{token});comicToken.value='';comicState.textContent=result.connected?'Token saved. Matching will continue in the background.':'Disconnected. Local metadata remains available.';comicDisconnect.hidden=!result.connected}catch(error){comicState.textContent=error.message}finally{comicConnect.disabled=comicDisconnect.disabled=false}}
+comicConnect.onclick=()=>{if(comicToken.value.trim())void saveComicProvider(comicToken.value.trim());else comicState.textContent='Paste your Metron API token first.'};
+comicDisconnect.onclick=()=>saveComicProvider('');
+comicProvider.append(comicSummary,comicHelp,comicLink,comicToken,comicConnect,comicDisconnect,comicState);$('sources').append(comicProvider);
+window.addEventListener('archivist-ready',async()=>{comicProvider.hidden=!currentProfile?.owner;if(currentProfile?.owner){try{const state=await api('./api/manage/comic-provider');comicDisconnect.hidden=!state.connected;comicState.textContent=state.connected?'Metron token saved.':'No connection needed for local import.'}catch(error){comicState.textContent=error.message}}});

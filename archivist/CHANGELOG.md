@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.3-qa.20261020.1 — Library discovery and onboarding
+
+- Open Library after import; optional metadata improvements stay optional.
+- Improved comic filenames, embedded metadata and skipped-file diagnostics.
+- Optional Metron genre/issue-year matching with protected credentials.
+- Fast unchanged rescans, regression coverage and retained navigation icons.
+- Rescan each source once after updating. See the repository QA guide for remaining limitations.
+
+
 ## 0.9.3-qa.20261018.2 — Discovery diagnostics and comic metadata
 
 - Icons for all six main sections.

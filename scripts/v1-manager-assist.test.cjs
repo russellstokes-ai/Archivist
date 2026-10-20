@@ -877,7 +877,7 @@ const settle=async()=>{for(let i=0;i<8;i++){await new Promise(setImmediate);awai
   assert.equal(elements.get('view-library').hidden,false,'review action must navigate to the actual library table');
   assert(calls.some(url=>url.startsWith('./api/books?')&&url.includes('metadataGap=genre')),
     'genre coverage must request real server-side filtered catalogue rows');
-  assert.equal(elements.get('scanner-coverage-note').textContent,'Read-only scanner metadata coverage');
+  assert.match(elements.get('scanner-coverage-note').textContent,/read your library without working through these lists/);
 
   // The server operations pages must use real admin APIs, never static mock
   // "all green" badges. Nothing triggers a SQLite quick check on navigation.

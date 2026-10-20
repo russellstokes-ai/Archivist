@@ -336,5 +336,13 @@
     "commercial_server_go": false,
     "physical_acceptance": "BLOCKED",
     "report": "docs/v1/SERVER_DIAGNOSTIC_REPORT_2026-10-18.md"
+  },
+  "server_library_onboarding_2026_10_20": {
+    "version": "0.9.3-qa.20261020.1",
+    "state": "pending_exact_sha_ci",
+    "qa": "docs/v1/SERVER_LIBRARY_ONBOARDING_QA_2026-10-20.md",
+    "physical_acceptance": "BLOCKED",
+    "live_provider_acceptance": "BLOCKED",
+    "commercial_server_go": false
   }
 }

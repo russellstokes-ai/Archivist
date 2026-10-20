@@ -249,3 +249,7 @@ The source status reports imported files, unchanged files, metadata flags, skipp
 ## Download diagnostics
 
 Open **Archivist Assist → Scanner & sources → Download scan report**. After upgrading to 0.9.3-qa.20261018.2, scan each source once to collect extension counts and skipped filename examples. The download also contains build/runtime, recent jobs, metadata provenance/gaps, effective book coverage, enrichment outcomes and repeated-title candidates. It includes filenames and titles, but not source root paths, access keys or media contents. See [report contents and limits](../docs/v1/SERVER_DIAGNOSTIC_REPORT_2026-10-18.md).
+
+## 0.9.3-qa.20261020.1
+
+See [library onboarding QA notes](../docs/v1/SERVER_LIBRARY_ONBOARDING_QA_2026-10-20.md). Rescan each source once after updating; import does not require metadata approval. Metron is optional and its token is kept in the private database, including backups.

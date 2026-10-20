@@ -81,7 +81,9 @@ type book struct {
 func openDB(path string) (*sql.DB, error) {
 	// Configure SQLite on every pooled connection. WAL + a small four-connection
 	// pool lets the Pi serve readers/streams while a scan or progress save writes.
-	u := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	uriPath := filepath.ToSlash(path)
+ if filepath.VolumeName(path)!="" && !strings.HasPrefix(uriPath,"/") {uriPath="/"+uriPath}
+ u := &url.URL{Scheme: "file", Path: uriPath}
 	q := u.Query()
 	// modernc applies _pragma values to every pooled connection.
 	q.Add("_pragma", "foreign_keys(1)")
@@ -319,8 +321,9 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 		if !d.Type().IsRegular() {
 			return nil
 		}
-		format := kind(path)
+		format,discoveryReason := discoverMedia(path)
         discovery.observe(path,format!="")
+        discovery.observeReason(path,discoveryReason)
 		if format == "" {
             skipped++
 			return nil
@@ -411,6 +414,13 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 		return e
 	}
 	defer tx.Rollback()
+ unchanged:=false
+ if count==reused {
+  var indexed,available,linked int
+  if e=tx.QueryRow(`SELECT count(*),COALESCE(sum(a.available),0),count(ea.asset_id) FROM assets a LEFT JOIN edition_assets ea ON ea.asset_id=a.id WHERE a.source_id=?`,id).Scan(&indexed,&available,&linked);e!=nil{return e}
+  unchanged=indexed==count&&available==count&&linked==count
+ }
+ if !unchanged {
 	if _, e = tx.Exec("UPDATE assets SET available=0 WHERE source_id=?", id); e != nil {
 		return e
 	}
@@ -452,7 +462,8 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
 			return e
 		}
 	}
-	discovery.CompletedAt=time.Now().UTC().Format(time.RFC3339)
+	}
+    discovery.CompletedAt=time.Now().UTC().Format(time.RFC3339)
     rawReport,reportErr:=json.Marshal(discovery);if reportErr!=nil{return reportErr}
     if _,e=tx.Exec("INSERT INTO app_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",fmt.Sprintf("scan_report_%d",id),string(rawReport));e!=nil{return e}
 	status := fmt.Sprintf("%d media files imported · %d unchanged · %d metadata flags · %d non-media/unsupported files skipped · %d symbolic links skipped · %s", count, reused, reviewCount, skipped, ignoredLinks, time.Now().Format("2 Jan 15:04"))
@@ -462,9 +473,9 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
     // No committed intermediate state: files, work/edition grouping, review
     // invalidation and source status form one consistent SQLite snapshot.
     // A catalogue trigger/storage failure rolls back all scan records.
-    if e=a.syncAutoCatalogueTx(tx,id);e!=nil{
+    if !unchanged {if e=a.syncAutoCatalogueTx(tx,id);e!=nil{
         return fmt.Errorf("scan grouping failed; previous catalogue retained: %w",e)
-    }
+    }}
 	if count>reused {
       if _,e=tx.Exec("DELETE FROM automatic_metadata_attempts WHERE work_id IN (SELECT ed.work_id FROM editions ed JOIN edition_assets ea ON ea.edition_id=ed.id JOIN assets a ON a.id=ea.asset_id WHERE a.source_id=?)",id);e!=nil{return e}
     }

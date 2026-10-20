@@ -1075,7 +1075,7 @@ function candidateMissingFields(candidate,fields,options={}){
     for(const edition of state.editions||[]){
       const row=e('div');
       row.append(e('strong',edition.format+' · edition #'+edition.id),
-        e('span',edition.available+'/'+edition.files+' available · '+edition.reviewFiles+' need review'));
+        e('span',edition.available+'/'+edition.files+' available · '+edition.reviewFiles+' with optional details to check'));
       editionHost.append(row);
     }
     $('work-publication').textContent=state.publicationState==='published'?
@@ -1762,7 +1762,9 @@ function candidateMissingFields(candidate,fields,options={}){
       card.append(scan);
       const evidence=(report.sources||[]).find(s=>Number(s.id)===Number(item.id))?.report;
       const skipped=Object.values(evidence?.extensions||{}).filter(x=>x.skipped).sort((a,b)=>b.skipped-a.skipped);
-      card.append(e('small',evidence?'Skipped: '+(skipped.map(x=>x.extension+': '+x.skipped).join(' · ')||'none'):'Run Scan / refresh source once to collect skipped extension details.','subtext'));
+      const reasons=Object.entries(evidence?.reasons||{}).filter(([name])=>name!=='recognised media');
+      if(reasons.length)card.append(e('p',reasons.map(([reason,value])=>value.count+' '+reason).join(' · '),'subtext'));
+      card.append(e('small',evidence?'File types not imported: '+(skipped.map(x=>x.extension+': '+x.skipped).join(' · ')||'none'):'Run Scan / refresh source once to collect skipped extension details.','subtext'));
       list.append(card);
     }
     const coverage=$('scanner-coverage');coverage.replaceChildren();
@@ -1772,7 +1774,7 @@ function candidateMissingFields(candidate,fields,options={}){
       ['Missing genre','genre',summary.missingGenre],
       ['Missing year','year',summary.missingYear],
       ['Low confidence','confidence',summary.lowConfidence],
-      ['Needs review','review',summary.needsReview],
+      ['Details to check','review',summary.needsReview],
       ['Unavailable files','unavailable',summary.offlineFiles]
     ];
     for(const [label,key,amount] of groups){
@@ -1780,7 +1782,7 @@ function candidateMissingFields(candidate,fields,options={}){
       const button=e('button',undefined,'coverage-tile');
       button.type='button';
       button.setAttribute('aria-label','Show '+count+' files: '+label);
-      button.append(e('strong',count.toLocaleString()),e('span',label),e('small','Review indexed files →','subtext'));
+      button.append(e('strong',count.toLocaleString()),e('span',label),e('small','See files →','subtext'));
       button.onclick=()=>{
         showView('library');
         $('metadata-gap').value=key;
@@ -1789,7 +1791,7 @@ function candidateMissingFields(candidate,fields,options={}){
       };
       coverage.append(button);
     }
-    $('scanner-coverage-note').textContent=health.note||'Read-only indexed-file coverage; root connectivity is checked separately.';
+    $('scanner-coverage-note').textContent='These are optional metadata improvements, except unavailable files. You can read your library without working through these lists. Download the scan report for discovery details.';
     const tasks=$('jobs-health');tasks.replaceChildren();
     if(!jobs.length)tasks.append(e('p','No recent scan jobs.','subtext'));
     for(const job of jobs.slice(0,15)){

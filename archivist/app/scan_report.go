@@ -17,6 +17,7 @@ type scanExtensionEvidence struct {
 }
 type scanDiscoveryReport struct {
  CompletedAt string `json:"completedAt"`
+ Reasons map[string]*scanReasonEvidence `json:"reasons,omitempty"`
  Extensions map[string]*scanExtensionEvidence `json:"extensions"`
  PathFallback int `json:"pathFallback"`
  Symlinks int `json:"symlinks"`
@@ -55,10 +56,10 @@ func (a *app)discoveryReportRoutes(mux *http.ServeMux){
   formats:=[]formatCount{}
   rows,err=a.db.QueryContext(r.Context(),`SELECT format,metadata_source,count(*),sum(trim(author)=''),sum(trim(genre)=''),sum(published_year=0) FROM assets GROUP BY format,metadata_source ORDER BY format,metadata_source`)
   if err!=nil{fail(w,500,err);return};for rows.Next(){var x formatCount;if err=rows.Scan(&x.Format,&x.MetadataSource,&x.Files,&x.MissingAuthor,&x.MissingGenre,&x.MissingYear);err!=nil{break};formats=append(formats,x)};if err==nil{err=rows.Err()};rows.Close();if err!=nil{fail(w,500,err);return}
-  type example struct{ID int64 `json:"id"`;SourceID int64 `json:"sourceId"`;Filename string `json:"filename"`;Title string `json:"title"`;Format string `json:"format"`;MetadataSource string `json:"metadataSource"`;Confidence int64 `json:"confidence"`;NeedsReview bool `json:"needsReview"`}
+  type example struct{ID int64 `json:"id"`;SourceID int64 `json:"sourceId"`;Filename string `json:"filename"`;Title string `json:"title"`;Format string `json:"format"`;MetadataSource string `json:"metadataSource"`;Confidence int64 `json:"confidence"`;Series string `json:"series"`;IssueNumber float64 `json:"issueNumber"`;Year int `json:"year"`;ReviewReason string `json:"reviewReason"`;NeedsReview bool `json:"needsReview"`}
   examples:=[]example{}
-  rows,err=a.db.QueryContext(r.Context(),`SELECT id,source_id,relative_path,title,format,metadata_source,metadata_confidence,needs_review FROM assets WHERE needs_review=1 OR trim(genre)='' OR published_year=0 ORDER BY needs_review DESC,metadata_confidence,id LIMIT 100`)
-  if err!=nil{fail(w,500,err);return};for rows.Next(){var x example;if err=rows.Scan(&x.ID,&x.SourceID,&x.Filename,&x.Title,&x.Format,&x.MetadataSource,&x.Confidence,&x.NeedsReview);err!=nil{break};x.Filename=filepath.Base(strings.ReplaceAll(x.Filename,"\\","/"));examples=append(examples,x)};if err==nil{err=rows.Err()};rows.Close();if err!=nil{fail(w,500,err);return}
+  rows,err=a.db.QueryContext(r.Context(),`SELECT id,source_id,relative_path,title,format,metadata_source,metadata_confidence,series,series_number,published_year,review_reason,needs_review FROM assets WHERE needs_review=1 OR trim(genre)='' OR published_year=0 ORDER BY needs_review DESC,metadata_confidence,id LIMIT 100`)
+  if err!=nil{fail(w,500,err);return};for rows.Next(){var x example;if err=rows.Scan(&x.ID,&x.SourceID,&x.Filename,&x.Title,&x.Format,&x.MetadataSource,&x.Confidence,&x.Series,&x.IssueNumber,&x.Year,&x.ReviewReason,&x.NeedsReview);err!=nil{break};x.Filename=filepath.Base(strings.ReplaceAll(x.Filename,"\\","/"));examples=append(examples,x)};if err==nil{err=rows.Err()};rows.Close();if err!=nil{fail(w,500,err);return}
   type job struct{ID int64 `json:"id"`;SourceID int64 `json:"sourceId"`;State string `json:"state"`;Progress int64 `json:"progress"`;Total int64 `json:"total"`}
   jobs:=[]job{}
   rows,err=a.db.QueryContext(r.Context(),`SELECT id,source_id,state,progress,total FROM jobs ORDER BY id DESC LIMIT 30`)
@@ -66,6 +67,13 @@ func (a *app)discoveryReportRoutes(mux *http.ServeMux){
 
   w.Header().Set("Cache-Control","no-store")
   if r.URL.Query().Get("download")=="1"{w.Header().Set("Content-Disposition",`attachment; filename="archivist-scan-report.json"`)}
-  reply(w,map[string]any{"schemaVersion":1,"buildVersion":buildVersion,"runtime":map[string]string{"os":runtime.GOOS,"architecture":runtime.GOARCH,"go":runtime.Version()},"recentJobs":jobs,"formats":formats,"metadataExamples":examples,"sampleLimits":map[string]int{"metadataExamples":100,"repeatedTitles":50,"skippedExamplesPerExtension":5},"generatedAt":time.Now().UTC().Format(time.RFC3339),"sources":sources,"books":map[string]int64{"total":books,"missingAuthor":missingAuthor,"missingGenre":missingGenre,"missingYear":missingYear},"automaticMetadataEnabled":a.automaticMetadataEnabled(),"enrichment":attempts,"repeatedTitles":repeatedTitles,"note":"Read-only report. Filenames and titles are included; no source roots, access keys or media bytes. Extension evidence requires a completed scan on this version. Repeated titles are candidates, not confirmed duplicates; nothing is merged. Path fallback means no selected embedded/sidecar metadata, not proof of archive damage."})
+  reply(w,map[string]any{"schemaVersion":2,"buildVersion":buildVersion,"runtime":map[string]string{"os":runtime.GOOS,"architecture":runtime.GOARCH,"go":runtime.Version()},"recentJobs":jobs,"formats":formats,"metadataExamples":examples,"sampleLimits":map[string]int{"metadataExamples":100,"repeatedTitles":50,"skippedExamplesPerExtension":5},"generatedAt":time.Now().UTC().Format(time.RFC3339),"sources":sources,"books":map[string]int64{"total":books,"missingAuthor":missingAuthor,"missingGenre":missingGenre,"missingYear":missingYear},"automaticMetadataEnabled":a.automaticMetadataEnabled(),"enrichment":attempts,"repeatedTitles":repeatedTitles,"note":"Read-only report. Filenames and titles are included; no source roots, access keys or media bytes. Extension evidence requires a completed scan on this version. Repeated titles are candidates, not confirmed duplicates; nothing is merged. Path fallback means no selected embedded/sidecar metadata, not proof of archive damage."})
  })
+}
+
+type scanReasonEvidence struct {Count int `json:"count"`; Examples []string `json:"examples"`}
+func (d *scanDiscoveryReport)observeReason(filename,reason string){
+ if d.Reasons==nil{d.Reasons=map[string]*scanReasonEvidence{}}
+ item:=d.Reasons[reason];if item==nil{item=&scanReasonEvidence{Examples:[]string{}};d.Reasons[reason]=item};item.Count++
+ if len(item.Examples)<5{name:=filepath.Base(filename);if len(name)>180{name=name[:180]};item.Examples=append(item.Examples,name)}
 }
