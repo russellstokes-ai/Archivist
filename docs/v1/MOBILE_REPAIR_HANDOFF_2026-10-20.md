@@ -2,6 +2,18 @@
 
 Active branch: `fix/assist-metadata-durable-20261017`. This branch is the source for the requested QA APK. No production release or main-branch merge is implied. Earlier handoffs are historical where they conflict with this scoped update.
 
+## QA APK delivery evidence
+
+- APK source commit: `37164eba32d9b219d8891b8ef1c9ca999b4a9a44`. Later documentation-only commits do not change this binary.
+- [Direct APK download](https://github.com/russellstokes-ai/Archivist/releases/download/qa-test14-39502558683-1/Archivist-0.9.4-test-14.apk) — 74.4 MB, QA package only; not a ZIP.
+- APK SHA-256: `a1b342aabe261386e04464ee04e2dd797b1e649b3c77dfc319a305f3786d309b`.
+- [Android native checks](https://github.com/russellstokes-ai/Archivist/actions/runs/39501552590): SUCCESS on this source commit, including real audio/chapter and independent RAR extraction checks.
+- [APK workflow](https://github.com/russellstokes-ai/Archivist/actions/runs/39502558683): typecheck, all mobile suites, release lint, APK compilation, package/signature/alignment checks and direct publication succeeded. The APK also installed successfully in the Android emulator.
+- The workflow's overall result is FAILURE: screenshot capture timed out in the emulator startup check, exit 86, with “Emulator screenshot transport stalled”. This is not a compile or release-lint failure, and it is NOT evidence of passed startup/device acceptance. The app launch command ran, but the subsequent full startup acceptance did not complete. Do not label this run green or commercially release-ready.
+- Outstanding: retry emulator visual/startup validation on a healthy runner and complete the physical-device checks below. No automatic polling or duplicate APK builds were requested.
+- MOBI and CB7 are outside the current supported reader/writer format list. MP3 is included; supported formats and safe-rejection restrictions are listed below.
+- The owner's black-buttons/player-name-input comment belonged to another chat. No changes were made for that comment.
+
 ## Implemented changes
 
 - Assist combines catalogue results and enrichment rather than replacing existing providers. Confirmed publisher-only comic identities are supported. Genre, year and cover retrieval is automatic when a matching source supplies them; unavailable data must not be invented.
@@ -27,7 +39,7 @@ PDF updates preserve page streams and remove the active stale XMP reference in f
 - MP3 and M4B two-chapter fixtures retained names, times and audio through two successive writes.
 - PDF and CBT regression tests cover original content preservation and metadata replacement.
 
-Android CI and APK release evidence will be added after completion. These local checks do not establish real-device acceptance, power-loss recovery acceptance, or universal format compatibility.
+Android CI and APK release evidence is recorded above. These local checks do not establish real-device acceptance, power-loss recovery acceptance, or universal format compatibility.
 
 ## Required device acceptance
 
