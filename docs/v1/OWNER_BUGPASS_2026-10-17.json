@@ -194,9 +194,25 @@
         {
           "old": "Add a title or author, then tap Save. Assist will look for the missing details.",
           "new": "Add a title, series or ISBN, then tap Save. For comics, include the issue or annual year; a known writer is optional. Assist looks for missing details."
+        },
+        {
+          "old": "  reviewReason?: string;",
+          "new": "  reviewReason?: string;\n  metadataFileStatus?: string;"
+        },
+        {
+          "old": "reviewReason:rows[0].reviewReason,needsReview:rows[0].needsReview",
+          "new": "reviewReason:rows[0].reviewReason,needsReview:rows[0].needsReview,metadataFileStatus:(rows[0] as {metadataFileStatus?:string}).metadataFileStatus"
+        },
+        {
+          "old": "            {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}",
+          "new": "            {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}\n            {editing.metadataFileStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{editing.metadataFileStatus}</Text>:null}"
+        },
+        {
+          "old": "Save confirmed details and covers in your library folder for every format. Also embed details in supported EPUB/CBZ files. File names stay unchanged.",
+          "new": "Write confirmed metadata into supported audio, EPUB, PDF and CBZ/ZIP/CBT files. CBR writing is unavailable. File names stay unchanged. Recovery copies are also saved in your library folder."
         }
       ],
-      "current": "0f20229b9fcfa837f1e502e7af5685c963b4bff8"
+      "current": "02d8746f0800921889a643fa874d37ade08cfedb"
     },
     "mobile/speechFocus.generated.ts": {
       "previous": "5aa6ed24f64542d80f11d3f0d54986f0d070b7e9",
@@ -347,6 +363,16 @@
         }
       ],
       "current": "900f886bdbb49e77734dce65dbef6301b1efcd2a"
+    },
+    "mobile/android/app/build.gradle": {
+      "previous": "5f2c49a7f8e028e2b68926f26b84019e5d410fd2",
+      "changes": [
+        {
+          "old": "    implementation(\"com.github.junrar:junrar:8.1.1\")",
+          "new": "    implementation(\"com.github.junrar:junrar:8.1.1\")\n    implementation(\"com.github.Adonai:jaudiotagger:2.3.14\")"
+        }
+      ],
+      "current": "da31c4c5ad6a4bf8c893bd35b7da76215b3c9bd5"
     }
   }
 }

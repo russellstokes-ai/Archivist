@@ -1,0 +1,25 @@
+package app.archivist.reader;
+import java.io.*;import java.nio.charset.StandardCharsets;import java.util.*;
+/** Replaces selected ID3 frames while retaining chapters and all unrelated frames verbatim. */
+public final class Id3MetadataWriter {
+ private static int number(byte[] b,int p,boolean sync)throws IOException{int n=0;for(int i=0;i<4;i++){int v=b[p+i]&255;if(sync&&v>127)throw new IOException("Invalid synchsafe size");n=(n<<(sync?7:8))|v;}if(n<0)throw new IOException("Invalid frame size");return n;}
+ private static void number(byte[] b,int p,int n,boolean sync){for(int i=3;i>=0;i--){b[p+i]=(byte)(n&(sync?127:255));n>>>=sync?7:8;}}
+ private static byte[] frame(String id,byte[] data,int version)throws IOException{byte[] f=new byte[10+data.length];System.arraycopy(id.getBytes(StandardCharsets.US_ASCII),0,f,0,4);number(f,4,data.length,version==4);System.arraycopy(data,0,f,10,data.length);return f;}
+ public static void write(File file,Map<String,String> fields,boolean multipart,byte[] cover,String mime)throws Exception{
+  int version=4,oldSize=0;byte[] old=new byte[0];
+  try(RandomAccessFile in=new RandomAccessFile(file,"r")){byte[] h=new byte[10];in.readFully(h);if(h[0]=='I'&&h[1]=='D'&&h[2]=='3'){version=h[3];if((version!=3&&version!=4)||h[5]!=0)throw new IOException("Unsupported ID3 header flags");oldSize=10+number(h,6,true);if(oldSize>16*1024*1024||oldSize>in.length())throw new IOException("ID3 size limit");old=new byte[oldSize-10];in.readFully(old);}}
+  if(file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".aac"))try(RandomAccessFile in=new RandomAccessFile(file,"r")){in.seek(oldSize);if(in.readUnsignedByte()!=255||(in.readUnsignedByte()&0xf6)!=0xf0)throw new IOException("Expected ADTS AAC frames");}
+  Map<String,String> text=new LinkedHashMap<>();put(text,"TALB",fields.get("title"));if(!multipart)put(text,"TIT2",fields.get("title"));put(text,"TPE1",fields.get("author"));put(text,"TPE2",fields.get("author"));put(text,"TCON",fields.get("genre"));put(text,version==3?"TYER":"TDRC",fields.get("publishedYear"));put(text,"TPUB",fields.get("publisher"));
+  List<byte[]> frames=new ArrayList<>();int p=0;
+  while(p+10<=old.length&&old[p]!=0){String id=new String(old,p,4,StandardCharsets.US_ASCII);if(!id.matches("[A-Z0-9]{4}"))throw new IOException("Invalid ID3 frame");int size=number(old,p+4,version==4);if(size>old.length-p-10)throw new IOException("Truncated ID3 frame");if(!text.containsKey(id)&&!(cover!=null&&id.equals("APIC")))frames.add(Arrays.copyOfRange(old,p,p+10+size));p+=10+size;}
+  for(;p<old.length;p++)if(old[p]!=0)throw new IOException("Invalid ID3 padding");
+  for(Map.Entry<String,String> e:text.entrySet()){ByteArrayOutputStream data=new ByteArrayOutputStream();data.write(version==4?3:1);if(version==3){data.write(255);data.write(254);}data.write(e.getValue().getBytes(version==4?StandardCharsets.UTF_8:StandardCharsets.UTF_16LE));frames.add(frame(e.getKey(),data.toByteArray(),version));}
+  if(cover!=null){if(cover.length>4194304||!("image/jpeg".equals(mime)||"image/png".equals(mime)))throw new IOException("Invalid cover");ByteArrayOutputStream art=new ByteArrayOutputStream();art.write(0);art.write(mime.getBytes(StandardCharsets.US_ASCII));art.write(0);art.write(3);art.write(0);art.write(cover);frames.add(frame("APIC",art.toByteArray(),version));}
+  int length=0;for(byte[] f:frames)length=Math.addExact(length,f.length);int total=Math.max(oldSize,length+266);if(total>16*1024*1024)throw new IOException("ID3 output limit");int delta=total-oldSize;
+  for(byte[] f:frames)if(new String(f,0,4,StandardCharsets.US_ASCII).equals("CHAP")){if(f[8]!=0||f[9]!=0)throw new IOException("Unsupported chapter flags");int at=10;while(at<f.length&&f[at]!=0)at++;if(at+17>f.length)throw new IOException("Truncated chapter");for(int offset:new int[]{at+9,at+13}){long value=Integer.toUnsignedLong(numberUnsigned(f,offset));if(value!=0xffffffffL){long next=value+delta;if(next<0||next>=0xffffffffL)throw new IOException("Chapter offset overflow");number(f,offset,(int)next,false);}}}
+  File temp=File.createTempFile("id3-update-",".tmp",file.getParentFile());
+  try{try(FileOutputStream out=new FileOutputStream(temp);FileInputStream in=new FileInputStream(file)){byte[] h=new byte[10];h[0]='I';h[1]='D';h[2]='3';h[3]=(byte)version;number(h,6,total-10,true);out.write(h);for(byte[] f:frames)out.write(f);out.write(new byte[total-10-length]);in.getChannel().position(oldSize);byte[] b=new byte[65536];int n;while((n=in.read(b))>=0)if(n>0)out.write(b,0,n);out.getFD().sync();}try(FileInputStream in=new FileInputStream(temp);FileOutputStream out=new FileOutputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))>=0)if(n>0)out.write(b,0,n);out.getFD().sync();}}finally{temp.delete();}
+ }
+ private static int numberUnsigned(byte[] b,int p){return (b[p]&255)<<24|(b[p+1]&255)<<16|(b[p+2]&255)<<8|(b[p+3]&255);}
+ private static void put(Map<String,String> m,String k,String v)throws IOException{if(v!=null&&!v.trim().isEmpty()){if(v.length()>4096||v.indexOf(0)>=0)throw new IOException("Invalid metadata");m.put(k,v.trim());}}
+}

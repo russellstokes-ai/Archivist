@@ -34,6 +34,7 @@
     "expo-video": "~55.0.21",
     "jszip": "^3.10.1",
     "lottie-react-native": "7.3.8",
+    "pdf-lib": "1.17.1",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.10",

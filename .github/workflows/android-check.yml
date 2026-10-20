@@ -86,6 +86,13 @@ jobs:
           node qa-signing-contract.test.cjs
           node ../scripts/test-check-16kb-native-libs.cjs
 
+      - name: Verify real audio metadata and chapter preservation
+        run: |
+          command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y ffmpeg)
+          curl --fail --location --max-time 60 https://jitpack.io/com/github/Adonai/jaudiotagger/2.3.14/jaudiotagger-2.3.14.jar -o /tmp/archivist-audio-tagger.jar
+          echo '1d2827c514832ab2a30a0ae4f969e571247dcfbed5b5a258f226e3e2a07da4e0  /tmp/archivist-audio-tagger.jar' | sha256sum --check
+          AUDIO_TAGGER_JAR=/tmp/archivist-audio-tagger.jar node mobile/test-support/audio-metadata/verify.cjs
+
       - name: Compile Android Kotlin
         working-directory: mobile/android
         run: ./gradlew :app:compileDebugKotlin --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a

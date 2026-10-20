@@ -189,6 +189,7 @@ type Book = {
   identificationConfidence?: 'high' | 'medium' | 'low';
   needsReview?: boolean;
   reviewReason?: string;
+  metadataFileStatus?: string;
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
   coverCandidates?: string[];
@@ -1169,7 +1170,7 @@ function Client() {
       const current=await loadLocalStageBooks();
       const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];
       await replaceLocalStageBooks(updated);setLocalBooks(updated);
-      setEditing(old=>old?.scannerWorkId===id?{...old,reviewReason:rows[0].reviewReason,needsReview:rows[0].needsReview}:old);
+      setEditing(old=>old?.scannerWorkId===id?{...old,reviewReason:rows[0].reviewReason,needsReview:rows[0].needsReview,metadataFileStatus:(rows[0] as {metadataFileStatus?:string}).metadataFileStatus}:old);
     });scannerRowsCommit.current=commit;return commit;
   }
   async function scanFreshFolders(folders:LocalFolder[],onProgress:((value:LocalScanProgress)=>void)|undefined,overrides:Record<string,LocalMetadataOverride>,previous:LocalBook[],shouldContinue:()=>boolean){
@@ -5180,6 +5181,7 @@ function Client() {
             {error?<Text accessibilityRole="alert" style={[styles.meta,{color:p.danger}]}>{error}</Text>:null}
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
+            {editing.metadataFileStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{editing.metadataFileStatus}</Text>:null}
             <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
             {localEdit?<Text style={[styles.meta,{color:p.muted}]}>Add a title, series or ISBN, then tap Save. For comics, include the issue or annual year; a known writer is optional. Assist looks for missing details.</Text>:null}
             {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
@@ -8210,7 +8212,7 @@ function Client() {
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
               <Button label="Review uncertain metadata" onPress={openMetadataReview}/>
-              <View style={styles.settingsRow}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Save metadata to files</Text><Text style={[styles.meta,{color:p.muted}]}>Save confirmed details and covers in your library folder for every format. Also embed details in supported EPUB/CBZ files. File names stay unchanged.</Text></View><Toggle label="Save metadata to files" value={metadataSettings.writeMetadataToFiles!==false} onPress={()=>void updateMetadataSettings(current=>({...current,writeMetadataToFiles:current.writeMetadataToFiles===false}))}/></View>
+              <View style={styles.settingsRow}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Save metadata to files</Text><Text style={[styles.meta,{color:p.muted}]}>Write confirmed metadata into supported audio, EPUB, PDF and CBZ/ZIP/CBT files. CBR writing is unavailable. File names stay unchanged. Recovery copies are also saved in your library folder.</Text></View><Toggle label="Save metadata to files" value={metadataSettings.writeMetadataToFiles!==false} onPress={()=>void updateMetadataSettings(current=>({...current,writeMetadataToFiles:current.writeMetadataToFiles===false}))}/></View>
               <Button label={libraryToolsOpen?'Hide library tools':'Folders, rescanning & file tools'} tone="quiet" onPress={()=>setLibraryToolsOpen(open=>!open)}/>
               {libraryToolsOpen?LibrarySettingsTools():null}
               <View style={styles.settingsSubgroup}>

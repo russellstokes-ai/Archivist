@@ -62,7 +62,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
    if(issues.some((x:string)=>['duplicate-part-number','overlapping-group-needs-review','source-parts-missing','source-discovery-incomplete','manual-edition-unresolved'].includes(x)))state='source-review-required';
    else for(const member of source.members){
     if((await store.get(id))?.revision!==work.revision||(await settings()).metadata.writeMetadataToFiles===false)return;
-    const result=await writeMetadataFile(source.root,member.uri,member.path,work.fields);
+    const result=await writeMetadataFile(source.root,member.uri,member.path,work.fields,source.members.length>1);
     if(result!=='unsupported-format'){state=result;if(result!=='written')break;}
    }
   }catch(error){state=String((error as {code?:string}).code||'file-write-failed');}
@@ -119,15 +119,18 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  }
  async function refresh(id:string,signal?:AbortSignal){
   await cacheArtwork(id,signal).catch(()=>{check(signal);});const rows=await base.refresh(id,signal);
-  void persist(id).catch(()=>{});return decorateRows(id,rows);
+  await persist(id).catch(()=>{});return decorateRows(id,rows);
  }
  async function decorateRows(id:string,rows:ScannerBook[]){
   const work=await store.get(id);if(!work)return rows;
   const saved=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_catalogue WHERE work_id=?',id);
   const staged=await db.getFirstAsync<{revision:number;payload:string}>('SELECT revision,payload FROM scanner_vnext_staged WHERE work_id=?',id);
   const issues=saved?JSON.parse(saved.payload).entry.issues||[]:[];
+  const writeReceipt=await db.getFirstAsync<{state:string}>('SELECT state FROM scanner_vnext_file_writes WHERE work_id=?',id);
+  const fileMessages:Record<string,string>={written:'Metadata written into the original file.','unsupported-format':'In-file metadata writing is unavailable for this format; the original is unchanged.','unsupported-size':'This file exceeds the current in-file writing limit; the original is unchanged.','source-review-required':'File writing is waiting for the source-file grouping to be checked.'};
+  const metadataFileStatus=(await settings()).metadata.writeMetadataToFiles===false?'File metadata saving is switched off.':writeReceipt?(fileMessages[writeReceipt.state]||'File metadata update could not be verified. Check the source folder; no successful write is claimed.'):'';
   const reasons=currentReview(work,issues,staged?.revision===work.revision?JSON.parse(staged.payload).reasons||[]:[]);
-  return rows.map(row=>({...row,...work.fields,seriesNumber:Number(work.fields.seriesNumber)||undefined,publishedYear:Number(work.fields.publishedYear)||undefined,coverUri:work.fields.coverUri||row.coverUri,needsReview:reasons.length>0,reviewReason:reasons.join(' · ')}));
+  return rows.map(row=>({...row,...work.fields,metadataFileStatus,seriesNumber:Number(work.fields.seriesNumber)||undefined,publishedYear:Number(work.fields.publishedYear)||undefined,coverUri:work.fields.coverUri||row.coverUri,needsReview:reasons.length>0,reviewReason:reasons.join(' · ')}));
  }
  async function restore(id:string,signal?:AbortSignal){
   if(!native?.restoreRecord)return false;const status=await durableStatus(id);
