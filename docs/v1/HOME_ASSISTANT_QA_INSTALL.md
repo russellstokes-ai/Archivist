@@ -1,6 +1,8 @@
 ## Library discovery and welcoming onboarding — 20 October 2026
 
-Version **0.9.3-qa.20261020.1**. Exact-SHA hosted verification is pending; this entry will be updated after the build.
+Version **0.9.3-qa.20261020.1**. Exact executable source **29a68642528bba1b87f0005002413c2077695f05**. [Server checks](https://github.com/russellstokes-ai/Archivist/actions/runs/39458881433) and [QA build](https://github.com/russellstokes-ai/Archivist/actions/runs/39458885802) **PASSED**. [Download binaries and HA repository ZIP](https://github.com/russellstokes-ai/Archivist/actions/runs/39458885802/artifacts/12280354655) (expires 27 October 2026). Artifact SHA256: 7562af1fc153f4c30f24bb6091122d37f136e575ad5923e520073f586da9f97e.
+
+Exact-SHA hosted test: **10,020 files**, first import **11.74s**, unchanged rescan **0.435s**, all retained. Allocations 157,462,928 and 54,746,144 bytes respectively (not peak memory or Pi measurements). Root and packaged Go suites, UI/manager/parity/protected-source gates, ARM64 runtime and Docker/Home Assistant smoke checks passed. The fast-path multi-edition safeguard regression was caught by the first Linux run, fixed, and verified in this final run.
 
 - Three-step onboarding: choose folders, find books, open Library. Optional metadata gaps no longer lead the first-import action to mass review. Existing books stay accessible during other imports or failed refreshes. All six navigation icons retained.
 - Clearer skipped-file reasons; recover validated comic ZIPs with the reported malformed ]cbz suffix; distinguish multi-book ZIP packs from page comics. No source file is renamed or extracted.

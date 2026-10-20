@@ -1,4 +1,4 @@
-> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261020.1; exact-SHA validation pending.** See the [installation guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md).
+> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261020.1; server checks and QA build passed; ready for owner installation testing.** See the [installation guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md).
 
 <p align="center">
   <img src="logo.png" alt="Archivist" width="190">

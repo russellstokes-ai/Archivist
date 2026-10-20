@@ -40,3 +40,5 @@
 - Final independent review identified decimal issues and bracketed annual/volume identity loss. Both reproduced in TestLibraryComicQualifiersAndDecimalIssues, then fixed and passed.
 - Local measurement: 10020 synthetic files retained; unchanged rescan 84.90s before,4.66s after.
 - Windows file-URL correction was necessary to run SQLite tests locally; Linux path handling unchanged. Linux-only tests/packaging await CI.
+
+- Final executable 29a68642528bba1b87f0005002413c2077695f05: exact-SHA Linux root/package suites, ARM64, Docker/HA smoke and QA packaging passed. CI discovered the ambiguous-multiple-edition fast-path regression; original regression test reproduced locally, guard restored, targeted tests and complete hosted suite passed.

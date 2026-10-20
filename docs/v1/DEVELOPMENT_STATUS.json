@@ -1635,10 +1635,15 @@
   },
   "server_library_onboarding_2026_10_20": {
     "version": "0.9.3-qa.20261020.1",
-    "state": "pending_exact_sha_ci",
+    "state": "ready_for_owner_installation_testing",
     "qa": "docs/v1/SERVER_LIBRARY_ONBOARDING_QA_2026-10-20.md",
     "physical_acceptance": "BLOCKED",
     "live_provider_acceptance": "BLOCKED",
-    "commercial_server_go": false
+    "commercial_server_go": false,
+    "tested_sha": "29a68642528bba1b87f0005002413c2077695f05",
+    "server_checks": "https://github.com/russellstokes-ai/Archivist/actions/runs/39458881433",
+    "qa_artifacts": "https://github.com/russellstokes-ai/Archivist/actions/runs/39458885802/artifacts/12280354655",
+    "synthetic_import_files": 10020,
+    "synthetic_rescan_seconds": 0.435
   }
 }
