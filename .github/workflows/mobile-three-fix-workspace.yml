@@ -1,0 +1,30 @@
+name: Three-fix mobile workspace
+on:
+  push:
+    branches: ['work/mobile-three-fixes-20261020']
+    paths: ['.github/workflows/mobile-three-fix-workspace.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export exact source history for isolated local tests
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 73a6282ff5d2358fac08029ee82ef9f5f96f4bad HEAD
+          git bundle create "$RUNNER_TEMP/archivist-source.bundle" HEAD
+          git rev-parse HEAD > "$RUNNER_TEMP/source-sha.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mobile-three-fix-source-workspace
+          path: |
+            ${{ runner.temp }}/archivist-source.bundle
+            ${{ runner.temp }}/source-sha.txt
+          retention-days: 1
+          if-no-files-found: error
