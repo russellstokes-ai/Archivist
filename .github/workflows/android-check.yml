@@ -93,6 +93,14 @@ jobs:
           echo '1d2827c514832ab2a30a0ae4f969e571247dcfbed5b5a258f226e3e2a07da4e0  /tmp/archivist-audio-tagger.jar' | sha256sum --check
           AUDIO_TAGGER_JAR=/tmp/archivist-audio-tagger.jar node mobile/test-support/audio-metadata/verify.cjs
 
+      - name: Verify CBR metadata against independent RAR extraction
+        run: |
+          curl --fail --location --max-time 60 https://repo.maven.apache.org/maven2/com/github/junrar/junrar/8.1.1/junrar-8.1.1.jar -o /tmp/archivist-junrar.jar
+          curl --fail --location --max-time 60 https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.13/slf4j-api-2.0.13.jar -o /tmp/archivist-slf4j.jar
+          echo '2de9ef91a179b40138c1480d16cecc63bce86de5076f5136c4598ad78ff9200e  /tmp/archivist-junrar.jar' | sha256sum --check
+          echo 'e7c2a48e8515ba1f49fa637d57b4e2f590b3f5bd97407ac699c3aa5efb1204a9  /tmp/archivist-slf4j.jar' | sha256sum --check
+          JUNRAR_JAR=/tmp/archivist-junrar.jar SLF4J_JAR=/tmp/archivist-slf4j.jar node mobile/test-support/rar-metadata/verify.cjs
+
       - name: Compile Android Kotlin
         working-directory: mobile/android
         run: ./gradlew :app:compileDebugKotlin --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a

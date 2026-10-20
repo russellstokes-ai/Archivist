@@ -2,6 +2,10 @@
 
 **Purpose:** Durable context for any future ChatGPT / AI development session working on Archivist.
 
+## Active mobile repair handoff — 20 October 2026
+
+Read [the current mobile repair handoff](docs/v1/MOBILE_REPAIR_HANDOFF_2026-10-20.md) first for branch `fix/assist-metadata-durable-20261017`, metadata writers, CBR coverage, chapter preservation, validation and remaining device acceptance. This owner-authorized scope supersedes older mobile status below; it does not change separate server work or authorize production release.
+
 ## Read first
 
 Before changing mobile UI, architecture, release scope, integration state or product wording, read these files in order:

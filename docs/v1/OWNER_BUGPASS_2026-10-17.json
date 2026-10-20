@@ -210,9 +210,13 @@
         {
           "old": "Save confirmed details and covers in your library folder for every format. Also embed details in supported EPUB/CBZ files. File names stay unchanged.",
           "new": "Write confirmed metadata into supported audio, EPUB, PDF and CBZ/ZIP/CBT files. CBR writing is unavailable. File names stay unchanged. Recovery copies are also saved in your library folder."
+        },
+        {
+          "old": "Write confirmed metadata into supported audio, EPUB, PDF and CBZ/ZIP/CBT files. CBR writing is unavailable. File names stay unchanged. Recovery copies are also saved in your library folder.",
+          "new": "Write confirmed metadata into supported audio, EPUB, PDF and comic files, including CBR. File names stay unchanged. Protected or unsupported files remain untouched, with the outcome shown in review. Recovery copies are also saved in your library folder."
         }
       ],
-      "current": "02d8746f0800921889a643fa874d37ade08cfedb"
+      "current": "433d13456d1b6d0ae238f242676a739c4030cfa4"
     },
     "mobile/speechFocus.generated.ts": {
       "previous": "5aa6ed24f64542d80f11d3f0d54986f0d070b7e9",

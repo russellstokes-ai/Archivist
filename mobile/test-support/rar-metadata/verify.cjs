@@ -1,0 +1,8 @@
+const fs=require('fs'),path=require('path'),cp=require('child_process'),os=require('os'),crypto=require('crypto'),ts=require('typescript'),assert=require('assert/strict');
+require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,p);
+const {createRarMetadataCopy}=require('../../assistMetadata/rarCopy.ts');
+const run=(cmd,args)=>cp.execFileSync(cmd,args,{encoding:'utf8'});
+(async()=>{const temp=fs.mkdtempSync(path.join(os.tmpdir(),'archivist-rar-')),jar=process.env.JUNRAR_JAR,slf=process.env.SLF4J_JAR;assert(jar&&slf,'JUNRAR_JAR and SLF4J_JAR required');try{
+run(process.env.JAVAC||'javac',['-cp',jar,'-d',temp,path.resolve(__dirname,'../../android/app/src/main/java/app/archivist/reader/RarMetadataVerifier.java'),path.join(__dirname,'RarHarness.java')]);
+for(const [name,fixture]of Object.entries(require('./fixtures.json').archives)){const b=Buffer.from(fixture.base64,'base64');assert.equal(crypto.createHash('sha256').update(b).digest('hex'),fixture.sha256);const original=path.join(temp,name+'.rar'),updated=path.join(temp,name+'-updated.rar');fs.writeFileSync(original,b);let result=await createRarMetadataCopy(b,{title:'Identified',genre:'Science Fiction',publishedYear:'1978'});result=await createRarMetadataCopy(result,{title:'Updated'});fs.writeFileSync(updated,result);run(process.env.JAVA||'java',['-cp',[temp,jar,slf].join(path.delimiter),'RarHarness',original,updated]);console.log('PASS '+name+' repeated metadata writes and independent extraction');}
+}finally{fs.rmSync(temp,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1});

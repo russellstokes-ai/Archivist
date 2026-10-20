@@ -52,6 +52,15 @@ class ArchivistFileMetadataModule(private val context:ReactApplicationContext):R
    };return result
   }finally{extractor.release()}
  }
+ @ReactMethod fun readRarMetadata(uriValue:String,name:String,promise:Promise){executor.execute{
+  val copy=File(context.cacheDir,"rar-read-${UUID.randomUUID()}")
+  try{copyFrom(Uri.parse(uriValue),copy);require(copy.length()<=64*1024*1024);promise.resolve(android.util.Base64.encodeToString(RarMetadataVerifier.readMetadata(copy,name),android.util.Base64.NO_WRAP))}
+  catch(e:Exception){promise.reject("RAR_METADATA_READ_FAILED",e)}finally{copy.delete()}
+ }}
+ @ReactMethod fun verifyRarCopies(originalValue:String,updatedValue:String,promise:Promise){executor.execute{
+  try{val original=privateFile(originalValue);val updated=privateFile(updatedValue);require(original.length()<=64*1024*1024&&updated.length()<=64*1024*1024);RarMetadataVerifier.verify(original,updated);promise.resolve(true)}
+  catch(e:Exception){promise.reject("RAR_METADATA_VERIFY_FAILED",e)}
+ }}
  @ReactMethod fun prepareAudio(treeValue:String,uriValue:String,extension:String,fieldsJson:String,multipart:Boolean,promise:Promise){executor.execute{
   var original:File?=null;var updated:File?=null
   try{
