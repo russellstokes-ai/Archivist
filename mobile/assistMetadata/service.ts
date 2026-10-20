@@ -1,4 +1,5 @@
 import type {Candidate,Query,SearchWork,SearchProvider,SearchCache,SearchPolicy,SearchResult} from '../scannerVNext/search';
+import {hasGenre} from './genres';
 import {clueQueries,parseSearchClues,rankAssistCandidates,selectAutomatic} from './core';
 export type AssistPolicy=SearchPolicy&{clues?:string};
 export type AssistProvider=SearchProvider&{details?:(candidate:Candidate,signal?:AbortSignal)=>Promise<Candidate>};
@@ -19,12 +20,12 @@ function plans(work:SearchWork,options:AssistPolicy):Query[]{
  return queries;
 }
 export function createAssistSearchService(providers:AssistProvider[],cache:SearchCache){
- if(providers.length>4||new Set(providers.map(p=>p.id)).size!==providers.length)throw Error('Invalid Assist providers');
+ if(providers.length>6||new Set(providers.map(p=>p.id)).size!==providers.length)throw Error('Invalid Assist providers');
  async function search(work:SearchWork,options:AssistPolicy):Promise<SearchResult>{
   check(options.signal);if(!options.online)return empty('offline');
   if(!options.automatic&&!options.explicit)return empty('disabled');
   const queries=plans(work,options);if(!queries.length)return empty('pending');
-  const key=JSON.stringify(['assist-search-v3',queries,providers.map(p=>[p.id,p.available!==false])]);
+  const key=JSON.stringify(['assist-search-v4',queries,providers.map(p=>[p.id,p.available!==false])]);
   const rankingFields=options.clues!==undefined?parseSearchClues(options.clues):work.fields;
   if(!options.retry){try{const entry=await cache.load(key);check(options.signal);if(entry&&entry.expires>Date.now())return {...entry.value,requests:0,cacheHit:true,candidates:rankAssistCandidates(rankingFields,entry.value.candidates.map(x=>x.candidate))};}catch{check(options.signal);}}
   const result=empty('pending'),found=new Map<string,Candidate>();
@@ -42,7 +43,7 @@ export function createAssistSearchService(providers:AssistProvider[],cache:Searc
      if(selectAutomatic({fields:rankingFields},[...found.values()]))break;
     }catch{check(options.signal);result.issues.push(provider.id+':request-failed');break;}
    }
-   if(selectAutomatic({fields:rankingFields},[...found.values()]))break;
+   if((()=>{const match=selectAutomatic({fields:rankingFields},[...found.values()]);return hasGenre(match?.fields.genre)&&!!match?.fields.coverUrl&&!!match?.fields.publishedYear;})())break;
   }
   // Conflicts prevent automatic acceptance, but must not hide a relevant title from review.
   let ranked=rankAssistCandidates(rankingFields,[...found.values()]).filter(x=>x.score+x.conflicts.length*150>0||!rankingFields.title);

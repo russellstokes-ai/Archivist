@@ -14,6 +14,8 @@ import {createAssistProviders} from './providers.native';
 import {createAssistSearchService,type AssistPolicy} from './service';
 import {missingMetadata,ProviderQueue} from './core';
 import {makePortableFields,validatePortableRecord} from './portable';
+import {currentReview} from './review';
+import {writeMetadataFile} from './writeBack.native';
 const artworkQueue=new ProviderQueue();
 const check=(s?:AbortSignal)=>{if(s?.aborted)throw Error('Metadata cancelled');};
 type Receipt={state:string;revision?:number;portableId?:string};
@@ -21,6 +23,8 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  const base=await createBaseRuntime(settings),db=metadataDatabase(await openScannerDatabase());
  const store=await createAssistMetadataStore(db,base.metadata),cache=await createSearchCache(db);
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_durable_meta(work_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);');
+ await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_file_writes(work_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, state TEXT NOT NULL);');
+ await NativeModules.ArchivistFileMetadata?.recoverPending?.().catch(()=>{});
  let signature='',service:ReturnType<typeof createAssistSearchService>|undefined;
  async function configured(){
   const options=await settings(),token=await SecureStore.getItemAsync('archivist.metadata.metron.token.v1').catch(()=>null);
@@ -35,7 +39,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
   const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_catalogue WHERE work_id=?',id);
   if(!row)throw Error('Work is unavailable');
   const stored=JSON.parse(row.payload);
-  const members=stored.entry.assets.map((asset:any)=>({path:asset.relativePath,uri:documentUri(stored.source.rootUri,asset.documentId),bytes:asset.size??-1}));
+  const members=stored.entry.assets.map((asset:any)=>({path:asset.relativePath,uri:documentUri(stored.source.rootUri,asset.documentId),bytes:(()=>{try{return new File(documentUri(stored.source.rootUri,asset.documentId)).size;}catch{return asset.size??-1;}})()}));
   return {root:stored.source.rootUri as string,members};
  }
  async function durableStatus(id:string):Promise<Receipt>{
@@ -45,11 +49,34 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  async function receipt(id:string,revision:number,value:Receipt){
   await db.runAsync('INSERT INTO scanner_vnext_durable_meta VALUES(?,?,?) ON CONFLICT(work_id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload',id,revision,JSON.stringify(value));
  }
+ async function writeConfirmedFiles(id:string,force=false){
+  const options=await settings();if(options.metadata.writeMetadataToFiles===false)return;
+  const work=await store.get(id);if(!work?.identityConfirmed)return;
+  const previous=await db.getFirstAsync<{revision:number;state:string}>('SELECT revision,state FROM scanner_vnext_file_writes WHERE work_id=?',id);
+  if(!force&&previous?.revision===work.revision)return previous.state;
+  const source=await context(id);let state='unsupported-format';
+  try{
+   // A catalogue identity never resolves ambiguous source-file membership by itself.
+   const saved=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_catalogue WHERE work_id=?',id);
+   const issues=saved?JSON.parse(saved.payload).entry.issues||[]:[];
+   if(issues.some((x:string)=>['duplicate-part-number','overlapping-group-needs-review','source-parts-missing','source-discovery-incomplete','manual-edition-unresolved'].includes(x)))state='source-review-required';
+   else for(const member of source.members){
+    if((await store.get(id))?.revision!==work.revision||(await settings()).metadata.writeMetadataToFiles===false)return;
+    const result=await writeMetadataFile(source.root,member.uri,member.path,work.fields);
+    if(result!=='unsupported-format'){state=result;if(result!=='written')break;}
+   }
+  }catch(error){state=String((error as {code?:string}).code||'file-write-failed');}
+  await db.runAsync('INSERT INTO scanner_vnext_file_writes VALUES(?,?,?) ON CONFLICT(work_id) DO UPDATE SET revision=excluded.revision,state=excluded.state',id,work.revision,state);
+  return state;
+ }
  async function persist(id:string,force=false):Promise<Receipt>{
   const running=pending.get(id);if(running){await running;return persist(id,force);}
   if(pending.size>=32)return {state:'queued'};
   const job=(async()=>{
+   if((await settings()).metadata.writeMetadataToFiles===false)return {state:'disabled'};
    const work=await store.get(id);if(!work||!work.identityConfirmed)return {state:'identity-needs-review'};
+   const fileState=await writeConfirmedFiles(id,force);
+   if(fileState==='FILE_RECOVERY_REQUIRED')return {state:'file-recovery-required',revision:work.revision};
    const previous=await durableStatus(id);
    if(!force&&previous.revision===work.revision&&['saved','restored','metadata-saved-cover-missing'].includes(previous.state))return previous;
    let priorId=previous.portableId;
@@ -73,7 +100,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  async function cacheArtwork(id:string,signal?:AbortSignal){
   const work=await store.get(id);const url=work?.fields.coverUri;
   if(!work||!url||!url.startsWith('https://')||!(await settings()).metadata.onlineEnabled)return;
-  const approved=new URL(url);if(approved.username||approved.password||!['covers.openlibrary.org','books.google.com','books.googleusercontent.com','metron.cloud','static.metron.cloud','m.media-amazon.com','images-na.ssl-images-amazon.com'].includes(approved.hostname))return;
+  const approved=new URL(url);if(approved.username||approved.password||!['covers.openlibrary.org','books.google.com','books.googleusercontent.com','metron.cloud','static.metron.cloud','m.media-amazon.com','images-na.ssl-images-amazon.com','inventaire.io','www.comics.org','files1.comics.org','files2.comics.org'].includes(approved.hostname))return;
   await artworkQueue.run('artwork',async inner=>{
    check(signal);const response=await expoFetch(url,{signal:inner,redirect:'error'});
    if(!response.ok||!response.body)throw Error('Artwork unavailable');
@@ -92,7 +119,15 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  }
  async function refresh(id:string,signal?:AbortSignal){
   await cacheArtwork(id,signal).catch(()=>{check(signal);});const rows=await base.refresh(id,signal);
-  void persist(id).catch(()=>{});return rows;
+  void persist(id).catch(()=>{});return decorateRows(id,rows);
+ }
+ async function decorateRows(id:string,rows:ScannerBook[]){
+  const work=await store.get(id);if(!work)return rows;
+  const saved=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_catalogue WHERE work_id=?',id);
+  const staged=await db.getFirstAsync<{revision:number;payload:string}>('SELECT revision,payload FROM scanner_vnext_staged WHERE work_id=?',id);
+  const issues=saved?JSON.parse(saved.payload).entry.issues||[]:[];
+  const reasons=currentReview(work,issues,staged?.revision===work.revision?JSON.parse(staged.payload).reasons||[]:[]);
+  return rows.map(row=>({...row,...work.fields,seriesNumber:Number(work.fields.seriesNumber)||undefined,publishedYear:Number(work.fields.publishedYear)||undefined,coverUri:work.fields.coverUri||row.coverUri,needsReview:reasons.length>0,reviewReason:reasons.join(' · ')}));
  }
  async function restore(id:string,signal?:AbortSignal){
   if(!native?.restoreRecord)return false;const status=await durableStatus(id);
@@ -113,27 +148,29 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  async function enrich(books:LocalBook[],policy:AssistPolicy,onRows:(rows:ScannerBook[])=>Promise<void>,signal?:AbortSignal){
   const groups=new Map<string,LocalBook>();for(const book of books){const id=(book as ScannerBook).scannerWorkId;if(id&&!groups.has(id))groups.set(id,book);}
   for(const [id,book]of groups){
-   check(signal);if(await restore(id,signal))await onRows(await base.refresh(id,signal));
+   check(signal);if(await restore(id,signal))await onRows(await refresh(id,signal));
    const work=await store.get(id);if(!work)continue;
    const missing=missingMetadata(work,book.format==='Audio');
    const previous=await assist.get(id);
    const freshResult=previous?.revision===work.revision&&previous.updated>Date.now()-3600000;
    if(policy.online&&policy.automatic&&missing.length&&!freshResult){
     const abort=()=>assist.cancel(id);signal?.addEventListener('abort',abort,{once:true});
-    try{const result=await assist.search(id,policy),state=await result.completion;check(signal);if(state.state==='accepted')await onRows(await refresh(id,signal));}
+    try{const result=await assist.search(id,policy),state=await result.completion;check(signal);if(state.state==='accepted')check(signal);}
     finally{signal?.removeEventListener('abort',abort);}
    }
+   await onRows(await refresh(id,signal));
    await persist(id);await new Promise<void>(resolve=>setTimeout(resolve,0));
   }
  }
  const scan=async(...args:Parameters<typeof base.scan>)=>{
   const result=await base.scan(...args);const groups=[...new Set(result.books.map(b=>(b as ScannerBook).scannerWorkId).filter(Boolean))];
   const replacements=new Map<string,ScannerBook[]>();
-  for(const id of groups)if(await restore(id,args[4]?.signal))replacements.set(id,await base.refresh(id,args[4]?.signal));
+  for(const id of groups){if(await restore(id,args[4]?.signal))replacements.set(id,await refresh(id,args[4]?.signal));else replacements.set(id,await decorateRows(id,result.books.filter(b=>(b as ScannerBook).scannerWorkId===id) as ScannerBook[]));}
   if(replacements.size){const rows=new Map(result.books.map(b=>[b.uri,b]));for(const group of replacements.values())for(const b of group)rows.set(b.uri,b);result.books=[...rows.values()];}
   return result;
  };
  return {...base,metadata:store,assist,refresh,enrich,scan,durableStatus,savePortable:(id:string)=>persist(id,true),
+  fileWriteStatus:async(id:string)=>(await db.getFirstAsync<{state:string}>('SELECT state FROM scanner_vnext_file_writes WHERE work_id=?',id))?.state||'not-written',
   async save(id:string,patch:Parameters<typeof store.saveManual>[1],policy:AssistPolicy){const work=await store.get(id);if(!work)throw Error('Unknown work');return assist.save(id,patch,work.revision,policy);},
   async confirm(id:string){const work=await store.get(id);if(!work)throw Error('Unknown work');const next=await store.confirmIdentity(id,work.revision);void persist(id);return next;}
  };

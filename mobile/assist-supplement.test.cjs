@@ -1,0 +1,15 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('assert/strict');
+require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,p);
+const {supplementCandidate}=require('./assistMetadata/supplement.ts');
+const candidate=(fields,identifiers=[])=>({id:'a',provider:'test',fields,identifiers});
+const chosen=candidate({title:'Example',author:'Writer'},['123']);
+const peer=candidate({title:'Example',author:'Writer',genre:'History',publishedYear:'1977',coverUrl:'https://example.org/cover'},['123']);
+assert.equal(supplementCandidate(chosen,[peer]).fields.coverUrl,peer.fields.coverUrl);
+assert.equal(supplementCandidate(chosen,[peer]).fields.publishedYear,'1977');
+const other=candidate({...peer.fields},['456']);
+assert.equal(supplementCandidate(chosen,[other]).fields.genre,'History');
+assert.equal(supplementCandidate(chosen,[other]).fields.publishedYear,undefined,'Do not borrow another edition year');
+assert.equal(supplementCandidate(chosen,[peer,candidate({...peer.fields,genre:'Fantasy'},['123'])]).fields.genre,undefined,'Conflicting sources need review');
+assert.equal(supplementCandidate(candidate({...chosen.fields,genre:'Science Fiction'},['123']),[peer]).fields.genre,'Science Fiction');
+assert.equal(chosen.fields.genre,undefined,'Do not mutate source candidates');
+console.log('PASS: complementary sources fill gaps without overwriting selected facts or mixing editions');

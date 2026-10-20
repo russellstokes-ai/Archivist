@@ -25,7 +25,7 @@ const {buildAtlasUniverse}=require('./atlasUniverse.ts');
   assert.equal(works[0].genre,'Fantasy');assert.equal(works[0].publishedYear,1937);assert.equal(rows[0].scannerPublished,true);
   const groups=[atlasBreakdown(works,w=>w.format,()=> 'blue'),atlasBreakdown(works,w=>w.publishedYear?String(w.publishedYear):'Not recorded',()=> 'gold'),atlasBreakdown(works,w=>w.genre,()=> 'green')];
   assert.deepEqual(groups.map(g=>g.map(x=>[x.label,x.count])),[[['Audio',1]],[['1937',1]],[['Fantasy',1]]]);
-  const segments=atlasRingSegments(groups);for(let sector=0;sector<3;sector++){const arc=segments.filter(x=>x.sector===sector);assert.equal(arc.length,48);assert(arc.every(x=>x.count===1&&x.label===groups[sector][0].label));}
+  const segments=atlasRingSegments(groups);for(let sector=0;sector<3;sector++){const arc=segments.filter(x=>x.sector===sector);assert.equal(arc.length,1);assert.equal(arc[0].step,120);assert.equal(arc[0].start,-90+sector*120);assert(arc.every(x=>x.count===1&&x.label===groups[sector][0].label));}
   const graph=buildAtlasUniverse(works);assert(graph.nodes.some(n=>n.kind==='genre'&&n.label==='Fantasy'));assert.equal(graph.nodes.filter(n=>n.kind==='work').length,1);assert(graph.edges.length>0);
   const saved=await runtime.save(workId,{genre:'History',publishedYear:'1954'},{online:true,automatic:true});await saved.completion;
   const edited=projectScannerWorks(await runtime.refresh(workId),()=>[]);assert.equal(edited[0].genre,'History');assert.equal(edited[0].publishedYear,1954,'Assist preserves a manual year');

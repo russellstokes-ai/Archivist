@@ -12,7 +12,7 @@ export async function createPublicationStore(db:ScannerDatabase){
   async publish(work:MetadataWork,artwork:ArtworkResult,signal?:AbortSignal):Promise<{state:'published'|'staged'|'stale';reasons:string[]}>{
    const check=()=>{if(signal?.aborted)throw new Error('Publication cancelled');};check();
    const genre=normalizeGenre(work.fields.genre?[{value:work.fields.genre,source:work.manual.genre?'manual':'provider'}]:[]),reasons:string[]=[];
-   if(!work.identityConfirmed||!work.fields.title?.trim()||!work.fields.author?.trim())reasons.push('identity-needs-review');if(!meaningfulGenre(genre))reasons.push('meaningful-genre-required');
+   if(!work.identityConfirmed||!work.fields.title?.trim()||!(work.fields.author?.trim()||work.fields.publisher?.trim()))reasons.push('identity-needs-review');if(!meaningfulGenre(genre))reasons.push('meaningful-genre-required');
    if(artwork.state!=='ready'||!artwork.uri||!/^(file|content):\/\//.test(artwork.uri)||!Number.isSafeInteger(artwork.bytes)||artwork.bytes!<1||artwork.bytes!>4194304||!Number.isSafeInteger(artwork.width)||!Number.isSafeInteger(artwork.height)||artwork.width!<64||artwork.height!<64||artwork.width!*artwork.height!>16777216)reasons.push('artwork-not-ready');if(!work.partIds.length)reasons.push('no-source-parts');
    let state:'published'|'staged'|'stale'='stale';
    await db.withExclusiveTransactionAsync(async tx=>{check();const current=await tx.getFirstAsync<{revision:number}>('SELECT revision FROM scanner_vnext_metadata WHERE work_id=?',work.workId);if(current?.revision!==work.revision)return;

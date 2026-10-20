@@ -1169,6 +1169,7 @@ function Client() {
       const current=await loadLocalStageBooks();
       const updated=[...current.filter(book=>(book as ScannerBook).scannerWorkId!==id),...rows];
       await replaceLocalStageBooks(updated);setLocalBooks(updated);
+      setEditing(old=>old?.scannerWorkId===id?{...old,reviewReason:rows[0].reviewReason,needsReview:rows[0].needsReview}:old);
     });scannerRowsCommit.current=commit;return commit;
   }
   async function scanFreshFolders(folders:LocalFolder[],onProgress:((value:LocalScanProgress)=>void)|undefined,overrides:Record<string,LocalMetadataOverride>,previous:LocalBook[],shouldContinue:()=>boolean){
@@ -1508,6 +1509,11 @@ function Client() {
     if(skipBookKeyRef.current!==currentAudioKey){
       skipBookKeyRef.current=currentAudioKey;
       cancelSkipBurst();
+      ++livingBookGeneration.current;
+      stopLivingBookPageLoop();clearLivingBookSettle();
+      bookOpenAnim.stopAnimation();bookOpenAnim.setValue(playerMotionPlaying?1:0);
+      pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);
+      transitionLivingBook({type:'restore',playing:playerMotionPlaying});
     }
   },[currentAudioKey]);
   useEffect(()=>{
@@ -5175,7 +5181,7 @@ function Client() {
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
             <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
-            {localEdit?<Text style={[styles.meta,{color:p.muted}]}>Add a title or author, then tap Save. Assist will look for the missing details.</Text>:null}
+            {localEdit?<Text style={[styles.meta,{color:p.muted}]}>Add a title, series or ISBN, then tap Save. For comics, include the issue or annual year; a known writer is optional. Assist looks for missing details.</Text>:null}
             {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
             <TextInput accessibilityLabel="Corrected title" value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
             <TextInput accessibilityLabel="Author" value={editAuthor} onChangeText={setEditAuthor} placeholder="Author" placeholderTextColor={p.muted} style={[styles.input,{color:p.ink,borderColor:p.line,backgroundColor:p.raised}]}/>
@@ -6181,6 +6187,7 @@ function Client() {
           <View style={[styles.playerAdaptive,foldLayout&&styles.playerAdaptiveWide,embedded&&phoneLayout&&!foldLayout&&styles.playerAdaptivePhoneTight]}>
             <View style={styles.playerHeroColumn}>
             <LivingBookCanvas
+              workKey={workKey||String(current.id)}
               title={current.title}
               author={current.author}
               chapter={currentChapter?.title}
@@ -8203,6 +8210,7 @@ function Client() {
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
               <Button label="Review uncertain metadata" onPress={openMetadataReview}/>
+              <View style={styles.settingsRow}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Save metadata to files</Text><Text style={[styles.meta,{color:p.muted}]}>Save confirmed details and covers in your library folder for every format. Also embed details in supported EPUB/CBZ files. File names stay unchanged.</Text></View><Toggle label="Save metadata to files" value={metadataSettings.writeMetadataToFiles!==false} onPress={()=>void updateMetadataSettings(current=>({...current,writeMetadataToFiles:current.writeMetadataToFiles===false}))}/></View>
               <Button label={libraryToolsOpen?'Hide library tools':'Folders, rescanning & file tools'} tone="quiet" onPress={()=>setLibraryToolsOpen(open=>!open)}/>
               {libraryToolsOpen?LibrarySettingsTools():null}
               <View style={styles.settingsSubgroup}>
@@ -8233,6 +8241,10 @@ function Client() {
                   <Toggle label="Audible UK" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={!!metadataSettings.books.audible} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,audible:!current.books.audible}}))}/>
                 </View>
                 <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Inventaire / Wikidata</Text><Text style={[styles.meta,{color:p.muted}]}>Books, editions and genres · no setup</Text></View>
+                  <Toggle label="Inventaire / Wikidata" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={metadataSettings.books.inventaire!==false} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,inventaire:current.books.inventaire===false}}))}/>
+                </View>
+                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Google Books</Text><Text style={[styles.meta,{color:googleBooksConfigured?p.sage:p.muted}]}>{googleBooksConfigured?'Configured':'Optional fallback'}</Text></View>
                   {googleBooksConfigured?<Toggle label="Google Books" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={metadataSettings.books.googleBooks} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,googleBooks:!current.books.googleBooks}}))}/>:null}
                   <Pressable accessibilityRole="button" onPress={()=>setMetadataCredentialEditor(metadataCredentialEditor==='google'?'':'google')} style={styles.settingsTextAction}><Text style={{color:p.sage,fontWeight:'700'}}>{googleBooksConfigured?'Manage':'Configure'}</Text></Pressable>
@@ -8249,6 +8261,10 @@ function Client() {
                 <View style={styles.settingsSubgroupHeading}>
                   <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>COMICS</Text>
                   <Toggle label="Comic metadata providers" disabled={!metadataSettings.onlineEnabled} value={metadataSettings.comics.enabled} onPress={()=>void updateMetadataSettings(current=>({...current,comics:{...current.comics,enabled:!current.comics.enabled}}))}/>
+                </View>
+                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
+                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Grand Comics Database</Text><Text style={[styles.meta,{color:p.sage}]}>Ready · no API key needed</Text></View>
+                  <Toggle label="Grand Comics Database" disabled={!metadataSettings.onlineEnabled||!metadataSettings.comics.enabled} value={metadataSettings.comics.gcd!==false} onPress={()=>void updateMetadataSettings(current=>({...current,comics:{...current.comics,gcd:current.comics.gcd===false}}))}/>
                 </View>
                 <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>
                   <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Metron</Text><Text style={[styles.meta,{color:metronConfigured?p.sage:p.muted}]}>{metronConfigured?'Configured':'Token required'}</Text></View>

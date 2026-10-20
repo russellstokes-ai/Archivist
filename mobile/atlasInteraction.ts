@@ -87,14 +87,14 @@ export function atlasSummary(items:AtlasSlice[],limit=7):AtlasSlice[]{
   return [...items.slice(0,limit),{label:'Other categories',count:items.slice(limit).reduce((sum,item)=>sum+item.count,0),color:'#98A6B9'}];
 }
 
-export function atlasRingSegments(groups:AtlasSlice[][],steps=144){
-  const perSector=Math.max(12,Math.floor(steps/3));
+export function atlasRingSegments(groups:AtlasSlice[][]){
   return groups.flatMap((items,sector)=>{
-    const total=items.reduce((sum,item)=>sum+Math.max(0,item.count),0);
-    return Array.from({length:perSector},(_,index)=>{
-      const fraction=(index+.5)/perSector;let cumulative=0;
-      const item=items.find(item=>{cumulative+=Math.max(0,item.count)/(total||1);return fraction<=cumulative;});
-      return {sector,angle:(-90+sector*120+(index+.5)*120/perSector)*Math.PI/180,color:item?.color,count:total,label:item?.label||'',step:120/perSector};
+    const valid=items.filter(item=>Number.isFinite(item.count)&&item.count>0);
+    const total=valid.reduce((sum,item)=>sum+item.count,0);let start=-90+sector*120;
+    return valid.map(item=>{
+      const step=item.count/total*120;
+      const segment={sector,start,angle:(start+step/2)*Math.PI/180,color:item.color,count:item.count,label:item.label,step};
+      start+=step;return segment;
     });
   });
 }

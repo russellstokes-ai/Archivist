@@ -5,6 +5,7 @@ import type {AssistState} from '../scannerVNext/assist';
 import type {SearchResult} from '../scannerVNext/search';
 import type {AssistMetadataStore} from './store';
 import type {AssistPolicy,createAssistSearchService} from './service';
+import {supplementCandidate} from './supplement';
 import {fillMissing,selectAutomatic} from './core';
 type State=AssistState&{clues?:string};
 type Service=ReturnType<typeof createAssistSearchService>;
@@ -32,7 +33,8 @@ export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetada
    try{
     const result=await service.search(work,{...policy,signal:owner.signal});
     if(owner.signal.aborted||active.get(work.workId)!==owner)return {revision:work.revision,state:'cancelled',updated:Date.now()};
-    const winner=policy.automatic&&policy.clues===undefined?selectAutomatic(work,result.candidates.map(r=>r.candidate)):null;
+    const selected=policy.automatic&&policy.clues===undefined?selectAutomatic(work,result.candidates.map(r=>r.candidate)):null;
+    const winner=selected?supplementCandidate(selected,result.candidates.map(r=>r.candidate)):null;
     if(winner){
      const patch=work.identityConfirmed?fillMissing(work,winner):null;
      if(!work.identityConfirmed||patch&&Object.keys(patch).length){
@@ -59,7 +61,7 @@ export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetada
    const state=await get(id);if(state?.revision!==expected)throw Error('Stale Assist choices');
    const candidate=state.result?.candidates.find(r=>r.candidate.provider+'|'+r.candidate.id===candidateId)?.candidate;
    if(!candidate)throw Error('Candidate is not in this work lookup');active.get(id)?.abort();
-   const work=await store.accept(id,candidate,expected,{confirmIdentityConflicts:confirm});await persist(work,{revision:work.revision,state:'accepted',updated:Date.now()});return work;
+   const work=await store.accept(id,supplementCandidate(candidate,state?.result?.candidates.map(r=>r.candidate)||[]),expected,{confirmIdentityConflicts:confirm});await persist(work,{revision:work.revision,state:'accepted',updated:Date.now()});return work;
   },
   async more(id:string,provider:string,page:number,expected:number,policy:AssistPolicy){
    const work=await store.get(id),state=await get(id);if(!work||work.revision!==expected||state?.revision!==expected)throw Error('Stale Assist choices');

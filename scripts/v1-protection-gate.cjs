@@ -31,6 +31,11 @@ for(const item of manifest.locks){
   const bytes=fs.readFileSync(absolute);
   const actual=crypto.createHash('sha1').update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
   if(actual===item.git_blob_sha)continue;
+  // Owner requested proportional Atlas arcs on 20 October; verify exact reversible edits.
+  if(item.path==='mobile/AtlasChartRing.tsx'){
+    const restored=require('./owner-bugpass-source.cjs')(item.path,bytes.toString('utf8'));
+    if(crypto.createHash('sha1').update('blob '+Buffer.byteLength(restored)+'\0').update(restored).digest('hex')===item.git_blob_sha){excepted++;continue;}
+  }
   if(item.path==='mobile/assets/icon.png'&&ivory.schema===1&&ivory.path===item.path&&ivory.release_approved===false&&ivory.installed_apk_approved===false&&actual===ivory.current&&branding.locks.some(x=>x.path===item.path&&x.approved_git_blob_sha===ivory.previous)){rebranded++;continue;}
   if(branding.locks.some(x=>x.path===item.path&&x.original_git_blob_sha===item.git_blob_sha&&x.approved_git_blob_sha===actual)){rebranded++;continue;}
   if(item.path==='mobile/App.tsx'&&actual===approved.approved_git_blob_sha){

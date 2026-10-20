@@ -46,10 +46,10 @@ async function load(file){return import('data:text/javascript;base64,'+Buffer.fr
   assert.equal(x.atlasSummary(slices).reduce((sum,s)=>sum+s.count,0),2000);
   assert.equal(x.atlasSummary(slices).at(-1).label,'Other categories');
   const segments=x.atlasRingSegments([[{label:'Audio',count:1,color:'blue'},{label:'Book',count:3,color:'green'}],slices,slices]);
-  assert.equal(segments.length,144);
-  assert.equal(segments.filter(s=>s.sector===0&&s.color==='blue').length,12);
-  assert.equal(segments.filter(s=>s.sector===0&&s.color==='green').length,36);
-  assert(x.atlasRingSegments([[],[],[]]).every(s=>!s.color));
+  assert.equal(segments.length,2+slices.length*2);
+  assert.equal(segments.find(s=>s.sector===0&&s.color==='blue').step,30);
+  assert.equal(segments.find(s=>s.sector===0&&s.color==='green').step,90);
+  assert.deepEqual(x.atlasRingSegments([[],[],[]]),[]);
   const overlap=[{id:'a',kind:'genre',label:'Fantasy',x:100,y:100},{id:'b',kind:'genre',label:'Mystery',x:101,y:101}];
   const labels=x.atlasLabels(overlap,{x:0,y:0,scale:1},300,'b',new Set());
   assert(labels.has('b')&&!labels.has('a'),'Selected label wins collision');

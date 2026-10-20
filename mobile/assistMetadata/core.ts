@@ -1,6 +1,7 @@
 /** Catalogue metadata only. No inference model or generated bibliographic facts. */
 import type {Candidate,SearchFields,RankedCandidate} from '../scannerVNext/search';
 import type {MetadataWork,WorkFields} from '../scannerVNext/fieldEvidence';
+import {hasGenre} from './genres';
 export type SearchClues={text:string;title?:string;author?:string;isbn?:string;asin?:string;series?:string;annualLabel?:string};
 export const canonicalText=(value:unknown)=>String(value??'').normalize('NFKC').toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]/gu,'');
 const clean=(value:unknown)=>String(value??'').normalize('NFKC').replace(/\s+/g,' ').trim();
@@ -87,7 +88,7 @@ export function selectAutomatic(work:Pick<MetadataWork,'fields'>,candidates:Cand
 export function missingMetadata(work:Pick<MetadataWork,'fields'|'manual'>,audio=false):(keyof WorkFields)[]{
  const keys:(keyof WorkFields)[]=['title','author','genre','publishedYear','description','publisher','language','coverUri'];
  if(audio)keys.push('narrator');
- return keys.filter(k=>!work.manual[k]&&!clean(work.fields[k]));
+ return keys.filter(k=>!work.manual[k]&&(k==='genre'?!hasGenre(work.fields.genre):!clean(work.fields[k])));
 }
 export function shouldEnrich(book:{title?:string;author?:string;format?:string;[key:string]:unknown}):boolean{
  const fields=book as WorkFields;
@@ -98,7 +99,8 @@ export function fillMissing(work:Pick<MetadataWork,'fields'|'manual'>,candidate:
  const allowed=new Set(['title','author','series','seriesNumber','genre','publishedYear','description','publisher','narrator','language','coverUri','isbn','asin']);
  for(const [key,value]of Object.entries(candidate.fields)){
   const field=(key==='coverUrl'?'coverUri':key) as keyof WorkFields;
-  if(!allowed.has(field)||work.manual[field]||clean(work.fields[field])||typeof value!=='string'||!value.trim())continue;
+  if(!allowed.has(field)||work.manual[field]||(field==='genre'?hasGenre(work.fields.genre):clean(work.fields[field]))||typeof value!=='string'||!value.trim())continue;
+  if(field==='genre'&&!hasGenre(value))continue;
   result[field]=value.trim();
  }
  return result;

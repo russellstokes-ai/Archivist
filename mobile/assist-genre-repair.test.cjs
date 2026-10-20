@@ -1,0 +1,13 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('assert/strict');
+require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,p);
+const {catalogueGenre,hasGenre}=require('./assistMetadata/genres.ts');
+const {missingMetadata,fillMissing}=require('./assistMetadata/core.ts');
+assert.equal(catalogueGenre(['Comedy & Humour','Performing Arts']),'Humour/Comedy');
+assert.equal(catalogueGenre(['Science Fiction & Fantasy','Space Opera']),'Science Fiction');
+assert.equal(catalogueGenre(['Fiction','Comics']),undefined);
+assert.equal(hasGenre('Fiction'),false);
+const work={fields:{genre:'Fiction'},manual:{}};
+assert(missingMetadata(work).includes('genre'));
+assert.equal(fillMissing(work,{fields:{genre:'Science Fiction'}}).genre,'Science Fiction');
+assert.equal(fillMissing({...work,manual:{genre:true}},{fields:{genre:'Science Fiction'}}).genre,undefined);
+console.log('PASS: provider categories and unresolved genre repair preserve manual choices');

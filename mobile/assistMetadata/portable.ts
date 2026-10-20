@@ -12,7 +12,7 @@ export function validatePortableRecord(raw:unknown):PortableRecord{
  if(Object.keys(x).some(k=>!['schema','kind','portableId','savedAt','revision','fields','manual','members','artwork'].includes(k)))throw Error('Unexpected portable metadata field');
  if(x.schema!==1||x.kind!=='archivist-work'||!uuid.test(x.portableId)||!Number.isSafeInteger(x.savedAt)||x.savedAt<0||!Number.isSafeInteger(x.revision)||x.revision<0)throw Error('Invalid portable metadata version');
  const fields=validatedFields(x.fields);
- if(!fields.title||!fields.author||fields.coverUri!==undefined)throw Error('Portable identity or private cover reference invalid');
+ if(!fields.title||!(fields.author||fields.publisher)||fields.coverUri!==undefined)throw Error('Portable identity or private cover reference invalid');
  if(!x.manual||typeof x.manual!=='object'||Array.isArray(x.manual))throw Error('Invalid portable locks');
  for(const [k,v]of Object.entries(x.manual))if(!(METADATA_FIELDS as readonly string[]).includes(k)||typeof v!=='boolean')throw Error('Invalid portable field lock');
  if(!Array.isArray(x.members)||!x.members.length||x.members.length>1000)throw Error('Invalid portable member count');

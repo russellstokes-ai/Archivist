@@ -8,7 +8,7 @@ function xml(text:string){
  const doc=new DOMParser({errorHandler:{warning:()=>{invalid=true;},error:()=>{invalid=true;},fatalError:()=>{invalid=true;}}}).parseFromString(text,'application/xml');
  if(invalid||!doc.documentElement)throw Error('Invalid metadata XML');return doc;
 }
-/** Creates a new archive; callers must never overwrite the source URI. */
+/** Creates and verifies an archive. Original replacement requires the native rollback journal. */
 export async function createEmbeddedCopy(bytes:Uint8Array,format:'epub'|'cbz',fields:WorkFields):Promise<Uint8Array>{
  if(bytes.length>limit)throw Error('Metadata copy supports files up to 64 MB');
  const zip=await JSZip.loadAsync(bytes),entries=Object.values(zip.files);
@@ -38,7 +38,7 @@ export async function createEmbeddedCopy(bytes:Uint8Array,format:'epub'|'cbz',fi
   doc=xml(existing[0]?await existing[0].async('string'):'<?xml version="1.0" encoding="utf-8"?><ComicInfo/>');parent=doc.documentElement;
   if(parent.nodeName!=='ComicInfo')throw Error('Invalid comic metadata root');
  }
- const mapping:Partial<Record<keyof WorkFields,string>>=format==='epub'?{title:'title',author:'creator',description:'description',publisher:'publisher',language:'language',genre:'subject'}:{title:'Title',author:'Writer',description:'Summary',publisher:'Publisher',language:'LanguageISO',genre:'Genre',series:'Series',seriesNumber:'Number',publishedYear:'Year'};
+ const mapping:Partial<Record<keyof WorkFields,string>>=format==='epub'?{title:'title',author:'creator',description:'description',publisher:'publisher',language:'language',genre:'subject',publishedYear:'date'}:{title:'Title',author:'Writer',description:'Summary',publisher:'Publisher',language:'LanguageISO',genre:'Genre',series:'Series',seriesNumber:'Number',publishedYear:'Year'};
  for(const [key,tag] of Object.entries(mapping)){
   const value=fields[key as keyof WorkFields];if(typeof value!=='string')continue;
   if(format==='epub'&&key==='title'&&!value.trim())throw Error('EPUB title cannot be empty');

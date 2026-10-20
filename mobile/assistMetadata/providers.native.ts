@@ -6,9 +6,12 @@ import {lookupOnlineComic} from '../onlineComicMetadata';
 import {ProviderQueue,parseSearchClues} from './core';
 import type {AssistProvider} from './service';
 import {createAudibleProvider} from './audible';
+import {catalogueGenre} from './genres';
+import {createGcdProvider} from './gcd';
+import {createInventaireProvider} from './inventaire';
 const queues=new ProviderQueue();
 const clean=(value:unknown,max=512)=>typeof value==='string'?value.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,max):undefined;
-const hosts=new Set(['openlibrary.org','www.googleapis.com','metron.cloud','api.audible.co.uk']);
+const hosts=new Set(['openlibrary.org','www.googleapis.com','metron.cloud','api.audible.co.uk','inventaire.io','www.comics.org']);
 async function request(url:string,signal?:AbortSignal,token?:string){
  const target=new URL(url);if(target.protocol!=='https:'||!hosts.has(target.hostname)||target.username||target.password)throw Error('Unapproved catalogue endpoint');
  const headers:Record<string,string>={Accept:'application/json','User-Agent':'Archivist/0.9.4 (+https://github.com/russellstokes-ai/Archivist)'};
@@ -23,7 +26,8 @@ export function createAssistProviders(settings:MetadataSettings,googleKey?:strin
    if(!/^\/works\/OL\d+W$/.test(candidate.id))return candidate;
    const detail=await queues.run('open-library-detail',s=>request('https://openlibrary.org'+candidate.id+'.json',s),signal,1100) as Record<string,any>;
    const description=clean(typeof detail.description==='string'?detail.description:detail.description?.value,4096);
-   return {...candidate,fields:{...candidate.fields,...(description?{description}:{})}};
+   const genre=catalogueGenre(detail.subjects);
+   return {...candidate,fields:{...candidate.fields,...(description?{description}:{}),...(genre?{genre}:{})}};
   };
   const original=provider.search.bind(provider);
   provider.search=async(query,page,signal)=>{
@@ -41,6 +45,7 @@ export function createAssistProviders(settings:MetadataSettings,googleKey?:strin
    return {...candidate,fields:{...candidate.fields,...(description?{description}:{}),...(publisher?{publisher}:{})}};
   };out.push(provider);
  }
+ if(settings.comics.enabled&&settings.comics.gcd!==false)out.push(createGcdProvider((url,signal)=>queues.run('gcd',s=>request(url,s),signal,1500)));
  if(settings.comics.enabled&&settings.comics.metron){
   out.push({id:'metron',available:!!metronToken,async search(query:Query,page,signal){
    if(!metronToken||page>0)return {candidates:[],nextPage:null};
@@ -67,5 +72,6 @@ export function createAssistProviders(settings:MetadataSettings,googleKey?:strin
   }});
  }
  if(settings.books.enabled&&settings.books.audible)out.push(createAudibleProvider((url,signal)=>queues.run('audible-uk',s=>request(url,s),signal,1000)));
+ if(settings.books.enabled&&settings.books.inventaire!==false)out.push(createInventaireProvider((url,signal)=>queues.run('inventaire',s=>request(url,s),signal,1000)));
  return out;
 }

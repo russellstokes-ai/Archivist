@@ -22,9 +22,65 @@
         {
           "old": "Math.min(1,(now-turnStart)/duration)",
           "new": "Math.min(1,Math.max(0,now-turnStart)/duration)"
+        },
+        {
+          "old": "import {AppState,StyleSheet,View} from 'react-native';",
+          "new": "import {AppState,Image,Text,StyleSheet,View} from 'react-native';"
+        },
+        {
+          "old": "key={JSON.stringify([props.title,props.author,props.coverUri])}",
+          "new": "key={JSON.stringify([props.title,props.author])}"
+        },
+        {
+          "old": "function tick(now){if(phase==='opening'||phase==='closing'){const progress=reduced?1:Math.min(1,Math.max(0,now-transitionStart)/((phase==='opening'?900:1000)*Math.max(.001,Math.abs(transitionTo-transitionFrom))));opening=transitionFrom+(transitionTo-transitionFrom)*ease(progress);}else if(phase==='turning'&&activeTurn){const duration=skipping?780:1900,progress=reduced?1:Math.min(1,Math.max(0,now-turnStart)/duration);turn=ease(progress);}else if(phase==='settling'&&activeTurn)turn=1;paint();requestAnimationFrame(tick);}",
+          "new": "function tick(now){requestAnimationFrame(tick);try{if(phase==='opening'||phase==='closing'){const progress=reduced?1:Math.min(1,Math.max(0,now-transitionStart)/((phase==='opening'?900:1000)*Math.max(.001,Math.abs(transitionTo-transitionFrom))));opening=transitionFrom+(transitionTo-transitionFrom)*ease(progress);}else if(phase==='turning'&&activeTurn){const duration=skipping?780:1900,progress=reduced?1:Math.min(1,Math.max(0,now-turnStart)/duration);turn=ease(progress);}else if(phase==='settling'&&activeTurn)turn=1;paint();}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(\"archivist-living-render-error\");}}"
+        },
+        {
+          "old": "paint();requestAnimationFrame(tick);\n})();",
+          "new": "requestAnimationFrame(tick);\n})();"
+        },
+        {
+          "old": "  const [ready,setReady]=useState(false);",
+          "new": "  const [ready,setReady]=useState(false);\n  const [coverFailed,setCoverFailed]=useState(false);\n  useEffect(()=>setCoverFailed(false),[props.coverUri]);"
+        },
+        {
+          "old": "    <WebView key={reloadKey}",
+          "new": "    {!ready&&<View style={styles.fallback}>{props.coverUri&&!coverFailed?<Image source={{uri:props.coverUri,headers:props.coverHeaders}} resizeMode=\"contain\" onError={()=>setCoverFailed(true)} style={styles.fallbackImage}/>:<View style={styles.fallbackJacket}><Text style={styles.fallbackTitle}>{props.title}</Text><Text style={styles.fallbackAuthor}>{props.author}</Text></View>}</View>}\n    <WebView key={reloadKey}"
+        },
+        {
+          "old": "androidLayerType=\"hardware\" style={styles.web}",
+          "new": "androidLayerType=\"software\" style={[styles.web,!ready&&{opacity:0}]}"
+        },
+        {
+          "old": "      onMessage={event=>{",
+          "new": "      onMessage={event=>{\n        if(event.nativeEvent.data===\"archivist-living-render-error\"){recover(\"canvas-render-error\",reloadKey);return;}"
+        },
+        {
+          "old": "  web:{backgroundColor:'transparent'},container:{flex:1,backgroundColor:'transparent'},",
+          "new": "  web:{backgroundColor:'transparent'},container:{flex:1,backgroundColor:'transparent'},\n  fallback:{...StyleSheet.absoluteFillObject,alignItems:'center',justifyContent:'center'},\n  fallbackImage:{width:190,height:255},\n  fallbackJacket:{width:174,height:240,backgroundColor:'#183D4A',borderWidth:2,borderColor:'#B89B62',borderRadius:4,padding:18,justifyContent:'center'},\n  fallbackTitle:{color:'#F4E8CC',fontSize:20,textAlign:'center'},fallbackAuthor:{color:'#F4E8CC',fontSize:13,textAlign:'center',marginTop:14},"
+        },
+        {
+          "old": "  title:string;author:string;chapter?:string;number?:number;phase:LivingBookPhase;",
+          "new": "  workKey?:string;title:string;author:string;chapter?:string;number?:number;phase:LivingBookPhase;"
+        },
+        {
+          "old": "key={JSON.stringify([props.title,props.author])}",
+          "new": "key={props.workKey||JSON.stringify([props.title,props.author])}"
+        },
+        {
+          "old": "window.ArchivistLivingBook={setState:data=>{if(!data)return;if(typeof data.title==='string'&&data.title!==title)title=data.title;if(typeof data.author==='string')author=data.author;if(typeof data.chapter==='string')chapter=data.chapter;if(Number.isFinite(data.number)){const nextPage=Math.max(2,Number(data.number)*2);if(!activeTurn&&nextPage!==page){page=nextPage;rebuildStable();}}setPhase(data.phase||phase,data);},setCover:(source,mode)=>{coverMode=mode||'fallback';if(!source){coverImage=null;coverReady=false;cover=texture(true,0);return;}const img=new Image();img.onload=()=>{coverImage=img;coverReady=true;cover=texture(true,0);};img.onerror=()=>{coverImage=null;coverReady=false;cover=texture(true,0);};img.src=source;}};",
+          "new": "window.ArchivistLivingBook={setState:data=>{if(!data)return;const identityChanged=(typeof data.title==='string'&&data.title!==title)||(typeof data.author==='string'&&data.author!==author);if(typeof data.title==='string'&&data.title!==title)title=data.title;if(typeof data.author==='string')author=data.author;if(typeof data.chapter==='string')chapter=data.chapter;if(Number.isFinite(data.number)){const nextPage=Math.max(2,Number(data.number)*2);if(!activeTurn&&nextPage!==page){page=nextPage;rebuildStable();}}if(identityChanged)rebuildStable();setPhase(data.phase||phase,data);},setCover:(source,mode)=>{const request=++coverRequest;coverMode=mode||'fallback';if(!source){coverImage=null;coverReady=false;cover=texture(true,0);return;}const img=new Image();img.onload=()=>{if(request!==coverRequest)return;coverImage=img;coverReady=true;cover=texture(true,0);};img.onerror=()=>{if(request!==coverRequest)return;coverImage=null;coverReady=false;cover=texture(true,0);};img.src=source;}};"
+        },
+        {
+          "old": "let coverImage=null,coverReady=false,coverMode=cfg.coverMode||'fallback';",
+          "new": "let coverRequest=0,coverImage=null,coverReady=false,coverMode=cfg.coverMode||'fallback';"
+        },
+        {
+          "old": "androidLayerType=\"software\"",
+          "new": "androidLayerType=\"hardware\""
         }
       ],
-      "current": "dfd769bc00ee28e80feda161baee3bb98fa9fc05"
+      "current": "e964765098b432497294f200a5fd3ecd069e38cc"
     },
     "mobile/speechFocus.ts": {
       "previous": "280b441936ce366554a908bbde9f0d20c047c71d",
@@ -106,9 +162,41 @@
         {
           "old": "\n            const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>current.fields[key as keyof typeof current.fields]!==value));",
           "new": "\n            const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>(current.fields[key as keyof typeof current.fields]??'')!==value));"
+        },
+        {
+          "old": "await replaceLocalStageBooks(updated);setLocalBooks(updated);",
+          "new": "await replaceLocalStageBooks(updated);setLocalBooks(updated);\n      setEditing(old=>old?.scannerWorkId===id?{...old,reviewReason:rows[0].reviewReason,needsReview:rows[0].needsReview}:old);"
+        },
+        {
+          "old": "            <LivingBookCanvas\n",
+          "new": "            <LivingBookCanvas\n              workKey={workKey||String(current.id)}\n"
+        },
+        {
+          "old": "                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Google Books</Text><Text style={[styles.meta,{color:googleBooksConfigured?p.sage:p.muted}]}>{googleBooksConfigured?'Configured':'Optional fallback'}</Text></View>",
+          "new": "                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Inventaire / Wikidata</Text><Text style={[styles.meta,{color:p.muted}]}>Books, editions and genres · no setup</Text></View>\n                  <Toggle label=\"Inventaire / Wikidata\" disabled={!metadataSettings.onlineEnabled||!metadataSettings.books.enabled} value={metadataSettings.books.inventaire!==false} onPress={()=>void updateMetadataSettings(current=>({...current,books:{...current.books,inventaire:current.books.inventaire===false}}))}/>\n                </View>\n                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Google Books</Text><Text style={[styles.meta,{color:googleBooksConfigured?p.sage:p.muted}]}>{googleBooksConfigured?'Configured':'Optional fallback'}</Text></View>"
+        },
+        {
+          "old": "    if(skipBookKeyRef.current!==currentAudioKey){\n      skipBookKeyRef.current=currentAudioKey;\n      cancelSkipBurst();\n    }\n  },[currentAudioKey]);",
+          "new": "    if(skipBookKeyRef.current!==currentAudioKey){\n      skipBookKeyRef.current=currentAudioKey;\n      cancelSkipBurst();\n      ++livingBookGeneration.current;\n      stopLivingBookPageLoop();clearLivingBookSettle();\n      bookOpenAnim.stopAnimation();bookOpenAnim.setValue(playerMotionPlaying?1:0);\n      pageTurnAnim.stopAnimation();pageTurnAnim.setValue(0);\n      transitionLivingBook({type:'restore',playing:playerMotionPlaying});\n    }\n  },[currentAudioKey]);"
+        },
+        {
+          "old": "                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Metron</Text><Text style={[styles.meta,{color:metronConfigured?p.sage:p.muted}]}>{metronConfigured?'Configured':'Token required'}</Text></View>",
+          "new": "                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Grand Comics Database</Text><Text style={[styles.meta,{color:p.sage}]}>Ready · no API key needed</Text></View>\n                  <Toggle label=\"Grand Comics Database\" disabled={!metadataSettings.onlineEnabled||!metadataSettings.comics.enabled} value={metadataSettings.comics.gcd!==false} onPress={()=>void updateMetadataSettings(current=>({...current,comics:{...current.comics,gcd:current.comics.gcd===false}}))}/>\n                </View>\n                <View style={[styles.settingsListRow,{borderBottomColor:p.line}]}>\n                  <View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Metron</Text><Text style={[styles.meta,{color:metronConfigured?p.sage:p.muted}]}>{metronConfigured?'Configured':'Token required'}</Text></View>"
+        },
+        {
+          "old": "              <Button label=\"Review uncertain metadata\" onPress={openMetadataReview}/>",
+          "new": "              <Button label=\"Review uncertain metadata\" onPress={openMetadataReview}/>\n              <View style={styles.settingsRow}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Save metadata to files</Text><Text style={[styles.meta,{color:p.muted}]}>Write confirmed details into supported EPUB and CBZ files. File names stay unchanged.</Text></View><Toggle label=\"Save metadata to files\" value={metadataSettings.writeMetadataToFiles!==false} onPress={()=>void updateMetadataSettings(current=>({...current,writeMetadataToFiles:current.writeMetadataToFiles===false}))}/></View>"
+        },
+        {
+          "old": "Write confirmed details into supported EPUB and CBZ files. File names stay unchanged.",
+          "new": "Save confirmed details and covers in your library folder for every format. Also embed details in supported EPUB/CBZ files. File names stay unchanged."
+        },
+        {
+          "old": "Add a title or author, then tap Save. Assist will look for the missing details.",
+          "new": "Add a title, series or ISBN, then tap Save. For comics, include the issue or annual year; a known writer is optional. Assist looks for missing details."
         }
       ],
-      "current": "9ce246958ab8ca9ed72199c5df2853791bc20c7f"
+      "current": "0f20229b9fcfa837f1e502e7af5685c963b4bff8"
     },
     "mobile/speechFocus.generated.ts": {
       "previous": "5aa6ed24f64542d80f11d3f0d54986f0d070b7e9",
@@ -146,9 +234,13 @@
         {
           "old": "          add(ArchivistMetadataPackage())",
           "new": "          add(ArchivistMetadataPackage())\n          add(ArchivistSplashPackage())"
+        },
+        {
+          "old": "          add(ArchivistMetadataPackage())",
+          "new": "          add(ArchivistMetadataPackage())\n          add(ArchivistFileMetadataPackage())"
         }
       ],
-      "current": "7ef2a501bbb93a635797b0b882e79b0336b931a0"
+      "current": "05eac5b411943c8849c334e6c4b200e4c2cc99d0"
     },
     "mobile/PremiumLaunch.tsx": {
       "previous": "aa7a6dc87e706c32fe3a3e79e68621487eb01e9b",
@@ -179,6 +271,82 @@
         }
       ],
       "current": "b95dfd671788d732914a4d616bf649a1cbc25d1a"
+    },
+    "mobile/livingBookCover.ts": {
+      "previous": "e42ec7ea6495413f6c0ad807f042492e20793e8c",
+      "changes": [
+        {
+          "old": "if(current&&current.key===key)return current;",
+          "new": "if(current&&current.key===key&&(current.decision.uri||!next.uri))return current;"
+        }
+      ],
+      "current": "593a505e44f6011ea2b5e17d6185b2bccaa97939"
+    },
+    "mobile/metadataSettings.ts": {
+      "previous": "30ab16b215def6dccec948e3ed97dcf7cd977288",
+      "changes": [
+        {
+          "old": "    audible?:boolean;",
+          "new": "    audible?:boolean;\n    inventaire?:boolean;"
+        },
+        {
+          "old": "googleBooks:false,audible:true",
+          "new": "googleBooks:false,audible:true,inventaire:true"
+        },
+        {
+          "old": "      audible:books.audible===undefined?true:!!books.audible,",
+          "new": "      audible:books.audible===undefined?true:!!books.audible,\n      inventaire:books.inventaire===undefined?true:!!books.inventaire,"
+        },
+        {
+          "old": "    metron:boolean;",
+          "new": "    metron:boolean;\n    gcd?:boolean;"
+        },
+        {
+          "old": "comics:{enabled:true,metron:true}",
+          "new": "comics:{enabled:true,metron:true,gcd:true}"
+        },
+        {
+          "old": "      metron:comics.metron===undefined?defaultMetadataSettings.comics.metron:!!comics.metron,",
+          "new": "      metron:comics.metron===undefined?defaultMetadataSettings.comics.metron:!!comics.metron,\n      gcd:comics.gcd===undefined?true:!!comics.gcd,"
+        },
+        {
+          "old": "settings.comics.enabled&&settings.comics.metron",
+          "new": "settings.comics.enabled&&(settings.comics.metron||settings.comics.gcd!==false)"
+        },
+        {
+          "old": "  onlineEnabled:boolean;",
+          "new": "  onlineEnabled:boolean;\n  writeMetadataToFiles?:boolean;"
+        },
+        {
+          "old": "  onlineEnabled:true,",
+          "new": "  onlineEnabled:true,\n  writeMetadataToFiles:true,"
+        },
+        {
+          "old": "  return {\n    onlineEnabled:",
+          "new": "  return {\n    writeMetadataToFiles:raw.writeMetadataToFiles!==false,\n    onlineEnabled:"
+        }
+      ],
+      "current": "e9e2972407ac506e3134cb2c04c22e6c948bb789"
+    },
+    "mobile/atlasInteraction.ts": {
+      "previous": "98b3a4f243d6a0305649bb445ca35593ad4fa3b7",
+      "changes": [
+        {
+          "old": "export function atlasRingSegments(groups:AtlasSlice[][],steps=144){\n  const perSector=Math.max(12,Math.floor(steps/3));\n  return groups.flatMap((items,sector)=>{\n    const total=items.reduce((sum,item)=>sum+Math.max(0,item.count),0);\n    return Array.from({length:perSector},(_,index)=>{\n      const fraction=(index+.5)/perSector;let cumulative=0;\n      const item=items.find(item=>{cumulative+=Math.max(0,item.count)/(total||1);return fraction<=cumulative;});\n      return {sector,angle:(-90+sector*120+(index+.5)*120/perSector)*Math.PI/180,color:item?.color,count:total,label:item?.label||'',step:120/perSector};\n    });\n  });\n}\n",
+          "new": "export function atlasRingSegments(groups:AtlasSlice[][]){\n  return groups.flatMap((items,sector)=>{\n    const valid=items.filter(item=>Number.isFinite(item.count)&&item.count>0);\n    const total=valid.reduce((sum,item)=>sum+item.count,0);let start=-90+sector*120;\n    return valid.map(item=>{\n      const step=item.count/total*120;\n      const segment={sector,start,angle:(start+step/2)*Math.PI/180,color:item.color,count:item.count,label:item.label,step};\n      start+=step;return segment;\n    });\n  });\n}\n"
+        }
+      ],
+      "current": "3e01f73566c8d7af0590c6bca48fd5dddf44c736"
+    },
+    "mobile/AtlasChartRing.tsx": {
+      "previous": "212afcabe1760e768563890336932f83ab7c16fb",
+      "changes": [
+        {
+          "old": "import React, {memo, useMemo} from 'react';\nimport {Animated, View} from 'react-native';\nimport {atlasRingSegments, AtlasSlice} from './atlasInteraction';\n\n/** Fixed chart sectors. Only the inner constellation is transformed by gestures. */\nexport const AtlasChartRing=memo(function AtlasChartRing({size,groups,selected,pulse,track,reduceMotion}:{size:number;groups:AtlasSlice[][];selected:number;pulse:Animated.Value;track:string;reduceMotion:boolean}){\n  const thickness=22,radius=(size-thickness)/2;\n  const segments=useMemo(()=>atlasRingSegments(groups),[groups]);\n  return <View pointerEvents=\"none\" accessibilityElementsHidden style={{width:size,height:size}}>\n    {segments.map((segment,index)=>{\n      const active=segment.sector===selected;\n      return <Animated.View key={index} style={{position:'absolute',\n        left:size/2+Math.cos(segment.angle)*radius-thickness/2,\n        top:size/2+Math.sin(segment.angle)*radius-(Math.PI*radius*segment.step/180)/2,\n        width:thickness,height:Math.PI*radius*segment.step/180+1,\n        backgroundColor:segment.color||track,\n        opacity:active?(reduceMotion?.85:pulse.interpolate({inputRange:[0,.5,1],outputRange:[.64,.9,.64]})):.48,\n        transform:[{rotate:segment.angle+'rad'}],\n      }}/>;\n    })}\n  </View>;\n});\n",
+          "new": "import React,{memo,useMemo} from 'react';\nimport {Animated,View} from 'react-native';\nimport Svg,{Path} from 'react-native-svg';\nimport {atlasRingSegments,AtlasSlice} from './atlasInteraction';\n/** One continuous arc per published category; empty categories have no arc. */\nexport const AtlasChartRing=memo(function AtlasChartRing({size,groups,selected,pulse,reduceMotion}:{size:number;groups:AtlasSlice[][];selected:number;pulse:Animated.Value;track:string;reduceMotion:boolean}){\n const thickness=22,radius=(size-thickness)/2,centre=size/2;\n const segments=useMemo(()=>atlasRingSegments(groups),[groups]);\n const path=(start:number,step:number)=>{\n  const a=start*Math.PI/180,b=(start+step)*Math.PI/180;\n  return 'M '+(centre+radius*Math.cos(a))+' '+(centre+radius*Math.sin(a))+' A '+radius+' '+radius+' 0 0 1 '+(centre+radius*Math.cos(b))+' '+(centre+radius*Math.sin(b));\n };\n return <View pointerEvents=\"none\" accessibilityElementsHidden style={{width:size,height:size}}>\n  {groups.map((_,sector)=><Animated.View key={sector} style={{position:'absolute',width:size,height:size,opacity:sector===selected?(reduceMotion?.85:pulse.interpolate({inputRange:[0,.5,1],outputRange:[.64,.9,.64]})):.48}}>\n   <Svg width={size} height={size}>{segments.filter(s=>s.sector===sector).map(s=><Path key={s.label} d={path(s.start,s.step)} stroke={s.color} strokeWidth={thickness} fill=\"none\" strokeLinecap=\"butt\"/>)}</Svg>\n  </Animated.View>)}\n </View>;\n});\n"
+        }
+      ],
+      "current": "900f886bdbb49e77734dce65dbef6301b1efcd2a"
     }
   }
 }

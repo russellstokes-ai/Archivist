@@ -9,7 +9,7 @@ const {defaultMetadataSettings}=require('./metadataSettings.ts');
  try{
   const metadata=await createMetadataStore(db);
   await metadata.ensure({workId:'one',revision:0,fields:{title:'Book',author:'Writer'},manual:{},identityConfirmed:true,partIds:['part']});
-  await db.execAsync('CREATE TABLE scanner_vnext_catalogue(work_id TEXT PRIMARY KEY,payload TEXT NOT NULL)');
+  await db.execAsync('CREATE TABLE scanner_vnext_catalogue(work_id TEXT PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE scanner_vnext_staged(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL)');
   await db.runAsync('INSERT INTO scanner_vnext_catalogue VALUES(?,?)','one',JSON.stringify({source:{rootUri:'content://fixture/tree/library'},entry:{assets:[{relativePath:'book.epub',documentId:'library/book.epub',size:20}]}}));
   const exports=[];let release,started;
   const ready=new Promise(resolve=>started=resolve);
@@ -56,6 +56,11 @@ const {defaultMetadataSettings}=require('./metadataSettings.ts');
   assert.equal((await restarted.metadata.get('two')).fields.title,'Recovered');
   await restarted.savePortable('two');
   assert.equal(exports.at(-1).portableId,recoveredId,'Interrupted restore must not fork a second portable identity');
+  const disabled=await factory(async()=>({metadata:{...defaultMetadataSettings,writeMetadataToFiles:false}}));
+  const before=exports.length;assert.equal((await disabled.savePortable('two')).state,'disabled');assert.equal(exports.length,before,'Off switch must prevent both embedded writes and snapshot exports');
+  await metadata.ensure({workId:'comic',revision:0,fields:{title:'2000 AD Annual 1978',publisher:'IPC',genre:'Science Fiction'},manual:{},identityConfirmed:false,partIds:['comic1']});
+  await runtime.metadata.confirmIdentity('comic',0);assert.equal((await runtime.metadata.get('comic')).identityConfirmed,true,'Publisher supports explicit comic identification without invented writer');
+  await runtime.metadata.saveManual('comic',{publisher:'Different publisher'},1);assert.equal((await runtime.metadata.get('comic')).identityConfirmed,false,'Changing publisher-only identity requires review');
   console.log('PASS: runtime serializes newer revisions and preserves snapshot identity across interrupted export and runtime restart (native transport simulated)');
  }finally{await db.close();fs.rmSync(dir,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1});

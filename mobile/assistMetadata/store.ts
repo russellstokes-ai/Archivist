@@ -4,6 +4,7 @@ import type {MetadataWork,WorkFields,createMetadataStore} from '../scannerVNext/
 import type {Candidate} from '../scannerVNext/search';
 import {rankAssistCandidates} from './core';
 import {METADATA_FIELDS,validatedFields} from './fields';
+import {hasGenre} from './genres';
 const IDENTITY=new Set<string>(['title','author','series','seriesNumber','isbn','asin']);
 const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw Error('Metadata cancelled');};
 export async function createAssistMetadataStore(db:ScannerDatabase,base:Awaited<ReturnType<typeof createMetadataStore>>){
@@ -19,9 +20,10 @@ export async function createAssistMetadataStore(db:ScannerDatabase,base:Awaited<
   });return next!;
  }
  return {...base,
+  confirmIdentity:(id:string,revision:number,signal?:AbortSignal)=>mutate(id,revision,work=>{if(!work.fields.title?.trim()||!(work.fields.author?.trim()||work.fields.publisher?.trim()))throw Error('A title and creator or publisher are required');work.identityConfirmed=true;},signal),
   saveManual:(id:string,patch:WorkFields,revision:number,signal?:AbortSignal)=>mutate(id,revision,work=>{
    for(const [key,value]of Object.entries(validatedFields(patch))){
-    if(IDENTITY.has(key)&&work.fields[key as keyof WorkFields]!==value)work.identityConfirmed=false;
+    if((IDENTITY.has(key)||key==='publisher'&&!work.fields.author?.trim())&&work.fields[key as keyof WorkFields]!==value)work.identityConfirmed=false;
     work.fields[key as keyof WorkFields]=value;work.manual[key]=true;
    }
   },signal),
@@ -33,10 +35,11 @@ export async function createAssistMetadataStore(db:ScannerDatabase,base:Awaited<
    for(const [key,value]of Object.entries(fields)){
     if(!value)continue;const identity=IDENTITY.has(key);
     if(work.manual[key]&&!(identity&&options.confirmIdentityConflicts))continue;
-    if(!identity&&work.fields[key as keyof WorkFields]?.trim())continue;
+    if(!identity&&(key==='genre'?hasGenre(work.fields.genre):work.fields[key as keyof WorkFields]?.trim()))continue;
+    if(key==='genre'&&!hasGenre(value))continue;
     work.fields[key as keyof WorkFields]=value;
    }
-   if(!work.fields.title?.trim()||!work.fields.author?.trim())throw Error('A title and creator are required');
+   if(!work.fields.title?.trim()||!(work.fields.author?.trim()||work.fields.publisher?.trim()))throw Error('A title and creator or publisher are required');
    work.identityConfirmed=true;
   },options.signal),
   setResolvedArtwork:(id:string,from:string,to:string,revision:number,signal?:AbortSignal)=>mutate(id,revision,work=>{
@@ -45,7 +48,7 @@ export async function createAssistMetadataStore(db:ScannerDatabase,base:Awaited<
   },signal),
   restorePortable:(id:string,fields:WorkFields,manual:Record<string,boolean|undefined>,revision:number,signal?:AbortSignal)=>mutate(id,revision,work=>{
    const validated=validatedFields(fields);
-   if(!validated.title||!validated.author)throw Error('Portable identity is incomplete');
+   if(!validated.title||!(validated.author||validated.publisher))throw Error('Portable identity is incomplete');
    if(Object.values(work.manual).some(Boolean))throw Error('Existing local manual decisions cannot be replaced by an imported record');
    for(const key of Object.keys(manual))if(!(METADATA_FIELDS as readonly string[]).includes(key)||typeof manual[key]!=='boolean')throw Error('Invalid portable field lock');
    work.fields=validated;work.manual={...manual};work.identityConfirmed=true;

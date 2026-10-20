@@ -5,7 +5,7 @@ Module._load=function(id,...args){if(id==='expo/fetch')return {fetch:()=>{throw 
 const {createAssistProviders}=require('./assistMetadata/providers.native.ts');Module._load=original;
 const core=require('./assistMetadata/core.ts');
 (async()=>{
- const provider=createAssistProviders({books:{enabled:false},comics:{enabled:true,metron:true}},undefined,'test-token')[0];
+ const provider=createAssistProviders({books:{enabled:false},comics:{enabled:true,metron:true}},undefined,'test-token').find(p=>p.id==='metron');
  const result=await provider.search({title:'2000 AD Annual 1978'},0);
  assert.equal(calls.length,2,'An empty issue-year lookup must retry by series');
  assert.equal(calls[0].comicIssueNumber,'1978');assert.equal(calls[1].comicIssueNumber,undefined);assert.equal(calls[1].publishedYear,undefined);

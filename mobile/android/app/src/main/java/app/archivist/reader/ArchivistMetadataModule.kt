@@ -114,7 +114,7 @@ class ArchivistMetadataModule(private val context:ReactApplicationContext):React
   @ReactMethod fun createPortableId(promise:Promise){promise.resolve(UUID.randomUUID().toString())}
   @ReactMethod fun exportRecord(rootUri:String,inputJson:String,promise:Promise)=job(promise){
     require(inputJson.length<=1024*1024);val tree=root(rootUri,true);val input=JSONObject(inputJson)
-    val fields=input.getJSONObject("fields");require(fields.optString("title").isNotBlank()&&fields.optString("author").isNotBlank()&&!fields.has("coverUri"))
+    val fields=input.getJSONObject("fields");require(fields.optString("title").isNotBlank()&&(fields.optString("author").isNotBlank()||fields.optString("publisher").isNotBlank())&&!fields.has("coverUri"))
     val portableId=input.optString("portableId").takeIf{it.matches(Regex("[a-f0-9-]{36}"))}?:UUID.randomUUID().toString()
     val list=members(tree,input.getJSONArray("members"),SystemClock.elapsedRealtime()+60000)
     val record=JSONObject().put("schema",1).put("kind","archivist-work").put("portableId",portableId).put("savedAt",System.currentTimeMillis()).put("revision",input.getLong("revision")).put("fields",fields).put("manual",input.getJSONObject("manual")).put("members",list)

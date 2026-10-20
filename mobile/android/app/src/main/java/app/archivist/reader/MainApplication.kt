@@ -26,6 +26,7 @@ class MainApplication : Application(), ReactApplication {
           add(ArchivistArchivePackage())
           add(ArchivistScannerPackage())
           add(ArchivistMetadataPackage())
+          add(ArchivistFileMetadataPackage())
           add(ArchivistSplashPackage())
         }
     )

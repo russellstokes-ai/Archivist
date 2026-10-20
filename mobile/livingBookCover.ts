@@ -103,6 +103,6 @@ export function lockLivingBookCoverSession(
   key:string,
   next:LivingBookCoverDecision,
 ):LivingBookCoverSession{
-  if(current&&current.key===key)return current;
+  if(current&&current.key===key&&(current.decision.uri||!next.uri))return current;
   return {key,decision:next};
 }

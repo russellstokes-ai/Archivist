@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
-import {AppState,StyleSheet,View} from 'react-native';
+import {AppState,Image,Text,StyleSheet,View} from 'react-native';
 import {livingBookProbeScript,parseLivingBookProbe} from './livingBookReadiness';
 import {livingBookCallbackAllowed,livingBookProbeAllowed} from './livingBookNativeGate';
 
@@ -11,7 +11,7 @@ import {EncodingType,StorageAccessFramework,cacheDirectory,createDownloadResumab
 import type {LivingBookPhase} from './playerExperience';
 
 export type LivingBookCanvasProps={
-  title:string;author:string;chapter?:string;number?:number;phase:LivingBookPhase;
+  workKey?:string;title:string;author:string;chapter?:string;number?:number;phase:LivingBookPhase;
   direction:1|-1;skipping:boolean;reduceMotion:boolean;coverUri?:string;
   coverMode?:'portrait'|'jacket'|'fallback';coverHeaders?:Record<string,string>;
 };
@@ -75,7 +75,7 @@ let title=cfg.title||'',author=cfg.author||'',chapter=cfg.chapter||'',page=Math.
 let phase=cfg.phase||'closed',direction=cfg.direction===-1?-1:1,skipping=!!cfg.skipping,reduced=!!cfg.reduceMotion;
 let opening=(phase==='closed'||phase==='closing')?0:1,turn=(phase==='turning'||phase==='settling')?1:0;
 let transitionStart=performance.now(),transitionFrom=opening,transitionTo=opening,turnStart=performance.now(),activeTurn=(phase==='turning'||phase==='settling');
-let coverImage=null,coverReady=false,coverMode=cfg.coverMode||'fallback';
+let coverRequest=0,coverImage=null,coverReady=false,coverMode=cfg.coverMode||'fallback';
 
 function wrap(t,text,x,y,maxWidth,lineHeight,maxLines){const words=String(text||'').split(/\s+/).filter(Boolean),lines=[];let line='';for(const word of words){const test=line?line+' '+word:word;if(line&&t.measureText(test).width>maxWidth){lines.push(line);line=word;}else line=test;}if(line)lines.push(line);lines.slice(0,maxLines).forEach((v,i)=>t.fillText(v,x,y+i*lineHeight,maxWidth));}
 function texture(isCover,num){const c=document.createElement('canvas');c.width=348;c.height=512;const t=c.getContext('2d');t.fillStyle=isCover?'#102b35':'#f3ecd9';t.fillRect(0,0,348,512);
@@ -97,19 +97,21 @@ function commitTurn(){if(!activeTurn)return;if(direction===1){page+=2;left=back;
 function rebuildStable(){liner=texture(false,0);left=texture(false,page);right=texture(false,page+1);cover=texture(true,0);}
 function setPhase(next,data){if(data){direction=data.direction===-1?-1:1;skipping=!!data.skipping;reduced=!!data.reduceMotion;}if(next===phase)return;const previous=phase;if((next==='opening'||next==='closing')&&activeTurn)commitTurn();phase=next;const now=performance.now();if(next==='opening'){transitionFrom=opening;transitionTo=1;transitionStart=now;if(reduced)opening=1;}else if(next==='closing'){transitionFrom=opening;transitionTo=0;transitionStart=now;if(reduced)opening=0;}else if(next==='turning'){if(!activeTurn)prepareTurn();turnStart=now;if(reduced)turn=1;}else if(next==='settling'){if(!activeTurn)prepareTurn();turn=1;}else if(next==='open'){opening=1;if(previous==='settling'||previous==='turning')commitTurn();}else if(next==='closed'){opening=0;activeTurn=false;turn=0;}}
 function paint(){ctx.setTransform(2,0,0,2,0,0);ctx.clearRect(0,0,500,420);ctx.transform(1.16,0,0,1.16,-40,12);ctx.save();ctx.fillStyle='rgba(0,0,0,.19)';ctx.filter='blur(15px)';ctx.beginPath();ctx.ellipse(250,342,110+80*opening,18+4*opening,0,0,2*PI);ctx.fill();ctx.restore();surface(cover,rigid(0,-9,W+5,H+8),false,false);for(let j=0;j<6;j++)surface(liner,rigid(0,-7+j*1.7),false,false);surface(right,rigid(0,4));if(opening>0){surface(cover,rigid(PI*opening,-5,W+5,H+8),opening>.5,false);surface(left,rigid(PI*opening,5),opening>.5);}if(activeTurn)surface(turn>.5?back:front,flex(turn),direction===1?turn>.5:turn<.5,true);if(opening<1)surface(opening<.5?cover:liner,rigid(PI*opening,11,W+5,H+8),opening>.5,false);}
-function tick(now){if(phase==='opening'||phase==='closing'){const progress=reduced?1:Math.min(1,Math.max(0,now-transitionStart)/((phase==='opening'?900:1000)*Math.max(.001,Math.abs(transitionTo-transitionFrom))));opening=transitionFrom+(transitionTo-transitionFrom)*ease(progress);}else if(phase==='turning'&&activeTurn){const duration=skipping?780:1900,progress=reduced?1:Math.min(1,Math.max(0,now-turnStart)/duration);turn=ease(progress);}else if(phase==='settling'&&activeTurn)turn=1;paint();requestAnimationFrame(tick);}
-window.ArchivistLivingBook={setState:data=>{if(!data)return;if(typeof data.title==='string'&&data.title!==title)title=data.title;if(typeof data.author==='string')author=data.author;if(typeof data.chapter==='string')chapter=data.chapter;if(Number.isFinite(data.number)){const nextPage=Math.max(2,Number(data.number)*2);if(!activeTurn&&nextPage!==page){page=nextPage;rebuildStable();}}setPhase(data.phase||phase,data);},setCover:(source,mode)=>{coverMode=mode||'fallback';if(!source){coverImage=null;coverReady=false;cover=texture(true,0);return;}const img=new Image();img.onload=()=>{coverImage=img;coverReady=true;cover=texture(true,0);};img.onerror=()=>{coverImage=null;coverReady=false;cover=texture(true,0);};img.src=source;}};
-paint();requestAnimationFrame(tick);
+function tick(now){requestAnimationFrame(tick);try{if(phase==='opening'||phase==='closing'){const progress=reduced?1:Math.min(1,Math.max(0,now-transitionStart)/((phase==='opening'?900:1000)*Math.max(.001,Math.abs(transitionTo-transitionFrom))));opening=transitionFrom+(transitionTo-transitionFrom)*ease(progress);}else if(phase==='turning'&&activeTurn){const duration=skipping?780:1900,progress=reduced?1:Math.min(1,Math.max(0,now-turnStart)/duration);turn=ease(progress);}else if(phase==='settling'&&activeTurn)turn=1;paint();}catch(e){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage("archivist-living-render-error");}}
+window.ArchivistLivingBook={setState:data=>{if(!data)return;const identityChanged=(typeof data.title==='string'&&data.title!==title)||(typeof data.author==='string'&&data.author!==author);if(typeof data.title==='string'&&data.title!==title)title=data.title;if(typeof data.author==='string')author=data.author;if(typeof data.chapter==='string')chapter=data.chapter;if(Number.isFinite(data.number)){const nextPage=Math.max(2,Number(data.number)*2);if(!activeTurn&&nextPage!==page){page=nextPage;rebuildStable();}}if(identityChanged)rebuildStable();setPhase(data.phase||phase,data);},setCover:(source,mode)=>{const request=++coverRequest;coverMode=mode||'fallback';if(!source){coverImage=null;coverReady=false;cover=texture(true,0);return;}const img=new Image();img.onload=()=>{if(request!==coverRequest)return;coverImage=img;coverReady=true;cover=texture(true,0);};img.onerror=()=>{if(request!==coverRequest)return;coverImage=null;coverReady=false;cover=texture(true,0);};img.src=source;}};
+requestAnimationFrame(tick);
 })();</script></body></html>`;
 }
 
 export function LivingBookCanvas(props:LivingBookCanvasProps){
-  return <LivingBookInstance key={JSON.stringify([props.title,props.author,props.coverUri])} {...props}/>;
+  return <LivingBookInstance key={props.workKey||JSON.stringify([props.title,props.author])} {...props}/>;
 }
 
 function LivingBookInstance(props:LivingBookCanvasProps){
   const ref=useRef<WebView>(null);
   const [ready,setReady]=useState(false);
+  const [coverFailed,setCoverFailed]=useState(false);
+  useEffect(()=>setCoverFailed(false),[props.coverUri]);
   const [reloadKey,setReloadKey]=useState(0);
   const generation=useRef(0);
   generation.current=reloadKey;
@@ -203,8 +205,9 @@ function LivingBookInstance(props:LivingBookCanvasProps){
   },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);
 
   return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none">
+    {!ready&&<View style={styles.fallback}>{props.coverUri&&!coverFailed?<Image source={{uri:props.coverUri,headers:props.coverHeaders}} resizeMode="contain" onError={()=>setCoverFailed(true)} style={styles.fallbackImage}/>:<View style={styles.fallbackJacket}><Text style={styles.fallbackTitle}>{props.title}</Text><Text style={styles.fallbackAuthor}>{props.author}</Text></View>}</View>}
     <WebView key={reloadKey} ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
-      bounces={false} overScrollMode="never" androidLayerType="hardware" style={styles.web} containerStyle={styles.container}
+      bounces={false} overScrollMode="never" androidLayerType="hardware" style={[styles.web,!ready&&{opacity:0}]} containerStyle={styles.container}
       onLoadStart={()=>{
         if(reloadKey!==generation.current)return; // stale previous WebView
         failed.current=false; ++probeSequence.current; setReady(false);clearDeadline();
@@ -213,6 +216,7 @@ function LivingBookInstance(props:LivingBookCanvasProps){
         if(livingBookCallbackAllowed(reloadKey,generation.current,suspended.current,failed.current))probe(reloadKey);
       }}
       onMessage={event=>{
+        if(event.nativeEvent.data==="archivist-living-render-error"){recover("canvas-render-error",reloadKey);return;}
         const result=parseLivingBookProbe(event.nativeEvent.data);
         if(!result||!livingBookProbeAllowed(reloadKey,generation.current,result.generation,probeSequence.current,suspended.current,failed.current))return;
         if(result.status==='ready'||result.status==='tainted'){
@@ -231,4 +235,8 @@ function LivingBookInstance(props:LivingBookCanvasProps){
 const styles=StyleSheet.create({
   stage:{width:340,maxWidth:'100%',height:290,alignSelf:'center',overflow:'hidden',backgroundColor:'transparent'},
   web:{backgroundColor:'transparent'},container:{flex:1,backgroundColor:'transparent'},
+  fallback:{...StyleSheet.absoluteFillObject,alignItems:'center',justifyContent:'center'},
+  fallbackImage:{width:190,height:255},
+  fallbackJacket:{width:174,height:240,backgroundColor:'#183D4A',borderWidth:2,borderColor:'#B89B62',borderRadius:4,padding:18,justifyContent:'center'},
+  fallbackTitle:{color:'#F4E8CC',fontSize:20,textAlign:'center'},fallbackAuthor:{color:'#F4E8CC',fontSize:13,textAlign:'center',marginTop:14},
 });
