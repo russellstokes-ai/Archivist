@@ -30,7 +30,7 @@ This candidate does not add CB7 decoding, loose-image-folder reading, MOBI readi
 
 # Home Assistant test build — PR 83
 
-## Diagnostic and comic metadata test build — 18 October 2026
+## Previous build record — 18 October 2026
 
 Version **0.9.3-qa.20261018.2**. Exact executable source **1755831ad6e40124b539f6c2c4221b36aa0ab106**.
 
@@ -60,8 +60,8 @@ To install the tested candidate:
 [Add the QA repository in Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Frussellstokes-ai%2FArchivist%23integration%2Farchivist-v1-auto-restore-recovery-20261016)
 
 The default repository URL without the branch suffix does **not** select PR 83.
-The manifest now selects `0.9.3-qa.20261018.2`. This supersedes the
-16 October label. A version label alone does not establish a passing build.
+The manifest now selects `0.9.3-qa.20261020.1`, dated 20 October 2026. This supersedes the
+16 and 18 October test builds. A version label alone does not establish a passing build.
 See PR 83 Checks for the exact commit and server workflow result.
 
 ## How installation builds the server

@@ -1,4 +1,4 @@
-> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261018.2; server checks passed; ready for installation testing.** See the [QA installation and build guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for the branch repository URL, validation status, setup, updates and rollback. The default repository URL below does not select this candidate.
+> **PR 83 Home Assistant candidate: version 0.9.3-qa.20261020.1; dated 20 October 2026; server checks and QA build passed; ready for installation testing.** See the [QA installation and build guide](../docs/v1/HOME_ASSISTANT_QA_INSTALL.md) for setup, updates and rollback.
 
 # Archivist for Home Assistant — Documentation
 
@@ -6,15 +6,15 @@
 
 Archivist is a self-hosted personal library server for books, audiobooks, comics and PDFs. The Home Assistant package provides the Archivist web interface and API, persistent catalogue storage, household profiles and access for the Archivist Android app.
 
-Current Home Assistant version: **0.9.3-qa.20261018.2 (test release)**
+Current Home Assistant version: **0.9.3-qa.20261020.1 (20 October 2026 test release)**
 
 ## Installation
 
 Add the following URL as a custom repository in the Home Assistant app store:
 
-`https://github.com/russellstokes-ai/Archivist`
+`https://github.com/russellstokes-ai/Archivist#integration/archivist-v1-auto-restore-recovery-20261016`
 
-Install **Archivist**, start the app and select **Open Web UI**.
+Install or update **Archivist QA (PR 83)**, start the app and select **Open Web UI**.
 
 ## First-run setup
 
