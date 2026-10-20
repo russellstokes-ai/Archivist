@@ -419,6 +419,11 @@ func (a *app) scanWithProgressJob(ctx context.Context,id,jobID int64,progress fu
   var indexed,available,linked int
   if e=tx.QueryRow(`SELECT count(*),COALESCE(sum(a.available),0),count(ea.asset_id) FROM assets a LEFT JOIN edition_assets ea ON ea.asset_id=a.id WHERE a.source_id=?`,id).Scan(&indexed,&available,&linked);e!=nil{return e}
   unchanged=indexed==count&&available==count&&linked==count
+  if unchanged {
+   var ambiguous bool
+   if e=tx.QueryRow(`SELECT EXISTS(SELECT ed.work_id FROM editions ed JOIN works w ON w.id=ed.work_id WHERE w.auto=1 AND w.id IN (SELECT e.work_id FROM assets a JOIN edition_assets ea ON ea.asset_id=a.id JOIN editions e ON e.id=ea.edition_id WHERE a.source_id=?) GROUP BY ed.work_id HAVING count(*)<>1)`,id).Scan(&ambiguous);e!=nil{return e}
+   unchanged=!ambiguous
+  }
  }
  if !unchanged {
 	if _, e = tx.Exec("UPDATE assets SET available=0 WHERE source_id=?", id); e != nil {
