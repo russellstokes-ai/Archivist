@@ -214,9 +214,41 @@
         {
           "old": "Write confirmed metadata into supported audio, EPUB, PDF and CBZ/ZIP/CBT files. CBR writing is unavailable. File names stay unchanged. Recovery copies are also saved in your library folder.",
           "new": "Write confirmed metadata into supported audio, EPUB, PDF and comic files, including CBR. File names stay unchanged. Protected or unsupported files remain untouched, with the outcome shown in review. Recovery copies are also saved in your library folder."
+        },
+        {
+          "old": "      <PageHeader title=\"Shelf\" subtitle={shelfGreeting+' Pick up where you left off.'}/>",
+          "new": "      <View style={styles.pageHeadingGroup}>\n      <PageHeader title=\"Shelf\" subtitle={shelfGreeting+' Pick up where you left off.'}/>"
+        },
+        {
+          "old": "      </PageToolbar>\n\n      <FirstRunOnboarding/>",
+          "new": "      </PageToolbar>\n      </View>\n\n      <FirstRunOnboarding/>"
+        },
+        {
+          "old": "        <PageHeader\n          title=\"Atlas\"",
+          "new": "        <View style={styles.pageHeadingGroup}>\n        <PageHeader\n          title=\"Atlas\""
+        },
+        {
+          "old": "        </PageToolbar>\n\n        {atlasListMode?<SourceSwitcher/>:null}",
+          "new": "        </PageToolbar>\n        </View>\n\n        {atlasListMode?<SourceSwitcher/>:null}"
+        },
+        {
+          "old": "  standardPageHeader: {",
+          "new": "  pageHeadingGroup: {gap:0},\n  profilePhotoColumn: {alignItems:'center',gap:4,flexShrink:0,maxWidth:148},\n  standardPageHeader: {"
+        },
+        {
+          "old": "        <View style={styles.profileIdentityRing}>",
+          "new": "        <View style={styles.profilePhotoColumn}>\n        <View style={styles.profileIdentityRing}>"
+        },
+        {
+          "old": "        <View style={styles.profileIdentityCopy}>",
+          "new": "          <Button label={profileAvatar.photoUri?'Replace photo':'Add photo'} tone=\"quiet\" onPress={()=>void chooseProfilePhoto()}/>\n          {profileAvatar.photoUri?<Button label=\"Remove photo\" tone=\"quiet\" onPress={()=>void saveProfileAvatar({...profileAvatar,photoUri:undefined})}/>:null}\n        </View>\n        <View style={styles.profileIdentityCopy}>"
+        },
+        {
+          "old": "          <View style={styles.toolRow}>\n            <Button label={profileAvatar.photoUri?'Change photo':'Choose photo'} tone=\"quiet\" onPress={()=>void chooseProfilePhoto()}/>\n            {profileAvatar.photoUri?<Button label=\"Remove photo\" tone=\"quiet\" onPress={()=>void saveProfileAvatar({...profileAvatar,photoUri:undefined})}/>:null}\n          </View>\n          <TextInput accessibilityLabel=\"Avatar initials\" value={profileAvatar.initials} maxLength={2} autoCapitalize=\"characters\" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>",
+          "new": "          <TextInput accessibilityLabel=\"Avatar initials\" value={profileAvatar.initials} maxLength={2} autoCapitalize=\"characters\" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>"
         }
       ],
-      "current": "433d13456d1b6d0ae238f242676a739c4030cfa4"
+      "current": "38fcaf01c3ae4b7578a95dbf76602b4d023555b8"
     },
     "mobile/speechFocus.generated.ts": {
       "previous": "5aa6ed24f64542d80f11d3f0d54986f0d070b7e9",

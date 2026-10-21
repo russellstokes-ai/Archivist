@@ -1,0 +1,20 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('assert/strict');
+require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,p);
+const {RecoveryReader}=require('./assistMetadata/recoveryReader.ts');
+(async()=>{
+ const reader=new RecoveryReader(25);let finish,starts=0;
+ const stuck=reader.read(()=>{starts++;return new Promise(resolve=>finish=resolve)});
+ await assert.rejects(stuck,/timeout/);
+ await assert.rejects(reader.read(async()=>{starts++;return 'wrong'}),/circuit-open/);
+ assert.equal(starts,1,'a hung storage provider must not accumulate native reads');
+ finish('late');await new Promise(resolve=>setTimeout(resolve,0));
+ assert.equal(await reader.read(async()=>'saved record'),'saved record');
+ const abort=new AbortController();let release;
+ const cancelled=reader.read(()=>new Promise(resolve=>release=resolve),abort.signal);
+ abort.abort();await assert.rejects(cancelled,/cancelled/);
+ release(null);await new Promise(resolve=>setTimeout(resolve,0));
+ const already=new AbortController();already.abort();
+ await assert.rejects(reader.read(async()=>{throw Error('must not start')},already.signal),/cancelled/);
+ assert.equal(await reader.read(async()=>null),null);
+ console.log('PASS recovery deadline, quarantine, late completion, cancellation and successful reuse');
+})().catch(e=>{console.error(e);process.exitCode=1});

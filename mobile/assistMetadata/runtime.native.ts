@@ -16,6 +16,7 @@ import {missingMetadata,ProviderQueue} from './core';
 import {makePortableFields,validatePortableRecord} from './portable';
 import {currentReview} from './review';
 import {writeMetadataFile} from './writeBack.native';
+import {RecoveryReader} from './recoveryReader';
 const artworkQueue=new ProviderQueue();
 const check=(s?:AbortSignal)=>{if(s?.aborted)throw Error('Metadata cancelled');};
 type Receipt={state:string;revision?:number;portableId?:string};
@@ -35,11 +36,16 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  const assist=await createImprovedAssist(db,store,{search:async(...args)=>(await configured()).search(...args),more:async(...args)=>(await configured()).more(...args)});
  const native=NativeModules.ArchivistMetadata as {createPortableId?:()=>Promise<string>;exportRecord?:(root:string,input:string)=>Promise<string>;restoreRecord?:(root:string,members:string)=>Promise<string|null>;inspectArtwork?:(uri:string)=>Promise<string|null>}|undefined;
  const pending=new Map<string,Promise<Receipt>>();
+ const recoveryReader=new RecoveryReader();
  async function context(id:string){
   const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_catalogue WHERE work_id=?',id);
   if(!row)throw Error('Work is unavailable');
   const stored=JSON.parse(row.payload);
-  const members=stored.entry.assets.map((asset:any)=>({path:asset.relativePath,uri:documentUri(stored.source.rootUri,asset.documentId),bytes:(()=>{try{return new File(documentUri(stored.source.rootUri,asset.documentId)).size;}catch{return asset.size??-1;}})()}));
+  // Source inspection belongs on the native worker. File.size on a content URI
+  // is synchronous and can freeze the UI when a document provider stalls.
+  // Discovery sizes can also be stale after an in-file metadata update. Native
+  // persistence measures and hashes the current bytes rather than trusting them.
+  const members=stored.entry.assets.map((asset:any)=>({path:asset.relativePath,uri:documentUri(stored.source.rootUri,asset.documentId),bytes:-1}));
   return {root:stored.source.rootUri as string,members};
  }
  async function durableStatus(id:string):Promise<Receipt>{
@@ -137,7 +143,7 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
   if(!['not-saved','restoring'].includes(status.state))return false;
   const current=await store.get(id);if(!current||Object.values(current.manual).some(Boolean))return false;
   try{
-   check(signal);const source=await context(id),raw=await native.restoreRecord(source.root,JSON.stringify(source.members));check(signal);
+   check(signal);const source=await context(id),raw=await recoveryReader.read(()=>native.restoreRecord!(source.root,JSON.stringify(source.members)),signal);check(signal);
    if(!raw)return false;const response=JSON.parse(raw),record=validatePortableRecord(response.record);
    if(status.portableId&&status.portableId!==record.portableId)throw Error('Conflicting restore identity');
    const fields={...record.fields,...(typeof response.coverUri==='string'&&response.coverUri.startsWith('file:///')?{coverUri:response.coverUri}:{})};
@@ -146,12 +152,23 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
    await receipt(id,current.revision,{state:'restoring',revision:current.revision,portableId:record.portableId});
    const next=await store.restorePortable(id,fields,record.manual,current.revision,signal);
    await receipt(id,next.revision,{state:'restored',revision:next.revision,portableId:record.portableId});return true;
-  }catch{check(signal);return false;}
+  }catch(error){
+   check(signal);
+   // Temporary provider failure is not evidence that no saved identity exists.
+   // Leave this work untouched so the next refresh can retry recovery.
+   if(error instanceof Error&&/^Recovery (timeout|circuit-open|queue-full|error)/.test(error.message))return 'deferred' as const;
+   return false;
+  }
  }
  async function enrich(books:LocalBook[],policy:AssistPolicy,onRows:(rows:ScannerBook[])=>Promise<void>,signal?:AbortSignal){
   const groups=new Map<string,LocalBook>();for(const book of books){const id=(book as ScannerBook).scannerWorkId;if(id&&!groups.has(id))groups.set(id,book);}
   for(const [id,book]of groups){
-   check(signal);if(await restore(id,signal))await onRows(await refresh(id,signal));
+   check(signal);const restored=await restore(id,signal);
+   if(restored==='deferred'){
+    console.warn('Archivist metadata recovery deferred; source provider unavailable');
+    continue;
+   }
+   if(restored)await onRows(await refresh(id,signal));
    const work=await store.get(id);if(!work)continue;
    const missing=missingMetadata(work,book.format==='Audio');
    const previous=await assist.get(id);
@@ -168,7 +185,11 @@ export async function createAndroidCatalogueRuntime(settings:Parameters<typeof c
  const scan=async(...args:Parameters<typeof base.scan>)=>{
   const result=await base.scan(...args);const groups=[...new Set(result.books.map(b=>(b as ScannerBook).scannerWorkId).filter(Boolean))];
   const replacements=new Map<string,ScannerBook[]>();
-  for(const id of groups){if(await restore(id,args[4]?.signal))replacements.set(id,await refresh(id,args[4]?.signal));else replacements.set(id,await decorateRows(id,result.books.filter(b=>(b as ScannerBook).scannerWorkId===id) as ScannerBook[]));}
+  // Commit discovery first. Recovery may hash large comics/audio or wait on a
+  // document provider; enrich already restores each work after this baseline.
+  const byWork=new Map<string,ScannerBook[]>();
+  for(const book of result.books){const row=book as ScannerBook;const rows=byWork.get(row.scannerWorkId)??[];rows.push(row);byWork.set(row.scannerWorkId,rows);}
+  for(const id of groups){check(args[4]?.signal);replacements.set(id,await decorateRows(id,byWork.get(id)??[]));}
   if(replacements.size){const rows=new Map(result.books.map(b=>[b.uri,b]));for(const group of replacements.values())for(const b of group)rows.set(b.uri,b);result.books=[...rows.values()];}
   return result;
  };

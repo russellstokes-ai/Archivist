@@ -5819,12 +5819,14 @@ function Client() {
       scrollEventThrottle={120}
       onContentSizeChange={()=>{if(shelfScrollOffset.current>0)shelfScrollRef.current?.scrollTo({y:shelfScrollOffset.current,animated:false})}}
       contentContainerStyle={[styles.shelfContent,phoneLayout&&styles.shelfContentPhone,narrowPhone&&styles.shelfContentNarrow,width>=600&&styles.shelfContentFold,width>=940&&styles.shelfContentWide]}>
+      <View style={styles.pageHeadingGroup}>
       <PageHeader title="Shelf" subtitle={shelfGreeting+' Pick up where you left off.'}/>
       <PageToolbar>
         <Pressable accessibilityRole="button" accessibilityLabel="Customise Shelf" onPress={()=>setShelfManageOpen(true)} style={styles.headerAction}>
           <UiIcon name="settings" color={p.sage} size={17}/><Text style={[styles.headerActionText,{color:p.sage}]}>Arrange</Text>
         </Pressable>
       </PageToolbar>
+      </View>
 
       <FirstRunOnboarding/>
 
@@ -6811,6 +6813,7 @@ function Client() {
     ];
     return (
       <ScrollView scrollEnabled={!atlasInteracting} contentContainerStyle={[styles.atlasScreen,phoneLayout&&styles.atlasScreenPhone,narrowPhone&&styles.atlasScreenNarrow,width>=600&&styles.atlasScreenFold,width>=940&&styles.atlasScreenWide]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
+        <View style={styles.pageHeadingGroup}>
         <PageHeader
           title="Atlas"
           subtitle="Characters, stories and ideas — your reading universe."
@@ -6820,6 +6823,7 @@ function Client() {
             <UiIcon name={atlasListMode?'atlas':'list'} color={p.sage} size={17}/><Text style={[styles.headerActionText,{color:p.sage}]}>{atlasListMode?'Universe':'List'}</Text>
           </Pressable>
         </PageToolbar>
+        </View>
 
         {atlasListMode?<SourceSwitcher/>:null}
         {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
@@ -7515,10 +7519,14 @@ function Client() {
       <PageHeader title="Profile" subtitle="Your identity and reading life."/>
 
       <View style={[styles.profileIdentityHero,styles.profileIdentityHeroRich,narrowPhone&&styles.profileIdentityHeroNarrow,{borderBottomColor:p.line}]}>
+        <View style={styles.profilePhotoColumn}>
         <View style={styles.profileIdentityRing}>
           <DataRing size={112} items={identityRing} ink={p.ink} muted={p.muted} track={p.line} thickness={6} opacity={1}/>
           <View style={[styles.profileIdentityAvatar,styles.profileIdentityAvatarRing,{backgroundColor:profileAvatar.color||'#47736F',overflow:'hidden'}]}>{profileAvatar.photoUri?<Image source={{uri:profileAvatar.photoUri}} resizeMode="cover" style={styles.profileIdentityAvatarImage}/>:<Text style={styles.profileIdentityAvatarText}>{avatarInitials}</Text>}</View>
           <View style={[styles.profileIdentityLevelBadge,{backgroundColor:darkMode?'#0B1725':'#FFF8E9',borderColor:p.gold}]}><Text style={[styles.profileIdentityLevelText,{color:p.gold}]}>L{overall.level}</Text></View>
+        </View>
+          <Button label={profileAvatar.photoUri?'Replace photo':'Add photo'} tone="quiet" onPress={()=>void chooseProfilePhoto()}/>
+          {profileAvatar.photoUri?<Button label="Remove photo" tone="quiet" onPress={()=>void saveProfileAvatar({...profileAvatar,photoUri:undefined})}/>:null}
         </View>
         <View style={styles.profileIdentityCopy}>
           <Text style={[styles.profileIdentityKicker,{color:p.gold}]}>{overall.title.toUpperCase()}</Text>
@@ -7570,10 +7578,6 @@ function Client() {
         <Text style={[styles.profileHubSectionTitle,{color:p.muted}]}>AVATAR</Text>
         <Text style={[styles.meta,{color:p.muted}]}>Use a photo or up to two initials. The accent remains visible whenever initials are used.</Text>
         <View style={styles.profileAvatarEditor}>
-          <View style={styles.toolRow}>
-            <Button label={profileAvatar.photoUri?'Change photo':'Choose photo'} tone="quiet" onPress={()=>void chooseProfilePhoto()}/>
-            {profileAvatar.photoUri?<Button label="Remove photo" tone="quiet" onPress={()=>void saveProfileAvatar({...profileAvatar,photoUri:undefined})}/>:null}
-          </View>
           <TextInput accessibilityLabel="Avatar initials" value={profileAvatar.initials} maxLength={2} autoCapitalize="characters" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>
           <View style={styles.profileAvatarPalette}>
             {avatarColours.map(color=><Pressable key={color} accessibilityRole="button" accessibilityLabel={'Use avatar colour '+color} accessibilityState={{selected:profileAvatar.color===color}} onPress={()=>void saveProfileAvatar({...profileAvatar,color})} style={[styles.profileAvatarSwatch,{backgroundColor:color,borderColor:profileAvatar.color===color?p.ink:'transparent'}]}/>)}
@@ -9179,6 +9183,8 @@ const styles = StyleSheet.create({
   shelfStorageShortcut: {minWidth:170,flexGrow:1,minHeight:46,borderWidth:StyleSheet.hairlineWidth,borderRadius:14,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:8},
   shelfStorageShortcutText: {fontSize:11.5,lineHeight:16,fontWeight:'600',flex:1},
   shelfStorageShortcutCount: {fontSize:10,lineHeight:14,fontWeight:'700',fontVariant:['tabular-nums']},
+  pageHeadingGroup: {gap:0},
+  profilePhotoColumn: {alignItems:'center',gap:4,flexShrink:0,maxWidth:148},
   standardPageHeader: {minHeight:66,flexDirection:'row',alignItems:'center',paddingRight:58},
   standardPageHeaderPhone: {minHeight:62,paddingRight:54},
   standardPageHeaderNarrow: {minHeight:58,paddingRight:50},

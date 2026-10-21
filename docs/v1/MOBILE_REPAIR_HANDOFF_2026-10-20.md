@@ -2,7 +2,15 @@
 
 Active branch: `fix/assist-metadata-durable-20261017`. This branch is the source for the requested QA APK. No production release or main-branch merge is implied. Earlier handoffs are historical where they conflict with this scoped update.
 
-## QA APK delivery evidence
+## 21 October: scan recovery and profile/header repairs
+
+- Discovery no longer waits for portable metadata recovery or media write-back before saving its baseline. Recovery remains in the existing post-scan enrichment path. Synchronous content-URI size inspection was removed; native persistence measures and hashes current bytes, including after metadata updates.
+- Recovery reads have a 65-second caller deadline (native hashing allows 60 seconds). A stalled native read retains its worker slot, preventing queued read accumulation; cancellation returns promptly and late results cannot update the catalogue. Temporarily unavailable recovery defers that work rather than treating it as absent and overwriting its saved identity; a later refresh retries it.
+- Profile Add photo / Replace photo and Remove photo now sit with the identity avatar. The old lower photo action row is removed; initials and colour controls close up naturally.
+- Shelf and Atlas heading/toolbars are grouped, removing the large parent-layout gaps around the toolbar while preserving touch-target sizes.
+- Validation: the full local run passed 184/185 suites; the remaining UI contract expected the old button wording. After updating that expectation, its focused rerun passed. Both new recovery tests pass; TypeScript and protected-source gate pass. Device reproduction of the reported 24% stall is not available, so the identified blocking path is fixed without claiming the exact device cause was proven. Latest APK workflow evidence will be recorded after completion.
+
+## Previous QA APK delivery evidence
 
 - APK source commit: `37164eba32d9b219d8891b8ef1c9ca999b4a9a44`. Later documentation-only commits do not change this binary.
 - [Direct APK download](https://github.com/russellstokes-ai/Archivist/releases/download/qa-test14-39502558683-1/Archivist-0.9.4-test-14.apk) — 74.4 MB, QA package only; not a ZIP.
