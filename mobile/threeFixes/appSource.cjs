@@ -69,8 +69,8 @@ function applyWithManifest(input){
   body=once(body,'    return <ScrollView','    return <><ScrollView','profile modal sibling opening');
   body=once(body,'        <View style={styles.profileIdentityRing}>','        <View style={{alignItems:\'center\',gap:10}}><View style={styles.profileIdentityRing}>','profile ring column');
   body=once(body,'        </View>\n        <View style={styles.profileIdentityCopy}>',`        </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{disabled:profilePhotoPicking||profilePhotoSaving}} disabled={profilePhotoPicking||profilePhotoSaving} onPress={()=>void chooseProfilePhoto()} style={({pressed})=>({minHeight:48,minWidth:112,paddingHorizontal:12,paddingVertical:12,borderRadius:12,borderWidth:1,borderColor:p.gold,backgroundColor:p.card,alignItems:'center',justifyContent:'center',opacity:profilePhotoPicking||profilePhotoSaving?.5:pressed?.75:1})}>
-            <Text style={{color:p.gold,fontSize:14,fontWeight:'700'}}>Change photo</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{disabled:profilePhotoPicking||profilePhotoSaving}} disabled={profilePhotoPicking||profilePhotoSaving} onPress={()=>void chooseProfilePhoto()} style={({pressed})=>({minHeight:48,minWidth:112,paddingHorizontal:12,paddingVertical:12,borderRadius:12,borderWidth:1,borderColor:p.gold,backgroundColor:p.card,alignItems:'center',justifyContent:'center',opacity:(profilePhotoPicking||profilePhotoSaving)?0.5:pressed?0.75:1})}>
+            <Text style={{color:p.ink,fontSize:14,fontWeight:'700'}}>Change photo</Text>
           </Pressable>
         </View>
         <View style={styles.profileIdentityCopy}>`,'visible photo action');
@@ -116,6 +116,15 @@ function applyWithManifest(input){
   },[localScanning,scanProgress?.phase,scanProgress?.currentFolder,scanProgress?.processed,scanProgress?.found]);
   const scanFrame=()=>`);
  scope('scan generation ownership','  const beginLocalScan=()=>{','\n  const reportLocalScan=',body=>once(body,'    const generation=scanCommitGate.begin();','    const generation=scanCommitGate.begin();\n    activeScanOwnerRef.current=generation;','own the actual running scan'));
+ scope('operation transitions are never count-throttled','  const reportLocalScan=(generation:number)=>{','\n  const endLocalScan=',()=>`  const reportLocalScan=(generation:number)=>{
+    let last=0,lastOperation='';
+    return (progress:LocalScanProgress)=>{
+      const now=Date.now(),operation=progress.phase+'|'+progress.currentFolder;
+      if(scanCommitGate.isCurrent(generation)&&(operation!==lastOperation||now-last>=150)){
+        last=now;lastOperation=operation;setScanProgress(progress);
+      }
+    };
+  };`);
  scope('release scan only after actual settlement','  const endLocalScan=(generation:number)=>{','\n  const recordLibraryRefreshWarning=',()=>`  const endLocalScan=(generation:number)=>{
     if(activeScanOwnerRef.current!==generation)return;
     activeScanOwnerRef.current=null;

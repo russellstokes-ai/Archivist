@@ -31,7 +31,7 @@ export function ProfilePhotoPreview({draft,saving,error,reduceMotion,onUse,onCan
           <Text style={{color:p.ink,fontSize:16,fontWeight:'600'}}>Cancel</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={saving?'Saving profile photo':'Use photo'} accessibilityState={{disabled:saving||!ready,busy:saving}} disabled={saving||!ready} onPress={use} style={({pressed})=>({flex:fontScale>1.5?undefined:1,minHeight:48,paddingHorizontal:12,paddingVertical:14,borderRadius:12,backgroundColor:p.accent,alignItems:'center',justifyContent:'center',opacity:saving||!ready?0.5:pressed?0.75:1})}>
-          <Text style={{color:p.background,fontSize:16,fontWeight:'700'}}>{saving?'Saving…':'Use photo'}</Text>
+          <Text style={{color:'#171410',fontSize:16,fontWeight:'700'}}>{saving?'Saving…':'Use photo'}</Text>
         </Pressable>
       </View>
     </SafeAreaView>
