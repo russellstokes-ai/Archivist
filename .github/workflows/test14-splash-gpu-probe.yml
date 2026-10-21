@@ -1,0 +1,39 @@
+name: Test 14 splash software GPU reference capture
+# Disposable, mobile-branch-only verification of the exact approved 3D motion.
+# Never changes the Android QA gate or publishes an APK.
+on:
+  push:
+    branches:
+      - fix/test14-mobile-acceptance-20261017
+    paths:
+      - .github/workflows/test14-splash-gpu-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  approved-motion-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install isolated browser
+        run: |
+          npm install --prefix /tmp/test14-splash --no-audit --no-fund --no-save playwright
+          /tmp/test14-splash/node_modules/.bin/playwright install --with-deps chromium
+      - name: Render approved source in CPU WebGL
+        env:
+          NODE_PATH: /tmp/test14-splash/node_modules
+        run: node .github/scripts/test14-splash-gpu-probe.cjs
+      - name: Upload motion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test14-Approved-Splash-Frame-Evidence
+          path: qa/test14-splash-gpu/*.png
+          retention-days: 7
+          if-no-files-found: warn

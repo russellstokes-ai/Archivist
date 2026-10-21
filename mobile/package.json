@@ -7,12 +7,13 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && node threeFixes/typecheck.cjs",
     "test": "node run-tests.cjs",
     "web": "expo start --web"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "0.13.5",
+    "@xmldom/xmldom": "0.8.15",
     "expo": "55.0.31",
     "expo-asset": "~55.0.20",
     "expo-audio": "~55.0.18",
@@ -30,6 +31,7 @@
     "expo-sqlite": "~55.0.20",
     "expo-status-bar": "~55.0.6",
     "expo-system-ui": "~55.0.22",
+    "expo-video": "~55.0.21",
     "jszip": "^3.10.1",
     "lottie-react-native": "7.3.8",
     "react": "19.2.0",
@@ -39,8 +41,7 @@
     "react-native-screens": "~4.23.0",
     "react-native-unarchive": "^1.1.0",
     "react-native-web": "~0.21.0",
-    "react-native-webview": "13.16.0",
-    "@xmldom/xmldom": "0.8.15"
+    "react-native-webview": "13.16.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
@@ -48,15 +49,10 @@
   },
   "expo": {
     "install": {
-      "exclude": [
-        "expo",
-        "typescript"
-      ]
+      "exclude": ["expo", "typescript"]
     },
     "doctor": {
-      "appConfigFieldsNotSyncedCheck": {
-        "enabled": false
-      }
+      "appConfigFieldsNotSyncedCheck": {"enabled": false}
     }
   }
 }

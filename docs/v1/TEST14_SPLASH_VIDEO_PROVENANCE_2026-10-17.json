@@ -1,0 +1,11 @@
+{
+  "source": "mobile/assets/splash/archivist-premium-shine.html",
+  "htmlSha256": "779faec70b31e247cf5d3c7debdf49e3abec9c7401e1483e3dce3ecc46c61f06",
+  "renderEngine": "Original, unmodified WebGL source + source-defined SVG shine translation",
+  "viewport": "480x800",
+  "fps": 24,
+  "bookFrames": 144,
+  "shineFrames": 35,
+  "durationSeconds": 7.458333333333333,
+  "cssFit": "62vw / 35vh / 310px capped, centred book, wordmark below"
+}

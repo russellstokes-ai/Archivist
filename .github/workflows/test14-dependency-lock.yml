@@ -1,0 +1,42 @@
+name: Test 14 synchronize SDK55 video dependency lock
+on:
+  push:
+    branches:
+      - fix/test14-mobile-acceptance-20261017
+    paths:
+      - .github/workflows/test14-dependency-lock.yml
+permissions:
+  contents: write
+jobs:
+  sync-locked-native-dependency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Refresh package-lock without lifecycle scripts
+        working-directory: mobile
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          node - <<'NODE'
+          const manifest=require('./package.json');
+          const lock=require('./package-lock.json');
+          if(manifest.dependencies['expo-video']!=='~55.0.21' ||
+             lock.packages[''].dependencies['expo-video']!=='~55.0.21' ||
+             !lock.packages['node_modules/expo-video']) throw Error('Expo-video lock failed');
+          console.log('Locked Expo-video:',lock.packages['node_modules/expo-video'].version)
+          NODE
+      - name: Commit only regenerated package-lock
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "fix/test14-mobile-acceptance-20261017"
+          git config user.name 'Archivist QA Dependency Lock'
+          git config user.email 'archivist-qa@users.noreply.github.com'
+          git add mobile/package-lock.json
+          if git diff --cached --quiet; then echo 'Lock already current'; exit 0; fi
+          test "$(git diff --cached --name-only)" = 'mobile/package-lock.json'
+          git diff --cached --check
+          git commit -m 'chore(test14): lock Expo SDK55 native video dependency'
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"

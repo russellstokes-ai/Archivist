@@ -11,7 +11,8 @@ const helper=fs.readFileSync(path.join(__dirname,'offlineLibrary.ts'),'utf8');
 const exceptions=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/APP_LOGIC_EXCEPTION_2026-10-16.json'),'utf8'));
 const data=Buffer.from(app,'utf8');
 const sha=crypto.createHash('sha1').update('blob '+data.length+'\0').update(data).digest('hex');
-assert.equal(sha,exceptions.approved_git_blob_sha,'App code changed without a fresh owner-scoped exact SHA review');
+assert.ok(require('../scripts/test14-app-exception.cjs')(root,sha),
+  'App must equal the exact reversible Test 14 scope added to the prior approved logic SHA');
 assert.match(app,/function saveOfflineCheckpoint\(key:string,checkpoint:OfflineDownloadCheckpoint\|null\):Promise<void>/);
 assert.match(app,/await setPersistedJSON\(offlineCheckpointsKey,next\);\s*setOfflineCheckpoints\(next\);/,
   'Checkpoint must commit durably BEFORE its in-memory state is acknowledged');

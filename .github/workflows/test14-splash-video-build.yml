@@ -1,0 +1,91 @@
+name: Test 14 generate faithful premium splash video
+# Owner-authorised isolated mobile repair. Captures ORIGINAL approved WebGL
+# and SVG shine frames, then commits an H264 replay asset to the draft branch.
+# Never dispatches an APK, releases anything, or merges into main.
+on:
+  push:
+    branches:
+      - fix/test14-mobile-acceptance-20261017
+    paths:
+      - .github/workflows/test14-splash-video-build.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: archivist-test14-video-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  render-approved-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install isolated browser and encoder
+        run: |
+          npm install --prefix /tmp/test14-splash --no-audit --no-fund --no-save playwright
+          /tmp/test14-splash/node_modules/.bin/playwright install --with-deps chromium
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+          command -v ffmpeg
+          command -v ffprobe
+      - name: Render all approved original 3D and shine frames
+        env:
+          NODE_PATH: /tmp/test14-splash/node_modules
+          ARCHIVIST_RENDER_VIDEO: '1'
+        run: node .github/scripts/test14-splash-gpu-probe.cjs
+      - name: Encode H264 video and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y -framerate 24 \
+            -i 'qa/test14-splash-gpu/frames/frame-%04d.png' \
+            -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+            -movflags +faststart -an mobile/assets/splash/archivist-premium-shine.mp4
+          ffprobe -v error -print_format json -show_streams -show_format mobile/assets/splash/archivist-premium-shine.mp4 > /tmp/test14-video-probe.json
+          python3 - <<'PY'
+          import json,os
+          x=json.load(open('/tmp/test14-video-probe.json'))
+          videos=[v for v in x['streams'] if v['codec_type']=='video']
+          assert len(videos)==1 and videos[0]['codec_name']=='h264'
+          assert videos[0]['width']==480 and videos[0]['height']==800
+          assert videos[0]['nb_frames']=='179'
+          duration=float(x['format']['duration'])
+          assert 7.40<duration<7.52,duration
+          path='mobile/assets/splash/archivist-premium-shine.mp4'
+          assert 50_000<os.stat(path).st_size<15_000_000
+          print('PASS: '+str(duration)+'s, 179 source frames, H264 480x800; '+str(os.stat(path).st_size)+' bytes')
+          PY
+          cp qa/test14-splash-gpu/provenance.json docs/v1/TEST14_SPLASH_VIDEO_PROVENANCE_2026-10-17.json
+          sha256sum mobile/assets/splash/archivist-premium-shine.mp4
+      - name: Preserve independently inspectable video and source samples
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test14-Source-Faithful-Premium-Animation
+          path: |
+            mobile/assets/splash/archivist-premium-shine.mp4
+            docs/v1/TEST14_SPLASH_VIDEO_PROVENANCE_2026-10-17.json
+            qa/test14-splash-gpu/sample-*.png
+          if-no-files-found: error
+          retention-days: 14
+      - name: Commit only verified render to isolated mobile branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "fix/test14-mobile-acceptance-20261017"
+          git config user.name 'Archivist QA Source Renderer'
+          git config user.email 'archivist-qa@users.noreply.github.com'
+          git add -- mobile/assets/splash/archivist-premium-shine.mp4 docs/v1/TEST14_SPLASH_VIDEO_PROVENANCE_2026-10-17.json
+          git diff --cached --check
+          git diff --cached --name-only | grep -Fx 'mobile/assets/splash/archivist-premium-shine.mp4'
+          git diff --cached --name-only | grep -Fx 'docs/v1/TEST14_SPLASH_VIDEO_PROVENANCE_2026-10-17.json'
+          git commit -m 'assets(test14): source-faithful 179-frame premium startup video'
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"

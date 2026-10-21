@@ -53,6 +53,7 @@ import type {OnlineBookCache} from './onlineBookMetadata';
 import type {OnlineComicCache} from './onlineComicMetadata';
 import {LocalReaderDocument, buildLocalReaderDocument, readerHostBridgeSource} from './localReader';
 import {comicWebViewFailure} from './readerAccessErrors';
+import {comicContainerFromDocument,comicContainerFromUri,effectiveLocalReaderFormat,readerFormatFromContainer} from './comicSourceFormat';
 import {comicReaderWebViewSource} from './comicReaderWebViewSource';
 import {groupLocalWorks, LocalWork} from './localWorks';
 import {createAndroidCatalogueRuntime} from './scannerVNext/runtimeFactory';
@@ -63,10 +64,12 @@ import {GENRE_CHOICES,genreChoiceLabel} from './scannerVNext/genreChoices';
 import {assistFeedback} from './scannerVNext/assistFeedback';
 import {acknowledgeAndroidAutoProgress, consumeAndroidAutoProgress, persistAndroidAutoLibrary, type AndroidAutoProgress} from './androidAuto';
 import {Achievement, achievementsFor, clampProgress, localDay, progressionFor, streakStats, VerifiedProfileStats} from './profileStats';
+import {rewardCabinetEntries,type RewardCabinetItem} from './rewardGallery';
 import {AchievementLedger, emptyAchievementLedger, mergeAchievementLedgers, claimAchievementCelebration, reconcileAchievementLedger, sanitizeAchievementLedger} from './achievementLedger';
 import {AchievementRewardOverlay} from './AchievementRewardOverlay';
 import {motionForAchievement,motionForLevelUp,rewardPresentationMs} from './rewardMotion';
 import {AtlasKind, buildAtlasRelationship} from './atlas';
+import {atlasSelectPublished,atlasSourceAudit} from './atlasSourceSelection';
 import {AtlasUniverseNode, buildAtlasUniverse} from './atlasUniverse';
 import {AtlasChartRing} from './AtlasChartRing';
 import {atlasFit, atlasZoomAt, atlasConstrain, atlasNearest, atlasLabels, atlasBreakdown as makeAtlasBreakdown, atlasSummary, atlasGenrePalette} from './atlasInteraction';
@@ -821,6 +824,7 @@ function Client() {
   const autoLocalScanAttempted=useRef(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
+  const [onboardingReady,setOnboardingReady] = useState(false);
   const [shelfServerPromptHidden,setShelfServerPromptHidden]=useState(false);
   const [celebrationEligible, setCelebrationEligible] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
@@ -1617,7 +1621,7 @@ function Client() {
     const downloaded:UnifiedWork[] = downloadedPersonalWorks.flatMap(work => {
       if(!work.originServer || !work.originWorkId)return [];
       const identity=sourceIdentity({source:'downloaded',server:work.originServer,serverWorkId:work.originWorkId,space:work.space,title:work.title});
-      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:true,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
+      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
     });
     const remote:UnifiedWork[] = session ? serverWorks.map(work => {
       const identity=sourceIdentity({source:'server',server:session.server,serverWorkId:work.id,space:work.space,title:work.title});
@@ -1638,15 +1642,16 @@ function Client() {
   useEffect(()=>{const next=normalizeSpaceSelection(sourceWorks,sourceFilter,space);if(next!==space)setSpace(next);},[sourceFilter,sourceWorks,space]);
 
 
-  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>{
-    const eligible=sourceWorks.filter(work=>work.source!=='local'||work.localWork?.tracks.some(track=>(track as ScannerBook).scannerPublished));
-    const selected=sourceFilter==='all'?dedupeForAll(eligible):eligible.filter(work=>matchesSource(work.source,sourceFilter));
-    const unique=new Map<string,UnifiedWork>();for(const work of selected)unique.set(work.source==='local'?(work.logicalWorkKey||work.canonicalKey):work.canonicalKey,work);
-    return [...unique.values()];
-  },[sourceFilter,sourceWorks]);
+  // One publication-aware boundary, shared by Atlas Universe, rings and relationships.
+  const atlasRelationshipWorks=useMemo<UnifiedWork[]>(()=>atlasSelectPublished(sourceWorks,sourceFilter),[sourceFilter,sourceWorks]);
+  useEffect(()=>{
+    if(activeTab!=='atlas'||!localCatalogReady)return;
+    // Counts only: never log media titles, paths, cover URLs or profile data.
+    console.info('ArchivistAtlasSourceCounts',JSON.stringify(atlasSourceAudit(sourceWorks,sourceFilter)));
+  },[activeTab,localCatalogReady,sourceFilter,sourceWorks]);
   const unifiedAtlasRelationship=useMemo(()=>atlasFocus?buildAtlasRelationship<UnifiedWork>(atlasRelationshipWorks,atlasFocus.kind,atlasFocus.value):null,[atlasFocus,atlasRelationshipWorks]);
   const atlasUniverseWorks=useMemo(()=>atlasRelationshipWorks.filter(work=>!space||work.space===space),[atlasRelationshipWorks,space]);
-  const atlasGenreColors=useMemo(()=>atlasGenrePalette(sourceWorks.map(work=>work.genre),genreColour),[sourceWorks]);
+  const atlasGenreColors=useMemo(()=>atlasGenrePalette(atlasUniverseWorks.map(work=>work.genre),genreColour),[atlasUniverseWorks]);
   const atlasGenreColor=(name:string)=>atlasGenreColors.get(name.trim()||'Unclassified')||genreColour(name);
   const atlasRingSize=Math.min(width-(width>=940?56:width>=600?48:width<360?28:32),width>=940?720:width>=600?620:520);
   const atlasDiameter=Math.max(1,atlasRingSize-64);
@@ -1960,7 +1965,7 @@ function Client() {
 
   const atlas = useMemo(() => {
     const count=(values:string[])=>{const totals=new Map<string,number>();for(const value of values.map(v=>v.trim()).filter(Boolean))totals.set(value,(totals.get(value)||0)+1);return [...totals.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,16);};
-    const items:UnifiedWork[]=sourceFilter==='all'?allUnifiedWorks:sourceWorks.filter((item:UnifiedWork)=>matchesSource(item.source,sourceFilter));
+    const items:UnifiedWork[]=atlasUniverseWorks;
     return {
       formats:count(items.map(item=>item.format)),authors:count(items.map(item=>item.author||'Unknown author')),
       series:count(items.map(item=>item.series).filter(Boolean)),genres:count(items.map(item=>item.genre).filter(Boolean)),
@@ -1970,7 +1975,7 @@ function Client() {
       ratings:count(items.map(item=>ratingLabel(item.rating||0))),
       favourites:items.some(item=>item.favourite)?[['Favourites',items.filter(item=>item.favourite).length] as [string,number]]:[],
     };
-  },[allUnifiedWorks,sourceFilter,sourceWorks]);
+  },[atlasUniverseWorks]);
 
 
   useEffect(() => {
@@ -2156,7 +2161,11 @@ function Client() {
     AccessibilityInfo.isReduceMotionEnabled().then(setSystemReduceMotion).catch(()=>undefined);
     SecureStore.getItemAsync(onboardingDoneKey).then(value => {
       setOnboardingDone(value === '1');
-    }).catch(() => undefined);
+    }).catch(() => {
+      // A storage read error cannot be treated as a fresh first login.
+      // Fail closed rather than repeat an already dismissed walkthrough.
+      setOnboardingDone(true);
+    }).finally(()=>setOnboardingReady(true));
     SecureStore.getItemAsync(shelfServerPromptKey).then(value => {
       setShelfServerPromptHidden(value === '1');
     }).catch(() => undefined);
@@ -3554,9 +3563,27 @@ function Client() {
     setError('Your last Now item is not currently available. Archivist kept its saved position and will resume it when the source is available again.');
   }
 
+  const nowRestorePending=useRef<{key:string;run:Promise<void>}|null>(null);
+  function beginNowRestore(snapshot:DurableNowSession):Promise<void>{
+    // Both the Now effect and its tab handler may attempt restoration in the
+    // same render. Deduplicate identical work/session opens, but allow a newer
+    // session to supersede an in-flight network/media request.
+    const key=String(snapshot.updatedAt)+'|'+snapshot.kind+'|'+
+      String(snapshot.media.uri||snapshot.media.serverWorkId||snapshot.media.localWorkKey||'');
+    if(nowRestorePending.current?.key===key)return nowRestorePending.current.run;
+    let run:Promise<void>;
+    run=Promise.resolve().then(()=>resumeNowSession(snapshot))
+      .catch(error=>{
+        setError(error instanceof Error?error.message:'Unable to restore saved media.');
+      }).finally(()=>{
+        if(nowRestorePending.current?.run===run)nowRestorePending.current=null;
+      });
+    nowRestorePending.current={key,run};
+    return run;
+  }
   useEffect(()=>{
     if(!nowSessionReady||activeTab!=='now'||playing||reading||!nowSessionRef.current)return;
-    void resumeNowSession(nowSessionRef.current);
+    void beginNowRestore(nowSessionRef.current);
   },[nowSessionReady,activeTab,playing,reading]);
 
   async function openNowTab(){
@@ -3565,12 +3592,12 @@ function Client() {
     if(snapshot){
       if(snapshot.kind==='audio'&&playing&&sameNowMedia(snapshot.media,nowMediaFromBook(playing))){setLiveMode('player');return;}
       if(snapshot.kind==='reader'&&reading&&sameNowMedia(snapshot.media,nowMediaFromBook(reading))){setLiveMode('reader');return;}
-      await resumeNowSession(snapshot);
+      await beginNowRestore(snapshot);
       return;
     }
     if(playing){setLiveMode('player');return;}
     if(reading){setLiveMode('reader');return;}
-    if(lastPlaying){setLiveMode('player');await playBook(lastPlaying);return;}
+    if(lastPlaying){setLiveMode('player');await playBook(lastPlaying,undefined,false);return;}
     if(lastReading){setLiveMode('reader');openBook(lastReading);return;}
     setLiveMode('player');
   }
@@ -3926,13 +3953,43 @@ function Client() {
     }catch{}
   }
 
-  function openBook(book: Book, resumePage?:number, selection = ++nowResumeGeneration.current) {
+  function openBook(book: Book, resumePage?:number, selection = ++nowResumeGeneration.current, checkOpaque=true) {
     if(selection!==nowResumeGeneration.current)return;
     loadCancel.current?.();
     controller.cancelPending();
     if (!book.available) {
       setError('This file is currently unavailable.');
       return;
+    }
+    // Reader-only SAF identity resolution; never rewrite scanner metadata.
+    if(book.source!=='server'&&book.uri){
+      const localUri=book.uri; // preserve TS narrowing across Book reassignment
+      const format=effectiveLocalReaderFormat(book.format,localUri);
+      if(format!==book.format)book={...book,format};
+      const opaque=Platform.OS==='android'&&localUri.startsWith('content://')
+        &&comicContainerFromUri(localUri)==='unknown';
+      // Android providers can expose a comic or PDF under a numeric document
+      // ID. Query the read-only native MIME/display-name enum once per open.
+      if(checkOpaque&&opaque&&(book.format==='Comic'||!['Audio','PDF','EPUB'].includes(book.format))){
+        const pending=++readerOpenGeneration.current;
+        const candidate=book;
+        setError('');
+        void comicContainerFromDocument(localUri).then(kind=>{
+          if(readerOpenGeneration.current!==pending||selection!==nowResumeGeneration.current)return;
+          const resolved=readerFormatFromContainer(candidate.format,kind);
+          if(['Comic','PDF','EPUB'].includes(resolved))
+            openBook({...candidate,format:resolved},resumePage,selection,false);
+          else setError('Unable to identify this document. Reconnect its library folder or choose a PDF, EPUB, CBZ, CBR or CBT file.');
+        }).catch(()=>{
+          if(readerOpenGeneration.current===pending&&selection===nowResumeGeneration.current)
+            setError('Unable to access this document. Reconnect its library folder.');
+        });
+        return;
+      }
+      if(!['Audio','Comic','PDF','EPUB'].includes(book.format)){
+        setError('Unsupported document format. Choose a PDF, EPUB, CBZ, CBR or CBT file.');
+        return; // never send an unidentified archive URI to a raw WebView
+      }
     }
     const generation=++readerOpenGeneration.current;
     comicWebViewFallbackAttempt.current=false;
@@ -4341,6 +4398,16 @@ function Client() {
           {!sources.length?<Text style={[styles.libraryTreeEmpty,{color:p.muted}]}>No server folders reported.</Text>:null}
         </View>:null}
       </>:null}
+    </View>;
+  }
+
+  function FirstRunOnboarding() {
+    if(!onboardingReady||onboardingDone)return null;
+    return <View style={{gap:7}}>
+      <OnboardingGuide/>
+      <Text style={[styles.meta,{color:p.muted,marginHorizontal:2,marginTop:-2}]}>
+        Atlas includes published local books after metadata and cover review. Library source and folder filters also apply.
+      </Text>
     </View>;
   }
 
@@ -5734,7 +5801,7 @@ function Client() {
         </Pressable>
       </PageToolbar>
 
-      <OnboardingGuide/>
+      <FirstRunOnboarding/>
 
       {shelfSections.find(item=>item.id==='continue')?section(shelfSections.find(item=>item.id==='continue') as ShelfSectionPref):null}
 
@@ -5996,9 +6063,8 @@ function Client() {
       <ArchivistLogo size={46}/>
       <Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>{playerMode?'Nothing playing':'Reader'}</Text>
       <Text style={[styles.empty,{color:p.muted,textAlign:'center'}]}>{playerMode
-        ? (lastTitle?'Resume your most recent audiobook, or choose another from Shelf.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.')
-        : (lastTitle?'Resume your most recent book or comic, or choose another from Shelf.':'Open an EPUB, PDF or comic from Shelf.')}</Text>
-      {lastTitle&&onResume?<Button label={'Resume '+lastTitle} onPress={onResume}/>:null}
+        ? (lastTitle?'Your listening position is saved. Archivist restores it automatically when the title is available.':'Choose an audiobook from Shelf. Archivist will remember where you stopped.')
+        : (lastTitle?'Your reading page is saved. Archivist restores it automatically when the title is available.':'Open an EPUB, PDF or comic from Shelf.')}</Text>
       <Button label="Go to Shelf" tone="quiet" onPress={()=>setActiveTab('shelf')}/>
     </View>;
   }
@@ -6150,13 +6216,13 @@ function Client() {
               <Text style={[styles.playerTime,{color:p.muted}]}>−{formatTime(remaining)}</Text>
             </View>
 
-            <View style={[styles.transport,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}>
+            <View style={[styles.transport,width<356&&styles.transportNarrow,embedded&&phoneLayout&&!foldLayout&&styles.transportPhoneTight]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',-1)} style={[styles.transportEdgeButton,width<356&&styles.transportEdgeButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
                 <View pointerEvents="none" style={{height:31,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back30} size={44} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>30s</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}>
-                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back15} size={52} reduceMotion={reduceMotion}/></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rewind 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',-1)} style={[styles.skipButton,width<356&&styles.skipButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={-1} trigger={skipButtonPulse.back15} size={width<356?46:52} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>15s</Text>
               </Pressable>
               <Pressable
@@ -6167,11 +6233,11 @@ function Client() {
                 onPress={()=>void togglePlayback()}>
                 {!transportReady ? <ArchivistBookLoader label="Loading audio playback" size="inline" reduceMotion={reduceMotion}/> : <LivePlayerPlayPauseMorph playing={playerMotionPlaying} active={appActive} reducedMotion={reduceMotion} inkTone={p.paper==='#000000'?'navy':'ivory'} fallback={<UiIcon name={playerMotionPlaying?'pause':'play'} color={p.paper==='#000000'?'#182C29':'#FFFFFF'} size={29}/>}/>}
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,{backgroundColor:'#F1EEE4'}]}>
-                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward15} size={52} reduceMotion={reduceMotion}/></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 15 seconds" disabled={!transportReady} onPress={()=>skipAudio('small',1)} style={[styles.skipButton,width<356&&styles.skipButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
+                <View pointerEvents="none" style={{height:37,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward15} size={width<356?46:52} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>15s</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,{backgroundColor:'#F1EEE4'}]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fast forward 30 seconds" disabled={!transportReady} onPress={()=>skipAudio('large',1)} style={[styles.transportEdgeButton,width<356&&styles.transportEdgeButtonNarrow,{backgroundColor:'#F1EEE4'}]}>
                 <View pointerEvents="none" style={{height:31,alignItems:'center',justifyContent:'center'}}><LivePlayerSkipIcon direction={1} trigger={skipButtonPulse.forward30} size={44} reduceMotion={reduceMotion}/></View>
                 <Text pointerEvents="none" style={[styles.skipNumber,{position:'relative',color:'#182C29',fontSize:10,marginTop:-3}]}>30s</Text>
               </Pressable>
@@ -6342,7 +6408,7 @@ function Client() {
     const localReaderMode=reading.source!=='server';
     if(localReaderMode){
       const localPdf=reading.format==='PDF'&&!!reading.uri&&Platform.OS==='android';
-      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader uri={reading.uri!} title={reading.title} initialPage={localReadingProgress[reading.uri!]||0} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ArchivistBookLoader label="Opening local reader" size="reader" reduceMotion={reduceMotion}/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>{reading.format==='Comic'?<Button label="Retry comic" onPress={()=>openBook(reading,readerPage)}/>:null}<Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri+(reading.format==='Comic'&&comicReaderUseDataFallback?':data':'')} source={reading.format==='Comic'?comicReaderWebViewSource(localReader.html,Platform.OS==='android'&&comicReaderUseDataFallback):{html:localReader.html}} renderError={reading.format==='Comic'?()=><View style={{flex:1,backgroundColor:'#000'}}/>:undefined} onError={event=>{if(reading.format==='Comic'&&retryComicReaderOriginOnce())return; const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}} onLoadEnd={()=>{sendReaderCommand('appearance',{value:readerAppearance});if(reading.format==='Comic')armComicReaderReadyWatch(reading.uri||reading.id);}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
+      return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}{localPdf?<LocalPdfReader key={reading.uri+'|'+readerOpenGeneration.current} uri={reading.uri!} title={reading.title} initialPage={readerPage} requestedPage={readerRequestedPage} paper={p.paper} ink={p.ink} muted={p.muted} line={p.line} sage={p.sage} reduceMotion={reduceMotion} onPosition={(page,count,complete)=>handleReaderMessage(JSON.stringify({type:'reader-position',page,count,complete}))}/>:readerLoading?<View style={styles.readerLoading}><ArchivistBookLoader label="Opening local reader" size="reader" reduceMotion={reduceMotion}/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:readerLoadError?<View style={styles.readerFailure}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Couldn’t open this book</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text>{reading.format==='Comic'?<Button label="Retry comic" onPress={()=>openBook(reading,readerPage)}/>:null}<Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>:localReader?.html?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['*']} key={reading.uri+(reading.format==='Comic'&&comicReaderUseDataFallback?':data':'')} source={reading.format==='Comic'?comicReaderWebViewSource(localReader.html,Platform.OS==='android'&&comicReaderUseDataFallback):{html:localReader.html}} renderError={reading.format==='Comic'?()=><View style={{flex:1,backgroundColor:'#000'}}/>:undefined} onError={event=>{if(reading.format==='Comic'&&retryComicReaderOriginOnce())return; const message=reading.format==='Comic'?comicWebViewFailure(event.nativeEvent,'local'):(event.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setError(message);setReaderLoading(false);}} onLoadEnd={()=>{sendReaderCommand('appearance',{value:readerAppearance});if(reading.format==='Comic')armComicReaderReadyWatch(reading.uri||reading.id);}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} androidLayerType={reading.format==='Comic'?'software':'none'} cacheEnabled={reading.format!=='Comic'} setSupportMultipleWindows={false} javaScriptCanOpenWindowsAutomatically={false}/>:localReader?.uri?<WebView style={styles.readerWebView} ref={readerWebRef} originWhitelist={['content://*','file://*']} source={{uri:localReader.uri}} allowFileAccess/>:<Text style={[styles.empty,{color:p.muted,padding:16}]}>Unable to open this file.</Text>}{ReaderTools()}</View>;
     }
     if(!session||(reading.originServer&&reading.originServer!==session.server))return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<View style={styles.readerFailure}><Text style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Server reader unavailable</Text><Text style={[styles.meta,{color:p.muted}]}>Reconnect to the server that owns this title, or open its downloaded copy.</Text><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View>{ReaderTools()}</View>;
     return <View style={styles.readerScreen}>{readerChromeVisible?readerBar:null}<WebView style={styles.readerWebView} ref={readerWebRef} key={session.token+reading.id+':'+readerReloadKey} source={{uri:session.server+'/reader.html?asset='+reading.id,headers:{Authorization:'Bearer '+session.token}}} incognito originWhitelist={[session.server]} onShouldStartLoadWithRequest={r=>readerNavigationAllowed(r.url,session.server)} mixedContentMode="never" injectedJavaScriptBeforeContentLoaded={readerHostBridgeSource()} onLoadStart={()=>{setReaderLoading(true);setReaderLoadError('')}} onLoadEnd={()=>{setReaderLoading(false);sendReaderCommand('appearance',{value:readerAppearance})}} onMessage={event=>handleReaderMessage(event.nativeEvent.data)} onHttpError={e=>{const message='Reader request failed: '+e.nativeEvent.statusCode;setReaderLoadError(message);setReaderLoading(false);setError(message)}} onError={e=>{const message=reading.format==='Comic'?comicWebViewFailure(e.nativeEvent,'server'):(e.nativeEvent.description||'Reader failed to load.');setReaderLoadError(message);setReaderLoading(false);setError(message)}} allowFileAccess={false} javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}/>{readerLoading?<View pointerEvents="none" style={[styles.readerOverlay,{backgroundColor:p.paper}]}><ArchivistBookLoader label="Opening server reader" size="reader" reduceMotion={reduceMotion}/><Text style={[styles.meta,{color:p.muted}]}>Opening {reading.format}…</Text></View>:null}{readerLoadError?<View style={[styles.readerErrorOverlay,{backgroundColor:p.paper}]}><Text accessibilityRole="alert" style={[styles.sectionTitle,{color:p.ink,marginTop:0}]}>Reader needs attention</Text><Text style={[styles.meta,{color:p.muted}]}>{readerLoadError}</Text><View style={styles.toolRow}><Button label="Retry" onPress={()=>{setReaderLoadError('');setReaderLoading(true);setReaderReloadKey(key=>key+1)}}/><Button label="Back to Shelf" tone="quiet" onPress={closeReader}/></View></View>:null}{ReaderTools()}</View>;
@@ -6731,6 +6797,10 @@ function Client() {
 
         {atlasListMode?<SourceSwitcher/>:null}
         {atlasListMode&&availableSpaces.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.libraryChips}><LibrarySwitcher/></ScrollView>:null}
+        {!atlasListMode&&(sourceFilter!=='all'||!!space)?
+          <Pressable accessibilityRole="button" accessibilityLabel="Show all Atlas works" onPress={()=>{setSourceFilter('all');setSpace('');}} style={{minHeight:44,justifyContent:'center',alignSelf:'flex-start'}}>
+            <Text style={{color:p.sage,fontSize:12,fontWeight:'700'}}>Show all</Text>
+          </Pressable>:null}
 
         {atlasListMode?<View style={styles.atlasListAlternative}>
           <AtlasGroup title="Reading state" kind="reading" items={atlas.reading} />
@@ -7498,10 +7568,11 @@ function Client() {
 
   function Rewards() {
     const categories=['All',...Array.from(new Set(profileAchievements.map(item=>item.category||'Other')))];
-    const visible=profileAchievements
+    const cabinet=rewardCabinetEntries(profileAchievements);
+    const visible=cabinet
       .filter(item=>awardCategory==='All'||(item.category||'Other')===awardCategory)
-      .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
-    const locked=profileAchievements.filter(item=>!item.unlocked).sort((a,b)=>clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
+      .sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||clampProgress((b.nextTier||b).progress,(b.nextTier||b).target)-clampProgress((a.nextTier||a).progress,(a.nextTier||a).target));
+    const locked=cabinet.flatMap(item=>item.nextTier?[item.nextTier]:item.unlocked?[]:[item]).sort((a,b)=>clampProgress(b.progress,b.target)-clampProgress(a.progress,a.target));
     const nextUp=locked.slice(0,3);
     const recent=recentAchievementId?profileAchievements.find(item=>item.id===recentAchievementId):null;
     const overall=profileProgression?.overall||{level:1,xp:0,levelStartXp:0,nextLevelXp:330,progress:0,title:'Reader'};
@@ -7522,20 +7593,7 @@ function Client() {
       {level:60,title:'Master',icon:'insights' as UiIconName},
     ];
     const nextMilestoneIndex=Math.max(0,milestones.findIndex(item=>overall.level<item.level));
-    const rewardIcon=(item:Achievement):UiIconName=>{
-      const id=item.id;
-      if(id.includes('streak')||id.includes('daily-spark'))return 'flame';
-      if(id.includes('days'))return 'calendar';
-      if(id.includes('listener')||id.includes('audio'))return 'play';
-      if(id.includes('reader')||id.includes('reading')||id.includes('finish'))return 'bookOpen';
-      if(id.includes('series'))return 'layers';
-      if(id.includes('format')||id.includes('balance'))return 'atlas';
-      if(id.includes('rating'))return 'insights';
-      if(id.includes('favourite'))return 'bookmark';
-      if(id.includes('collection')||id.includes('shelf')||id.includes('archive')||id.includes('curator'))return 'shelf';
-      if(id.includes('active-stack')||id.includes('starter'))return 'library';
-      return 'target';
-    };
+    // Minted reward tiers replace repeated generic per-award icons in this gallery.
     const rewardTone=(item:Achievement)=>{
       const category=item.category||'Other';
       if(category==='Reading')return p.sage;
@@ -7544,29 +7602,29 @@ function Client() {
       if(category==='Library')return p.gold;
       return darkMode?'#A78BC7':'#806B9A';
     };
-    const renderTrophy=(item:Achievement)=>{
-      const progress=Math.round(clampProgress(item.progress,item.target)*100);
+    const renderTrophy=(item:RewardCabinetItem|Achievement)=>{
+      const nextTier='nextTier' in item?item.nextTier:undefined;
+      const progressSource=nextTier||item;
+      const progress=Math.round(clampProgress(progressSource.progress,progressSource.target)*100);
       const recentItem=recentAchievementId===item.id;
       const tone=rewardTone(item);
-      const icon=rewardIcon(item);
-      return <View key={item.id} style={[styles.rewardTrophyCard,width>=760&&styles.rewardTrophyCardWide,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.card:'transparent'}]}>
+      const number=String(item.target.toLocaleString());
+      const earnedTiers='earnedTiers' in item?item.earnedTiers:0;
+      return <View key={item.id} style={[styles.rewardTrophyCard,width>=760&&styles.rewardTrophyCardWide,{backgroundColor:'transparent'}]}>
         <View style={styles.rewardTrophyTop}>
           <View style={styles.rewardMedalWrap}>
             {recentItem?<Animated.View pointerEvents="none" style={[styles.rewardPulseHalo,{backgroundColor:darkMode?tone:p.gold,opacity:interfacePulse.interpolate({inputRange:[0,1],outputRange:[darkMode?.42:.30,0]}),transform:[{scale:interfacePulse.interpolate({inputRange:[0,1],outputRange:[1,1.52]})}]}]}/>:null}
-            <View style={[styles.rewardRibbon,styles.rewardRibbonLeft,{backgroundColor:item.unlocked?tone:p.line}]}/>
-            <View style={[styles.rewardRibbon,styles.rewardRibbonRight,{backgroundColor:item.unlocked?tone:p.line}]}/>
-            <View style={[styles.rewardMedal,{borderColor:item.unlocked?tone:p.line,backgroundColor:item.unlocked?(darkMode?'#151412':'#FFF9EC'):p.card}]}>
-              <UiIcon name={icon} color={item.unlocked?tone:p.muted} size={22}/>
+            <View style={[styles.rewardMedal,{borderColor:item.unlocked?p.gold:p.line,backgroundColor:item.unlocked?p.gold:p.card}]}>
+              <View style={{width:62,height:62,borderRadius:31,borderWidth:1,borderColor:item.unlocked?'rgba(24,44,41,.44)':p.line,alignItems:'center',justifyContent:'center'}}>
+                <Text adjustsFontSizeToFit numberOfLines={1} style={{color:item.unlocked?'#182C29':p.muted,fontFamily:'ArchivistEditorial',fontSize:number.length>4?18:number.length>3?20:27,fontWeight:'500',maxWidth:56}}>{number}</Text>
+              </View>
             </View>
           </View>
-          <View style={{alignItems:'flex-end',gap:3}}>
-            {recentItem?<Text style={[styles.rewardRecent,{color:p.gold}]}>RECENT</Text>:null}
-            <Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{item.unlocked?'UNLOCKED':progress+'%'}</Text>
-          </View>
+          <Text style={[styles.rewardProgressLabel,{color:item.unlocked?p.gold:p.muted}]}>{recentItem?'RECENT · ':''}{item.unlocked?'EARNED':progress+'%'}{earnedTiers>1?' · '+earnedTiers+' TIERS':''}</Text>
         </View>
         <Text numberOfLines={2} style={[styles.rewardTrophyTitle,{color:p.ink}]}>{item.title}</Text>
-        <Text numberOfLines={2} style={[styles.rewardTrophyCopy,{color:p.muted}]}>{item.description}</Text>
-        <View style={[styles.rewardTrophyTrack,{backgroundColor:p.line}]}><View style={[styles.rewardTrophyFill,{backgroundColor:item.unlocked?tone:p.muted,width:(progress+'%') as any}]}/></View>
+        <Text numberOfLines={2} style={[styles.rewardTrophyCopy,{color:p.muted}]}>{nextTier?'Next '+nextTier.target.toLocaleString()+' · '+progress+'% complete':item.description}</Text>
+        {nextTier||!item.unlocked?<View style={[styles.rewardTrophyTrack,{backgroundColor:p.line}]}><View style={[styles.rewardTrophyFill,{backgroundColor:item.unlocked?tone:p.muted,width:(progress+'%') as any}]}/></View>:null}
       </View>;
     };
     const overallRing:ChartItem[]=[
@@ -7622,7 +7680,7 @@ function Client() {
             return <View key={milestone.level} style={styles.rewardsMilestoneItem}>
               {index>0?<View pointerEvents="none" style={[styles.rewardsMilestoneLine,{backgroundColor:complete?p.gold:p.line}]}/>:null}
               <View style={[styles.rewardsMilestoneMedal,{borderColor:complete||current?p.gold:p.line,backgroundColor:complete?p.card:'transparent'},current&&styles.rewardsMilestoneCurrent]}>
-                <UiIcon name={milestone.icon} color={complete||current?p.gold:p.muted} size={19}/>
+                <Text style={{color:complete||current?p.gold:p.muted,fontFamily:'ArchivistEditorial',fontSize:19,fontWeight:'500'}}>{milestone.level}</Text>
               </View>
               <Text style={[styles.rewardsMilestoneLevel,{color:complete?p.gold:p.ink}]}>Level {milestone.level}</Text>
               <Text numberOfLines={1} style={[styles.rewardsMilestoneTitle,{color:p.muted}]}>{milestone.title}</Text>
@@ -7637,7 +7695,7 @@ function Client() {
           {nextUp.map(item=>{
             const progress=Math.round(clampProgress(item.progress,item.target)*100),tone=rewardTone(item);
             return <View key={item.id} style={[styles.rewardsNextCard,{borderColor:p.line}]}>
-              <View style={[styles.rewardsNextIcon,{backgroundColor:p.card}]}><UiIcon name={rewardIcon(item)} color={tone} size={20}/></View>
+              <View style={[styles.rewardsNextIcon,{backgroundColor:p.card}]}><Text style={{color:tone,fontFamily:'ArchivistEditorial',fontSize:String(item.target).length>3?13:18,fontWeight:'500'}}>{item.target}</Text></View>
               <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.bookTitle,{color:p.ink}]}>{item.title}</Text><Text style={[styles.meta,{color:p.muted}]}>{progress}% complete</Text></View>
               <Text style={[styles.rewardsNextPercent,{color:tone}]}>{progress}%</Text>
             </View>;
@@ -7651,7 +7709,7 @@ function Client() {
       </View>:null}
 
       <View style={styles.rewardsSection}>
-        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Trophy cabinet</Text><Text style={[styles.meta,{color:p.muted}]}>Every milestone has its own mark.</Text></View></View>
+        <View style={styles.rewardsSectionHeading}><View><Text style={[styles.rewardsSectionTitle,{color:p.ink}]}>Trophy cabinet</Text><Text style={[styles.meta,{color:p.muted}]}>A gallery of {visible.length} achievement families · all earned tiers retained.</Text></View></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.rewardsCategories}>
           {categories.map(category=><Pressable key={category} accessibilityRole="button" accessibilityState={{selected:awardCategory===category}} onPress={()=>setAwardCategory(category)} style={[styles.rewardsCategory,awardCategory===category&&{backgroundColor:p.card,borderColor:p.gold}]}><Text style={{color:awardCategory===category?p.ink:p.muted,fontWeight:awardCategory===category?'700':'500'}}>{category}</Text></Pressable>)}
         </ScrollView>
@@ -8733,6 +8791,11 @@ const styles = StyleSheet.create({
   timeRow: {flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:-6},
   playerTime: {fontSize:12,fontVariant:['tabular-nums'],fontWeight:'500'},
   transport: {flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,marginVertical:8,maxWidth:560,width:'100%',alignSelf:'center'},
+  // For devices narrower than 356dp, the five approved control targets must
+  // fit without collision; 48dp touch targets and the 80dp play circle stay.
+  transportNarrow: {gap:2},
+  transportEdgeButtonNarrow: {width:48,height:48,borderRadius:24},
+  skipButtonNarrow: {width:48,height:48,borderRadius:24},
   transportEdgeButton: {width:50,height:50,borderRadius:25,borderWidth:0,alignItems:'center',justifyContent:'center'},
   skipButton: {width:58,height:58,borderRadius:29,borderWidth:0,alignItems:'center',justifyContent:'center',position:'relative'},
   skipNumber: {position:'absolute',fontSize:9,lineHeight:11,fontWeight:'700',fontVariant:['tabular-nums']},
@@ -9181,7 +9244,7 @@ const styles = StyleSheet.create({
   rewardsSectionHeading: {flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12},
   rewardsSectionTitle: {fontFamily:'ArchivistEditorial',fontSize:22,lineHeight:28,fontWeight:'500',letterSpacing:-.12},
   rewardsPathGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
-  rewardsPathCard: {width:'48%',minWidth:150,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:16,padding:12,gap:10},
+  rewardsPathCard: {width:'48%',minWidth:150,flexGrow:1,borderWidth:0,borderBottomWidth:StyleSheet.hairlineWidth,borderRadius:0,padding:12,gap:10},
   rewardsPathTop: {flexDirection:'row',alignItems:'center',gap:9},
   rewardsPathRing: {width:52,height:52,alignItems:'center',justifyContent:'center',position:'relative',flexShrink:0},
   rewardsPathIcon: {position:'absolute',left:0,right:0,top:0,bottom:0,alignItems:'center',justifyContent:'center'},
@@ -9205,20 +9268,20 @@ const styles = StyleSheet.create({
   rewardsCategories: {gap:6,paddingRight:12},
   rewardsCategory: {minHeight:40,borderRadius:20,borderWidth:StyleSheet.hairlineWidth,borderColor:'transparent',paddingHorizontal:13,alignItems:'center',justifyContent:'center'},
   rewardTrophyGrid: {flexDirection:'row',flexWrap:'wrap',columnGap:12,rowGap:12},
-  rewardTrophyCard: {width:'48%',minWidth:148,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:18,padding:13,gap:7,minHeight:188},
+  rewardTrophyCard: {width:'48%',minWidth:148,flexGrow:1,borderWidth:0,borderRadius:0,paddingHorizontal:8,paddingVertical:16,gap:8,minHeight:185,alignItems:'center',justifyContent:'flex-start'},
   rewardTrophyCardWide: {width:'31%',minWidth:190},
-  rewardTrophyTop: {flexDirection:'row',alignItems:'flex-start',justifyContent:'space-between',gap:10},
-  rewardMedalWrap: {width:58,height:60,alignItems:'center',justifyContent:'flex-start',position:'relative'},
+  rewardTrophyTop: {flexDirection:'column',alignItems:'center',justifyContent:'center',gap:5},
+  rewardMedalWrap: {width:80,height:80,alignItems:'center',justifyContent:'center',position:'relative'},
   rewardPulseHalo: {position:'absolute',top:0,width:48,height:48,borderRadius:24},
   rewardRibbon: {position:'absolute',top:38,width:13,height:20,borderBottomLeftRadius:2,borderBottomRightRadius:2},
   rewardRibbonLeft: {left:14,transform:[{rotate:'8deg'}]},
   rewardRibbonRight: {right:14,transform:[{rotate:'-8deg'}]},
-  rewardMedal: {width:48,height:48,borderRadius:24,borderWidth:1.5,alignItems:'center',justifyContent:'center',zIndex:2},
+  rewardMedal: {width:76,height:76,borderRadius:38,borderWidth:2,alignItems:'center',justifyContent:'center',zIndex:2,shadowColor:'#B99A68',shadowOpacity:.14,shadowRadius:8,elevation:2},
   rewardRecent: {fontSize:8.5,lineHeight:11,fontWeight:'800',letterSpacing:1.1},
   rewardProgressLabel: {fontSize:9,lineHeight:12,fontWeight:'800',fontVariant:['tabular-nums']},
-  rewardTrophyTitle: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:20,fontWeight:'500'},
-  rewardTrophyCopy: {fontSize:9.5,lineHeight:14,flexGrow:1},
-  rewardTrophyTrack: {height:4,borderRadius:2,overflow:'hidden',marginTop:2},
+  rewardTrophyTitle: {fontFamily:'ArchivistEditorial',fontSize:16,lineHeight:20,fontWeight:'500',textAlign:'center'},
+  rewardTrophyCopy: {fontSize:10,lineHeight:15,minHeight:30,textAlign:'center'},
+  rewardTrophyTrack: {width:'84%',height:3,borderRadius:2,overflow:'hidden',marginTop:2},
   rewardTrophyFill: {height:'100%',borderRadius:2},
   pageHeadingRow: {flexDirection:'row',alignItems:'flex-start',gap:12},
   pageSubtitle: {fontSize:14,lineHeight:21,marginTop:2,fontWeight:'400'},
