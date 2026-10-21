@@ -2,6 +2,9 @@ import {metadataWrite} from './scannerVNext/metadataWrites';
 import * as SQLite from 'expo-sqlite';
 import type {LocalBook} from './localLibrary';
 
+export type LocalStageWriteProgress={stage:'waiting'|'saving'|'committed';processed:number;total:number};
+export type LocalStageWriteOptions={shouldContinue?:()=>boolean;onProgress?:(progress:LocalStageWriteProgress)=>void};
+
 const databaseName='archivist-local.db';
 let databasePromise:Promise<SQLite.SQLiteDatabase>|null=null;
 
@@ -56,31 +59,65 @@ export async function localStageHasAssets(){
   return Number(row?.count||0)>0;
 }
 
-export async function replaceLocalStageBooks(books:LocalBook[]){
+export async function replaceLocalStageBooks(books:LocalBook[],options:LocalStageWriteOptions={}){
+  const checkCurrent=()=>{
+    if(options.shouldContinue?.()===false)throw new Error('Catalogue save cancelled');
+  };
+  const total=books.reduce((count,book)=>count+(book.uri?1:0),0);
+  // Progress is observational: a UI callback must not roll back a valid save or
+  // report a failed save after SQLite has already committed it.
+  const report=(stage:LocalStageWriteProgress['stage'],processed:number)=>{
+    try{options.onProgress?.({stage,processed,total});}catch{/* observer only */}
+  };
+  checkCurrent();
+  report('waiting',0);
   const db=await database();
+  checkCurrent();
   const now=Date.now();
-  await metadataWrite(()=>db.withExclusiveTransactionAsync(async txn=>{
-    await txn.runAsync('DELETE FROM local_assets');
-    const statement=await txn.prepareAsync(`
-      INSERT INTO local_assets(uri,root_uri,payload,ordinal,updated_at)
-      VALUES ($uri,$rootUri,$payload,$ordinal,$updatedAt)
-    `);
-    try{
+  await metadataWrite(async()=>{
+    // A cancelled operation may have spent time behind another database write.
+    // Check again before opening the transaction, not just before enqueueing.
+    checkCurrent();
+    await db.withExclusiveTransactionAsync(async txn=>{
+      checkCurrent();
+      await txn.runAsync('DELETE FROM local_assets');
+      checkCurrent();
+      let processed=0;
+      let values:Array<string|number>=[];
+      let placeholders:string[]=[];
+      report('saving',0);
+      const flush=async()=>{
+        if(!placeholders.length)return;
+        checkCurrent();
+        await txn.runAsync(
+          'INSERT INTO local_assets(uri,root_uri,payload,ordinal,updated_at) VALUES '+placeholders.join(','),
+          ...values,
+        );
+        processed+=placeholders.length;
+        values=[];placeholders=[];
+        checkCurrent();
+        report('saving',processed);
+        // Let queued UI cancellation run between bounded native writes while
+        // retaining this transaction and the metadata queue's ownership.
+        await new Promise<void>(resolve=>setTimeout(resolve,0));
+        checkCurrent();
+      };
       for(let index=0;index<books.length;index++){
+        checkCurrent();
         const book=books[index];
         if(!book.uri)continue;
-        await statement.executeAsync({
-          $uri:book.uri,
-          $rootUri:book.rootUri||'',
-          $payload:JSON.stringify(book),
-          $ordinal:index,
-          $updatedAt:now,
-        });
+        values.push(book.uri,book.rootUri||'',JSON.stringify(book),index,now);
+        placeholders.push('(?,?,?,?,?)');
+        // 64 rows / 320 parameters: below SQLite's conservative bind limit.
+        if(placeholders.length===64)await flush();
       }
-    }finally{
-      await statement.finalizeAsync();
-    }
-  }));
+      await flush();
+      checkCurrent();
+    });
+  });
+  // Never detach a timed-out write from the queue. Completion means the actual
+  // transaction settled successfully, not merely that its rows were submitted.
+  report('committed',total);
 }
 
 export async function upsertLocalStageBooks(books:LocalBook[]){
