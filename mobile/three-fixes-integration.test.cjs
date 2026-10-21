@@ -20,6 +20,10 @@ test('Metro and full-program TypeScript checks consume the same explicit effecti
  const config=require('./metro.config.js');
  assert.equal(config.transformer.babelTransformerPath,require.resolve('./threeFixes/metroTransformer.cjs'));
  assert.ok(config.cacheVersion.includes(cacheKey));
+ // Actually load the transformer: configuration-string checks alone miss nested
+ // Expo dependency resolution failures that otherwise appear only at bundling.
+ const loaded=require(config.transformer.babelTransformerPath);
+ assert.equal(typeof loaded.transform,'function');
  const transformer=fs.readFileSync(path.join(__dirname,'threeFixes/metroTransformer.cjs'),'utf8');
  assert.ok(transformer.includes('effectiveSource(args.filename,args.src)'));
  const pkg=require('./package.json');assert.ok(pkg.scripts.typecheck.includes('tsc --noEmit'));assert.ok(pkg.scripts.typecheck.includes('threeFixes/typecheck.cjs'));
