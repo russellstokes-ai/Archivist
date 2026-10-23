@@ -188,6 +188,11 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Enable emulator hardware acceleration
+        run: |
+          sudo chown "$(id -u):$(id -g)" /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+
       - name: Launch test APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -195,6 +200,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-build: 14214601
+          disable-linux-hw-accel: false
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           pre-emulator-launch-script: |
