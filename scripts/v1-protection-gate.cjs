@@ -31,6 +31,11 @@ for(const item of manifest.locks){
   const bytes=fs.readFileSync(absolute);
   const actual=crypto.createHash('sha1').update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
   if(actual===item.git_blob_sha)continue;
+  // Owner approved exact cover-thumbnail model changes on 23 October; original hashes retained.
+  if(['mobile/localLibrary.ts','mobile/localWorks.ts'].includes(item.path)){
+    const restored=require('./owner-bugpass-source.cjs')(item.path,bytes.toString('utf8'));
+    if(crypto.createHash('sha1').update('blob '+Buffer.byteLength(restored)+'\0').update(restored).digest('hex')===item.git_blob_sha){excepted++;continue;}
+  }
   // Owner requested proportional Atlas arcs on 20 October; verify exact reversible edits.
   if(item.path==='mobile/AtlasChartRing.tsx'){
     const restored=require('./owner-bugpass-source.cjs')(item.path,bytes.toString('utf8'));

@@ -30,6 +30,27 @@ export async function readMp4IndexClues(size:number|null,reader:RangeClueReader,
     if(!Number.isSafeInteger(length)||length<headerSize||length>size-offset)return unresolved('invalid-mp4-atom');
     if(type==='moov'){
       if(headerSize!==8)return unresolved('extended-mp4-index-unsupported');
+      // Large audiobook sample tables can precede a tiny ilst. Seek through
+      // container headers instead of truncating the moov before its metadata.
+      if(length>65536){
+       let visited=atoms;
+       const find=async(start:number,end:number,depth:number):Promise<HeaderClues|null>=>{
+        if(depth>6)return null;
+        for(let pos=start;pos<end;){
+         if(++visited>=maxAtoms||maxBytes-bytesRead<16||end-pos<8)return null;
+         const h=await read(pos,Math.min(16,end-pos));if(h.length<8)return null;
+         let n=u32(h,0),head=8;const kind=String.fromCharCode(...h.subarray(4,8));
+         if(n===1){if(h.length<16)return null;n=u32(h,8)*4294967296+u32(h,12);head=16;}else if(n===0)n=end-pos;
+         if(!Number.isSafeInteger(n)||n<head||n>end-pos)return null;
+         if(kind==='ilst'&&head===8&&n<=65536&&n<=maxBytes-bytesRead){const data=await read(pos,n);if(data.length===n)return parseHeaderClues(data,'m4b');return null;}
+         if(['udta','meta'].includes(kind)){const nested=await find(pos+head+(kind==='meta'?4:0),pos+n,depth+1);if(nested)return nested;}
+         pos+=n;
+        }return null;
+       };
+       try{const found=await find(offset+headerSize,offset+length,0);if(found)return {clues:found,bytesRead};}
+       catch(error){check(options.signal);if(error instanceof Error&&/Invalid native/.test(error.message))throw error;return unresolved('seek-read-failed');}
+       return unresolved('mp4-metadata-not-in-budget');
+      }
       const budget=Math.min(length,65536,maxBytes-bytesRead);
       if(budget<8)return unresolved('source-read-budget');
       let index:Uint8Array;

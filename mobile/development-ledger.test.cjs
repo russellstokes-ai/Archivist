@@ -52,7 +52,7 @@ for(const {path:lockedPath,git_blob_sha} of locks.locks){
   const source=fs.readFileSync(path.join(root,lockedPath));
   const actual=crypto.createHash('sha1')
     .update(Buffer.from('blob '+source.length+'\0')).update(source).digest('hex');
-  if(lockedPath==='mobile/AtlasChartRing.tsx'){
+  if(['mobile/AtlasChartRing.tsx','mobile/localLibrary.ts','mobile/localWorks.ts'].includes(lockedPath)){
     const restored=require('../scripts/owner-bugpass-source.cjs')(lockedPath,source.toString('utf8'));
     assert.equal(crypto.createHash('sha1').update('blob '+Buffer.byteLength(restored)+'\0').update(restored).digest('hex'),git_blob_sha);continue;
   }

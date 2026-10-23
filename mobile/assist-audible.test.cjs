@@ -8,6 +8,7 @@ const {rankAssistCandidates}=require('./assistMetadata/core.ts');
  assert.equal(requested.hostname,'api.audible.co.uk');assert.equal(requested.searchParams.get('keywords'),'From the Oasthouse');assert.equal(result.candidates.length,1);
  const c=result.candidates[0];assert.equal(c.fields.narrator,'Alan Partridge');assert.equal(c.fields.publishedYear,'2020');assert.equal(c.fields.description,'Catalogue summary');
  assert.equal(rankAssistCandidates({title:c.fields.title,author:c.fields.author},[c])[0].automaticEligible,false,'Audio editions must not automatically replace print metadata');
+ const audio=await provider.search({title:c.fields.title,mediaKind:'audio'},0);assert.equal(rankAssistCandidates({title:c.fields.title,author:c.fields.author},audio.candidates)[0].automaticEligible,true,'Known audiobook context can accept matching audio editions');
  await provider.search({asin:'B089M9XZW5'},0);assert.equal(requested.searchParams.get('asins'),'B089M9XZW5');
  assert.deepEqual(await provider.search({isbn:'9780306406157'},0),{candidates:[],nextPage:null});
  console.log('PASS: Audible catalogue parsing, ASIN search, edition review and no ISBN guessing');

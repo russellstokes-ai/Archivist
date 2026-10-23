@@ -1,0 +1,445 @@
+{
+  "schemaVersion": 1,
+  "scope": "T0/T3 enumerated format audit; this describes test evidence, not a promise inferred from extension discovery",
+  "fixturePolicy": "generated-in-test fixtures are identified as synthetic; they do not validate owner-supplied media",
+  "namedCorpus": {
+    "status": "missing",
+    "requiredExamples": [
+      "2000 AD Annual 1978",
+      "From the Oasthouse",
+      "Bobiverse",
+      "The Hunt for Vulcan"
+    ],
+    "existingEvidence": "No original owner media fixtures or wrong-edition decoys are present in this repository corpus."
+  },
+  "formats": [
+    {
+      "extension": "epub",
+      "discovery": "signature-and-extension candidate",
+      "metadataExtraction": {
+        "status": "fixture-tested partial OPF and bounded spine text",
+        "tests": [
+          "test-support/ScannerArchiveTest.java"
+        ],
+        "fixture": "generated EPUB ZIP entries inside ScannerArchiveTest.java"
+      },
+      "appReading": {
+        "status": "contract-tested; no retained EPUB file fixture",
+        "tests": [
+          "epub-reading-contract.test.cjs"
+        ],
+        "fixture": "generated in-memory OPF/spine fixture"
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "tested",
+        "tests": [
+          "assist-embedded-copy.test.cjs"
+        ],
+        "fixture": "generated in-test EPUB archive"
+      }
+    },
+    {
+      "extension": "pdf",
+      "discovery": "signature candidate; PDF remains document/ambiguous until content evidence",
+      "metadataExtraction": {
+        "status": "OCR/deep reader implemented; no retained PDF extraction fixture verified here",
+        "tests": []
+      },
+      "appReading": {
+        "status": "contract-tested; no retained PDF file fixture",
+        "tests": [
+          "test14-offline-pdf-app-contract.test.cjs"
+        ],
+        "fixture": "app contract test; no committed PDF input"
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "tested",
+        "tests": [
+          "assist-pdf-write.test.cjs"
+        ],
+        "fixture": "generated one-page PDF"
+      }
+    },
+    {
+      "extension": "mobi",
+      "discovery": "signature recognised as unsupported; extension classified unsupported ebook",
+      "metadataExtraction": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "appReading": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "unsupported; DB-only",
+        "tests": []
+      }
+    },
+    {
+      "extension": "azw",
+      "discovery": "unsupported ebook by extension; no dedicated signature reader",
+      "metadataExtraction": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "appReading": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "unsupported; DB-only",
+        "tests": []
+      }
+    },
+    {
+      "extension": "azw3",
+      "discovery": "unsupported ebook by extension; no dedicated signature reader",
+      "metadataExtraction": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "appReading": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "unsupported; DB-only",
+        "tests": []
+      }
+    },
+    {
+      "extension": "fb2",
+      "discovery": "unsupported ebook by extension",
+      "metadataExtraction": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "appReading": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "unsupported; DB-only",
+        "tests": []
+      }
+    },
+    {
+      "extension": "lit",
+      "discovery": "unsupported ebook by extension",
+      "metadataExtraction": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "appReading": {
+        "status": "unsupported",
+        "tests": []
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "unsupported; DB-only",
+        "tests": []
+      }
+    },
+    {
+      "extension": "cbz",
+      "discovery": "ZIP-signature and extension candidate",
+      "metadataExtraction": {
+        "status": "fixture-tested ComicInfo and bounded page evidence",
+        "tests": [
+          "test-support/ScannerArchiveTest.java"
+        ],
+        "fixture": "generated ZIP with ComicInfo.xml and generated page entries"
+      },
+      "appReading": {
+        "status": "reader routing tested; full image-reader fixture not tied to this corpus",
+        "tests": [
+          "comic-saf-reader-routing.test.cjs"
+        ],
+        "fixture": "URI/container routing cases"
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "tested",
+        "tests": [
+          "assist-embedded-copy.test.cjs"
+        ],
+        "fixture": "generated in-test CBZ archive"
+      }
+    },
+    {
+      "extension": "cbr",
+      "discovery": "RAR-signature and extension candidate",
+      "metadataExtraction": {
+        "status": "conditional Junrar path; real ComicInfo read-back not established by default fixture run",
+        "tests": [
+          "test-support/ScannerArchiveTest.java"
+        ],
+        "fixture": "minimal RAR signature plus optional external compressed-CBR argument"
+      },
+      "appReading": {
+        "status": "reader routing tested; no retained comic page fixture",
+        "tests": [
+          "comic-saf-reader-routing.test.cjs"
+        ],
+        "fixture": "URI/container routing cases"
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "tested synthetic RAR structure; upstream archive fixtures cover extraction verification separately",
+        "tests": [
+          "assist-cbr-write.test.cjs",
+          "test-support/rar-metadata/verify.cjs"
+        ],
+        "fixture": "generated RAR blocks and base64 upstream archives in test-support/rar-metadata/fixtures.json"
+      }
+    },
+    {
+      "extension": "cb7",
+      "discovery": "7z signature or CB7 extension candidate with MIME/signature conflict rejection",
+      "metadataExtraction": {
+        "status": "implemented bounded ComicInfo/cover/page evidence; native extraction/device acceptance pending",
+        "tests": [
+          "scanner-vnext-archive.test.cjs"
+        ],
+        "fixture": "Archive harness verifies bounds/unavailable engine and exact API compile contract; positive CB7 fixture still required"
+      },
+      "appReading": {
+        "status": "implemented Android selected-page reader; native extraction/device acceptance pending",
+        "tests": [
+          "cb7-pages.test.cjs"
+        ],
+        "fixture": "Mock native bridge verifies bounded index, page selection and cleanup; does not establish JNI extraction"
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "unsupported; DB-only",
+        "tests": []
+      }
+    },
+    {
+      "extension": "cbt",
+      "discovery": "USTAR signature candidate; app reader container routing exists",
+      "metadataExtraction": {
+        "status": "not implemented by ScannerArchiveReader",
+        "tests": []
+      },
+      "appReading": {
+        "status": "routing tested; no retained CBT reading fixture",
+        "tests": [
+          "comic-saf-reader-routing.test.cjs"
+        ],
+        "fixture": "URI/container routing cases"
+      },
+      "playback": "not-applicable",
+      "embeddedWrite": {
+        "status": "tested synthetic TAR",
+        "tests": [
+          "assist-cbt-write.test.cjs"
+        ],
+        "fixture": "generated TAR headers and page blocks"
+      }
+    },
+    {
+      "extension": "mp3",
+      "discovery": "audio extension/signature candidate",
+      "metadataExtraction": {
+        "status": "fixture-tested partial ID3v2 header fields",
+        "tests": [
+          "scanner-vnext-clues.test.cjs"
+        ],
+        "fixture": "generated ID3v2.3/v2.4 frames"
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second MP3 plus generated chapter file"
+      }
+    },
+    {
+      "extension": "m4a",
+      "discovery": "audio extension/ftyp candidate",
+      "metadataExtraction": {
+        "status": "unverified; parser has no M4A-specific clue fixture",
+        "tests": []
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second M4A"
+      }
+    },
+    {
+      "extension": "m4b",
+      "discovery": "audio extension/ftyp candidate",
+      "metadataExtraction": {
+        "status": "fixture-tested partial MP4 header tags; seek extraction covered separately",
+        "tests": [
+          "scanner-vnext-clues.test.cjs",
+          "scanner-vnext-seek-clues.test.cjs"
+        ],
+        "fixture": "generated MP4 atoms/index cases"
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tags, chapters and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated M4B with chapters"
+      }
+    },
+    {
+      "extension": "aac",
+      "discovery": "audio extension/signature candidate",
+      "metadataExtraction": {
+        "status": "unsupported by bounded header clue parser",
+        "tests": []
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second AAC/ADTS"
+      }
+    },
+    {
+      "extension": "flac",
+      "discovery": "audio extension/signature candidate",
+      "metadataExtraction": {
+        "status": "unsupported by bounded header clue parser",
+        "tests": []
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second FLAC"
+      }
+    },
+    {
+      "extension": "ogg",
+      "discovery": "audio extension/signature candidate",
+      "metadataExtraction": {
+        "status": "unsupported by bounded header clue parser",
+        "tests": []
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second Ogg/Vorbis"
+      }
+    },
+    {
+      "extension": "opus",
+      "discovery": "audio extension/signature candidate",
+      "metadataExtraction": {
+        "status": "unsupported by bounded header clue parser",
+        "tests": []
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second Opus"
+      }
+    },
+    {
+      "extension": "wav",
+      "discovery": "audio extension/signature candidate",
+      "metadataExtraction": {
+        "status": "unsupported by bounded header clue parser",
+        "tests": []
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second WAV"
+      }
+    },
+    {
+      "extension": "wma",
+      "discovery": "audio extension candidate",
+      "metadataExtraction": {
+        "status": "unsupported by bounded header clue parser",
+        "tests": []
+      },
+      "appReading": {
+        "status": "no format-specific committed audio playback fixture in T0 corpus",
+        "tests": []
+      },
+      "playback": "not verified by this corpus",
+      "embeddedWrite": {
+        "status": "tested tag write and decoded audio preservation",
+        "tests": [
+          "test-support/audio-metadata/verify.cjs"
+        ],
+        "fixture": "generated 2-second WMA/ASF"
+      }
+    }
+  ],
+  "crossFormatGaps": [
+    "`formatCapabilities.ts` only declares writable fields; it is not a complete read/play/extract/write/recovery matrix.",
+    "ArchivistFileMetadataModule gates non-audio embedded copies at 64 MiB; audio writer path has a separate 8 GiB cap.",
+    "Native write-recovery policy is tested independently, but no per-format interrupted SAF replacement/read-back corpus establishes crash recovery for each listed format.",
+    "ScannerDeepReader OCR and app playback have no retained real PDF/audio/comic corpus in these tests; contract or generated-fixture coverage is not owner-file coverage.",
+    "Generic ZIP metadata writes are disabled: ambiguous content remains database-only; a .zip filename is not sufficient evidence of a comic."
+  ],
+  "additionalFormats": []
+}

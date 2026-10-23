@@ -75,13 +75,14 @@ class ArchivistArchiveModule(private val context: ReactApplicationContext) : Rea
         val ext = name.lowercase(Locale.ROOT).substringAfterLast('.', "")
         val mime = resolver.getType(parsed)?.lowercase(Locale.ROOT)?.substringBefore(';')?.trim()
         val kind = when (ext) {
-          "cbr", "cbz", "cbt", "pdf", "epub" -> ext
+          "cbr", "cbz", "cbt", "cb7", "pdf", "epub" -> ext
           else -> when (mime) {
             "application/pdf" -> "pdf"
             "application/epub+zip" -> "epub"
             "application/vnd.comicbook-rar", "application/x-cbr" -> "cbr"
             "application/vnd.comicbook+zip", "application/x-cbz" -> "cbz"
             "application/x-cbt" -> "cbt"
+            "application/x-cb7" -> "cb7"
             else -> "unknown" // generic ZIP/RAR and octet-stream remain ambiguous
           }
         }

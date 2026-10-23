@@ -22,6 +22,7 @@ export type LocalWork = {
   needsReview: boolean;
   reviewReason: string;
   coverUri?: string;
+  coverThumbnailUri?: string;
   coverShape: 'portrait' | 'square';
 };
 
@@ -73,6 +74,7 @@ export function groupLocalWorks(books: LocalBook[]): LocalWork[] {
       needsReview: unresolved||!!importantConflict,
       reviewReason: importantConflict?.reviewReason || (unresolved?'Title or author still needs review.':''),
       coverUri: audio ? canonical.coverUri : tracks.find(item => item.coverUri)?.coverUri,
+      coverThumbnailUri: tracks.find(item => item.coverThumbnailUri)?.coverThumbnailUri,
       coverShape: audio ? 'square' : 'portrait',
     };
   });

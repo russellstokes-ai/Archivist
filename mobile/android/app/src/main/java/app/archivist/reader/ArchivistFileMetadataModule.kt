@@ -32,6 +32,7 @@ class ArchivistFileMetadataModule(private val context:ReactApplicationContext):R
   require(DocumentsContract.isChildDocument(resolver,DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree)),uri))
  }
  private fun sourceSize(uri:Uri):Long=resolver.query(uri,arrayOf(android.provider.OpenableColumns.SIZE),null,null,null)?.use{cursor->if(cursor.moveToFirst()&&!cursor.isNull(0))cursor.getLong(0)else -1L}?:-1L
+ private fun sourceModified(uri:Uri):Long=resolver.query(uri,arrayOf(DocumentsContract.Document.COLUMN_LAST_MODIFIED),null,null,null)?.use{cursor->if(cursor.moveToFirst()&&!cursor.isNull(0))cursor.getLong(0)else -1L}?:-1L
  private fun copyFrom(uri:Uri,file:File,maxBytes:Long=8589934592L,reserveCopies:Int=0){resolver.openInputStream(uri)?.use{input->file.outputStream().use{out->val b=ByteArray(65536);var total=0L;var n=input.read(b);while(n>=0){if(n>0){total+=n;require(total<=maxBytes){"File exceeds verified writer size limit"};if(reserveCopies>0)require(context.filesDir.usableSpace>total*reserveCopies+16777216){"Insufficient space for verified update and undo"};out.write(b,0,n)};n=input.read(b)};out.fd.sync()}}?:error("Cannot read source")}
  private fun copyTo(file:File,uri:Uri){resolver.openFileDescriptor(uri,"rwt")?.use{pfd->java.io.FileOutputStream(pfd.fileDescriptor).use{out->file.inputStream().use{it.copyTo(out)};out.flush();out.fd.sync()}}?:error("Cannot write source")}
  private fun retain(journal:File,backup:File){
@@ -68,7 +69,7 @@ class ArchivistFileMetadataModule(private val context:ReactApplicationContext):R
   val copy=File(context.cacheDir,"metadata-source-${UUID.randomUUID()}.${extension.filter{it.isLetterOrDigit()}.take(8)}")
   try{
    require(extension in listOf("mp3","m4a","m4b","aac","flac","ogg","opus","wav","wma","epub","cbz","zip","cbr","cbt","pdf"))
-   val tree=Uri.parse(treeValue);val uri=Uri.parse(uriValue);checkGrant(tree,uri);recover(uriValue)
+   val tree=Uri.parse(treeValue);val uri=Uri.parse(uriValue);checkGrant(tree,uri)
    val limit=if(extension in listOf("epub","cbz","zip","cbr","cbt","pdf"))67108864L else 8589934592L
    val size=sourceSize(uri);require(size<=limit){"File exceeds verified writer size limit"}
    if(size>0)require(context.filesDir.usableSpace>size*4+16777216){"Insufficient space for verified update and undo"}
@@ -77,6 +78,17 @@ class ArchivistFileMetadataModule(private val context:ReactApplicationContext):R
    promise.resolve(Arguments.createMap().apply{putString("original",Uri.fromFile(copy).toString());putString("fingerprint",fingerprint);putString("fieldsJson",(known?:JSONObject()).toString())})
   }
   catch(e:Throwable){copy.delete();if(e is WriteFailure)promise.reject(e.code,e.message,e)else promise.reject("FILE_SNAPSHOT_FAILED","The file could not be prepared safely; library details are saved.",e)}
+ }}
+ @ReactMethod fun verifiedFileReceipt(treeValue:String,uriValue:String,promise:Promise){executor.execute{
+  try{
+   val tree=Uri.parse(treeValue);val uri=Uri.parse(uriValue);checkGrant(tree,uri)
+   val file=receiptFile(uriValue);if(!file.isFile){promise.resolve(null);return@execute}
+   val record=JSONObject(file.readText())
+   if(record.optString("tree")!=treeValue||record.optString("uri")!=uriValue){promise.resolve(null);return@execute}
+   val hash=record.optString("updated");val size=record.optLong("verifiedSize",-1);val modified=record.optLong("verifiedModified",-1)
+   if(!hash.matches(Regex("[a-f0-9]{64}"))||size<0||modified<=0||sourceSize(uri)!=size||sourceModified(uri)!=modified){promise.resolve(null);return@execute}
+   promise.resolve(Arguments.createMap().apply{putString("sha256",hash);putDouble("size",size.toDouble());putDouble("modified",modified.toDouble())})
+  }catch(e:Throwable){promise.reject("VERIFIED_RECEIPT_UNAVAILABLE","The verified file receipt is unavailable for this source.",e)}
  }}
  @ReactMethod fun writeHistory(uriValue:String,promise:Promise){executor.execute{
   try{val rows=Arguments.createArray();for(file in history.listFiles()?.filter{it.extension=="json"}?:emptyList()){val record=JSONObject(file.readText());if(record.getString("uri")==uriValue)rows.pushMap(Arguments.createMap().apply{putString("id",file.nameWithoutExtension);putString("original",record.getString("original"));putString("updated",record.getString("updated"))})};promise.resolve(rows)}catch(e:Throwable){promise.reject("HISTORY_UNAVAILABLE",e)}
@@ -172,7 +184,9 @@ class ArchivistFileMetadataModule(private val context:ReactApplicationContext):R
    pendingJournal.outputStream().use{it.write(record.toString().toByteArray());it.fd.sync()}
    require(pendingJournal.renameTo(journal!!)){"Cannot commit recovery journal"}
    copyTo(updated,uri)
-   val check=File(directory,"$id.check");try{copyFrom(uri,check);require(hash(check)==hash(updated))}finally{check.delete()}
+   val check=File(directory,"$id.check");var verifiedSize=-1L;var verifiedModified=-1L;try{val beforeSize=sourceSize(uri);val beforeModified=sourceModified(uri);copyFrom(uri,check);require(hash(check)==hash(updated));val afterSize=sourceSize(uri);val afterModified=sourceModified(uri);if(beforeSize==afterSize&&afterSize==check.length()&&beforeModified>0&&beforeModified==afterModified){verifiedSize=check.length();verifiedModified=afterModified}}finally{check.delete()}
+   record.put("verifiedSize",verifiedSize).put("verifiedModified",verifiedModified)
+   journal!!.outputStream().use{it.write(record.toString().toByteArray());it.fd.sync()}
    retain(journal!!,backup!!);return "written"
   }catch(_:Throwable){
    if(journal?.exists()==true){

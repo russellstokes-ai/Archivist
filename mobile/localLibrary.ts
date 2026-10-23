@@ -42,6 +42,7 @@ export type LocalBook = {
   coverShape?: 'portrait' | 'square';
   metadataSource?: 'path' | 'embedded' | 'sidecar' | 'manual' | 'online';
   coverUri?: string;
+  coverThumbnailUri?: string;
   coverCandidates?: string[];
   onlineMetadataMatch?: OnlineBookCandidate;
   onlineMetadataAlternatives?: OnlineBookCandidate[];

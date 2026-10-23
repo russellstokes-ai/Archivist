@@ -71,6 +71,7 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           node harden-forge.cjs
+          node patch-gradle-toolchain.cjs
 
       - name: Expo doctor
         working-directory: mobile

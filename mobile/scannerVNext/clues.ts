@@ -1,6 +1,6 @@
-export type EmbeddedFields={title?:string;album?:string;author?:string;genre?:string;publishedYear?:string;publisher?:string;language?:string;description?:string;track?:number;disc?:number};
+export type EmbeddedFields={title?:string;album?:string;author?:string;albumAuthor?:string;narrator?:string;series?:string;seriesNumber?:string;isbn?:string;asin?:string;genre?:string;publishedYear?:string;publisher?:string;language?:string;description?:string;track?:number;disc?:number};
 export type HeaderClues={readerVersion:'header-1';provenance:'embedded';status:'parsed'|'partial'|'unresolved';reason:string;fields:EmbeddedFields};
-const ids:Record<string,keyof EmbeddedFields>={TIT2:'title',TALB:'album',TPE1:'author',TCON:'genre',TRCK:'track',TPOS:'disc',TDRC:'publishedYear',TYER:'publishedYear',TPUB:'publisher',TLAN:'language','\xa9nam':'title','\xa9alb':'album','\xa9ART':'author',aART:'author','\xa9gen':'genre','\xa9day':'publishedYear',desc:'description',ldes:'description'};
+const ids:Record<string,keyof EmbeddedFields>={TIT2:'title',TALB:'album',TPE1:'author',TPE2:'albumAuthor',TPE3:'narrator',TCON:'genre',TRCK:'track',TPOS:'disc',TDRC:'publishedYear',TYER:'publishedYear',TPUB:'publisher',TLAN:'language','\xa9nam':'title','\xa9alb':'album','\xa9ART':'author',aART:'albumAuthor','\xa9gen':'genre','\xa9day':'publishedYear',desc:'description',ldes:'description'};
 function ascii(bytes:Uint8Array,start:number,length:number){let value='';for(let i=start;i<start+length;i++)value+=String.fromCharCode(bytes[i]);return value;}
 function u32(bytes:Uint8Array,start:number){return bytes[start]*16777216+bytes[start+1]*65536+bytes[start+2]*256+bytes[start+3];}
 function sync(bytes:Uint8Array,start:number){for(let i=0;i<4;i++)if(bytes[start+i]&128)return -1;return bytes[start]*2097152+bytes[start+1]*16384+bytes[start+2]*128+bytes[start+3];}
@@ -59,6 +59,13 @@ export function parseHeaderClues(bytes:Uint8Array,extension:string):HeaderClues 
       const id=ascii(bytes,offset,4),size=version===4?sync(bytes,offset+4):u32(bytes,offset+4);
       if(!/^[A-Z0-9]{4}$/.test(id)||size<1||offset+10+size>end){partial=true;break;}
       if(bytes[offset+8]||bytes[offset+9]){partial=true;reason='id3-frame-flags-require-special-reader';}
+      else if(id==='TXXX'){
+        const payload=bytes.subarray(offset+11,offset+10+size),encoding=bytes[offset+10],step=encoding===1||encoding===2?2:1;
+        let end=encoding===1?2:0;for(;end+step<=payload.length;end+=step)if(payload[end]===0&&(step===1||payload[end+1]===0))break;
+        const label=text(payload.subarray(0,end),encoding)?.toLowerCase().replace(/[^a-z]/g,'');
+        const custom:Record<string,keyof EmbeddedFields>={isbn:'isbn',asin:'asin',series:'series',seriespart:'seriesNumber',seriesnumber:'seriesNumber',narrator:'narrator'};
+        if(label&&custom[label]&&end+step<payload.length){let rest=payload.subarray(end+step);if(encoding===1&&!(rest[0]===255&&rest[1]===254||rest[0]===254&&rest[1]===255)){const withBom=new Uint8Array(rest.length+2);withBom.set(payload.subarray(0,2));withBom.set(rest,2);rest=withBom;}assign(custom[label],text(rest,encoding));}
+      }
       else if(ids[id])assign(ids[id],text(bytes.subarray(offset+11,offset+10+size),bytes[offset+10]));
       offset+=10+size;
     }
@@ -77,6 +84,9 @@ export function parseHeaderClues(bytes:Uint8Array,extension:string):HeaderClues 
         if(type==='ilst'){index=true;walk(offset+8,atomEnd,depth+1,true);}
         else if(type==='meta'){if(offset+12>atomEnd)partial=true;else walk(offset+12,atomEnd,depth+1);}
         else if(['moov','udta'].includes(type))walk(offset+8,atomEnd,depth+1);
+        else if(inIndex&&['trkn','disk'].includes(type)){
+          const d=offset+8;if(d+20<=atomEnd&&ascii(bytes,d+4,4)==='data'&&u32(bytes,d)>=20&&d+u32(bytes,d)<=atomEnd)assign(type==='trkn'?'track':'disc',String(bytes[d+18]*256+bytes[d+19]));else partial=true;
+        }
         else if(inIndex&&ids[type]){
           const dataStart=offset+8;
           if(dataStart+16>atomEnd||ascii(bytes,dataStart+4,4)!=='data'||u32(bytes,dataStart)<16||dataStart+u32(bytes,dataStart)>atomEnd){partial=true;}

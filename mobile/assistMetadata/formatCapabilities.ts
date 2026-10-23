@@ -8,6 +8,6 @@ export const writableFields:Record<string,readonly Field[]>={
  flac:audio,ogg:audio,opus:audio,wav:audio,wma:audio,
  epub:['title','author','description','publisher','language','genre','publishedYear'],
  pdf:['title','author','genre','publishedYear','publisher','series','seriesNumber','isbn','description'],
- cbz:comic,zip:comic,cbr:comic,cbt:comic,
+ cbz:comic,cbr:comic,cbt:comic,
 };
 export function fileMetadataFields(path:string){return writableFields[path.toLowerCase().split('.').pop()||'']??[];}

@@ -3,6 +3,7 @@ import type {Candidate,SearchFields,RankedCandidate} from '../scannerVNext/searc
 import type {MetadataWork,WorkFields} from '../scannerVNext/fieldEvidence';
 import {hasGenre} from './genres';
 export type SearchClues={text:string;title?:string;author?:string;isbn?:string;asin?:string;series?:string;annualLabel?:string};
+export const canonicalIssue=(value:unknown)=>String(value??'').trim().toLowerCase().replace(/^0+(?=\d)/,'');
 export const canonicalText=(value:unknown)=>String(value??'').normalize('NFKC').toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]/gu,'');
 const clean=(value:unknown)=>String(value??'').normalize('NFKC').replace(/\s+/g,' ').trim();
 const annualLabel=(value:string)=>(value.match(/\b((?:18|19|20)\d{2})\s+annual\b/i)||value.match(/\bannual\s+((?:18|19|20)\d{2})\b/i))?.[1];
@@ -55,13 +56,13 @@ export function rankAssistCandidates(fields:WorkFields,candidates:Candidate[]):R
    const incoming=(candidate.fields as WorkFields)[field];
    if(fields[field]&&incoming&&canonicalText(fields[field])!==canonicalText(incoming))conflicts.push(field);
   }
-  if(fields.seriesNumber&&candidate.fields.seriesNumber&&canonicalText(fields.seriesNumber)!==canonicalText(candidate.fields.seriesNumber))conflicts.push('series-number');
+  if(fields.seriesNumber&&candidate.fields.seriesNumber&&canonicalIssue(fields.seriesNumber)!==canonicalIssue(candidate.fields.seriesNumber))conflicts.push('series-number');
   if(candidate.anthology)conflicts.push('anthology');
   if(exactId&&fields.title&&candidate.fields.title&&!title&&overlap(fields.title,candidate.fields.title)<.45)conflicts.push('title');
   const clue=overlap(fields.title,[candidate.fields.title,candidate.fields.author,candidate.fields.series].filter(Boolean).join(' '));
-  const score=(exactId?1000:0)+(title?100:Math.round(clue*70))+(author?40:0)-(conflicts.length*150);
-  const comic=!!fields.series&&!!fields.seriesNumber&&!!fields.publisher&&!!fields.publishedYear&&['series','seriesNumber','publisher','publishedYear'].every(key=>canonicalText(fields[key as keyof WorkFields])===canonicalText(candidate.fields[key as keyof typeof candidate.fields]));
-  return {candidate,score,conflicts,automaticEligible:!candidate.relatedMatch&&!conflicts.length&&(exactId||title&&author||title&&comic)};
+  const comic=!!fields.series&&!!fields.seriesNumber&&!!fields.publisher&&!!fields.publishedYear&&['series','publisher','publishedYear'].every(key=>canonicalText(fields[key as keyof WorkFields])===canonicalText(candidate.fields[key as keyof typeof candidate.fields]))&&canonicalIssue(fields.seriesNumber)===canonicalIssue(candidate.fields.seriesNumber);
+  const score=(comic?160:0)+(exactId?1000:0)+(title?100:Math.round(clue*70))+(author?40:0)-(conflicts.length*150);
+  return {candidate,score,conflicts,automaticEligible:!candidate.relatedMatch&&!conflicts.length&&(exactId||title&&author||comic)};
  }).sort((a,b)=>b.score-a.score||a.candidate.id.localeCompare(b.candidate.id));
 }
 export function selectAutomatic(work:Pick<MetadataWork,'fields'>,candidates:Candidate[]):Candidate|null{
@@ -97,7 +98,7 @@ export function shouldEnrich(book:{title?:string;author?:string;format?:string;[
 }
 export function fillMissing(work:Pick<MetadataWork,'fields'|'manual'>,candidate:Candidate):WorkFields{
  const result:WorkFields={};
- const allowed=new Set(['title','author','series','seriesNumber','genre','publishedYear','description','publisher','narrator','language','coverUri','isbn','asin']);
+ const allowed=new Set(['title','author','series','seriesNumber','genre','publishedYear','description','publisher','narrator','language','coverUri','isbn','asin','subtitle','publicationDate','pageCount','durationSeconds']);
  for(const [key,value]of Object.entries(candidate.fields)){
   const field=(key==='coverUrl'?'coverUri':key) as keyof WorkFields;
   if(!allowed.has(field)||work.manual[field]||(field==='genre'?hasGenre(work.fields.genre):clean(work.fields[field]))||typeof value!=='string'||!value.trim())continue;

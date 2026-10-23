@@ -1,7 +1,7 @@
-export type SearchFields=Partial<Record<'title'|'author'|'series'|'seriesNumber'|'isbn'|'asin'|'language',string>>;
-export type Candidate={id:string;provider:string;fields:SearchFields&{genre?:string;coverUrl?:string;description?:string;publishedYear?:string};identifiers:string[];anthology?:boolean;relatedMatch?:boolean};
+export type SearchFields=Partial<Record<'title'|'author'|'series'|'seriesNumber'|'isbn'|'asin'|'language'|'publisher'|'publishedYear'|'narrator',string>>;
+export type Candidate={id:string;provider:string;fields:SearchFields&{genre?:string;coverUrl?:string;description?:string;publishedYear?:string;subtitle?:string;publicationDate?:string;pageCount?:string;durationSeconds?:string};identifiers:string[];anthology?:boolean;relatedMatch?:boolean};
 export type SearchWork={workId:string;revision:number;fields:SearchFields;manual:Record<string,boolean|undefined>;partIds:string[]};
-export type Query=SearchFields&{broad?:boolean;fuzzy?:boolean};
+export type Query=SearchFields&{broad?:boolean;fuzzy?:boolean;mediaKind?:'audio'|'comic'|'book'};
 export interface SearchProvider {id:string;available?:boolean;search(query:Query,page:number,signal?:AbortSignal):Promise<{candidates:Candidate[];nextPage:number|null}>}
 export type RankedCandidate={candidate:Candidate;score:number;conflicts:string[];automaticEligible:boolean};
 export type SearchResult={state:'review'|'no-match'|'offline'|'disabled'|'pending';candidates:RankedCandidate[];requests:number;cacheHit:boolean;issues:string[];nextPages:Record<string,number|null>;nextPlans?:Record<string,number>};

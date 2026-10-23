@@ -22,7 +22,7 @@ const cases = [
   ['unknown.zip','application/zip','ambiguous','archive'],
   ['book.mobi','','unsupported','ebook'],
   ['book.azw3','','unsupported','ebook'],
-  ['archive.cb7','','unsupported','comic'],
+  ['archive.cb7','','candidate','comic'],
   ['cover.JPG','image/jpeg','candidate','artwork'],
   ['notes.opf','','candidate','sidecar'],
   ['track.mp3','image/jpeg','ambiguous','unknown'],

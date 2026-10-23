@@ -44,11 +44,11 @@ export function createBookProviders(settings:{openLibrary:boolean;googleBooks:bo
  if(settings.googleBooks)providers.push({id:'google-books',available:!!settings.googleKey,async search(query,page,signal){
   if(!settings.googleKey)throw new Error('Google Books is unconfigured');
   const terms=query.isbn?'isbn:'+quote(query.isbn):[query.title?'intitle:'+quote(query.title):'',query.author?'inauthor:'+quote(query.author):'',query.series?quote(query.series):''].filter(Boolean).join(' ');
-  const params=new URLSearchParams({q:terms,startIndex:String(page*20),maxResults:'20',key:settings.googleKey,fields:'items(id,volumeInfo(title,authors,categories,industryIdentifiers,imageLinks/thumbnail,language,publishedDate)),totalItems'});
+  const params=new URLSearchParams({q:terms,startIndex:String(page*20),maxResults:'20',key:settings.googleKey,fields:'items(id,volumeInfo(title,subtitle,authors,categories,industryIdentifiers,imageLinks/thumbnail,language,publishedDate,pageCount)),totalItems'});
   const raw=await queue.run('google-books',inner=>request('https://www.googleapis.com/books/v1/volumes?'+params,inner),signal) as {items?:unknown;totalItems?:number};
   const items=list(raw?.items),candidates:Candidate[]=[];
   for(const value of items){const row=value as {id?:unknown;volumeInfo?:Record<string,unknown>},info=row.volumeInfo,id=text(row.id);if(!id||!info)continue;const title=text(info.title);if(!title)continue;const author=list(info.authors,4).map(x=>text(x)).filter(Boolean).join(', '),genre=providerGenre(info.categories),publishedYear=year(info.publishedDate),cover=image((info.imageLinks as {thumbnail?:unknown}|undefined)?.thumbnail),language=text(info.language,32);
-   candidates.push({id,provider:'google-books',identifiers:list(info.industryIdentifiers).map(x=>text((x as {identifier?:unknown})?.identifier,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(publishedYear?{publishedYear}:{}),...(cover?{coverUrl:cover}:{}),...(language?{language}:{})}});
+   candidates.push({id,provider:'google-books',identifiers:list(info.industryIdentifiers).map(x=>text((x as {identifier?:unknown})?.identifier,64)).filter((x):x is string=>!!x),fields:{title,...(author?{author}:{}),...(genre?{genre}:{}),...(publishedYear?{publishedYear}:{}),...(cover?{coverUrl:cover}:{}),...(language?{language}:{}),...(text(info.subtitle)?{subtitle:text(info.subtitle)}:{}),...(text(info.publishedDate)?{publicationDate:text(info.publishedDate)}:{}),...(Number.isSafeInteger(info.pageCount)&&Number(info.pageCount)>0?{pageCount:String(info.pageCount)}:{})}});
   }
   return {candidates,nextPage:typeof raw.totalItems==='number'&&page*20+items.length<raw.totalItems?page+1:null};
  }});

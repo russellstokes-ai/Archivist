@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript'),sqlite=require('./test-support/sqlite-port.cjs');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+const {createMetadataStore}=require('./scannerVNext/fieldEvidence.ts'),{createAssistMetadataStore}=require('./assistMetadata/store.ts'),{writeEligibility}=require('./assistMetadata/changePlan.ts'),{createImprovedAssist}=require('./assistMetadata/controller.ts');
+const {initDeepEvidence,saveDeepProof,loadDeepProof,deepSourceKey}=require('./assistMetadata/deepEvidenceStore.ts');
+(async()=>{const tmp=fs.mkdtempSync(path.join(__dirname,'.scanner-store-test-')),db=sqlite(path.join(tmp,'deep.db'));try{
+ const base=await createMetadataStore(db),store=await createAssistMetadataStore(db,base);await initDeepEvidence(db);
+ await base.ensure({workId:'book',revision:0,fields:{title:'Scan 01'},manual:{},partIds:['file'],identityConfirmed:false,fieldSources:{title:'filename'}});
+ await db.execAsync('CREATE TABLE scanner_vnext_catalogue(work_id TEXT PRIMARY KEY,payload TEXT NOT NULL);');
+ const source={source:{rootUri:'content://tree'},entry:{assets:[{documentId:'file',size:500,modified:1}]}};await db.runAsync('INSERT INTO scanner_vnext_catalogue VALUES(?,?)','book',JSON.stringify(source));
+ const candidate={provider:'catalogue',id:'edition',identifiers:['9780306406157'],fields:{title:'Example Novel',author:'A Writer',isbn:'9780306406157'}};
+ const proof={sourceKey:deepSourceKey(source),text:'Example Novel\nA Writer\nISBN 9780306406157',fields:{isbn:'9780306406157'},covers:{}};
+ const result={state:'no-match',candidates:[],issues:[],requests:1,cacheHit:false,nextPages:{}};
+ const assist=await createImprovedAssist(db,store,{async search(){return result;}},undefined,async(work,initial,policy,signal)=>{await saveDeepProof(db,work.workId,work.revision,proof,signal);return {result:{...initial,state:'review',candidates:[{candidate,score:10,conflicts:[],automaticEligible:false}]},candidate};});
+ assert.equal((await (await assist.search('book',{online:true,automatic:true})).completion).state,'accepted');
+ let work=await store.get('book');assert.equal(work.identification.rung,'R4');assert.equal(work.identityConfirmed,true);assert.equal(writeEligibility(work,[],false),'identity-needs-evidence');
+ assert.ok((await store.evidence('book')).some(o=>o.source==='deep'));
+ work=await store.accept('book',candidate,work.revision);assert.equal(work.identification.rung,'R4','provider data must not corroborate itself on repeat lookup');
+ const changed=await store.saveManual('book',{title:'Another Book'},work.revision);assert.equal(await loadDeepProof(db,'book',changed.revision),null,'editing invalidates stale visual evidence');
+ await assert.rejects(saveDeepProof(db,'book',work.revision,proof),/Stale/);
+ console.log('PASS: R4 callback accepted to DB, repeat stays R4, write gate blocks, stale manual-edit proof rejected');
+}finally{await db.close();fs.rmSync(tmp,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

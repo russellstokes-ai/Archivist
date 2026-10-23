@@ -1,7 +1,7 @@
 import type {Candidate,Query,SearchWork,SearchProvider,SearchCache,SearchPolicy,SearchResult} from '../scannerVNext/search';
 import {hasGenre} from './genres';
 import {clueQueries,parseSearchClues,rankAssistCandidates,selectAutomatic} from './core';
-export type AssistPolicy=SearchPolicy&{clues?:string};
+export type AssistPolicy=SearchPolicy&{clues?:string;mediaKind?:Query['mediaKind']};
 export type AssistProvider=SearchProvider&{details?:(candidate:Candidate,signal?:AbortSignal)=>Promise<Candidate>};
 const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw Error('Search cancelled');};
 const empty=(state:SearchResult['state']):SearchResult=>({state,candidates:[],requests:0,cacheHit:false,issues:[],nextPages:{},nextPlans:{}});
@@ -14,8 +14,9 @@ function plans(work:SearchWork,options:AssistPolicy):Query[]{
  }
  const f=work.fields;
  if(f.isbn)return [{isbn:f.isbn,...(f.title?{title:f.title}:{}),...(f.author?{author:f.author}:{})}];
- if(!f.title&&!f.author&&!f.asin)return [];
+ if(!f.title&&!f.series&&!f.author&&!f.asin)return [];
  const initial:Query={...f};const queries=[initial];
+ if(f.series&&f.seriesNumber)queries.push({series:f.series,seriesNumber:f.seriesNumber,title:f.series+' '+f.seriesNumber,publisher:f.publisher,publishedYear:f.publishedYear});
  if(f.title)queries.push({title:f.title,broad:true});
  return queries;
 }
@@ -24,12 +25,13 @@ export function createAssistSearchService(providers:AssistProvider[],cache:Searc
  async function search(work:SearchWork,options:AssistPolicy):Promise<SearchResult>{
   check(options.signal);if(!options.online)return empty('offline');
   if(!options.automatic&&!options.explicit)return empty('disabled');
-  const queries=plans(work,options);if(!queries.length)return empty('pending');
-  const key=JSON.stringify(['assist-search-v4',queries,providers.map(p=>[p.id,p.available!==false])]);
+  const queries=plans(work,options).map(query=>({...query,...(options.mediaKind?{mediaKind:options.mediaKind}:{})}));if(!queries.length)return empty('pending');
+  const key=JSON.stringify(['assist-search-v6',queries,providers.map(p=>[p.id,p.available!==false])]);
   const rankingFields=options.clues!==undefined?parseSearchClues(options.clues):work.fields;
   if(!options.retry){try{const entry=await cache.load(key);check(options.signal);if(entry&&entry.expires>Date.now())return {...entry.value,requests:0,cacheHit:true,candidates:rankAssistCandidates(rankingFields,entry.value.candidates.map(x=>x.candidate))};}catch{check(options.signal);}}
   const result=empty('pending'),found=new Map<string,Candidate>();
-  for(const provider of providers){
+  const ordered=options.mediaKind==='audio'?[...providers].sort((a,b)=>Number(b.id==='audible-uk')-Number(a.id==='audible-uk')):providers;
+  for(const provider of ordered){
    check(options.signal);
    if(provider.available===false){result.issues.push(provider.id+':unconfigured');continue;}
    for(const [index,query]of queries.entries()){
@@ -37,7 +39,7 @@ export function createAssistSearchService(providers:AssistProvider[],cache:Searc
     try{
      result.requests++;const page=await provider.search(query,0,options.signal);check(options.signal);
      if(!Array.isArray(page.candidates)||page.candidates.length>20)throw Error('Provider result budget');
-     for(const c of page.candidates){if(c.provider!==provider.id||!c.id||!c.fields?.title)continue;found.set(c.provider+'|'+c.id,c);}
+     for(const c of page.candidates){if(c.provider!==provider.id||!c.id||!c.fields?.title)continue;const candidate=options.mediaKind==='audio'&&provider.id!=='audible-uk'&&!query.isbn?{...c,relatedMatch:true}:c;found.set(c.provider+'|'+c.id,candidate);}
      result.nextPages[provider.id]=page.nextPage;result.nextPlans![provider.id]=index;
      if(found.size>120)throw Error('Assist candidate budget');
      if(selectAutomatic({fields:rankingFields},[...found.values()]))break;
@@ -51,8 +53,8 @@ export function createAssistSearchService(providers:AssistProvider[],cache:Searc
    const provider=providers.find(p=>p.id===row.candidate.provider);
    if(!provider?.details)continue;
    const fields=row.candidate.fields as Record<string,string|undefined>;
-   if(fields.description&&fields.publisher&&fields.publishedYear&&fields.coverUrl)continue;
-   try{result.requests++;const detailed=await provider.details(row.candidate,options.signal);check(options.signal);if(detailed.id!==row.candidate.id||detailed.provider!==row.candidate.provider)throw Error('Detail identity mismatch');found.set(detailed.provider+'|'+detailed.id,detailed);}
+   if(fields.description&&fields.publisher&&fields.publishedYear&&fields.coverUrl&&hasGenre(fields.genre))continue;
+   try{result.requests++;const detailed=await provider.details(row.candidate,options.signal);check(options.signal);if(detailed.id!==row.candidate.id||detailed.provider!==row.candidate.provider)throw Error('Detail identity mismatch');found.set(detailed.provider+'|'+detailed.id,{...detailed,relatedMatch:row.candidate.relatedMatch||detailed.relatedMatch});}
    catch{check(options.signal);result.issues.push(row.candidate.provider+':detail-unavailable');}
   }
   ranked=rankAssistCandidates(rankingFields,[...found.values()]).filter(x=>x.score+x.conflicts.length*150>0||!rankingFields.title);
@@ -61,14 +63,15 @@ export function createAssistSearchService(providers:AssistProvider[],cache:Searc
   if(!result.issues.length){try{await cache.save(key,{expires:Date.now()+(ranked.length?7*86400000:3600000),value:result},options.signal);}catch{check(options.signal);}}
   return result;
  }
- async function more(work:SearchWork,providerId:string,page:number,options:{online:boolean;automatic:boolean;signal?:AbortSignal;clues?:string},planIndex=0):Promise<SearchResult>{
+ async function more(work:SearchWork,providerId:string,page:number,options:{online:boolean;automatic:boolean;signal?:AbortSignal;clues?:string;mediaKind?:Query['mediaKind']},planIndex=0):Promise<SearchResult>{
   check(options.signal);if(!options.online)return empty('offline');
   if(!Number.isSafeInteger(page)||page<1||page>50)throw Error('Invalid provider page');
   const provider=providers.find(p=>p.id===providerId),query=plans(work,{...options,explicit:true})[planIndex];
   if(!provider||provider.available===false||!query)return empty('pending');
-  const response=await provider.search(query,page,options.signal);check(options.signal);
+  const response=await provider.search({...query,...(options.mediaKind?{mediaKind:options.mediaKind}:{})},page,options.signal);check(options.signal);
   if(response.candidates.length>20)throw Error('Provider result budget');
-  return {...empty(response.candidates.length?'review':'no-match'),requests:1,candidates:rankAssistCandidates(options.clues!==undefined?parseSearchClues(options.clues):work.fields,response.candidates),nextPages:{[providerId]:response.nextPage},nextPlans:{[providerId]:planIndex}};
+  const candidates=response.candidates.filter(c=>c.provider===providerId&&c.id&&c.fields?.title).map(c=>options.mediaKind==='audio'&&providerId!=='audible-uk'&&!query.isbn?{...c,relatedMatch:true}:c);
+  return {...empty(candidates.length?'review':'no-match'),requests:1,candidates:rankAssistCandidates(options.clues!==undefined?parseSearchClues(options.clues):work.fields,candidates),nextPages:{[providerId]:response.nextPage},nextPlans:{[providerId]:planIndex}};
  }
  return {search,more};
 }

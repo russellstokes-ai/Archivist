@@ -20,5 +20,7 @@ const lib=require('./assistMetadata/service.ts');
  const bad={id:'unavailable',available:false,search:async()=>{throw Error('not configured')}};
  const s2=lib.createAssistSearchService([bad,provider],cache);assert.equal((await s2.search(w,{online:true,automatic:true})).candidates.length,1);
  const aborted=new AbortController();aborted.abort();await assert.rejects(s.search(w,{online:true,automatic:true,signal:aborted.signal}),/cancel/i);
+ const audio=await s.search(w,{online:true,automatic:true,mediaKind:'audio',retry:true});assert.equal(audio.candidates[0].candidate.relatedMatch,true,'Print-only match cannot identify an audiobook edition');
+ const later=await s.more(w,'books',2,{online:true,automatic:true,mediaKind:'audio'});assert.equal(later.candidates[0].candidate.relatedMatch,true,'Pagination retains audiobook edition guard');
  console.log('PASS: Assist searches the actual clue draft, reuses provider metadata across records, hydrates detail, preserves saved fields and handles cancellation');
 })().catch(e=>{console.error(e);process.exitCode=1});

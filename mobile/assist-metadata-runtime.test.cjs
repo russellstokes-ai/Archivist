@@ -23,7 +23,7 @@ const waitFor=async read=>{const end=Date.now()+3000;while(Date.now()<end){if(aw
    if(name==='expo/fetch')return {fetch:async()=>{throw Error('Unexpected network');}};
    if(name==='expo-file-system')return {File:class{constructor(uri){this.uri=uri;this.exists=existingFiles.has(uri);}delete(){}},Paths:{}};
    if(name==='./writeBack.native')return {writeMetadataFile:async plan=>{plans.push(plan);return 'written';}};
-   if(name==='../scannerVNext/androidRuntime.native')return {createAndroidCatalogueRuntime:async()=>({metadata,refresh:async(id,signal,localOnly)=>{assert.equal(localOnly,true);return [{uri:'content://fixture/book.epub',scannerWorkId:id}];},acquireArtwork:async()=>{coverReads++;const saved=await metadata.get('one');if(coverReads===1)await new Promise(resolve=>coverRelease=resolve);const uri='file:///cache/cover-'+saved.revision+'.jpg';existingFiles.add(uri);return {state:'ready',uri};},scan:async()=>({books:[]})})};
+   if(name==='../scannerVNext/androidRuntime.native')return {createAndroidCatalogueRuntime:async()=>({metadata,refresh:async(id,signal,localOnly)=>{assert.equal(localOnly,true);return [{uri:'content://fixture/book.epub',scannerWorkId:id}];},acquireArtwork:async()=>{coverReads++;const saved=await metadata.get('one');if(coverReads===1)await new Promise(resolve=>coverRelease=resolve);const uri='file:///cache/cover-'+saved.revision+'.jpg',thumbnailUri='file:///cache/thumbnail-'+saved.revision+'.jpg';existingFiles.add(uri);existingFiles.add(thumbnailUri);return {state:'ready',uri,thumbnailUri,thumbnailWidth:240,thumbnailHeight:360};},scan:async()=>({books:[]})})};
    if(name==='../scannerVNext/androidStore.native')return {openScannerDatabase:async()=>db};
    return original.call(this,name,...args);
   };
@@ -45,7 +45,7 @@ const waitFor=async read=>{const end=Date.now()+3000;while(Date.now()<end){if(aw
   await (await disabled.save('one',{coverUri:'https://covers.openlibrary.org/new.jpg'},{online:false,automatic:true})).completion;
   coverRelease();coverRelease=undefined;
   await waitFor(async()=>(await disabled.refresh('one'))[0].coverUri==='file:///cache/cover-3.jpg');
-  assert.equal(coverReads,2,'A changed selection supersedes the in-flight cover');
+  const projectedCover=(await disabled.refresh('one'))[0];assert.equal(projectedCover.coverUri,'file:///cache/cover-3.jpg','The library retains the full-resolution cover for player use');assert.equal(projectedCover.coverThumbnailUri,'file:///cache/thumbnail-3.jpg','The small-cover path receives the generated thumbnail');assert.equal(coverReads,2,'A changed selection supersedes the in-flight cover');
   assert.equal((await disabled.metadata.get('one')).revision,3,'Caching the selected cover does not queue a new metadata revision');
   assert.equal(plans.length,1,'Artwork does not rewrite the media file');
   existingFiles.clear();assert.equal((await disabled.refresh('one'))[0].coverUri,'https://covers.openlibrary.org/new.jpg','A removed cache file cannot replace a valid cover reference');

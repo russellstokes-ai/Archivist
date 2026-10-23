@@ -1,3 +1,7 @@
+# Current continuation: recognition repairs (23 October 2026)
+
+See `docs/v1/RECOGNITION_FOLLOWUP_2026-10-23.md` for this repair set, test evidence and explicit remaining scope. The bottom-of-Settings diagnostic export is retained and now includes bounded per-file inspection/grouping clues after a rescan. Do not describe all P0-P12 work as complete. Audio transcription is excluded. Current combined source passes 202/202 mobile suites, TypeScript and Android Java/Kotlin compilation. GitHub release lint and real CB7 JNI extraction remain release gates; no APK may be dispatched until they pass. See the closure section of that handoff; the old validation counts are historical.
+
 # Archivist AI Handoff
 
 ## Current Discovery Preview candidate

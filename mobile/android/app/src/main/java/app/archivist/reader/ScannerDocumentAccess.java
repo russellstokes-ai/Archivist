@@ -38,6 +38,14 @@ public final class ScannerDocumentAccess {
     }
     token.check();return document;
   }
+  public Entry readDocumentStat(Uri root,String id,ScannerTaskPool.Token token)throws Exception{
+    Uri uri=document(root,id,token);CancellationSignal cancellation=new CancellationSignal();token.onCancel(cancellation::cancel);token.check();
+    String[] fields={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE,DocumentsContract.Document.COLUMN_LAST_MODIFIED};
+    try(Cursor cursor=resolver.query(uri,fields,null,null,null,cancellation)){
+      token.check();if(cursor==null||!cursor.moveToFirst())throw new IllegalStateException("Document stat unavailable");
+      Entry entry=new Entry(text(cursor,fields[0]),text(cursor,fields[1]),text(cursor,fields[2]),number(cursor,fields[3]),number(cursor,fields[4]));token.check();return entry;
+    }
+  }
   public Page queryChildren(Uri root,String parentId,int offset,int limit,ScannerTaskPool.Token token)throws Exception{
     if(offset<0||offset>100000||limit<1||limit>128)throw new IllegalArgumentException("Invalid discovery batch bounds");
     document(root,parentId,token);
@@ -85,7 +93,7 @@ public final class ScannerDocumentAccess {
   }
   public ScannerArtworkReader.Artwork readEmbeddedArtwork(Uri root,String id,String container,java.io.File cache,ScannerTaskPool.Token token)throws Exception{
     byte[] bytes;
-    if(java.util.Arrays.asList("epub","cbz","zip").contains(container))bytes=ScannerArchiveReader.readCover(t->openFile(root,id,t),token);
+    if(java.util.Arrays.asList("epub","cbz","zip","cbr","cb7").contains(container))bytes=ScannerArchiveReader.readCover(t->openFile(root,id,t),token);
     else if(java.util.Arrays.asList("mp3","m4a","m4b","aac","flac","ogg","opus","wav","wma").contains(container)){
       android.media.MediaMetadataRetriever reader=new android.media.MediaMetadataRetriever();
       try(java.io.FileInputStream input=openFile(root,id,token)){token.check();reader.setDataSource(input.getFD());token.check();bytes=reader.getEmbeddedPicture();token.check();}
@@ -93,6 +101,9 @@ public final class ScannerDocumentAccess {
     }else throw new java.io.IOException("Embedded cover reader unavailable");
     if(bytes==null||bytes.length>4194304)throw new java.io.IOException("Embedded cover unavailable or over budget");
     final byte[] image=bytes;return ScannerArtworkReader.read(t->new java.io.ByteArrayInputStream(image),cache,token);
+  }
+  public ScannerDeepReader.Facts readDeepEvidence(Uri root,String id,String container,ScannerTaskPool.Token token)throws Exception{
+    return ScannerDeepReader.read(t->openFile(root,id,t),container,token);
   }
   private static String text(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getString(index);}
   private static Long number(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getLong(index);}

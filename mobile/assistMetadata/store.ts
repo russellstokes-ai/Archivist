@@ -6,7 +6,10 @@ import {rankAssistCandidates} from './core';
 import {METADATA_FIELDS,validatedFields} from './fields';
 import {hasGenre} from './genres';
 import {initEvidence,appendEvidence,loadEvidence,type EvidenceSource} from './evidenceLedger';
+import {loadNeighbourContext,selectNeighbourCandidate} from './neighbours';
 import {resolve} from './resolver';
+import {selectDeepCandidate} from './deepEvidence';
+import {loadDeepProof} from './deepEvidenceStore';
 const IDENTITY=new Set<string>(['title','author','series','seriesNumber','isbn','asin']);
 const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw Error('Metadata cancelled');};
 export async function createAssistMetadataStore(db:ScannerDatabase,base:Awaited<ReturnType<typeof createMetadataStore>>){
@@ -21,9 +24,8 @@ export async function createAssistMetadataStore(db:ScannerDatabase,base:Awaited<
    check(signal);const row=await tx.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_metadata WHERE work_id=?',id);
    if(!row)throw Error('Unknown work');const current=JSON.parse(row.payload) as MetadataWork;
    if(current.workId!==id||current.revision!==revision)throw Error('Stale metadata revision');
-   if(!(await loadEvidence(tx,id)).length){
-    for(const [key,value]of Object.entries(current.fields))if(value!==undefined)await observe(tx,current,{[key]:value},current.manual[key]?'manual':current.fieldSources?.[key]==='embedded'?'embedded':'filename','initial:'+key);
-   }
+   const existingEvidence=await loadEvidence(tx,id);
+   for(const [key,value]of Object.entries(current.fields))if(value!==undefined&&!existingEvidence.some(o=>o.field===key&&!o.supersededBy))await observe(tx,current,{[key]:value},current.manual[key]?'manual':current.fieldSources?.[key]==='embedded'?'embedded':'filename','initial:'+key);
    await edit(current,tx);current.fields=validatedFields(current.fields);current.revision++;
    check(signal);await tx.runAsync('UPDATE scanner_vnext_metadata SET revision=?,payload=? WHERE work_id=?',current.revision,JSON.stringify(current),id);check(signal);next=current;
   });return next!;
@@ -51,7 +53,11 @@ export async function createAssistMetadataStore(db:ScannerDatabase,base:Awaited<
    const independent=resolve(priorEvidence.filter(o=>['manual','embedded','filename'].includes(o.source)),Object.fromEntries(Object.entries(work.fields).filter(([key])=>work.manual[key])) as WorkFields).fields;
    const independentlyRanked=rankAssistCandidates(independent,[candidate])[0];
    const exact=[independent.isbn,independent.asin].filter(Boolean).some(id=>[...candidate.identifiers,candidate.fields.isbn,candidate.fields.asin].filter(Boolean).some(other=>normal(id)===normal(other)));
-   const rung=independentlyRanked.automaticEligible?(exact?'R1':'R2'):undefined;
+   const neighbour=independentlyRanked.automaticEligible?null:await loadNeighbourContext(tx,{...work,fields:independent});
+   const deep=await loadDeepProof(tx,id,revision);
+   const rung=independentlyRanked.automaticEligible?(exact?'R1':'R2'):selectNeighbourCandidate({...work,fields:independent},[candidate],neighbour)?'R3':deep&&selectDeepCandidate(independent,[candidate],deep)?'R4':undefined;
+   if(rung==='R4'&&deep){await observe(tx,work,deep.fields,'deep','local-pages-v1');await tx.runAsync('UPDATE assist_deep_evidence SET revision=? WHERE work_id=? AND revision=?',revision+1,id,revision);}
+   if(rung==='R3'&&neighbour)await observe(tx,work,neighbour.fields,'neighbour','anchors:'+neighbour.anchors.join(','));
    await observe(tx,work,fields,exact&&!ranked.conflicts.length?'verified-id':'provider',candidate.provider+':'+candidate.id);
    const locks:WorkFields={};for(const [key,value]of Object.entries(work.fields))if(work.manual[key])locks[key as keyof WorkFields]=value;
    const resolved=resolve(await loadEvidence(tx,id),locks);

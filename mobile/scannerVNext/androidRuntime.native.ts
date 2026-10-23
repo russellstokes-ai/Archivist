@@ -15,7 +15,10 @@ import {NativeModules} from 'react-native';
 import {fetch as expoFetch} from 'expo/fetch';
 import {File,Paths} from 'expo-file-system';
 import {approvedArtworkUrl,readArtworkBytes} from './artworkDownload';
+import {selectBestCover,isSensibleCoverCompanion,type CoverCandidate} from './coverSelection';
+import type {ArtworkResult} from './artwork';
 import {classifyAsset} from './classify';
+import {audioGroupingEvidence} from './recognitionClues';
 import {parseHeaderClues} from './clues';
 import {readMp4IndexClues} from './seekClues';
 type Settings={metadata:MetadataSettings;googleKey?:string};
@@ -31,9 +34,9 @@ export async function createAndroidCatalogueRuntime(settings:()=>Promise<Setting
   async inspect(source,asset,signal){
    const input=asClue(source,asset),read=await header.readHeader(input,65536,signal);
    let disposition=classifyAsset({...asset,signature:read.bytes});let fields:WorkFields={};
-   if(disposition.container==='zip'||disposition.container==='epub'){
+   if(['zip','epub','cbr','cb7'].includes(disposition.container||'')){
     const value=await archive.read(input,signal);fields=value.fields;
-    if(value.container==='epub'||value.container==='cbz')disposition={...disposition,kind:value.container==='epub'?'ebook':'comic',container:value.container,state:'candidate',reason:'archive-content-confirmed'};
+    if(['epub','cbz','cbr','cb7'].includes(value.container||''))disposition={...disposition,kind:value.container==='epub'?'ebook':'comic',container:value.container,state:'candidate',reason:'archive-content-confirmed'};
    }
    if(disposition.kind==='audio'){
     let value=parseHeaderClues(read.bytes,disposition.container||asset.name.split('.').pop()||'');
@@ -41,9 +44,9 @@ export async function createAndroidCatalogueRuntime(settings:()=>Promise<Setting
      const indexed=await readMp4IndexClues(input.size,{readRange:(offset,budget,owner)=>header.readRange(input,offset,budget,owner)},{signal,maxAtoms:32});
      if(Object.keys(indexed.clues.fields).length)value=indexed.clues;
     }
-    fields={title:value.fields.album||value.fields.title,author:value.fields.author,genre:value.fields.genre,publishedYear:value.fields.publishedYear,publisher:value.fields.publisher,language:value.fields.language,description:value.fields.description};
+    fields={title:value.fields.album||value.fields.title,author:value.fields.albumAuthor||value.fields.author,series:value.fields.series,seriesNumber:value.fields.seriesNumber,isbn:value.fields.isbn,asin:value.fields.asin,narrator:value.fields.narrator,genre:value.fields.genre,publishedYear:value.fields.publishedYear,publisher:value.fields.publisher,language:value.fields.language,description:value.fields.description};
     for(const key of Object.keys(fields) as (keyof WorkFields)[])if(fields[key]===undefined)delete fields[key];
-    return {disposition,fields,grouping:value.fields.album&&value.fields.author&&value.fields.track?{title:value.fields.album,author:value.fields.author,track:value.fields.track,disc:value.fields.disc,edition:value.fields.album+'|'+value.fields.author,provenance:'embedded' as const}:undefined};
+    return {disposition,fields,grouping:audioGroupingEvidence(value.fields,asset.relativePath,disposition.container||'')};
    }
    return {disposition,fields};
   },
@@ -63,25 +66,40 @@ export async function createAndroidCatalogueRuntime(settings:()=>Promise<Setting
    for(const key of Object.keys(fields)as(keyof WorkFields)[])if(!fields[key])delete fields[key];return fields;
   },
   identityProof:(assets)=>proofs.has(fingerprint(assets)),
-  async artwork(source,assets,work,signal){
+  async artwork(source,assets,work,signal,coverUrls:string[]=[]){
    const first=assets.find(a=>a.disposition.kind!=='artwork')??assets[0];if(!first)return {state:'missing'};
    if(work.fields.coverUri?.startsWith('file:///'))return art.read(asClue(source,first),{manualUri:work.fields.coverUri,signal});
-   // Keep a protected but invalid manual reference visible; never replace it silently.
    if(work.manual.coverUri&&work.fields.coverUri&&!approvedArtworkUrl(work.fields.coverUri))return {state:'invalid',issues:['manual-cover-needs-review']};
-   if(!work.manual.coverUri)for(const candidate of assets.filter(a=>a.disposition.kind==='artwork').slice(0,8)){try{const result=await art.read(asClue(source,candidate),{signal});if(result.state==='ready')return result;}catch{if(signal?.aborted)throw Error('Artwork cancelled');}}
+   const choices:(CoverCandidate&{result:ArtworkResult})[]=[];
+   const collect=(result:ArtworkResult,manual=false,exactEdition=false,priority=0)=>{
+    if(result.state!=='ready'||!result.uri||!result.thumbnailUri||!result.bytes||!result.width||!result.height||!result.sha256)return;
+    choices.push({uri:result.uri,manual,exactEdition,width:result.width,height:result.height,bytes:result.bytes,sha256:result.sha256,priority,result});
+   };
    if(!work.manual.coverUri){
     const container=first.disposition.container||first.name.split('.').pop()?.toLowerCase();
-    if(container)try{const result=await art.read(asClue(source,first),{embeddedContainer:container,signal});if(result.state==='ready')return result;}catch{if(signal?.aborted)throw Error('Artwork cancelled');}
+    if(container)try{collect(await art.read(asClue(source,first),{embeddedContainer:container,signal}),false,true,4);}catch{if(signal?.aborted)throw Error('Artwork cancelled');}
+    const embedded=selectBestCover(choices);if(embedded)return embedded.result;
+    // Archive companions are weaker evidence. Only conventional cover names are plausible;
+    // arbitrary page images from a folder must never outrank embedded artwork.
+    for(const candidate of assets.filter(a=>a.disposition.kind==='artwork'&&isSensibleCoverCompanion(a.name)).slice(0,4)){
+     try{collect(await art.read(asClue(source,candidate),{signal}),false,false,2);}catch{if(signal?.aborted)throw Error('Artwork cancelled');}
+    }
+    const local=selectBestCover(choices);if(local)return local.result;
    }
-   if(work.fields.coverUri&&approvedArtworkUrl(work.fields.coverUri)&&(await settings()).metadata.onlineEnabled){
-    return sharedRequestQueue.run('artwork',async inner=>{
-     const response=await expoFetch(work.fields.coverUri!,{signal:inner,redirect:'error'}),bytes=await readArtworkBytes(response,inner);if(inner.aborted)throw Error('Artwork cancelled');
-     const temporary=new File(Paths.cache,'scanner-art-'+nonce+'-'+(++sequence)+'.tmp');
-     try{temporary.create();temporary.write(bytes);return await art.read(asClue(source,first),{privateUri:temporary.uri,signal:inner});}
-     finally{if(temporary.exists)temporary.delete();}
-    },signal);
+   const online=(await settings()).metadata.onlineEnabled;const current=online&&work.fields.coverUri&&approvedArtworkUrl(work.fields.coverUri)?[work.fields.coverUri]:[];
+   const urls=online?[...new Set(work.manual.coverUri?current:[...coverUrls,...current].filter(approvedArtworkUrl))].slice(0,8):[];
+   for(const url of urls){
+    try{
+     const result=await sharedRequestQueue.run('artwork',async inner=>{
+      const response=await expoFetch(url,{signal:inner,redirect:'error'}),bytes=await readArtworkBytes(response,inner);if(inner.aborted)throw Error('Artwork cancelled');
+      const temporary=new File(Paths.cache,'scanner-art-'+nonce+'-'+(++sequence)+'.tmp');
+      try{temporary.create();temporary.write(bytes);return await art.read(asClue(source,first),{privateUri:temporary.uri,signal:inner});}
+      finally{if(temporary.exists)temporary.delete();}
+     },signal);
+     collect(result,!!work.manual.coverUri,true,1);
+    }catch{if(signal?.aborted)throw Error('Artwork cancelled');}
    }
-   return {state:'missing'};
+   const selected=selectBestCover(choices);return selected?.result??{state:'missing'};
   }
  });
 }

@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript'),sqlite=require('./test-support/sqlite-port.cjs');
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
+let reads=0,closed=0,queries=[],afterRead;
+const bridge={readDocumentStat:async()=>({state:'ok',documentId:'document',size:12345,modified:1}),beginScope:async()=>({scope:'scope'}),cancelScope:async()=>{closed++},readDeepEvidence:async()=>{reads++;if(afterRead)afterRead();return {state:'ok',text:'Example Novel\nISBN 9780306406157',coverHash:'0102030405060708'}},fingerprintPrivateCover:async()=>{throw Error('No image expected')}};
+const load=Module._load;Module._load=function(id,...args){if(id==='react-native')return {NativeModules:{ArchivistScanner:bridge}};if(id==='expo-file-system')return {File:class {},Paths:{cache:'private'}};if(id==='expo/fetch')return {fetch:async()=>{throw Error('No image expected')}};return load.call(this,id,...args)};
+const {createDeepRecognition}=require('./assistMetadata/deepEvidence.native.ts'),{loadDeepProof}=require('./assistMetadata/deepEvidenceStore.ts'),{createMetadataStore}=require('./scannerVNext/fieldEvidence.ts');Module._load=load;
+(async()=>{const dir=fs.mkdtempSync(path.join(__dirname,'.scanner-store-test-')),db=sqlite(path.join(dir,'deep-adapter.db'));try{
+ const metadata=await createMetadataStore(db);await db.execAsync('CREATE TABLE scanner_vnext_catalogue(work_id TEXT PRIMARY KEY,payload TEXT NOT NULL);');
+ const work={workId:'book',revision:0,fields:{},manual:{},partIds:['a'],identityConfirmed:false};await metadata.ensure(work);
+ const payload={source:{rootUri:'content://tree'},entry:{assets:[{documentId:'document',size:12345,modified:1,disposition:{container:'epub'}}]}};
+ await db.runAsync('INSERT INTO scanner_vnext_catalogue VALUES(?,?)','book',JSON.stringify(payload));
+ const candidate={provider:'catalogue',id:'edition',identifiers:['9780306406157'],fields:{title:'Example Novel',isbn:'9780306406157'}};
+ const empty={state:'no-match',candidates:[],issues:[],requests:0,cacheHit:false,nextPages:{}};
+ const run=await createDeepRecognition(db,async()=>({search:async(w)=>{queries.push(w.fields);return {...empty,state:'review',candidates:[{candidate,score:10,conflicts:[],automaticEligible:false}]}}}));
+ const signal=new AbortController().signal;
+ assert.equal(await run(work,empty,{online:false,automatic:true},signal),null);assert.equal(reads,0);
+ let result=await run(work,empty,{online:true,automatic:true},signal);assert.equal(result.candidate.id,'edition');assert.equal(reads,1);assert.equal(closed,1);assert.deepEqual(queries[0],{isbn:'9780306406157'},'Only bibliographic fields leave the device, not raw extracted text');
+ assert.equal((await loadDeepProof(db,'book',0)).coverHash,'0102030405060708');await run(work,empty,{online:true,automatic:true},signal);assert.equal(reads,1,'Current evidence is reused');
+ payload.entry.assets[0].modified=2;await db.runAsync('UPDATE scanner_vnext_catalogue SET payload=?',JSON.stringify(payload));assert.equal(await loadDeepProof(db,'book',0),null,'Changed source invalidates cached proof even when metadata revision is unchanged');
+ payload.entry.assets[0].modified=1;await db.runAsync('UPDATE scanner_vnext_catalogue SET payload=?',JSON.stringify(payload));
+ await db.runAsync('DELETE FROM assist_deep_evidence');const cancelled=new AbortController();afterRead=()=>cancelled.abort();await assert.rejects(run(work,empty,{online:true,automatic:true},cancelled.signal),/cancel/i);assert.equal(await loadDeepProof(db,'book',0),null);afterRead=undefined;
+ payload.entry.assets.push(payload.entry.assets[0]);await db.runAsync('UPDATE scanner_vnext_catalogue SET payload=?',JSON.stringify(payload));assert.equal(await run(work,empty,{online:true,automatic:true},signal),null,'Multi-part audio/files are not sent to the page reader');
+ console.log('PASS: bounded deep adapter stores private evidence, reuses it, and rejects cancelled and unsupported work');
+}finally{await db.close();fs.rmSync(dir,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1});

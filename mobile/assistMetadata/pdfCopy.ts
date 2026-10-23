@@ -17,5 +17,9 @@ export async function createPdfMetadataCopy(bytes:Uint8Array,fields:WorkFields):
  if(verified.getPageCount()!==doc.getPageCount())throw Error('PDF pages changed');
  for(const old of streams){const stream=verified.context.lookup(old.ref);if(!(stream instanceof PDFRawStream))throw Error('PDF stream missing');const next=stream.getContents();if(next.length!==old.bytes.length||next.some((b,i)=>b!==old.bytes[i]))throw Error('PDF content stream changed');}
  if(fields.title&&verified.getTitle()!==fields.title||fields.author&&verified.getAuthor()!==fields.author||fields.genre&&verified.getSubject()!==fields.genre)throw Error('PDF metadata verification failed');
+ const verifiedInfo=verified.context.lookup(verified.context.trailerInfo.Info,PDFDict);
+ for(const [key,value]of Object.entries({PublicationYear:fields.publishedYear,Publisher:fields.publisher,Series:fields.series,SeriesNumber:fields.seriesNumber,ISBN:fields.isbn,Description:fields.description})){
+  if(value&&verifiedInfo.get(PDFName.of(key))?.toString()!==PDFString.of(value).toString())throw Error('PDF metadata verification failed');
+ }
  return result;
 }

@@ -195,6 +195,7 @@ type Book = {
   metadataFileStatus?: string;
   coverShape?: 'portrait' | 'square';
   coverUri?: string;
+  coverThumbnailUri?: string;
   coverCandidates?: string[];
   metadataSource?: 'path' | 'sidecar' | 'manual' | 'embedded' | 'online' | 'legacy';
   localWorkKey?: string;
@@ -283,6 +284,7 @@ type UnifiedWork = {
   rating: number;
   favourite: boolean;
   coverUri?: string;
+  coverThumbnailUri?: string;
   localWork?: PersonalLocalWork;
   serverWork?: ServerWork;
   server?: string;
@@ -724,7 +726,7 @@ function DismissSheetHandle({onDismiss,foldLayout}:{onDismiss:()=>void;foldLayou
   function MiniArtwork({book,session,p}: {book: Book;session:Session|null;p:Palette}) {
     const source = session && book.source==='server'
       ? {uri: session.server + '/api/assets/' + book.id + '/cover', headers: {Authorization: 'Bearer ' + session.token}}
-      : book.coverUri ? {uri: book.coverUri} : null;
+      : (book.coverThumbnailUri||book.coverUri) ? {uri: book.coverThumbnailUri||book.coverUri} : null;
     const [failed,setFailed]=useState(false);
     useEffect(()=>setFailed(false),[source?.uri]);
     return (
@@ -1655,12 +1657,12 @@ function Client() {
   const sourceWorks = useMemo<UnifiedWork[]>(() => {
     const phone:UnifiedWork[] = phonePersonalWorks.map(work => {
       const identity=sourceIdentity({source:'local',localKey:work.key,space:work.space,title:work.title});
-      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work};
+      return {...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,coverThumbnailUri:work.coverThumbnailUri,localWork:work};
     });
     const downloaded:UnifiedWork[] = downloadedPersonalWorks.flatMap(work => {
       if(!work.originServer || !work.originWorkId)return [];
       const identity=sourceIdentity({source:'downloaded',server:work.originServer,serverWorkId:work.originWorkId,space:work.space,title:work.title});
-      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
+      return [{...identity,title:work.title,author:work.author,series:work.series,genre:work.genre,publishedYear:work.publishedYear,seriesNumber:work.seriesNumber,logicalWorkKey:work.logicalWorkKey,format:work.format,space:work.space,available:work.available,files:work.files,editions:1,readingState:work.readingState,rating:work.rating,favourite:work.favourite,coverUri:work.coverUri,coverThumbnailUri:work.coverThumbnailUri,localWork:work,server:work.originServer,serverWorkId:work.originWorkId}];
     });
     const remote:UnifiedWork[] = session ? serverWorks.map(work => {
       const identity=sourceIdentity({source:'server',server:session.server,serverWorkId:work.id,space:work.space,title:work.title});
@@ -1864,7 +1866,7 @@ function Client() {
   const reviewAssetPool = useMemo(() => {
     if(sourceFilter==='server')return serverBooks;
     if(sourceFilter==='downloaded')return [] as Book[];
-    const reviewWorks=phoneWorks.map(work=>({...work.tracks[0],source:'local' as const,title:work.title,author:work.author,genre:work.genre,coverUri:work.coverUri,needsReview:work.needsReview,reviewReason:work.reviewReason}));
+    const reviewWorks=phoneWorks.map(work=>({...work.tracks[0],source:'local' as const,title:work.title,author:work.author,genre:work.genre,coverUri:work.coverUri,coverThumbnailUri:work.coverThumbnailUri,needsReview:work.needsReview,reviewReason:work.reviewReason}));
     if(sourceFilter==='local')return reviewWorks;
     return [...reviewWorks,...serverBooks];
   },[phoneWorks,serverBooks,sourceFilter]);
@@ -4654,7 +4656,7 @@ function Client() {
     return (
       <View style={styles.book}>
         <Pressable accessibilityRole="button" accessibilityLabel={work.title + ', ' + work.format} onPress={()=>openLocalWork(work)}>
-          <Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverUri} />
+          <Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.coverShape} coverUri={work.coverThumbnailUri||work.coverUri} />
           <Text numberOfLines={2} style={[styles.bookTitle,{color:p.ink}]}>{work.title}</Text>
           {work.needsReview ? <View style={[styles.reviewPill,{borderColor:p.sage}]}><Text style={{color:p.sage,fontSize:11,fontWeight:'800'}}>Needs review</Text></View> : null}
           <Text numberOfLines={2} style={[styles.meta,{color:p.muted}]}>
@@ -4883,7 +4885,7 @@ function Client() {
         pressed&&styles.cardPressed,
       ]}>
       <View style={[styles.unifiedCoverWrap,list&&styles.unifiedCoverWrapList]}>
-        <Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPath}/>
+        <Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverThumbnailUri||work.coverUri} serverPath={serverPath}/>
         {work.source==='downloaded'?<View style={[styles.offlineBadge,{backgroundColor:p.sage}]}><Text style={styles.offlineBadgeText}>SAVED</Text></View>:null}
         <Pressable
           accessibilityRole="button"
@@ -5698,7 +5700,7 @@ function Client() {
     const serverReview=session?(serverSummary?.needsReview||0):0;
     const reviewCount=localReview+serverReview;
     const serverPathFor=(work:UnifiedWork)=>work.source==='server'&&work.serverWork&&session&&(!work.server||work.server===session.server)?'/api/works/'+work.serverWork.id+'/cover':undefined;
-    const workArtwork=(work:UnifiedWork)=><Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverUri} serverPath={serverPathFor(work)}/>;
+    const workArtwork=(work:UnifiedWork)=><Artwork session={session} p={p} title={work.title} format={work.format} coverShape={work.format==='Audio'?'square':'portrait'} coverUri={work.coverThumbnailUri||work.coverUri} serverPath={serverPathFor(work)}/>;
     const renderWorks=(works:UnifiedWork[])=>works.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedRow}>{works.map(work=><View key={work.key} style={styles.curatedCardWrap}>{UnifiedWorkCard({work})}</View>)}</ScrollView>:null;
 
     const openLibraryBrowse=({family='',source='all'}:{family?:LibraryFormatFamily;source?:LibrarySource})=>{

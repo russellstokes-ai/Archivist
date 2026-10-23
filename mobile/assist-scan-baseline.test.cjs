@@ -14,6 +14,8 @@ require.extensions['.ts']=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p
   '../scannerVNext/fieldEvidence':{createSearchCache:async()=>({})},
   './store':{createAssistMetadataStore:async()=>({get:async()=>work})},
   './controller':{createImprovedAssist:async()=>({})},'./providers.native':{},'./writeBack.native':{},
+  './deepEvidence.native':{createDeepRecognition:async()=>async()=>null},
+  './libraryRelations':{createLibraryRelationsStore:async()=>({refreshFromCatalogue:async()=>{}})},
   './review':{currentReview:()=>[]}
  };
  const path=require.resolve('./assistMetadata/runtime.native.ts'),m=new Module(path,module);m.filename=path;m.paths=module.paths;

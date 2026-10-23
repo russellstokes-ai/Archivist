@@ -1,0 +1,12 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('node:path');
+const file=fs.readFileSync(path.join(__dirname,'android/app/src/main/java/app/archivist/reader/ArchivistFileMetadataModule.kt'),'utf8');
+assert.match(file,/@ReactMethod fun verifiedFileReceipt\(treeValue:String,uriValue:String,promise:Promise\)/,'Native writer exposes a read-only verified source receipt bridge');
+assert.match(file,/verifiedSize/,'A receipt retains the post-replacement verified size');
+assert.match(file,/verifiedModified/,'A receipt retains post-replacement provider modification time');
+assert.match(file,/DocumentsContract\.Document\.COLUMN_LAST_MODIFIED/,'Receipt reads current provider modification time');
+assert.match(file,/sourceSize\(uri\)!=size/,'Receipt size must match current source stat');
+assert.match(file,/sourceModified\(uri\)!=modified/,'Receipt modification time must match current source stat');
+const start=file.indexOf('@ReactMethod fun verifiedFileReceipt('),end=file.indexOf('@ReactMethod fun writeHistory(',start);
+assert.ok(start>=0&&end>start,'Receipt method is extractable');
+assert.doesNotMatch(file.slice(start,end),/copyFrom\(|hash\(/,'Receipt lookup must not read or hash full file contents');
+console.log('PASS: verified file receipts expose only hash and stats matching the current source');

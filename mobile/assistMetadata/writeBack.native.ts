@@ -18,7 +18,7 @@ export async function writeMetadataFile(plan:ChangePlan){
   try{return state(await writer.replaceVerified(root,uri,plan.file.original,copies.updated,receipt) as string);}
   finally{const file=new File(copies.updated);if(file.exists)file.delete();}
  }
- const format=extension==='cbr'?'cbr':extension==='cbt'?'cbt':extension==='pdf'?'pdf':path.toLowerCase().endsWith('.epub')?'epub':(path.toLowerCase().endsWith('.cbz')||path.toLowerCase().endsWith('.zip'))?'cbz':null;
+ const format=extension==='cbr'?'cbr':extension==='cbt'?'cbt':extension==='pdf'?'pdf':path.toLowerCase().endsWith('.epub')?'epub':path.toLowerCase().endsWith('.cbz')?'cbz':null;
  if(!format)return 'unsupported-format';
  const native=NativeModules.ArchivistFileMetadata;if(!native?.replaceVerified)return 'writer-unavailable';
  const source=new File(plan.file.original);if(!source.exists||source.size<=0||source.size>64*1024*1024)return 'unsupported-size';

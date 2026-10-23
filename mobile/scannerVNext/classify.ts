@@ -1,7 +1,7 @@
 import type {AssetKind,Disposition} from './types';
 
 const audio = new Set(['mp3','m4a','m4b','aac','flac','opus','ogg','wav','wma']);
-const comic = new Set(['cbz','cbr','cbt']);
+const comic = new Set(['cbz','cbr','cbt','cb7']);
 const unreadableBooks = new Set(['mobi','azw','azw3','fb2','lit']);
 const artwork = new Set(['jpg','jpeg','png','gif','webp','heic']);
 const sidecar = new Set(['opf','xml','nfo','cue','json','txt']);
@@ -23,7 +23,7 @@ export function classifyAsset(input:{name:string;mimeType?:string;signature?:Uin
    if(ascii(0,4)==='RIFF'&&ascii(8,4)==='WAVE')return found('audio','wav');
    if(ascii(4,4)==='ftyp')return found('audio',ext==='m4b'?'m4b':'m4a','ambiguous');
    if(ascii(0,4)==='Rar!')return found('comic','cbr');
-   if(bytes[0]===55&&bytes[1]===122&&bytes[2]===188&&bytes[3]===175&&bytes[4]===39&&bytes[5]===28)return found('comic','cb7','unsupported');
+   if(bytes[0]===55&&bytes[1]===122&&bytes[2]===188&&bytes[3]===175&&bytes[4]===39&&bytes[5]===28)return found('comic','cb7');
    if(ascii(60,8)==='BOOKMOBI')return found('ebook','mobi','unsupported');
    if(ascii(257,5)==='ustar')return found('comic','cbt');
    if(ascii(0,2)==='PK')return ascii(0,512).includes('application/epub+zip')?found('ebook','epub'):found('archive','zip','ambiguous');
@@ -38,7 +38,6 @@ export function classifyAsset(input:{name:string;mimeType?:string;signature?:Uin
   else if(ext==='pdf'){kind='document';state='ambiguous';reason='pdf-needs-content-evidence';}
   else if(ext==='zip'){kind='archive';state='ambiguous';reason='zip-needs-content-evidence';}
   else if(unreadableBooks.has(ext)){kind='ebook';reason='ebook-reader-unsupported';}
-  else if(ext==='cb7'){kind='comic';reason='comic-reader-unsupported';}
   else if(artwork.has(ext)){kind='artwork';state='candidate';reason='local-artwork-candidate';}
   else if(sidecar.has(ext)){kind='sidecar';state='candidate';reason='local-clue-candidate';}
   else if(!ext){
@@ -51,7 +50,7 @@ export function classifyAsset(input:{name:string;mimeType?:string;signature?:Uin
   if(state==='candidate'&&!genericMime.has(mime)){
     const consistent = kind==='audio' ? mime.startsWith('audio/') || mime==='application/ogg' || mime==='application/mp4'
       : kind==='ebook' ? mime==='application/epub+zip' || zipMime.has(mime)
-      : kind==='comic' ? (ext==='cbr'?rarMime.has(mime):ext==='cbt'?mime==='application/x-tar':zipMime.has(mime))
+      : kind==='comic' ? (ext==='cb7'?['application/x-7z-compressed','application/x-cb7'].includes(mime):ext==='cbr'?rarMime.has(mime):ext==='cbt'?mime==='application/x-tar':zipMime.has(mime))
       : kind==='artwork' ? mime.startsWith('image/')
       : kind==='sidecar' ? mime.startsWith('text/') || ['application/json','application/xml','application/oebps-package+xml'].includes(mime)
       : true;
@@ -60,7 +59,7 @@ export function classifyAsset(input:{name:string;mimeType?:string;signature?:Uin
   if(bytes && bytes.length>=4 && state==='candidate' && ['comic','ebook'].includes(kind)){
     const zip=bytes[0]===0x50&&bytes[1]===0x4b&&((bytes[2]===3&&bytes[3]===4)||(bytes[2]===5&&bytes[3]===6));
     const rar=bytes[0]===0x52&&bytes[1]===0x61&&bytes[2]===0x72&&bytes[3]===0x21;
-    if((ext==='cbz'||ext==='epub')&&!zip || ext==='cbr'&&!rar){state='ambiguous';reason='signature-extension-conflict';}
+    if((ext==='cbz'||ext==='epub')&&!zip || ext==='cbr'&&!rar || ext==='cb7'&&![55,122,188,175,39,28].every((value,index)=>bytes[index]===value)){state='ambiguous';reason='signature-extension-conflict';}
   }
   return {state,kind,reason,audiobookConfirmed:false};
 }

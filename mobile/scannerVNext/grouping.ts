@@ -24,6 +24,8 @@ function pathEvidence(asset:GroupingAsset){
   if(nested&&pair&&normalize(stem).startsWith(normalize(nested[1]))&&Number(pair[1])===Number(nested[2])){
     folder=nested[1];disc=Number(pair[1]);track=Number(pair[2]);segments[segments.length-1]=folder;
   }
+  const namedTrack=stem.match(/^(.+?)\s*[-._ ]+\s*(?:chapter|track|part)\s*[-._ ]*(\d+)\b/i);
+  if(namedTrack)return {key:JSON.stringify([asset.sourceId,segments.map(normalize),normalize(namedTrack[1])]),title:namedTrack[1],disc,track:Number(namedTrack[2]),evidence:'path' as const};
   const chapter=stem.match(/(?:^|\b)(?:chapter|track)\s*(\d+)\b/i);
   const numbered=stem.match(/^(\d+)(?:\s*[-._ ]|$)/);
   const compressedPart=stem.match(/^(.+[a-z])P(\d+)$/i);

@@ -8,6 +8,16 @@ module.exports=function(file){
  if(file==='mobile/localReader.ts'){
   const next=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_READER_DISPATCH_EXCEPTION_2026-10-17.json'),'utf8'));
   const tar=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/TEST14_CBT_READER_EXCEPTION_2026-10-17.json'),'utf8'));
+  const cb7=JSON.parse(fs.readFileSync(path.join(root,'docs/v1/DISCOVERY_CB7_READER_EXCEPTION_2026-10-23.json'),'utf8'));
+  if(cb7.schema_version!==1||cb7.path!==file||cb7.release_approved!==false||cb7.installed_apk_approved!==false||
+     cb7.previous_approved_git_blob_sha!==tar.approved_git_blob_sha||cb7.approved_git_blob_sha!==hash(text)||cb7.changes.length!==1)
+    throw Error('Unreviewed CB7 reader dispatch exception');
+  for(const change of [...cb7.changes].reverse()){
+    if(typeof change.old!=='string'||typeof change.new!=='string'||!change.new||text.split(change.new).length!==2)
+      throw Error('Non-reversible CB7 reader dispatch');
+    text=text.replace(change.new,change.old);
+  }
+  if(hash(text)!==tar.approved_git_blob_sha)throw Error('Previous CBT reader source changed');
   if(tar.schema_version!==1||tar.path!==file||tar.previous_approved_git_blob_sha!==next.approved_git_blob_sha||
      tar.release_approved!==false||tar.installed_apk_approved!==false||
      tar.changes.length!==4||hash(text)!==tar.approved_git_blob_sha)

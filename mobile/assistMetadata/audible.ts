@@ -15,12 +15,12 @@ export function createAudibleProvider(request:(url:string,signal?:AbortSignal)=>
    const asin=clean(p?.asin,10),title=clean(p?.title,512);if(!/^[A-Z0-9]{10}$/.test(asin)||!title)continue;
    const fields:Record<string,string>={title,asin};
    const genre=catalogueLadderGenre(p.category_ladders);if(genre)fields.genre=genre;
-   for(const [key,value] of Object.entries({author:names(p.authors),narrator:names(p.narrators),publisher:clean(p.publisher_name),description:clean(p.publisher_summary),language:clean(p.language,64),publishedYear:clean(p.release_date,32).match(/^\d{4}/)?.[0]||''}))if(value)fields[key]=value;
+   for(const [key,value] of Object.entries({subtitle:clean(p.subtitle,512),publicationDate:clean(p.release_date,32),durationSeconds:Number.isFinite(p.runtime_length_min)&&p.runtime_length_min>0?String(Math.round(p.runtime_length_min*60)):'',author:names(p.authors),narrator:names(p.narrators),publisher:clean(p.publisher_name),description:clean(p.publisher_summary),language:clean(p.language,64),publishedYear:clean(p.release_date,32).match(/^\d{4}/)?.[0]||''}))if(value)fields[key]=value;
    const cover=Object.values(p.product_images||{}).find(v=>typeof v==='string'&&/^https:\/\/(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com)\//.test(v));
    if(typeof cover==='string')fields.coverUrl=cover;
-   // SearchWork does not yet identify media format. Review avoids applying an
-   // audiobook edition to a print book with the same title and author.
-   candidates.push({id:asin,provider:'audible-uk',fields,identifiers:[asin],relatedMatch:true});
+   // Known audiobook context permits automatic matching; other/unknown formats
+   // retain related-result status to avoid applying audio editions to ebooks.
+   candidates.push({id:asin,provider:'audible-uk',fields,identifiers:[asin],relatedMatch:query.mediaKind!=='audio'});
   }
   return {candidates,nextPage:!query.asin&&page<4&&typeof data.total_results==='number'&&(page+1)*20<data.total_results?page+1:null};
  }};

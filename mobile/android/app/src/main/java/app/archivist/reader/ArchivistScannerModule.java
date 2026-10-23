@@ -16,6 +16,7 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
   // Process-wide pools survive JS/module reloads: stuck workers cannot be replaced by a new module.
   private static final ScannerTaskPool discovery=new ScannerTaskPool(2,128,8000);
   private static final ScannerTaskPool clues=new ScannerTaskPool(2,128,8000);
+  private static final ScannerTaskPool deep=new ScannerTaskPool(1,8,30000);
   private static final class Scope {final Uri root;final AtomicBoolean cancelled=new AtomicBoolean();Scope(Uri root){this.root=root;}}
   private final Map<String,Scope> scopes=new ConcurrentHashMap<>();
   private final ScannerDocumentAccess documents;
@@ -67,6 +68,25 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
       return ScannerArtworkReader.read(t->new java.io.FileInputStream(source),cache,token);
     },result->resolve(scope,result,promise));
   }
+  @ReactMethod public void readDocumentStat(String scopeId,String documentId,Promise promise){
+    Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
+    clues.submit(scopeId,token->{check(scope,token);return documents.readDocumentStat(scope.root,documentId,token);},result->resolve(scope,result,promise));
+  }
+  @ReactMethod public void readDeepEvidence(String scopeId,String documentId,String container,Promise promise){
+    Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
+    if(!Arrays.asList("pdf","cbz","zip","epub").contains(container)){promise.reject("scanner-format","Deep page reader unavailable");return;}
+    deep.submit(scopeId,token->{check(scope,token);return documents.readDeepEvidence(scope.root,documentId,container,token);},result->resolve(scope,result,promise));
+  }
+  @ReactMethod public void fingerprintPrivateCover(String scopeId,String fileUri,Promise promise){
+    Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
+    deep.submit(scopeId,token->{
+      check(scope,token);Uri uri=Uri.parse(fileUri);if(!"file".equals(uri.getScheme())||uri.getPath()==null)throw new SecurityException("Private cover required");
+      java.io.File file=new java.io.File(uri.getPath()).getCanonicalFile();
+      String cache=getReactApplicationContext().getCacheDir().getCanonicalPath()+java.io.File.separator;
+      if(!file.getPath().startsWith(cache))throw new SecurityException("Cover is outside app cache");
+      ScannerDeepReader.Facts facts=new ScannerDeepReader.Facts();facts.coverHash=ScannerDeepReader.hashFile(file,token);return facts;
+    },result->resolve(scope,result,promise));
+  }
   @ReactMethod public void readRange(String scopeId,String documentId,double offset,double byteBudget,Promise promise){
     Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
     if(!Double.isFinite(offset)||offset!=Math.floor(offset)||offset<0||offset>8796093022208L||!Double.isFinite(byteBudget)||byteBudget!=Math.floor(byteBudget)||byteBudget<1||byteBudget>65536){promise.reject("scanner-budget","Invalid bounded range");return;}
@@ -80,7 +100,11 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
       for(ScannerDocumentAccess.Entry entry:page.entries){WritableMap item=Arguments.createMap();item.putString("documentId",entry.documentId);item.putString("name",entry.name);if(entry.mimeType!=null)item.putString("mimeType",entry.mimeType);if(entry.size!=null)item.putDouble("size",entry.size);if(entry.modified!=null)item.putDouble("modified",entry.modified);item.putBoolean("directory",entry.directory);entries.pushMap(item);}
       output.putArray("entries",entries);if(page.nextOffset==null)output.putNull("nextOffset");else output.putInt("nextOffset",page.nextOffset);
     }else if("ok".equals(state)&&result.value instanceof ScannerArtworkReader.Artwork){
-      ScannerArtworkReader.Artwork value=(ScannerArtworkReader.Artwork)result.value;output.putString("uri",value.uri);output.putString("sha256",value.sha256);output.putInt("bytes",value.bytes);output.putInt("width",value.width);output.putInt("height",value.height);
+      ScannerArtworkReader.Artwork value=(ScannerArtworkReader.Artwork)result.value;output.putString("uri",value.uri);output.putString("sha256",value.sha256);output.putInt("bytes",value.bytes);output.putInt("width",value.width);output.putInt("height",value.height);output.putString("thumbnailUri",value.thumbnailUri);output.putInt("thumbnailWidth",value.thumbnailWidth);output.putInt("thumbnailHeight",value.thumbnailHeight);
+    }else if("ok".equals(state)&&result.value instanceof ScannerDocumentAccess.Entry){
+      ScannerDocumentAccess.Entry value=(ScannerDocumentAccess.Entry)result.value;output.putString("documentId",value.documentId);if(value.size!=null)output.putDouble("size",value.size);if(value.modified!=null)output.putDouble("modified",value.modified);
+    }else if("ok".equals(state)&&result.value instanceof ScannerDeepReader.Facts){
+      ScannerDeepReader.Facts facts=(ScannerDeepReader.Facts)result.value;output.putString("text",facts.text);output.putString("coverHash",facts.coverHash);output.putInt("pageCount",facts.pageCount);
     }else if("ok".equals(state)&&result.value instanceof ScannerArchiveReader.Clues){
       ScannerArchiveReader.Clues value=(ScannerArchiveReader.Clues)result.value;output.putString("status",value.status);output.putString("reason",value.reason);output.putInt("bytesRead",(int)value.bytesRead);WritableMap fields=Arguments.createMap();for(Map.Entry<String,String> field:value.fields.entrySet())fields.putString(field.getKey(),field.getValue());output.putMap("fields",fields);output.putString("provenance","embedded");output.putString("container",value.container);
     }else if("ok".equals(state)&&result.value instanceof ScannerBoundedIO.Header){
@@ -88,8 +112,8 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
     }
     promise.resolve(output);
   }
-  @ReactMethod public void cancelScope(String scopeId,Promise promise){Scope scope=scopes.remove(scopeId);if(scope!=null){scope.cancelled.set(true);discovery.cancel(scopeId);clues.cancel(scopeId);}promise.resolve(null);}
-  @ReactMethod public void diagnostics(Promise promise){WritableMap result=Arguments.createMap();result.putMap("discovery",stats(discovery.stats()));result.putMap("clues",stats(clues.stats()));result.putInt("scopes",scopes.size());promise.resolve(result);}
+  @ReactMethod public void cancelScope(String scopeId,Promise promise){Scope scope=scopes.remove(scopeId);if(scope!=null){scope.cancelled.set(true);discovery.cancel(scopeId);clues.cancel(scopeId);deep.cancel(scopeId);}promise.resolve(null);}
+  @ReactMethod public void diagnostics(Promise promise){WritableMap result=Arguments.createMap();result.putMap("discovery",stats(discovery.stats()));result.putMap("clues",stats(clues.stats()));result.putMap("deep",stats(deep.stats()));result.putInt("scopes",scopes.size());promise.resolve(result);}
   private static WritableMap stats(ScannerTaskPool.Stats stats){WritableMap value=Arguments.createMap();value.putInt("active",stats.active);value.putInt("queued",stats.queued);value.putInt("quarantined",stats.quarantined);return value;}
-  @Override public void invalidate(){for(String id:new ArrayList<>(scopes.keySet())){Scope scope=scopes.remove(id);if(scope!=null)scope.cancelled.set(true);discovery.cancel(id);clues.cancel(id);}super.invalidate();}
+  @Override public void invalidate(){for(String id:new ArrayList<>(scopes.keySet())){Scope scope=scopes.remove(id);if(scope!=null)scope.cancelled.set(true);discovery.cancel(id);clues.cancel(id);deep.cancel(id);}super.invalidate();}
 }

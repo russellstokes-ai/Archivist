@@ -1,10 +1,11 @@
+import {initEvidence,appendEvidence} from '../assistMetadata/evidenceLedger';
 import {metadataDatabase} from './metadataWrites';
 import type {ScannerDatabase} from './store';
 import {normalizeGenre} from './genre';
 import {rankCandidates,type Candidate,type SearchFields,type SearchCache,type SearchResult} from './search';
-export type WorkFields=SearchFields&Partial<Record<'genre'|'coverUri'|'description'|'publisher'|'narrator'|'publishedYear',string>>;
+export type WorkFields=SearchFields&Partial<Record<'genre'|'coverUri'|'description'|'publisher'|'narrator'|'publishedYear'|'subtitle'|'publicationDate'|'pageCount'|'durationSeconds',string>>;
 export type MetadataWork={workId:string;revision:number;fields:WorkFields;manual:Record<string,boolean|undefined>;identityConfirmed:boolean;partIds:string[];fieldSources?:Record<string,'embedded'|'filename'>;provenance?:Partial<Record<keyof WorkFields,string>>;identification?:{rung?:'R1'|'R2'|'R3'|'R4';provider:string;candidateId:string;conflicts:string[];selectedAt:number}};
-const fields=['title','author','series','seriesNumber','isbn','asin','language','genre','coverUri','description','publisher','narrator','publishedYear'] as const;
+const fields=['title','author','series','seriesNumber','isbn','asin','language','genre','coverUri','description','publisher','narrator','publishedYear','subtitle','publicationDate','pageCount','durationSeconds'] as const;
 const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw new Error('Metadata save cancelled');};
 function validate(value:MetadataWork){
  if(!value.workId||value.workId.length>128||!Number.isSafeInteger(value.revision)||value.revision<0||value.partIds.length>100000||new Set(value.partIds).size!==value.partIds.length||value.partIds.some(id=>typeof id!=='string'||!id||id.length>128))throw new Error('Invalid work metadata identity');
@@ -12,6 +13,7 @@ function validate(value:MetadataWork){
 }
 export async function createMetadataStore(db:ScannerDatabase){
  db=metadataDatabase(db);
+ await initEvidence(db);
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_metadata(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL);');
  const load=async(database:ScannerDatabase,id:string):Promise<MetadataWork|null>=>{const row=await database.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_metadata WHERE work_id=?',id);if(!row)return null;const value=JSON.parse(row.payload);validate(value);return value;};
  const write=async(database:ScannerDatabase,value:MetadataWork)=>{validate(value);await database.runAsync('INSERT INTO scanner_vnext_metadata VALUES(?,?,?) ON CONFLICT(work_id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload',value.workId,value.revision,JSON.stringify(value));};
@@ -20,6 +22,23 @@ export async function createMetadataStore(db:ScannerDatabase){
  }
  return {
   get:(id:string)=>load(db,id),
+  async refreshDiscovery(id:string,clues:WorkFields,sources:Record<string,'embedded'|'filename'>,expected:number,signal?:AbortSignal){
+   let result:MetadataWork|undefined;
+   await db.withExclusiveTransactionAsync(async tx=>{
+    check(signal);const work=await load(tx,id);if(!work||work.revision!==expected)throw Error('Stale metadata revision');result=work;
+    // Provider-selected identity and manual edits cannot be overwritten by a rescan.
+    if(work.identification&&['R1','R2'].includes(work.identification.rung||''))return;
+    let changed=false;
+    for(const [key,value]of Object.entries(clues)){
+     if(work.identification&&sources[key]!=='embedded')continue;
+     const field=key as keyof WorkFields;if(typeof value!=='string'||!value||work.manual[key]||work.fields[field]===value&&work.fieldSources?.[key]===sources[key])continue;
+     if(work.fields[field]&&sources[key]!=='embedded'&&work.fieldSources?.[key]!=='filename')continue;
+     work.fields[field]=value;(work.fieldSources??={})[key]=sources[key]||'filename';changed=true;
+     await appendEvidence(tx,{itemId:id,field,raw:value,value:value.normalize('NFKC').trim(),source:sources[key]||'filename',detail:'initial:'+key,extractorVersion:2,time:Date.now(),tier:sources[key]==='embedded'?'corroborated':'suggestion',fileRevision:expected+1});
+    }
+    if(changed){work.identityConfirmed=false;work.identification=undefined;work.revision++;await write(tx,work);}check(signal);
+   });return result!;
+  },
   confirmIdentity:(id:string,expected:number,signal?:AbortSignal)=>mutate(id,expected,work=>{if(!work.fields.title?.trim()||!work.fields.author?.trim())throw new Error('A title and author are required');work.identityConfirmed=true;},signal),
   updateMembership:(id:string,partIds:string[],expected:number,signal?:AbortSignal)=>mutate(id,expected,work=>{work.partIds=[...partIds];work.identityConfirmed=false;},signal),
   async ensure(value:MetadataWork){validate(value);let result:MetadataWork|undefined;await db.withExclusiveTransactionAsync(async tx=>{result=await load(tx,value.workId)??value;if(result===value)await write(tx,value);});return result!;},

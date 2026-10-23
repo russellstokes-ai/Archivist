@@ -5,6 +5,7 @@ import {EncodingType, readAsStringAsync} from 'expo-file-system/legacy';
 import {speechFocusBrowserSource} from './speechFocus';
 import {openCbrPages, ArchiveImage} from './archiveReader';
 import {openCbtPages} from './nativeCbtPages';
+import {openCb7Pages} from './nativeCb7Pages';
 import {comicContainerFromUri} from './comicSourceFormat';
 
 export type LocalReaderPage = {mime:string;base64:string};
@@ -30,11 +31,17 @@ async function tarComicDocument(uri:string,title:string,initialPage:number):Prom
   return {...pages,html:shell(title,'<img id="comicPage" class="comic-page active" alt="Loading comic page">','comic',initialPage,pages.pageCount)};
 }
 
+async function sevenZipComicDocument(uri:string,title:string,initialPage:number):Promise<LocalReaderDocument>{
+  const pages=await openCb7Pages(uri);
+  return {...pages,html:shell(title,'<img id="comicPage" class="comic-page active" alt="Loading comic page">','comic',initialPage,pages.pageCount)};
+}
+
 export async function buildLocalReaderDocument(uri: string, format: string, title: string, initialPage = 0): Promise<LocalReaderDocument> {
   if (format === 'PDF') return {uri};
   if (format === 'Comic') {
     const ext=comicContainerFromUri(uri);
     if(ext==='cbr')return rarComicDocument(uri,title,initialPage);
+    if(ext==='cb7')return sevenZipComicDocument(uri,title,initialPage);
     if(ext==='cbt')return tarComicDocument(uri,title,initialPage);
     if(ext==='pdf')return {uri};
     if(ext==='cbz')return comicDocument(uri,title,initialPage);
@@ -44,8 +51,9 @@ export async function buildLocalReaderDocument(uri: string, format: string, titl
     // WebView; try native bounded decoders in a fixed, predictable sequence.
     try{return await comicDocument(uri,title,initialPage);}catch{}
     try{return await rarComicDocument(uri,title,initialPage);}catch{}
+    try{return await sevenZipComicDocument(uri,title,initialPage);}catch{}
     try{return await tarComicDocument(uri,title,initialPage);}catch{}
-    throw Error('This comic could not be opened as CBZ, CBR or CBT. Retry it or reconnect the original library folder.');
+    throw Error('This comic could not be opened as CBZ, CBR, CB7 or CBT. Retry it or reconnect the original library folder.');
   }
   if (format === 'EPUB') return {html: await epubHtml(uri, title, initialPage)};
   return {uri};

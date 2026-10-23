@@ -12,3 +12,6 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+
+# ScannerSevenZipReader uses the bundled 7-Zip-JBinding API reflectively; keep API and JNI names stable.
+-keep class net.sf.sevenzipjbinding.** { *; }

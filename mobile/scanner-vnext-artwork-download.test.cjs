@@ -1,10 +1,10 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,f);
 const {readArtworkBytes,approvedArtworkUrl}=require('./scannerVNext/artworkDownload.ts');
-(async()=>{let closed=0;const response=chunks=>({ok:true,status:200,headers:{get(){return null;}},body:{getReader(){return {async read(){return chunks.length?{done:false,value:chunks.shift()}:{done:true};},async cancel(){closed++;},releaseLock(){}};}}});
- assert.equal(approvedArtworkUrl('https://covers.openlibrary.org/b/id/1-L.jpg'),true);assert.equal(approvedArtworkUrl('http://covers.openlibrary.org/b/id/1-L.jpg'),false);assert.equal(approvedArtworkUrl('https://evil.example/cover.jpg'),false);
+(async()=>{let closed=0;const response=(chunks,url)=>({ok:true,status:200,url,headers:{get(){return null;}},body:{getReader(){return {async read(){return chunks.length?{done:false,value:chunks.shift()}:{done:true};},async cancel(){closed++;},releaseLock(){}};}}});
+ assert.equal(approvedArtworkUrl('https://covers.openlibrary.org/b/id/1-L.jpg'),true);assert.equal(approvedArtworkUrl('https://covers.openlibrary.org/b/id/placeholder.jpg'),false);assert.equal(approvedArtworkUrl('https://covers.openlibrary.org/b/id/1-L.jpg?variant=no-cover'),false);assert.equal(approvedArtworkUrl('http://covers.openlibrary.org/b/id/1-L.jpg'),false);assert.equal(approvedArtworkUrl('https://evil.example/cover.jpg'),false);
  assert.equal((await readArtworkBytes(response([new Uint8Array(40)]))).length,40);
- await assert.rejects(()=>readArtworkBytes(response([new Uint8Array(4194305)])),/budget/);assert.equal(closed,1);
+ await assert.rejects(()=>readArtworkBytes(response([new Uint8Array(4194305)])),/budget/);assert.equal(closed,1);await assert.rejects(()=>readArtworkBytes(response([new Uint8Array(40)],'https://covers.openlibrary.org/no-cover.jpg')),/placeholder/i);assert.equal(closed,2);await assert.rejects(()=>readArtworkBytes(response([new Uint8Array(40)],'https://covers.openlibrary.org/b/id/1.jpg?image=placeholder')),/placeholder/i);assert.equal(closed,3);
  const stop=new AbortController();stop.abort();await assert.rejects(()=>readArtworkBytes(response([]),stop.signal),/cancel/i);
  console.log('PASS: approved provider artwork hosts, strict byte budget and stream cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1;});

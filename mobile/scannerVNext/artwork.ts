@@ -1,5 +1,5 @@
 export type ArtworkCandidate={uri:string;manual:boolean};
-export type ArtworkResult={state:'ready'|'missing'|'invalid';uri?:string;manual?:boolean;bytes?:number;width?:number;height?:number;issues?:string[]};
+export type ArtworkResult={state:'ready'|'missing'|'invalid';uri?:string;thumbnailUri?:string;thumbnailWidth?:number;thumbnailHeight?:number;sha256?:string;manual?:boolean;bytes?:number;width?:number;height?:number;issues?:string[]};
 export interface ArtworkPort {read(uri:string,maxBytes:number,signal?:AbortSignal):Promise<{bytes:Uint8Array;width:number;height:number}>;save(workId:string,bytes:Uint8Array,signal?:AbortSignal):Promise<string>}
 const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw new Error('Artwork cancelled');};
 export async function resolveArtwork(workId:string,candidates:ArtworkCandidate[],port:ArtworkPort,signal?:AbortSignal):Promise<ArtworkResult>{

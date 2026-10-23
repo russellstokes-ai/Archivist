@@ -8,6 +8,9 @@ const ftyp=atom('ftyp',Buffer.from('M4B '));const mdat=atom('mdat',Buffer.alloc(
 (async()=>{
  let consumed=0;const reads=[];const reader={async readRange(offset,length){reads.push({offset,length});consumed+=length;return {bytes:media.subarray(offset,offset+length),budgetReached:offset+length<=media.length};}};
  const result=await readMp4IndexClues(media.length,reader);assert.equal(result.clues.fields.title,'Generated Late Title');assert.equal(result.clues.status,'parsed');assert.equal(result.bytesRead,consumed);assert.ok(consumed<1024);assert.ok(reads.every(r=>r.length<=65536));assert.ok(!reads.some(r=>r.offset>ftyp.length+16&&r.offset<ftyp.length+mdat.length));
+ const huge=Buffer.concat([ftyp,atom('moov',Buffer.concat([atom('trak',Buffer.alloc(200000)),atom('udta',atom('meta',Buffer.concat([Buffer.alloc(4),atom('ilst',atom('\xa9nam',data))])))]))]);
+ const seekReads=[];const late=await readMp4IndexClues(huge.length,{async readRange(o,n){seekReads.push([o,n]);return {bytes:huge.subarray(o,o+n),budgetReached:true};}});
+ assert.equal(late.clues.fields.title,'Generated Late Title');assert.ok(late.bytesRead<1024,'large sample tables must be skipped');
  const bounded=await readMp4IndexClues(media.length,reader,{maxBytes:16});assert.equal(bounded.clues.status,'unresolved');assert.equal(bounded.clues.reason,'source-read-budget');assert.ok(bounded.bytesRead<=16);
  const corrupt=Buffer.alloc(16);corrupt.writeUInt32BE(4);assert.equal((await readMp4IndexClues(corrupt.length,{async readRange(o,n){return {bytes:corrupt.subarray(o,o+n),budgetReached:true};}})).clues.reason,'invalid-mp4-atom');
  const stop=new AbortController();await assert.rejects(()=>readMp4IndexClues(media.length,{async readRange(){stop.abort();return {bytes:media.subarray(0,16),budgetReached:true};}},{signal:stop.signal}),/cancel/i);
