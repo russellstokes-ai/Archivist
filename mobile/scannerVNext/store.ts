@@ -12,6 +12,7 @@ export async function createScannerStore(db:ScannerDatabase,newId:()=>string){
     CREATE TABLE IF NOT EXISTS scanner_vnext_sources(id TEXT PRIMARY KEY,root_uri TEXT NOT NULL,name TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS scanner_vnext_assets(asset_id TEXT PRIMARY KEY,source_id TEXT NOT NULL,document_id TEXT NOT NULL,payload TEXT NOT NULL,UNIQUE(source_id,document_id));
     CREATE TABLE IF NOT EXISTS scanner_vnext_checkpoints(source_id TEXT PRIMARY KEY,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS scanner_vnext_scan_seen(source_id TEXT NOT NULL,document_id TEXT NOT NULL,PRIMARY KEY(source_id,document_id));
     CREATE TABLE IF NOT EXISTS scanner_vnext_issues(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,reason TEXT NOT NULL,detail TEXT NOT NULL,cursor TEXT);
   `);
   const checkCancelled=(signal?:AbortSignal)=>{if(signal?.aborted)throw new Error('Scan cancelled');};
@@ -19,6 +20,7 @@ export async function createScannerStore(db:ScannerDatabase,newId:()=>string){
     loadAsset(sourceId:string,documentId:string):Promise<(DiscoveredEntry & {assetId:string})|null>;
     loadCheckpoint(sourceId:string):Promise<DiscoveryCheckpoint|null>;
     listAssets(sourceId:string):Promise<(DiscoveredEntry & {assetId:string})[]>;
+    beginScan(sourceId:string):Promise<{checkpoint:DiscoveryCheckpoint|null;seen:string[]}>;
   }={
     async saveSource(source:Source){
       if(!source.id||!source.rootUri)throw new Error('Selected source grant is required');
@@ -39,6 +41,7 @@ export async function createScannerStore(db:ScannerDatabase,newId:()=>string){
           const prior=await tx.getFirstAsync<{asset_id:string}>('SELECT asset_id FROM scanner_vnext_assets WHERE source_id=? AND document_id=?',sourceId,entry.documentId);
           checkCancelled(signal);
           await tx.runAsync('INSERT INTO scanner_vnext_assets VALUES(?,?,?,?) ON CONFLICT(source_id,document_id) DO UPDATE SET payload=excluded.payload',prior?.asset_id??newId(),sourceId,entry.documentId,JSON.stringify(entry));
+          await tx.runAsync('INSERT OR IGNORE INTO scanner_vnext_scan_seen VALUES(?,?)',sourceId,entry.documentId);
         }
         checkCancelled(signal);
         await tx.runAsync('INSERT INTO scanner_vnext_checkpoints VALUES(?,?) ON CONFLICT(source_id) DO UPDATE SET payload=excluded.payload',sourceId,JSON.stringify(checkpoint));
@@ -58,6 +61,20 @@ export async function createScannerStore(db:ScannerDatabase,newId:()=>string){
     async loadCheckpoint(sourceId){
       const row=await db.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_checkpoints WHERE source_id=?',sourceId);
       return row?JSON.parse(row.payload):null;
+    },
+    async beginScan(sourceId){
+      let result:{checkpoint:DiscoveryCheckpoint|null;seen:string[]}={checkpoint:null,seen:[]};
+      await db.withExclusiveTransactionAsync(async tx=>{
+        const row=await tx.getFirstAsync<{payload:string}>('SELECT payload FROM scanner_vnext_checkpoints WHERE source_id=?',sourceId);
+        const checkpoint:DiscoveryCheckpoint|null=row?JSON.parse(row.payload):null;
+        const seenRow=await tx.getFirstAsync<{payload:string}>('SELECT json_group_array(document_id) AS payload FROM scanner_vnext_scan_seen WHERE source_id=?',sourceId);
+        const seen:string[]=JSON.parse(seenRow?.payload||'[]');
+        // Old installations have checkpoints without a matching seen-set. A
+        // fresh discovery is safer than falsely marking unseen old files present.
+        if(checkpoint&&!checkpoint.complete&&checkpoint.cursor!==null&&seen.length){result={checkpoint,seen};return;}
+        await tx.runAsync('DELETE FROM scanner_vnext_scan_seen WHERE source_id=?',sourceId);
+        await tx.runAsync('DELETE FROM scanner_vnext_checkpoints WHERE source_id=?',sourceId);
+      });return result;
     }
   };
   return store;

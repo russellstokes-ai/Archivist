@@ -7,6 +7,7 @@ import {LivePlayerSkipIcon} from './LivePlayerSkipIcon';
 import {MiniAudioWaveform} from './MiniAudioWaveform';
 import {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';
 import {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';
+import {populationMessage} from './assistMetadata/progress';
 import React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';
 import {
   AccessibilityInfo,
@@ -146,7 +147,7 @@ async function persistPickedProfilePhoto(uri:string,fileName?:string|null) {
   return target;
 }
 
-const appVersion=Constants.expoConfig?.version||'0.9.4';
+const appVersion=Constants.expoConfig?.version||'0.10.0';
 const platformLabel=Platform.OS==='ios'?'iOS':Platform.OS==='android'?'Android':'Web';
 const addLocalFolderLabel=Platform.OS==='ios'?'Import folder':'Add device folder';
 const addLocalFolderShortLabel=Platform.OS==='ios'?'Import folder':'Add a folder';
@@ -772,6 +773,7 @@ function Client() {
   const [profileMenuMounted,setProfileMenuMounted]=useState(false);
   const profileMenuAnim=useRef(new Animated.Value(0)).current;
   const interfacePulse=useRef(new Animated.Value(0)).current;
+  const [profilePhotoDraft,setProfilePhotoDraft]=useState<{uri:string;fileName?:string|null}|null>(null);
   const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});
   const [atlasFocus,setAtlasFocus]=useState<{kind:AtlasKind;value:string}|null>(null);
   const [atlasListMode,setAtlasListMode]=useState(false);
@@ -806,6 +808,10 @@ function Client() {
   const [serverBooksHasMore, setServerBooksHasMore] = useState(false);
   const [serverBooksLoadingMore, setServerBooksLoadingMore] = useState(false);
   const [localFolders, setLocalFolders] = useState<LocalFolder[]>([]);
+  const [populationStatus,setPopulationStatus]=useState('');
+  const [fileWriteSummary,setFileWriteSummary]=useState('');
+  const [populating,setPopulating]=useState(false);
+  const populationOwner=useRef<AbortController|null>(null);
   const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');
   const [localFolderNotice, setLocalFolderNotice] = useState('');
   const [localScanning, setLocalScanning] = useState(false);
@@ -1162,6 +1168,24 @@ function Client() {
     if(!freshRuntimeRef.current)freshRuntimeRef.current=createAndroidCatalogueRuntime(async()=>({metadata:metadataSettingsRef.current,googleKey:metadataSettingsRef.current.books.googleBooks?(await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined:undefined})).catch(error=>{freshRuntimeRef.current=null;throw error;});
     return freshRuntimeRef.current;
   }
+  useEffect(()=>{
+    if(Platform.OS!=='android')return;
+    let alive=true,unsubscribe:(()=>void)|undefined;
+    void freshRuntime().then(runtime=>{
+      if(!alive)return;
+      const update=(id?:string)=>{
+        void runtime.writeProgress().then(({counts,operation})=>{
+          if(!alive)return;
+          const waiting=(counts.pending||0)+(counts.running||0)+(counts.retry||0);
+          setFileWriteSummary(operation|| (waiting?`${waiting} file updates queued; ${counts.done||0} completed.`:counts.blocked?`${counts.blocked} file updates need attention. Your library details are saved.`:''));
+        }).catch(()=>{if(alive)setFileWriteSummary('File-saving status is unavailable. Your library remains accessible.');});
+        void runtime.populationProgress().then(({enabled,counts})=>{if(alive)setPopulationStatus(populationMessage(enabled,counts));}).catch(()=>{});
+        if(id)void runtime.refresh(id).then(rows=>{if(alive)return applyScannerRows(rows);}).catch(()=>{});
+      };
+      unsubscribe=runtime.subscribe(update);update();
+    }).catch(()=>{if(alive)setFileWriteSummary('File-saving status is unavailable.');});
+    return ()=>{alive=false;unsubscribe?.();};
+  },[]);
   const assistPolicy=(explicit=false)=>({online:metadataSettingsRef.current.onlineEnabled&&metadataSettingsRef.current.books.enabled,automatic:metadataSettingsRef.current.automaticEnrichment,explicit});
   const scannerRowsCommit=useRef<Promise<void>>(Promise.resolve());
   async function applyScannerRows(rows:ScannerBook[]){
@@ -1826,8 +1850,8 @@ function Client() {
   const libraryFormatFamilyMatches=(format:string)=>{
     if(!libraryFormatFamily)return true;
     const value=String(format||'').trim().toLowerCase();
-    if(libraryFormatFamily==='books')return value==='epub'||value==='ebook'||value==='book';
-    if(libraryFormatFamily==='comics')return value==='comic'||value==='cbz'||value==='cbr'||value==='cbt';
+    if(libraryFormatFamily==='books')return ['epub','ebook','book','pdf','kindle','mobi'].includes(value);
+    if(libraryFormatFamily==='comics')return ['comic','cbz','cbr','cbt','cb7'].includes(value);
     if(libraryFormatFamily==='audio')return value==='audio'||value==='audiobook';
     return value==='pdf';
   };
@@ -2993,25 +3017,31 @@ function Client() {
     await scanFrame();
     if(!scanCommitGate.isCurrent(generation))return null;
     setScanProgress(null);
-    let enrichmentCompleted=false;
-    try{
-      // Fresh runtime has already staged metadata and atomically checked publication.
-      // No historical deep metadata or cover sweep runs after discovery.
-      enrichmentCompleted=scanCommitGate.isCurrent(generation);
-      const controller=new AbortController();
-      const watch=setInterval(()=>{if(!scanCommitGate.isCurrent(generation))controller.abort();},150);
-      void freshRuntime().then(runtime=>runtime.enrich(result.books,assistPolicy(),async rows=>{
-        if(scanCommitGate.isCurrent(generation))await applyScannerRows(rows);
-      },controller.signal)).catch(()=>undefined).finally(()=>clearInterval(watch));
-    }catch(error){
-      if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));
-    }
+    // Stage 1 ends here. Identification starts only from the population action.
+    const enrichmentCompleted=scanCommitGate.isCurrent(generation);
     if(enrichmentCompleted){
       const signature=localFolderSetSignature(result.folders);
       setLibraryPreparedSignature(signature);
       await setPersistedJSON(librarySetupPreparedKey,{signature,completedAt:new Date().toISOString()}).catch(()=>undefined);
     }
     return scanCommitGate.isCurrent(generation)?summary:null;
+  }
+
+  async function populateLibrary(){
+    if(populationOwner.current||libraryRefreshActive)return;
+    const owner=new AbortController();populationOwner.current=owner;setPopulating(true);
+    const total=new Set(localBooks.map(book=>(book as ScannerBook).scannerWorkId).filter(Boolean)).size;
+    setPopulationStatus('Identifying 0 of '+total+' items');
+    try{
+      const runtime=await freshRuntime();
+      await runtime.enrich(localBooks.filter((book):book is Book & LocalBook=>typeof book.uri==='string'&&book.uri.length>0),{...assistPolicy(true),automatic:true},async rows=>{
+        if(owner.signal.aborted||populationOwner.current!==owner)return;
+        await applyScannerRows(rows);
+        const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));
+      },owner.signal);
+      if(!owner.signal.aborted){const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));}
+    }catch{if(!owner.signal.aborted)setPopulationStatus('Population paused. Your progress is saved; press Identify & populate to retry.');}
+    finally{if(populationOwner.current===owner){populationOwner.current=null;setPopulating(false);}}
   }
 
   async function checkpointLocalEnrichment(books:LocalBook[],generation:number){
@@ -3322,6 +3352,7 @@ function Client() {
   }
 
   async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {
+    populationOwner.current?.abort();setPopulationStatus('');
     if(libraryRefreshRunningRef.current)return;
     if(!localFolders.length)return;
     setError('');
@@ -4416,7 +4447,7 @@ function Client() {
     return <View style={{gap:7}}>
       <OnboardingGuide/>
       <Text style={[styles.meta,{color:p.muted,marginHorizontal:2,marginTop:-2}]}>
-        Atlas includes published local books after metadata and cover review. Library source and folder filters also apply.
+        Atlas reflects your library and the available metadata. Source and folder filters also apply.
       </Text>
     </View>;
   }
@@ -4438,12 +4469,12 @@ function Client() {
       <View style={[styles.onboardingCard,{borderTopColor:p.line,borderBottomColor:p.line}]}>
         <Text style={[styles.onboardingEyebrow,{color:p.sage}]}>LIBRARY SETUP</Text>
         <Text style={[styles.onboardingTitle,{color:p.ink}]}>Set up your library</Text>
-        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Add folders, scan, then review any uncertain book details. Your files can stay where they are.</Text>
+        <Text style={[styles.onboardingIntro,{color:p.muted}]}>Scan your files, let Assist identify and populate them, then help only with unresolved items. Your files stay where they are.</Text>
 
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:hasSource?p.sage:p.muted}]}>01</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Add library folders</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Scan library</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{hasSource
               ? [hasFolder?localFolders.length+' device folder'+(localFolders.length===1?'':'s'):'',hasServerFolders?sources.length+' server folder'+(sources.length===1?'':'s'):''].filter(Boolean).join(' · ')
               : hasServer
@@ -4456,7 +4487,7 @@ function Client() {
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:hasSource?p.gold:p.muted}]}>02</Text>
           <View style={{flex:1,gap:4}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Prepare library</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Identify &amp; populate</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
               ? (localBooks.length+serverWorks.length)+' items ready'+(reviewCount?' · '+reviewCount+' local items need review':'')
               : progress
@@ -4470,9 +4501,9 @@ function Client() {
         <View style={styles.onboardingStep}>
           <Text style={[styles.onboardingNumber,{color:setupReady?p.sage:p.muted}]}>03</Text>
           <View style={{flex:1}}>
-            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Review book details</Text>
+            <Text style={[styles.onboardingStepTitle,{color:p.ink}]}>Complete missing details</Text>
             <Text style={[styles.meta,{color:p.muted}]}>{setupReady
-              ? 'Tap a book to correct its details. Assist fills the gaps; file organisation is optional in Settings.'
+              ? 'Only unresolved items need your help. Add a clue or select the correct match.'
               : 'Available when preparation finishes.'}</Text>
           </View>
         </View>
@@ -4495,9 +4526,11 @@ function Client() {
         </View>
         {!hasServer&&!shelfServerPromptHidden?<Pressable accessibilityRole="button" onPress={()=>void useArchivistLocallyOnly()} style={styles.shelfLocalOnlyAction}><Text style={[styles.meta,{color:p.muted,fontWeight:'600'}]}>Use Archivist locally only</Text></Pressable>:null}
 
-        {preparing&&!libraryRefreshActive?<Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}
+        {preparing&&!libraryRefreshActive?<Button label={busy?'Scanning…':'Scan library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}
+        {setupReady&&hasFolder?<Button label={populating?'Cancel population':'Identify & populate'} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>:null}
+        {populationStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}
         {setupReady&&hasBooks?<View style={styles.shelfSetupActions}>
-          <View style={styles.shelfSetupAction}><Button label="Review uncertain metadata" onPress={openMetadataReview}/></View>
+          <View style={styles.shelfSetupAction}><Button label="Complete missing details" onPress={openMetadataReview}/></View>
           <View style={styles.shelfSetupAction}><Button label="Start using library" tone="quiet" onPress={()=>void finishOnboarding()}/></View>
         </View>:null}
       </View>
@@ -4523,6 +4556,9 @@ function Client() {
         {activeProgress.phase!=='complete'?<Pressable accessibilityRole="button" accessibilityLabel="Cancel library refresh" onPress={cancelLibraryRefresh} style={styles.settingsTextAction}><Text style={{color:p.muted,fontWeight:'700'}}>Cancel</Text></Pressable>:null}
       </View>;
     }
+    if(fileWriteSummary)return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
+      <View style={{flex:1,minWidth:0}}><Text style={[styles.scanBannerTitle,{color:p.ink}]}>Saving file metadata</Text><Text style={[styles.scanBannerDetail,{color:p.muted}]}>{fileWriteSummary}</Text></View>
+    </View>;
     if(!localFolderNotice)return null;
     return <View accessibilityLiveRegion="polite" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>
       <View style={{flex:1,minWidth:0}}>
@@ -5102,13 +5138,25 @@ function Client() {
     };
     const acceptAssist=async(candidateId:string,confirm=false)=>{
       if(!editing.scannerWorkId||!assistState||busy)return;setBusy(true);setError('');const id=editing.scannerWorkId;
-      try{const runtime=await freshRuntime(),work=await runtime.assist.accept(id,candidateId,assistState.revision,confirm);await assistCompleted(id,{revision:work.revision,state:'accepted',updated:Date.now()});}
+      try{const runtime=await freshRuntime(),work=await runtime.assist.accept(id,candidateId,assistState.revision,confirm,assistState.updated);await assistCompleted(id,{revision:work.revision,state:'accepted',updated:Date.now()});}
       catch(e){setError((e as Error).message);}finally{setBusy(false);}
     };
     const confirmDetails=async()=>{
       if(!editing.scannerWorkId||busy)return;setBusy(true);setError('');
       try{const runtime=await freshRuntime();await runtime.confirm(editing.scannerWorkId);await applyScannerRows(await runtime.refresh(editing.scannerWorkId));setAssistState(null);}
       catch(e){setError((e as Error).message);}finally{setBusy(false);}
+    };
+    const reviewFileRecovery=async()=>{
+      if(!editing.scannerWorkId||busy)return;
+      const id=editing.scannerWorkId;setBusy(true);setError('');
+      try{
+        const runtime=await freshRuntime(),options=await runtime.recoveryOptions(id),option=options[0];
+        if(!option){setError('No interrupted file update remains.');return;}
+        Alert.alert('Restore original file?',`${option.path}\n\nRestore the intact copy saved before the interrupted update? The current file is also retained for undo. Your library details stay saved.`,[
+          {text:'Cancel',style:'cancel'},
+          {text:'Restore original',onPress:()=>{setBusy(true);void runtime.restoreOriginal(id,option).then(async()=>applyScannerRows(await runtime.refresh(id))).catch(error=>setError(error.message)).finally(()=>setBusy(false));}},
+        ]);
+      }catch(error){setError((error as Error).message);}finally{setBusy(false);}
     };
     const moreAssist=async(provider:string,page:number)=>{
       if(!editing.scannerWorkId||!assistState||busy)return;setBusy(true);setError('');
@@ -5182,6 +5230,7 @@ function Client() {
             {targets.length>1?<Text style={[styles.meta,{color:p.muted}]}>Changes apply to all {targets.length} files in this grouped work.</Text>:null}
             {editing.reviewReason?<Text style={[styles.meta,{color:p.muted}]}>{editing.reviewReason}</Text>:null}
             {editing.metadataFileStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{editing.metadataFileStatus}</Text>:null}
+            {localEdit&&editing.metadataFileStatus?.includes('recovery review')?<Pressable accessibilityRole="button" disabled={busy} onPress={()=>void reviewFileRecovery()} style={{paddingVertical:10}}><Text style={{color:p.sage}}>Review file recovery</Text></Pressable>:null}
             <Text style={[styles.meta,{color:p.muted}]}>Current metadata: {editing.metadataSource==='manual'?'Manual override':editing.metadataSource==='embedded'?'Embedded file metadata':editing.metadataSource==='sidecar'?'Sidecar metadata':editing.metadataSource==='path'?'Filename / folder scan':editing.metadataSource==='legacy'?'Protected existing metadata':'Scanned metadata'}. Manual edits are protected from future rescans.</Text>
             {localEdit?<Text style={[styles.meta,{color:p.muted}]}>Add a title, series or ISBN, then tap Save. For comics, include the issue or annual year; a known writer is optional. Assist looks for missing details.</Text>:null}
             {editing.metadataConflicts?.length?<Text style={[styles.meta,{color:p.gold}]}>Conflicts to review: {[...new Set(editing.metadataConflicts.map(item=>item.field).filter(Boolean))].join(', ')}</Text>:null}
@@ -5256,7 +5305,6 @@ function Client() {
                 </View>
               </Pressable>) }
               {Object.entries(assistState?.result?.nextPages||{}).filter(([,page])=>page!==null).map(([provider,page])=><Button key={provider} label={'More matches · '+provider} tone="quiet" disabled={busy||editorDirty} onPress={()=>void moreAssist(provider,page!)}/>)}
-              <Button label="Confirm saved identity" tone="quiet" disabled={busy||editorDirty||!editTitle.trim()||!editAuthor.trim()} onPress={()=>void confirmDetails()}/>
               {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>Choose a genre, or let Assist find one. Books with missing details remain visible.</Text>:null}
             </View>:null}
             {localEdit&&targets.length===1&&exportFormat?<View style={{gap:6}}><Button label="Export embedded metadata copy" tone="quiet" disabled={busy||editorDirty} onPress={()=>void exportCopy()}/><Text style={[styles.meta,{color:p.muted}]}>Creates a new {exportFormat.toUpperCase()} copy, up to 64 MB. The original stays unchanged. Text metadata only; covers and identifiers are preserved.</Text></View>:null}
@@ -5496,19 +5544,17 @@ function Client() {
 
   async function saveProfileAvatar(next:ProfileAvatarConfig){
     const cleaned={initials:String(next.initials||'').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase(),color:avatarColours.includes(next.color)?next.color:'#47736F',photoUri:typeof next.photoUri==='string'&&next.photoUri.trim()?next.photoUri.trim():undefined};
-    setProfileAvatar(cleaned);
-    try{await setPersistedJSON(profileAvatarKey,cleaned);}catch(e){setError((e as Error).message);}
+    try{await setPersistedJSON(profileAvatarKey,cleaned);setProfileAvatar(cleaned);return true;}catch(e){setError((e as Error).message);return false;}
   }
 
   async function chooseProfilePhoto(){
     setError('');
     try{
-      const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:true,aspect:[1,1],quality:.9,selectionLimit:1});
+      const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:false,quality:.9,selectionLimit:1});
       if(result.canceled||!result.assets?.length)return;
       const asset=result.assets[0];
       if(asset.fileSize&&asset.fileSize>15*1024*1024){setError('Choose a profile photo smaller than 15 MB.');return;}
-      const photoUri=await persistPickedProfilePhoto(asset.uri,asset.fileName);
-      await saveProfileAvatar({...profileAvatar,photoUri});
+      setProfilePhotoDraft({uri:asset.uri,fileName:asset.fileName});
     }catch(e){setError((e as Error).message);}
   }
 
@@ -6018,9 +6064,9 @@ function Client() {
             <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:!formatFilter&&!libraryFormatFamily?p.ink:p.muted,fontWeight:!formatFilter&&!libraryFormatFamily?'700':'500'}]}>All</Text>
             <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:!formatFilter&&!libraryFormatFamily?1:0}]}/>
           </Pressable>
-          {formatOptions.map(format=><Pressable key={format} accessibilityRole="button" accessibilityState={{selected:!libraryFormatFamily&&formatFilter===format}} onPress={()=>{setLibraryFormatFamily('');setFormatFilter(formatFilter===format?'':format)}} style={styles.libraryFormatTab}>
-            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:formatFilter===format?p.ink:p.muted,fontWeight:'600'}]}>{format}</Text>
-            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:formatFilter===format?1:0}]}/>
+          {([{id:'books',label:'Books'},{id:'audio',label:'Audiobooks'},{id:'comics',label:'Comics'}] as const).map(category=><Pressable key={category.id} accessibilityRole="button" accessibilityState={{selected:libraryFormatFamily===category.id}} onPress={()=>{setFormatFilter('');setLibraryFormatFamily(category.id)}} style={styles.libraryFormatTab}>
+            <Text style={[styles.libraryFormatText,{color:libraryFormatFamily===category.id?p.ink:p.muted,fontWeight:'600'}]}>{category.label}</Text>
+            <View pointerEvents="none" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:libraryFormatFamily===category.id?1:0}]}/>
           </Pressable>)}
         </ScrollView>:null}
       </>}
@@ -6080,7 +6126,7 @@ function Client() {
         <Button label="Apply" onPress={()=>setLibraryFiltersOpen(false)}/><Button label="Save as Smart Shelf" tone="quiet" onPress={()=>{setLibraryFiltersOpen(false);beginSmartShelf(true)}}/>
       </ScrollView></Pressable></Pressable></Modal>:null}
     </View>;
-    const libraryFolderRailWidth=layoutTier==='fold'?136:160;
+    const libraryFolderRailWidth=layoutTier==='fold'?184:208;
     return wide?<View style={styles.libraryTwoPane}><ScrollView style={[styles.libraryRail,layoutTier==='fold'&&styles.libraryRailFold,{width:libraryFolderRailWidth,minWidth:libraryFolderRailWidth,maxWidth:libraryFolderRailWidth,flexBasis:libraryFolderRailWidth,flexGrow:0,flexShrink:0,backgroundColor:'transparent',borderRightColor:p.line}]} contentContainerStyle={[styles.libraryRailContent,{width:'100%'}]} showsVerticalScrollIndicator={false}><LibrarySourceNavigator/></ScrollView>{main}</View>:main;
   }
 
@@ -7343,7 +7389,7 @@ function Client() {
     const formatCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
       <CardHeader title="Format Breakdown" subtitle="How you read" icon="bookOpen"/>
       <View style={styles.statsCardBody}>
-        <DataRing size={110} value={String(stats?.works||formatsTotal)} label="books" items={formatItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
+        <DataRing size={110} value={String(formatsTotal)} label="books" items={formatItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
         {formatItems.length?<Legend items={formatItems} total={formatsTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Add format metadata to reveal your mix.</Text>}
       </View>
       {formatCompletionRows.length?<View style={styles.statsSplitBlock}>
@@ -7355,7 +7401,7 @@ function Client() {
     const genreCard=<View style={[styles.statsDashboardCard,width>=700&&styles.statsDashboardCardWide,{borderTopColor:statsPalette.line}]}>
       <CardHeader title="Genre Reading Time" subtitle="Time spent in each genre" icon="layers"/>
       <View style={styles.statsCardBody}>
-        <DataRing size={110} value={genreTimeItems.length?minutesRead.toLocaleString():String(genreTotal)} label={genreTimeItems.length?'minutes':'books'} items={genreItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
+        <DataRing size={110} value={genreTotal.toLocaleString()} label={genreTimeItems.length?'minutes':'books'} items={genreItems} ink={statsPalette.ink} muted={statsPalette.muted} track={statsPalette.line} thickness={11}/>
         {genreItems.length?<Legend items={genreItems} total={genreTotal}/>:<Text style={[styles.meta,{color:statsPalette.muted,flex:1}]}>Genre activity will appear as you read.</Text>}
       </View>
       {genreCompletionRows.length?<View style={styles.statsSplitBlock}>
@@ -7941,8 +7987,13 @@ function Client() {
     const openReview=()=>{setActiveTab('library');clearLibraryFilters();setReviewOnly(true);setLibraryToolsOpen(false);};
     return <View style={{gap:16}}>
             <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEEDS ATTENTION</Text>
-            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEXT STEP</Text>
-            <Text style={[styles.meta,{color:p.muted}]}>{reviewCount?'Review uncertain books, save any corrections, then let Assist fill missing details.':'Your books are grouped. Check missing genres and publication years before exploring Atlas.'} Moving files is optional.</Text>
+            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>IDENTIFY & POPULATE</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>Assist uses the saved scan to find matches, fill available details and covers, then save confirmed metadata to your files.</Text>
+            <Button label={populating?'Cancel population':'Identify & populate'} disabled={!localBooks.length||libraryRefreshActive} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>
+            {populationStatus?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}
+            {fileWriteSummary?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{fileWriteSummary}</Text>:null}
+            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>COMPLETE MISSING DETAILS</Text>
+            <Text style={[styles.meta,{color:p.muted}]}>{reviewCount?'Review uncertain books, save any corrections, then let Assist fill missing details.':'Assist fills available genres and years automatically. Only uncertain identities need your help.'} Moving files is optional.</Text>
             <Button label={reviewCount?'Review uncertain metadata ('+reviewCount+')':'Review missing details'} onPress={reviewCount?openReview:()=>openGap('incomplete')}/>
             <View style={styles.libraryHealthGrid}>
               {[
@@ -8216,7 +8267,7 @@ function Client() {
             <View style={[styles.settingsSection,{borderTopColor:p.line}]}>
               <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>LIBRARY & METADATA</Text>
               <Button label="Review uncertain metadata" onPress={openMetadataReview}/>
-              <View style={styles.settingsRow}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Save metadata to files</Text><Text style={[styles.meta,{color:p.muted}]}>Write confirmed metadata into supported audio, EPUB, PDF and comic files, including CBR. File names stay unchanged. Protected or unsupported files remain untouched, with the outcome shown in review. Recovery copies are also saved in your library folder.</Text></View><Toggle label="Save metadata to files" value={metadataSettings.writeMetadataToFiles!==false} onPress={()=>void updateMetadataSettings(current=>({...current,writeMetadataToFiles:current.writeMetadataToFiles===false}))}/></View>
+              <View style={styles.settingsRow}><View style={{flex:1,minWidth:0}}><Text style={[styles.bookTitle,settingsTitleStyle,{color:p.ink}]}>Save metadata to files</Text><Text style={[styles.meta,{color:p.muted}]}>Write confirmed metadata into supported audio, EPUB, PDF and comic files, including CBR. File names stay unchanged. Protected or unsupported files remain untouched, with the outcome shown in review. Verified undo copies are kept in the app. Large file updates run separately from scanning.</Text></View><Toggle label="Save metadata to files" value={metadataSettings.writeMetadataToFiles!==false} onPress={()=>void updateMetadataSettings(current=>({...current,writeMetadataToFiles:current.writeMetadataToFiles===false}))}/></View>
               <Button label={libraryToolsOpen?'Hide library tools':'Folders, rescanning & file tools'} tone="quiet" onPress={()=>setLibraryToolsOpen(open=>!open)}/>
               {libraryToolsOpen?LibrarySettingsTools():null}
               <View style={styles.settingsSubgroup}>
@@ -8494,6 +8545,14 @@ function Client() {
         paper={p.paper} ink={p.ink} muted={p.muted}
       />
       {ProfileMenu()}
+      <Modal visible={!!profilePhotoDraft} transparent animationType={reduceMotion?'none':'fade'} onRequestClose={()=>setProfilePhotoDraft(null)}>
+        <View style={modalSheetBackdrop}><View style={[styles.actionSheet,{backgroundColor:p.card,gap:16}]}>
+          <Text style={[styles.sectionTitle,{color:p.ink}]}>Your profile photo</Text>
+          {profilePhotoDraft?<Image source={{uri:profilePhotoDraft.uri}} resizeMode="cover" style={{width:180,height:180,borderRadius:90,alignSelf:'center'}}/>:null}
+          <Button label="Use photo" disabled={busy} onPress={()=>{const draft=profilePhotoDraft;if(!draft)return;setBusy(true);void persistPickedProfilePhoto(draft.uri,draft.fileName).then(photoUri=>saveProfileAvatar({...profileAvatar,photoUri})).then(saved=>{if(saved)setProfilePhotoDraft(null);}).catch(()=>setError('The photo could not be saved. Please try again.')).finally(()=>setBusy(false));}}/>
+          <Button label="Cancel" tone="quiet" disabled={busy} onPress={()=>setProfilePhotoDraft(null)}/>
+        </View></View>
+      </Modal>
       {WorkDetailsPanel()}
       {FormatPickerPanel()}
       {RatingPromptPanel()}
@@ -8640,16 +8699,16 @@ const styles = StyleSheet.create({
   libraryRailList: {gap:2},
   libraryRailAdd: {minHeight:40,paddingHorizontal:10,justifyContent:'center'},
   librarySourceTree: {gap:3,width:'100%',minWidth:0},
-  libraryTreeGroupLabel: {fontSize:8,lineHeight:10,fontWeight:'800',letterSpacing:1.15,marginTop:13,marginBottom:2,paddingHorizontal:5},
+  libraryTreeGroupLabel: {fontSize:11,lineHeight:16,fontWeight:'800',letterSpacing:1.15,marginTop:13,marginBottom:2,paddingHorizontal:5},
   libraryTreeChildren: {paddingLeft:4,gap:1},
   libraryTreeRow: {minHeight:38,borderRadius:9,paddingHorizontal:4,paddingVertical:4,flexDirection:'row',alignItems:'center',gap:5},
   libraryTreeIcon: {width:24,height:24,borderRadius:12,alignItems:'center',justifyContent:'center',flexShrink:0},
-  libraryTreeLabel: {fontSize:10.5,lineHeight:13},
-  libraryTreeDetail: {fontSize:8,lineHeight:10.5,marginTop:1},
-  libraryTreeCount: {fontSize:9.5,lineHeight:13,fontWeight:'700',fontVariant:['tabular-nums']},
+  libraryTreeLabel: {fontSize:14,lineHeight:20},
+  libraryTreeDetail: {fontSize:12,lineHeight:16,marginTop:1},
+  libraryTreeCount: {fontSize:13,lineHeight:18,fontWeight:'700',fontVariant:['tabular-nums']},
   libraryTreeEmpty: {fontSize:9.5,lineHeight:14,paddingHorizontal:10,paddingVertical:7},
   libraryTreeAdd: {minHeight:38,flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:5,marginTop:2},
-  libraryTreeAddText: {fontSize:10.5,lineHeight:13,fontWeight:'700'},
+  libraryTreeAddText: {fontSize:14,lineHeight:20,fontWeight:'700'},
   libraryMobileSourceButton: {minHeight:58,borderTopWidth:StyleSheet.hairlineWidth,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:'row',alignItems:'center',gap:10,paddingVertical:7},
   libraryMobileSourceKicker: {fontSize:8,lineHeight:10.5,fontWeight:'800',letterSpacing:1.15},
   libraryMobileSourceLabel: {fontSize:12.5,lineHeight:17,fontWeight:'600',marginTop:1},
@@ -9158,10 +9217,10 @@ const styles = StyleSheet.create({
   sourceTabCount: {fontSize:11,fontWeight:'600'},
   sourceTabMarker: {position:'absolute',left:0,right:0,bottom:1,height:2,borderRadius:2},
   sourceTabMarkerVertical: {position:'absolute',left:0,top:10,bottom:10,width:3,borderRadius:3},
-  shelfContent: {paddingHorizontal:18,paddingTop:10,paddingBottom:120,gap:32,maxWidth:1280,width:'100%',alignSelf:'center'},
+  shelfContent: {paddingHorizontal:18,paddingTop:10,paddingBottom:120,gap:16,maxWidth:1280,width:'100%',alignSelf:'center'},
   shelfContentPhone: {paddingHorizontal:16,paddingTop:8,paddingBottom:112,gap:26},
   shelfContentNarrow: {paddingHorizontal:14,gap:22},
-  shelfContentFold: {paddingHorizontal:24,paddingTop:10,gap:34},
+  shelfContentFold: {paddingHorizontal:24,paddingTop:10,gap:18},
   shelfContentWide: {paddingHorizontal:28,paddingTop:10,gap:34},
   shelfEditorialHeader: {flexDirection:'row',alignItems:'flex-start',gap:16,paddingTop:2,paddingBottom:0},
   shelfEditorialHeaderFold: {paddingTop:0},
@@ -9196,7 +9255,7 @@ const styles = StyleSheet.create({
   standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},
   standardPageSubtitlePhone: {fontSize:13,lineHeight:18},
   standardPageSubtitleLarge: {fontSize:16,lineHeight:23},
-  pageHeaderToolbar: {minHeight:44,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end'},
+  pageHeaderToolbar: {height:44,marginTop:0,flexDirection:'row',alignItems:'center',justifyContent:'flex-end'},
   pageHeaderToolbarStart: {justifyContent:'flex-start'},
   pageHeaderToolbarCenter: {justifyContent:'center'},
   pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},

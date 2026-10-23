@@ -1,5 +1,5 @@
 const fs=require('fs'),path=require('path'),crypto=require('crypto'),ts=require('typescript'),assert=require('assert/strict');
-const lock=JSON.parse(fs.readFileSync(path.join(__dirname,'../docs/scanner-vnext/CANONICAL_PROCESS_LOCK.json'))),file=ts.createSourceFile('App.tsx',fs.readFileSync(path.join(__dirname,'App.tsx'),'utf8').replace(/\r\n/g,'\n'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),seen={};
+const lock=JSON.parse(fs.readFileSync(path.join(__dirname,'../docs/scanner-vnext/CANONICAL_PROCESS_LOCK.json'))),file=ts.createSourceFile('App.tsx',require('../scripts/discovery-original-source.cjs')('mobile/App.tsx',fs.readFileSync(path.join(__dirname,'App.tsx'),'utf8')),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),seen={};
 function visit(node){
   if(ts.isFunctionDeclaration(node)&&lock.sha256[node.name?.text]){
     const name=node.name.text;

@@ -6,7 +6,7 @@ if (!suites.length) throw new Error('No mobile test suites found');
 const failed = [];
 for (const suite of suites) {
   console.log(`\n--- ${suite} ---`);
-  const result = spawnSync(process.execPath, [suite], {cwd: __dirname, stdio: 'inherit'});
+  const result = spawnSync(process.execPath, ['--unhandled-rejections=strict',suite], {cwd: __dirname, stdio: 'inherit',timeout:180000});
   if (result.error || result.status !== 0) failed.push(suite);
 }
 console.log(`\n${suites.length - failed.length}/${suites.length} mobile suites passed.`);

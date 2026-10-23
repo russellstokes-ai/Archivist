@@ -88,6 +88,14 @@ export function detectBubbleRegion(
     if(x>left)outside(pos-1);if(x<right)outside(pos+1);
     if(y>top)outside(pos-width);if(y<bottom)outside(pos+width);
   }
+  // Reject blank highlights without imposing a minimum word length or glyph
+  // shape: short dialogue, punctuation and joined lettering must still work.
+  let enclosedInk=0;
+  for(let y=top+pad;y<=bottom-pad;y++)for(let x=left+pad;x<=right-pad;x++){
+    const pos=y*width+x;
+    if(visited[pos]!==3&&pixels[pos*4+3]>=180&&lum(pixels[pos*4],pixels[pos*4+1],pixels[pos*4+2])<baseLum-65)enclosedInk++;
+  }
+  if(enclosedInk<2)return null;
   // Round dilation includes outline ink without bridging a whole concavity.
   // Bound the mask to the crop; no full-resolution source allocations.
   const maskW=right-left+1,maskH=bottom-top+1;
@@ -159,7 +167,7 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
   function regionFor(img:any,clientX:number,clientY:number,key:string){
     const rect=img.getBoundingClientRect();
     if(!rect.width||!rect.height||!img.naturalWidth||!img.naturalHeight)return null;
-    const maxAnalysis=520;
+    const maxAnalysis=900;
     const scale=Math.min(1,maxAnalysis/Math.max(img.naturalWidth,img.naturalHeight));
     const width=Math.max(8,Math.round(img.naturalWidth*scale));
     const height=Math.max(8,Math.round(img.naturalHeight*scale));
@@ -195,12 +203,13 @@ function installSpeechFocus(detector:typeof detectBubbleRegion){
     const sourceW=(region.right-region.left+1)*sx,sourceH=(region.bottom-region.top+1)*sy;
     if(sourceW<12||sourceH<12)return false;
 
-    const maxPixels=1600;
+    const maxPixels=2048;
     const outputScale=Math.min(1,maxPixels/Math.max(sourceW,sourceH));
     const outW=Math.max(1,Math.round(sourceW*outputScale));
     const outH=Math.max(1,Math.round(sourceH*outputScale));
     const canvas=document.createElement('canvas');canvas.width=outW;canvas.height=outH;
     const ctx=canvas.getContext('2d');if(!ctx)return false;
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
 
     const path=new Path2D();
     const xScale=outW/(region.right-region.left+1);

@@ -3,7 +3,7 @@ import type {ScannerDatabase} from './store';
 import {normalizeGenre} from './genre';
 import {rankCandidates,type Candidate,type SearchFields,type SearchCache,type SearchResult} from './search';
 export type WorkFields=SearchFields&Partial<Record<'genre'|'coverUri'|'description'|'publisher'|'narrator'|'publishedYear',string>>;
-export type MetadataWork={workId:string;revision:number;fields:WorkFields;manual:Record<string,boolean|undefined>;identityConfirmed:boolean;partIds:string[]};
+export type MetadataWork={workId:string;revision:number;fields:WorkFields;manual:Record<string,boolean|undefined>;identityConfirmed:boolean;partIds:string[];fieldSources?:Record<string,'embedded'|'filename'>;provenance?:Partial<Record<keyof WorkFields,string>>;identification?:{rung?:'R1'|'R2'|'R3'|'R4';provider:string;candidateId:string;conflicts:string[];selectedAt:number}};
 const fields=['title','author','series','seriesNumber','isbn','asin','language','genre','coverUri','description','publisher','narrator','publishedYear'] as const;
 const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw new Error('Metadata save cancelled');};
 function validate(value:MetadataWork){

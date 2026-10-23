@@ -7,5 +7,10 @@ const asset={assetId:'cover',documentId:'cover-document',name:'cover.png',source
  const manual=await reader.read(asset,{manualUri:'file:///private/manual.png'});assert.equal(manual.uri,'file:///private/manual.png');assert.equal(manual.manual,true);
  await assert.rejects(()=>new NativeArtworkReader({...port,async readArtwork(){return {...await port.readArtwork(),bytes:4194305};}}).read(asset),/Invalid/);
  const stop=new AbortController();await assert.rejects(()=>new NativeArtworkReader({...port,async readArtwork(){stop.abort();return port.readArtwork();}}).read(asset,{signal:stop.signal}),/cancel/i);assert.equal(closes,4);
+ let embeddedCalls=0;
+ const embedded=new NativeArtworkReader({...port,async readEmbeddedArtwork(scope,id,container){embeddedCalls++;assert.equal(id,asset.documentId);assert.equal(container,'m4b');return port.readArtwork();}});
+ assert.equal((await embedded.read(asset,{embeddedContainer:'m4b'})).state,'ready');assert.equal(embeddedCalls,1);
+ await assert.rejects(()=>reader.read(asset,{embeddedContainer:'cbz'}),/unavailable/);
+ assert.equal(closes,6,'Unsupported embedded readers close their scope too');
  console.log('PASS: native validated artwork adapter preserves manual references, bounds dimensions/bytes and closes cancelled scopes');
 })().catch(e=>{console.error(e);process.exitCode=1;});

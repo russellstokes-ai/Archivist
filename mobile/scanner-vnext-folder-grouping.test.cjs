@@ -3,7 +3,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
 const {groupCandidates}=require('./scannerVNext/grouping.ts');
 const assets=paths=>paths.map((relativePath,i)=>({assetId:String(i),sourceId:'library',relativePath,kind:'audio'}));
 const scan=paths=>groupCandidates(assets(paths));
-assert.equal(scan(['Novel/Opening.mp3','Novel/The journey.mp3','Novel/Ending.mp3']).length,1,'Unnumbered tracks share their book folder');
+assert.equal(scan(['Novel/Opening.mp3','Novel/The journey.mp3','Novel/Ending.mp3']).length,3,'Unnumbered files need independent identity evidence before merging');
 assert.equal(scan(['Novel/01.mp3','Novel/02.mp3']).length,1,'Numeric-only tracks group');
 assert.equal(scan(['Series/One/Opening.mp3','Series/Two/Opening.mp3']).length,2,'Separate books in a series stay separate');
 assert.equal(scan(['Author/First.m4b','Author/Second.m4b']).length,2,'Whole-book containers do not blindly merge');

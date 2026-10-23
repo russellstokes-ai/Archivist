@@ -50,8 +50,9 @@ export function groupCandidates(assets:GroupingAsset[],evidence:Record<string,Gr
     const clue=evidence[asset.assetId];const inferred=asset.kind==='audio'?pathEvidence(asset):{key:JSON.stringify(['asset',asset.assetId]),title:undefined,evidence:'unknown' as const,disc:undefined,track:undefined};
     const manual=clue?.provenance==='human_confirmed'&&clue.manualWorkId;
     const bibliographic=!manual&&clue?.title?.trim()&&clue.author?.trim()&&clue.provenance!=='unknown';
+    const fallbackKey=asset.kind==='audio'&&inferred.track===undefined&&inferred.disc===undefined?JSON.stringify(['asset',asset.assetId]):inferred.key;
     const key=manual?JSON.stringify(['manual',clue.manualWorkId,clue.manualEditionId??'unresolved-edition'])
-      :bibliographic?JSON.stringify(['bibliographic',asset.sourceId,asset.kind,normalize(clue.title!),normalize(clue.author!),clue.edition?.trim()?normalize(clue.edition):inferred.key]):inferred.key;
+      :bibliographic?JSON.stringify(['bibliographic',asset.sourceId,asset.kind,normalize(clue.title!),normalize(clue.author!),clue.edition?.trim()?normalize(clue.edition):inferred.key]):fallbackKey;
     let group=groups.get(key);
     if(!group){
       group={key,title:manual||bibliographic?clue?.title:inferred.title,author:clue?.author,priorWorkId:manual?clue?.manualWorkId:undefined,priorEditionId:manual?clue?.manualEditionId:undefined,parts:[],needsAttention:!manual,issues:[],evidence:manual?'manual':bibliographic?'bibliographic':inferred.evidence};

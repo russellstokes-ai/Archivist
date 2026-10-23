@@ -56,7 +56,16 @@ export async function createEmbeddedCopy(bytes:Uint8Array,format:'epub'|'cbz',fi
   else if(value){const node=format==='epub'?doc.createElementNS(dc,'dc:'+tag):doc.createElement(tag);node.textContent=value;parent.appendChild(node);}
  }
  const output=new JSZip();if(format==='epub')output.file('mimetype','application/epub+zip',{compression:'STORE'});
- for(const entry of entries){if(entry.name===target||format==='epub'&&entry.name==='mimetype')continue;if(entry.dir)output.file(entry.name,null,{dir:true,date:entry.date});else output.file(entry.name,await entry.async('uint8array'),{date:entry.date,comment:entry.comment});}
+ // Retain the loaded compressed entries. Re-inserting decompressed image bytes
+ // forced a full recompression of every comic page on every metadata save.
+ // JSZip 3 reuses a compressed block when its compression method is unchanged.
+ for(const entry of entries){
+  if(entry.name===target||format==='epub'&&entry.name==='mimetype')continue;
+  const magic=(entry as any)._data?.compression?.magic;
+  if(!entry.dir&&magic!=='\x00\x00'&&magic!=='\x08\x00')throw Error('Unsupported ZIP compression');
+  entry.options.compression=magic==='\x08\x00'?'DEFLATE':'STORE';
+  output.files[entry.name]=entry;
+ }
  output.file(target,new XMLSerializer().serializeToString(doc));
  const result=await output.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}});
  if(result.length>limit)throw Error('Metadata copy exceeds 64 MB');

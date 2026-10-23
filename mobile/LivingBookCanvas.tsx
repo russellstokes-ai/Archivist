@@ -193,6 +193,12 @@ function LivingBookInstance(props:LivingBookCanvasProps){
   },[ready,props.title,props.author,props.chapter,props.number,props.phase,props.direction,props.skipping,props.reduceMotion]);
 
   useEffect(()=>{
+    if(!ready||suspended.current)return;
+    const timer=setTimeout(()=>probe(generation.current),350);
+    return()=>clearTimeout(timer);
+  },[props.phase,props.workKey]);
+
+  useEffect(()=>{
     let live=true;
     void coverSource(props.coverUri,props.coverHeaders).then(source=>{
       if(live)inject('window.ArchivistLivingBook&&window.ArchivistLivingBook.setCover('+js(source)+','+js(props.coverMode||'fallback')+')');
@@ -204,10 +210,10 @@ function LivingBookInstance(props:LivingBookCanvasProps){
     return()=>{live=false;};
   },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);
 
-  return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none">
+  return <View accessibilityLabel="Living book artwork" style={styles.stage} pointerEvents="none" onLayout={()=>{if(ready&&!suspended.current)probe(generation.current);}}>
     {!ready&&<View style={styles.fallback}>{props.coverUri&&!coverFailed?<Image source={{uri:props.coverUri,headers:props.coverHeaders}} resizeMode="contain" onError={()=>setCoverFailed(true)} style={styles.fallbackImage}/>:<View style={styles.fallbackJacket}><Text style={styles.fallbackTitle}>{props.title}</Text><Text style={styles.fallbackAuthor}>{props.author}</Text></View>}</View>}
     <WebView key={reloadKey} ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}
-      bounces={false} overScrollMode="never" androidLayerType="hardware" style={[styles.web,!ready&&{opacity:0}]} containerStyle={styles.container}
+      bounces={false} overScrollMode="never" androidLayerType="software" style={[styles.web,!ready&&{opacity:0}]} containerStyle={styles.container}
       onLoadStart={()=>{
         if(reloadKey!==generation.current)return; // stale previous WebView
         failed.current=false; ++probeSequence.current; setReady(false);clearDeadline();

@@ -11,6 +11,23 @@ const rarMime = new Set(['application/x-rar-compressed','application/vnd.rar']);
 
 export function classifyAsset(input:{name:string;mimeType?:string;signature?:Uint8Array}):Disposition {
   const ext = input.name.toLowerCase().match(/\.([^./\\]+)$/)?.[1] || '';
+  if(input.name.startsWith('._')||/\.(?:nfo|part|partial|crdownload|download|tmp)$/i.test(input.name)||/^(?:thumbs\.db|desktop\.ini)$/i.test(input.name))return {state:'rejected',kind:'unknown',reason:'non-library-file',audiobookConfirmed:false};
+  const bytes=input.signature;
+  if(bytes?.length){
+   const ascii=(at:number,n:number)=>String.fromCharCode(...bytes.slice(at,at+n));
+   const found=(kind:AssetKind,container:string,state:Disposition['state']='candidate'):Disposition=>({kind,container,state,reason:'content-'+container,audiobookConfirmed:false});
+   if(ascii(0,5)==='%PDF-')return found('document','pdf','ambiguous');
+   if(ascii(0,3)==='ID3'||bytes[0]===255&&(bytes[1]&224)===224)return found('audio',ext==='aac'?'aac':'mp3');
+   if(ascii(0,4)==='fLaC')return found('audio','flac');
+   if(ascii(0,4)==='OggS')return found('audio',ascii(0,128).includes('OpusHead')?'opus':'ogg');
+   if(ascii(0,4)==='RIFF'&&ascii(8,4)==='WAVE')return found('audio','wav');
+   if(ascii(4,4)==='ftyp')return found('audio',ext==='m4b'?'m4b':'m4a','ambiguous');
+   if(ascii(0,4)==='Rar!')return found('comic','cbr');
+   if(bytes[0]===55&&bytes[1]===122&&bytes[2]===188&&bytes[3]===175&&bytes[4]===39&&bytes[5]===28)return found('comic','cb7','unsupported');
+   if(ascii(60,8)==='BOOKMOBI')return found('ebook','mobi','unsupported');
+   if(ascii(257,5)==='ustar')return found('comic','cbt');
+   if(ascii(0,2)==='PK')return ascii(0,512).includes('application/epub+zip')?found('ebook','epub'):found('archive','zip','ambiguous');
+  }
   const mime = (input.mimeType || '').split(';')[0].trim().toLowerCase();
   let kind:AssetKind='unknown';
   let state:Disposition['state']='unsupported';
@@ -40,7 +57,6 @@ export function classifyAsset(input:{name:string;mimeType?:string;signature?:Uin
       : true;
     if(!consistent){kind='unknown';state='ambiguous';reason='mime-extension-conflict';}
   }
-  const bytes = input.signature;
   if(bytes && bytes.length>=4 && state==='candidate' && ['comic','ebook'].includes(kind)){
     const zip=bytes[0]===0x50&&bytes[1]===0x4b&&((bytes[2]===3&&bytes[3]===4)||(bytes[2]===5&&bytes[3]===6));
     const rar=bytes[0]===0x52&&bytes[1]===0x61&&bytes[2]===0x72&&bytes[3]===0x21;

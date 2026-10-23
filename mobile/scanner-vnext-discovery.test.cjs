@@ -36,7 +36,7 @@ for(const [name,mimeType,state,kind] of cases) {
   if(kind==='audio') assert.equal(got.audiobookConfirmed,false);
 }
 assert.equal(classifyAsset({name:'issue.cbz',mimeType:'application/zip',signature:new Uint8Array([0,0,0,0,0,0,0,0])}).state,'ambiguous');
-assert.equal(classifyAsset({name:'issue.cbz',mimeType:'application/zip',signature:new Uint8Array([80,75,3,4])}).state,'candidate');
+assert.equal(classifyAsset({name:'issue.cbz',mimeType:'application/zip',signature:new Uint8Array([80,75,3,4])}).state,'ambiguous');
 
 function store() {
   return {saved:new Map(),checkpoints:[],issues:[],

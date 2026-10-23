@@ -12,6 +12,9 @@ for(const version of [3,4]){
  assert.equal(got.fields.title,'A chapter');assert.equal(got.fields.album,'A novel');assert.equal(got.fields.author,'An author');assert.equal(got.fields.genre,'Fantasy');assert.equal(got.fields.track,2);assert.equal(got.fields.disc,1);assert.equal(got.status,'parsed');assert.equal(got.provenance,'embedded');
 }
 const unicode=id3({TIT2:'Café 日本語'});assert.equal(parseHeaderClues(unicode,'mp3').fields.title,'Café 日本語');
+const dated=parseHeaderClues(id3({TDRC:'2007-10-22',TPUB:'Fixture Press',TLAN:'eng'}),'mp3');
+assert.equal(dated.fields.publishedYear,'2007');assert.equal(dated.fields.publisher,'Fixture Press');assert.equal(dated.fields.language,'eng');
+assert.equal(parseHeaderClues(id3({TDRC:'not a date'}),'mp3').fields.publishedYear,undefined);
 const utf16=id3({TIT2:'xxxxxxxxxxxx'});utf16[20]=1;Buffer.from([255,254,66,0,111,0,111,0,107,0,0,0]).copy(utf16,21);assert.equal(parseHeaderClues(utf16,'mp3').fields.title,'Book');
 const truncated=id3({TIT2:'A novel'}).subarray(0,22);assert.equal(parseHeaderClues(truncated,'mp3').status,'partial');
 const oversized=id3({TIT2:'A novel'});oversized.writeUInt32BE(0x7fffffff,14);assert.equal(parseHeaderClues(oversized,'mp3').status,'partial');

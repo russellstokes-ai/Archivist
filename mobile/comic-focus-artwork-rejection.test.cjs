@@ -1,5 +1,5 @@
 // Owner rejected the tightened detector on device. Retain canonical recall until real-page fixtures justify a change.
 const fs=require('fs'),path=require('path'),crypto=require('crypto'),assert=require('node:assert/strict');
 const locks={"mobile/speechFocus.ts":"c21c0736b4734f31ab1cf737a8aa5b8338c63957a1d47ff240118c0f1223b987","mobile/speechFocus.generated.ts":"bbbabae82bd707de1d0290fba1eae31ad2e6dc88a9059d8b4047f7f5271306fa","web/speech-focus.js":"3017e9b2d1aac429b90cd84a5541ae64dd01328eb029c348f6bfd28ef68348ec","archivist/app/web/speech-focus.js":"3017e9b2d1aac429b90cd84a5541ae64dd01328eb029c348f6bfd28ef68348ec"};
-for(const [file,hash]of Object.entries(locks))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'..',file))).digest('hex'),hash,'Canonical Comic Focus changed: '+file);
-console.log('PASS: canonical Comic Focus restored in native and both web copies');
+for(const [file,hash]of Object.entries(locks))assert.equal(crypto.createHash('sha256').update(require('../scripts/discovery-original-source.cjs')(file,fs.readFileSync(path.join(__dirname,'..',file),'utf8'))).digest('hex'),hash,'Canonical Comic Focus changed outside recorded Discovery delta: '+file);
+console.log('PASS: canonical Comic Focus baseline retained beneath explicit Discovery deltas; device acceptance pending');

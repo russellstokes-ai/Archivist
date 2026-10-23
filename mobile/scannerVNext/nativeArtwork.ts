@@ -6,16 +6,18 @@ export interface NativeArtworkPort {
  cancelScope(scope:string):Promise<unknown>;
  readArtwork(scope:string,documentId:string):Promise<NativeArtwork>;
  readPrivateArtwork?(scope:string,fileUri:string):Promise<NativeArtwork>;
+ readEmbeddedArtwork?(scope:string,documentId:string,container:string):Promise<NativeArtwork>;
 }
 const check=(signal?:AbortSignal)=>{if(signal?.aborted)throw new Error('Artwork request cancelled');};
 export class NativeArtworkReader {
  constructor(private native:NativeArtworkPort){}
- async read(asset:ClueAsset,options:{manualUri?:string;privateUri?:string;signal?:AbortSignal}={}):Promise<ArtworkResult>{
+ async read(asset:ClueAsset,options:{manualUri?:string;privateUri?:string;embeddedContainer?:string;signal?:AbortSignal}={}):Promise<ArtworkResult>{
   const privateUri=options.manualUri??options.privateUri;
   check(options.signal);if(privateUri&&(!privateUri.startsWith('file:///')||privateUri.length>2048||!this.native.readPrivateArtwork))throw new Error('Private manual artwork required');
   const scope=await this.native.beginScope(asset.source.rootUri);let closing:Promise<unknown>|undefined;const close=()=>closing??(closing=this.native.cancelScope(scope.scope));const abort=()=>{void close().catch(()=>{});};options.signal?.addEventListener('abort',abort,{once:true});
   try{
-   check(options.signal);const value=privateUri?await this.native.readPrivateArtwork!(scope.scope,privateUri):await this.native.readArtwork(scope.scope,asset.documentId);check(options.signal);
+   check(options.signal);if(options.embeddedContainer&&!this.native.readEmbeddedArtwork)throw new Error('Embedded artwork reader unavailable');
+   const value=privateUri?await this.native.readPrivateArtwork!(scope.scope,privateUri):options.embeddedContainer?await this.native.readEmbeddedArtwork!(scope.scope,asset.documentId,options.embeddedContainer):await this.native.readArtwork(scope.scope,asset.documentId);check(options.signal);
    if(value.state!=='ok')throw new Error('Native artwork unavailable');
    if(!value.uri?.startsWith('file:///')||value.uri.length>2048||!value.sha256||!/^[a-f0-9]{64}$/.test(value.sha256)||!Number.isSafeInteger(value.bytes)||value.bytes!<1||value.bytes!>4194304||!Number.isSafeInteger(value.width)||!Number.isSafeInteger(value.height)||value.width!<64||value.height!<64||value.width!*value.height!>16777216)throw new Error('Invalid native artwork');
    return {state:'ready',uri:options.manualUri??value.uri,manual:!!options.manualUri,bytes:value.bytes,width:value.width,height:value.height};

@@ -9,9 +9,9 @@ export async function discoverSource(source:Source,access:SourceAccess,store:Dis
   if(!source.id||!source.rootUri)throw new Error('Selected source grant is required');
   if(!options.signal?.aborted)await store.saveSource(source);
   let cursor=options.cursor??null;
-  const seenDocuments=new Set<string>();
+  const seenDocuments=new Set<string>(options.resume?.seen??[]);
   const seenCursors=new Set<string|null>();
-  const result:DiscoverySummary={visited:0,accounted:0,candidates:0,ambiguous:0,unsupported:0,unreadable:0,rejected:0,directories:0,duplicateEntries:0,complete:false,reason:'',nextCursor:cursor};
+  const result:DiscoverySummary={visited:options.resume?.visited??0,accounted:options.resume?.accounted??0,candidates:0,ambiguous:0,unsupported:0,unreadable:0,rejected:0,directories:0,duplicateEntries:0,complete:false,reason:'',nextCursor:cursor};
   const stop=async(reason:string,detail='')=>{
     result.reason=reason;result.nextCursor=cursor;
     if(reason!=='cancelled'&&reason!=='entry-limit')await store.saveIssue(source.id,{reason,detail,cursor});

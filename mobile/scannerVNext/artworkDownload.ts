@@ -1,5 +1,5 @@
 type ResponsePort={ok:boolean;status:number;headers:{get(name:string):string|null};body:{getReader():{read():Promise<{done:boolean;value?:Uint8Array}>;cancel():Promise<unknown>;releaseLock():void}}|null;url?:string};
-export function approvedArtworkUrl(url:string){try{const parsed=new URL(url);return parsed.protocol==='https:'&&!parsed.username&&!parsed.password&&['covers.openlibrary.org','books.google.com','books.googleusercontent.com'].includes(parsed.hostname);}catch{return false;}}
+export function approvedArtworkUrl(url:string){try{const parsed=new URL(url);return parsed.protocol==='https:'&&!parsed.username&&!parsed.password&&['covers.openlibrary.org','books.google.com','books.googleusercontent.com','metron.cloud','static.metron.cloud','m.media-amazon.com','images-na.ssl-images-amazon.com','inventaire.io','www.comics.org','files1.comics.org','files2.comics.org'].includes(parsed.hostname);}catch{return false;}}
 export async function readArtworkBytes(response:ResponsePort,signal?:AbortSignal){
  const check=()=>{if(signal?.aborted)throw Error('Artwork download cancelled');};check();if(!response.body)throw Error('Artwork transport unavailable');const reader=response.body.getReader();let complete=false;
  try{

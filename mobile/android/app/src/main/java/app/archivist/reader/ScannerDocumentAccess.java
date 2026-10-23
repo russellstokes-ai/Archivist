@@ -83,6 +83,17 @@ public final class ScannerDocumentAccess {
   public ScannerArtworkReader.Artwork readArtwork(Uri root,String id,java.io.File cache,ScannerTaskPool.Token token)throws Exception{
     return ScannerArtworkReader.read(t->openFile(root,id,t),cache,token);
   }
+  public ScannerArtworkReader.Artwork readEmbeddedArtwork(Uri root,String id,String container,java.io.File cache,ScannerTaskPool.Token token)throws Exception{
+    byte[] bytes;
+    if(java.util.Arrays.asList("epub","cbz","zip").contains(container))bytes=ScannerArchiveReader.readCover(t->openFile(root,id,t),token);
+    else if(java.util.Arrays.asList("mp3","m4a","m4b","aac","flac","ogg","opus","wav","wma").contains(container)){
+      android.media.MediaMetadataRetriever reader=new android.media.MediaMetadataRetriever();
+      try(java.io.FileInputStream input=openFile(root,id,token)){token.check();reader.setDataSource(input.getFD());token.check();bytes=reader.getEmbeddedPicture();token.check();}
+      finally{reader.release();}
+    }else throw new java.io.IOException("Embedded cover reader unavailable");
+    if(bytes==null||bytes.length>4194304)throw new java.io.IOException("Embedded cover unavailable or over budget");
+    final byte[] image=bytes;return ScannerArtworkReader.read(t->new java.io.ByteArrayInputStream(image),cache,token);
+  }
   private static String text(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getString(index);}
   private static Long number(Cursor cursor,String column){int index=cursor.getColumnIndex(column);return index<0||cursor.isNull(index)?null:cursor.getLong(index);}
 }

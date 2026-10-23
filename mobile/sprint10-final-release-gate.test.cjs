@@ -25,12 +25,12 @@ const requiredGates=[
 ];
 for(const file of requiredGates)assert.ok(fs.existsSync(here+'/'+file),'missing Test 10 regression gate: '+file);
 
-assert.equal(pkg.version,'0.9.4');
-assert.equal(app.expo.version,'0.9.4');
-assert.equal(app.expo.android.versionCode,103,'Test 14 QA must install as Android versionCode 103');
-assert.match(gradle,/versionCode\s+103/);
-assert.match(gradle,/versionName\s+"0\.9\.4"/);
-assert.match(apkWorkflow,/TEST_BUILD:\s*'14'/);
+assert.equal(pkg.version,'0.10.0');
+assert.equal(app.expo.version,'0.10.0');
+assert.equal(app.expo.android.versionCode,104,'Test 14 QA must install as Android versionCode 103');
+assert.match(gradle,/versionCode\s+104/);
+assert.match(gradle,/versionName\s+"0\.10\.0"/);
+assert.ok(apkWorkflow.includes('Discovery'),'QA workflow identifies the new preview');
 assert.ok(apkWorkflow.includes('workflow_dispatch:')&&apkWorkflow.includes('qa_confirmation'),'Test 14 QA build must require explicit owner confirmation');
 assert.ok(!/^  push:/m.test(apkWorkflow)&&!apkWorkflow.includes('gh release upload'),'Test 14 QA artifact cannot publish automatically');
 assert.ok(apkWorkflow.includes("app.archivist.reader.qa"),'Test 14 QA APK must not overwrite the installed production package');

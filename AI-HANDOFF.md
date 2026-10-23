@@ -1,5 +1,9 @@
 # Archivist AI Handoff
 
+## Current Discovery Preview candidate
+
+Read [Discovery Preview QA handoff](docs/v1/DISCOVERY_PREVIEW_HANDOFF.md) for the current branch, validation and explicit remaining limitations. Android validation and APK publication are still pending.
+
 **Purpose:** Durable context for any future ChatGPT / AI development session working on Archivist.
 
 ## Active mobile repair handoff — 20 October 2026

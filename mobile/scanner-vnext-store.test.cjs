@@ -43,9 +43,16 @@ function sqlite(file){
     assert.equal((await db.getFirstAsync('SELECT name FROM scanner_vnext_sources WHERE id=?','a')).name,'Renamed source');
     await db.close();db=sqlite(file);store=await createScannerStore(db,randomUUID);
     assert.deepEqual(await store.loadCheckpoint('a'),{cursor:'page-2',visited:1,accounted:1,complete:false});
+    assert.deepEqual(await store.beginScan('a'),{checkpoint:{cursor:'page-2',visited:1,accounted:1,complete:false},seen:['doc-1']},'Restart resumes only an atomic checkpoint with its committed seen-set');
     await store.saveBatch('a',[{...entry,name:'renamed.mp3',relativePath:'renamed.mp3'}],{cursor:null,visited:1,accounted:1,complete:true});
     assert.equal((await store.loadAsset('a','doc-1')).assetId,original.assetId);
     assert.equal((await store.loadAsset('a','doc-1')).relativePath,'renamed.mp3');
+    assert.deepEqual(await store.beginScan('a'),{checkpoint:null,seen:[]},'A completed scan starts a fresh seen-set');
+    assert.equal(await store.loadCheckpoint('a'),null);
+    assert.equal((await store.loadAsset('a','doc-1')).assetId,original.assetId,'Starting discovery never deletes the existing catalogue');
+    await db.runAsync('INSERT INTO scanner_vnext_checkpoints VALUES(?,?)','a',JSON.stringify({cursor:'legacy-page',visited:7,accounted:7,complete:false}));
+    assert.deepEqual(await store.beginScan('a'),{checkpoint:null,seen:[]},'An old checkpoint without committed IDs must restart safely');
+    await store.saveBatch('a',[],{cursor:null,visited:1,accounted:1,complete:true});
     await store.saveSource({id:'b',rootUri:'content://b',name:'B'});
     await store.saveBatch('b',[entry],{cursor:null,visited:1,accounted:1,complete:true});
     assert.notEqual((await store.loadAsset('b','doc-1')).assetId,original.assetId);

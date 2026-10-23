@@ -51,6 +51,11 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
     java.io.File cache=new java.io.File(getReactApplicationContext().getCacheDir(),"scanner-vnext-artwork");
     clues.submit(scopeId,token->{check(scope,token);return documents.readArtwork(scope.root,documentId,cache,token);},result->resolve(scope,result,promise));
   }
+  @ReactMethod public void readEmbeddedArtwork(String scopeId,String documentId,String container,Promise promise){
+    Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
+    java.io.File cache=new java.io.File(getReactApplicationContext().getCacheDir(),"scanner-vnext-artwork");
+    clues.submit(scopeId,token->{check(scope,token);return documents.readEmbeddedArtwork(scope.root,documentId,container,cache,token);},result->resolve(scope,result,promise));
+  }
   @ReactMethod public void readPrivateArtwork(String scopeId,String fileUri,Promise promise){
     Scope scope=scopes.get(scopeId);if(scope==null){promise.reject("scanner-scope-cancelled","Scanner scope is closed");return;}
     java.io.File cache=new java.io.File(getReactApplicationContext().getCacheDir(),"scanner-vnext-artwork");
@@ -77,7 +82,7 @@ public final class ArchivistScannerModule extends ReactContextBaseJavaModule {
     }else if("ok".equals(state)&&result.value instanceof ScannerArtworkReader.Artwork){
       ScannerArtworkReader.Artwork value=(ScannerArtworkReader.Artwork)result.value;output.putString("uri",value.uri);output.putString("sha256",value.sha256);output.putInt("bytes",value.bytes);output.putInt("width",value.width);output.putInt("height",value.height);
     }else if("ok".equals(state)&&result.value instanceof ScannerArchiveReader.Clues){
-      ScannerArchiveReader.Clues value=(ScannerArchiveReader.Clues)result.value;output.putString("status",value.status);output.putString("reason",value.reason);output.putInt("bytesRead",(int)value.bytesRead);WritableMap fields=Arguments.createMap();for(Map.Entry<String,String> field:value.fields.entrySet())fields.putString(field.getKey(),field.getValue());output.putMap("fields",fields);output.putString("provenance","embedded");
+      ScannerArchiveReader.Clues value=(ScannerArchiveReader.Clues)result.value;output.putString("status",value.status);output.putString("reason",value.reason);output.putInt("bytesRead",(int)value.bytesRead);WritableMap fields=Arguments.createMap();for(Map.Entry<String,String> field:value.fields.entrySet())fields.putString(field.getKey(),field.getValue());output.putMap("fields",fields);output.putString("provenance","embedded");output.putString("container",value.container);
     }else if("ok".equals(state)&&result.value instanceof ScannerBoundedIO.Header){
       ScannerBoundedIO.Header header=(ScannerBoundedIO.Header)result.value;output.putString("base64",Base64.encodeToString(header.bytes,Base64.NO_WRAP));output.putInt("bytesRead",header.bytes.length);output.putBoolean("budgetReached",header.budgetReached);output.putString("metadataStatus",header.offset<0?"header-only":"bounded-range");if(header.offset>=0)output.putDouble("offset",header.offset);
     }

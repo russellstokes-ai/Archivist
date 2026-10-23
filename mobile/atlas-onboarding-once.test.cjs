@@ -11,10 +11,10 @@ const atlas=src.slice(atlasStart,atlasEnd>atlasStart?atlasEnd:undefined);
 assert(first>=0&&end>first&&atlasStart>=0,'The original onboarding and Atlas components must remain');
 assert(onboarding.includes('if(!onboardingReady||onboardingDone)return null;'),
  'Previously completed onboarding must not flash on every login / launch');
-assert(onboarding.includes('Atlas includes published local books after metadata and cover review.')&&onboarding.includes('Library source and folder filters also apply.'),
+assert(onboarding.includes('Atlas reflects your library and the available metadata.')&&onboarding.includes('Source and folder filters also apply.'),
  'Atlas explanation belongs inside the original first-run onboarding, not Atlas');
 assert(onboarding.includes('function OnboardingGuide()')&&onboarding.includes('if (onboardingDone) return null;')&&
-       onboarding.includes('Add library folders')&&onboarding.includes('Prepare library')&&onboarding.includes('Review book details'),
+       onboarding.includes('Scan library')&&onboarding.includes('Identify &amp; populate')&&onboarding.includes('Complete missing details'),
  'The original scanner setup three-step flow stays intact');
 assert(!atlas.includes('Atlas only includes fully reviewed')&&!atlas.includes('No completed titles are ready for Atlas yet')&&
  !atlas.includes('Your catalogue contains published works')&&!atlas.includes('Published titles are hidden by Library filters'),

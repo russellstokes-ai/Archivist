@@ -8,12 +8,12 @@ const apkWorkflow=fs.readFileSync(__dirname+'/../.github/workflows/android-apk.y
 const androidWorkflow=fs.readFileSync(__dirname+'/../.github/workflows/android-check.yml','utf8');
 const source=fs.readFileSync(__dirname+'/App.tsx','utf8');
 
-assert.equal(pkg.version,'0.9.4');
-assert.equal(app.expo.version,'0.9.4');
-assert.equal(app.expo.android.versionCode,103);
-assert.match(gradle,/versionCode\s+103/);
-assert.match(gradle,/versionName\s+"0\.9\.4"/);
-assert.match(apkWorkflow,/TEST_BUILD:\s*'14'/);
+assert.equal(pkg.version,'0.10.0');
+assert.equal(app.expo.version,'0.10.0');
+assert.equal(app.expo.android.versionCode,104);
+assert.match(gradle,/versionCode\s+104/);
+assert.match(gradle,/versionName\s+"0\.10\.0"/);
+assert.ok(apkWorkflow.includes('Discovery'),'QA workflow identifies the new preview');
 assert.ok(apkWorkflow.includes('workflow_dispatch:')&&apkWorkflow.includes('qa_confirmation'),'Test 14 QA APK must remain buildable through an explicitly confirmed manual workflow');
 assert.ok(apkWorkflow.includes('inputs.publish_direct_apk == true')&&apkWorkflow.includes('--prerelease --latest=false')&&!/^  push:/m.test(apkWorkflow),'A test APK must never be automatically published or replace the production app');
 assert.ok(apkWorkflow.includes("app.archivist.reader.qa"),'Device acceptance APK must have a separate QA application ID');

@@ -39,17 +39,17 @@ const partiallyPublished={...staged('partial'),localWork:{...staged('partial').l
  {scannerWorkId:'scanner-partial',scannerPublished:true,format:'Audio'},
  {scannerWorkId:'scanner-partial',scannerPublished:false,format:'Audio'},
 ]}};
-assert.equal(atlasEligible(publishedButReview),false,'Stale publication must not bypass Needs Review');
-assert.equal(atlasEligible(publishedNoCover),false,'Atlas cannot expose published work before cover completes');
-assert.equal(atlasEligible(partiallyPublished),false,'A single accepted chapter cannot publish all chapters');
-assert.equal(atlasSelectPublished([publishedButReview,publishedNoCover,partiallyPublished]).length,0);
-assert.deepEqual(atlasSelectPublished(all).map(x=>x.title),['Work published','Legacy migrated']);
-assert.equal(atlasEligible(reviewed),false,'unpublished scanner work cannot enter Atlas');
-assert.equal(atlasEligible(brokenFlag),false,'missing scanner flag must not be treated as legacy');
+assert.equal(atlasEligible(publishedButReview),true,'Review remains available without hiding discovered books from Atlas');
+assert.equal(atlasEligible(publishedNoCover),true,'Cover acquisition must not hide the work from Atlas');
+assert.equal(atlasEligible(partiallyPublished),true,'Atlas counts the logical work independently of chapter publication');
+assert.equal(atlasSelectPublished([publishedButReview,publishedNoCover,partiallyPublished]).length,3);
+assert.deepEqual(atlasSelectPublished(all).map(x=>x.title),['Work published','Work review','Legacy migrated','Work unknown']);
+assert.equal(atlasEligible(reviewed),true,'Discovered scanner works enter Atlas before enrichment');
+assert.equal(atlasEligible(brokenFlag),true,'Scanner identity keeps a discovered work visible');
 assert.equal(atlasEligible(migrated),true,'fully reviewed legacy works remain visible');
 assert.equal(atlasEligible(missingCover),false,'incomplete legacy metadata must remain unexposed');
 assert.deepEqual(atlasSourceAudit(all,'all'),{
-  sourceWorks:6,local:6,localPublished:2,localUnpublished:4,downloaded:0,remote:0,publishedVisible:2,
+  sourceWorks:6,local:6,localPublished:4,localUnpublished:2,downloaded:0,remote:0,publishedVisible:4,
 });
 
 const multipart={...staged('multipart','Audio'),localWork:{
@@ -74,7 +74,7 @@ assert.equal(mixed.length,1,'remote + offline are one logical title');
 assert.equal(mixed[0].source,'downloaded','usable offline work wins when server inaccessible');
 const atlasWorks=atlasSelectPublished([...all,sourceWork,download]);
 const graphs=buildAtlasUniverse(atlasWorks,[],[],120);
-assert.equal(graphs.nodes.filter(n=>n.kind==='work').length,3);
+assert.equal(graphs.nodes.filter(n=>n.kind==='work').length,5);
 assert.ok(graphs.nodes.some(n=>n.kind==='genre'&&n.label==='Unclassified'),
   'missing genre is categorized, never excluded');
 const group=[
@@ -82,7 +82,7 @@ const group=[
   atlasBreakdown(atlasWorks,w=>w.format||'Not recorded',()=> '#B99A68'),
   atlasBreakdown(atlasWorks,w=>w.publishedYear?String(w.publishedYear):'Not recorded',()=> '#B99A68'),
 ];
-assert.deepEqual(group.map(g=>g.reduce((sum,entry)=>sum+entry.count,0)),[3,3,3],
+assert.deepEqual(group.map(g=>g.reduce((sum,entry)=>sum+entry.count,0)),[5,5,5],
   'genre, format and publication-year rings share the same published logical-book universe');
 assert.ok(group[2].some(e=>e.label==='Not recorded'),'missing year must be counted');
-console.log('PASS: Atlas matches published logical Library works, keeps complete legacy catalogues, blocks staged/unreviewed, supports all three rings and offline dedupe');
+console.log('PASS: Atlas matches published logical Library works, keeps complete legacy catalogues, includes discovered works awaiting enrichment, supports all three rings and offline dedupe');

@@ -2,11 +2,8 @@ import {dedupeForAll, matchesSource, type LibrarySource, type WorkSource} from '
 
 /**
  * Atlas's source boundary. It must use the same logical works as Library/Shelf,
- * but never promote staged scanner files before explicit publication.
- *
- * Legacy catalogues predate scannerPublished. Their fully reviewed, artwork-
- * complete works may enter Atlas; missing/malformed staged publication flags
- * are not silently treated as published.
+ * including discovered items while Assist is still filling their details.
+ * Legacy catalogues retain their existing eligibility rules.
  */
 export type AtlasCandidate = {
   source: WorkSource;
@@ -38,6 +35,7 @@ export function atlasEligible<T extends AtlasCandidate>(work:T):boolean {
   const local=work.localWork;
   if(!local || !local.tracks?.length)return false;
   const staged=local.tracks.some(track=>typeof track.scannerWorkId==='string'&&!!track.scannerWorkId.trim());
+  if(staged)return !!String(local.title||work.title).trim()&&recognisedFormats.has(local.format||work.format);
   // A published flag alone can be stale after a metadata edit, or only one
   // chapter of a multi-file work may have been accepted. Both cases must
   // remain in Needs Review, never appear prematurely in Atlas.
@@ -47,12 +45,6 @@ export function atlasEligible<T extends AtlasCandidate>(work:T):boolean {
     !!String(local.coverUri||work.coverUri||'').trim() &&
     recognisedFormats.has(local.format||work.format);
   if(!complete)return false;
-  if(staged){
-    // Work-level publication is all-or-nothing: every scanner chapter must
-    // have explicit current publication, not a single old accepted member.
-    return local.tracks.every(track=>typeof track.scannerWorkId==='string' &&
-      !!track.scannerWorkId.trim() && track.scannerPublished===true);
-  }
   // Historic approved libraries had no publication flag; retain complete
   // reviewed legacy works without modifying the canonical scanner.
   return true;

@@ -12,8 +12,8 @@ const messages:Record<string,string>={
 };
 export function currentReview(work:MetadataWork,issues:string[]=[],staged:string[]=[]):string[]{
  const reasons=issues.filter(x=>!scanMetadata.has(x));
- if(!work.identityConfirmed)reasons.push('Confirm the book or comic details to approve this book’s identity and folder grouping.');
- if(!hasGenre(work.fields.genre))reasons.push(work.fields.genre?'Choose a recognised genre, such as Science Fiction, History or Humour/Comedy. The current label is not recognised.':'Assist has not found a reliable genre yet.');
- reasons.push(...staged.filter(x=>!['identity-needs-review','meaningful-genre-required'].includes(x)));
+ if(!work.identityConfirmed)reasons.push('Add a title and creator, or a comic series, issue and publisher, to help Assist identify this item.');
+ // Missing enrichment is an automatic retry state, not a user identification task.
+ reasons.push(...staged.filter(x=>!['identity-needs-review','meaningful-genre-required','artwork-not-ready'].includes(x)));
  return [...new Set(reasons.map(x=>messages[x]??x.replace(/-/g,' ')))];
 }

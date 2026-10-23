@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {stripTypeScriptTypes}=require('node:module');
-const source=stripTypeScriptTypes(fs.readFileSync(__dirname+'/speechFocus.ts','utf8')).replace(/^import .*speechFocus.generated.*\n/m,'').replaceAll('export function','function');
+const source=stripTypeScriptTypes(fs.readFileSync(__dirname+'/speechFocus.ts','utf8')).replace(/^import .*speechFocus.generated.*\r?\n/m,'').replaceAll('export function','function');
 const generated=stripTypeScriptTypes(fs.readFileSync(__dirname+'/speechFocus.generated.ts','utf8')).replace('export const','const');
 const {detectBubbleRegion,speechFocusBrowserSource}=vm.runInNewContext(generated+'\n'+source+';({detectBubbleRegion,speechFocusBrowserSource})');
 
@@ -120,6 +120,11 @@ for(const item of corpus){
   const tiny=image(100,100,50,50,50);
   rectangle(tiny,100,48,48,53,53,250,20,1);
   assert.equal(detectBubbleRegion(tiny,100,100,50,50),null,'tiny highlight should not be treated as a speech bubble');
+  const blank=image(180,120,50,50,50);
+  rectangle(blank,180,35,30,110,78,245,20,3);
+  assert.equal(detectBubbleRegion(blank,180,120,65,50),null,'A large enclosed blank artwork highlight is not dialogue');
+  textBlock(blank,180,68,48,70,53,25);
+  assertBounded(detectBubbleRegion(blank,180,120,65,50),180,120,'Short punctuation dialogue retains canonical recall');
 }
 
 const browser=speechFocusBrowserSource();
@@ -214,7 +219,7 @@ const browser=speechFocusBrowserSource();
 assert(browser.includes('speech-focus-overlay'));
 assert(browser.includes('getImageData'));
 assert(browser.includes('Path2D'));
-assert(browser.includes('1600'),'display crop should be bounded while retaining high-resolution source pixels');
+assert(browser.includes('2048'),'display crop should be bounded while retaining high-resolution source pixels');
 assert(browser.includes('Close enlarged speech bubble'),'enlarged bubble must be keyboard/screen-reader dismissible');
 
 // Motion lifecycle with a controllable animation clock (no timing sleeps).

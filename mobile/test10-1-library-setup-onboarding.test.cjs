@@ -9,14 +9,14 @@ assert.ok(app.includes("setLibraryPreparedSignature('')")&&app.includes("complet
 assert.ok(app.includes("setPersistedJSON(librarySetupPreparedKey,{signature,completedAt:new Date().toISOString()})"),'only a completed metadata pipeline may unlock organisation');
 
 assert.ok(app.includes('LIBRARY SETUP'),'Shelf onboarding must be a dedicated Library Setup journey');
-assert.ok(app.includes('>Add library folders<'),'step 1 must support device and server library folders');
+assert.ok(app.includes('>Scan library<'),'step 1 must support device and server library folders');
 assert.ok(app.includes("hasFolder?'Add another device folder':addLocalFolderShortLabel"),'step 1 must keep an Add another device folder action after the first local source is selected');
 assert.ok(app.includes("Step 1 only collects sources"),'adding a folder must not automatically start the heavy preparation scan');
 assert.ok(app.includes('if (onboardingDone) return null;')&&!app.includes('if (session || recoverableSession || onboardingDone) return null;'),'connecting a server must not dismiss onboarding before folders are chosen');
 assert.ok(app.includes('const hasSource = hasFolder || hasServerFolders')&&app.includes("hasServer&&owner?<View style={styles.shelfSetupAction}"),'onboarding must support local folders, server folders, or both');
 assert.ok(app.includes("inputRange:[0,.5,1],outputRange:[1,1.045,1]"),'the first folder CTA should pulse subtly while respecting reduced motion');
-assert.ok(app.includes('>Prepare library<'),'step 2 must be Prepare library');
-assert.ok(app.includes('>Review book details<'),'step 3 must be metadata review');
+assert.ok(app.includes('>Identify &amp; populate<'),'step 2 must be Identify &amp; populate');
+assert.ok(app.includes('>Complete missing details<'),'step 3 must be metadata review');
 assert.ok(app.includes("Available when preparation finishes."),'Step 3 must stay quiet and unavailable while preparation is incomplete');
 assert.ok(app.includes('disabled={busy||localBooks.length===0||!libraryPreparationReady}'),'sorting preview must be gated by completed preparation');
 assert.ok(app.includes('disabled={busy||selectedReady.length===0||!libraryPreparationReady}'),'sorting apply must be gated by completed preparation');

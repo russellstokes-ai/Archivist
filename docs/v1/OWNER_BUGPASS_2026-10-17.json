@@ -78,9 +78,17 @@
         {
           "old": "androidLayerType=\"software\"",
           "new": "androidLayerType=\"hardware\""
+        },
+        {
+          "old": "      phase:props.phase,direction:props.direction,skipping:props.skipping,reduceMotion:props.reduceMotion,\n    })+')');\n  },[ready,props.title,props.author,props.chapter,props.number,props.phase,props.direction,props.skipping,props.reduceMotion]);\n\n  useEffect(()=>{\n    let live=true;\n    void coverSource(props.coverUri,props.coverHeaders).then(source=>{\n      if(live)inject('window.ArchivistLivingBook&&window.ArchivistLivingBook.setCover('+js(source)+','+js(props.coverMode||'fallback')+')');\n    }).catch(()=>{\n      // Failed optional cover reads must never create unhandled JS rejections.\n",
+          "new": "      phase:props.phase,direction:props.direction,skipping:props.skipping,reduceMotion:props.reduceMotion,\n    })+')');\n  },[ready,props.title,props.author,props.chapter,props.number,props.phase,props.direction,props.skipping,props.reduceMotion]);\n\n  useEffect(()=>{\n    if(!ready||suspended.current)return;\n    const timer=setTimeout(()=>probe(generation.current),350);\n    return()=>clearTimeout(timer);\n  },[props.phase,props.workKey]);\n\n  useEffect(()=>{\n    let live=true;\n    void coverSource(props.coverUri,props.coverHeaders).then(source=>{\n      if(live)inject('window.ArchivistLivingBook&&window.ArchivistLivingBook.setCover('+js(source)+','+js(props.coverMode||'fallback')+')');\n    }).catch(()=>{\n      // Failed optional cover reads must never create unhandled JS rejections.\n"
+        },
+        {
+          "old": "      if(live)inject('window.ArchivistLivingBook&&window.ArchivistLivingBook.setCover(\"\",'+js(props.coverMode||'fallback')+')');\n    });\n    return()=>{live=false;};\n  },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);\n\n  return <View accessibilityLabel=\"Living book artwork\" style={styles.stage} pointerEvents=\"none\">\n    {!ready&&<View style={styles.fallback}>{props.coverUri&&!coverFailed?<Image source={{uri:props.coverUri,headers:props.coverHeaders}} resizeMode=\"contain\" onError={()=>setCoverFailed(true)} style={styles.fallbackImage}/>:<View style={styles.fallbackJacket}><Text style={styles.fallbackTitle}>{props.title}</Text><Text style={styles.fallbackAuthor}>{props.author}</Text></View>}</View>}\n    <WebView key={reloadKey} ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}\n      bounces={false} overScrollMode=\"never\" androidLayerType=\"hardware\" style={[styles.web,!ready&&{opacity:0}]} containerStyle={styles.container}\n      onLoadStart={()=>{\n        if(reloadKey!==generation.current)return; // stale previous WebView\n        failed.current=false; ++probeSequence.current; setReady(false);clearDeadline();\n      }}\n      onLoadEnd={()=>{\n",
+          "new": "      if(live)inject('window.ArchivistLivingBook&&window.ArchivistLivingBook.setCover(\"\",'+js(props.coverMode||'fallback')+')');\n    });\n    return()=>{live=false;};\n  },[ready,props.coverUri,props.coverMode,JSON.stringify(props.coverHeaders||{})]);\n\n  return <View accessibilityLabel=\"Living book artwork\" style={styles.stage} pointerEvents=\"none\" onLayout={()=>{if(ready&&!suspended.current)probe(generation.current);}}>\n    {!ready&&<View style={styles.fallback}>{props.coverUri&&!coverFailed?<Image source={{uri:props.coverUri,headers:props.coverHeaders}} resizeMode=\"contain\" onError={()=>setCoverFailed(true)} style={styles.fallbackImage}/>:<View style={styles.fallbackJacket}><Text style={styles.fallbackTitle}>{props.title}</Text><Text style={styles.fallbackAuthor}>{props.author}</Text></View>}</View>}\n    <WebView key={reloadKey} ref={ref} source={{html:initialHtml}} originWhitelist={['*']} javaScriptEnabled scrollEnabled={false}\n      bounces={false} overScrollMode=\"never\" androidLayerType=\"software\" style={[styles.web,!ready&&{opacity:0}]} containerStyle={styles.container}\n      onLoadStart={()=>{\n        if(reloadKey!==generation.current)return; // stale previous WebView\n        failed.current=false; ++probeSequence.current; setReady(false);clearDeadline();\n      }}\n      onLoadEnd={()=>{\n"
         }
       ],
-      "current": "e964765098b432497294f200a5fd3ecd069e38cc"
+      "current": "940e22907e0f8539f595f42992a65cb0c3d78b19"
     },
     "mobile/speechFocus.ts": {
       "previous": "280b441936ce366554a908bbde9f0d20c047c71d",
@@ -246,9 +254,209 @@
         {
           "old": "          <View style={styles.toolRow}>\n            <Button label={profileAvatar.photoUri?'Change photo':'Choose photo'} tone=\"quiet\" onPress={()=>void chooseProfilePhoto()}/>\n            {profileAvatar.photoUri?<Button label=\"Remove photo\" tone=\"quiet\" onPress={()=>void saveProfileAvatar({...profileAvatar,photoUri:undefined})}/>:null}\n          </View>\n          <TextInput accessibilityLabel=\"Avatar initials\" value={profileAvatar.initials} maxLength={2} autoCapitalize=\"characters\" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>",
           "new": "          <TextInput accessibilityLabel=\"Avatar initials\" value={profileAvatar.initials} maxLength={2} autoCapitalize=\"characters\" onChangeText={value=>void saveProfileAvatar({...profileAvatar,initials:value})} placeholder={avatarInitials} placeholderTextColor={p.muted} style={[styles.profileInitialInput,{color:p.ink,borderBottomColor:p.line}]}/>"
+        },
+        {
+          "old": "  const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');",
+          "new": "  const [populationStatus,setPopulationStatus]=useState('');\n  const [populating,setPopulating]=useState(false);\n  const populationOwner=useRef<AbortController|null>(null);\n  const [libraryPreparedSignature,setLibraryPreparedSignature]=useState('');"
+        },
+        {
+          "old": "  const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});",
+          "new": "  const [profilePhotoDraft,setProfilePhotoDraft]=useState<{uri:string;fileName?:string|null}|null>(null);\n  const [profileAvatar,setProfileAvatar]=useState<ProfileAvatarConfig>({initials:'',color:'#47736F'});"
+        },
+        {
+          "old": "    let enrichmentCompleted=false;\n    try{\n      // Fresh runtime has already staged metadata and atomically checked publication.\n      // No historical deep metadata or cover sweep runs after discovery.\n      enrichmentCompleted=scanCommitGate.isCurrent(generation);\n      const controller=new AbortController();\n      const watch=setInterval(()=>{if(!scanCommitGate.isCurrent(generation))controller.abort();},150);\n      void freshRuntime().then(runtime=>runtime.enrich(result.books,assistPolicy(),async rows=>{\n        if(scanCommitGate.isCurrent(generation))await applyScannerRows(rows);\n      },controller.signal)).catch(()=>undefined).finally(()=>clearInterval(watch));\n    }catch(error){\n      if(scanCommitGate.isCurrent(generation))setLocalFolderNotice('Metadata refresh interrupted: '+String((error as any)?.message||error));\n    }\n",
+          "new": "    // Stage 1 ends here. Identification starts only from the population action.\n    const enrichmentCompleted=scanCommitGate.isCurrent(generation);\n"
+        },
+        {
+          "old": "  async function checkpointLocalEnrichment(",
+          "new": "  async function populateLibrary(){\n    if(populationOwner.current||libraryRefreshActive)return;\n    const owner=new AbortController();populationOwner.current=owner;setPopulating(true);\n    const total=new Set(localBooks.map(book=>(book as ScannerBook).scannerWorkId).filter(Boolean)).size;\n    const completed=new Set<string>();setPopulationStatus('Identifying 0 of '+total+' items');\n    try{\n      const runtime=await freshRuntime();\n      await runtime.enrich(localBooks,{...assistPolicy(true),automatic:true},async rows=>{\n        if(owner.signal.aborted||populationOwner.current!==owner)return;\n        await applyScannerRows(rows);for(const row of rows)completed.add(row.scannerWorkId);\n        setPopulationStatus('Processed '+completed.size+' of '+total+' items. Covers and file updates are tracked separately.');\n      },owner.signal);\n      if(!owner.signal.aborted)setPopulationStatus('Population finished. Open Complete missing details for items that still need clues.');\n    }catch{if(!owner.signal.aborted)setPopulationStatus('Population paused. Your progress is saved; press Identify & populate to retry.');}\n    finally{if(populationOwner.current===owner){populationOwner.current=null;setPopulating(false);}}\n  }\n\n  async function checkpointLocalEnrichment("
+        },
+        {
+          "old": "  async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {",
+          "new": "  async function rescanLocalFolders(overrides:Record<string,LocalMetadataOverride>=localMetadataOverrides,refreshMetadata=false) {\n    populationOwner.current?.abort();setPopulationStatus('');"
+        },
+        {
+          "old": "Atlas includes published local books after metadata and cover review. Library source and folder filters also apply.",
+          "new": "Atlas reflects your library and the available metadata. Source and folder filters also apply."
+        },
+        {
+          "old": "Add folders, scan, then review any uncertain book details. Your files can stay where they are.",
+          "new": "Scan your files, let Assist identify and populate them, then help only with unresolved items. Your files stay where they are."
+        },
+        {
+          "old": ">Add library folders</Text>",
+          "new": ">Scan library</Text>"
+        },
+        {
+          "old": ">Prepare library</Text>",
+          "new": ">Identify &amp; populate</Text>"
+        },
+        {
+          "old": ">Review book details</Text>",
+          "new": ">Complete missing details</Text>"
+        },
+        {
+          "old": "? 'Tap a book to correct its details. Assist fills the gaps; file organisation is optional in Settings.'",
+          "new": "? 'Only unresolved items need your help. Add a clue or select the correct match.'"
+        },
+        {
+          "old": "{preparing&&!libraryRefreshActive?<Button label={busy?'Preparing…':'Prepare library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}",
+          "new": "{preparing&&!libraryRefreshActive?<Button label={busy?'Scanning…':'Scan library'} disabled={busy} onPress={()=>void prepareOnboardingLibrary()}/>:null}\n        {setupReady&&hasFolder?<Button label={populating?'Cancel population':'Identify & populate'} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>:null}\n        {populationStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}"
+        },
+        {
+          "old": "<View style={styles.shelfSetupAction}><Button label=\"Review uncertain metadata\" onPress={openMetadataReview}/></View>",
+          "new": "<View style={styles.shelfSetupAction}><Button label=\"Complete missing details\" onPress={openMetadataReview}/></View>"
+        },
+        {
+          "old": "runtime.assist.accept(id,candidateId,assistState.revision,confirm)",
+          "new": "runtime.assist.accept(id,candidateId,assistState.revision,confirm,assistState.updated)"
+        },
+        {
+          "old": "              <Button label=\"Confirm saved identity\" tone=\"quiet\" disabled={busy||editorDirty||!editTitle.trim()||!editAuthor.trim()} onPress={()=>void confirmDetails()}/>\n              {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>Choose a genre, or let Assist find on",
+          "new": "              {normalizeGenre(editGenre?[{value:editGenre,source:'manual'}]:[]).state!=='confirmed'?<Text style={[styles.meta,{color:p.gold}]}>Choose a genre, or let Assist find on"
+        },
+        {
+          "old": "if(libraryFormatFamily==='books')return value==='epub'||value==='ebook'||value==='book';",
+          "new": "if(libraryFormatFamily==='books')return ['epub','ebook','book','pdf','kindle','mobi'].includes(value);"
+        },
+        {
+          "old": "if(libraryFormatFamily==='comics')return value==='comic'||value==='cbz'||value==='cbr'||value==='cbt';",
+          "new": "if(libraryFormatFamily==='comics')return ['comic','cbz','cbr','cbt','cb7'].includes(value);"
+        },
+        {
+          "old": "          {formatOptions.map(format=><Pressable key={format} accessibilityRole=\"button\" accessibilityState={{selected:!libraryFormatFamily&&formatFilter===format}} onPress={()=>{setLibraryFormatFamily('');setFormatFilter(formatFilter===format?'':format)}} style={styles.libraryFormatTab}>\n            <Text maxFontSizeMultiplier={1.15} style={[styles.libraryFormatText,{color:formatFilter===format?p.ink:p.muted,fontWeight:'600'}]}>{format}</Text>\n            <View pointerEvents=\"none\" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:formatFilter===format?1:0}]}/>\n          </Pressable>)}",
+          "new": "          {([{id:'books',label:'Books'},{id:'audio',label:'Audiobooks'},{id:'comics',label:'Comics'}] as const).map(category=><Pressable key={category.id} accessibilityRole=\"button\" accessibilityState={{selected:libraryFormatFamily===category.id}} onPress={()=>{setFormatFilter('');setLibraryFormatFamily(category.id)}} style={styles.libraryFormatTab}>\n            <Text style={[styles.libraryFormatText,{color:libraryFormatFamily===category.id?p.ink:p.muted,fontWeight:'600'}]}>{category.label}</Text>\n            <View pointerEvents=\"none\" style={[styles.libraryFormatMarker,{backgroundColor:p.sage,opacity:libraryFormatFamily===category.id?1:0}]}/>\n          </Pressable>)}"
+        },
+        {
+          "old": "allowsEditing:true,aspect:[1,1],quality:.9,selectionLimit:1",
+          "new": "allowsEditing:false,quality:.9,selectionLimit:1"
+        },
+        {
+          "old": "      const photoUri=await persistPickedProfilePhoto(asset.uri,asset.fileName);\n      await saveProfileAvatar({...profileAvatar,photoUri});",
+          "new": "      setProfilePhotoDraft({uri:asset.uri,fileName:asset.fileName});"
+        },
+        {
+          "old": "      {ProfileMenu()}",
+          "new": "      {ProfileMenu()}\n      <Modal visible={!!profilePhotoDraft} transparent animationType=\"fade\" onRequestClose={()=>setProfilePhotoDraft(null)}>\n        <View style={modalSheetBackdrop}><View style={[styles.actionSheet,{backgroundColor:p.card,gap:16}]}>\n          <Text style={[styles.sectionTitle,{color:p.ink}]}>Your profile photo</Text>\n          {profilePhotoDraft?<Image source={{uri:profilePhotoDraft.uri}} resizeMode=\"cover\" style={{width:180,height:180,borderRadius:90,alignSelf:'center'}}/>:null}\n          <Button label=\"Use photo\" disabled={busy} onPress={()=>{const draft=profilePhotoDraft;if(!draft)return;setBusy(true);void persistPickedProfilePhoto(draft.uri,draft.fileName).then(photoUri=>saveProfileAvatar({...profileAvatar,photoUri})).then(()=>setProfilePhotoDraft(null)).catch(()=>setError('The photo could not be saved. Please try again.')).finally(()=>setBusy(false));}}/>\n          <Button label=\"Cancel\" tone=\"quiet\" disabled={busy} onPress={()=>setProfilePhotoDraft(null)}/>\n        </View></View>\n      </Modal>"
+        },
+        {
+          "old": "const libraryFolderRailWidth=layoutTier==='fold'?136:160;",
+          "new": "const libraryFolderRailWidth=layoutTier==='fold'?184:208;"
+        },
+        {
+          "old": "pageHeaderToolbar: {minHeight:44,marginTop:-4,flexDirection:'row'",
+          "new": "pageHeaderToolbar: {height:44,marginTop:0,flexDirection:'row'"
+        },
+        {
+          "old": "libraryTreeLabel: {fontSize:10.5,lineHeight:13",
+          "new": "libraryTreeLabel: {fontSize:14,lineHeight:20"
+        },
+        {
+          "old": "libraryTreeDetail: {fontSize:8,lineHeight:10.5",
+          "new": "libraryTreeDetail: {fontSize:12,lineHeight:16"
+        },
+        {
+          "old": "libraryTreeCount: {fontSize:9.5,lineHeight:13",
+          "new": "libraryTreeCount: {fontSize:13,lineHeight:18"
+        },
+        {
+          "old": "libraryTreeAddText: {fontSize:10.5,lineHeight:13",
+          "new": "libraryTreeAddText: {fontSize:14,lineHeight:20"
+        },
+        {
+          "old": "libraryTreeGroupLabel: {fontSize:8,lineHeight:10",
+          "new": "libraryTreeGroupLabel: {fontSize:11,lineHeight:16"
+        },
+        {
+          "old": "  const [populationStatus,setPopulationStatus]=useState('');",
+          "new": "  const [populationStatus,setPopulationStatus]=useState('');\n  const [fileWriteSummary,setFileWriteSummary]=useState('');"
+        },
+        {
+          "old": "  const assistPolicy=(explicit=false)=>",
+          "new": "  useEffect(()=>{\n    if(Platform.OS!=='android')return;\n    let alive=true,unsubscribe:(()=>void)|undefined;\n    void freshRuntime().then(runtime=>{\n      if(!alive)return;\n      const update=(id?:string)=>{\n        void runtime.writeProgress().then(({counts,operation})=>{\n          if(!alive)return;\n          const waiting=(counts.pending||0)+(counts.running||0)+(counts.retry||0);\n          setFileWriteSummary(operation|| (waiting?`${waiting} file updates queued; ${counts.done||0} completed.`:counts.blocked?`${counts.blocked} file updates need attention. Your library details are saved.`:''));\n        }).catch(()=>{if(alive)setFileWriteSummary('File-saving status is unavailable. Your library remains accessible.');});\n        if(id)void runtime.refresh(id).then(rows=>{if(alive)return applyScannerRows(rows);}).catch(()=>{});\n      };\n      unsubscribe=runtime.subscribe(update);update();\n    }).catch(()=>{if(alive)setFileWriteSummary('File-saving status is unavailable.');});\n    return ()=>{alive=false;unsubscribe?.();};\n  },[]);\n  const assistPolicy=(explicit=false)=>"
+        },
+        {
+          "old": "    if(!localFolderNotice)return null;",
+          "new": "    if(fileWriteSummary)return <View accessibilityLiveRegion=\"polite\" style={[styles.scanBanner,styles.scanBannerStable,{borderTopColor:p.line,borderBottomColor:p.line}]}>\n      <View style={{flex:1,minWidth:0}}><Text style={[styles.scanBannerTitle,{color:p.ink}]}>Saving file metadata</Text><Text style={[styles.scanBannerDetail,{color:p.muted}]}>{fileWriteSummary}</Text></View>\n    </View>;\n    if(!localFolderNotice)return null;"
+        },
+        {
+          "old": "            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>NEXT STEP</Text>",
+          "new": "            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>IDENTIFY & POPULATE</Text>\n            <Text style={[styles.meta,{color:p.muted}]}>Assist uses the saved scan to find matches, fill available details and covers, then save confirmed metadata to your files.</Text>\n            <Button label={populating?'Cancel population':'Identify & populate'} disabled={!localBooks.length||libraryRefreshActive} onPress={()=>populating?populationOwner.current?.abort():void populateLibrary()}/>\n            {populationStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{populationStatus}</Text>:null}\n            {fileWriteSummary?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{fileWriteSummary}</Text>:null}\n            <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>COMPLETE MISSING DETAILS</Text>"
+        },
+        {
+          "old": "Your books are grouped. Check missing genres and publication years before exploring Atlas.",
+          "new": "Assist fills available genres and years automatically. Only uncertain identities need your help."
+        },
+        {
+          "old": "Recovery copies are also saved in your library folder.",
+          "new": "Verified undo copies are kept in the app. Large file updates run separately from scanning."
+        },
+        {
+          "old": "    setProfileAvatar(cleaned);\n    try{await setPersistedJSON(profileAvatarKey,cleaned);}catch(e){setError((e as Error).message);}",
+          "new": "    try{await setPersistedJSON(profileAvatarKey,cleaned);setProfileAvatar(cleaned);return true;}catch(e){setError((e as Error).message);return false;}"
+        },
+        {
+          "old": ".then(()=>setProfilePhotoDraft(null)).catch(()=>setError('The photo could not be saved. Please try again.'))",
+          "new": ".then(saved=>{if(saved)setProfilePhotoDraft(null);}).catch(()=>setError('The photo could not be saved. Please try again.'))"
+        },
+        {
+          "old": "const appVersion=Constants.expoConfig?.version||'0.9.4';",
+          "new": "const appVersion=Constants.expoConfig?.version||'0.10.0';"
+        },
+        {
+          "old": "value={String(stats?.works||formatsTotal)} label=\"books\" items={formatItems}",
+          "new": "value={String(formatsTotal)} label=\"books\" items={formatItems}"
+        },
+        {
+          "old": "value={genreTimeItems.length?minutesRead.toLocaleString():String(genreTotal)}",
+          "new": "value={genreTotal.toLocaleString()}"
+        },
+        {
+          "old": "shelfContent: {paddingHorizontal:18,paddingTop:10,paddingBottom:120,gap:32,",
+          "new": "shelfContent: {paddingHorizontal:18,paddingTop:10,paddingBottom:120,gap:16,"
+        },
+        {
+          "old": "shelfContentFold: {paddingHorizontal:24,paddingTop:10,gap:34}",
+          "new": "shelfContentFold: {paddingHorizontal:24,paddingTop:10,gap:18}"
+        },
+        {
+          "old": "import React,",
+          "new": "import {populationMessage} from './assistMetadata/progress';\nimport React,"
+        },
+        {
+          "old": "        if(id)void runtime.refresh(id).then(rows=>{if(alive)return applyScannerRows(rows);}).catch(()=>{});",
+          "new": "        void runtime.populationProgress().then(({enabled,counts})=>{if(alive)setPopulationStatus(populationMessage(enabled,counts));}).catch(()=>{});\n        if(id)void runtime.refresh(id).then(rows=>{if(alive)return applyScannerRows(rows);}).catch(()=>{});"
+        },
+        {
+          "old": "    const completed=new Set<string>();setPopulationStatus('Identifying 0 of '+total+' items');",
+          "new": "    setPopulationStatus('Identifying 0 of '+total+' items');"
+        },
+        {
+          "old": "        await applyScannerRows(rows);for(const row of rows)completed.add(row.scannerWorkId);\n        setPopulationStatus('Processed '+completed.size+' of '+total+' items. Covers and file updates are tracked separately.');",
+          "new": "        await applyScannerRows(rows);\n        const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));"
+        },
+        {
+          "old": "      if(!owner.signal.aborted)setPopulationStatus('Population finished. Open Complete missing details for items that still need clues.');",
+          "new": "      if(!owner.signal.aborted){const progress=await runtime.populationProgress();setPopulationStatus(populationMessage(progress.enabled,progress.counts));}"
+        },
+        {
+          "old": "    const moreAssist=async(provider:string,page:number)=>{",
+          "new": "    const reviewFileRecovery=async()=>{\n      if(!editing.scannerWorkId||busy)return;\n      const id=editing.scannerWorkId;setBusy(true);setError('');\n      try{\n        const runtime=await freshRuntime(),options=await runtime.recoveryOptions(id),option=options[0];\n        if(!option){setError('No interrupted file update remains.');return;}\n        Alert.alert('Restore original file?',`${option.path}\\n\\nRestore the intact copy saved before the interrupted update? The current file is also retained for undo. Your library details stay saved.`,[\n          {text:'Cancel',style:'cancel'},\n          {text:'Restore original',onPress:()=>{setBusy(true);void runtime.restoreOriginal(id,option).then(async()=>applyScannerRows(await runtime.refresh(id))).catch(error=>setError(error.message)).finally(()=>setBusy(false));}},\n        ]);\n      }catch(error){setError((error as Error).message);}finally{setBusy(false);}\n    };\n    const moreAssist=async(provider:string,page:number)=>{"
+        },
+        {
+          "old": "            {editing.metadataFileStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{editing.metadataFileStatus}</Text>:null}",
+          "new": "            {editing.metadataFileStatus?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{editing.metadataFileStatus}</Text>:null}\n            {localEdit&&editing.metadataFileStatus?.includes('recovery review')?<Pressable accessibilityRole=\"button\" disabled={busy} onPress={()=>void reviewFileRecovery()} style={{paddingVertical:10}}><Text style={{color:p.sage}}>Review file recovery</Text></Pressable>:null}"
+        },
+        {
+          "old": "<Modal visible={!!profilePhotoDraft} transparent animationType=\"fade\"",
+          "new": "<Modal visible={!!profilePhotoDraft} transparent animationType={reduceMotion?'none':'fade'}"
+        },
+        {
+          "old": "await runtime.enrich(localBooks,{...assistPolicy(true),automatic:true},async rows=>{",
+          "new": "await runtime.enrich(localBooks.filter((book):book is Book & LocalBook=>typeof book.uri==='string'&&book.uri.length>0),{...assistPolicy(true),automatic:true},async rows=>{"
         }
       ],
-      "current": "38fcaf01c3ae4b7578a95dbf76602b4d023555b8"
+      "current": "8a3876d368bd54cc8aa4e31f26f6813efd018291"
     },
     "mobile/speechFocus.generated.ts": {
       "previous": "5aa6ed24f64542d80f11d3f0d54986f0d070b7e9",

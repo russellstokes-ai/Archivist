@@ -1,6 +1,6 @@
-export type EmbeddedFields={title?:string;album?:string;author?:string;genre?:string;track?:number;disc?:number};
+export type EmbeddedFields={title?:string;album?:string;author?:string;genre?:string;publishedYear?:string;publisher?:string;language?:string;description?:string;track?:number;disc?:number};
 export type HeaderClues={readerVersion:'header-1';provenance:'embedded';status:'parsed'|'partial'|'unresolved';reason:string;fields:EmbeddedFields};
-const ids:Record<string,keyof EmbeddedFields>={TIT2:'title',TALB:'album',TPE1:'author',TCON:'genre',TRCK:'track',TPOS:'disc','\xa9nam':'title','\xa9alb':'album','\xa9ART':'author',aART:'author','\xa9gen':'genre'};
+const ids:Record<string,keyof EmbeddedFields>={TIT2:'title',TALB:'album',TPE1:'author',TCON:'genre',TRCK:'track',TPOS:'disc',TDRC:'publishedYear',TYER:'publishedYear',TPUB:'publisher',TLAN:'language','\xa9nam':'title','\xa9alb':'album','\xa9ART':'author',aART:'author','\xa9gen':'genre','\xa9day':'publishedYear',desc:'description',ldes:'description'};
 function ascii(bytes:Uint8Array,start:number,length:number){let value='';for(let i=start;i<start+length;i++)value+=String.fromCharCode(bytes[i]);return value;}
 function u32(bytes:Uint8Array,start:number){return bytes[start]*16777216+bytes[start+1]*65536+bytes[start+2]*256+bytes[start+3];}
 function sync(bytes:Uint8Array,start:number){for(let i=0;i<4;i++)if(bytes[start+i]&128)return -1;return bytes[start]*2097152+bytes[start+1]*16384+bytes[start+2]*128+bytes[start+3];}
@@ -39,6 +39,7 @@ export function parseHeaderClues(bytes:Uint8Array,extension:string):HeaderClues 
   function assign(key:keyof EmbeddedFields,value:string|null){
     if(!value||conflicts.has(key))return;
     if(value.includes('\ufffd')){partial=true;reason='invalid-text-encoding';return;}
+    if(key==='publishedYear'){const year=value.match(/^((?:1\d{3}|20\d{2}|21\d{2}))(?:$|[-T ])/);if(!year)return;value=year[1];}
     const numeric=key==='track'||key==='disc';const n=numeric&&/^\d+(?:\/\d+)?$/.test(value)?Number(value.split('/')[0]):null;
     const next=numeric?n&&Number.isSafeInteger(n)&&n<=100000?n:null:value;
     if(next===null)return;

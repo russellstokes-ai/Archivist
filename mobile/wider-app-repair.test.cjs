@@ -2,7 +2,7 @@
 // Run from repository root. Production sources remain unchanged.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'..');
-const ts=require(root+'/mobile/node_modules/typescript');
+const ts=require('typescript');
 function moduleFrom(file,requireStub){const exports={};const code=ts.transpileModule(fs.readFileSync(root+'/mobile/'+file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(code,{exports,require:requireStub,console,Date,Math,Number,Promise,setTimeout,clearTimeout});return exports;}
 (async()=>{
  const {Playback}=moduleFrom('playback.ts',()=>({RequestError:class extends Error{}}));

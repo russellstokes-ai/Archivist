@@ -11,11 +11,11 @@ INFRA_EXIT=86
 test -f "$APK"
 
 wait_for_android() {
-  adb wait-for-device >/dev/null 2>&1 || return 1
+  timeout 20s adb wait-for-device >/dev/null 2>&1 || return 1
   local attempt boot
   for attempt in $(seq 1 60); do
-    boot="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-    if [ "$boot" = "1" ] && adb shell cmd package list packages >/dev/null 2>&1; then
+    boot="$(timeout 5s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+    if [ "$boot" = "1" ] && timeout 8s adb shell cmd package list packages >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -96,10 +96,10 @@ if ! adb shell am start "${START_ARGS[@]}" >"$START_LOG" 2>&1; then
 fi
 cat "$START_LOG"
 
-# Test 14 preserves the original 15s crash smoke AND adds actual screen-frame
+# Discovery Preview preserves the original 15s crash smoke AND adds actual screen-frame
 # evidence. Unlike the old smoke test, a static splash must not pass silently.
 if [ "${ARCHIVIST_QA_VISUAL_CAPTURE:-}" = "1" ] && [ "$PACKAGE" = "app.archivist.reader.qa" ]; then
-  SHOTS="${RUNNER_TEMP:-/tmp}/test14-android-splash"
+  SHOTS="${RUNNER_TEMP:-/tmp}/discovery-android-startup"
   mkdir -p "$SHOTS"
   # Zero-padded names sort chronologically; cover slow native startup plus
   # the complete 179-frame animation instead of just post-start Shelf frames.

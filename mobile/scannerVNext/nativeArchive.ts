@@ -1,5 +1,5 @@
 import type {ClueAsset} from './collectClues';
-export type ArchiveClues={status:'parsed'|'unresolved';reason:string;bytesRead:number;provenance:'embedded';fields:Partial<Record<'title'|'author'|'genre'|'series',string>>};
+export type ArchiveClues={status:'parsed'|'unresolved';reason:string;bytesRead:number;provenance:'embedded';container?:string;fields:import('./fieldEvidence').WorkFields};
 export interface NativeArchivePort {
  beginScope(rootUri:string):Promise<{scope:string;rootDocumentId:string}>;
  cancelScope(scope:string):Promise<unknown>;
@@ -15,8 +15,8 @@ export class NativeArchiveReader {
    check(signal);const value=await this.native.readArchiveClues(scope.scope,asset.documentId);check(signal);
    if(value.state!=='ok')throw new Error('Native archive '+value.state);
    if(!['parsed','unresolved'].includes(value.status)||typeof value.reason!=='string'||value.reason.length>128||!Number.isSafeInteger(value.bytesRead)||value.bytesRead<0||value.bytesRead>8388608||value.provenance!=='embedded'||!value.fields||Array.isArray(value.fields))throw new Error('Invalid native archive result');
-   for(const [key,field] of Object.entries(value.fields))if(!['title','author','genre','series'].includes(key)||typeof field!=='string'||field.length>4096)throw new Error('Invalid native archive field');
-   return {status:value.status,reason:value.reason,bytesRead:value.bytesRead,provenance:value.provenance,fields:{...value.fields}};
+   for(const [key,field] of Object.entries(value.fields))if(!['title','author','genre','series','seriesNumber','publishedYear','publisher','description','language','isbn'].includes(key)||typeof field!=='string'||field.length>4096)throw new Error('Invalid native archive field');
+   return {status:value.status,reason:value.reason,bytesRead:value.bytesRead,provenance:value.provenance,container:value.container,fields:{...value.fields}};
   }finally{signal?.removeEventListener('abort',abort);await close();}
  }
 }

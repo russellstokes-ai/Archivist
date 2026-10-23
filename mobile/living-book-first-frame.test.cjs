@@ -58,6 +58,6 @@ assert(current.includes('++probeSequence.current; // invalidate any queued old p
 assert(current.includes("if(attempts.current>=2)"));
 assert(current.includes("state==='background'||state==='inactive'"));
 assert(current.includes("state==='active'&&suspended.current"));
-assert(current.includes('style={styles.stage}')&&current.includes('androidLayerType="hardware"'));
+assert(current.includes('style={styles.stage}')&&current.includes('androidLayerType="software"'));
 assert(current.includes('coverSource(props.coverUri,props.coverHeaders)'));
 console.log('PASS: painted-frame handshake, tainted covers, blank/retry fencing, two recovery attempts, background rescue and byte-perfect Living Book renderer');

@@ -51,7 +51,7 @@ export function rankAssistCandidates(fields:WorkFields,candidates:Candidate[]):R
   for(const field of ['isbn','asin'] as const){
    if(fields[field]&&candidate.fields[field]&&identifier(fields[field])!==identifier(candidate.fields[field])&&!conflicts.includes('identifier'))conflicts.push('identifier');
   }
-  for(const field of ['series','language','publishedYear','narrator'] as const){
+  for(const field of ['series','language','publishedYear','narrator','publisher'] as const){
    const incoming=(candidate.fields as WorkFields)[field];
    if(fields[field]&&incoming&&canonicalText(fields[field])!==canonicalText(incoming))conflicts.push(field);
   }
@@ -60,7 +60,8 @@ export function rankAssistCandidates(fields:WorkFields,candidates:Candidate[]):R
   if(exactId&&fields.title&&candidate.fields.title&&!title&&overlap(fields.title,candidate.fields.title)<.45)conflicts.push('title');
   const clue=overlap(fields.title,[candidate.fields.title,candidate.fields.author,candidate.fields.series].filter(Boolean).join(' '));
   const score=(exactId?1000:0)+(title?100:Math.round(clue*70))+(author?40:0)-(conflicts.length*150);
-  return {candidate,score,conflicts,automaticEligible:!candidate.relatedMatch&&!conflicts.length&&(exactId||title&&author)};
+  const comic=!!fields.series&&!!fields.seriesNumber&&!!fields.publisher&&!!fields.publishedYear&&['series','seriesNumber','publisher','publishedYear'].every(key=>canonicalText(fields[key as keyof WorkFields])===canonicalText(candidate.fields[key as keyof typeof candidate.fields]));
+  return {candidate,score,conflicts,automaticEligible:!candidate.relatedMatch&&!conflicts.length&&(exactId||title&&author||title&&comic)};
  }).sort((a,b)=>b.score-a.score||a.candidate.id.localeCompare(b.candidate.id));
 }
 export function selectAutomatic(work:Pick<MetadataWork,'fields'>,candidates:Candidate[]):Candidate|null{

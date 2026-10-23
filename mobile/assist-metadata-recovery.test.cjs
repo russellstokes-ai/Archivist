@@ -43,6 +43,13 @@ const {createImprovedAssist}=require('./assistMetadata/controller.ts');
    {...record,fields:{title:' ',author:'Fixture Writer'}},
   ])assert.throws(()=>validatePortableRecord(bad));
   assert.equal((await restoredStore.get('new')).fields.title,'Recovered Book');
+  await restoredStore.ensure({workId:'weak',revision:0,fields:{title:'Uncertain filename'},manual:{},identityConfirmed:false,partIds:['weak-part']});
+  const weakCandidate={id:'borrowed',provider:'fixture',identifiers:['9780306406157'],fields:{title:'A real title',author:'A real author',isbn:'9780306406157'}};
+  const selected=await restoredStore.accept('weak',weakCandidate,0);
+  assert.equal(selected.identityConfirmed,false);
+  const repeated=await restoredStore.accept('weak',weakCandidate,selected.revision);
+  assert.equal(repeated.identityConfirmed,false,'Provider-supplied ISBN/title/author cannot corroborate their own next lookup');
+  assert.equal(repeated.identification.rung,undefined,'Repeated selection cannot upgrade borrowed fields to R1');
   console.log('PASS: real-file identity checks, serialized metadata recovery into a fresh SQLite database, restored locks/manual clears, published identity preservation and rejection of invalid snapshots (Android SAF transport not exercised)');
  }finally{await db.close();await fresh.close();fs.rmSync(dir,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1});

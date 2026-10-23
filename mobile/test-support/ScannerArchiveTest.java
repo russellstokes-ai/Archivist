@@ -10,11 +10,23 @@ public final class ScannerArchiveTest {
   }
  }
  static void zip(File file,int entries,String xml)throws Exception{try(ZipOutputStream out=new ZipOutputStream(new FileOutputStream(file))){for(int i=0;i<entries;i++){out.putNextEntry(new ZipEntry(i==0?"ComicInfo.xml":"page-"+i+".jpg"));out.write((i==0?xml:"generated page").getBytes("UTF-8"));out.closeEntry();}}}
+ static ScannerTaskPool.Result cover(File file)throws Exception{
+  try(ScannerTaskPool pool=new ScannerTaskPool(1,1,2000)){
+   ArrayBlockingQueue<ScannerTaskPool.Result> result=new ArrayBlockingQueue<>(1);
+   pool.submit("cover",token->ScannerArchiveReader.readCover(t->new FileInputStream(file),token),result::add);
+   ScannerTaskPool.Result value=result.poll(3,TimeUnit.SECONDS);check(value!=null,"Cover caller settles");return value;
+  }
+ }
  public static void main(String[] args)throws Exception{
   File fixture=File.createTempFile("scanner-archive-",".zip");
   try{
    zip(fixture,2,"<ComicInfo><Title>Generated Comic</Title><Writer>Fixture Writer</Writer><Genre>Science Fiction</Genre></ComicInfo>");
    ScannerArchiveReader.Clues result=read(fixture);check("parsed".equals(result.status)&&"Generated Comic".equals(result.fields.get("title")),"Bounded deflated ComicInfo");check(result.bytesRead<8388608,"Source budget");
+   check(Arrays.equals("generated page".getBytes("UTF-8"),(byte[])cover(fixture).value),"Comic first page bytes preserved for image validation");
+   try(ZipOutputStream out=new ZipOutputStream(new FileOutputStream(fixture))){
+    out.putNextEntry(new ZipEntry("cover.jpg"));out.write(new byte[4194305]);out.closeEntry();
+   }
+   check(!"ok".equals(cover(fixture).state),"Oversized embedded cover rejected before inflation");
    zip(fixture,1025,"<ComicInfo/>");check("archive-entry-budget".equals(read(fixture).reason),"Too many entries cannot start decompression");
    zip(fixture,1,"<!DOCTYPE ComicInfo [<!ENTITY x SYSTEM 'https://invalid.example/secret'>]><ComicInfo><Title>&x;</Title></ComicInfo>");check("archive-metadata-invalid".equals(read(fixture).reason),"External entities never fetched");
    zip(fixture,1,"<ComicInfo><Title>"+"x".repeat(300000)+"</Title></ComicInfo>");check("archive-metadata-budget".equals(read(fixture).reason),"Inflation bomb rejected before allocation");

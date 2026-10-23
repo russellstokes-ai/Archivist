@@ -9,7 +9,7 @@ import {supplementCandidate} from './supplement';
 import {fillMissing,selectAutomatic} from './core';
 type State=AssistState&{clues?:string};
 type Service=ReturnType<typeof createAssistSearchService>;
-export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetadataStore,service:Service){
+export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetadataStore,service:Service,onSaved?:(id:string)=>Promise<void>){
  db=metadataDatabase(db);const active=new Map<string,AbortController>();
  await db.execAsync('CREATE TABLE IF NOT EXISTS scanner_vnext_assist(work_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL);');
  async function persist(work:MetadataWork,state:State,owner?:AbortController){
@@ -41,7 +41,8 @@ export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetada
       const candidate=work.identityConfirmed?{...winner,fields:{...work.fields,...patch},identifiers:[work.fields.isbn,work.fields.asin].filter((v):v is string=>!!v)}:winner;
       const saved=await store.accept(work.workId,candidate,work.revision,{signal:owner.signal});
       const state:State={revision:saved.revision,state:'accepted',result,updated:Date.now()};
-      return await persist(saved,state,owner)?state:{...state,state:'stale'};
+      if(!await persist(saved,state,owner))return {...state,state:'stale'};
+      await onSaved?.(saved.workId);return state;
      }
     }
     const state:State={revision:work.revision,state:result.state==='pending'?(result.issues.length?'error':'needs-clues'):result.state,result,updated:Date.now(),...(policy.clues!==undefined?{clues:policy.clues}:{})};
@@ -56,12 +57,12 @@ export async function createImprovedAssist(db:ScannerDatabase,store:AssistMetada
   get,
   cancel(id:string){active.get(id)?.abort();},
   async search(id:string,policy:AssistPolicy){const work=await store.get(id);if(!work)throw Error('Unknown work');return start(work,policy);},
-  async save(id:string,patch:WorkFields,expected:number,policy:AssistPolicy){return start(await store.saveManual(id,patch,expected),policy);},
-  async accept(id:string,candidateId:string,expected:number,confirm=false){
-   const state=await get(id);if(state?.revision!==expected)throw Error('Stale Assist choices');
+  async save(id:string,patch:WorkFields,expected:number,policy:AssistPolicy){const saved=await store.saveManual(id,patch,expected);await onSaved?.(id);return start(saved,policy);},
+  async accept(id:string,candidateId:string,expected:number,confirm=false,lookupUpdated?:number){
+   const state=await get(id);if(state?.revision!==expected||lookupUpdated!==undefined&&state.updated!==lookupUpdated)throw Error('These search results have changed. Search again to choose the current match.');
    const candidate=state.result?.candidates.find(r=>r.candidate.provider+'|'+r.candidate.id===candidateId)?.candidate;
-   if(!candidate)throw Error('Candidate is not in this work lookup');active.get(id)?.abort();
-   const work=await store.accept(id,supplementCandidate(candidate,state?.result?.candidates.map(r=>r.candidate)||[]),expected,{confirmIdentityConflicts:confirm});await persist(work,{revision:work.revision,state:'accepted',updated:Date.now()});return work;
+   if(!candidate)throw Error('This match is no longer available. Search again to refresh the choices.');active.get(id)?.abort();
+   const work=await store.accept(id,supplementCandidate(candidate,state?.result?.candidates.map(r=>r.candidate)||[]),expected,{confirmIdentityConflicts:confirm});await persist(work,{revision:work.revision,state:'accepted',updated:Date.now()});await onSaved?.(id);return work;
   },
   async more(id:string,provider:string,page:number,expected:number,policy:AssistPolicy){
    const work=await store.get(id),state=await get(id);if(!work||work.revision!==expected||state?.revision!==expected)throw Error('Stale Assist choices');

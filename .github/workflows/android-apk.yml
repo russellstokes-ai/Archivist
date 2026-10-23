@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 env:
-  TEST_BUILD: '14'
+  RELEASE_NAME: 'Discovery-Preview'
   ARCHIVIST_QA_VISUAL_CAPTURE: '1'
 
 concurrency:
@@ -174,36 +174,19 @@ jobs:
         run: |
           set -euo pipefail
           APK="${{ steps.release_apk.outputs.path }}"
-          OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk"
+          OUT="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-${{ env.RELEASE_NAME }}-${{ github.run_id }}.apk"
           cp "$APK" "$OUT"
           sha256sum "$OUT" > "$OUT.sha256"
 
-      - name: Upload verified APK
+      - name: Upload candidate APK for diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: Archivist-${{ steps.app_version.outputs.version }}-Test-${{ env.TEST_BUILD }}-APK
+          name: Archivist-${{ steps.app_version.outputs.version }}-${{ env.RELEASE_NAME }}-${{ github.run_id }}-APK
           path: |
-            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk
-            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk.sha256
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-${{ env.RELEASE_NAME }}-${{ github.run_id }}.apk
+            mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-${{ env.RELEASE_NAME }}-${{ github.run_id }}.apk.sha256
           if-no-files-found: error
           retention-days: 30
-
-      - name: Publish owner-requested direct QA APK
-        if: ${{ inputs.publish_direct_apk == true }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          QA_SHA: ${{ github.sha }}
-          QA_RUN: ${{ github.run_id }}
-          QA_ATTEMPT: ${{ github.run_attempt }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="qa-test14-${QA_RUN}-${QA_ATTEMPT}"
-          APK="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-test-${{ env.TEST_BUILD }}.apk"
-          printf '%s\n' 'Owner-requested device test APK. Not a production release.' "Source commit: $QA_SHA" 'Includes Assist wiring, canonical Comic Focus, bounded Living Book animation and device-decoded splash matte. Awards remain locked.' 'Typecheck, regression tests, release lint, package, signature and alignment checks passed. Phone acceptance is still required. Emulator evidence is recorded separately in the workflow run.' > "$RUNNER_TEMP/qa-notes.txt"
-          gh release create "$TAG" "$APK" "$APK.sha256" --target "$QA_SHA" --prerelease --latest=false --title "Archivist Test 14 repairs — QA $QA_RUN" --notes-file "$RUNNER_TEMP/qa-notes.txt"
-          echo "Direct APK: https://github.com/$GH_REPO/releases/download/$TAG/$(basename "$APK")" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Launch test APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -224,10 +207,27 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Test14-Android-Splash-Emulator-Frames
-          path: ${{ runner.temp }}/test14-android-splash/frame-*.png
+          name: Discovery-Preview-Android-Startup-Frames
+          path: ${{ runner.temp }}/discovery-android-startup/frame-*.png
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Publish owner-requested direct QA APK
+        if: ${{ inputs.publish_direct_apk == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          QA_SHA: ${{ github.sha }}
+          QA_RUN: ${{ github.run_id }}
+          QA_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="qa-discovery-${QA_RUN}-${QA_ATTEMPT}"
+          APK="mobile/android/app/build/outputs/apk/Archivist-${{ steps.app_version.outputs.version }}-${{ env.RELEASE_NAME }}-${{ github.run_id }}.apk"
+          printf '%s\n' 'Owner-requested device test APK. Not a production release.' "Source commit: $QA_SHA" 'Discovery Preview: separate scan and population stages, evidence-based identification, queued file updates, reader and layout repairs. See repository handoff for verified format coverage and limitations.' 'Typecheck, regression tests, release lint, package, signature and alignment checks passed. Emulator startup checks passed. Physical phone acceptance is still required; see this run for evidence.' > "$RUNNER_TEMP/qa-notes.txt"
+          gh release create "$TAG" "$APK" "$APK.sha256" --target "$QA_SHA" --prerelease --latest=false --title "Archivist 0.10.0 Discovery Preview — QA $QA_RUN" --notes-file "$RUNNER_TEMP/qa-notes.txt"
+          echo "Direct APK: https://github.com/$GH_REPO/releases/download/$TAG/$(basename "$APK")" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Confirm production isolation
         run: echo "QA package only. Direct prerelease requires explicit manual opt-in; Google Play and latest production release remain unchanged."
