@@ -40,6 +40,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
+import {collectAssistDiagnostics} from './assistMetadata/diagnostics';
+import {openScannerDatabase} from './scannerVNext/androidStore.native';
 import Constants from 'expo-constants';
 import {createDownloadResumable, copyAsync, deleteAsync, documentDirectory, downloadAsync, getInfoAsync, makeDirectoryAsync, readAsStringAsync, writeAsStringAsync} from 'expo-file-system/legacy';
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio';
@@ -1163,6 +1165,9 @@ function Client() {
   const [assistState,setAssistState]=useState<AssistState|null>(null);
   const editingScannerId=useRef<string|undefined>(undefined);
   editingScannerId.current=editing?.scannerWorkId;
+  const [diagnosticBusy,setDiagnosticBusy]=useState(false);
+  const diagnosticExportRunning=useRef(false);
+  const [diagnosticNotice,setDiagnosticNotice]=useState('');
   const freshRuntimeRef=useRef<Promise<Awaited<ReturnType<typeof createAndroidCatalogueRuntime>>>|null>(null);
   function freshRuntime(){
     if(!freshRuntimeRef.current)freshRuntimeRef.current=createAndroidCatalogueRuntime(async()=>({metadata:metadataSettingsRef.current,googleKey:metadataSettingsRef.current.books.googleBooks?(await SecureStore.getItemAsync(googleBooksApiKeyKey).catch(()=>null))?.trim()||undefined:undefined})).catch(error=>{freshRuntimeRef.current=null;throw error;});
@@ -8166,6 +8171,22 @@ function Client() {
     return JSON.stringify(snapshot,null,2);
   }
 
+  async function exportAssistDiagnostics(){
+    if(diagnosticExportRunning.current)return;
+    diagnosticExportRunning.current=true;setDiagnosticBusy(true);setDiagnosticNotice('Preparing report…');
+    try{
+      if(!documentDirectory||!await Sharing.isAvailableAsync())throw Error('File sharing is unavailable on this device.');
+      const report=await collectAssistDiagnostics(await openScannerDatabase(),Constants.expoConfig?.version||'unknown');
+      const directory=documentDirectory+'diagnostics/';
+      await makeDirectoryAsync(directory,{intermediates:true});
+      const uri=directory+'Archivist-Assist-diagnostics.json';
+      await writeAsStringAsync(uri,JSON.stringify(report,null,2));
+      await Sharing.shareAsync(uri,{mimeType:'application/json',dialogTitle:'Save Assist diagnostic report'});
+      setDiagnosticNotice('Report prepared. Save or share it using the device menu.');
+    }catch{setDiagnosticNotice('Could not export the report. Please try again when the device share menu is available.');}
+    finally{diagnosticExportRunning.current=false;setDiagnosticBusy(false);}
+  }
+
   function createPrivacyBackup(){
     const text=privacyBackupJSON();
     setPrivacyBackupText(text);
@@ -8462,6 +8483,12 @@ function Client() {
               </View>
               <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>
             </View>
+            {Platform.OS==='android'?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>
+              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>TEMPORARY DIAGNOSTICS</Text>
+              <Text style={[styles.meta,{color:p.muted}]}>Export library filenames, grouping decisions and saved identification evidence to help investigate Assist. Includes relative folder names; excludes credentials, full storage addresses and book contents. Nothing is sent automatically.</Text>
+              <Button label={diagnosticBusy?'Preparing report…':'Export Assist diagnostics'} tone="quiet" disabled={diagnosticBusy} onPress={()=>void exportAssistDiagnostics()}/>
+              {diagnosticNotice?<Text accessibilityLiveRegion="polite" style={[styles.meta,{color:p.muted}]}>{diagnosticNotice}</Text>:null}
+            </View>:null}
           </View>
         </View>
       </ScrollView>

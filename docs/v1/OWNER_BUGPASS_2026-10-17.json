@@ -454,9 +454,25 @@
         {
           "old": "await runtime.enrich(localBooks,{...assistPolicy(true),automatic:true},async rows=>{",
           "new": "await runtime.enrich(localBooks.filter((book):book is Book & LocalBook=>typeof book.uri==='string'&&book.uri.length>0),{...assistPolicy(true),automatic:true},async rows=>{"
+        },
+        {
+          "old": "import * as Sharing from 'expo-sharing';",
+          "new": "import * as Sharing from 'expo-sharing';\nimport {collectAssistDiagnostics} from './assistMetadata/diagnostics';\nimport {openScannerDatabase} from './scannerVNext/androidStore.native';"
+        },
+        {
+          "old": "  const freshRuntimeRef=",
+          "new": "  const [diagnosticBusy,setDiagnosticBusy]=useState(false);\n  const diagnosticExportRunning=useRef(false);\n  const [diagnosticNotice,setDiagnosticNotice]=useState('');\n  const freshRuntimeRef="
+        },
+        {
+          "old": "  function createPrivacyBackup(){",
+          "new": "  async function exportAssistDiagnostics(){\n    if(diagnosticExportRunning.current)return;\n    diagnosticExportRunning.current=true;setDiagnosticBusy(true);setDiagnosticNotice('Preparing report…');\n    try{\n      if(!documentDirectory||!await Sharing.isAvailableAsync())throw Error('File sharing is unavailable on this device.');\n      const report=await collectAssistDiagnostics(await openScannerDatabase(),Constants.expoConfig?.version||'unknown');\n      const directory=documentDirectory+'diagnostics/';\n      await makeDirectoryAsync(directory,{intermediates:true});\n      const uri=directory+'Archivist-Assist-diagnostics.json';\n      await writeAsStringAsync(uri,JSON.stringify(report,null,2));\n      await Sharing.shareAsync(uri,{mimeType:'application/json',dialogTitle:'Save Assist diagnostic report'});\n      setDiagnosticNotice('Report prepared. Save or share it using the device menu.');\n    }catch{setDiagnosticNotice('Could not export the report. Please try again when the device share menu is available.');}\n    finally{diagnosticExportRunning.current=false;setDiagnosticBusy(false);}\n  }\n\n  function createPrivacyBackup(){"
+        },
+        {
+          "old": "              <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>\n            </View>",
+          "new": "              <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>\n            </View>\n            {Platform.OS==='android'?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>\n              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>TEMPORARY DIAGNOSTICS</Text>\n              <Text style={[styles.meta,{color:p.muted}]}>Export library filenames, grouping decisions and saved identification evidence to help investigate Assist. Includes relative folder names; excludes credentials, full storage addresses and book contents. Nothing is sent automatically.</Text>\n              <Button label={diagnosticBusy?'Preparing report…':'Export Assist diagnostics'} tone=\"quiet\" disabled={diagnosticBusy} onPress={()=>void exportAssistDiagnostics()}/>\n              {diagnosticNotice?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{diagnosticNotice}</Text>:null}\n            </View>:null}"
         }
       ],
-      "current": "8a3876d368bd54cc8aa4e31f26f6813efd018291"
+      "current": "47bf23898ec5eb52383676452087cc708be7d145"
     },
     "mobile/speechFocus.generated.ts": {
       "previous": "5aa6ed24f64542d80f11d3f0d54986f0d070b7e9",

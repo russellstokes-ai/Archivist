@@ -244,7 +244,7 @@
     },
     "mobile/App.tsx": {
       "previous": "13fb8c1b6d27d4b084018832a2e0134b6407da2f2d8afd73af13f5fa0bfe2e80",
-      "current": "c5cc76d6c6123b796c0c1409b31166417c0d82c0c01bb0f0c4858911f5b2b6a8",
+      "current": "2a56a8e87f0b0f42c965b56c02c4918ba2284a82080a646c24ce1ed77b152d7f",
       "changes": [
         {
           "old": "import {MiniAudioWaveform} from './MiniAudioWaveform';\nimport {LivingBookCoverSession,lockLivingBookCoverSession,resolveLivingBookCover} from './livingBookCover';\nimport {PLAYER_SKIP, PlayerSeekQueue} from './playerTransport';\nimport React, {useEffect, useLayoutEffect, useMemo, useState, useRef} from 'react';\nimport {\n  AccessibilityInfo,\n",
@@ -357,6 +357,22 @@
         {
           "old": "  standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},\n  standardPageSubtitlePhone: {fontSize:13,lineHeight:18},\n  standardPageSubtitleLarge: {fontSize:16,lineHeight:23},\n  pageHeaderToolbar: {minHeight:44,marginTop:-4,flexDirection:'row',alignItems:'center',justifyContent:'flex-end'},\n  pageHeaderToolbarStart: {justifyContent:'flex-start'},\n  pageHeaderToolbarCenter: {justifyContent:'center'},\n  pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},\n",
           "new": "  standardPageSubtitle: {fontSize:14,lineHeight:20,marginTop:2,fontWeight:'400'},\n  standardPageSubtitlePhone: {fontSize:13,lineHeight:18},\n  standardPageSubtitleLarge: {fontSize:16,lineHeight:23},\n  pageHeaderToolbar: {height:44,marginTop:0,flexDirection:'row',alignItems:'center',justifyContent:'flex-end'},\n  pageHeaderToolbarStart: {justifyContent:'flex-start'},\n  pageHeaderToolbarCenter: {justifyContent:'center'},\n  pageHeaderMeta: {fontSize:11.5,lineHeight:16,marginTop:-5},\n"
+        },
+        {
+          "old": "import * as Sharing from 'expo-sharing';",
+          "new": "import * as Sharing from 'expo-sharing';\nimport {collectAssistDiagnostics} from './assistMetadata/diagnostics';\nimport {openScannerDatabase} from './scannerVNext/androidStore.native';"
+        },
+        {
+          "old": "  const freshRuntimeRef=",
+          "new": "  const [diagnosticBusy,setDiagnosticBusy]=useState(false);\n  const diagnosticExportRunning=useRef(false);\n  const [diagnosticNotice,setDiagnosticNotice]=useState('');\n  const freshRuntimeRef="
+        },
+        {
+          "old": "  function createPrivacyBackup(){",
+          "new": "  async function exportAssistDiagnostics(){\n    if(diagnosticExportRunning.current)return;\n    diagnosticExportRunning.current=true;setDiagnosticBusy(true);setDiagnosticNotice('Preparing report…');\n    try{\n      if(!documentDirectory||!await Sharing.isAvailableAsync())throw Error('File sharing is unavailable on this device.');\n      const report=await collectAssistDiagnostics(await openScannerDatabase(),Constants.expoConfig?.version||'unknown');\n      const directory=documentDirectory+'diagnostics/';\n      await makeDirectoryAsync(directory,{intermediates:true});\n      const uri=directory+'Archivist-Assist-diagnostics.json';\n      await writeAsStringAsync(uri,JSON.stringify(report,null,2));\n      await Sharing.shareAsync(uri,{mimeType:'application/json',dialogTitle:'Save Assist diagnostic report'});\n      setDiagnosticNotice('Report prepared. Save or share it using the device menu.');\n    }catch{setDiagnosticNotice('Could not export the report. Please try again when the device share menu is available.');}\n    finally{diagnosticExportRunning.current=false;setDiagnosticBusy(false);}\n  }\n\n  function createPrivacyBackup(){"
+        },
+        {
+          "old": "              <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>\n            </View>",
+          "new": "              <Text style={[styles.meta,{color:p.muted}]}>Open-source and third-party licence notices are included with the packaged application.</Text>\n            </View>\n            {Platform.OS==='android'?<View style={[styles.settingsSection,{borderTopColor:p.line}]}>\n              <Text style={[styles.settingsSectionTitle,{color:p.muted}]}>TEMPORARY DIAGNOSTICS</Text>\n              <Text style={[styles.meta,{color:p.muted}]}>Export library filenames, grouping decisions and saved identification evidence to help investigate Assist. Includes relative folder names; excludes credentials, full storage addresses and book contents. Nothing is sent automatically.</Text>\n              <Button label={diagnosticBusy?'Preparing report…':'Export Assist diagnostics'} tone=\"quiet\" disabled={diagnosticBusy} onPress={()=>void exportAssistDiagnostics()}/>\n              {diagnosticNotice?<Text accessibilityLiveRegion=\"polite\" style={[styles.meta,{color:p.muted}]}>{diagnosticNotice}</Text>:null}\n            </View>:null}"
         }
       ]
     }
