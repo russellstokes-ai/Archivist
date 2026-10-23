@@ -201,7 +201,8 @@ jobs:
           profile: pixel_6
           emulator-build: 14214601
           disable-linux-hw-accel: false
-          disable-animations: true
+          # The splash motion gate must run with Reduce Motion OFF.
+          disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           pre-emulator-launch-script: |
             adb kill-server || true

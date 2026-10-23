@@ -39,3 +39,6 @@ try{
  assert.equal(frozen.movingTealTransitions,0,'Static teal must never pass the new native animation gate');
  console.log('PASS: native screenshot decoder distinguishes real moving splash from static branded icon');
 }finally{fs.rmSync(folder,{recursive:true,force:true})}
+
+const workflow=fs.readFileSync(require('node:path').join(__dirname,'../.github/workflows/android-apk.yml'),'utf8');
+assert.match(workflow,/disable-animations: false/,'Animated splash validation must not enable Android Reduce Motion');
