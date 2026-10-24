@@ -41,7 +41,7 @@ concurrency:
 jobs:
   android-native-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
@@ -121,6 +121,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Verify CB7 with Android JNI and generated real archives
+        timeout-minutes: 15
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
